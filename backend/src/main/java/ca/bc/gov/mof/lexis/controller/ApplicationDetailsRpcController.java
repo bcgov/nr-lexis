@@ -600,6 +600,9 @@ public class ApplicationDetailsRpcController {
         authentication, createRequest.ownerClientNumber(), createRequest.agentClientNumber())) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
+    if (createRequest.exportScheduleId() == null && requiresListDate(authentication)) {
+      return listDateRequired(null);
+    }
     if (exemptionNumber == null) {
       return persistNewApplication(service, createRequest, userId);
     }
@@ -717,6 +720,11 @@ public class ApplicationDetailsRpcController {
 
     ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request =
         toApplicationSummaryUpdateRequest(parameters, saveSource);
+    if (saveSource == ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY
+        && request.exportScheduleId() == null
+        && requiresListDate(authentication)) {
+      return listDateRequired(request.applicationNumber());
+    }
 
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
@@ -1555,6 +1563,25 @@ public class ApplicationDetailsRpcController {
   private boolean canPerform(Authentication authentication, String action) {
     return authorizationService.canPerformAction(
         sessionService.parseRolesFromPrincipal(authentication), action);
+  }
+
+  private boolean requiresListDate(Authentication authentication) {
+    List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
+    return roles != null
+        && roles.stream()
+            .map(role -> role.toUpperCase(Locale.ROOT))
+            .anyMatch(
+                role ->
+                    role.startsWith("LEXIS_PROVINCIAL_SUBMITTER")
+                        || role.startsWith("PROVINCIAL_SUBMITTER"))
+        && !canPerform(authentication, LEGACY_ACTION_APPLICATIONS_REVIEW);
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> listDateRequired(
+      Long applicationNumber) {
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            false, null, applicationNumber, List.of("Select a list date."), List.of()));
   }
 
   private boolean canPerform(List<String> roles, String action) {

@@ -1081,6 +1081,7 @@ class ApplicationDetailsRpcControllerTest {
     params.add("ownerClientNumber", "00099999");
     params.add("ownerClientLocationCode", "02");
     params.add("agentClientNumber", "00022222");
+    params.add("exportScheduleId", "987");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
         controller.addApplicationLegacy(params, authentication);
@@ -1121,6 +1122,7 @@ class ApplicationDetailsRpcControllerTest {
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("ownerClientNumber", "00099999");
     params.add("ownerClientLocationCode", "   ");
+    params.add("exportScheduleId", "987");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
         controller.addApplicationLegacy(params, authentication);
@@ -1133,6 +1135,44 @@ class ApplicationDetailsRpcControllerTest {
             requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("bceid\\submitter"));
     assertThat(requestCaptor.getValue().ownerClientNumber()).isEqualTo("00077881");
     assertThat(requestCaptor.getValue().ownerClientLocationCode()).isEqualTo("00");
+  }
+
+  @Test
+  void provincialSubmitterCannotCreateApplicationWithoutListDate() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(new LinkedMultiValueMap<>(), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors()).containsExactly("Select a list date.");
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @Test
+  void provincialSubmitterCannotClearApplicationListDate() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("saveSource", "summary");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors()).containsExactly("Select a list date.");
+    verify(service, never()).updateApplicationSummary(any(), any());
   }
 
   @Test

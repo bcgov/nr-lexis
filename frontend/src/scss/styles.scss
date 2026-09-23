@@ -1559,6 +1559,12 @@ $notification-types: 'error', 'info', 'success', 'warning';
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
+@media (min-width: 672px) {
+  .legacy-search-grid .application-list-date-field {
+    grid-column: span 2;
+  }
+}
+
 .offer-application-link-field {
   display: flex;
   min-block-size: var(--cds-layout-size-height-lg, 4rem);

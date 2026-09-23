@@ -165,7 +165,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const summary = within(await selectApplicationSummaryTile())
-    const fields = ['Region', 'Listing date', 'Jurisdiction', 'Order in Council indicator']
+    const fields = ['Region', 'List date', 'Jurisdiction', 'Order in Council indicator']
     for (const field of fields) {
       expect(summary.getAllByText(field, { exact: true })).toHaveLength(1)
     }
@@ -1502,8 +1502,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       getSummaryComboBox(summaryControls, 'Region'),
       getSummaryComboBox(summaryControls, 'Exemption reason'),
       summaryControls.getByLabelText('Application date'),
-      summaryControls.getByLabelText('Received date'),
-      getSummaryComboBox(summaryControls, 'Listing date'),
+      summaryControls.getByRole('group', { name: 'List date' }),
       summaryControls.getByLabelText('Exemption term (days)'),
     ]
     legacyOrderedControls.slice(1).forEach((control, index) => {
@@ -1557,7 +1556,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         applicationNumber: '321',
         saveSource: 'summary',
         applicationDate: '2026-01-01',
-        receivedDate: '2026-01-02',
         termDays: '430',
         exemptionReasonCode: 'S',
         exportScheduleId: '988',
@@ -2018,7 +2016,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue(
         'Historic Natural Resource Region',
       )
-      expect(getSummaryComboBox(summaryControls, 'Listing date')).toHaveValue('2011-11-25')
+      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
     })
 
     fireEvent.change(termDaysInput, {
@@ -2206,7 +2204,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
   })
 
-  it('can clear application summary listing date with the blank schedule option', async () => {
+  it('lets an approver select No list date on an application summary', async () => {
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
       exemptionTypes: [],
       exemptionReasons: [{ value: 'U', label: 'Utilization' }],
@@ -2219,6 +2217,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         { value: '988', label: '2026-01-25' },
         { value: '989', label: '2026-02-08' },
         { value: '', label: 'Blank' },
+      ],
+      nextSchedules: [
+        { value: '987', label: '2026-01-11' },
+        { value: '988', label: '2026-01-25' },
       ],
     })
 
@@ -2235,17 +2237,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryTile = await selectApplicationSummaryTile()
     const summaryControls = within(summaryTile)
-    const listingDateComboBox = getSummaryComboBox(summaryControls, 'Listing date')
-
     await waitFor(() => {
-      expect(listingDateComboBox).toHaveValue('2026-01-11')
+      expect(summaryControls.getByRole('radio', { name: '2026-01-11' })).toBeChecked()
     })
-
-    await chooseComboBoxOption(listingDateComboBox, '2026-02-08')
-    await waitFor(() => {
-      expect(listingDateComboBox).toHaveValue('2026-02-08')
-    })
-    await chooseComboBoxOption(listingDateComboBox, 'Blank')
+    await userEvent.click(summaryControls.getByRole('radio', { name: '2026-01-25' }))
+    expect(summaryControls.getByRole('radio', { name: '2026-01-25' })).toBeChecked()
+    await userEvent.click(summaryControls.getByRole('radio', { name: 'No list date' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
 
     await waitFor(() => {

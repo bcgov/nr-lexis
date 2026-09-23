@@ -174,7 +174,7 @@ type ProvincialApplicationCreateSubmission = {
   region: string
   applicationDate: string
   applicationTermDays: string
-  receivedDate: string
+  receivedDate?: string
   exportScheduleId?: string
   listingDate: string
   productLocation: string
@@ -222,8 +222,6 @@ export const submitProvincialApplicationCreate = async (
         applicationDate: form.applicationDate,
         exemptionTerm: form.applicationTermDays,
         termDays: form.applicationTermDays,
-        receivedDate: form.receivedDate,
-        dateReceived: form.receivedDate,
         exportScheduleId: form.exportScheduleId,
         legacyExportScheduleId: form.exportScheduleId,
         listingDate: form.listingDate,
