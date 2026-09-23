@@ -1559,9 +1559,17 @@ $notification-types: 'error', 'info', 'success', 'warning';
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
-@media (min-width: 672px) {
-  .legacy-search-grid .application-list-date-field {
-    grid-column: span 2;
+// Span the full row without adding implicit columns when auto-fit collapses to one column.
+.legacy-search-grid .application-list-date-field {
+  grid-column: 1 / -1;
+
+  .cds--radio-button-group {
+    flex-wrap: wrap;
+    row-gap: 0.5rem;
+  }
+
+  .cds--radio-button__label-text {
+    white-space: nowrap;
   }
 }
 
