@@ -17,7 +17,9 @@ import java.sql.Timestamp;
 import java.sql.Types;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
@@ -26,6 +28,7 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,6 +55,14 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
           ),
           0
         ) AS COMPLETED_VOLUME
+      FROM EXPORT_PERMIT_DETAIL
+      WHERE EXEMPTION_NUMBER = ?
+      """;
+  // The deployed FIND_PERMIT_DET_BY_EXMP cursor has no ORG_UNIT_NO, so regions are read directly
+  // for the same permits.
+  private static final String FIND_PERMIT_REGIONS_BY_EXEMPTION =
+      """
+      SELECT EXPORT_PERMIT_DETAIL_NUMBER, ORG_UNIT_NO
       FROM EXPORT_PERMIT_DETAIL
       WHERE EXEMPTION_NUMBER = ?
       """;
@@ -164,6 +175,27 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         cs -> cs.setString(1, normalized),
         2,
         this::mapPermitSummaryRow);
+  }
+
+  /** Each permit's region, by permit number, for the permits the exemption's cursor lists. */
+  public Map<Long, Long> findPermitRegionsByExemptionNumber(String exemptionNumber) {
+    String normalized = trim(exemptionNumber);
+    if (normalized == null) {
+      return Map.of();
+    }
+    Map<Long, Long> regions = new HashMap<>();
+    jdbcTemplate.query(
+        FIND_PERMIT_REGIONS_BY_EXEMPTION,
+        (RowCallbackHandler)
+            rs -> {
+              Long permitNumber = getLong(rs, "EXPORT_PERMIT_DETAIL_NUMBER");
+              Long region = getLong(rs, "ORG_UNIT_NO");
+              if (permitNumber != null && region != null) {
+                regions.put(permitNumber, region);
+              }
+            },
+        normalized);
+    return regions;
   }
 
   public BlanketOicTotalsRow findBlanketOicTotals(String exemptionNumber) {

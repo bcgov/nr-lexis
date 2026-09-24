@@ -22,6 +22,7 @@ import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.DisplayName;
@@ -773,10 +774,13 @@ class OracleExemptionDetailsRpcServiceTest {
                     7000123L, 95.0d, 0.0d, "Active", "ACT", null, null, null),
                 new ExemptionDetailsRpcRepository.PermitSummaryRow(
                     7000124L, 12.0d, 0.0d, "Complete", "COM", null, null, null)));
+    when(repository.findPermitRegionsByExemptionNumber("EX-205"))
+        .thenReturn(Map.of(7000123L, 1903L, 7000124L, 1908L));
 
+    // Regional users are authorized by each permit's stored region.
     List<ExemptionDetailsRpcService.PermitItem> response =
         service.getPermits(
-            "EX-205", permit -> permit.permitNumber() == 7000123L);
+            "EX-205", permit -> Long.valueOf(1903L).equals(permit.orgUnitNumber()));
 
     assertThat(response)
         .extracting(

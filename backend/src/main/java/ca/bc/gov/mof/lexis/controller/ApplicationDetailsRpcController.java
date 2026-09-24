@@ -597,6 +597,7 @@ public class ApplicationDetailsRpcController {
     String exemptionNumber = createRequest.exemptionNumber();
     if (exemptionNumber != null) {
       provincialAuthorizationService.requireExemption(authentication, exemptionNumber);
+      requireNewApplicationExemptionLink(authentication, exemptionNumber, createRequest);
     }
     if (!provincialAuthorizationService.canCreateForClient(
         authentication, createRequest.ownerClientNumber(), createRequest.agentClientNumber())) {
@@ -623,6 +624,7 @@ public class ApplicationDetailsRpcController {
               OrgUnitSurface.APPLICATION_WRITE);
           provincialAuthorizationService.requireExemption(
               authentication, exemptionNumber);
+          requireNewApplicationExemptionLink(authentication, exemptionNumber, createRequest);
           if (!provincialAuthorizationService.canCreateForClient(
               authentication,
               createRequest.ownerClientNumber(),
@@ -639,6 +641,20 @@ public class ApplicationDetailsRpcController {
             }
           }
         });
+  }
+
+  /**
+   * An application created under an exemption is linked to it, so a regional user needs what
+   * linking an existing application needs: write access to every exemption region, and those
+   * regions and the new application's within their Application Approver grants.
+   */
+  private void requireNewApplicationExemptionLink(
+      Authentication authentication,
+      String exemptionNumber,
+      ApplicationDetailsRpcService.CreateApplicationRequest createRequest) {
+    provincialAuthorizationService.requireExemptionWrite(authentication, exemptionNumber);
+    provincialAuthorizationService.requireNewApplicationExemptionLink(
+        authentication, exemptionNumber, createRequest.orgUnitNumber());
   }
 
   private boolean acquireExemptionLockForMutation(

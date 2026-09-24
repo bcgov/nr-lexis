@@ -234,7 +234,7 @@ public class ExemptionDetailsRpcController {
                                 permit.permitNumber(),
                                 permit.applicantClientNumber(),
                                 permit.ownerClientNumber(),
-                                null),
+                                permit.orgUnitNumber()),
                             permit.oicLike()))
             .stream()
             .filter(ExemptionDetailsRpcService.PermitItem::canViewPermit)

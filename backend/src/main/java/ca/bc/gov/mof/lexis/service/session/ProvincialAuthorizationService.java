@@ -309,27 +309,43 @@ public class ProvincialAuthorizationService {
    */
   public void requireExemptionApplicationLink(
       Authentication authentication, String exemptionNumber, Long applicationNumber) {
+    LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
+    requireExemptionLinkRegions(
+        authentication,
+        exemptionNumber,
+        () ->
+            applicationService == null || applicationNumber == null || applicationNumber < 1
+                ? null
+                : applicationService
+                    .findAccessByApplicationNumber(applicationNumber)
+                    .map(ApplicationAccessContextDto::orgUnitNumber)
+                    .orElse(null));
+  }
+
+  /**
+   * Creating an application under an exemption links it, so the same limit applies, with the new
+   * application's requested region in place of a stored one.
+   */
+  public void requireNewApplicationExemptionLink(
+      Authentication authentication, String exemptionNumber, Long applicationOrgUnitNumber) {
+    requireExemptionLinkRegions(authentication, exemptionNumber, () -> applicationOrgUnitNumber);
+  }
+
+  private void requireExemptionLinkRegions(
+      Authentication authentication, String exemptionNumber, Supplier<Long> applicationRegion) {
     OrgUnitConstraint regions = roleRegions(authentication, Set.of(ROLE_APPLICATION_APPROVER));
     if (!regions.restricted()) {
       return;
     }
     ExemptionService exemptionService = exemptionServiceProvider.getIfAvailable();
-    LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
     String normalizedNumber = trimToNull(exemptionNumber);
     List<Long> exemptionRegions =
         exemptionService == null || normalizedNumber == null
             ? List.of()
             : sanitizePositive(exemptionService.findOrgUnitNumbers(normalizedNumber));
-    Long applicationRegion =
-        applicationService == null || applicationNumber == null || applicationNumber < 1
-            ? null
-            : applicationService
-                .findAccessByApplicationNumber(applicationNumber)
-                .map(ApplicationAccessContextDto::orgUnitNumber)
-                .orElse(null);
     if (exemptionRegions.isEmpty()
         || !exemptionRegions.stream().allMatch(regions::allows)
-        || !regions.allows(applicationRegion)) {
+        || !regions.allows(applicationRegion.get())) {
       throw new AccessDeniedException(
           "Linking applications is limited to the authenticated Application Approver regions.");
     }

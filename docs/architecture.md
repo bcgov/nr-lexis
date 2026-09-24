@@ -72,8 +72,8 @@ the same actions for records in its regions only (organization units 1903-1910).
 its own regions, and record checks apply the regions of both the surface and the action the route
 authorized, so province-wide Read Only plus Cariboo Application Approver reads everywhere but
 writes only in Cariboo. Writing or approving a multi-region record requires every region, including
-linking or unlinking an exemption's applications, removing its documents and sending its approval
-emails. Activating an exemption through a save or create is an approval, so it needs the regions of
+creating an application under an exemption, linking or unlinking an exemption's applications,
+removing its documents and sending its approval emails. Activating an exemption through a save or create is an approval, so it needs the regions of
 the user's Exemption Approver grants rather than those of the route's save or create action.
 Creating a permit from an exemption needs one of its regions, and the permit's own region must be
 granted. A regional user's reports must name only their regions, including the tenure type and

@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -20,6 +21,7 @@ import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.security.LexisRequestActions;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionActivationEligibilityValidator;
@@ -33,6 +35,7 @@ import ca.bc.gov.mof.lexis.service.permit.PermitService;
 import ca.bc.gov.mof.lexis.service.report.LexisJasperReportDefinition;
 import ca.bc.gov.mof.lexis.service.report.LexisJasperReportParameterProvider;
 import ca.bc.gov.mof.lexis.service.report.LexisReportService;
+import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
@@ -40,6 +43,7 @@ import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Predicate;
 import java.util.stream.Stream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -59,6 +63,7 @@ import org.springframework.boot.context.properties.source.MapConfigurationProper
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.http.HttpStatus;
 import org.springframework.mock.web.MockHttpServletRequest;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -79,9 +84,11 @@ class RegionalAuthorizationRegressionTest {
   @Mock private ExemptionService exemptions;
   @Mock private ExemptionDetailsRpcService exemptionRpc;
   @Mock private LexisReportService reports;
+  @Mock private ApplicationDetailsRpcService applicationRpc;
 
   private LexisReportController reportController;
   private ExemptionDetailsRpcController exemptionController;
+  private ApplicationDetailsRpcController applicationController;
 
   @BeforeEach
   void setUp() {
@@ -111,6 +118,15 @@ class RegionalAuthorizationRegressionTest {
         beans.getBeanProvider(ClientLookupService.class), session, authorization, principal,
         new ApplicationPermitOperationCoordinator(new PermitOperationMutex()));
     exemptionController.setProvincialAuthorizationService(regional);
+    var applicationBeans = new StaticListableBeanFactory();
+    applicationBeans.addBean("applicationRpc", applicationRpc);
+    applicationController = new ApplicationDetailsRpcController(
+        applicationBeans.getBeanProvider(ApplicationDetailsRpcService.class),
+        applicationBeans.getBeanProvider(ClientLookupService.class),
+        applicationBeans.getBeanProvider(ApplicationReviewService.class),
+        session, authorization, new ApplicationEditLockService(), regional, null, null,
+        new ApplicationPermitOperationCoordinator(new PermitOperationMutex()));
+    applicationController.setLexisPrincipalService(principal);
   }
 
   @AfterEach
@@ -258,6 +274,68 @@ class RegionalAuthorizationRegressionTest {
           .containsExactly("Insufficient privileges to set this Exemption as Active.");
       verify(repository, never()).updateExemption(any());
     }
+  }
+
+  @ParameterizedTest
+  @MethodSource("exemptionRegionsForNewApplication")
+  void creatingAnApplicationUnderAnExemptionNeedsEveryExemptionRegion(
+      List<Long> exemptionRegions, boolean allowed) {
+    var authentication = staff(APPLICATION_CARIBOO);
+    requestAuthorizedFor("createApplication", authentication);
+    when(exemptions.findAccessByExemptionNumber("EX-1"))
+        .thenReturn(Optional.of(new ExemptionAccessDto("EX-1", "M", "NEW", false)));
+    when(exemptions.findOrgUnitNumbers("EX-1")).thenReturn(exemptionRegions);
+    var parameters = new LinkedMultiValueMap<String, String>();
+    parameters.add("exemptionNumber", "EX-1");
+    parameters.add("region", "1903");
+
+    if (allowed) {
+      when(applicationRpc.addApplication(any(), anyString()))
+          .thenReturn(new ApplicationDetailsRpcService.CreateApplicationResult(
+              true, "Saved", 1L, List.of(), List.of()));
+      assertThat(applicationController.addApplicationLegacy(parameters, authentication)
+          .getStatusCode()).isEqualTo(HttpStatus.OK);
+    } else {
+      // Creating links the application, so it needs every exemption region, as linking does.
+      assertThatThrownBy(() -> applicationController.addApplicationLegacy(parameters, authentication))
+          .isInstanceOf(AccessDeniedException.class);
+      verify(applicationRpc, never()).addApplication(any(), anyString());
+    }
+  }
+
+  static Stream<Arguments> exemptionRegionsForNewApplication() {
+    return Stream.of(
+        Arguments.of(List.of(1903L), true),
+        Arguments.of(List.of(1903L, 1908L), false));
+  }
+
+  @Test
+  void regionalUsersSeeTheExemptionPermitsInTheirRegions() {
+    var authentication = staff("LEXIS_READ_ONLY_REGION_REGION-CARIBOO");
+    requestAuthorizedFor("/exemptionDetails", authentication);
+    when(exemptions.findAccessByExemptionNumber("EX-1"))
+        .thenReturn(Optional.of(new ExemptionAccessDto("EX-1", "M", "NEW", false)));
+    when(exemptions.findOrgUnitNumbers("EX-1")).thenReturn(List.of(1903L, 1908L));
+    when(exemptionRpc.getPermits(eq("EX-1"), any()))
+        .thenAnswer(invocation -> {
+          Predicate<ExemptionDetailsRpcService.PermitAccessContext> access =
+              invocation.getArgument(1);
+          return List.of(permitItem(7001L, 1903L, access), permitItem(7002L, 1908L, access));
+        });
+
+    assertThat(exemptionController.getPermits("EX-1", authentication).getBody())
+        .extracting(ExemptionDetailsRpcController.PermitItemDto::permitNumber)
+        .containsExactly(7001L);
+  }
+
+  private static ExemptionDetailsRpcService.PermitItem permitItem(
+      long permitNumber,
+      Long region,
+      Predicate<ExemptionDetailsRpcService.PermitAccessContext> access) {
+    return new ExemptionDetailsRpcService.PermitItem(
+        permitNumber, "1.0", "Active", "", access.test(
+            new ExemptionDetailsRpcService.PermitAccessContext(
+                permitNumber, "", "", false, region)));
   }
 
   private static Authentication staff(String... authorities) {
