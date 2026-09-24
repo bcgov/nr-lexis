@@ -28,15 +28,17 @@
 		X-XSS-Protection "1;mode=block"
 		X-Content-Type-Options "nosniff"
 		Strict-Transport-Security "max-age=31536000"
+		# Scripts come only from this origin, which also serves /api. The browser's only other
+		# requests are to BC Gov SSO for sign-in and token refresh; tokens live in sessionStorage.
 		Content-Security-Policy "default-src 'self' https://*.gov.bc.ca;
-			script-src 'self' https://*.gov.bc.ca;
+			script-src 'self';
 			style-src 'self' https://fonts.googleapis.com https://use.fontawesome.com 'unsafe-inline';
 			font-src 'self' https://fonts.gstatic.com https://www2.gov.bc.ca;
 			img-src 'self' data: https://fonts.googleapis.com https://www.w3.org https://*.gov.bc.ca https://*.tile.openstreetmap.org;
 			frame-ancestors 'self';
 			form-action 'self';
 			block-all-mixed-content;
-			connect-src 'self' https://*.gov.bc.ca wss://*.gov.bc.ca;"
+			connect-src 'self' https://loginproxy.gov.bc.ca https://*.loginproxy.gov.bc.ca;"
 		Referrer-Policy "no-referrer"
 		Permissions-Policy "fullscreen=(self), camera=(), microphone=()"
 		Cross-Origin-Resource-Policy "same-origin"

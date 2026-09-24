@@ -122,6 +122,12 @@ SecRule REQUEST_URI "@beginsWith /waf-critical-probe" "id:990001,phase:1,deny,st
     assert.equal(response.headers.get('cross-origin-opener-policy'), 'same-origin', path)
     assert.equal(response.headers.get('x-frame-options'), 'SAMEORIGIN', path)
     assert.match(response.headers.get('content-security-policy'), /frame-ancestors 'self'/, path)
+    assert.match(response.headers.get('content-security-policy'), /script-src 'self';/, path)
+    assert.match(
+      response.headers.get('content-security-policy'),
+      /connect-src 'self' https:\/\/loginproxy\.gov\.bc\.ca https:\/\/\*\.loginproxy\.gov\.bc\.ca;/,
+      path,
+    )
     assert.equal(response.headers.get('x-content-type-options'), 'nosniff', path)
     await response.arrayBuffer()
     return response
