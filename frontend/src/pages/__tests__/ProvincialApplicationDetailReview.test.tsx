@@ -9,7 +9,7 @@ import {
   Routes,
 } from 'react-router-dom'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   setupApplicationDetailTests,
   applicationDetail,
@@ -47,6 +47,8 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       .mockReset()
       .mockResolvedValue(reviewableApplicationDetail)
   })
+
+  afterEach(() => vi.restoreAllMocks())
 
   it('hides remarks and review tabs without legacy remarks/review access', async () => {
     mockApplicationDetailAuth((action: string) => action !== '/applicationRemarks')
@@ -106,6 +108,77 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     await userEvent.click(review.getByRole('button', { name: 'Cancel' }))
     expect(review.queryByRole('group', { name: /Application status/ })).not.toBeInTheDocument()
   })
+
+  it.each(['add', 'edit'] as const)(
+    'protects the desktop %s remark draft from background launchers through save',
+    async (mode) => {
+      const originalMatchMedia = window.matchMedia
+      vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+        ...originalMatchMedia(query),
+        matches: query === '(min-width: 1312px)',
+      }))
+      const savedRemark = {
+        success: true,
+        remarkId: mode === 'edit' ? '88' : '89',
+        remark: 'Keep this staff note',
+        title: 'Keep this staff note',
+        user: 'reviewer',
+        status: 'saved',
+      }
+      let resolveSave: (result: typeof savedRemark) => void = () => undefined
+      mockedSaveApplicationRemark.mockImplementationOnce(
+        () => new Promise((resolve) => (resolveSave = resolve)),
+      )
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectApplicationDetailTab('Remarks')
+      const addButton = await screen.findByRole('button', { name: 'Add remark' })
+      const editButton = screen.getByRole('button', { name: 'Edit' })
+      await userEvent.click(mode === 'add' ? addButton : editButton)
+      const remarkInput = await screen.findByLabelText(
+        mode === 'add' ? 'New Remark' : 'Edit Remark 88',
+      )
+      expect(document.querySelector('.c4p--side-panel--slide-in')).toBeInTheDocument()
+      fireEvent.change(remarkInput, { target: { value: savedRemark.remark } })
+
+      expect(addButton).toBeDisabled()
+      expect(editButton).toBeDisabled()
+      await userEvent.click(addButton)
+      await userEvent.click(editButton)
+      expect(remarkInput).toHaveValue(savedRemark.remark)
+
+      await userEvent.click(
+        screen.getByRole('button', { name: mode === 'add' ? 'Save remark' : 'Update remark' }),
+      )
+      await waitFor(() => expect(mockedSaveApplicationRemark).toHaveBeenCalledTimes(1))
+      expect(mockedSaveApplicationRemark).toHaveBeenCalledWith({
+        applicationNumber: '321',
+        remarkBody: savedRemark.remark,
+        remarkId: mode === 'edit' ? '88' : undefined,
+      })
+      expect(addButton).toBeDisabled()
+      expect(editButton).toBeDisabled()
+      expect(remarkInput).toHaveValue(savedRemark.remark)
+
+      await act(async () => resolveSave(savedRemark))
+      await screen.findByText(
+        mode === 'edit' ? 'Application remark updated.' : 'Application remark saved.',
+      )
+      expect(screen.queryByLabelText(/^(New Remark|Edit Remark 88)$/)).not.toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Add remark' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+    },
+  )
 
   it('keeps an approved application review editable for legacy status correction', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
@@ -571,6 +644,70 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       within(actionBanner as HTMLElement).getByRole('button', { name: 'close notification' }),
     )
     expect(screen.queryByText('Created application 321.')).not.toBeInTheDocument()
+  })
+
+  it('preserves unrelated drafts and their baseline when approving with a remark', async () => {
+    const approvedDetail = {
+      ...reviewableApplicationDetail,
+      applicationStatusCode: 'APP',
+      statusDescription: 'Approved',
+      remarks: [
+        ...reviewableApplicationDetail.remarks,
+        { remarkId: 89, title: 'Approval note', remark: 'Approval note' },
+      ],
+    }
+    mockedFetchProvincialApplicationDetail
+      .mockResolvedValueOnce(reviewableApplicationDetail)
+      .mockResolvedValue(approvedDetail)
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationSummaryTile()
+    fireEvent.change(await screen.findByLabelText('Exemption term (days)'), {
+      target: { value: '181' },
+    })
+    await selectApplicationRemarksForEditing()
+    fireEvent.change(await screen.findByLabelText('New Remark'), {
+      target: { value: 'Unrelated remark draft' },
+    })
+    const review = within(await selectApplicationReviewTile())
+    fireEvent.change(review.getByLabelText('Remarks'), { target: { value: 'Approval note' } })
+    await userEvent.click(review.getByRole('button', { name: 'Approve application' }))
+
+    await screen.findByText('Application approved.')
+    expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
+    expect(mockedSaveApplicationRemark).toHaveBeenCalledWith({
+      applicationNumber: '321',
+      remarkBody: 'Approval note',
+    })
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    await selectApplicationDetailTab('Remarks')
+    expect(screen.getByLabelText('New Remark')).toHaveValue('Unrelated remark draft')
+    expect(screen.getByRole('cell', { name: 'Approval note' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await selectApplicationDetailTab('Application')
+    expect(screen.getByLabelText('Exemption term (days)')).toHaveValue(181)
+    const dirtyUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(dirtyUnload)
+    expect(dirtyUnload.defaultPrevented).toBe(true)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    const cleanUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(cleanUnload)
+    expect(cleanUnload.defaultPrevented).toBe(false)
+    await selectApplicationSummaryTile()
+    expect(screen.getByLabelText('Exemption term (days)')).toHaveValue(30)
   })
 
   it('keeps an optional approval remark available to retry when only its save fails', async () => {

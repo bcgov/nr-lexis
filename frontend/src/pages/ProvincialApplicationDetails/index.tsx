@@ -918,7 +918,7 @@ const ProvincialApplicationDetailsPage = () => {
   ])
 
   const loadApplicationDetail = useCallback(
-    async ({ preserveRemarkDraft = false } = {}) => {
+    async ({ preserveRemarkDraft = false, preserveSummaryDraft = false } = {}) => {
       const isLatestRequest = beginDetailRequest()
       const detailDocumentRequestSequence = ++documentRequestSequenceRef.current
       setSummaryAccuracyConfirmationOpen(false)
@@ -989,9 +989,11 @@ const ProvincialApplicationDetailsPage = () => {
           ? normalizeSummaryAgentFields(toSummaryFormState(response))
           : null
         setDetail(response)
-        setSummaryForm(editableSummaryForm)
-        setSummaryBaselineForm(editableSummaryForm)
-        setShowSummaryValidationErrors(false)
+        if (!preserveSummaryDraft) {
+          setSummaryForm(editableSummaryForm)
+          setSummaryBaselineForm(editableSummaryForm)
+          setShowSummaryValidationErrors(false)
+        }
         const persistedReviewStatusCode = response?.applicationStatusCode ?? ''
         const persistedReviewStatusRemark = latestPersistedReviewRemark(response)
         setReviewStatusCode(persistedReviewStatusCode)
@@ -1063,7 +1065,7 @@ const ProvincialApplicationDetailsPage = () => {
           setPartialLoadMessage('Unable to retrieve species and end-use fields.')
         }
 
-        if (editableSummaryForm) {
+        if (editableSummaryForm && !preserveSummaryDraft) {
           setSummaryForm(editableSummaryForm)
           setSummaryBaselineForm(editableSummaryForm)
         }
@@ -3293,7 +3295,9 @@ const ProvincialApplicationDetailsPage = () => {
           return 'partial'
         }
         try {
-          await loadApplicationDetail()
+          // Approval updates the status in both summary states; keep unrelated edits and
+          // their saved baseline while refreshing the newly persisted review remark.
+          await loadApplicationDetail({ preserveRemarkDraft: true, preserveSummaryDraft: true })
         } catch {
           setActionResult({
             kind: 'error',
@@ -3848,6 +3852,7 @@ const ProvincialApplicationDetailsPage = () => {
       kind="tertiary"
       size="sm"
       renderIcon={Add}
+      disabled={isEditingRemarks || isSavingRemark}
       onClick={(event) => {
         remarkLauncherRef.current = event.currentTarget
         setRemarkBody('')
@@ -5268,7 +5273,9 @@ const ProvincialApplicationDetailsPage = () => {
                                               kind="ghost"
                                               size="sm"
                                               renderIcon={Edit}
-                                              disabled={!item.remarkId}
+                                              disabled={
+                                                !item.remarkId || isEditingRemarks || isSavingRemark
+                                              }
                                               onClick={(event) => {
                                                 remarkLauncherRef.current = event.currentTarget
                                                 setEditingRemarkId(
