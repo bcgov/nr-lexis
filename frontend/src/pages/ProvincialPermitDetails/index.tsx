@@ -2761,6 +2761,11 @@ const ProvincialPermitDetailsPage = () => {
     ) {
       return
     }
+    // The permit loads before its exemption context, and only that context says whether it is
+    // Blanket OIC; keep the one-time signal until the context has been merged in.
+    if (detail.exemptionNumber && !hasPermitExemptionContext(detail)) {
+      return
+    }
 
     if (detail.blanketOic && location.state.blanketOicPermitCreated === permitNumber) {
       // Keep the one-time notice visible after consuming its navigation signal.

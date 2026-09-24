@@ -1065,6 +1065,53 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
   })
 
+  it('shows Blanket OIC creation success once the exemption context identifies the permit', async () => {
+    configureEditableBlanketOicPackage()
+    // The permit endpoint omits exemption context, so Blanket OIC is only known after it loads.
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      exemptionNumber: 'BOIC-1',
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      approvedExemptionVolume: null,
+      exemptionVolumeRemaining: null,
+      exemptionTypeDescription: null,
+      blanketOic: false,
+    })
+    let resolveExemptionContext!: (
+      value: Awaited<ReturnType<typeof fetchProvincialPermitExemptionContext>>,
+    ) => void
+    mockedFetchProvincialPermitExemptionContext.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveExemptionContext = resolve
+      }),
+    )
+    const router = createMemoryRouter(
+      [{ path: '/provincial/permit/:permitNumber', element: <ProvincialPermitDetailsPage /> }],
+      {
+        initialEntries: [
+          { pathname: '/provincial/permit/777', state: { blanketOicPermitCreated: '777' } },
+        ],
+      },
+    )
+    render(<RouterProvider router={router} />)
+    expect(await screen.findByRole('heading', { name: /Permit 777/ })).toBeInTheDocument()
+    await waitFor(() => expect(mockedFetchProvincialPermitExemptionContext).toHaveBeenCalled())
+    // The signal must survive the partial detail instead of being consumed without a notice.
+    expect(router.state.location.state).toEqual({ blanketOicPermitCreated: '777' })
+
+    await act(async () =>
+      resolveExemptionContext({
+        approvedExemptionVolume: 250,
+        exemptionVolumeRemaining: 130,
+        exemptionTypeDescription: 'Blanket OIC',
+        blanketOic: true,
+      }),
+    )
+    expect(await screen.findByText('Permit created')).toBeInTheDocument()
+    await waitFor(() => expect(router.state.location.state).toEqual({}))
+  })
+
   it('does not carry Blanket OIC creation success to another record or a return visit', async () => {
     configureEditableBlanketOicPackage()
     const router = createMemoryRouter(
