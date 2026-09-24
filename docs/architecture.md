@@ -86,8 +86,9 @@ editable.
 
 ### Mixed grants
 
-A user can hold several staff roles, some province-wide and some regional. LEXIS assumes each
-grant carries its own reach:
+In practice each user holds one LEXIS role. These rules are defensive: if someone is accidentally
+given several staff roles, some province-wide and some regional, the combination never reaches beyond
+what each grant allows on its own. Each grant carries its own reach:
 
 - The same role granted both without and with a region is province-wide; the unscoped grant
   supersedes the regional one.
