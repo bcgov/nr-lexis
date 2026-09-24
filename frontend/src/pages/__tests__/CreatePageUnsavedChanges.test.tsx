@@ -146,7 +146,7 @@ const createCases = [
     targetPath: '/provincial/application',
     heading: 'Create provincial application',
     fieldLabel: 'Location of logs',
-    saveButtonName: 'Save',
+    saveButtonName: 'Save application',
     element: <ProvincialApplicationCreatePage />,
   },
   {
@@ -171,7 +171,7 @@ const createCases = [
 
 const getDraftField = async (testCase: (typeof createCases)[number]) => {
   if (testCase.name === 'application') {
-    await userEvent.click(screen.getByRole('tab', { name: 'Items' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Scale' }))
     return screen.getByRole('textbox', { name: 'Location of logs' })
   }
 
@@ -322,10 +322,12 @@ describe('create page unsaved changes', () => {
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
     await userEvent.click(screen.getByRole('tab', { name: 'Applicant' }))
-    fireEvent.change(screen.getByRole('textbox', { name: 'Client number' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Client' }), {
       target: { value: '00011111' },
     })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save application' })).toBeDisabled(),
+    )
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 

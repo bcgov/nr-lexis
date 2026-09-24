@@ -270,8 +270,11 @@ const chooseComboBoxOption = async (
   await container.getByRole('option', { name: optionName, exact: true }).click()
 }
 
-test('keeps create-package End Use authoritative while options load', async ({ page }) => {
+test('keeps create-package End Use authoritative while options load', async ({
+  page,
+}, testInfo) => {
   const fixture = await installEndUseParityFixtures(page)
+  await page.setViewportSize({ width: 1440, height: 1000 })
 
   await gotoSyntheticRoute(page, '/provincial/application/321?tab=items', {
     ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
@@ -279,17 +282,15 @@ test('keeps create-package End Use authoritative while options load', async ({ p
   await expect(page.getByRole('heading', { level: 1, name: 'Application 321' })).toBeVisible()
   await page.getByRole('button', { name: 'Create package', exact: true }).click()
 
-  const createPackage = page.getByRole('heading', { name: 'Create Package', exact: true })
-  await expect(createPackage).toBeVisible()
-  const createPackageSection = createPackage.locator('xpath=ancestor::section[1]')
+  const createPackageSection = page.locator('.application-items-drawer')
+  await expect(createPackageSection.getByLabel('Package Number', { exact: true })).toBeVisible()
   await chooseComboBoxOption(page, 'Create Package Species', 'CE - Cedar')
   await page.getByRole('button', { name: 'Add species to new package', exact: true }).click()
 
   const endUse = createPackageSection.getByRole('combobox', { name: 'End Use', exact: true })
   await fixture.endUseRequest
   await expect(endUse).toBeDisabled()
-  await expect(page.getByText('Loading authoritative item options…', { exact: true })).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Create Package', exact: true })).toBeDisabled()
+  await expect(page.getByRole('button', { name: 'Save package', exact: true })).toBeDisabled()
 
   fixture.resolveEndUses([
     { code: 'PL', description: 'Pulp' },
@@ -306,16 +307,40 @@ test('keeps create-package End Use authoritative while options load', async ({ p
   await chooseComboBoxOption(createPackageSection, 'Status Code', 'ACT - Active')
   await chooseComboBoxOption(createPackageSection, 'Product Type', 'H - Harvested Timber')
   await chooseComboBoxOption(createPackageSection, 'Age Class', 'S - Second Growth')
-  await page.getByRole('button', { name: 'Create Package', exact: true }).click()
+  for (const width of [1440, 390]) {
+    await page.setViewportSize({ width, height: 1000 })
+    await expect(
+      createPackageSection.getByRole('button', { name: 'Save package', exact: true }),
+    ).toBeVisible()
+    expect(
+      await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+    ).toBe(true)
+    await page.screenshot({
+      path: testInfo.outputPath(`application-package-drawer-${width}.png`),
+      fullPage: true,
+      animations: 'disabled',
+    })
+  }
+  await page.setViewportSize({ width: 1440, height: 1000 })
+  await createPackageSection.getByRole('button', { name: 'Save package', exact: true }).click()
 
   await expect(page.getByText('Package PKG-DELAYED created.', { exact: true })).toBeVisible()
+  await expect(page.getByRole('combobox', { name: 'Selected Package', exact: true })).toBeFocused()
+  const addScale = page.getByRole('button', { name: 'Add scale', exact: true })
+  await addScale.click()
+  await expect(page.getByRole('textbox', { name: 'Timber Mark', exact: true })).toBeFocused()
+  await page
+    .locator('.application-items-drawer')
+    .getByRole('button', { name: 'Cancel', exact: true })
+    .click()
+  await expect(addScale).toBeFocused()
   expect(fixture.writes).toEqual([
     expect.objectContaining({
       method: 'POST',
       path: '/api/lexis/rpc/application-details/package',
       body: expect.objectContaining({
         packageNumber: 'PKG-DELAYED',
-        createPackageSpeciesTableValues: 'CE',
+        createPackageSpeciesTableValues: 'FI,CE',
         createPackageEndUse: 'SL',
       }),
     }),

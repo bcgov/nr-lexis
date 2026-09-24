@@ -1,14 +1,19 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import {
+  createMemoryRouter,
+  Link,
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+} from 'react-router-dom'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   setupApplicationDetailTests,
   applicationDetail,
   applicationSummarySnapshot,
-  chooseComboBoxOption,
-  clearComboBox,
   mockApplicationDetailAuth,
   mockedApproveApplicationReview,
   mockedFetchApplicationClientData,
@@ -60,9 +65,8 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     const tabs = await screen.findAllByRole('tab')
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       'Applicant',
-      'Agent',
       'Application',
-      'Items',
+      'Scale',
       'Documents',
       'Offers',
     ])
@@ -87,20 +91,20 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Add remark' }))
-    const addRemarkDialog = await screen.findByRole('dialog', { name: 'Add remark' })
-    expect(within(addRemarkDialog).getByLabelText('New Remark')).toHaveAttribute('maxlength', '250')
+    const addRemarkInput = await screen.findByLabelText('New Remark')
+    expect(addRemarkInput).toHaveAttribute('maxlength', '250')
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
 
     const reviewTile = await selectApplicationReviewTile(false)
     const review = within(reviewTile)
-    expect(review.getByRole('button', { name: 'Edit application review' })).toBeInTheDocument()
-    expect(review.queryByRole('combobox', { name: 'Application status' })).not.toBeInTheDocument()
+    expect(review.getByRole('button', { name: 'Update status' })).toBeInTheDocument()
+    expect(review.queryByRole('group', { name: /Application status/ })).not.toBeInTheDocument()
 
-    await userEvent.click(review.getByRole('button', { name: 'Edit application review' }))
-    expect(await review.findByRole('combobox', { name: 'Application status' })).toBeInTheDocument()
+    await userEvent.click(review.getByRole('button', { name: 'Update status' }))
+    expect(await review.findByRole('group', { name: /Application status/ })).toBeInTheDocument()
     await userEvent.click(review.getByRole('button', { name: 'Cancel' }))
-    expect(review.queryByRole('combobox', { name: 'Application status' })).not.toBeInTheDocument()
+    expect(review.queryByRole('group', { name: /Application status/ })).not.toBeInTheDocument()
   })
 
   it('keeps an approved application review editable for legacy status correction', async () => {
@@ -123,11 +127,11 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     const reviewTile = await selectApplicationReviewTile(false)
     const review = within(reviewTile)
-    await userEvent.click(review.getByRole('button', { name: 'Edit application review' }))
+    await userEvent.click(review.getByRole('button', { name: 'Update status' }))
 
-    expect(await review.findByRole('combobox', { name: 'Application status' })).toBeInTheDocument()
-    expect(review.getByRole('button', { name: 'Update Review Status' })).toBeInTheDocument()
-    expect(review.queryByRole('button', { name: 'Approve Application' })).not.toBeInTheDocument()
+    expect(await review.findByRole('group', { name: /Application status/ })).toBeInTheDocument()
+    expect(review.getByRole('button', { name: 'Update status' })).toBeInTheDocument()
+    expect(review.queryByRole('button', { name: 'Approve application' })).not.toBeInTheDocument()
   })
 
   it('keeps remarks read-only when application detail editing is not allowed', async () => {
@@ -179,14 +183,9 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       target: { value: 'Preserve remark draft' },
     })
     const reviewTile = within(await selectApplicationReviewTile())
-    const reviewStatus = reviewTile.getByRole('combobox', { name: 'Application status' })
-    await chooseComboBoxOption(reviewStatus, 'Rejected')
-    const reviewRemark = reviewTile.getByLabelText('Status change remark')
-    expect(
-      reviewTile.getByText(
-        'Saved with the status change and included in an email notification, if one is sent.',
-      ),
-    ).toBeInTheDocument()
+    await userEvent.click(reviewTile.getByRole('radio', { name: 'Rejected' }))
+    const reviewRemark = reviewTile.getByLabelText('Remarks')
+    expect(reviewTile.getByText('Saved to the Remarks tab.')).toBeInTheDocument()
     fireEvent.change(reviewRemark, {
       target: { value: 'Preserve review draft' },
     })
@@ -196,24 +195,25 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     })
     const detailFetchCountBeforeSave = mockedFetchProvincialApplicationDetail.mock.calls.length
     const savePackageButton = screen.getByRole('button', {
-      name: 'Save Package',
+      name: 'Save package',
     })
+    await waitFor(() => expect(savePackageButton).toBeEnabled())
     fireEvent.click(savePackageButton)
     await waitFor(() => {
       expect(mockedUpdateApplicationPackage).toHaveBeenCalledTimes(1)
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(
         detailFetchCountBeforeSave + 1,
       )
-      expect(savePackageButton).toBeEnabled()
     })
+    expect(screen.queryByRole('button', { name: 'Save package' })).not.toBeInTheDocument()
     expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
 
     expect(exemptionTerm).toBeInTheDocument()
     expect(exemptionTerm).toHaveValue(181)
     expect(newRemark).toBeInTheDocument()
     expect(newRemark).toHaveValue('Preserve remark draft')
-    expect(reviewStatus).toBeInTheDocument()
-    expect(reviewStatus).toHaveValue('Rejected')
+    await selectApplicationDetailTab('Review')
+    expect(reviewTile.getByRole('radio', { name: 'Rejected' })).toBeChecked()
     expect(reviewRemark).toBeInTheDocument()
     expect(reviewRemark).toHaveValue('Preserve review draft')
   }, 30_000)
@@ -250,7 +250,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     fireEvent.change(screen.getByLabelText('New Remark'), {
       target: { value: 'New application note' },
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
 
     await waitFor(() => {
       expect(mockedSaveApplicationRemark).toHaveBeenCalledWith({
@@ -294,7 +294,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     fireEvent.change(screen.getByLabelText('New Remark'), {
       target: { value: 'Refresh permit eligibility' },
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
     await waitFor(() => expect(mockedFetchApplicationPermits).toHaveBeenCalledTimes(2))
 
     await selectApplicationDetailTab('Documents')
@@ -343,7 +343,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     await selectApplicationRemarksForEditing()
     const remarkInput = await screen.findByLabelText('New Remark')
     fireEvent.change(remarkInput, { target: { value: 'éè' } })
-    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
 
     expect(
       await screen.findByText(
@@ -409,7 +409,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     fireEvent.change(await screen.findByLabelText('New Remark'), {
       target: { value: 'Operational note' },
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
     await waitFor(() => expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2))
 
     const unload = new Event('beforeunload', { cancelable: true })
@@ -435,7 +435,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(await screen.findByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save remark' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
@@ -478,12 +478,11 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(within(remarkRow as HTMLElement).getByText('2026-01-04')).toBeInTheDocument()
     expect(within(remarkRow as HTMLElement).getByText('idir\\reviewer')).toBeInTheDocument()
     await userEvent.click(within(remarkRow as HTMLElement).getByRole('button', { name: 'Edit' }))
-    const editRemarkDialog = await screen.findByRole('dialog', { name: 'Edit remark' })
-    const remarkInput = within(editRemarkDialog).getByLabelText('Edit Remark 88')
+    const remarkInput = await screen.findByLabelText('Edit Remark 88')
     fireEvent.change(remarkInput, {
       target: { value: 'Updated application note' },
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Update Remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Update remark' }))
 
     await waitFor(() => {
       expect(mockedSaveApplicationRemark).toHaveBeenCalledWith({
@@ -553,9 +552,10 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     expect(await screen.findByText('Created application 321.')).toBeInTheDocument()
-    await selectApplicationReviewTile()
+    const reviewTile = await selectApplicationReviewTile()
     expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Application' }))
+    await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Approved' }))
+    await userEvent.click(within(reviewTile).getByRole('button', { name: 'Approve application' }))
 
     await waitFor(() => {
       expect(mockedApproveApplicationReview).toHaveBeenCalledWith('321')
@@ -573,6 +573,119 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(screen.queryByText('Created application 321.')).not.toBeInTheDocument()
   })
 
+  it('keeps an optional approval remark available to retry when only its save fails', async () => {
+    mockedSaveApplicationRemark.mockResolvedValueOnce({
+      success: false,
+      message: 'Remark storage unavailable.',
+      remarkId: '',
+      remark: '',
+      title: '',
+      user: '',
+      status: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reviewTile = await selectApplicationReviewTile()
+    await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Approved' }))
+    fireEvent.change(within(reviewTile).getByLabelText('Remarks'), {
+      target: { value: 'Approval note' },
+    })
+    await userEvent.click(within(reviewTile).getByRole('button', { name: 'Approve application' }))
+
+    expect(
+      await screen.findByText(/Application approved, but the remark was not saved/),
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('New Remark')).toHaveValue('Approval note')
+    expect(screen.getByRole('tab', { name: 'Remarks' })).toHaveAttribute('aria-selected', 'true')
+    expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
+    expect(mockedSaveApplicationRemark).toHaveBeenCalledWith({
+      applicationNumber: '321',
+      remarkBody: 'Approval note',
+    })
+  })
+
+  it('keeps navigation blocked after approval when its optional remark could not be saved', async () => {
+    mockedSaveApplicationRemark.mockResolvedValueOnce({
+      success: false,
+      message: 'Remark storage unavailable.',
+      remarkId: '',
+      remark: '',
+      title: '',
+      user: '',
+      status: '',
+    })
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/application/:applicationNumber',
+          element: (
+            <>
+              <ProvincialApplicationDetailsPage />
+              <Link to="/next">Leave application</Link>
+            </>
+          ),
+        },
+        { path: '/next', element: <h1>Next page</h1> },
+      ],
+      { initialEntries: ['/provincial/application/321'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    const reviewTile = await selectApplicationReviewTile()
+    await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Approved' }))
+    fireEvent.change(within(reviewTile).getByLabelText('Remarks'), {
+      target: { value: 'Approval note' },
+    })
+    await userEvent.click(screen.getByRole('link', { name: 'Leave application' }))
+    const unsavedDialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
+    await userEvent.click(within(unsavedDialog).getByRole('button', { name: 'Save and leave' }))
+
+    expect(
+      await screen.findByText(/Application approved, but the remark was not saved/),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Next page' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('New Remark')).toHaveValue('Approval note')
+    expect(screen.getByRole('tab', { name: 'Remarks' })).toHaveAttribute('aria-selected', 'true')
+    expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
+  })
+
+  it('leaves without an unsaved prompt when the opened review form is unchanged', async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/application/:applicationNumber',
+          element: (
+            <>
+              <ProvincialApplicationDetailsPage />
+              <Link to="/next">Leave application</Link>
+            </>
+          ),
+        },
+        { path: '/next', element: <h1>Next page</h1> },
+      ],
+      { initialEntries: ['/provincial/application/321'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    const reviewTile = await selectApplicationReviewTile()
+    expect(within(reviewTile).getByRole('radio', { name: 'Approved' })).toBeChecked()
+    await userEvent.click(screen.getByRole('link', { name: 'Leave application' }))
+
+    expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+  })
+
   it('prefills application review email from the applicant client data', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -586,6 +699,12 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     const reviewTile = await selectApplicationReviewTile()
+    await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Rejected' }))
+    await userEvent.click(
+      within(reviewTile).getByRole('checkbox', {
+        name: 'Send email notification to the client, including the remark',
+      }),
+    )
     await waitFor(() => {
       expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
         'agent@example.test',
@@ -595,9 +714,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       'readonly',
     )
     expect(
-      within(reviewTile).getByText(
-        "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification.",
-      ),
+      within(reviewTile).getByText("Editing this address won't change the client's record."),
     ).toBeInTheDocument()
   })
 
@@ -635,14 +752,14 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     await selectApplicationDetailTab('Applicant')
     const ownerDetailsTile = (
-      await screen.findByRole('heading', { name: 'Applicant client details', level: 2 })
+      await screen.findByRole('heading', { name: 'Applicant details', level: 2 })
     ).closest('.cds--tile')
     expect(ownerDetailsTile).toBeTruthy()
     expect(
       within(ownerDetailsTile as HTMLElement).getByText('owner@example.test'),
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole('heading', { name: 'Applicant client details', level: 3 }),
+      screen.queryByRole('heading', { name: 'Applicant details', level: 3 }),
     ).not.toBeInTheDocument()
     expect(screen.queryByText('Notification email')).not.toBeInTheDocument()
 
@@ -692,7 +809,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     await selectApplicationDetailTab('Applicant')
     const ownerDetailsTile = (
-      await screen.findByRole('heading', { name: 'Applicant client details', level: 2 })
+      await screen.findByRole('heading', { name: 'Applicant details', level: 2 })
     ).closest('.cds--tile')
     expect(ownerDetailsTile).toBeTruthy()
     const applicantTypeField = within(ownerDetailsTile as HTMLElement)
@@ -730,6 +847,12 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     const reviewTile = await selectApplicationReviewTile()
+    await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Rejected' }))
+    await userEvent.click(
+      within(reviewTile).getByRole('checkbox', {
+        name: 'Send email notification to the client, including the remark',
+      }),
+    )
     await waitFor(() =>
       expect(within(reviewTile).getByLabelText('Client email address')).toHaveValue(
         'owner@example.test',
@@ -763,19 +886,26 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     const reviewTile = await selectApplicationReviewTile()
     const reviewControls = within(reviewTile)
-    await chooseComboBoxOption(
-      reviewControls.getByRole('combobox', { name: /application status/i }),
-      'Rejected',
+    await userEvent.click(reviewControls.getByRole('radio', { name: 'Rejected' }))
+    await userEvent.click(
+      reviewControls.getByRole('checkbox', {
+        name: 'Send email notification to the client, including the remark',
+      }),
     )
     await waitFor(() => {
       expect(reviewControls.getByLabelText(/client email address/i)).toHaveValue(
         'agent@example.test',
       )
     })
-    fireEvent.change(reviewControls.getByLabelText(/status change remark/i), {
+    await userEvent.click(
+      reviewControls.getByRole('checkbox', {
+        name: 'Send email notification to the client, including the remark',
+      }),
+    )
+    fireEvent.change(reviewControls.getByLabelText('Remarks'), {
       target: { value: 'Cannot approve this application' },
     })
-    await userEvent.click(reviewControls.getByRole('button', { name: 'Update Review Status' }))
+    await userEvent.click(reviewControls.getByRole('button', { name: 'Reject application' }))
 
     await waitFor(() => {
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith('321', {
@@ -785,7 +915,59 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       })
     })
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-    expect(await screen.findByText('Application status updated.')).toBeInTheDocument()
+    expect(await screen.findByText('Application rejected.')).toBeInTheDocument()
+    expect(screen.getByText('No email was sent to the client.')).toBeInTheDocument()
+    expect(within(reviewTile).queryByText('Client email address')).not.toBeInTheDocument()
+  })
+
+  it('leaves the withdrawal email unticked until the reviewer opts in', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reviewControls = within(await selectApplicationReviewTile())
+    expect(reviewControls.getByRole('radio', { name: 'Approved' })).toBeChecked()
+    await userEvent.click(reviewControls.getByRole('radio', { name: 'Withdrawn' }))
+    const sendEmail = reviewControls.getByRole('checkbox', {
+      name: 'Send email notification to the client, including the remark',
+    })
+    expect(sendEmail).not.toBeChecked()
+    expect(reviewControls.queryByLabelText(/client email address/i)).not.toBeInTheDocument()
+    expect(reviewControls.getByRole('button', { name: 'Withdraw application' })).toBeEnabled()
+
+    await userEvent.click(sendEmail)
+    await waitFor(() =>
+      expect(reviewControls.getByLabelText(/client email address/i)).toHaveValue(
+        'agent@example.test',
+      ),
+    )
+    fireEvent.change(reviewControls.getByLabelText('Remarks'), {
+      target: { value: 'Withdrawn at the client request' },
+    })
+    await userEvent.click(
+      reviewControls.getByRole('button', { name: 'Withdraw application and send email' }),
+    )
+
+    await waitFor(() =>
+      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith('321', {
+        statusCode: 'WDN',
+        remark: 'Withdrawn at the client request',
+        clientEmailAddress: 'agent@example.test',
+      }),
+    )
+    expect(await screen.findByText('Application withdrawn.')).toBeInTheDocument()
+    expect(screen.getByText('Email sent to agent@example.test.')).toBeInTheDocument()
+    const savedEmail = within(await selectApplicationReviewTile(false))
+      .getByText('Client email address')
+      .closest('.detail-field-item') as HTMLElement
+    expect(within(savedEmail).getByText('agent@example.test')).toBeInTheDocument()
   })
 
   it('loads persisted review status remark without treating placeholder email as persisted', async () => {
@@ -833,18 +1015,17 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     const reviewTile = await selectApplicationReviewTile()
     expect(within(reviewTile).getByText('Expired')).toBeInTheDocument()
     expect(within(reviewTile).getByText('Expired after review')).toBeInTheDocument()
-    expect(within(reviewTile).getByText('Not provided')).toBeInTheDocument()
+    // No status email is recorded, so neither the placeholder nor a guessed address is shown.
+    expect(within(reviewTile).queryByText('Client email address')).not.toBeInTheDocument()
+    expect(within(reviewTile).queryByText('Not on file')).not.toBeInTheDocument()
     expect(
-      within(reviewTile).queryByRole('button', { name: 'Edit application review' }),
+      within(reviewTile).queryByRole('button', { name: 'Update status' }),
     ).not.toBeInTheDocument()
     expect(
-      within(reviewTile).queryByRole('button', { name: 'Approve Application' }),
+      within(reviewTile).queryByRole('button', { name: 'Approve application' }),
     ).not.toBeInTheDocument()
     expect(
-      within(reviewTile).queryByRole('button', { name: 'Update Review Status' }),
-    ).not.toBeInTheDocument()
-    expect(
-      within(reviewTile).queryByRole('button', { name: 'Update Status and Send Email' }),
+      within(reviewTile).queryByRole('button', { name: 'Reject application' }),
     ).not.toBeInTheDocument()
   })
 
@@ -870,19 +1051,15 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     const reviewControls = within(reviewTile)
 
     expect(reviewControls.getByText('Rejected')).toBeInTheDocument()
-    expect(reviewControls.getByText('agent@example.test')).toBeInTheDocument()
     expect(reviewControls.getByText('ok')).toBeInTheDocument()
+    // A loaded review cannot show who was emailed because sent status emails are not recorded.
+    expect(reviewControls.queryByText('agent@example.test')).not.toBeInTheDocument()
+    expect(reviewControls.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
     expect(
-      reviewControls.queryByRole('button', { name: 'Edit application review' }),
+      reviewControls.queryByRole('button', { name: 'Approve application' }),
     ).not.toBeInTheDocument()
     expect(
-      reviewControls.queryByRole('button', { name: 'Approve Application' }),
-    ).not.toBeInTheDocument()
-    expect(
-      reviewControls.queryByRole('button', { name: 'Update Review Status' }),
-    ).not.toBeInTheDocument()
-    expect(
-      reviewControls.queryByRole('button', { name: 'Update Status and Send Email' }),
+      reviewControls.queryByRole('button', { name: 'Reject application' }),
     ).not.toBeInTheDocument()
   })
 
@@ -914,20 +1091,19 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     const reviewTile = await selectApplicationReviewTile()
     const reviewControls = within(reviewTile)
+    await userEvent.click(reviewControls.getByRole('radio', { name: 'Rejected' }))
+    await userEvent.click(
+      reviewControls.getByRole('checkbox', {
+        name: 'Send email notification to the client, including the remark',
+      }),
+    )
     await waitFor(() =>
       expect(reviewControls.getByLabelText(/client email address/i)).toHaveValue(''),
     )
-    await chooseComboBoxOption(
-      reviewControls.getByRole('combobox', { name: /application status/i }),
-      'Rejected',
-    )
-    await userEvent.type(
-      reviewControls.getByLabelText(/status change remark/i),
-      'Missing recipient',
-    )
+    await userEvent.type(reviewControls.getByLabelText('Remarks'), 'Missing recipient')
     await userEvent.click(
       reviewControls.getByRole('button', {
-        name: 'Update Status and Send Email',
+        name: 'Reject application and send email',
       }),
     )
 
@@ -971,22 +1147,21 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     const reviewTile = await selectApplicationReviewTile()
+    await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Rejected' }))
+    await userEvent.click(
+      within(reviewTile).getByRole('checkbox', {
+        name: 'Send email notification to the client, including the remark',
+      }),
+    )
     await waitFor(() => {
       expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
         'agent@example.test',
       )
     })
-    await chooseComboBoxOption(
-      within(reviewTile).getByRole('combobox', { name: /application status/i }),
-      'Rejected',
-    )
     fireEvent.change(within(reviewTile).getByLabelText(/client email address/i), {
       target: { value: 'edited.client@example.test' },
     })
-    await userEvent.type(
-      within(reviewTile).getByLabelText(/status change remark/i),
-      'Needs correction',
-    )
+    await userEvent.type(within(reviewTile).getByLabelText('Remarks'), 'Needs correction')
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
       'edited.client@example.test',
     )
@@ -996,7 +1171,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     })
     await userEvent.click(
       within(reviewTile).getByRole('button', {
-        name: 'Update Status and Send Email',
+        name: 'Reject application and send email',
       }),
     )
 
@@ -1021,14 +1196,19 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
       'edited.client@example.test',
     )
-    expect(within(reviewTile).getByLabelText(/status change remark/i)).toHaveValue(
-      'Needs correction',
-    )
+    expect(within(reviewTile).getByLabelText('Remarks')).toHaveValue('Needs correction')
     expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Needs correction').length).toBeGreaterThan(0)
   })
 
   it('validates application review status before updating from detail', async () => {
+    // Approval is preselected when available, so use a status that opens without a choice.
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...reviewableApplicationDetail,
+      applicationStatusCode: 'APP',
+      statusDescription: 'Approved',
+    })
+
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -1041,8 +1221,10 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     const reviewTile = await selectApplicationReviewTile()
-    await clearComboBox(within(reviewTile).getByRole('combobox', { name: /application status/i }))
-    await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update Review Status' }))
+    expect(
+      within(reviewTile).getByRole('group', { name: /Application status/ }),
+    ).toBeInTheDocument()
+    await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update status' }))
 
     expect(
       screen.getByText('Choose an application status before updating review status.'),
@@ -1065,19 +1247,19 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       )
 
       const reviewTile = await selectApplicationReviewTile()
-      await chooseComboBoxOption(
-        within(reviewTile).getByRole('combobox', {
-          name: /application status/i,
-        }),
-        statusLabel,
-      )
+      await userEvent.click(within(reviewTile).getByRole('radio', { name: statusLabel }))
       await userEvent.click(
         within(reviewTile).getByRole('button', {
-          name: 'Update Review Status',
+          name:
+            statusLabel === 'Rejected'
+              ? 'Reject application'
+              : statusLabel === 'Withdrawn'
+                ? 'Withdraw application'
+                : 'Update status',
         }),
       )
 
-      expect(within(reviewTile).getByLabelText(/status change remark/i)).toBeInvalid()
+      expect(within(reviewTile).getByLabelText('Remarks')).toBeInvalid()
       expect(
         screen.getByText(
           'Status change remark is required when rejecting, withdrawing, or expiring an application.',
@@ -1101,7 +1283,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     await selectApplicationRemarksForEditing()
     expect(await screen.findByLabelText('New Remark')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
 
     expect(screen.getByText('Remark is required.')).toBeInTheDocument()
     expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
