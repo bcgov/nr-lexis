@@ -215,6 +215,8 @@ class FederalApplicationRepositoryTest {
         .satisfies(
             detail -> {
               assertThat(detail.packages()).containsExactly("PKG-900123", "PKG-900124");
+              // Carried through the package/offer enrichment copy for regional write checks.
+              assertThat(detail.orgUnitNumber()).isEqualTo(1909L);
               assertThat(detail.offers())
                   .containsExactly(
                       new FederalApplicationOfferDto(
@@ -419,7 +421,8 @@ class FederalApplicationRepositoryTest {
         List.of(),
         List.of(),
         List.of(),
-        null);
+        null)
+        .withOrgUnitNumber(1909L);
   }
 
   private static final class TestFederalApplicationRepository extends FederalApplicationRepository {

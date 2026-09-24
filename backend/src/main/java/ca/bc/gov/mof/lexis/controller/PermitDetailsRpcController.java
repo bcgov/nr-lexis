@@ -576,6 +576,7 @@ public class PermitDetailsRpcController {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     requireExemptionAccess(mutationRequest.exemptionNumber(), authentication);
+    requirePermitRegions(mutationRequest, authentication);
     Long requestedOicApplicationNumber = requestedOicApplicationNumber(mutationRequest);
     if (requestedOicApplicationNumber != null) {
       requireApplicationAccess(requestedOicApplicationNumber, authentication);
@@ -690,6 +691,7 @@ public class PermitDetailsRpcController {
     }
     Long permitNumber = parsePositiveLong(mutationRequest.permitNumber());
     requirePermitAccess(permitNumber, authentication);
+    requirePermitRegions(mutationRequest, authentication);
     if (requestsMinistryPermitMutation(mutationRequest, permitNumber)
         && !canReviewPermits(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -835,6 +837,25 @@ public class PermitDetailsRpcController {
       applicationNumbers.add(requestedOicApplicationNumber);
     }
     return List.copyOf(applicationNumbers);
+  }
+
+  /** A regional user's new or re-regioned permit must land in one of their granted regions. */
+  private void requirePermitRegions(
+      PermitMutationRequestDto mutationRequest, Authentication authentication) {
+    if (provincialAuthorizationService == null) {
+      return;
+    }
+    List<Long> requestedRegions = new ArrayList<>();
+    for (String region : new String[] {mutationRequest.orgUnitNumber(), mutationRequest.oicRegion()}) {
+      Long orgUnitNumber = region == null ? null : parsePositiveLong(region);
+      if (orgUnitNumber != null) {
+        requestedRegions.add(orgUnitNumber);
+      }
+    }
+    provincialAuthorizationService.requireOrgUnits(
+        authentication,
+        requestedRegions,
+        ProvincialAuthorizationService.OrgUnitSurface.PERMIT_WRITE);
   }
 
   private Long requestedOicApplicationNumber(PermitMutationRequestDto mutationRequest) {

@@ -1485,7 +1485,7 @@ class LexisUploadControllerTest {
                     Map.of(
                         "client_id",
                         "nexcol-service-client",
-                        "cognito:groups",
+                        "client_roles",
                         List.of(),
                         "scope",
                         "lexis:federal-submission:submit"))));
@@ -1607,7 +1607,7 @@ class LexisUploadControllerTest {
         .thenReturn(payload);
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                submissionData, "federal-direct.xml", "shared-name", "FED-REF-1"))
+                submissionData, "federal-direct.xml", "IDIR\\shared-name", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> serviceResponse =
@@ -1640,7 +1640,11 @@ class LexisUploadControllerTest {
                         "shared-name",
                         "preferred_username",
                         "shared-name",
-                        "cognito:groups",
+                        "identity_provider",
+                        "idir",
+                        "idir_username",
+                        "shared-name",
+                        "client_roles",
                         List.of("LEXIS_GROUP_9"),
                         "scope",
                         "lexis:federal-submission:submit"))));
@@ -1655,7 +1659,7 @@ class LexisUploadControllerTest {
             "FED-REF-1");
     verify(applicationSubmissionImportService)
         .importDedicatedFederalApplicationSubmission(
-            submissionData, "federal-direct.xml", "shared-name", "FED-REF-1");
+            submissionData, "federal-direct.xml", "IDIR\\shared-name", "FED-REF-1");
   }
 
   @Test

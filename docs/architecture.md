@@ -8,10 +8,13 @@ server-rendered Java application and its application-server integrations.
 
 ```mermaid
 flowchart LR
-    User["Interactive user"] -->|OIDC sign-in| Cognito["FAM / Cognito"]
-    User --> Route["OpenShift route"]
+    User["Interactive user"] --> Route["OpenShift route"]
     Route --> Frontend["Caddy / Coraza / React"]
-    Frontend -->|REST with Cognito JWT| Backend["Spring Boot API<br/>1-N replicas"]
+    Frontend -->|"Code + PKCE sign-in,<br/>refresh and logout"| Sso["BC Gov SSO<br/>Keycloak standard realm"]
+    Sso -->|Federated sign-in| Idp["IDIR (Azure) /<br/>Business BCeID (SiteMinder)"]
+    Fam["FAM (nr-fam)"] -->|Client role grants| Sso
+    Frontend -->|REST with SSO access token| Backend["Spring Boot API<br/>1-N replicas"]
+    Backend -.->|Signing keys| Sso
 
     Nexcol[NEXCOL] -->|Client credentials| Keycloak["External Keycloak<br/>forests realm"]
     Nexcol --> Gateway["API gateway"]
@@ -32,11 +35,11 @@ over TCP rather than deploying a scanner workload of its own.
 
 | Component                | Responsibility                                                                                                                                                         |
 | ------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| React frontend           | Interactive provincial, federal, reporting, administration, and RTM AMV journeys. It uses backend-provided capabilities to control navigation and actions.             |
+| React frontend           | Interactive provincial, federal, reporting, administration, and RTM AMV journeys. It uses backend-provided capabilities, including per-action regions, to control navigation, actions, and region choices. |
 | Spring Boot backend      | REST endpoints, object- and client-level authorization, Oracle workflow coordination, report generation, attachment validation, email events, and operational metrics. |
 | Oracle                   | System of record for LEXIS data, reference codes, audit fields, attachments, and the established PL/SQL package contracts.                                             |
 | Shared ClamAV            | Malware scanning for uploaded content before accepted files are persisted. The scanner service and signature updates are operated separately from LEXIS.              |
-| FAM / Cognito            | Interactive authentication and FAM role authorities, including client-scoped Provincial Submitter access.                                                              |
+| BC Gov SSO and FAM       | Interactive sign-in through the Keycloak standard realm; FAM (nr-fam) grants its client roles, including client-scoped Provincial Submitter and region-scoped staff access. |
 | Keycloak and API gateway | Dedicated machine-to-machine authentication, scope enforcement, traffic controls, and routing for NEXCOL federal submissions.                                          |
 | Mail relay               | Delivery of post-commit workflow notifications from provincial and regional positional mailboxes to validated applicants and regional positional recipients.            |
 
@@ -44,19 +47,71 @@ Prefer persistent inline banners for action success, warning, and failure feedba
 
 ## Identity and authorization
 
-Interactive users authenticate through FAM's Cognito integration. The backend validates the JWT,
-normalizes FAM authorities, and derives the authenticated forest-client scopes where applicable.
-The signed `custom:idp_name` claim is also enforced when authorities are created: `idir` identities
-can receive only staff roles, while `bceidbusiness` identities can receive only concrete,
-client-scoped Provincial Submitter roles. Missing or unknown identity-provider claims and
-incompatible role assignments grant no corresponding LEXIS authority.
+Interactive users authenticate directly through BC Gov SSO, with access managed in nr-fam/CSS.
+The backend validates signature, issuer, expiry, access-token type and the configured LEXIS client
+ID (`azp`), then translates client roles into its existing internal authorities. The signed
+`identity_provider` claim separates IDIR staff (`idir` or `azureidir`) from Business BCeID
+(`bceidbusiness`) Provincial Submitter and Federal Read Only roles. Missing or unknown providers
+and incompatible roles grant no corresponding authority. Scoped roles such as
+`LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00001018` retain their eight-digit client scope;
+`FAM:` metadata roles grant no application access. Existing audit usernames are preserved.
 When FAM assigns a Provincial Submitter to multiple forest clients, LEXIS requires a per-session
 active organization selection. The frontend sends that selection with each API request and the
 backend validates it against the client-scoped FAM authorities before enforcing it for every
 protected object, child resource, download, and mutation. The frontend treats its route and action
 guards as user experience controls rather than the security boundary.
 
-FAM delegated administration controls who may assign the five LEXIS application roles. It is a FAM
+Application Approver, Exemption Approver and Read Only can also be granted per Natural Resource
+Region through separate FAM roles that require a region selection:
+`LEXIS_APPLICATION_APPROVER_REGION`, `LEXIS_EXEMPTION_APPROVER_REGION` and
+`LEXIS_READ_ONLY_REGION` (created in DEV, TEST and PROD). A role without a region is
+province-wide; a regional grant such as `LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO` carries
+the same actions for records in its regions only (organization units 1903-1910). Each grant keeps
+its own regions, and record checks apply the regions of both the surface and the action the route
+authorized, so province-wide Read Only plus Cariboo Application Approver reads everywhere but
+writes only in Cariboo. Writing or approving a multi-region record requires every region;
+creating a permit from an exemption needs one of its regions, and the permit's own region must be
+granted. A regional user's reports must name only their regions. Records without a region, or
+still tagged with a pre-2010 forest region, are outside every regional grant. Administrator and
+Business BCeID roles are never regional. Session capabilities list each region-limited action's regions
+(`actionRegions`), so region pickers offer only usable regions and write actions are hidden on
+records outside them; out-of-region federal applications open read-only and offers are not
+editable.
+
+### Interactive sign-in
+
+```mermaid
+sequenceDiagram
+    participant F as FAM (nr-fam)
+    participant U as Browser (React)
+    participant S as BC Gov SSO (Keycloak)
+    participant I as IDIR / Business BCeID
+    participant B as LEXIS API
+    F->>S: Grant client roles, optionally per region
+    U->>S: Authorization request with PKCE and kc_idp_hint
+    S->>I: Federated sign-in
+    I-->>S: Authenticated identity
+    S-->>U: Redirect to /authCallback with code
+    U->>S: Exchange code and PKCE verifier
+    S-->>U: Access, ID and refresh tokens
+    U->>B: API request with bearer access token
+    B->>B: Validate issuer, signature, azp, typ and identity_provider
+    B->>B: Map client_roles to authorities and regions
+    B-->>U: Capabilities, including actionRegions
+    Note over U,S: Near expiry, one shared refresh renews the tokens
+    U->>I: Logout through SiteMinder logoff.cgi
+    I-->>U: Redirect to Keycloak end-session
+    U->>S: End session with id_token_hint
+    S-->>U: Return to LEXIS
+```
+
+The browser uses the public LEXIS client with no secret and keeps tokens in sessionStorage, so
+each tab signs in separately. It renews from the refresh token on activity and before API calls,
+sharing one renewal between concurrent callers, and signs out after 25 idle minutes. Logout
+chains SiteMinder `logoff.cgi` before Keycloak end-session so a Business BCeID SiteMinder session
+does not survive LEXIS logout.
+
+FAM delegated administration controls who may assign the LEXIS application roles. It is a FAM
 permission type, not a LEXIS runtime role, and does not grant or appear as application access. FAM
 should prevent incompatible identity/role assignments at provisioning time; the backend token guard
 is the authoritative runtime control.
@@ -177,10 +232,10 @@ submission processing.
 The federal NEXCOL team confirmed that this service has been removed from `NEXCOL.LexisAPI` and is
 no longer used by NEXCOL. No modern replacement is required for NEXCOL.
 
-### Keycloak authentication
+### NEXCOL Keycloak authentication
 
 Keycloak is hosted separately from LEXIS. NEXCOL uses a dedicated confidential client in the
-existing `forests` realm, independently of interactive FAM/Cognito authentication.
+existing `forests` realm, independently of interactive nr-fam / BC Gov SSO authentication.
 
 The [NEXCOL API documentation](https://openapi.apps.gov.bc.ca/?url=https://raw.githubusercontent.com/bcgov/nr-lexis/main/gateway/openapi.yaml)
 covers token endpoints, client credentials, the required scope, and request examples.
@@ -220,9 +275,11 @@ approved NEXCOL client. A client ID is used for provisioning and caller identity
 extra runtime allowlist check.
 
 The [backend token configuration](../backend/src/main/java/ca/bc/gov/mof/lexis/security/Oauth2SecurityCustomizer.java)
-registers the Cognito issuer for interactive users and the configured Keycloak issuer for machine
-clients. Cognito tokens produce the compatible FAM role authorities; Keycloak tokens produce scope
-authorities. `SCOPE_lexis:federal-submission:submit` maps only to `uploadFederalSubmission`, which
+registers `LEXIS_OIDC_ISSUER_URI` for interactive users and the separate `KEYCLOAK_ISSUER_URI`
+for machine clients. Interactive tokens produce compatible FAM role authorities; machine tokens
+produce scope authorities. The interactive client is bound through `LEXIS_OIDC_CLIENT_ID`; this
+does not change the machine-client trust model described above.
+`SCOPE_lexis:federal-submission:submit` maps only to `uploadFederalSubmission`, which
 protects the three federal endpoints. It grants no interactive LEXIS role or general record-read
 access. The backend trusts one configured Keycloak issuer for machine clients.
 
@@ -291,10 +348,9 @@ Configure these values before the first PROD deployment:
 
 The deployer passes the multiline PEM values directly to the Route with debug logging disabled. On
 renewal, replace the three certificate secrets and rerun the PROD deployment; no code change is
-required. Keep `VITE_REDIRECT_SIGN_IN=/dashboard` and set `VITE_REDIRECT_SIGN_OUT` to
-`https://lexis.nrs.gov.bc.ca` before deployment. The FAM PROD client must also allow
-`https://lexis.nrs.gov.bc.ca/dashboard` as a callback and `https://lexis.nrs.gov.bc.ca` as a logout
-URL before users authenticate through the vanity host.
+required. The CSS PROD client must allow `https://lexis.nrs.gov.bc.ca/authCallback` as a callback
+and `https://lexis.nrs.gov.bc.ca` as a logout URL before users authenticate through the vanity
+host. Configure the matching interactive issuer/client ID for that environment.
 
 The backend deployment uses a CPU-based Horizontal Pod Autoscaler with environment-specific minimum
 and maximum replica counts. Interactive saves use optimistic version checks: stale saves return a
@@ -318,7 +374,7 @@ that finds an existing package receives a conflict for NEXCOL reconciliation.
 | -------------------- | ----------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
 | Application delivery | Java 8 WAR deployed to an application server                            | Separate React/Caddy and Spring Boot workloads on OpenShift, with a shared ClamAV service in its own namespace            |
 | Web architecture     | Struts actions, JSP pages, browser JavaScript, and server HTTP sessions | React SPA, typed REST contracts, stateless JWT authentication, and Spring services                                       |
-| Interactive identity | WebADE filters, roles, and active organization context                  | FAM roles through Cognito JWTs, per-session active client selection, backend capability resolution, and explicit client/object checks |
+| Interactive identity | WebADE filters, roles, and active organization context                  | FAM roles through BC Gov SSO JWTs, per-session active client selection, backend capability resolution, and explicit client/object checks |
 | Federal ingress      | ESF queue-oriented ingestion                                            | NEXCOL through a dedicated Keycloak scope and API gateway routes                                                         |
 | Persistence          | Oracle tables and PL/SQL packages                                       | The same Oracle system of record behind Spring JDBC repositories and explicit transaction boundaries                     |
 | Attachments          | Oracle BLOB storage through application-server upload actions           | Oracle BLOB storage with bounded streaming validation and ClamAV scanning                                                |

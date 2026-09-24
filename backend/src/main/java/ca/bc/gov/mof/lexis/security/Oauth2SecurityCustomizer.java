@@ -10,6 +10,7 @@ import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.core.convert.converter.Converter;
@@ -23,9 +24,9 @@ import org.springframework.security.oauth2.core.DelegatingOAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.OAuth2TokenValidator;
 import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
+import org.springframework.security.oauth2.jwt.BadJwtException;
 import org.springframework.security.oauth2.jwt.Jwt;
 import org.springframework.security.oauth2.jwt.JwtDecoder;
-import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.security.oauth2.jwt.JwtValidators;
 import org.springframework.security.oauth2.jwt.NimbusJwtDecoder;
 import org.springframework.security.oauth2.server.resource.authentication.JwtAuthenticationConverter;
@@ -36,7 +37,7 @@ import org.springframework.util.StringUtils;
 public class Oauth2SecurityCustomizer
     implements Customizer<OAuth2ResourceServerConfigurer<HttpSecurity>> {
 
-  private static final String IDP_IDIR = "idir";
+  private static final Set<String> STAFF_IDENTITY_PROVIDERS = Set.of("idir", "azureidir");
   private static final String IDP_BCEID_BUSINESS = "bceidbusiness";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
   private static final Set<String> STAFF_ROLES =
@@ -48,39 +49,49 @@ public class Oauth2SecurityCustomizer
 
   private final JwtDecoder jwtDecoder;
   private final LexisSessionService sessionService;
-  private final String cognitoIssuerUri;
+  private final String interactiveIssuerUri;
+  private final String expectedClientId;
   private final String keycloakIssuerUri;
 
   public Oauth2SecurityCustomizer(
-      @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String cognitoJwkSetUri,
-      @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String cognitoIssuerUri,
+      @Value("${spring.security.oauth2.resourceserver.jwt.jwk-set-uri}") String interactiveJwkSetUri,
+      @Value("${spring.security.oauth2.resourceserver.jwt.issuer-uri}") String interactiveIssuerUri,
+      @Value("${lexis.auth.oidc.client-id}") String expectedClientId,
       @Value("${lexis.auth.keycloak.issuer-uri:}") String keycloakIssuerUri,
       @Value("${lexis.auth.keycloak.jwk-set-uri:}") String keycloakJwkSetUri,
       LexisSessionService sessionService) {
 
-    String normalizedCognitoIssuerUri = normalizeIssuerUri(cognitoIssuerUri);
-    this.cognitoIssuerUri = normalizedCognitoIssuerUri;
+    this.interactiveIssuerUri = normalizeIssuerUri(interactiveIssuerUri);
+    if (!StringUtils.hasText(expectedClientId)) {
+      throw new IllegalStateException("lexis.auth.oidc.client-id must be configured");
+    }
+    this.expectedClientId = expectedClientId;
     Map<String, JwtDecoder> decoders = new LinkedHashMap<>();
     decoders.put(
-        normalizedCognitoIssuerUri,
+        this.interactiveIssuerUri,
         createDecoder(
-            normalizedCognitoIssuerUri,
-            cognitoJwkSetUri,
+            this.interactiveIssuerUri,
+            resolveJwkSetUri(this.interactiveIssuerUri, interactiveJwkSetUri),
             "spring.security.oauth2.resourceserver.jwt.issuer-uri",
-            "spring.security.oauth2.resourceserver.jwt.jwk-set-uri"));
+            "spring.security.oauth2.resourceserver.jwt.jwk-set-uri",
+            interactiveTokenValidator()));
 
     String normalizedKeycloakIssuerUri = null;
     if (StringUtils.hasText(keycloakIssuerUri)) {
       normalizedKeycloakIssuerUri = normalizeIssuerUri(keycloakIssuerUri);
+      if (this.interactiveIssuerUri.equals(normalizedKeycloakIssuerUri)) {
+        throw new IllegalStateException("Interactive and machine JWT issuers must be distinct");
+      }
       String resolvedKeycloakJwkSetUri =
-          resolveKeycloakJwkSetUri(normalizedKeycloakIssuerUri, keycloakJwkSetUri);
+          resolveJwkSetUri(normalizedKeycloakIssuerUri, keycloakJwkSetUri);
       decoders.put(
           normalizedKeycloakIssuerUri,
           createDecoder(
               normalizedKeycloakIssuerUri,
               resolvedKeycloakJwkSetUri,
               "lexis.auth.keycloak.issuer-uri",
-              "lexis.auth.keycloak.jwk-set-uri"));
+              "lexis.auth.keycloak.jwk-set-uri",
+              accessTokenUseValidator()));
     }
 
     this.keycloakIssuerUri = normalizedKeycloakIssuerUri;
@@ -103,14 +114,11 @@ public class Oauth2SecurityCustomizer
     LinkedHashSet<String> authorities = new LinkedHashSet<>();
     String tokenIssuer = normalizeIssuerUri(jwt.getClaimAsString("iss"));
 
-    if (cognitoIssuerUri.equals(tokenIssuer)) {
-      List<String> groups = jwt.getClaimAsStringList("cognito:groups");
-      if (groups != null && !groups.isEmpty()) {
-        authorities.addAll(
-            sessionService.parseGrantedAuthorities(
-                identityCompatibleFamGroups(
-                    groups, jwt.getClaimAsString("custom:idp_name"))));
-      }
+    if (interactiveIssuerUri.equals(tokenIssuer)
+        && expectedClientId.equals(jwt.getClaimAsString("azp"))) {
+      authorities.addAll(
+          sessionService.parseGrantedAuthorities(
+              identityCompatibleFamRoles(clientRoles(jwt), jwt.getClaimAsString("identity_provider"))));
     } else if (keycloakIssuerUri != null && keycloakIssuerUri.equals(tokenIssuer)) {
       authorities.addAll(normalizedScopeAuthorities(jwt));
     }
@@ -120,35 +128,77 @@ public class Oauth2SecurityCustomizer
         .toList();
   }
 
-  private static List<String> identityCompatibleFamGroups(
-      List<String> groups, String identityProvider) {
-    // INTENTIONAL_LEGACY_DIVERGENCE(FAM_STAFF_GLOBAL_DATA_SCOPE): the approved FAM
-    // model keeps IDIR staff authorities separate from BCeID roles. Federal Read Only is
-    // a concrete BCeID role without a forest-client scope; Provincial Submitter is client-scoped.
-    if (!IDP_IDIR.equals(identityProvider) && !IDP_BCEID_BUSINESS.equals(identityProvider)) {
+  private List<String> clientRoles(Jwt jwt) {
+    List<String> roles = stringRoles(jwt.getClaim("client_roles"));
+    if (!roles.isEmpty()) {
+      return roles;
+    }
+    Object resourceAccess = jwt.getClaim("resource_access");
+    if (resourceAccess instanceof Map<?, ?> byClient
+        && byClient.get(expectedClientId) instanceof Map<?, ?> client) {
+      return stringRoles(client.get("roles"));
+    }
+    return List.of();
+  }
+
+  private static List<String> stringRoles(Object claim) {
+    // Case and padding are normalized so a role's spelling cannot change what it grants.
+    return claim instanceof List<?> values
+        ? values.stream()
+            .filter(String.class::isInstance)
+            .map(value -> ((String) value).trim().toUpperCase(Locale.ROOT))
+            .filter(role -> !role.isEmpty())
+            .toList()
+        : List.of();
+  }
+
+  private static boolean isStaffIdentityProvider(String identityProvider) {
+    return identityProvider != null && STAFF_IDENTITY_PROVIDERS.contains(identityProvider);
+  }
+
+  private static List<String> identityCompatibleFamRoles(
+      List<String> roles, String identityProvider) {
+    // Preserve the approved IDIR staff / Business BCeID separation and the internal
+    // forest-client authority contract used throughout business authorization.
+    if (isStaffIdentityProvider(identityProvider)) {
+      // Retain the concrete regional grant without adding its unscoped base role. Runtime
+      // authorization still denies regional-only access until all record surfaces are wired.
+      return roles.stream()
+          .filter(role -> STAFF_ROLES.contains(role) || FamRegionGrant.parse(role).isPresent())
+          .toList();
+    }
+    if (!IDP_BCEID_BUSINESS.equals(identityProvider)) {
       return List.of();
     }
-
-    return groups.stream()
-        .filter(group -> group != null)
-        .map(group -> group.trim().toUpperCase(Locale.ROOT))
-        .filter(group -> !group.isEmpty())
-        .filter(
-            group ->
-                IDP_IDIR.equals(identityProvider)
-                    ? STAFF_ROLES.contains(group)
-                    : "LEXIS_FEDERAL_READ_ONLY".equals(group)
-                        || isClientScopedProvincialSubmitter(group))
+    return roles.stream()
+        .map(
+            role -> {
+              if ("LEXIS_FEDERAL_READ_ONLY".equals(role)) {
+                return role;
+              }
+              String prefix = ROLE_PROVINCIAL_SUBMITTER + "_FOREST_CLIENT-";
+              if (role.startsWith(prefix) && role.substring(prefix.length()).matches("[0-9]{8}")) {
+                return ROLE_PROVINCIAL_SUBMITTER + "_" + role.substring(prefix.length());
+              }
+              return null;
+            })
+        .filter(Objects::nonNull)
         .toList();
   }
 
-  private static boolean isClientScopedProvincialSubmitter(String group) {
-    String prefix = ROLE_PROVINCIAL_SUBMITTER + "_";
-    if (!group.startsWith(prefix)) {
-      return false;
-    }
-    String clientNumber = group.substring(prefix.length());
-    return !clientNumber.isEmpty() && clientNumber.chars().allMatch(Character::isDigit);
+  private OAuth2TokenValidator<Jwt> interactiveTokenValidator() {
+    return token -> {
+      String provider = token.getClaimAsString("identity_provider");
+      if (!expectedClientId.equals(token.getClaimAsString("azp"))
+          // Keycloak's payload typ distinguishes access tokens from ID / refresh tokens.
+          || !"Bearer".equals(token.getClaimAsString("typ"))
+          || token.getExpiresAt() == null
+          || !(isStaffIdentityProvider(provider) || IDP_BCEID_BUSINESS.equals(provider))) {
+        return OAuth2TokenValidatorResult.failure(
+            new OAuth2Error("invalid_token", "A LEXIS user access token is required.", null));
+      }
+      return OAuth2TokenValidatorResult.success();
+    };
   }
 
   private List<String> normalizedScopeAuthorities(Jwt jwt) {
@@ -179,7 +229,7 @@ public class Oauth2SecurityCustomizer
     String issuer = tokenIssuer(token);
     JwtDecoder decoder = decoders.get(issuer);
     if (decoder == null) {
-      throw new JwtException("Unsupported token issuer: " + issuer);
+      throw new BadJwtException("Unsupported token issuer");
     }
     return decoder.decode(token);
   }
@@ -188,23 +238,27 @@ public class Oauth2SecurityCustomizer
     try {
       String issuer = SignedJWT.parse(token).getJWTClaimsSet().getIssuer();
       if (!StringUtils.hasText(issuer)) {
-        throw new JwtException("JWT issuer is missing");
+        throw new BadJwtException("JWT issuer is missing");
       }
       return issuer;
     } catch (ParseException exception) {
-      throw new JwtException("Unable to parse JWT issuer", exception);
+      throw new BadJwtException("Unable to parse JWT issuer", exception);
     }
   }
 
   private static JwtDecoder createDecoder(
-      String issuerUri, String jwkSetUri, String issuerPropertyName, String jwkSetPropertyName) {
+      String issuerUri,
+      String jwkSetUri,
+      String issuerPropertyName,
+      String jwkSetPropertyName,
+      OAuth2TokenValidator<Jwt> tokenValidator) {
     requireAbsoluteUri(issuerUri, issuerPropertyName);
     requireAbsoluteUri(jwkSetUri, jwkSetPropertyName);
 
     NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
-            JwtValidators.createDefaultWithIssuer(issuerUri), accessTokenUseValidator()));
+            JwtValidators.createDefaultWithIssuer(issuerUri), tokenValidator));
     return decoder;
   }
 
@@ -222,7 +276,7 @@ public class Oauth2SecurityCustomizer
     };
   }
 
-  private static String resolveKeycloakJwkSetUri(String issuerUri, String configuredJwkSetUri) {
+  private static String resolveJwkSetUri(String issuerUri, String configuredJwkSetUri) {
     if (StringUtils.hasText(configuredJwkSetUri)) {
       return configuredJwkSetUri;
     }

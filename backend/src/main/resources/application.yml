@@ -15,8 +15,10 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${AWS_COGNITO_ISSUER_URI:}
-          jwk-set-uri: ${AWS_COGNITO_JWK_SET_URI:${AWS_COGNITO_ISSUER_URI:}/.well-known/jwks.json}
+          issuer-uri: ${LEXIS_OIDC_ISSUER_URI:}
+          # Never empty: Boot builds its own JWK-set decoder whenever this property exists, and
+          # an empty value fails startup. Keycloak publishes keys at /protocol/openid-connect/certs.
+          jwk-set-uri: ${LEXIS_OIDC_JWK_SET_URI:${LEXIS_OIDC_ISSUER_URI:}/protocol/openid-connect/certs}
   mail:
     host: ${SMTP_HOST:apps.smtp.gov.bc.ca}
     port: ${SMTP_PORT:25}
@@ -104,6 +106,8 @@ lexis:
     region-rni-address: ${LEXIS_MAIL_REGION_RNI_ADDRESS:}
     region-rsi-address: ${LEXIS_MAIL_REGION_RSI_ADDRESS:}
   auth:
+    oidc:
+      client-id: ${LEXIS_OIDC_CLIENT_ID:}
     keycloak:
       # Optional second JWT issuer for machine-to-machine clients such as NEXCOL.
       issuer-uri: ${KEYCLOAK_ISSUER_URI:}

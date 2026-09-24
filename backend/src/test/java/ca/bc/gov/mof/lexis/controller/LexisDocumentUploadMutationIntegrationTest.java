@@ -38,8 +38,9 @@ import org.springframework.test.web.servlet.ResultActions;
 
 @SpringBootTest(
     properties = {
-      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito.example.test/user-pool",
-      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito.example.test/user-pool/.well-known/jwks.json"
+      "lexis.auth.oidc.client-id=lexis-test",
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://loginproxy.example.test/auth/realms/standard",
+      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://loginproxy.example.test/auth/realms/standard/protocol/openid-connect/certs"
     })
 @AutoConfigureMockMvc
 class LexisDocumentUploadMutationIntegrationTest {
@@ -553,8 +554,8 @@ class LexisDocumentUploadMutationIntegrationTest {
         .jwt(
             token ->
                 token
-                    .claim("custom:idp_name", "idir")
-                    .claim("custom:idp_username", "lexis-upload-test-user"))
+                    .claim("identity_provider", "idir")
+                    .claim("idir_username", "lexis-upload-test-user"))
         .authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"));
   }
 
@@ -567,8 +568,8 @@ class LexisDocumentUploadMutationIntegrationTest {
         .jwt(
             token ->
                 token
-                    .claim("custom:idp_name", "bceidbusiness")
-                    .claim("custom:idp_username", "lexis-submit-test-user"))
+                    .claim("identity_provider", "bceidbusiness")
+                    .claim("bceid_username", "lexis-submit-test-user"))
         .authorities(
             new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_" + clientNumber));
   }
@@ -578,8 +579,8 @@ class LexisDocumentUploadMutationIntegrationTest {
         .jwt(
             token ->
                 token
-                    .claim("custom:idp_name", "idir")
-                    .claim("custom:idp_username", "lexis-approver-test-user"))
+                    .claim("identity_provider", "idir")
+                    .claim("idir_username", "lexis-approver-test-user"))
         .authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"));
   }
 
@@ -588,8 +589,8 @@ class LexisDocumentUploadMutationIntegrationTest {
         .jwt(
             token ->
                 token
-                    .claim("custom:idp_name", "idir")
-                    .claim("custom:idp_username", "lexis-exemption-approver-test-user"))
+                    .claim("identity_provider", "idir")
+                    .claim("idir_username", "lexis-exemption-approver-test-user"))
         .authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"));
   }
 }

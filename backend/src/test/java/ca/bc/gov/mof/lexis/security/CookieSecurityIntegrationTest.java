@@ -39,8 +39,9 @@ import org.springframework.web.bind.annotation.RestController;
     webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
     properties = {
       "server.address=127.0.0.1",
-      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito.example.test/user-pool",
-      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito.example.test/user-pool/.well-known/jwks.json",
+      "lexis.auth.oidc.client-id=lexis-test",
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://loginproxy.example.test/auth/realms/standard",
+      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://loginproxy.example.test/auth/realms/standard/protocol/openid-connect/certs",
       "spring.profiles.active=stub-reports,stub-services"
     })
 @AutoConfigureMockMvc

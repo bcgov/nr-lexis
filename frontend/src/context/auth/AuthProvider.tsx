@@ -1,16 +1,23 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
-import { fetchAuthSession, signInWithRedirect, signOut } from 'aws-amplify/auth'
 import {
-  businessBceidProviderName,
-  idirProviderName,
-  isCognitoConfigured,
-} from '@/config/fam/config'
+  AUTH_CALLBACK_PATH,
+  endOidcSession,
+  getOidcUser,
+  isOidcConfigured,
+  startOidcLogin,
+} from '@/service/oidc-service'
 import { isProdRtmOnlyMode, PROD_RTM_ONLY_ROUTE } from '@/config/features'
 import { AppToastNotification } from '@/components/AppToastNotification'
 import SessionTimeoutWarning from '@/components/SessionTimeoutWarning'
 import { AuthContext } from '@/context/auth/AuthContext'
 import { clearLoginDestination } from '@/context/auth/login-destination'
-import { startFederatedLogout } from '@/context/auth/logout-chain'
+import {
+  allowedRegions,
+  normalizeAction,
+  normalizeActionRegions,
+  withinRegions,
+  type RecordOrgUnits,
+} from '@/context/auth/region-utils'
 import { hasRole, isPureReadOnlyRole } from '@/context/auth/role-utils'
 import {
   clearSessionExpiredLoginNotice,
@@ -49,6 +56,7 @@ const DEFAULT_CAPABILITIES: LexisSessionCapabilities = {
   forestClientNumber: null,
   availableForestClientNumbers: [],
   forestClientSelectionRequired: false,
+  actionRegions: {},
 }
 
 const LEGACY_ACTION_ROUTE_MAP: Record<string, string> = {
@@ -123,31 +131,6 @@ const SESSION_ACTIVITY_EVENTS = [
 const SESSION_ACTIVITY_THROTTLE_MS = 1_000
 const SESSION_KEEPALIVE_THROTTLE_MS = 60_000
 
-const cognitoSignOut = async (): Promise<void> => {
-  await signOut()
-}
-
-const isUserAlreadyAuthenticatedError = (error: unknown): boolean => {
-  return error instanceof Error && error.name === 'UserAlreadyAuthenticatedException'
-}
-
-const normalizeAction = (action: string): string => {
-  return action.trim().toLowerCase().replace(/\.do$/i, '').replace(/^\//, '')
-}
-
-const hasOauthCallbackParams = (): boolean => {
-  const searchParams = new URLSearchParams(window.location.search)
-  return searchParams.has('code') || searchParams.has('state')
-}
-
-const clearOauthCallbackParams = (): void => {
-  if (!hasOauthCallbackParams()) {
-    return
-  }
-  const cleanUrl = `${window.location.origin}${window.location.pathname}`
-  window.history.replaceState({}, document.title, cleanUrl)
-}
-
 const canonicalizeRole = (role: string): string | null => {
   const normalizedRole = role.trim().toUpperCase()
 
@@ -218,6 +201,7 @@ const sanitizeCapabilities = (
     forestClientNumber: asNonBlankString(payload.forestClientNumber),
     availableForestClientNumbers,
     forestClientSelectionRequired: Boolean(payload.forestClientSelectionRequired),
+    actionRegions: normalizeActionRegions(payload.actionRegions),
   }
 }
 
@@ -314,7 +298,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   const [sessionWarningExpiresAt, setSessionWarningExpiresAt] = useState<number | null>(null)
   const [showSessionExtendedMessage, setShowSessionExtendedMessage] = useState(false)
   const [idleTimerVersion, setIdleTimerVersion] = useState(0)
-  const usesExternalLogin = isCognitoConfigured
+  const usesExternalLogin = isOidcConfigured
 
   const closeSessionWarning = useCallback((resetIdleTimer = false) => {
     sessionWarningOpenRef.current = false
@@ -334,8 +318,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       sessionGenerationRef.current += 1
       refreshPromiseRef.current = null
       const shouldSignOut =
-        isCognitoConfigured && (authenticatedSessionRef.current || reason === 'idle-timeout')
+        isOidcConfigured && (authenticatedSessionRef.current || reason === 'idle-timeout')
 
+      let redirectStarted = false
       try {
         closeSessionWarning()
         setShowSessionExtendedMessage(false)
@@ -352,21 +337,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
           clearSessionExpiredLoginNotice()
         }
 
-        if (shouldSignOut && startFederatedLogout()) {
-          return
-        }
-
         setCapabilities(DEFAULT_CAPABILITIES)
-        setIsLoading(false)
+        setIsLoading(shouldSignOut)
         redirectToLoginShell()
 
         if (shouldSignOut) {
-          await cognitoSignOut()
+          await endOidcSession()
+          redirectStarted = true
         }
       } catch (error) {
-        console.warn(`Unable to complete Cognito sign-out after ${reason}.`, error)
+        console.warn(`Unable to complete OIDC sign-out after ${reason}.`, error)
+        setIsLoading(false)
       } finally {
-        sessionExpiryInFlightRef.current = false
+        if (!redirectStarted) sessionExpiryInFlightRef.current = false
       }
     },
     [closeSessionWarning],
@@ -382,36 +365,15 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
     const refreshPromise = (async () => {
       try {
-        let orgUnitNo: string | null = null
-        if (isCognitoConfigured) {
-          const isLoginCallback =
-            hasOauthCallbackParams() || new URLSearchParams(window.location.search).has('error')
-          let tokenReady = false
-          const retryCount = hasOauthCallbackParams() ? 6 : 1
-          for (let attempt = 0; attempt < retryCount; attempt += 1) {
-            try {
-              const { tokens } = (await fetchAuthSession({ forceRefresh: false })) ?? {}
-              orgUnitNo = asNonBlankString(tokens?.idToken?.payload?.['custom:org_unit_no'])
-              if (tokens?.accessToken) {
-                tokenReady = true
-                break
-              }
-            } catch {
-              // Continue retry loop below.
-            }
-
-            if (attempt < retryCount - 1) {
-              await new Promise((resolve) => setTimeout(resolve, 300))
-            }
-          }
-
-          if (!tokenReady) {
-            // The deployed capabilities endpoint is protected. Calling it after logout would
-            // raise a second expiry event and consume the inactivity notice before it renders.
+        if (isOidcConfigured) {
+          // The callback route explicitly consumes the code before reloading the
+          // application. Bootstrap must not race it or clear the saved destination.
+          if (window.location.pathname === AUTH_CALLBACK_PATH) return
+          // A stored session that can no longer be renewed is simply signed out,
+          // not a capabilities failure: keep the destination for the next login.
+          const user = await getOidcUser().catch(() => null)
+          if (!user?.access_token) {
             if (sessionGenerationRef.current === refreshGeneration) {
-              if (isLoginCallback) {
-                clearLoginDestination()
-              }
               sessionExpiryInFlightRef.current = false
               authenticatedSessionRef.current = false
               clearPersistedSearchState()
@@ -419,14 +381,12 @@ export function AuthProvider({ children }: AuthProviderProps) {
             }
             return
           }
-
-          clearOauthCallbackParams()
         }
 
         let data = await fetchSessionCapabilities()
         if (sessionGenerationRef.current === refreshGeneration) {
           sessionExpiryInFlightRef.current = false
-          let nextCapabilities = sanitizeCapabilities(data, orgUnitNo)
+          let nextCapabilities = sanitizeCapabilities(data)
           const persistedForestClientNumber = getActiveForestClientNumber()
           if (
             persistedForestClientNumber &&
@@ -440,7 +400,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
             if (sessionGenerationRef.current !== refreshGeneration) {
               return
             }
-            nextCapabilities = sanitizeCapabilities(data, orgUnitNo)
+            nextCapabilities = sanitizeCapabilities(data)
           }
           if (!nextCapabilities.authenticated) {
             clearPersistedSearchState()
@@ -494,7 +454,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
   }, [expireSession])
 
   useEffect(() => {
-    if (!isCognitoConfigured || !capabilities.authenticated) {
+    if (!isOidcConfigured || !capabilities.authenticated) {
       return undefined
     }
 
@@ -554,9 +514,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
       }
       if (now - lastKeepalive >= SESSION_KEEPALIVE_THROTTLE_MS) {
         lastKeepalive = now
-        void fetchAuthSession({ forceRefresh: false })
+        void getOidcUser()
           .then((session) => {
-            if (!session.tokens?.accessToken) {
+            if (!session?.access_token) {
               void expireSession('token-unavailable')
             }
           })
@@ -583,7 +543,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     async (provider: LoginProvider = 'idir') => {
       sessionExpiryInFlightRef.current = false
 
-      if (isCognitoConfigured) {
+      if (isOidcConfigured) {
         await refresh()
         if (authenticatedSessionRef.current) {
           return
@@ -593,20 +553,8 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearActiveForestClientNumber()
       apiService.clearCachedGetData()
       clearPersistedSearchState()
-      if (isCognitoConfigured) {
-        const providerName =
-          provider === 'business-bceid' ? businessBceidProviderName : idirProviderName
-        try {
-          await signInWithRedirect({ provider: { custom: providerName } })
-        } catch (error) {
-          if (isUserAlreadyAuthenticatedError(error)) {
-            await refresh()
-            if (authenticatedSessionRef.current) {
-              return
-            }
-          }
-          throw error
-        }
+      if (isOidcConfigured) {
+        await startOidcLogin(provider)
         return
       }
       await refresh()
@@ -631,19 +579,16 @@ export function AuthProvider({ children }: AuthProviderProps) {
       clearLoginDestination()
       authenticatedSessionRef.current = false
 
-      if (isCognitoConfigured && startFederatedLogout()) {
-        return
-      }
-
       setCapabilities(DEFAULT_CAPABILITIES)
-      setIsLoading(false)
+      setIsLoading(isOidcConfigured)
       redirectToLoginShell()
 
-      if (isCognitoConfigured) {
-        await cognitoSignOut()
+      if (isOidcConfigured) {
+        await endOidcSession()
       }
     } catch (error) {
-      console.warn('Unable to complete Cognito sign-out. Clearing local auth state.', error)
+      console.warn('Unable to complete OIDC sign-out. Clearing local auth state.', error)
+      setIsLoading(false)
     }
   }, [closeSessionWarning])
 
@@ -692,15 +637,19 @@ export function AuthProvider({ children }: AuthProviderProps) {
   )
 
   const extendSession = useCallback(async () => {
+    const extensionGeneration = sessionGenerationRef.current
     try {
-      const { tokens } = (await fetchAuthSession({ forceRefresh: true })) ?? {}
-      if (!tokens?.accessToken) {
-        throw new Error('Cognito did not return a refreshed access token.')
+      const user = await getOidcUser({ forceRefresh: true })
+      if (sessionGenerationRef.current !== extensionGeneration) return
+      if (!user?.access_token) {
+        throw new Error('OIDC did not return a refreshed access token.')
       }
       setShowSessionExtendedMessage(true)
       closeSessionWarning(true)
     } catch {
-      await expireSession('token-unavailable')
+      if (sessionGenerationRef.current === extensionGeneration) {
+        await expireSession('token-unavailable')
+      }
     }
   }, [closeSessionWarning, expireSession])
 
@@ -708,7 +657,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
     return new Set(capabilities.grantedActions.map(normalizeAction))
   }, [capabilities.grantedActions])
 
-  const canPerform = useCallback(
+  const canPerformAction = useCallback(
     (action: string): boolean => {
       if (isProdRtmOnlyMode()) {
         if (hasRole(capabilities.roles, ROLE_ADMIN)) {
@@ -728,6 +677,14 @@ export function AuthProvider({ children }: AuthProviderProps) {
       return grantedActionSet.has(normalizedAction)
     },
     [capabilities.roles, grantedActionSet],
+  )
+
+  const canPerform = useCallback(
+    (action: string, ...recordOrgUnits: [recordOrgUnits?: RecordOrgUnits]): boolean =>
+      canPerformAction(action) &&
+      (recordOrgUnits.length === 0 ||
+        withinRegions(allowedRegions(capabilities, action), recordOrgUnits[0])),
+    [canPerformAction, capabilities],
   )
 
   const hasAnyRole = capabilities.roles.some(isApplicationRole)

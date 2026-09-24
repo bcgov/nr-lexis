@@ -3,11 +3,13 @@ package ca.bc.gov.mof.lexis.service.session;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.session.LexisSessionWelcomeDto;
+import ca.bc.gov.mof.lexis.security.FamRegionGrant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
+import java.util.Optional;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -114,6 +116,17 @@ public class LexisSessionService {
       authorities.add(collapseForestClientScopedIndustryRole(concreteRole));
     }
     return List.copyOf(authorities);
+  }
+
+  /** The raw authority names, including concrete regional and forest-client grants. */
+  public List<String> authorityNames(Authentication authentication) {
+    if (authentication == null || authentication.getAuthorities() == null) {
+      return List.of();
+    }
+    return authentication.getAuthorities().stream()
+        .map(GrantedAuthority::getAuthority)
+        .filter(authority -> authority != null)
+        .toList();
   }
 
   public List<String> parseRolesFromPrincipal(Authentication authentication) {
@@ -227,6 +240,13 @@ public class LexisSessionService {
     String canonicalRole = canonicalizeRole(rawRole);
     if (canonicalRole == null) {
       return null;
+    }
+    // A regional grant carries its role's actions everywhere a role name is consulted; the
+    // concrete grant stays in the Authentication so ProvincialAuthorizationService limits the
+    // records those actions reach to the granted regions.
+    Optional<FamRegionGrant> regionalGrant = FamRegionGrant.parse(canonicalRole);
+    if (regionalGrant.isPresent()) {
+      return regionalGrant.get().role();
     }
     return collapseForestClientScopedIndustryRole(canonicalRole);
   }

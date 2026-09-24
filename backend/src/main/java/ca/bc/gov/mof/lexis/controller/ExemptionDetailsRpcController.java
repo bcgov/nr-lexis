@@ -759,6 +759,7 @@ public class ExemptionDetailsRpcController {
         firstTrimmedNonBlank(
             updateRequest.previousExemptionNumber(), updateRequest.exemptionNumber());
     requireExemptionAccess(existingExemptionNumber, authentication);
+    requireExemptionWriteAccess(existingExemptionNumber, authentication);
     requireBlanketOicRoleScope(updateRequest.exemptionTypeCode(), authentication);
     requireExemptionRegionAccess(updateRequest.regionNumbers(), authentication);
     List<String> exemptionNumbers =
@@ -774,6 +775,7 @@ public class ExemptionDetailsRpcController {
                 service, exemptionNumbers, List.of()),
         () -> {
           requireExemptionAccess(existingExemptionNumber, authentication);
+          requireExemptionWriteAccess(existingExemptionNumber, authentication);
           requireBlanketOicRoleScope(
               updateRequest.exemptionTypeCode(), authentication);
           requireExemptionRegionAccess(updateRequest.regionNumbers(), authentication);
@@ -832,8 +834,10 @@ public class ExemptionDetailsRpcController {
     Supplier<ResponseEntity<ExemptionApprovalResponseDto>> mutation =
         () -> {
           normalizedExemptions.forEach(
-              exemptionNumber ->
-                  requireExemptionAccess(exemptionNumber, authentication));
+              exemptionNumber -> {
+                requireExemptionAccess(exemptionNumber, authentication);
+                requireExemptionWriteAccess(exemptionNumber, authentication);
+              });
           List<Long> applicationNumbers =
               linkedApplicationNumbersForMutation(
                   service, normalizedExemptions, List.of());
@@ -1262,6 +1266,13 @@ public class ExemptionDetailsRpcController {
         && provincialAuthorizationService != null
         && !provincialAuthorizationService.canViewBlanketOic(authentication)) {
       throw new AccessDeniedException("Blanket OIC exemptions are outside the authenticated role scope.");
+    }
+  }
+
+  private void requireExemptionWriteAccess(
+      String exemptionNumber, Authentication authentication) {
+    if (provincialAuthorizationService != null) {
+      provincialAuthorizationService.requireExemptionWrite(authentication, exemptionNumber);
     }
   }
 

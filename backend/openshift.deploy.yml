@@ -109,7 +109,11 @@ parameters:
   - name: LEXIS_MAIL_REGION_RSI_ADDRESS
     description: RSI positional mailbox supplied by the GitHub Environment secret
     value: ""
-  - name: AWS_COGNITO_ISSUER_URI
+  - name: LEXIS_OIDC_ISSUER_URI
+    description: BC Gov SSO issuer for interactive users, independent of NEXCOL
+    required: true
+  - name: LEXIS_OIDC_CLIENT_ID
+    description: Expected public browser client ID for interactive access tokens
     required: true
   - name: KEYCLOAK_ISSUER_URI
     description: Optional Keycloak realm issuer URI for machine-to-machine service clients
@@ -229,8 +233,10 @@ objects:
                   value: /tmp
                 - name: XDG_CACHE_HOME
                   value: /tmp/.cache
-                - name: AWS_COGNITO_ISSUER_URI
-                  value: ${AWS_COGNITO_ISSUER_URI}
+                - name: LEXIS_OIDC_ISSUER_URI
+                  value: ${LEXIS_OIDC_ISSUER_URI}
+                - name: LEXIS_OIDC_CLIENT_ID
+                  value: ${LEXIS_OIDC_CLIENT_ID}
                 - name: KEYCLOAK_ISSUER_URI
                   value: ${KEYCLOAK_ISSUER_URI}
                 - name: ALLOWED_ORIGINS

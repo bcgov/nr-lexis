@@ -27,7 +27,7 @@ type ResponseRejectedInterceptor = (error: unknown) => Promise<AxiosResponse<unk
 
 const {
   axiosClientMock,
-  fetchAuthSessionMock,
+  getOidcUserMock,
   getRegisteredRequestInterceptor,
   getRegisteredResponseResolvedInterceptor,
   getRegisteredResponseRejectedInterceptor,
@@ -56,7 +56,7 @@ const {
   )
 
   return {
-    fetchAuthSessionMock: vi.fn(),
+    getOidcUserMock: vi.fn(),
     getRegisteredRequestInterceptor: () => registeredRequestInterceptor,
     getRegisteredResponseResolvedInterceptor: () => registeredResponseResolvedInterceptor,
     getRegisteredResponseRejectedInterceptor: () => registeredResponseRejectedInterceptor,
@@ -84,8 +84,8 @@ vi.mock('axios', () => ({
   },
 }))
 
-vi.mock('aws-amplify/auth', () => ({
-  fetchAuthSession: fetchAuthSessionMock,
+vi.mock('@/service/oidc-service', () => ({
+  getOidcUser: getOidcUserMock,
 }))
 
 vi.mock('@/utils/page-unload', () => ({
@@ -107,18 +107,8 @@ const buildSession = ({
   token = 'token',
   includePayload = true,
 } = {}) => ({
-  tokens: {
-    accessToken: {
-      payload: includePayload
-        ? {
-            sub,
-            username,
-            client_id: clientId,
-          }
-        : undefined,
-      toString: () => token,
-    },
-  },
+  access_token: token,
+  profile: includePayload ? { sub, preferred_username: username, azp: clientId } : undefined,
 })
 
 const registeredRequestInterceptor = (): RequestInterceptor => {
@@ -159,12 +149,12 @@ describe('api-service cached GET support', () => {
     vi.clearAllMocks()
     getMock.mockReset()
     requestMock.mockReset()
-    fetchAuthSessionMock.mockReset()
+    getOidcUserMock.mockReset()
     apiService.clearCachedGetData()
     apiService.clearRecordVersions()
     clearAllPageDataCache()
     clearActiveForestClientNumber()
-    fetchAuthSessionMock.mockResolvedValue(buildSession())
+    getOidcUserMock.mockResolvedValue(buildSession())
   })
 
   it('coalesces matching in-flight cached GET requests', async () => {
@@ -254,7 +244,7 @@ describe('api-service cached GET support', () => {
   })
 
   it('keeps custom cached GET keys separated by authenticated user', async () => {
-    fetchAuthSessionMock
+    getOidcUserMock
       .mockResolvedValueOnce(buildSession({ sub: 'user-1', username: 'USER1', token: 'token-1' }))
       .mockResolvedValueOnce(buildSession({ sub: 'user-2', username: 'USER2', token: 'token-2' }))
       .mockResolvedValueOnce(buildSession({ sub: 'user-1', username: 'USER1', token: 'token-1' }))
@@ -282,7 +272,7 @@ describe('api-service cached GET support', () => {
   })
 
   it('keeps cached GET keys separated by token when auth claims are unavailable', async () => {
-    fetchAuthSessionMock
+    getOidcUserMock
       .mockResolvedValueOnce(buildSession({ token: 'opaque-token-1', includePayload: false }))
       .mockResolvedValueOnce(buildSession({ token: 'opaque-token-2', includePayload: false }))
       .mockResolvedValueOnce(buildSession({ token: 'opaque-token-1', includePayload: false }))
@@ -310,7 +300,7 @@ describe('api-service cached GET support', () => {
   })
 
   it('does not cache GETs when the auth cache scope cannot be resolved', async () => {
-    fetchAuthSessionMock.mockRejectedValue(new Error('session unavailable'))
+    getOidcUserMock.mockRejectedValue(new Error('session unavailable'))
     getMock
       .mockResolvedValueOnce(buildResponse({ count: 1 }))
       .mockResolvedValueOnce(buildResponse({ count: 2 }))
@@ -882,7 +872,7 @@ describe('api-service cached GET support', () => {
   it('emits a session-expired event when an auth token cannot be resolved', async () => {
     const listener = vi.fn()
     window.addEventListener(SESSION_EXPIRED_EVENT, listener)
-    fetchAuthSessionMock.mockRejectedValueOnce(new Error('session unavailable'))
+    getOidcUserMock.mockRejectedValueOnce(new Error('session unavailable'))
 
     const result = await registeredRequestInterceptor()({
       method: 'get',

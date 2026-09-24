@@ -36,6 +36,7 @@ import type {
   ProvincialApplicationSearchSortField,
 } from '@/interfaces/ProvincialApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
@@ -191,7 +192,8 @@ const ProvincialApplicationPage = () => {
   const navigate = useNavigate()
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-applications')
-  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
+  const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
+  const regionOptions = useAllowedRegionOptions(allRegionOptions, '/applicationSearch', 'id')
   const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
     hasProvincialStaffRole(capabilities.roles),
   )
@@ -467,7 +469,7 @@ const ProvincialApplicationPage = () => {
         setExemptionTypeOptions(options.exemptionTypes)
         setApplicationStatusOptions(options.applicationStatuses)
         setProductTypeOptions(options.productTypes)
-        setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+        setAllRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
         setOptionsUnavailable(false)
       } catch {
         setOptionsUnavailable(true)

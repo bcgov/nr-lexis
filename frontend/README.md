@@ -10,7 +10,7 @@ React frontend for LEXIS.
 | TypeScript | 6.x | Type safety |
 | Vite | 8.x | Build tool and dev server |
 | Carbon Design System | 1.x (`@carbon/react`) | UI components |
-| AWS Amplify | 6.x | Cognito authentication |
+| oidc-client-ts | 3.x | BC Gov SSO authorization code + PKCE |
 | React Router | 7.x | Routing |
 | Vitest + Playwright | 4.x / 1.x | Unit and E2E testing |
 
@@ -28,17 +28,14 @@ rollout but not an image rebuild.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `VITE_USER_POOLS_ID` | Cognito user pool id | - |
-| `VITE_USER_POOLS_WEB_CLIENT_ID` | Cognito app client id | - |
-| `VITE_COGNITO_DOMAIN` | Cognito hosted UI domain, without protocol | - |
-| `VITE_REDIRECT_SIGN_IN` | OAuth callback URL | http://localhost:3000/ |
-| `VITE_REDIRECT_SIGN_OUT` | Cognito-registered app return URL used by fallback Amplify sign-out | http://localhost:3000 |
-| `VITE_LOGOUT_SITEMINDER_URL` | Siteminder logoff endpoint used by the federated logout chain | - |
-| `VITE_LOGOUT_KEYCLOAK_URL` | Keycloak end-session endpoint used by the federated logout chain | - |
-| `VITE_LOGOUT_KEYCLOAK_CLIENT_ID` | Cognito client id registered in the shared Keycloak client | - |
-| `VITE_COGNITO_SCOPES` | OAuth scopes | openid profile email |
-| `VITE_ZONE` | Environment zone used for IDIR provider selection | dev |
+| `VITE_OIDC_ISSUER_URI` | BC Gov SSO realm issuer for interactive users | - |
+| `VITE_OIDC_CLIENT_ID` | LEXIS public browser client ID | - |
+| `VITE_OIDC_IDIR_HINT` | Registered IDIR provider alias | azureidir |
+| `VITE_OIDC_BCEID_HINT` | Registered Business BCeID provider alias | bceidbusiness |
+| `VITE_OIDC_SITEMINDER_LOGOUT_URL` | SiteMinder `logoff.cgi` chained before Keycloak end-session | - (Keycloak only) |
 | `VITE_LEXIS_PROD_RTM_ONLY` | Restricts admins to Average Monthly Values, preserves normal read-only routes, and denies other application roles | false |
+
+Register `<origin>/authCallback` as the login callback and `<origin>` as the post-logout URL. Tokens live in sessionStorage; there is no browser client secret.
 
 Additional route and endpoint overrides are listed in `frontend/.env.example`.
 
@@ -89,9 +86,10 @@ npm run test:cov
 npm run e2e
 ```
 
-The scheduled/manual GitHub `Regression` workflow loads TEST IDIR credentials from GitHub `test`
-environment secrets before running `npm run e2e:regression`. Local runs require `E2E_IDIR_USER` and
-`E2E_IDIR_PASSWORD` to be exported in your shell.
+The GitHub `Regression` workflow is manual-only while the FAM team fixes the TEST IDIR regression
+account for Keycloak. It loads credentials from GitHub `test` environment secrets and runs Playwright
+with the safe regression reporter. Local runs require `E2E_IDIR_USER` and `E2E_IDIR_PASSWORD` to be
+exported in your shell. See [the restoration steps](e2e/README.md#ci-setup) before resuming weekly runs.
 
 ### Testing Libraries
 
@@ -110,7 +108,7 @@ frontend/
 ├── src/
 │   ├── components/      # Reusable UI components
 │   ├── config/          # App and test configuration
-│   ├── context/         # Auth context and session capability checks
+│   ├── context/         # Auth context, session capability and regional access checks
 │   ├── interfaces/      # Shared TypeScript contracts
 │   ├── pages/           # Route-level page components
 │   ├── routes/          # Route table and guards

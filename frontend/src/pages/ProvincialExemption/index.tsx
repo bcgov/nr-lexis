@@ -40,6 +40,7 @@ import type {
   ProvincialExemptionSearchSortField,
 } from '@/interfaces/ProvincialExemptionSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
@@ -233,7 +234,8 @@ const buildSearchParams = (
 const ProvincialExemptionPage = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-exemptions')
-  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
+  const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
+  const regionOptions = useAllowedRegionOptions(allRegionOptions, '/exemptionSearch', 'id')
   const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
     hasProvincialStaffRole(capabilities.roles),
   )
@@ -531,7 +533,7 @@ const ProvincialExemptionPage = () => {
 
         setExemptionTypeOptions(options.exemptionTypes)
         setExemptionStatusOptions(options.exemptionStatuses)
-        setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+        setAllRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
         setOptionsUnavailable(false)
       } catch {
         setOptionsUnavailable(true)

@@ -43,8 +43,9 @@ import org.springframework.test.web.servlet.request.RequestPostProcessor;
 
 @SpringBootTest(properties = {
     "spring.profiles.active=stub-reports,stub-services",
-    "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito.example.test/user-pool",
-    "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito.example.test/user-pool/.well-known/jwks.json"
+    "lexis.auth.oidc.client-id=lexis-test",
+    "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://loginproxy.example.test/auth/realms/standard",
+    "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://loginproxy.example.test/auth/realms/standard/protocol/openid-connect/certs"
 })
 @AutoConfigureMockMvc
 class FederalReadOnlyAuthorizationIntegrationTest {
@@ -174,15 +175,23 @@ class FederalReadOnlyAuthorizationIntegrationTest {
   }
 
   private RequestPostProcessor federalReader() {
-    String issuer = "https://cognito.example.test/user-pool";
-    Jwt token = Jwt.withTokenValue("test-token").header("alg", "none")
-        .issuer(issuer).subject("nexcol-reader")
-        .issuedAt(Instant.now()).expiresAt(Instant.now().plusSeconds(300))
-        .claim("custom:idp_name", "bceidbusiness")
-        .claim("custom:idp_username", "nexcol-reader")
-        .claim("cognito:groups", List.of("LEXIS_FEDERAL_READ_ONLY")).build();
-    var converter = new Oauth2SecurityCustomizer(issuer + "/.well-known/jwks.json", issuer,
-        "", "", sessionService);
+    String issuer = "https://loginproxy.example.test/auth/realms/standard";
+    Jwt token =
+        Jwt.withTokenValue("test-token")
+            .header("alg", "none")
+            .issuer(issuer)
+            .subject("nexcol-reader")
+            .issuedAt(Instant.now())
+            .expiresAt(Instant.now().plusSeconds(300))
+            .claim("azp", "lexis-test")
+            .claim("typ", "Bearer")
+            .claim("identity_provider", "bceidbusiness")
+            .claim("bceid_username", "nexcol-reader")
+            .claim("client_roles", List.of("LEXIS_FEDERAL_READ_ONLY"))
+            .build();
+    var converter =
+        new Oauth2SecurityCustomizer(
+            issuer + "/protocol/openid-connect/certs", issuer, "lexis-test", "", "", sessionService);
     return jwt().jwt(token).authorities(converter.normalizedAuthorities(token));
   }
 }

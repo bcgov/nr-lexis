@@ -46,8 +46,9 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
 
 @SpringBootTest(
     properties = {
-      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito.example.test/user-pool",
-      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito.example.test/user-pool/.well-known/jwks.json",
+      "lexis.auth.oidc.client-id=lexis-test",
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://loginproxy.example.test/auth/realms/standard",
+      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://loginproxy.example.test/auth/realms/standard/protocol/openid-connect/certs",
       "spring.profiles.active=stub-reports,stub-services",
       "ALLOWED_ORIGINS=http://localhost:3000,https://openapi.apps.gov.bc.ca"
     })
@@ -130,6 +131,70 @@ class LexisRouteAuthorizationIntegrationTest {
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("{\"title\":\"Notice\",\"contentHtml\":\"<p>Text</p>\",\"notificationLevel\":\"INFORMATION\",\"displayStartDate\":\"2026-07-21\",\"displayEndDate\":\"2026-07-28\",\"audienceRoles\":[]}"))
         .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void regionalGrantsReceiveTheirRoleWhileRecordChecksLimitItsRegions() throws Exception {
+    for (List<String> grant : List.of(
+        List.of("LEXIS_READ_ONLY_REGION_REGION-CARIBOO", "LEXIS_READ_ONLY", "readOnly"),
+        List.of(
+            "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO",
+            "LEXIS_APPLICATION_APPROVER",
+            "applicationApprover"),
+        List.of(
+            "LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA",
+            "LEXIS_EXEMPTION_APPROVER",
+            "exemptionApprover"))) {
+      var regional = jwt().authorities(new SimpleGrantedAuthority(grant.get(0)));
+      mockMvc.perform(get("/api/lexis/session/capabilities").with(regional))
+          .andExpect(status().isOk())
+          .andExpect(jsonPath("$.roles[0]").value(grant.get(1)))
+          .andExpect(jsonPath("$.roles.length()").value(1))
+          .andExpect(jsonPath("$.grantedActions").isNotEmpty())
+          .andExpect(jsonPath("$.welcomeTarget").value(grant.get(2)))
+          .andExpect(jsonPath("$.actionRegions['/exemptionDetails'].length()").value(1));
+    }
+    // Reports reach all regions unless a regional user names only their own.
+    mockMvc
+        .perform(
+            post("/api/lexis/reports/permit-ledger-report")
+                .with(csrf())
+                .with(jwt().authorities(
+                    new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-CARIBOO")))
+                .contentType(MediaType.APPLICATION_JSON)
+                .content("{\"parameters\":{}}"))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
+  void actionRoutesRecordTheActionsTheyAuthorizedForRecordChecks() throws Exception {
+    mockMvc
+        .perform(
+            get("/api/lexis/applications/search/options")
+                .with(jwt().authorities(
+                    new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA"))))
+        .andDo(
+            result ->
+                assertThat(result.getRequest().getAttribute(LexisRequestActions.class.getName()))
+                    .isEqualTo(List.of("/applicationDetails")));
+  }
+
+  @Test
+  void regionalApproverAlongsideProvinceWideReadOnlyHoldsBothRoles() throws Exception {
+    var mixed = jwt().authorities(
+        new SimpleGrantedAuthority("LEXIS_READ_ONLY"),
+        new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO"));
+    mockMvc.perform(get("/api/lexis/session/capabilities").with(mixed))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.roles[0]").value("LEXIS_READ_ONLY"))
+        .andExpect(jsonPath("$.roles[1]").value("LEXIS_APPLICATION_APPROVER"))
+        .andExpect(jsonPath("$.welcomeTarget").value("applicationApprover"))
+        // Province-wide Read Only leaves reads unlimited; only Approver-only actions carry regions.
+        .andExpect(jsonPath("$.actionRegions['/applicationSearch']").doesNotExist())
+        .andExpect(jsonPath("$.actionRegions['createApplication'][0]").value(1903));
+    mockMvc.perform(get("/api/lexis/session/capabilities").with(jwt().authorities(
+            new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(jsonPath("$.actionRegions").isEmpty());
   }
 
   @Test
@@ -3088,8 +3153,8 @@ class LexisRouteAuthorizationIntegrationTest {
         .jwt(
             token ->
                 token
-                    .claim("custom:idp_name", "idir")
-                    .claim("custom:idp_username", "lexis-test-user"));
+                    .claim("identity_provider", "idir")
+                    .claim("idir_username", "lexis-test-user"));
   }
 
   private static JwtRequestPostProcessor machineJwt() {

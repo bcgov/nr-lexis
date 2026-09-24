@@ -28,6 +28,7 @@ import AuthoritativeOptionsUnavailableNotification from '@/components/Authoritat
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
+import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import {
   atMostTwoDecimalFieldError,
   firstValidationError,
@@ -356,7 +357,12 @@ const ProvincialExemptionCreatePage = () => {
   const [createdRecordPath, setCreatedRecordPath] = useState<string | null>(null)
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
   const [exemptionStatuses, setExemptionStatuses] = useState<SearchOption[]>([])
-  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
+  const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
+  const regionOptions = useAllowedRegionOptions(
+    allRegionOptions,
+    ['/createExemption', 'saveExemption'],
+    'id',
+  )
   const [optionsLoaded, setOptionsLoaded] = useState(false)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
   const [status, setStatus] = useState<PageStatus | null>(null)
@@ -490,7 +496,7 @@ const ProvincialExemptionCreatePage = () => {
         const options = await fetchProvincialExemptionOptions()
         setExemptionTypes(options.exemptionTypes)
         setExemptionStatuses(options.exemptionStatuses)
-        setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+        setAllRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
         setOptionsUnavailable(false)
       } catch {
         setOptionsUnavailable(true)

@@ -3,12 +3,14 @@ import { FRONTEND_RECOVERY_TIMEOUT_MS, gotoWithRecovery } from './navigation'
 
 export const E2E_BASE_URL = process.env.E2E_BASE_URL ?? 'http://127.0.0.1:4173'
 
-const LOCAL_E2E_CLIENT_ID = 'local-e2e-client'
+export const LOCAL_E2E_CLIENT_ID = 'local-e2e-client'
+export const LOCAL_E2E_ISSUER_URI = 'https://local-e2e.example.test/auth/realms/standard'
 const RUNTIME_CONFIG_REQUEST_TIMEOUT_MS = 10_000
 const TRANSIENT_CONFIG_ERROR =
   /\b(?:ECONNREFUSED|ECONNRESET|ETIMEDOUT|EAI_AGAIN|ENOTFOUND)\b|socket hang up|apiRequestContext\.get: Timeout \d+ms exceeded/i
 const TRANSIENT_GATEWAY_STATUSES = new Set([502, 503, 504])
-let cachedRuntimeClientId: string | undefined
+type RuntimeOidcConfig = { clientId: string; issuer: string }
+let cachedRuntimeOidcConfig: RuntimeOidcConfig | undefined
 
 type GotoOptions = NonNullable<Parameters<Page['goto']>[1]> & { ready: Locator }
 
@@ -25,9 +27,9 @@ export const createUnsignedToken = (payload: Record<string, unknown>): string =>
   return `${encode({ alg: 'none', typ: 'JWT' })}.${encode(payload)}.signature`
 }
 
-const resolveCognitoClientId = async (page: Page): Promise<string> => {
-  if (cachedRuntimeClientId) {
-    return cachedRuntimeClientId
+const resolveOidcConfig = async (page: Page): Promise<RuntimeOidcConfig> => {
+  if (cachedRuntimeOidcConfig) {
+    return cachedRuntimeOidcConfig
   }
 
   const deadline = Date.now() + FRONTEND_RECOVERY_TIMEOUT_MS
@@ -46,15 +48,23 @@ const resolveCognitoClientId = async (page: Page): Promise<string> => {
         } else {
           if (!response.ok()) throw new Error(`Runtime config returned ${response.status()}.`)
           const runtimeConfig = await response.text()
-          const runtimeClientId = runtimeConfig
-            .match(/VITE_USER_POOLS_WEB_CLIENT_ID:\s*"([^"]+)"/)?.[1]
-            ?.trim()
+          const runtimeValue = (name: string) =>
+            runtimeConfig
+              .match(new RegExp(`(?:["']?${name}["']?)\\s*:\\s*["']([^"']+)["']`))?.[1]
+              ?.trim()
 
-          cachedRuntimeClientId =
-            runtimeClientId ||
-            process.env.VITE_USER_POOLS_WEB_CLIENT_ID?.trim() ||
-            LOCAL_E2E_CLIENT_ID
-          return cachedRuntimeClientId
+          cachedRuntimeOidcConfig = {
+            clientId:
+              runtimeValue('VITE_OIDC_CLIENT_ID') ||
+              process.env.VITE_OIDC_CLIENT_ID?.trim() ||
+              LOCAL_E2E_CLIENT_ID,
+            issuer: (
+              runtimeValue('VITE_OIDC_ISSUER_URI') ||
+              process.env.VITE_OIDC_ISSUER_URI?.trim() ||
+              LOCAL_E2E_ISSUER_URI
+            ).replace(/\/$/, ''),
+          }
+          return cachedRuntimeOidcConfig
         }
       } finally {
         await response.dispose()
@@ -82,7 +92,30 @@ const resolveCognitoClientId = async (page: Page): Promise<string> => {
   )
 }
 
-type SyntheticCognitoSessionOptions = {
+export const installSyntheticOidcProvider = async (page: Page): Promise<RuntimeOidcConfig> => {
+  const { issuer, clientId } = await resolveOidcConfig(page)
+  // Discovery and protocol requests stay in the browser's test-only network boundary.
+  await page.route(`${issuer}/.well-known/openid-configuration`, async (route) => {
+    await route.fulfill({
+      status: 200,
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': new URL(E2E_BASE_URL).origin },
+      body: JSON.stringify({
+        issuer,
+        authorization_endpoint: `${issuer}/protocol/openid-connect/auth`,
+        token_endpoint: `${issuer}/protocol/openid-connect/token`,
+        end_session_endpoint: `${issuer}/protocol/openid-connect/logout`,
+        jwks_uri: `${issuer}/protocol/openid-connect/certs`,
+        response_types_supported: ['code'],
+        subject_types_supported: ['public'],
+        id_token_signing_alg_values_supported: ['RS256'],
+      }),
+    })
+  })
+  return { issuer, clientId }
+}
+
+type SyntheticOidcSessionOptions = {
   username: string
   orgUnitNo: string
   issuedAtSeconds?: number
@@ -90,13 +123,13 @@ type SyntheticCognitoSessionOptions = {
   refreshToken?: string
 }
 
-export type SyntheticCognitoSession = {
-  clientId: string
-  storagePrefix: string
+export type SyntheticOidcSession = RuntimeOidcConfig & {
+  storageKey: string
   username: string
+  profile: Record<string, unknown>
 }
 
-export const installSyntheticCognitoSession = async (
+export const installSyntheticOidcSession = async (
   page: Page,
   {
     username,
@@ -104,48 +137,46 @@ export const installSyntheticCognitoSession = async (
     issuedAtSeconds = Math.floor(Date.now() / 1000),
     expiresInSeconds = 60 * 60,
     refreshToken = 'synthetic-refresh-token',
-  }: SyntheticCognitoSessionOptions,
-): Promise<SyntheticCognitoSession> => {
-  const clientId = await resolveCognitoClientId(page)
-  const storagePrefix = `CognitoIdentityServiceProvider.${clientId}`
-  const accessToken = createUnsignedToken({
+  }: SyntheticOidcSessionOptions,
+): Promise<SyntheticOidcSession> => {
+  const { clientId, issuer } = await installSyntheticOidcProvider(page)
+  const storageKey = `oidc.user:${issuer}:${clientId}`
+  const profile = {
     sub: 'synthetic-e2e-user',
-    username,
-    client_id: clientId,
-    token_use: 'access',
+    iss: issuer,
+    aud: clientId,
+    azp: clientId,
+    preferred_username: '00000000000000000000000000000001@azureidir',
+    identity_provider: 'azureidir',
+    idir_username: username,
+    idir_user_guid: '00000000000000000000000000000001',
+    display_name: username,
+    org_unit_no: orgUnitNo,
+    client_roles: ['LEXIS_ADMIN'],
     iat: issuedAtSeconds,
     exp: issuedAtSeconds + expiresInSeconds,
-  })
-  const idToken = createUnsignedToken({
-    sub: 'synthetic-e2e-user',
-    'custom:org_unit_no': orgUnitNo,
-    token_use: 'id',
-    iat: issuedAtSeconds,
-    exp: issuedAtSeconds + expiresInSeconds,
+  }
+  const storedUser = JSON.stringify({
+    id_token: createUnsignedToken(profile),
+    access_token: createUnsignedToken({ ...profile, typ: 'Bearer' }),
+    refresh_token: refreshToken,
+    token_type: 'Bearer',
+    scope: 'openid profile email',
+    profile,
+    expires_at: issuedAtSeconds + expiresInSeconds,
   })
 
   await page.addInitScript(
-    ({ prefix, storageUsername, storedAccessToken, storedIdToken, storedRefreshToken }) => {
-      const initializedKey = `${prefix}.syntheticSessionInitialized`
-      // Do not restore synthetic tokens after the application deliberately clears them on logout.
-      if (window.sessionStorage.getItem(initializedKey) === 'true') {
-        return
-      }
+    ({ key, user, origin }) => {
+      if (window.location.origin !== origin) return
+      const initializedKey = `${key}.syntheticSessionInitialized`
+      // Do not restore a session after the application deliberately clears it on logout.
+      if (window.sessionStorage.getItem(initializedKey) === 'true') return
       window.sessionStorage.setItem(initializedKey, 'true')
-      window.localStorage.setItem(`${prefix}.LastAuthUser`, storageUsername)
-      window.localStorage.setItem(`${prefix}.${storageUsername}.accessToken`, storedAccessToken)
-      window.localStorage.setItem(`${prefix}.${storageUsername}.idToken`, storedIdToken)
-      window.localStorage.setItem(`${prefix}.${storageUsername}.refreshToken`, storedRefreshToken)
-      window.localStorage.setItem(`${prefix}.${storageUsername}.clockDrift`, '0')
+      window.sessionStorage.setItem(key, user)
     },
-    {
-      prefix: storagePrefix,
-      storageUsername: username,
-      storedAccessToken: accessToken,
-      storedIdToken: idToken,
-      storedRefreshToken: refreshToken,
-    },
+    { key: storageKey, user: storedUser, origin: new URL(E2E_BASE_URL).origin },
   )
 
-  return { clientId, storagePrefix, username }
+  return { clientId, issuer, storageKey, username, profile }
 }

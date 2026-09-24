@@ -4,6 +4,7 @@ import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import ca.bc.gov.mof.lexis.security.LexisApiAuthorizationRules.Rule;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import jakarta.servlet.DispatcherType;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.List;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authorization.AuthorizationDecision;
@@ -172,15 +173,16 @@ public class LexisApiAuthorizationCustomizer
     authorize
         .requestMatchers(rule.method(), rule.patternsArray())
         .access(
-            (authentication, context) -> {
-              List<String> authorities = getAuthorities(authentication.get());
-              return new AuthorizationDecision(
-                  authorizationService.isReadOnlyRolloutUser(authorities)
-                      && authorizationService.canPerformAction(
-                          authorities,
-                          rule.requiredAction(
-                              context.getRequest().getParameter("actionMapping"))));
-            });
+            (authentication, context) ->
+                new AuthorizationDecision(
+                    authorizationService.isReadOnlyRolloutUser(
+                            getAuthorities(authentication.get()))
+                        && decideActions(
+                            authentication.get(),
+                            context.getRequest(),
+                            actionList(
+                                rule.requiredAction(
+                                    context.getRequest().getParameter("actionMapping"))))));
   }
 
   private void authorizeProdReadOnlyAnyAction(
@@ -190,15 +192,14 @@ public class LexisApiAuthorizationCustomizer
     authorize
         .requestMatchers(rule.method(), rule.patternsArray())
         .access(
-            (authentication, context) -> {
-              List<String> authorities = getAuthorities(authentication.get());
-              return new AuthorizationDecision(
-                  authorizationService.isReadOnlyRolloutUser(authorities)
-                      && rule.alternativeActions().stream()
-                          .anyMatch(
-                              action ->
-                                  authorizationService.canPerformAction(authorities, action)));
-            });
+            (authentication, context) ->
+                new AuthorizationDecision(
+                    authorizationService.isReadOnlyRolloutUser(
+                            getAuthorities(authentication.get()))
+                        && decideActions(
+                            authentication.get(),
+                            context.getRequest(),
+                            rule.alternativeActions())));
   }
 
   private void authorizeKnownRoles(
@@ -242,9 +243,12 @@ public class LexisApiAuthorizationCustomizer
         .access(
             (authentication, context) ->
                 new AuthorizationDecision(
-                    authorizationService.canPerformAction(
-                        getAuthorities(authentication.get()),
-                        rule.requiredAction(context.getRequest().getParameter("actionMapping")))));
+                    decideActions(
+                        authentication.get(),
+                        context.getRequest(),
+                        actionList(
+                            rule.requiredAction(
+                                context.getRequest().getParameter("actionMapping"))))));
   }
 
   private void authorizeAnyAction(
@@ -254,14 +258,10 @@ public class LexisApiAuthorizationCustomizer
     authorize
         .requestMatchers(rule.method(), rule.patternsArray())
         .access(
-            (authentication, context) -> {
-              List<String> authorities = getAuthorities(authentication.get());
-              return new AuthorizationDecision(
-                  rule.alternativeActions().stream()
-                      .anyMatch(
-                          action ->
-                              authorizationService.canPerformAction(authorities, action)));
-            });
+            (authentication, context) ->
+                new AuthorizationDecision(
+                    decideActions(
+                        authentication.get(), context.getRequest(), rule.alternativeActions())));
   }
 
   private void authorizeFixedAction(
@@ -275,9 +275,8 @@ public class LexisApiAuthorizationCustomizer
         .access(
             (authentication, context) ->
                 new AuthorizationDecision(
-                    authorizationService.canPerformAction(
-                        getAuthorities(authentication.get()),
-                        requiredAction)));
+                    decideActions(
+                        authentication.get(), context.getRequest(), actionList(requiredAction))));
   }
 
   private void authorizeAnyFixedAction(
@@ -289,13 +288,28 @@ public class LexisApiAuthorizationCustomizer
     authorize
         .requestMatchers(method, patterns)
         .access(
-            (authentication, context) -> {
-              List<String> authorities = getAuthorities(authentication.get());
-              return new AuthorizationDecision(
-                  requiredActions.stream()
-                      .anyMatch(
-                          action -> authorizationService.canPerformAction(authorities, action)));
-            });
+            (authentication, context) ->
+                new AuthorizationDecision(
+                    decideActions(authentication.get(), context.getRequest(), requiredActions)));
+  }
+
+  /**
+   * Grants when the user holds any of the actions, and records the ones they hold so record checks
+   * apply the regions of what this request does.
+   */
+  private boolean decideActions(
+      Authentication authentication, HttpServletRequest request, List<String> actions) {
+    List<String> authorities = getAuthorities(authentication);
+    List<String> granted =
+        actions.stream()
+            .filter(action -> authorizationService.canPerformAction(authorities, action))
+            .toList();
+    LexisRequestActions.record(request, granted);
+    return !granted.isEmpty();
+  }
+
+  private static List<String> actionList(String action) {
+    return action == null ? List.of() : List.of(action);
   }
 
   private List<String> getAuthorities(Authentication authentication) {

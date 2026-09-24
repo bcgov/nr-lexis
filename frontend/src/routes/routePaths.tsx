@@ -7,6 +7,7 @@ import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import { clearLoginDestination, getLoginDestination } from '@/context/auth/login-destination'
 import LandingPage from '@/pages/Landing'
+import AuthCallback from '@/pages/AuthCallback'
 import NotFoundPage from '@/pages/NotFound'
 import ForbiddenPage from '@/pages/Forbidden'
 import ForestClientSelectionPage from '@/pages/ForestClientSelection'
@@ -145,6 +146,12 @@ function RouteActionGuard({
 }
 
 export const PUBLIC_ROUTES: RouteDescription[] = [
+  {
+    path: '/authCallback',
+    id: 'Auth Callback',
+    element: <AuthCallback />,
+    isNavigation: false,
+  },
   {
     path: '/',
     id: 'Landing',

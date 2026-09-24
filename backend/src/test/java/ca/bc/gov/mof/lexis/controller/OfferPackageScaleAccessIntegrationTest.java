@@ -33,8 +33,9 @@ import org.springframework.test.web.servlet.MockMvc;
 
 @SpringBootTest(
     properties = {
-      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito.example.test/user-pool",
-      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito.example.test/user-pool/.well-known/jwks.json"
+      "lexis.auth.oidc.client-id=lexis-test",
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://loginproxy.example.test/auth/realms/standard",
+      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://loginproxy.example.test/auth/realms/standard/protocol/openid-connect/certs"
     })
 @AutoConfigureMockMvc
 class OfferPackageScaleAccessIntegrationTest {
@@ -271,8 +272,8 @@ class OfferPackageScaleAccessIntegrationTest {
     return SecurityMockMvcRequestPostProcessors.jwt()
         .jwt(
             token -> token
-                .claim("custom:idp_name", "bceidbusiness")
-                .claim("custom:idp_username", "lexis-offer-scale-test-user"))
+                .claim("identity_provider", "bceidbusiness")
+                .claim("bceid_username", "lexis-offer-scale-test-user"))
         .authorities(new SimpleGrantedAuthority(authority));
   }
 }

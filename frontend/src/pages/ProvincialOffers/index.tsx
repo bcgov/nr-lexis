@@ -30,6 +30,7 @@ import type {
   ProvincialOfferSearchSortField,
 } from '@/interfaces/ProvincialOfferSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
@@ -140,7 +141,8 @@ const buildSearchParams = (
 const ProvincialOffersPage = () => {
   const { capabilities, canPerform } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-offers')
-  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
+  const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
+  const regionOptions = useAllowedRegionOptions(allRegionOptions, '/offersSearch', 'id')
   const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
     hasProvincialStaffRole(capabilities.roles),
   )
@@ -393,7 +395,7 @@ const ProvincialOffersPage = () => {
       ])
 
       if (offerResult.status === 'fulfilled') {
-        setRegionOptions(mapValueLabelOptionsToIdTextOptions(offerResult.value.regions))
+        setAllRegionOptions(mapValueLabelOptionsToIdTextOptions(offerResult.value.regions))
         setOfferOptionsUnavailable(false)
       } else {
         setOfferOptionsUnavailable(true)

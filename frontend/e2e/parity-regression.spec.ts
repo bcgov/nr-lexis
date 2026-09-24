@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
-import { gotoSyntheticRoute, installSyntheticCognitoSession } from './utils'
+import { gotoSyntheticRoute, installSyntheticOidcSession } from './utils'
 
 // These are frontend browser contracts with synthetic sessions and intercepted API responses.
-// They do not authenticate against Cognito or verify persistence/authorization in Oracle.
+// They do not authenticate against Keycloak or verify persistence/authorization in Oracle.
 const installParityFixtures = async (page: Page) => {
-  await installSyntheticCognitoSession(page, { username: 'PARITY.TESTER', orgUnitNo: '1903' })
+  await installSyntheticOidcSession(page, { username: 'PARITY.TESTER', orgUnitNo: '1903' })
   const writes: Array<{ method: string; path: string; body: Record<string, unknown> }> = []
   const unexpectedRequests: string[] = []
   let version = 1

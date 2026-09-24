@@ -1,8 +1,8 @@
 name: Regression
 
 on:
-  schedule:
-    - cron: "0 10 * * 3" # Wednesdays at 10:00 UTC; 3 AM Pacific during daylight time.
+  # Weekly runs are paused while the FAM team fixes the TEST IDIR regression account.
+  # Restore the schedule after a successful manual run; see frontend/e2e/README.md.
   workflow_dispatch:
 
 concurrency:

@@ -11,7 +11,7 @@ import {
   fetchProvincialExemptionOptions,
   fetchProvincialPermitOptions,
 } from '@/service/search-options-service'
-import { createTestAuthContext } from '@/test-utils/auth'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 import { businessDateParts, formatIsoDateParts } from '@/utils/date'
 import { triggerBrowserDownload } from '@/utils/download'
 
@@ -702,6 +702,51 @@ describe('Reports Page Actions', () => {
           regionLabel: 'Cariboo Natural Resource Region',
         },
       })
+    })
+  })
+
+  it('limits a regional report to its own regions even when another report is province-wide', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          grantedActions: ['/offerReport', '/permitLedgerReport'],
+          actionRegions: { permitledgerreport: ['1908'] },
+        }),
+      }),
+    )
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      defaultRegion: '1903',
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1908', label: 'Skeena Natural Resource Region' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=permitLedgerReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Permits Report' })
+    await waitFor(() => {
+      expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reportId: 'permitLedgerReport',
+          values: expect.objectContaining({
+            region: '1908',
+            regionLabel: 'Skeena Natural Resource Region',
+          }),
+        }),
+      )
     })
   })
 

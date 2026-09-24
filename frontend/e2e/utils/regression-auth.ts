@@ -57,7 +57,6 @@ type AuthTokenSnapshot = {
 
 type AccessTokenDiagnostics = {
   expiresInSeconds?: number
-  tokenUse?: string
 }
 
 const baseOrigin = new URL(E2E_BASE_URL).origin
@@ -225,13 +224,13 @@ const browserAuthSnapshot = async (page: Page): Promise<AuthTokenSnapshot> => {
             : [cookie, '']
         })
       const storageEntries = [
-        ...Array.from({ length: localStorage.length }, (_, index) => {
-          const key = localStorage.key(index) ?? ''
-          return [key, localStorage.getItem(key) ?? '']
-        }),
         ...Array.from({ length: sessionStorage.length }, (_, index) => {
           const key = sessionStorage.key(index) ?? ''
           return [key, sessionStorage.getItem(key) ?? '']
+        }),
+        ...Array.from({ length: localStorage.length }, (_, index) => {
+          const key = localStorage.key(index) ?? ''
+          return [key, localStorage.getItem(key) ?? '']
         }),
       ]
 
@@ -239,16 +238,21 @@ const browserAuthSnapshot = async (page: Page): Promise<AuthTokenSnapshot> => {
       let cookieCandidateCount = 0
       let storageCandidateCount = 0
 
-      for (const [name, value] of cookieEntries) {
-        if (name.toLowerCase().includes('token')) {
-          cookieCandidateCount += 1
+      for (const [name, value] of storageEntries) {
+        if (
+          name.startsWith('oidc.user:') ||
+          name.toLowerCase().includes('token') ||
+          value.includes('accessToken') ||
+          value.includes('access_token')
+        ) {
+          storageCandidateCount += 1
         }
         accessToken = accessToken ?? findToken(name, value)
       }
 
-      for (const [name, value] of storageEntries) {
-        if (name.toLowerCase().includes('token') || value.includes('accessToken')) {
-          storageCandidateCount += 1
+      for (const [name, value] of cookieEntries) {
+        if (name.toLowerCase().includes('token')) {
+          cookieCandidateCount += 1
         }
         accessToken = accessToken ?? findToken(name, value)
       }
@@ -307,7 +311,6 @@ const accessTokenDiagnostics = (accessToken?: string): AccessTokenDiagnostics | 
 
     return {
       expiresInSeconds: typeof exp === 'number' ? exp - Math.floor(Date.now() / 1000) : undefined,
-      tokenUse: typeof payload.token_use === 'string' ? payload.token_use : undefined,
     }
   } catch {
     return null
@@ -363,10 +366,10 @@ const refreshExpiringRegressionAuthSession = async (page: Page): Promise<void> =
     return
   }
 
-  throw new Error('Unable to refresh the expiring Cognito access token for regression API calls.')
+  throw new Error('Unable to refresh the expiring OIDC access token for regression API calls.')
 }
 
-// APIRequestContext bypasses the app's Amplify request path, so rotate its browser token here.
+// APIRequestContext bypasses the app's OIDC request path, so rotate its browser token here.
 const ensureFreshRegressionAuthSession = async (page: Page): Promise<void> => {
   const activeRefresh = authSessionRefreshes.get(page)
   if (activeRefresh) {
@@ -530,7 +533,6 @@ const authDiagnostics = async (page: Page): Promise<string> => {
     `browserStorageTokenCandidates=${browserSnapshot.storageCandidateCount}`,
     `contextCookieTokenCandidates=${contextSnapshot.cookieCandidateCount}`,
     `bearerTokenFound=${Boolean(accessToken)}`,
-    tokenDiagnostics?.tokenUse ? `tokenUse=${tokenDiagnostics.tokenUse}` : null,
     typeof tokenDiagnostics?.expiresInSeconds === 'number'
       ? `tokenExpiresInSeconds=${tokenDiagnostics.expiresInSeconds}`
       : null,

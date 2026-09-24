@@ -116,15 +116,18 @@ const safeUrlForLog = (rawUrl: string): string => {
 const redirectExternalLogoutToLoginShell = async (page: Page): Promise<void> => {
   const logoutReturnUrl = `${new URL(E2E_BASE_URL).origin}/`
 
-  await page.route(/https:\/\/[^/]*amazoncognito\.com\/(?:logout|error).*/i, async (route) => {
-    await route.fulfill({
-      status: 302,
-      headers: {
-        location: logoutReturnUrl,
-      },
-      body: '',
-    })
-  })
+  await page.route(
+    /https:\/\/[^/]+\/.*\/protocol\/openid-connect\/logout(?:\?.*)?$/i,
+    async (route) => {
+      await route.fulfill({
+        status: 302,
+        headers: {
+          location: logoutReturnUrl,
+        },
+        body: '',
+      })
+    },
+  )
 }
 
 const isSafeCredentialedRegressionBaseUrl = (rawUrl: string): boolean => {
@@ -539,9 +542,6 @@ const expectLoginShell = async (page: Page, source: string): Promise<void> => {
     })
   } catch (error) {
     const currentUrl = page.url()
-    if (/amazoncognito\.com\/error/i.test(currentUrl)) {
-      throw new Error(`${source} landed on a Cognito error page: ${safeUrlForLog(currentUrl)}`)
-    }
     if (/loginproxy\.gov\.bc\.ca/i.test(currentUrl)) {
       throw new Error(
         `${source} did not return from LoginProxy to the LEXIS login shell: ${safeUrlForLog(currentUrl)}`,

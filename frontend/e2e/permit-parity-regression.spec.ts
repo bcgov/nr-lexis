@@ -1,5 +1,5 @@
 import { expect, test, type Page } from '@playwright/test'
-import { gotoSyntheticRoute, installSyntheticCognitoSession } from './utils'
+import { gotoSyntheticRoute, installSyntheticOidcSession } from './utils'
 
 type PermitScenario = 'normal' | 'ministerial' | 'blanket-oic' | 'blanket-oic-empty'
 
@@ -52,7 +52,7 @@ const installPermitParityFixtures = async (
   delayedShipping = false,
   role: 'ADMIN' | 'PROVINCIAL_SUBMITTER' = 'ADMIN',
 ): Promise<PermitParityFixture> => {
-  await installSyntheticCognitoSession(page, {
+  await installSyntheticOidcSession(page, {
     username: 'PERMIT.PARITY.TESTER',
     orgUnitNo: '1903',
   })

@@ -237,7 +237,8 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
                     getDouble(rs, "AVERAGE_LOG_VOLUME"),
                     firstNonNull(getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"), getDouble(rs, "APPLICATION_VOLUME")),
                     null,
-                    firstNonNull(getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID")));
+                    firstNonNull(getString(rs, "UPDATE_USERID"), getString(rs, "ENTRY_USERID")))
+                  .withOrgUnitNumber(getLong(rs, "ORG_UNIT_NO"));
             });
 
     if (detail.isEmpty()) {
@@ -285,7 +286,8 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
             dto.averageLogVolume(),
             dto.applicationVolume(),
             dto.endUse(),
-            dto.author()));
+            dto.author())
+            .withOrgUnitNumber(dto.orgUnitNumber()));
   }
 
   static String resolveAgentApplicantType(String agentClientNumber) {

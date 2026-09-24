@@ -14,14 +14,14 @@ Full-stack LEXIS application for log export workflows.
 | Backend | Spring Boot 3.5, Java 21 |
 | Database | Oracle (shared, BC Gov-managed) |
 | Concurrency | Optimistic stale-save checks and Oracle transaction locks |
-| Auth | AWS Cognito (FAM) for interactive users; Keycloak scopes for NEXCOL service-client submission |
+| Auth | BC Gov SSO (Keycloak) with FAM roles, including region-scoped staff roles, for interactive users; Keycloak scopes for NEXCOL service-client submission |
 | Reports | JasperReports library |
 
 ## Architecture
 
 LEXIS runs as separate frontend and backend workloads on OpenShift while retaining Oracle as its
 system of record. Uploaded content is scanned through a shared ClamAV service in a dedicated
-namespace. Interactive access uses FAM/Cognito; NEXCOL federal submissions use a dedicated
+namespace. Interactive access uses nr-fam / BC Gov SSO; NEXCOL federal submissions use a dedicated
 Keycloak service client through the API gateway.
 
 See [docs/architecture.md](docs/architecture.md) for the runtime architecture, component boundaries,
@@ -45,6 +45,9 @@ container. Deployed environments use a shared ClamAV service; see
 [Shared ClamAV service](docs/shared-clamav-service.md) for configuration and network-policy
 ownership.
 
+Users sign in through BC Gov SSO (Keycloak) with roles managed in FAM; see
+[Identity and authorization](docs/architecture.md#identity-and-authorization).
+
 ### Shared prerequisites
 
 1. **Network access to the BC Gov Oracle environment.** Compose cannot route that for you.
@@ -58,7 +61,7 @@ These files are gitignored and stay local.
 
 #### `backend/src/main/resources/application-local.yml`
 
-Activated by the Spring `local` profile. Holds Oracle credentials, Cognito issuer/userinfo URIs, optional Keycloak issuer URI for service-client tokens, IDIR base URL, and `TRUSTSTORE_PATH`. It must also provide the four approved `LEXIS_MAIL_*` positional-mailbox settings when running with the `oracle` profile, because startup validates outbound-mail configuration. Obtain all values through approved team channels and keep them out of git. See [outbound email configuration](docs/outbound-email.md) for the setting names and safe local/TEST delivery behavior.
+Activated by the Spring `local` profile. Holds Oracle credentials, interactive SSO issuer/client ID, optional separate Keycloak issuer URI for service-client tokens, and `TRUSTSTORE_PATH`. It must also provide the four approved `LEXIS_MAIL_*` positional-mailbox settings when running with the `oracle` profile, because startup validates outbound-mail configuration. Obtain all values through approved team channels and keep them out of git. See [outbound email configuration](docs/outbound-email.md) for the setting names and safe local/TEST delivery behavior.
 
 For Option B, Compose overrides `TRUSTSTORE_PATH` inside Docker to `/app/src/main/resources/cert/jssecacerts`; no local edit is needed for the container path.
 
@@ -68,7 +71,7 @@ Java keystore containing the trusted CA chain for the Oracle TLS connection. Obt
 
 #### `frontend/.env`
 
-Copy `frontend/.env.example` and fill in the Cognito client values. Vite inlines these values into the app bundle, so restart `npm run dev` after changing `.env`.
+Copy `frontend/.env.example` and fill in the SSO issuer and public client ID. Vite inlines these values into the app bundle, so restart `npm run dev` after changing `.env`.
 
 ### Option A - direct on host
 
@@ -133,9 +136,9 @@ That builds the real `frontend/Dockerfile` and serves it at `localhost:3005`.
 Regardless of option:
 
 - `nc -z localhost 8080` succeeds once the backend port is listening.
-- Open `http://localhost:3000` and complete the Cognito login round trip.
+- Open `http://localhost:3000` and complete the BC Gov SSO login round trip.
 
-If the backend starts but authenticated API calls fail, check network access, `application-local.yml` credentials, Cognito config, and the truststore path.
+If the backend starts but authenticated API calls fail, check network access, `application-local.yml` credentials, SSO issuer/client configuration, and the truststore path.
 
 ### NEXCOL federal submission API
 
@@ -149,7 +152,8 @@ contract and [gateway/README.md](gateway/README.md) for gateway responsibilities
 
 ## CI regression
 
-The `Regression` GitHub Actions workflow runs weekly and manually against TEST. It currently reads
+The weekly `Regression` GitHub Actions trigger is paused while the FAM team fixes the TEST IDIR
+regression account for Keycloak. Manual dispatch remains available to verify recovery. It reads
 TEST IDIR credentials from GitHub `test` environment secrets, creates its own lifecycle records and
 resolves external reference keys at runtime. Playwright uses a reporter that suppresses sensitive
 output. Business BCeID browser regression is intentionally not scheduled because repeated automated

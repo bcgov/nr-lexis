@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.dto.session;
 
 import java.util.List;
+import java.util.Map;
 
 public record LexisSessionCapabilitiesDto(
     boolean authenticated,
@@ -12,4 +13,6 @@ public record LexisSessionCapabilitiesDto(
     String forestClientNumber,
     List<String> availableForestClientNumbers,
     boolean forestClientSelectionRequired,
-    String orgUnitNo) {}
+    String orgUnitNo,
+    // Region-limited granted actions only; an absent action is province-wide.
+    Map<String, List<Long>> actionRegions) {}

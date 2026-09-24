@@ -454,8 +454,14 @@ public class FederalApplicationController {
 
   private FederalApplicationDetailDto withEditPolicy(
       FederalApplicationDetailDto detail, Authentication authentication) {
+    // Out-of-region records are read-only for a regional user, so the page offers no edits.
     return detail.withReadOnly(
-        !editPolicyService.canEdit(authentication, detail.statusCode(), detail.listingDate()));
+        !editPolicyService.canEdit(authentication, detail.statusCode(), detail.listingDate())
+            || (provincialAuthorizationService != null
+                && !provincialAuthorizationService.canWriteRecord(
+                    authentication,
+                    detail.orgUnitNumber(),
+                    OrgUnitSurface.FEDERAL_APPLICATION_WRITE)));
   }
 
   private void requireApplicationEdit(

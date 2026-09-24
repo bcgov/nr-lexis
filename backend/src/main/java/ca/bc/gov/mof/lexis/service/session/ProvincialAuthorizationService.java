@@ -9,15 +9,19 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
-import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
+import ca.bc.gov.mof.lexis.security.FamRegionGrant;
+import ca.bc.gov.mof.lexis.security.LexisRequestActions;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
+import java.util.ArrayList;
 import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
+import java.util.function.Supplier;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
@@ -34,8 +38,10 @@ public class ProvincialAuthorizationService {
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
 
+  private static final OrgUnitConstraint UNRESTRICTED = new OrgUnitConstraint(false, List.of());
+
   private final LexisSessionService sessionService;
-  private final LexisPrincipalService principalService;
+  private final LexisAuthorizationService authorizationService;
   private final ObjectProvider<LexisApplicationService> applicationServiceProvider;
   private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   private final ObjectProvider<ExemptionService> exemptionServiceProvider;
@@ -44,14 +50,14 @@ public class ProvincialAuthorizationService {
 
   public ProvincialAuthorizationService(
       LexisSessionService sessionService,
-      LexisPrincipalService principalService,
+      LexisAuthorizationService authorizationService,
       ObjectProvider<LexisApplicationService> applicationServiceProvider,
       ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider,
       ObjectProvider<ExemptionService> exemptionServiceProvider,
       ObjectProvider<PermitService> permitServiceProvider,
       ObjectProvider<PurchaseOfferService> offerServiceProvider) {
     this.sessionService = sessionService;
-    this.principalService = principalService;
+    this.authorizationService = authorizationService;
     this.applicationServiceProvider = applicationServiceProvider;
     this.applicationDetailsServiceProvider = applicationDetailsServiceProvider;
     this.exemptionServiceProvider = exemptionServiceProvider;
@@ -86,15 +92,11 @@ public class ProvincialAuthorizationService {
       return true;
     }
     if ("F".equalsIgnoreCase(application.jurisdictionCode())) {
-      return currentRoles.contains(ROLE_FEDERAL_READ_ONLY)
-          || currentRoles.contains(ROLE_APPLICATION_APPROVER)
-          || (currentRoles.contains(ROLE_READ_ONLY)
-              && canAccessOrgUnits(
-                  authentication,
-                  application.orgUnitNumber() == null
-                      ? List.of()
-                      : List.of(application.orgUnitNumber()),
-                  OrgUnitSurface.FEDERAL_APPLICATION_SEARCH));
+      return hasFederalReadRole(currentRoles)
+          && canAccessOrgUnits(
+              authentication,
+              orgUnitList(application.orgUnitNumber()),
+              OrgUnitSurface.FEDERAL_APPLICATION_SEARCH);
     }
     if (!"P".equalsIgnoreCase(application.jurisdictionCode())
         || isFederalOnlyUser(currentRoles)) {
@@ -226,7 +228,7 @@ public class ProvincialAuthorizationService {
           && service.hasLinkedProvincialApplicationForClient(
               exemption.exemptionNumber(), scopedClientNumber);
     }
-    if (!isOrgUnitRestricted(currentRoles, OrgUnitSurface.EXEMPTION_DETAIL)) {
+    if (!isOrgUnitRestricted(authentication, OrgUnitSurface.EXEMPTION_DETAIL)) {
       return true;
     }
     ExemptionService service = exemptionServiceProvider.getIfAvailable();
@@ -255,7 +257,7 @@ public class ProvincialAuthorizationService {
           || canAccessLinkedExemptionApplication(
               scopedClientNumber, exemption.exemptionNumber());
     }
-    if (!isOrgUnitRestricted(roles, OrgUnitSurface.EXEMPTION_DETAIL)) {
+    if (!isOrgUnitRestricted(authentication, OrgUnitSurface.EXEMPTION_DETAIL)) {
       return true;
     }
     ExemptionService service = exemptionServiceProvider.getIfAvailable();
@@ -365,7 +367,7 @@ public class ProvincialAuthorizationService {
           || canAccessLinkedPermitApplication(
               scopedClientNumber, permitNumber);
     }
-    if (!isOrgUnitRestricted(roles(authentication), OrgUnitSurface.PERMIT_DETAIL)) {
+    if (!isOrgUnitRestricted(authentication, OrgUnitSurface.PERMIT_DETAIL)) {
       return true;
     }
     return canAccessOrgUnits(
@@ -382,11 +384,11 @@ public class ProvincialAuthorizationService {
     }
     Set<String> currentRoles = roles(authentication);
     if (currentRoles.contains(ROLE_ADMIN)
-        || currentRoles.contains(ROLE_APPLICATION_APPROVER)) {
+        || (currentRoles.contains(ROLE_APPLICATION_APPROVER)
+            && !isOrgUnitRestricted(authentication, OrgUnitSurface.FEDERAL_APPLICATION_SEARCH))) {
       return true;
     }
-    if (!currentRoles.contains(ROLE_READ_ONLY)
-        && !currentRoles.contains(ROLE_FEDERAL_READ_ONLY)) {
+    if (!hasFederalReadRole(currentRoles)) {
       return false;
     }
 
@@ -419,7 +421,7 @@ public class ProvincialAuthorizationService {
     if (scopedClientNumber != null) {
       return canAccessOffer(scopedClientNumber, offer);
     }
-    if (!isOrgUnitRestricted(roles(authentication), OrgUnitSurface.OFFER_DETAIL)) {
+    if (!isOrgUnitRestricted(authentication, OrgUnitSurface.OFFER_DETAIL)) {
       return true;
     }
     LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
@@ -456,23 +458,31 @@ public class ProvincialAuthorizationService {
 
   public OrgUnitConstraint constrainOrgUnits(
       Authentication authentication, List<Long> requestedOrgUnits, OrgUnitSurface surface) {
-    Set<String> roles = roles(authentication);
-    if (roles.contains(ROLE_ADMIN) || !isOrgUnitRestricted(roles, surface)) {
-      return new OrgUnitConstraint(false, sanitizePositive(requestedOrgUnits));
-    }
-
-    List<Long> authorized =
-        sanitizePositive(principalService.resolveOrgUnitNumbers(authentication));
-    if (authorized.isEmpty()) {
-      return new OrgUnitConstraint(true, List.of());
-    }
-    Set<Long> authorizedSet = Set.copyOf(authorized);
     List<Long> requested = sanitizePositive(requestedOrgUnits);
-    if (requested.isEmpty()) {
-      return new OrgUnitConstraint(true, authorized);
+    OrgUnitConstraint regions = regionConstraint(authentication, surface);
+    if (!regions.restricted()) {
+      return new OrgUnitConstraint(false, requested);
     }
-    return new OrgUnitConstraint(
-        true, requested.stream().filter(authorizedSet::contains).toList());
+    if (requested.isEmpty()) {
+      return regions;
+    }
+    return new OrgUnitConstraint(true, requested.stream().filter(regions::allows).toList());
+  }
+
+  /**
+   * Requires every requested report region to be within a regional user's grants. "All regions"
+   * and reports without a region are denied to them; province-wide users are unaffected.
+   */
+  public void requireReportRegions(Authentication authentication, Map<String, String> parameters) {
+    OrgUnitConstraint regions = regionConstraint(authentication, OrgUnitSurface.REPORT);
+    if (!regions.restricted()) {
+      return;
+    }
+    List<Long> requested = reportRegions(parameters);
+    if (requested == null || requested.isEmpty() || !requested.stream().allMatch(regions::allows)) {
+      throw new AccessDeniedException(
+          "Reports are limited to the authenticated regions; choose one or more of them.");
+    }
   }
 
   /**
@@ -523,6 +533,31 @@ public class ProvincialAuthorizationService {
     }
   }
 
+  /**
+   * Approving or changing an existing exemption reaches every region it covers, so a regional
+   * user must hold all of them. Province-wide users skip the region lookup.
+   */
+  public void requireExemptionWrite(Authentication authentication, String exemptionNumber) {
+    ExemptionService service = exemptionServiceProvider.getIfAvailable();
+    String normalizedNumber = trimToNull(exemptionNumber);
+    if (!canWriteOrgUnits(
+        authentication,
+        () ->
+            service == null || normalizedNumber == null
+                ? List.of()
+                : service.findOrgUnitNumbers(normalizedNumber),
+        OrgUnitSurface.EXEMPTION_WRITE)) {
+      throw new AccessDeniedException(
+          "The exemption covers regions outside the authenticated write scope.");
+    }
+  }
+
+  /** Whether a regional user's write grants for the surface cover the record's region. */
+  public boolean canWriteRecord(
+      Authentication authentication, Long orgUnitNumber, OrgUnitSurface surface) {
+    return canWriteOrgUnits(authentication, () -> orgUnitList(orgUnitNumber), surface);
+  }
+
   public void requirePermit(Authentication authentication, Long permitNumber) {
     if (!canAccessPermit(authentication, permitNumber)) {
       throw new AccessDeniedException("The permit is outside the authenticated access scope.");
@@ -541,7 +576,12 @@ public class ProvincialAuthorizationService {
     }
 
     Set<String> currentRoles = roles(authentication);
-    boolean allowed = isStaffAttachmentWriter(currentRoles);
+    boolean allowed =
+        isStaffAttachmentWriter(currentRoles)
+            && canWriteOrgUnits(
+                authentication,
+                () -> orgUnitList(application.orgUnitNumber()),
+                OrgUnitSurface.APPLICATION_WRITE);
     if (!allowed) {
       String scopedClientNumber = scopedClientNumber(authentication);
       allowed =
@@ -589,7 +629,12 @@ public class ProvincialAuthorizationService {
     }
 
     Set<String> currentRoles = roles(authentication);
-    boolean allowed = isStaffAttachmentWriter(currentRoles);
+    boolean allowed =
+        isStaffAttachmentWriter(currentRoles)
+            && canWriteOrgUnits(
+                authentication,
+                () -> service.findOrgUnitNumbers(exemption.exemptionNumber()),
+                OrgUnitSurface.EXEMPTION_WRITE);
     if (!allowed) {
       String scopedClientNumber = scopedClientNumber(authentication);
       allowed =
@@ -621,7 +666,12 @@ public class ProvincialAuthorizationService {
     }
 
     Set<String> currentRoles = roles(authentication);
-    boolean allowed = isStaffAttachmentWriter(currentRoles);
+    boolean allowed =
+        isStaffAttachmentWriter(currentRoles)
+            && canWriteOrgUnits(
+                authentication,
+                () -> orgUnitList(permit.orgUnitNumber()),
+                OrgUnitSurface.PERMIT_WRITE);
     if (!allowed) {
       String scopedClientNumber = scopedClientNumber(authentication);
       allowed =
@@ -681,18 +731,24 @@ public class ProvincialAuthorizationService {
   private boolean canAccessFederalApplication(
       Authentication authentication, LexisApplicationDetailDto application) {
     Set<String> currentRoles = roles(authentication);
-    if (currentRoles.contains(ROLE_ADMIN)
-        || currentRoles.contains(ROLE_APPLICATION_APPROVER)) {
+    if (currentRoles.contains(ROLE_ADMIN)) {
       return true;
     }
-    return currentRoles.contains(ROLE_FEDERAL_READ_ONLY)
-        || (currentRoles.contains(ROLE_READ_ONLY)
-            && canAccessOrgUnits(
-                authentication,
-                application.orgUnitNumber() == null
-                    ? List.of()
-                    : List.of(application.orgUnitNumber()),
-                OrgUnitSurface.FEDERAL_APPLICATION_SEARCH));
+    return hasFederalReadRole(currentRoles)
+        && canAccessOrgUnits(
+            authentication,
+            orgUnitList(application.orgUnitNumber()),
+            OrgUnitSurface.FEDERAL_APPLICATION_SEARCH);
+  }
+
+  private static boolean hasFederalReadRole(Set<String> roles) {
+    return roles.contains(ROLE_FEDERAL_READ_ONLY)
+        || roles.contains(ROLE_APPLICATION_APPROVER)
+        || roles.contains(ROLE_READ_ONLY);
+  }
+
+  private static List<Long> orgUnitList(Long orgUnitNumber) {
+    return orgUnitNumber == null ? List.of() : List.of(orgUnitNumber);
   }
 
   private boolean matchesApplicationClient(
@@ -740,11 +796,84 @@ public class ProvincialAuthorizationService {
     return !isPureExemptionApprover(roles);
   }
 
-  private boolean isOrgUnitRestricted(Set<String> roles, OrgUnitSurface surface) {
-    // INTENTIONAL_LEGACY_DIVERGENCE(FAM_STAFF_GLOBAL_DATA_SCOPE): IDIR staff have global record
-    // scope within their granted actions. Zone and region selections are defaults and filters,
-    // not authorization boundaries; Provincial Submitter client scope is enforced separately.
-    return false;
+  private boolean isOrgUnitRestricted(Authentication authentication, OrgUnitSurface surface) {
+    return regionConstraint(authentication, surface).restricted();
+  }
+
+  /**
+   * INTENTIONAL_LEGACY_DIVERGENCE(FAM_STAFF_GLOBAL_DATA_SCOPE): a staff role with no region is
+   * province-wide, and zone or region selections are only its defaults and filters. The same
+   * role granted for regions reaches only those regions' records, for the actions of both the
+   * surface and the current request. Provincial Submitter client scope is enforced separately.
+   */
+  private OrgUnitConstraint regionConstraint(
+      Authentication authentication, OrgUnitSurface surface) {
+    List<String> authorities = sessionService.authorityNames(authentication);
+    if (!FamRegionGrant.anyIn(authorities) || roles(authentication).contains(ROLE_ADMIN)) {
+      return UNRESTRICTED;
+    }
+    OrgUnitConstraint surfaceRegions =
+        authorizationService.resolveStaffRegionConstraintForAny(authorities, surface.actions());
+    List<String> requestActions = LexisRequestActions.current();
+    if (requestActions.isEmpty()) {
+      return surfaceRegions;
+    }
+    return intersect(
+        surfaceRegions,
+        authorizationService.resolveStaffRegionConstraintForAny(authorities, requestActions));
+  }
+
+  private static OrgUnitConstraint intersect(OrgUnitConstraint first, OrgUnitConstraint second) {
+    if (!first.restricted()) {
+      return second;
+    }
+    if (!second.restricted()) {
+      return first;
+    }
+    return new OrgUnitConstraint(
+        true, first.orgUnitNumbers().stream().filter(second::allows).toList());
+  }
+
+  /**
+   * A write reaches a record only when all of its regions are granted; a record without a region
+   * is outside every regional grant. Region lookups are skipped for province-wide users.
+   */
+  private boolean canWriteOrgUnits(
+      Authentication authentication, Supplier<List<Long>> recordOrgUnits, OrgUnitSurface surface) {
+    OrgUnitConstraint regions = regionConstraint(authentication, surface);
+    if (!regions.restricted()) {
+      return true;
+    }
+    List<Long> orgUnits = sanitizePositive(recordOrgUnits.get());
+    return !orgUnits.isEmpty() && orgUnits.stream().allMatch(regions::allows);
+  }
+
+  private static List<Long> reportRegions(Map<String, String> parameters) {
+    if (parameters == null) {
+      return List.of();
+    }
+    List<Long> regions = new ArrayList<>();
+    for (String key : List.of("region", "orgUnitNumber")) {
+      String value = trimToNull(parameters.get(key));
+      if (value == null) {
+        continue;
+      }
+      if (value.startsWith("[") && value.endsWith("]")) {
+        value = value.substring(1, value.length() - 1);
+      }
+      for (String part : value.split(",")) {
+        String trimmed = part.trim();
+        if (trimmed.isEmpty()) {
+          continue;
+        }
+        try {
+          regions.add(Long.parseLong(trimmed));
+        } catch (NumberFormatException exception) {
+          return null;
+        }
+      }
+    }
+    return regions;
   }
 
   private boolean isFederalOnlyUser(Set<String> roles) {
@@ -782,19 +911,53 @@ public class ProvincialAuthorizationService {
     return List.copyOf(sanitized);
   }
 
+  /** Each surface names the actions whose regional grants reach its records. */
   public enum OrgUnitSurface {
-    APPLICATION_SEARCH,
-    APPLICATION_DETAIL,
-    APPLICATION_WRITE,
-    EXEMPTION_SEARCH,
-    EXEMPTION_DETAIL,
-    EXEMPTION_WRITE,
-    OFFER_SEARCH,
-    OFFER_DETAIL,
-    PERMIT_SEARCH,
-    PERMIT_DETAIL,
-    FEDERAL_APPLICATION_SEARCH,
-    APPLICATION_REVIEW
+    APPLICATION_SEARCH("/applicationSearch"),
+    APPLICATION_DETAIL("/applicationDetails"),
+    APPLICATION_WRITE(
+        "createApplication",
+        "/editCompletedApplications",
+        "/changeApplicantType",
+        "/applicationsReview",
+        "uploadApplicationSubmission",
+        "/fileApplicationUpload"),
+    EXEMPTION_SEARCH("/exemptionSearch"),
+    EXEMPTION_DETAIL("/exemptionDetails"),
+    EXEMPTION_WRITE("saveExemption", "approveExemption", "/createExemption", "/fileExemptionUpload"),
+    OFFER_SEARCH("/offersSearch"),
+    OFFER_DETAIL("/offerDetails"),
+    OFFER_WRITE("createOffer"),
+    PERMIT_SEARCH("/permitSearch"),
+    PERMIT_DETAIL("/permitDetails"),
+    PERMIT_WRITE(
+        "savePermit", "createPermit", "/permitsReview", "/filePermitUpload", "/fileInvoiceUpload"),
+    FEDERAL_APPLICATION_SEARCH(
+        "/federalApplicationSearch", "/federalApplicationDetails", "viewFederalApplication"),
+    FEDERAL_APPLICATION_WRITE("manageFederalApplication"),
+    APPLICATION_REVIEW("/applicationsReview"),
+    REPORT(
+        "/applicationReport",
+        "/offerReport",
+        "/teacReport",
+        "/exemptionReport",
+        "/permitReport",
+        "/permitLedgerReport",
+        "/transportReport",
+        "/speciesGradeReport",
+        "/feeReport",
+        "/tenureReport",
+        "mofrListing");
+
+    private final List<String> actions;
+
+    OrgUnitSurface(String... actions) {
+      this.actions = List.of(actions);
+    }
+
+    public List<String> actions() {
+      return actions;
+    }
   }
 
   public record OrgUnitConstraint(boolean restricted, List<Long> orgUnitNumbers) {

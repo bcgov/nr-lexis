@@ -45,6 +45,7 @@ import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import Modal from '@/components/Modal'
 import { useAuth } from '@/context/auth/useAuth'
+import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import {
   applicationListDateOptions,
@@ -150,6 +151,12 @@ import {
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
+
+const APPLICATION_WRITE_ACTIONS = [
+  'createApplication',
+  '/editCompletedApplications',
+  '/applicationsReview',
+]
 
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
 const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['EXP', 'REJ', 'WDN'])
@@ -806,7 +813,12 @@ const ProvincialApplicationDetailsPage = () => {
   >([])
   const [summaryProductTypeOptions, setSummaryProductTypeOptions] = useState<SearchOption[]>([])
   const [summaryGrowthTypeOptions, setSummaryGrowthTypeOptions] = useState<SearchOption[]>([])
-  const [summaryRegionOptions, setSummaryRegionOptions] = useState<SearchOption[]>([])
+  const [allSummaryRegionOptions, setAllSummaryRegionOptions] = useState<SearchOption[]>([])
+  const summaryRegionOptions = useAllowedRegionOptions(
+    allSummaryRegionOptions,
+    APPLICATION_WRITE_ACTIONS,
+    'value',
+  )
   const [summaryScheduleOptions, setSummaryScheduleOptions] = useState<SearchOption[]>([])
   const [applicationSpeciesOptions, setApplicationSpeciesOptions] = useState<
     ApplicationCodeOption[]
@@ -1155,7 +1167,9 @@ const ProvincialApplicationDetailsPage = () => {
     0,
   )
 
-  const canUploadApplicationDocuments = canPerform('/fileApplicationUpload')
+  // Writes also need the application's region when the user's grant is regional.
+  const applicationOrgUnit = detail?.orgUnitNumber ?? null
+  const canUploadApplicationDocuments = canPerform('/fileApplicationUpload', applicationOrgUnit)
   const canDeleteDocuments = canDeleteApplicationDocuments(detail, capabilities?.roles ?? [])
   const documentUploadUnavailableMessage = applicationDocumentUploadUnavailableMessage(
     detail,
@@ -1176,7 +1190,10 @@ const ProvincialApplicationDetailsPage = () => {
   const isApplicationExpired = isExpiredApplication(detail)
   const applicationProductSupportsPackages = productTypeSupportsPackages(detail?.productTypeCode)
   const canUseApplicationMutations =
-    canPerform('createApplication') && !detail?.locked && !detail?.readOnly && !isApplicationExpired
+    canPerform('createApplication', applicationOrgUnit) &&
+    !detail?.locked &&
+    !detail?.readOnly &&
+    !isApplicationExpired
   const canEditPackages =
     applicationProductSupportsPackages && canUseApplicationMutations && !!detail?.canEditPackages
   const canAddPackages =
@@ -1202,14 +1219,14 @@ const ProvincialApplicationDetailsPage = () => {
     detail &&
     !isApplicationExpired &&
     canPerform('/offersSearch') &&
-    canPerform('createOffer') &&
+    canPerform('createOffer', applicationOrgUnit) &&
     detail.canCreateOffers &&
     !detail.industryUser &&
     !isProvincialSubmitter &&
     offerPackageNumbers.length > 0,
   )
-  const canChangeApplicantType = canPerform('/changeApplicantType')
-  const canReviewApplication = canPerform('/applicationsReview')
+  const canChangeApplicantType = canPerform('/changeApplicantType', applicationOrgUnit)
+  const canReviewApplication = canPerform('/applicationsReview', applicationOrgUnit)
   // Clients cannot change the list date once the application is approved.
   const listDateLocked =
     !canReviewApplication &&
@@ -2329,7 +2346,7 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryApplicationStatusOptions(options.applicationStatuses)
         setSummaryProductTypeOptions(options.productTypes)
         setSummaryGrowthTypeOptions(options.growthTypes)
-        setSummaryRegionOptions(options.regions)
+        setAllSummaryRegionOptions(options.regions)
         setSummaryScheduleOptions(
           applicationListDateOptions(
             options.nextSchedules ?? options.currentSchedules,
@@ -2349,7 +2366,7 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryApplicationStatusOptions([])
         setSummaryProductTypeOptions([])
         setSummaryGrowthTypeOptions([])
-        setSummaryRegionOptions([])
+        setAllSummaryRegionOptions([])
         setSummaryScheduleOptions([])
         setSummaryOptionsAvailability('unavailable')
       })

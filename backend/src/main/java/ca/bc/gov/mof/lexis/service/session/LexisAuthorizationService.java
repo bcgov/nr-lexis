@@ -2,6 +2,9 @@ package ca.bc.gov.mof.lexis.service.session;
 
 import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
 import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
+import ca.bc.gov.mof.lexis.security.FamRegionGrant;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
+import java.util.Collection;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -76,21 +79,106 @@ public class LexisAuthorizationService {
     return LexisLegacyActionCatalog.ACTIONS;
   }
 
+  /**
+   * Resolves staff region access for one action, preserving each grant's role/region pair. A
+   * role with no region is province-wide; the same role granted for regions reaches only those.
+   */
+  public OrgUnitConstraint resolveStaffRegionConstraint(
+      List<String> authorities, String action) {
+    return resolveStaffRegionConstraintForAny(
+        authorities, action == null ? List.of() : List.of(action));
+  }
+
+  /** As {@link #resolveStaffRegionConstraint}, for a grant able to perform any of the actions. */
+  public OrgUnitConstraint resolveStaffRegionConstraintForAny(
+      List<String> authorities, Collection<String> actions) {
+    Set<Long> orgUnits = new LinkedHashSet<>();
+    if (authorities == null || actions == null) {
+      return new OrgUnitConstraint(true, List.of());
+    }
+    for (String authority : authorities) {
+      if (authority == null) {
+        continue;
+      }
+      var regionalGrant = FamRegionGrant.parse(authority);
+      if (regionalGrant.isPresent()) {
+        FamRegionGrant grant = regionalGrant.get();
+        if (canPerformAnyAction(grant.role(), actions)) {
+          orgUnits.add(grant.region().orgUnitNumber());
+        }
+      } else if (PROVINCIAL_STAFF_ROLES.contains(authority)
+          && canPerformAnyAction(authority, actions)) {
+        // Only a recognized unscoped grant for THIS action makes its region access global.
+        // A province-wide Read Only grant cannot widen a regional Approver's write access.
+        return new OrgUnitConstraint(false, List.of());
+      }
+    }
+    return new OrgUnitConstraint(true, List.copyOf(orgUnits));
+  }
+
+  /**
+   * The organization units each granted action is limited to, for actions a regional grant
+   * limits. Actions absent from the result are province-wide; users without a regional grant get
+   * an empty map.
+   */
+  public Map<String, List<Long>> resolveActionRegions(
+      List<String> authorities, List<String> grantedActions) {
+    Map<String, List<Long>> actionRegions = new LinkedHashMap<>();
+    if (!FamRegionGrant.anyIn(authorities) || grantedActions == null) {
+      return actionRegions;
+    }
+    // Same answer as resolveStaffRegionConstraint per action, resolving each grant's actions once.
+    Set<String> provinceWide = new LinkedHashSet<>();
+    Map<String, Set<Long>> regionsByAction = new LinkedHashMap<>();
+    for (String authority : authorities) {
+      if (authority == null) {
+        continue;
+      }
+      var regionalGrant = FamRegionGrant.parse(authority);
+      if (regionalGrant.isPresent()) {
+        FamRegionGrant grant = regionalGrant.get();
+        Set<String> roleActions = Set.copyOf(resolveGrantedActions(List.of(grant.role())));
+        for (String action : grantedActions) {
+          if (grantsAction(roleActions, action)) {
+            regionsByAction
+                .computeIfAbsent(action, ignored -> new LinkedHashSet<>())
+                .add(grant.region().orgUnitNumber());
+          }
+        }
+      } else if (PROVINCIAL_STAFF_ROLES.contains(authority)) {
+        Set<String> roleActions = Set.copyOf(resolveGrantedActions(List.of(authority)));
+        grantedActions.stream()
+            .filter(action -> grantsAction(roleActions, action))
+            .forEach(provinceWide::add);
+      }
+    }
+    for (String action : grantedActions) {
+      if (!provinceWide.contains(action)) {
+        actionRegions.put(action, List.copyOf(regionsByAction.getOrDefault(action, Set.of())));
+      }
+    }
+    return actionRegions;
+  }
+
+  private boolean canPerformAnyAction(String role, Collection<String> actions) {
+    return actions.stream().anyMatch(action -> canPerformAction(List.of(role), action));
+  }
+
   public boolean canPerformAction(List<String> rawRoles, String rawAction) {
+    return normalizeAction(rawAction) != null
+        && grantsAction(resolveGrantedActions(rawRoles), rawAction);
+  }
+
+  /** Whether the granted actions include the action, with or without its leading slash. */
+  private boolean grantsAction(Collection<String> grantedActions, String rawAction) {
     String action = normalizeAction(rawAction);
     if (action == null) {
       return false;
     }
-
-    List<String> grantedActions = resolveGrantedActions(rawRoles);
     if (grantedActions.contains(action)) {
       return true;
     }
-
-    if (!action.startsWith("/")) {
-      return grantedActions.contains("/" + action);
-    }
-    return false;
+    return !action.startsWith("/") && grantedActions.contains("/" + action);
   }
 
   public boolean hasKnownRole(List<String> rawRoles) {

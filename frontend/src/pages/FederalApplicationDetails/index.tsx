@@ -36,6 +36,7 @@ import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { useAuth } from '@/context/auth/useAuth'
+import { allowedRegions, withinRegions } from '@/context/auth/region-utils'
 import { hasRole } from '@/context/auth/role-utils'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
@@ -222,15 +223,20 @@ const FederalApplicationDetailsPage = () => {
   const federalApplicationLocked = currentDetail?.locked === true
   const canViewFederalApplication =
     canPerform('/federalApplicationDetails') && canPerform('viewFederalApplication')
-  const canManageFederalApplication = canPerform('manageFederalApplication')
+  // Writes also need the application's region when the user's grant is regional.
+  const applicationOrgUnit = currentDetail?.orgUnitNumber ?? null
+  const canManageFederalApplication = canPerform('manageFederalApplication', applicationOrgUnit)
   const canMutateFederalApplication =
     canManageFederalApplication &&
     !!currentDetail &&
     !currentDetail.readOnly &&
     !federalApplicationLocked
   const applicationStatusCode = currentDetail?.statusCode?.trim().toUpperCase() ?? ''
+  // Staff document maintenance stays role-based, limited to the application's region for
+  // regional grants; it does not depend on holding the upload action.
   const applicationDocumentEditor =
-    hasRole(capabilities.roles, 'APPLICATION_APPROVER') || hasRole(capabilities.roles, 'ADMIN')
+    (hasRole(capabilities.roles, 'APPLICATION_APPROVER') || hasRole(capabilities.roles, 'ADMIN')) &&
+    withinRegions(allowedRegions(capabilities, '/fileApplicationUpload'), applicationOrgUnit)
   // INTENTIONAL_LEGACY_DIVERGENCE(EXPIRED_DOCUMENT_MAINTENANCE): Expiry may lock the
   // federal application form while authorized staff can still maintain its documents.
   const canMaintainApplicationDocuments =
@@ -238,7 +244,7 @@ const FederalApplicationDetailsPage = () => {
     !federalApplicationLocked &&
     (!currentDetail.readOnly || (applicationStatusCode === 'EXP' && applicationDocumentEditor))
   const canUploadApplicationDocuments =
-    canPerform('/fileApplicationUpload') && canMaintainApplicationDocuments
+    canPerform('/fileApplicationUpload', applicationOrgUnit) && canMaintainApplicationDocuments
   const businessToday = formatBusinessIsoDate()
   const statusTransitions = allowedFederalStatusTransitions(
     applicationStatusCode,

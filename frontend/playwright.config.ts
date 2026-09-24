@@ -1,5 +1,5 @@
 import { defineConfig, devices } from '@playwright/test'
-import { E2E_BASE_URL } from './e2e/utils'
+import { E2E_BASE_URL, LOCAL_E2E_CLIENT_ID, LOCAL_E2E_ISSUER_URI } from './e2e/utils'
 
 const isRemoteE2E = !!process.env.CI && /^https?:\/\//.test(E2E_BASE_URL)
 
@@ -24,11 +24,8 @@ export default defineConfig({
         command: 'npm run dev -- --host 127.0.0.1 --port 4173',
         url: 'http://127.0.0.1:4173',
         env: {
-          VITE_USER_POOLS_ID: process.env.VITE_USER_POOLS_ID ?? 'ca-central-1_local',
-          VITE_USER_POOLS_WEB_CLIENT_ID:
-            process.env.VITE_USER_POOLS_WEB_CLIENT_ID ?? 'local-e2e-client',
-          VITE_COGNITO_DOMAIN:
-            process.env.VITE_COGNITO_DOMAIN ?? 'local-e2e.auth.ca-central-1.amazoncognito.com',
+          VITE_OIDC_ISSUER_URI: process.env.VITE_OIDC_ISSUER_URI ?? LOCAL_E2E_ISSUER_URI,
+          VITE_OIDC_CLIENT_ID: process.env.VITE_OIDC_CLIENT_ID ?? LOCAL_E2E_CLIENT_ID,
         },
         reuseExistingServer: !process.env.CI,
         timeout: 120000,

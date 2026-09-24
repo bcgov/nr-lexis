@@ -197,6 +197,8 @@ export type FederalApplicationDetail = {
   exemptionType: string | null
   exemptionReason: string | null
   region?: string | null
+  /** The application's organization unit, for region-limited writes. */
+  orgUnitNumber?: number | null
   productType?: string | null
   applicationDate?: string | null
   receivedDate: string | null

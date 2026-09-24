@@ -14,10 +14,8 @@ class FrontendRuntimeConfigTest {
 
   private static final Map<String, String> VALID_AUTH_CONFIG =
       Map.of(
-          "VITE_USER_POOLS_ID", "sensitive-pool-id",
-          "VITE_USER_POOLS_WEB_CLIENT_ID", "sensitive-client-id",
-          "VITE_COGNITO_DOMAIN", "sensitive.auth.example.gov.bc.ca",
-          "VITE_ZONE", "test");
+          "VITE_OIDC_ISSUER_URI", "https://sensitive.example.gov.bc.ca/auth/realms/standard",
+          "VITE_OIDC_CLIENT_ID", "sensitive-client-id");
 
   @Test
   void entrypointShouldRejectBlankAuthenticationSettingsWithoutEchoingValues() throws Exception {
@@ -37,42 +35,23 @@ class FrontendRuntimeConfigTest {
       assertThat(output)
           .contains(missingVariable + " is required for deployed LEXIS authentication.")
           .doesNotContain(
-              VALID_AUTH_CONFIG.get("VITE_USER_POOLS_ID"),
-              VALID_AUTH_CONFIG.get("VITE_USER_POOLS_WEB_CLIENT_ID"),
-              VALID_AUTH_CONFIG.get("VITE_COGNITO_DOMAIN"),
-              VALID_AUTH_CONFIG.get("VITE_ZONE"));
+              VALID_AUTH_CONFIG.get("VITE_OIDC_ISSUER_URI"),
+              VALID_AUTH_CONFIG.get("VITE_OIDC_CLIENT_ID"));
     }
   }
 
   @Test
-  void entrypointShouldRejectUnsupportedAuthenticationZoneWithoutEchoingIt() throws Exception {
-    Path entrypoint = resolve(Path.of("frontend", "docker-entrypoint.sh"));
-    ProcessBuilder processBuilder = new ProcessBuilder("sh", entrypoint.toString());
-    processBuilder.redirectErrorStream(true);
-    processBuilder.environment().putAll(VALID_AUTH_CONFIG);
-    processBuilder.environment().put("VITE_ZONE", "sensitive-unsupported-zone");
-
-    Process process = processBuilder.start();
-    assertThat(process.waitFor(5, TimeUnit.SECONDS)).isTrue();
-    String output = new String(process.getInputStream().readAllBytes(), StandardCharsets.UTF_8);
-
-    assertThat(process.exitValue()).isNotZero();
-    assertThat(output)
-        .contains(
-            "VITE_ZONE must be configured as dev, test, or prod for deployed LEXIS authentication.")
-        .doesNotContain("sensitive-unsupported-zone");
-  }
-
-  @Test
-  void openshiftTemplateShouldRequireAnExplicitAuthenticationZone() throws IOException {
-    String deployment =
-        Files.readString(resolve(Path.of("frontend", "openshift.deploy.yml")));
+  void deploymentShouldRequireBothInteractiveOidcSettings() throws IOException {
+    String deployment = Files.readString(resolve(Path.of("frontend", "openshift.deploy.yml")));
 
     assertThat(deployment)
-        .contains(
-            "  - name: VITE_ZONE\n"
-                + "    description: Authentication environment; supported values are dev, test, and prod\n"
-                + "    required: true");
+        .contains("  - name: VITE_OIDC_ISSUER_URI\n"
+            + "    description: BC Gov SSO issuer for interactive users\n"
+            + "    required: true")
+        .contains("  - name: VITE_OIDC_CLIENT_ID\n"
+            + "    description: LEXIS public browser client in the same SSO environment\n"
+            + "    required: true")
+        .doesNotContain("VITE_USER_POOLS", "VITE_COGNITO", "VITE_LOGOUT", "VITE_ZONE");
   }
 
   @Test

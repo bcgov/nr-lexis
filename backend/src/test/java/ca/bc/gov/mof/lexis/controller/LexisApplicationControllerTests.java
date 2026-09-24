@@ -17,8 +17,9 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(
     properties = {
       "spring.profiles.active=stub-reports,stub-services",
-      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito.example.test/user-pool",
-      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito.example.test/user-pool/.well-known/jwks.json"
+      "lexis.auth.oidc.client-id=lexis-test",
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://loginproxy.example.test/auth/realms/standard",
+      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://loginproxy.example.test/auth/realms/standard/protocol/openid-connect/certs"
     })
 @AutoConfigureMockMvc
 class LexisApplicationControllerTests {
@@ -182,8 +183,8 @@ class LexisApplicationControllerTests {
         .jwt(
             token ->
                 token
-                    .claim("custom:idp_name", "idir")
-                    .claim("custom:idp_username", "lexis-test-user")
+                    .claim("identity_provider", "idir")
+                    .claim("idir_username", "lexis-test-user")
                     .claim(orgUnitClaim, orgUnitValue));
   }
 
@@ -192,8 +193,8 @@ class LexisApplicationControllerTests {
         .jwt(
             token ->
                 token
-                    .claim("custom:idp_name", "bceidbusiness")
-                    .claim("custom:idp_username", "multi-client-user"))
+                    .claim("identity_provider", "bceidbusiness")
+                    .claim("bceid_username", "multi-client-user"))
         .authorities(
             new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"),
             new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00012345"),

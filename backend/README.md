@@ -44,7 +44,9 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `TRUSTSTORE_PATH` | Path to `jssecacerts` JKS | - |
 | `KEYSTORE_SECRET` | Password used to create and open the JVM Oracle truststore | Required |
 | `ALLOWED_ORIGINS` | Frontend CORS origins | http://localhost:3000 |
-| `AWS_COGNITO_ISSUER_URI` | Cognito issuer URI | - |
+| `LEXIS_OIDC_ISSUER_URI` | BC Gov SSO issuer for interactive users | - |
+| `LEXIS_OIDC_CLIENT_ID` | Expected LEXIS browser client (`azp`) | - |
+| `LEXIS_OIDC_JWK_SET_URI` | Optional signing-key endpoint override | `<issuer>/protocol/openid-connect/certs` |
 | `KEYCLOAK_ISSUER_URI` | Keycloak issuer URI for machine-to-machine NEXCOL service-client tokens; optional locally and required for TEST/PROD deployment | - |
 | `KEYCLOAK_JWK_SET_URI` | Optional override for Keycloak JWKS URI; defaults to `<KEYCLOAK_ISSUER_URI>/protocol/openid-connect/certs` when the issuer is set | - |
 | `LEXIS_PROD_RTM_ONLY` | Restricts admins to RTM AMV, preserves normal `LEXIS_READ_ONLY` access, denies other application roles, suppresses modern exemption expiry while legacy remains active, and must be paired with `VITE_LEXIS_PROD_RTM_ONLY` | false |
@@ -148,7 +150,7 @@ Grouped by area; see `controller/` for request and response contracts.
 | Area | Base path | Notes |
 |---|---|---|
 | Actuator | `/actuator/health`, `/actuator/prometheus` | Protected operational endpoints. Requires authentication and `LEXIS_ADMIN`. |
-| Session | `/api/lexis/session/*` | Session capabilities and logoff routes. |
+| Session | `/api/lexis/session/*` | Session capabilities, including per-action region limits (`actionRegions`) for regional FAM roles, and logoff routes. |
 | Provincial workflows | `/api/lexis/applications`, `/api/lexis/exemptions`, `/api/lexis/permits`, `/api/lexis/purchase-offers` | Search, options, details, and workflow actions. |
 | Federal workflows | `/api/lexis/federal` | Federal application search and detail workflows. |
 | Federal submissions | `/api/lexis/federal/submissions`, `/api/lexis/federal/submissions/validation`, `/api/lexis/federal/submissions/prevalidation` | NEXCOL machine-to-machine legacy field prevalidation and XML validation/submission. Requires the `lexis:federal-submission:submit` Keycloak scope. |

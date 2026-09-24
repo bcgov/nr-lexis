@@ -21,7 +21,7 @@ jobs:
         run: |
           slot=$(( ${{ github.event.number }} % 50 ))
           echo "slot=${slot}" >> "$GITHUB_OUTPUT"
-          echo "PR ${{ github.event.number }} -> Cognito slot ${slot}"
+          echo "PR ${{ github.event.number }} -> preview slot ${slot}"
 
   builds:
     name: Builds

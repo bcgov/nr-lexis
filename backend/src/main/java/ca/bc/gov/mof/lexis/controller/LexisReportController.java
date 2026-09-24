@@ -21,6 +21,7 @@ import java.util.LinkedHashMap;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -49,6 +50,9 @@ public class LexisReportController {
   private static final Logger AUDIT_LOGGER =
       LoggerFactory.getLogger("ca.bc.gov.mof.lexis.audit.report");
   private static final String UNRESOLVED_ACTOR = "UNRESOLVED";
+  // These authorize their single record instead of a region selection.
+  private static final Set<String> RECORD_REPORT_ACTIONS =
+      Set.of("approvedExemptionReport", "permitReport");
   private static final String APPLICATION_REPORT_LIMITER_MESSAGE =
       "Choose at least one Application Report filter before generating: region, jurisdiction, "
           + "exemption reason, client number, growth type, or received date.";
@@ -223,6 +227,10 @@ public class LexisReportController {
 
     try {
       LexisReportRequestDto normalizedRequest = requestPreparer.prepare(normalizeRequest(request));
+      if (!RECORD_REPORT_ACTIONS.contains(reportAction)) {
+        provincialAuthorizationService.requireReportRegions(
+            resolveAuthentication(authentication), normalizedRequest.parameters());
+      }
       return executeNormalizedReport(reportAction, reportLabel, normalizedRequest, audit);
     } catch (LexisReportValidationException exception) {
       completeAudit(
