@@ -22,12 +22,8 @@ import {
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
 
 const openDocumentUploadModal = async (): Promise<void> => {
-  const editButton = screen.queryByRole('button', { name: 'Edit documents' })
-  if (editButton) {
-    await userEvent.click(editButton)
-  }
-  await userEvent.click(await screen.findByRole('button', { name: 'Add document' }))
-  await screen.findByRole('dialog', { name: 'Add document' })
+  await userEvent.click(await screen.findByRole('button', { name: 'Add documents' }))
+  await screen.findByRole('dialog', { name: 'Add documents' })
 }
 
 describe.sequential('Provincial Application Detail Actions - documents', () => {
@@ -78,7 +74,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
         'Application document upload is unavailable while permit information cannot be retrieved.',
       ),
     ).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText(/Document description/)).not.toBeInTheDocument()
   })
 
@@ -105,7 +101,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('Unable to retrieve application documents.')).toBeInTheDocument()
     expect(
-      screen.queryByRole('heading', { level: 3, name: 'No documents found' }),
+      screen.queryByRole('heading', { level: 3, name: 'No documents for this application' }),
     ).not.toBeInTheDocument()
   })
 
@@ -125,9 +121,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
 
     expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
-    expect(await screen.findByRole('button', { name: 'Edit documents' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Add documents' })).not.toBeInTheDocument()
   })
 
   it('shows the application document modal to a scoped Provincial Submitter', async () => {
@@ -174,14 +169,15 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(
       await screen.findByRole('heading', {
         level: 3,
-        name: 'No documents found',
+        name: 'No documents for this application',
       }),
     ).toBeInTheDocument()
     expect(
-      await screen.findByText('No documents are on file for this application yet.'),
+      await screen.findByText(
+        'Documents stay with this record through the application, exemption, and permit stages.',
+      ),
     ).toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Edit documents' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
     expect(screen.queryByLabelText(/Document description/)).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Filter document rows')).not.toBeInTheDocument()
     expect(
@@ -213,9 +209,9 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDocumentsForEditing()
+    await selectApplicationDetailTab('Documents')
     const documentName = await screen.findByText('existing-doc.pdf')
-    const uploadTrigger = screen.getByRole('button', { name: 'Add document' })
+    const uploadTrigger = screen.getByRole('button', { name: 'Add documents' })
 
     expect(screen.getByRole('region', { name: 'Application document rows' })).toBeInTheDocument()
     expect(screen.queryByLabelText('Filter document rows')).not.toBeInTheDocument()
@@ -247,7 +243,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Applicant client details')).toBeInTheDocument()
+    expect(await screen.findByText('Applicant details')).toBeInTheDocument()
     expect(
       screen.queryByText('Application document upload is unavailable for expired applications.'),
     ).not.toBeInTheDocument()
@@ -255,7 +251,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     await selectApplicationDetailTab('Documents')
 
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
-    expect(await screen.findByRole('button', { name: 'Edit documents' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
     await openDocumentUploadModal()
     expect(screen.getByLabelText('Document File')).toBeVisible()
   })
@@ -289,7 +285,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     ).toBeInTheDocument()
 
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
   })
 
   it('uploads application documents inline and refreshes document rows', async () => {
@@ -333,7 +329,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
     })
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
 
     await waitFor(() => {
       expect(mockedValidateAdminUpload).toHaveBeenCalledWith(
@@ -403,7 +399,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
     })
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
 
     expect(await screen.findByText('uploaded-doc.pdf')).toBeInTheDocument()
     await act(async () => {
@@ -469,7 +465,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     )
     await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
 
     await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2))
     expect(screen.getAllByText('second.pdf').length).toBeGreaterThan(0)
@@ -490,7 +486,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
 
     expect(await screen.findByText(/1 file failed/)).toBeInTheDocument()
     expect(screen.getAllByText('second.pdf').length).toBeGreaterThan(0)
-    expect(screen.getByRole('dialog', { name: 'Add document' })).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Add documents' })).toBeInTheDocument()
   })
 
   it('includes queued document uploads in application dirty-state protection', async () => {
@@ -730,9 +726,9 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDocumentsForEditing()
+    await selectApplicationDetailTab('Documents')
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
-    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
 
     const documentName = await screen.findByText('expired-doc.pdf')
     const documentRow = documentName.closest('tr')
@@ -777,8 +773,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDocumentsForEditing()
-    expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    await selectApplicationDetailTab('Documents')
+    expect(screen.getByRole('button', { name: 'Add documents' })).toBeInTheDocument()
     const documentRow = (await screen.findByText('industry-expired-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(
@@ -913,8 +909,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
 
     await selectApplicationDetailTab('Documents')
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
     const documentName = await screen.findByText('locked-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -954,8 +950,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDocumentsForEditing()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    await selectApplicationDetailTab('Documents')
+    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
     const documentRow = (await screen.findByText('approver-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(
@@ -998,10 +994,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
     expect(
-      within(documentRow as HTMLElement).getByRole('button', {
-        name: 'Delete',
-      }),
-    ).toBeDisabled()
+      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+    ).not.toBeInTheDocument()
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
   })
 })

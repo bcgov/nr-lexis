@@ -23,10 +23,12 @@ public class ClientLookupRepository extends OracleRepositorySupport {
   private static final int MAXIMUM_CLIENT_SEARCH_LENGTH = 60;
   private static final int CLIENT_NUMBER_LENGTH = 8;
   private static final Pattern NUMERIC_SEARCH_TERM = Pattern.compile("[0-9]+");
+  // MATCH_RANK keeps exact acronym matches ahead of name-prefix matches within the row limit.
   private static final String FIND_CLIENT_SUGGESTIONS =
       """
       SELECT CLIENT_NUMBER,
-             COMPANY_NAME
+             COMPANY_NAME,
+             CLIENT_ACRONYM
       FROM (
         SELECT FC.CLIENT_NUMBER,
                TRIM(
@@ -38,12 +40,38 @@ public class ClientLookupRepository extends OracleRepositorySupport {
                      || ', '
                      || TRIM(FC.LEGAL_FIRST_NAME)
                      || ' '
-                     || TRIM(FC.LEGAL_MIDDLE_NAME))) AS COMPANY_NAME
+                     || TRIM(FC.LEGAL_MIDDLE_NAME))) AS COMPANY_NAME,
+               COALESCE(
+                 (SELECT MIN(CA.CLIENT_ACRONYM)
+                  FROM THE.CLIENT_ACRONYM CA
+                  WHERE CA.CLIENT_NUMBER = FC.CLIENT_NUMBER
+                    AND ? = 0
+                    AND UPPER(CA.CLIENT_ACRONYM) LIKE UPPER(?) || '%' ESCAPE '\\'),
+                 (SELECT MIN(CA.CLIENT_ACRONYM)
+                  FROM THE.CLIENT_ACRONYM CA
+                  WHERE CA.CLIENT_NUMBER = FC.CLIENT_NUMBER)) AS CLIENT_ACRONYM,
+               CASE
+                 WHEN ? = 0 AND EXISTS (
+                   SELECT 1
+                   FROM THE.CLIENT_ACRONYM CA
+                   WHERE CA.CLIENT_NUMBER = FC.CLIENT_NUMBER
+                     AND UPPER(CA.CLIENT_ACRONYM) = UPPER(?)
+                 ) THEN 0
+                 ELSE 1
+               END AS MATCH_RANK
         FROM THE.V_CLIENT_PUBLIC FC
         WHERE (
           (? = 1 AND FC.CLIENT_NUMBER = LPAD(?, 8, '0'))
           OR
-          (? = 0 AND UPPER(FC.CLIENT_NAME) LIKE UPPER(?) || '%' ESCAPE '\\')
+          (? = 0 AND (
+            UPPER(FC.CLIENT_NAME) LIKE UPPER(?) || '%' ESCAPE '\\'
+            OR EXISTS (
+              SELECT 1
+              FROM THE.CLIENT_ACRONYM CA
+              WHERE CA.CLIENT_NUMBER = FC.CLIENT_NUMBER
+                AND UPPER(CA.CLIENT_ACRONYM) LIKE UPPER(?) || '%' ESCAPE '\\'
+            )
+          ))
         )
         AND (? IS NULL OR FC.CLIENT_NUMBER = ?)
         AND (
@@ -58,7 +86,7 @@ public class ClientLookupRepository extends OracleRepositorySupport {
               )
           )
         )
-        ORDER BY UPPER(FC.CLIENT_NAME), FC.CLIENT_NUMBER
+        ORDER BY MATCH_RANK, UPPER(FC.CLIENT_NAME), FC.CLIENT_NUMBER
       )
       WHERE ROWNUM <= 15
       """;
@@ -194,8 +222,13 @@ public class ClientLookupRepository extends OracleRepositorySupport {
         ps -> {
           int parameterIndex = 1;
           ps.setInt(parameterIndex++, numericSearchTerm ? 1 : 0);
+          ps.setString(parameterIndex++, escapedSearchTerm);
+          ps.setInt(parameterIndex++, numericSearchTerm ? 1 : 0);
           ps.setString(parameterIndex++, normalizedSearchTerm);
           ps.setInt(parameterIndex++, numericSearchTerm ? 1 : 0);
+          ps.setString(parameterIndex++, normalizedSearchTerm);
+          ps.setInt(parameterIndex++, numericSearchTerm ? 1 : 0);
+          ps.setString(parameterIndex++, escapedSearchTerm);
           ps.setString(parameterIndex++, escapedSearchTerm);
           ps.setString(parameterIndex++, normalizedAllowedClientNumber);
           ps.setString(parameterIndex++, normalizedAllowedClientNumber);
@@ -205,7 +238,7 @@ public class ClientLookupRepository extends OracleRepositorySupport {
             new ClientSuggestionRow(
                 trim(rs.getString("CLIENT_NUMBER")),
                 trim(rs.getString("COMPANY_NAME")),
-                null));
+                trim(rs.getString("CLIENT_ACRONYM"))));
   }
 
   private static boolean isSearchableClientTerm(String searchTerm) {

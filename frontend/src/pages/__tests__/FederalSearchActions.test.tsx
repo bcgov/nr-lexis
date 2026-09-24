@@ -189,7 +189,7 @@ describe('Federal Search Actions', () => {
       {
         clientNumber: '00012345',
         companyName: 'Pine Forestry',
-        clientAcronym: '',
+        clientAcronym: 'PF',
       },
     ])
 
@@ -198,7 +198,7 @@ describe('Federal Search Actions', () => {
     const clientInput = await screen.findByRole('combobox', { name: 'Client number' })
     await userEvent.type(clientInput, 'Pine')
     const option = await screen.findByRole('option', {
-      name: 'Pine Forestry · 00012345',
+      name: 'Pine Forestry (PF) · 00012345',
     })
     await userEvent.click(option)
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))

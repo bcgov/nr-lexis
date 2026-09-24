@@ -8,7 +8,7 @@ import type { AuthContextType } from '@/context/auth/types'
 
 vi.mock('@/service/client-search-service', () => ({ searchForestClients: vi.fn() }))
 const search = vi.mocked(searchForestClients)
-const sample = { clientNumber: '00012345', companyName: 'Sample Forest', clientAcronym: '' }
+const sample = { clientNumber: '00012345', companyName: 'Sample Forest', clientAcronym: 'SFC' }
 Element.prototype.scrollIntoView = vi.fn()
 
 function Harness({ initial = '', counterparty = '', resetKey = 0, disabled = false }) {
@@ -51,7 +51,9 @@ describe('ForestClientComboBox', () => {
   it('waits for three characters and debounces the current query', async () => {
     render(<Harness />)
     expect(input()).toHaveAttribute('aria-required', 'true')
-    expect(screen.getByText('Enter name or client number (min. 3 characters)')).toBeVisible()
+    expect(
+      screen.getByText('Enter name, acronym, or client number (min. 3 characters)'),
+    ).toBeVisible()
     type('Sa')
     await tick()
     expect(search).not.toHaveBeenCalled()
@@ -62,16 +64,16 @@ describe('ForestClientComboBox', () => {
     expect(search).not.toHaveBeenCalled()
     await tick(1)
     expect(search).toHaveBeenCalledExactlyOnceWith('Samp', '')
-    expect(screen.getByRole('option', { name: 'Sample Forest · 00012345' })).toBeVisible()
+    expect(screen.getByRole('option', { name: 'Sample Forest (SFC) · 00012345' })).toBeVisible()
   })
 
   it('stores only the selected number and clears it when the label is edited', async () => {
     render(<Harness />)
     type('Sam')
     await tick()
-    fireEvent.click(screen.getByRole('option', { name: 'Sample Forest · 00012345' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Sample Forest (SFC) · 00012345' }))
     expect(screen.getByTestId('value')).toHaveTextContent('00012345')
-    expect(input()).toHaveValue('Sample Forest · 00012345')
+    expect(input()).toHaveValue('Sample Forest (SFC) · 00012345')
     type('Other')
     expect(screen.getByTestId('value')).toBeEmptyDOMElement()
     expect(input()).toHaveValue('Other')
@@ -104,7 +106,7 @@ describe('ForestClientComboBox', () => {
     render(<Harness />)
     type('Sam')
     await tick()
-    fireEvent.click(screen.getByRole('option', { name: 'Sample Forest · 00012345' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Sample Forest (SFC) · 00012345' }))
 
     expect(input()).toHaveAttribute('aria-expanded', 'false')
     expect(screen.getByRole('button', { name: 'Clear selected item' })).toBeVisible()
@@ -112,7 +114,7 @@ describe('ForestClientComboBox', () => {
     fireEvent.click(input())
 
     expect(input()).toHaveAttribute('aria-expanded', 'true')
-    const selectedOption = screen.getByRole('option', { name: 'Sample Forest · 00012345' })
+    const selectedOption = screen.getByRole('option', { name: 'Sample Forest (SFC) · 00012345' })
     expect(selectedOption).toHaveAttribute('aria-selected', 'true')
     expect(selectedOption).toHaveClass('cds--list-box__menu-item--active')
     expect(screen.getAllByRole('option')).toHaveLength(1)
@@ -121,7 +123,7 @@ describe('ForestClientComboBox', () => {
     await tick()
 
     expect(screen.getByTestId('value')).toHaveTextContent('00012345')
-    expect(input()).toHaveValue('Sample Forest · 00012345')
+    expect(input()).toHaveValue('Sample Forest (SFC) · 00012345')
     expect(search).toHaveBeenCalledTimes(1)
   })
 
@@ -160,7 +162,7 @@ describe('ForestClientComboBox', () => {
     render(<Harness />)
     type('Sam')
     await tick()
-    fireEvent.click(screen.getByRole('option', { name: 'Sample Forest · 00012345' }))
+    fireEvent.click(screen.getByRole('option', { name: 'Sample Forest (SFC) · 00012345' }))
     fireEvent.click(screen.getByRole('button', { name: 'Reset selected client' }))
     expect(input()).toHaveValue('')
   })

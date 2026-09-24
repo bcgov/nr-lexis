@@ -3,7 +3,7 @@ import {
   Button,
   Checkbox,
   Column,
-  DismissibleTag,
+  FilterableMultiSelect,
   Grid,
   InlineLoading,
   InlineNotification,
@@ -43,7 +43,6 @@ import ApplicationAccuracyConfirmation, {
 } from '@/components/ApplicationAccuracyConfirmation'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import ConfirmationModal from '@/components/ConfirmationModal'
-import Modal from '@/components/Modal'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import {
@@ -106,6 +105,7 @@ import {
   type SearchOption,
 } from '@/service/search-options-service'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
+import DetailSidePanel from '@/components/DetailSidePanel'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
@@ -152,11 +152,21 @@ import { AppNotification } from '../../components/AppNotification'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
+const REVIEW_STATUS_SUCCESS_TITLES: Record<string, string> = {
+  REJ: 'Application rejected.',
+  WDN: 'Application withdrawn.',
+}
+const REVIEW_STATUS_ACTION_LABELS: Record<string, string> = {
+  APP: 'Approve application',
+  REJ: 'Reject application',
+  WDN: 'Withdraw application',
+}
 const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['EXP', 'REJ', 'WDN'])
 const REVIEW_STATUSES_WITH_PERSISTED_REMARK = new Set(['EXP', 'REJ', 'WDN'])
 const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before updating review status.'
 const REVIEW_REMARK_REQUIRED_MESSAGE =
   'Status change remark is required when rejecting, withdrawing, or expiring an application.'
+const APPROVAL_REMARK_REQUIRED_MESSAGE = 'Remark is required.'
 type LookupAvailability = 'loading' | 'available' | 'unavailable'
 type ApplicationActionResult = ActionResult & {
   /** Keeps the creation notice through this application's own reloads. */
@@ -177,7 +187,6 @@ const withoutDraftResult = (
 ): ApplicationActionResult | null => withoutVolumeWarning(withoutActionError(current))
 type ApplicationDetailTabKey =
   | 'owner'
-  | 'agent'
   | 'application'
   | 'items'
   | 'documents'
@@ -193,7 +202,6 @@ type ApplicationCreationNavigationState = Record<string, unknown> & {
 // Keep these slots aligned with the TabList and TabPanels declarations below.
 const APPLICATION_DETAIL_TAB_SLOTS: readonly ApplicationDetailTabKey[] = [
   'owner',
-  'agent',
   'application',
   'items',
   'documents',
@@ -204,8 +212,7 @@ const APPLICATION_DETAIL_TAB_SLOTS: readonly ApplicationDetailTabKey[] = [
 const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
   'Status email is only supported for rejected or withdrawn applications.'
 const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
-const REVIEW_EMAIL_PREVIEW_HELPER =
-  "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification."
+const REVIEW_EMAIL_PREVIEW_HELPER = "Editing this address won't change the client's record."
 const APPROVABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND'])
 const REVIEWABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND', 'APP'])
 const productTypeSupportsPackages = (productTypeCode?: string | null): boolean =>
@@ -768,8 +775,6 @@ const ProvincialApplicationDetailsPage = () => {
   const [isSavingSummary, setIsSavingSummary] = useState(false)
   const [isEditingSummary, setIsEditingSummary] = useState(false)
   const [isEditingOwnerDetails, setIsEditingOwnerDetails] = useState(false)
-  const [isEditingAgentDetails, setIsEditingAgentDetails] = useState(false)
-  const [isTransitioningApplicantToAgent, setIsTransitioningApplicantToAgent] = useState(false)
   const [isEditingApplicationItems, setIsEditingApplicationItems] = useState(false)
   const [isEditingDocuments, setIsEditingDocuments] = useState(false)
   const [isEditingRemarks, setIsEditingRemarks] = useState(false)
@@ -814,7 +819,6 @@ const ProvincialApplicationDetailsPage = () => {
   const [applicationEndUseOptions, setApplicationEndUseOptions] = useState<ApplicationCodeOption[]>(
     [],
   )
-  const [applicationSpeciesCandidate, setApplicationSpeciesCandidate] = useState('')
   const [summaryOptionsAvailability, setSummaryOptionsAvailability] = useState<
     'idle' | 'loading' | 'available' | 'unavailable'
   >('idle')
@@ -824,6 +828,13 @@ const ProvincialApplicationDetailsPage = () => {
   >('loading')
   const [reviewStatusCode, setReviewStatusCode] = useState('')
   const [reviewStatusRemark, setReviewStatusRemark] = useState('')
+  const [isRetryingApprovalRemark, setIsRetryingApprovalRemark] = useState(false)
+  const [sendReviewEmail, setSendReviewEmail] = useState(false)
+  // Sent status emails are not recorded, so only an email sent from this page can be shown.
+  const [sentReviewEmail, setSentReviewEmail] = useState<{
+    applicationNumber: string
+    address: string
+  } | null>(null)
   const [reviewStatusBaselineCode, setReviewStatusBaselineCode] = useState('')
   const [reviewStatusRemarkBaseline, setReviewStatusRemarkBaseline] = useState('')
   const reviewStatusEmailCandidate = useMemo(
@@ -909,7 +920,7 @@ const ProvincialApplicationDetailsPage = () => {
   ])
 
   const loadApplicationDetail = useCallback(
-    async ({ preserveRemarkDraft = false } = {}) => {
+    async ({ preserveRemarkDraft = false, preserveSummaryDraft = false } = {}) => {
       const isLatestRequest = beginDetailRequest()
       const detailDocumentRequestSequence = ++documentRequestSequenceRef.current
       setSummaryAccuracyConfirmationOpen(false)
@@ -933,13 +944,12 @@ const ProvincialApplicationDetailsPage = () => {
         setSummaryBaselineForm(null)
         setIsEditingSummary(false)
         setIsEditingOwnerDetails(false)
-        setIsEditingAgentDetails(false)
-        setIsTransitioningApplicantToAgent(false)
         setIsEditingApplicationItems(false)
         setApplicationItemsEditing(false)
         setIsEditingDocuments(false)
         setIsEditingRemarks(false)
         setIsEditingReview(false)
+        setIsRetryingApprovalRemark(false)
         setReviewStatusCode('')
         setReviewStatusRemark('')
         setReviewStatusBaselineCode('')
@@ -961,13 +971,12 @@ const ProvincialApplicationDetailsPage = () => {
       if (!retainingCurrentDetail) {
         setIsEditingSummary(false)
         setIsEditingOwnerDetails(false)
-        setIsEditingAgentDetails(false)
-        setIsTransitioningApplicantToAgent(false)
         setIsEditingApplicationItems(false)
         setApplicationItemsEditing(false)
         setIsEditingDocuments(false)
         setIsEditingRemarks(false)
         setIsEditingReview(false)
+        setIsRetryingApprovalRemark(false)
         setReviewStatusEmailOverride(null)
         setIndustryViewableExemptionNumber(null)
         setDocumentRows([])
@@ -984,9 +993,11 @@ const ProvincialApplicationDetailsPage = () => {
           ? normalizeSummaryAgentFields(toSummaryFormState(response))
           : null
         setDetail(response)
-        setSummaryForm(editableSummaryForm)
-        setSummaryBaselineForm(editableSummaryForm)
-        setShowSummaryValidationErrors(false)
+        if (!preserveSummaryDraft) {
+          setSummaryForm(editableSummaryForm)
+          setSummaryBaselineForm(editableSummaryForm)
+          setShowSummaryValidationErrors(false)
+        }
         const persistedReviewStatusCode = response?.applicationStatusCode ?? ''
         const persistedReviewStatusRemark = latestPersistedReviewRemark(response)
         setReviewStatusCode(persistedReviewStatusCode)
@@ -1058,7 +1069,7 @@ const ProvincialApplicationDetailsPage = () => {
           setPartialLoadMessage('Unable to retrieve species and end-use fields.')
         }
 
-        if (editableSummaryForm) {
+        if (editableSummaryForm && !preserveSummaryDraft) {
           setSummaryForm(editableSummaryForm)
           setSummaryBaselineForm(editableSummaryForm)
         }
@@ -1169,7 +1180,6 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canAddApplicationDocuments =
     canUploadApplicationDocuments && !documentUploadUnavailableMessage
-  const canEditApplicationDocuments = canAddApplicationDocuments || canDeleteDocuments
   const hasApplicationDocuments =
     documentLookupAvailability === 'available' && documentRows.length > 0
   const canViewRemarks = canPerform('/applicationRemarks')
@@ -1221,6 +1231,8 @@ const ProvincialApplicationDetailsPage = () => {
   const canApproveApplicationReview =
     canEditApplicationReview &&
     APPROVABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(detail?.applicationStatusCode ?? ''))
+  // The reviewed Figma opens the review form on Approved when approval is available.
+  const reviewFormDefaultStatusCode = canApproveApplicationReview ? 'APP' : ''
   const canViewReview = canViewRemarks && canReviewApplication
   const normalizedReviewStatusCode = useMemo(
     () => normalizeReviewStatus(reviewStatusCode),
@@ -1228,7 +1240,9 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canSendReviewStatusEmail = EMAIL_SUPPORTED_STATUS_CODES.has(normalizedReviewStatusCode)
   const isReviewStatusInvalid = reviewValidationMessage === REVIEW_STATUS_REQUIRED_MESSAGE
-  const isReviewRemarkInvalid = reviewValidationMessage === REVIEW_REMARK_REQUIRED_MESSAGE
+  const isReviewRemarkInvalid =
+    reviewValidationMessage === REVIEW_REMARK_REQUIRED_MESSAGE ||
+    reviewValidationMessage === APPROVAL_REMARK_REQUIRED_MESSAGE
   const showReviewValidationNotification =
     !!reviewValidationMessage && !isReviewStatusInvalid && !isReviewRemarkInvalid
   const hasSummaryForm = summaryForm !== null
@@ -1236,7 +1250,6 @@ const ProvincialApplicationDetailsPage = () => {
   const isSummaryAgentApplicant = isAgentApplicant(summaryForm?.applicantTypeCode ?? '')
   const applicationDetailTabs: ApplicationDetailTabKey[] = [
     'owner',
-    ...(isSummaryAgentApplicant ? (['agent'] as const) : []),
     'application',
     'items',
     'documents',
@@ -1284,14 +1297,11 @@ const ProvincialApplicationDetailsPage = () => {
     (source: SummarySaveSource): boolean => {
       if (source === 'owner') return isOwnerClientLookupPending
       if (source === 'agent') {
-        return (
-          isAgentClientLookupPending ||
-          (isTransitioningApplicantToAgent && isOwnerClientLookupPending)
-        )
+        return isAgentClientLookupPending || isOwnerClientLookupPending
       }
       return false
     },
-    [isAgentClientLookupPending, isOwnerClientLookupPending, isTransitioningApplicantToAgent],
+    [isAgentClientLookupPending, isOwnerClientLookupPending],
   )
   const ownerClientLocationPlaceholder = !summaryOwnerClientNumber
     ? 'Enter applicant client number first'
@@ -1639,26 +1649,34 @@ const ProvincialApplicationDetailsPage = () => {
   const summaryValidationErrorsForSource = useCallback(
     (source: SummarySaveSource): string[] => {
       const fields =
-        source === 'agent' && isTransitioningApplicantToAgent
+        source === 'agent'
           ? [...SUMMARY_SAVE_FIELDS.owner, ...SUMMARY_SAVE_FIELDS.agent]
           : SUMMARY_SAVE_FIELDS[source]
       return fields
         .map((field) => summaryFieldErrors[field])
         .filter((error): error is string => !!error)
     },
-    [isTransitioningApplicantToAgent, summaryFieldErrors],
+    [summaryFieldErrors],
   )
   const visibleSummaryFieldError = (field: ApplicationSummaryField): string | undefined =>
     showSummaryValidationErrors ? summaryFieldErrors[field] : undefined
   const summarySpeciesCodesError = visibleSummaryFieldError('speciesCodes')
-  const availableApplicationSpeciesOptions = useMemo(
-    () => applicationSpeciesOptions.filter((option) => !summarySpeciesCodes.includes(option.code)),
-    [applicationSpeciesOptions, summarySpeciesCodes],
+  const applicationSpeciesMultiSelectOptions = useMemo(() => {
+    const options = applicationSpeciesOptions.map((option) => ({
+      id: option.code,
+      text: `${option.code} - ${option.description}`,
+    }))
+    for (const code of summarySpeciesCodes) {
+      if (!options.some((option) => option.id === code)) {
+        options.push({ id: code, text: code })
+      }
+    }
+    return options
+  }, [applicationSpeciesOptions, summarySpeciesCodes])
+  const selectedApplicationSpeciesOptions = applicationSpeciesMultiSelectOptions.filter((option) =>
+    summarySpeciesCodes.includes(option.id),
   )
-  const applicationSpeciesSelectOptions = availableApplicationSpeciesOptions.map(toSearchOption)
   const applicationEndUseSelectOptions = applicationEndUseOptions.map(toSearchOption)
-  const speciesPlaceholder =
-    applicationSpeciesSelectOptions.length > 0 ? 'Select species' : 'No remaining species'
   const endUsePlaceholder =
     summarySpeciesCodes.length === 0
       ? 'Add species first'
@@ -1808,7 +1826,7 @@ const ProvincialApplicationDetailsPage = () => {
 
         setAgentClientData(clientData)
         updateClientLookupFailure('agent-data', false)
-        if (!clientData || (!isEditingAgentDetails && !isEditingSummary)) {
+        if (!clientData || (!isEditingOwnerDetails && !isEditingSummary)) {
           return
         }
 
@@ -1857,7 +1875,7 @@ const ProvincialApplicationDetailsPage = () => {
   }, [
     applicationNumber,
     hasSummaryForm,
-    isEditingAgentDetails,
+    isEditingOwnerDetails,
     isEditingSummary,
     summaryAgentClientLocationCode,
     summaryAgentClientNumberForLookup,
@@ -2367,7 +2385,6 @@ const ProvincialApplicationDetailsPage = () => {
           return
         }
         setApplicationSpeciesOptions([])
-        setApplicationSpeciesCandidate('')
       })
       return () => {
         isActive = false
@@ -2384,19 +2401,20 @@ const ProvincialApplicationDetailsPage = () => {
         if (!isActive) {
           return
         }
-        setApplicationSpeciesOptions(options)
-        setApplicationSpeciesCandidate((current) =>
-          current && options.some((option) => option.code === current)
-            ? current
-            : (options[0]?.code ?? ''),
-        )
+        setApplicationSpeciesOptions((current) => [
+          ...options,
+          ...current.filter(
+            (option) =>
+              summarySpeciesCodes.includes(option.code) &&
+              !options.some((remaining) => remaining.code === option.code),
+          ),
+        ])
       })
       .catch(() => {
         if (!isActive) {
           return
         }
         setApplicationSpeciesOptions([])
-        setApplicationSpeciesCandidate('')
       })
 
     return () => {
@@ -2775,34 +2793,25 @@ const ProvincialApplicationDetailsPage = () => {
     [],
   )
 
-  const onOwnerApplicantTypeChange = useCallback(
-    (applicantTypeCode: string) => {
-      setSummaryForm((current) => {
-        if (!current) {
-          return current
-        }
-
-        const next = {
-          ...current,
-          applicantTypeCode,
-          agentClientNumber:
-            applicantTypeCode === 'A'
-              ? current.agentClientNumber || current.ownerClientNumber
-              : current.agentClientNumber,
-        }
-        return normalizeSummaryAgentFields(next)
-      })
-      if (applicantTypeCode === 'A' && !isSummaryAgentApplicant) {
-        setIsEditingOwnerDetails(false)
-        setIsEditingAgentDetails(true)
-        setIsTransitioningApplicantToAgent(true)
-        selectApplicationTab('agent')
+  const onOwnerApplicantTypeChange = useCallback((applicantTypeCode: string) => {
+    setSummaryForm((current) => {
+      if (!current) {
+        return current
       }
-      setSummaryVolumeWarningAccepted(false)
-      setActionResult(withoutVolumeWarning)
-    },
-    [isSummaryAgentApplicant, selectApplicationTab],
-  )
+
+      const next = {
+        ...current,
+        applicantTypeCode,
+        agentClientNumber:
+          applicantTypeCode === 'A'
+            ? current.agentClientNumber || current.ownerClientNumber
+            : current.agentClientNumber,
+      }
+      return normalizeSummaryAgentFields(next)
+    })
+    setSummaryVolumeWarningAccepted(false)
+    setActionResult(withoutVolumeWarning)
+  }, [])
 
   const onCancelOwnerDetails = useCallback(() => {
     setSummaryForm((current) => {
@@ -2822,7 +2831,6 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
     setIsEditingOwnerDetails(false)
-    setIsTransitioningApplicantToAgent(false)
     setShowSummaryValidationErrors(false)
     setSummaryVolumeWarningAccepted(false)
     setActionResult(withoutDraftResult)
@@ -2831,38 +2839,6 @@ const ProvincialApplicationDetailsPage = () => {
     setSummaryAccuracyApplicationNumber(null)
     setPendingSummarySaveSource('summary')
   }, [summaryBaselineForm])
-
-  const onCancelAgentDetails = useCallback(() => {
-    setSummaryForm((current) => {
-      if (!current || !summaryBaselineForm) {
-        return current
-      }
-
-      return {
-        ...current,
-        ...(isTransitioningApplicantToAgent
-          ? {
-              ownerClientNumber: summaryBaselineForm.ownerClientNumber,
-              ownerClientLocationCode: summaryBaselineForm.ownerClientLocationCode,
-              ownerContactName: summaryBaselineForm.ownerContactName,
-              applicantTypeCode: summaryBaselineForm.applicantTypeCode,
-            }
-          : {}),
-        agentClientNumber: summaryBaselineForm.agentClientNumber,
-        agentClientLocationCode: summaryBaselineForm.agentClientLocationCode,
-        agentContactName: summaryBaselineForm.agentContactName,
-      }
-    })
-    setIsEditingAgentDetails(false)
-    setIsTransitioningApplicantToAgent(false)
-    setShowSummaryValidationErrors(false)
-    setSummaryVolumeWarningAccepted(false)
-    setActionResult(withoutDraftResult)
-    setSummaryAccuracyConfirmationOpen(false)
-    setSummaryAccuracyConfirmed(false)
-    setSummaryAccuracyApplicationNumber(null)
-    setPendingSummarySaveSource('summary')
-  }, [isTransitioningApplicantToAgent, summaryBaselineForm])
 
   const onCancelSummaryDetails = useCallback(() => {
     setSummaryForm((current) => {
@@ -2886,7 +2862,6 @@ const ProvincialApplicationDetailsPage = () => {
     setIsEditingSummary(false)
     setShowSummaryValidationErrors(false)
     setSummaryVolumeWarningAccepted(false)
-    setApplicationSpeciesCandidate('')
     setActionResult(withoutDraftResult)
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
@@ -2914,7 +2889,6 @@ const ProvincialApplicationDetailsPage = () => {
     setIsEditingApplicationItems(false)
     setShowSummaryValidationErrors(false)
     setSummaryVolumeWarningAccepted(false)
-    setApplicationSpeciesCandidate('')
     setActionResult(withoutDraftResult)
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
@@ -2927,36 +2901,6 @@ const ProvincialApplicationDetailsPage = () => {
     setEditingRemarkId(null)
     setRemarkValidationMessage('')
     setIsEditingRemarks(false)
-  }, [])
-
-  const onAddApplicationSpecies = useCallback(() => {
-    const nextSpecies = applicationSpeciesCandidate.trim()
-    if (!nextSpecies) {
-      return
-    }
-
-    setSummaryForm((current) => {
-      if (!current || current.speciesCodes.includes(nextSpecies)) {
-        return current
-      }
-      return { ...current, speciesCodes: [...current.speciesCodes, nextSpecies] }
-    })
-    setSummaryVolumeWarningAccepted(false)
-    setActionResult(withoutVolumeWarning)
-  }, [applicationSpeciesCandidate])
-
-  const onRemoveApplicationSpecies = useCallback((speciesCode: string) => {
-    setSummaryForm((current) => {
-      if (!current) {
-        return current
-      }
-      return {
-        ...current,
-        speciesCodes: current.speciesCodes.filter((code) => code !== speciesCode),
-      }
-    })
-    setSummaryVolumeWarningAccepted(false)
-    setActionResult(withoutVolumeWarning)
   }, [])
 
   const onSaveSummary = useCallback(
@@ -3034,8 +2978,7 @@ const ProvincialApplicationDetailsPage = () => {
         const originalOwnerClientLocationCode = summaryRequestForm.ownerClientLocationCode
         const originalAgentClientNumber = summaryRequestForm.agentClientNumber
         const originalAgentClientLocationCode = summaryRequestForm.agentClientLocationCode
-        const confirmOwnerClientNumber =
-          source === 'owner' || (source === 'agent' && isTransitioningApplicantToAgent)
+        const confirmOwnerClientNumber = source === 'owner' || source === 'agent'
         const confirmAgentClientNumber =
           source === 'agent' && isAgentApplicant(summaryRequestForm.applicantTypeCode)
         const [ownerClientNumber, agentClientNumber] = await Promise.all([
@@ -3085,8 +3028,7 @@ const ProvincialApplicationDetailsPage = () => {
         // BCeID edits depend on staff-only review status or remark controls.
         const result = await updateApplicationSummary({
           applicationNumber: String(detail.applicationNumber),
-          saveSource:
-            source === 'agent' && isTransitioningApplicantToAgent ? 'owner-agent' : source,
+          saveSource: source === 'agent' ? 'owner-agent' : source,
           ...(confirmOwnerClientNumber && {
             ownerClientNumber: summaryRequestForm.ownerClientNumber,
             ownerClientLocationCode: summaryRequestForm.ownerClientLocationCode,
@@ -3171,7 +3113,6 @@ const ProvincialApplicationDetailsPage = () => {
       editingRemarkId,
       isSavingSummary,
       isSummaryClientLookupPendingForSource,
-      isTransitioningApplicantToAgent,
       loadApplicationDetail,
       remarkBody,
       requiresApplicationAccuracyAcknowledgement,
@@ -3201,13 +3142,11 @@ const ProvincialApplicationDetailsPage = () => {
       }
       if (saved && source === 'owner') {
         setIsEditingOwnerDetails(false)
-        setIsTransitioningApplicantToAgent(false)
         setActionResult({ kind: 'success', message: 'Applicant client details saved.' })
       }
       if (saved && source === 'agent') {
-        setIsEditingAgentDetails(false)
-        setIsTransitioningApplicantToAgent(false)
-        setActionResult({ kind: 'success', message: 'Agent details saved.' })
+        setIsEditingOwnerDetails(false)
+        setActionResult({ kind: 'success', message: 'Applicant details saved.' })
       }
       if (saved && source === 'items') {
         setIsEditingApplicationItems(false)
@@ -3222,8 +3161,10 @@ const ProvincialApplicationDetailsPage = () => {
     setReviewStatusCode(reviewStatusBaselineCode)
     setReviewStatusRemark(reviewStatusRemarkBaseline)
     setReviewStatusEmailOverride(null)
+    setSendReviewEmail(false)
     setReviewValidationMessage('')
     setIsEditingReview(false)
+    setIsRetryingApprovalRemark(false)
   }, [reviewStatusBaselineCode, reviewStatusRemarkBaseline])
 
   const onRequestSaveSummary = useCallback(
@@ -3313,39 +3254,97 @@ const ProvincialApplicationDetailsPage = () => {
     ],
   )
 
-  const onApproveApplication = useCallback(async (): Promise<boolean> => {
-    if (!detail || !canEditApplicationReview || isSubmittingReviewAction) {
-      return false
+  const onApproveApplication = useCallback(async (): Promise<'saved' | 'partial' | 'failed'> => {
+    if (
+      !detail ||
+      isSubmittingReviewAction ||
+      (isRetryingApprovalRemark ? !canManageRemarks : !canApproveApplicationReview)
+    ) {
+      return 'failed'
     }
 
     setActionResult(null)
+    const approvalRemark = reviewStatusRemark.trim()
+    if (isRetryingApprovalRemark && !approvalRemark) {
+      setReviewValidationMessage(APPROVAL_REMARK_REQUIRED_MESSAGE)
+      return 'failed'
+    }
     setReviewValidationMessage('')
     setIsSubmittingReviewAction(true)
     try {
-      const result = await approveApplicationReview(String(detail.applicationNumber))
-      if (!result.valid || !result.updated) {
-        setActionResult({
-          kind: 'error',
-          message: result.message || 'Unable to approve application.',
-        })
-        return false
+      if (!isRetryingApprovalRemark) {
+        const result = await approveApplicationReview(String(detail.applicationNumber))
+        if (!result.valid || !result.updated) {
+          setActionResult({
+            kind: 'error',
+            message: result.message || 'Unable to approve application.',
+          })
+          return 'failed'
+        }
+        applyReviewStatusResult(result, '')
       }
 
-      applyReviewStatusResult(result, reviewStatusRemark)
-      setActionResult({ kind: 'success', message: result.message || 'Application approved.' })
-      return true
+      if (approvalRemark && canManageRemarks) {
+        const retainFailedRemark = (reason?: string) => {
+          // Review owns this draft; the separate Remarks editor may already have unsaved work.
+          setReviewStatusRemark(approvalRemark)
+          setIsRetryingApprovalRemark(true)
+          setReviewStatusEmailOverride(null)
+          setIsEditingReview(true)
+          selectApplicationTab('review')
+          setReviewValidationMessage(
+            `Application approved, but the remark was not saved. Retry saving the remark.${reason ? ` ${reason}` : ''}`,
+          )
+        }
+        try {
+          const remarkResult = await saveApplicationRemark({
+            applicationNumber: String(detail.applicationNumber),
+            remarkBody: approvalRemark,
+          })
+          if (!remarkResult.success) {
+            retainFailedRemark(remarkResult.message)
+            return 'partial'
+          }
+        } catch {
+          retainFailedRemark()
+          return 'partial'
+        }
+        setIsRetryingApprovalRemark(false)
+        try {
+          // Approval updates the status in both summary states; keep unrelated edits and
+          // their saved baseline while refreshing the newly persisted review remark.
+          await loadApplicationDetail({ preserveRemarkDraft: true, preserveSummaryDraft: true })
+        } catch {
+          setActionResult({
+            kind: 'error',
+            message: 'Application approved and remark saved, but the page could not refresh.',
+          })
+          return 'saved'
+        }
+      }
+      setIsRetryingApprovalRemark(false)
+      setActionResult({
+        kind: 'success',
+        title: isRetryingApprovalRemark ? 'Application remark saved.' : 'Application approved.',
+        message: '',
+      })
+      return 'saved'
     } catch {
       setActionResult({ kind: 'error', message: 'Unable to approve application.' })
-      return false
+      return 'failed'
     } finally {
       setIsSubmittingReviewAction(false)
     }
   }, [
     applyReviewStatusResult,
-    canEditApplicationReview,
+    canApproveApplicationReview,
+    canManageRemarks,
     detail,
+    isRetryingApprovalRemark,
     isSubmittingReviewAction,
+    loadApplicationDetail,
     reviewStatusRemark,
+    selectApplicationTab,
   ])
 
   const onUpdateReviewStatus = useCallback(
@@ -3389,6 +3388,7 @@ const ProvincialApplicationDetailsPage = () => {
           )
           if (!emailResult.success) {
             applyReviewStatusResult(updateResult, payloadResult.payload.remark)
+            setSentReviewEmail(null)
             setActionResult({
               kind: 'error',
               message:
@@ -3402,11 +3402,20 @@ const ProvincialApplicationDetailsPage = () => {
         }
 
         applyReviewStatusResult(updateResult, payloadResult.payload.remark)
+        const { statusCode, clientEmailAddress } = payloadResult.payload
+        setSentReviewEmail(
+          sendEmail
+            ? { applicationNumber: String(detail.applicationNumber), address: clientEmailAddress }
+            : null,
+        )
         setActionResult({
           kind: 'success',
+          title: REVIEW_STATUS_SUCCESS_TITLES[statusCode] ?? 'Application status updated.',
           message: sendEmail
-            ? 'Application status updated and email sent.'
-            : updateResult.message || 'Application status updated.',
+            ? `Email sent to ${clientEmailAddress}.`
+            : EMAIL_SUPPORTED_STATUS_CODES.has(statusCode)
+              ? 'No email was sent to the client.'
+              : '',
         })
         return true
       } catch {
@@ -3428,7 +3437,7 @@ const ProvincialApplicationDetailsPage = () => {
   )
 
   const onApproveApplicationFromEdit = useCallback(async () => {
-    if (await onApproveApplication()) {
+    if ((await onApproveApplication()) === 'saved') {
       setReviewStatusEmailOverride(null)
       setIsEditingReview(false)
     }
@@ -3457,7 +3466,6 @@ const ProvincialApplicationDetailsPage = () => {
     const preservedSummaryBaselineForm = summaryBaselineForm
     const preservedSummaryVolumeWarningAccepted = summaryVolumeWarningAccepted
     const preservedShowSummaryValidationErrors = showSummaryValidationErrors
-    const preservedApplicationSpeciesCandidate = applicationSpeciesCandidate
     const preservedRemarkBody = remarkBody
     const preservedEditingRemarkId = editingRemarkId
     const preservedRemarkValidationMessage = remarkValidationMessage
@@ -3474,7 +3482,6 @@ const ProvincialApplicationDetailsPage = () => {
     setSummaryBaselineForm(preservedSummaryBaselineForm)
     setSummaryVolumeWarningAccepted(preservedSummaryVolumeWarningAccepted)
     setShowSummaryValidationErrors(preservedShowSummaryValidationErrors)
-    setApplicationSpeciesCandidate(preservedApplicationSpeciesCandidate)
     setRemarkBody(preservedRemarkBody)
     setEditingRemarkId(preservedEditingRemarkId)
     setRemarkValidationMessage(preservedRemarkValidationMessage)
@@ -3485,7 +3492,6 @@ const ProvincialApplicationDetailsPage = () => {
     setReviewValidationMessage(preservedReviewValidationMessage)
   }, [
     applicationNumber,
-    applicationSpeciesCandidate,
     editingRemarkId,
     loadApplicationDetail,
     remarkBody,
@@ -3503,20 +3509,17 @@ const ProvincialApplicationDetailsPage = () => {
 
   const summaryDirty =
     canEditSummary &&
-    (isEditingSummary ||
-      isEditingOwnerDetails ||
-      isEditingAgentDetails ||
-      isEditingApplicationItems) &&
+    (isEditingSummary || isEditingOwnerDetails || isEditingApplicationItems) &&
     !!summaryForm &&
     !!summaryBaselineForm &&
     !formValuesEqual(summaryForm, summaryBaselineForm)
   const activeSummarySaveSource: SummarySaveSource = isEditingApplicationItems
     ? 'items'
     : isEditingOwnerDetails
-      ? 'owner'
-      : isEditingAgentDetails
+      ? isSummaryAgentApplicant
         ? 'agent'
-        : 'summary'
+        : 'owner'
+      : 'summary'
   const activeMissingSummaryOptionLabels =
     missingSummaryOptionLabelsForSource(activeSummarySaveSource)
   const activeRequiredSummaryOptionsMissing =
@@ -3526,11 +3529,14 @@ const ProvincialApplicationDetailsPage = () => {
     : ''
   const remarkDirty = canManageRemarks && isEditingRemarks && remarkBody !== remarkBaselineBody
   const reviewDirty =
-    canEditApplicationReview &&
-    isEditingReview &&
-    (normalizedReviewStatusCode !== normalizeReviewStatus(reviewStatusBaselineCode) ||
-      reviewStatusRemark !== reviewStatusRemarkBaseline ||
-      reviewStatusEmailAddress !== reviewStatusEmailCandidate)
+    isRetryingApprovalRemark ||
+    (canEditApplicationReview &&
+      isEditingReview &&
+      // The review form opens on its default status; only a different choice is a change.
+      (normalizedReviewStatusCode !== reviewFormDefaultStatusCode ||
+        reviewStatusRemark !== reviewStatusRemarkBaseline ||
+        reviewStatusEmailAddress !== reviewStatusEmailCandidate ||
+        (canSendReviewStatusEmail && sendReviewEmail)))
   const isApplicationDirty =
     summaryDirty || remarkDirty || reviewDirty || applicationItemsDirty || documentUploadDirty
 
@@ -3548,7 +3554,7 @@ const ProvincialApplicationDetailsPage = () => {
       setActionResult({
         kind: 'error',
         message:
-          'Save or reset the package, species, or scale draft in the Items tab before leaving this application.',
+          'Save or cancel the package or scale draft in the Scale tab before leaving this application.',
       })
       return false
     }
@@ -3557,12 +3563,13 @@ const ProvincialApplicationDetailsPage = () => {
     if (reviewDirty) {
       const reviewSaved = await (normalizedReviewStatusCode === 'APP'
         ? onApproveApplication()
-        : onUpdateReviewStatus(false))
-      if (!reviewSaved) return false
+        : onUpdateReviewStatus(sendReviewEmail && canSendReviewStatusEmail))
+      if (reviewSaved !== true && reviewSaved !== 'saved') return false
     }
     return true
   }, [
     normalizedReviewStatusCode,
+    canSendReviewStatusEmail,
     activeSummarySaveSource,
     applicationItemsDirty,
     documentUploadDirty,
@@ -3572,6 +3579,7 @@ const ProvincialApplicationDetailsPage = () => {
     onUpdateReviewStatus,
     remarkDirty,
     reviewDirty,
+    sendReviewEmail,
     selectApplicationTab,
     summaryDirty,
   ])
@@ -3584,22 +3592,21 @@ const ProvincialApplicationDetailsPage = () => {
     setSummaryVolumeWarningAccepted(false)
     setIsEditingSummary(false)
     setIsEditingOwnerDetails(false)
-    setIsEditingAgentDetails(false)
-    setIsTransitioningApplicantToAgent(false)
     setIsEditingApplicationItems(false)
     setApplicationItemsEditing(false)
     setIsEditingDocuments(false)
     setIsEditingRemarks(false)
     setIsEditingReview(false)
+    setIsRetryingApprovalRemark(false)
     closeSummaryAccuracyConfirmation()
     setShowSummaryValidationErrors(false)
-    setApplicationSpeciesCandidate('')
     setRemarkBody('')
     setEditingRemarkId(null)
     setRemarkValidationMessage('')
     setReviewStatusCode(reviewStatusBaselineCode)
     setReviewStatusRemark(reviewStatusRemarkBaseline)
     setReviewStatusEmailOverride(null)
+    setSendReviewEmail(false)
     setReviewValidationMessage('')
     setActionResult(withoutDraftResult)
     setDocumentUploadDirty(false)
@@ -3841,13 +3848,62 @@ const ProvincialApplicationDetailsPage = () => {
       ) : (
         <EmptyState
           title="No offers found"
-          description="No purchase offers are linked to this provincial application."
+          description="No offers are linked to this application."
           icon={<Handshake width={48} height={48} />}
           headingLevel={3}
         />
       )}
     </Tile>
   ) : null
+
+  // Figma places each tab's add action in its empty state, and above the list once rows exist.
+  const showsEmptyApplicationDocuments =
+    documentLookupAvailability === 'available' && !hasApplicationDocuments
+  const addApplicationDocumentsButton =
+    canAddApplicationDocuments && !isEditingDocuments ? (
+      <Button
+        kind="tertiary"
+        size="sm"
+        renderIcon={Add}
+        onClick={() => setIsEditingDocuments(true)}
+      >
+        Add documents
+      </Button>
+    ) : null
+  const hasApplicationRemarks = (detail?.remarks?.length ?? 0) > 0
+  const addApplicationRemarkButton = canManageRemarks ? (
+    <Button
+      kind="tertiary"
+      size="sm"
+      renderIcon={Add}
+      disabled={isEditingRemarks || isSavingRemark}
+      onClick={(event) => {
+        remarkLauncherRef.current = event.currentTarget
+        setRemarkBody('')
+        setEditingRemarkId(null)
+        setRemarkValidationMessage('')
+        setIsEditingRemarks(true)
+      }}
+    >
+      Add remark
+    </Button>
+  ) : null
+
+  const openReviewEditor = () => {
+    setReviewValidationMessage('')
+    setReviewStatusCode(reviewFormDefaultStatusCode)
+    setReviewStatusRemark('')
+    setSendReviewEmail(false)
+    setIsEditingReview(true)
+  }
+  const isReviewNotStarted =
+    normalizeReviewStatus(detail?.applicationStatusCode ?? '') === 'NEW' &&
+    !reviewStatusRemarkBaseline
+  const updateReviewStatusButton = (
+    <Button kind="tertiary" size="sm" renderIcon={Edit} onClick={openReviewEditor}>
+      Update status
+    </Button>
+  )
 
   const applicationReviewContent = detail ? (
     canReviewApplication ? (
@@ -3857,136 +3913,157 @@ const ProvincialApplicationDetailsPage = () => {
       >
         <div className="detail-section-card__header">
           <h2 className="detail-tile-title">Application review</h2>
-          {canEditApplicationReview && !isEditingReview && (
-            <Button
-              kind="tertiary"
-              size="sm"
-              renderIcon={Edit}
-              onClick={() => {
-                setReviewValidationMessage('')
-                setIsEditingReview(true)
-              }}
-            >
-              Edit application review
-            </Button>
-          )}
+          {canEditApplicationReview &&
+            !isEditingReview &&
+            !isReviewNotStarted &&
+            updateReviewStatusButton}
         </div>
         {isEditingReview ? (
           <>
-            <div className="legacy-search-grid">
-              <SearchableSelect
-                id="applicationDetailReviewStatus"
-                labelText={requiredLabel('Application status')}
-                required
-                value={reviewStatusCode}
-                placeholder="Select status"
-                options={reviewStatusOptions}
-                disabled={
-                  reviewOptionsAvailability !== 'available' || reviewStatusOptions.length === 0
+            <RadioButtonGroup
+              legendText={requiredLabel('Application status')}
+              name="applicationDetailReviewStatus"
+              valueSelected={reviewStatusCode}
+              disabled={
+                isRetryingApprovalRemark ||
+                isSubmittingReviewAction ||
+                reviewOptionsAvailability !== 'available'
+              }
+              onChange={(value) => {
+                const nextStatus = String(value)
+                setReviewStatusCode(nextStatus)
+                if (nextStatus === 'APP' && !canManageRemarks) {
+                  setReviewStatusRemark('')
                 }
-                invalid={isReviewStatusInvalid}
-                invalidText={reviewValidationMessage}
-                onChange={(value) => {
-                  setReviewStatusCode(value)
-                  setReviewValidationMessage('')
-                }}
-              />
-              <TextInput
-                id="applicationDetailReviewEmail"
-                labelText="Client email address"
-                helperText={REVIEW_EMAIL_PREVIEW_HELPER}
-                value={reviewStatusEmailAddress}
-                invalid={reviewValidationMessage === REVIEW_EMAIL_REQUIRED_MESSAGE}
-                invalidText={reviewValidationMessage}
-                onChange={(event) => {
-                  setReviewStatusEmailOverride({
-                    applicationNumber: applicationNumber ?? '',
-                    value: event.target.value,
-                  })
-                  setReviewValidationMessage('')
-                }}
-              />
-            </div>
-            <div className="legacy-search-grid">
+                setReviewValidationMessage('')
+              }}
+            >
+              {[
+                ...(canApproveApplicationReview || isRetryingApprovalRemark
+                  ? [{ value: 'APP', label: 'Approved' }]
+                  : []),
+                ...reviewStatusOptions.filter((option) => option.value !== 'APP'),
+              ].map((option) => (
+                <RadioButton
+                  key={option.value}
+                  id={`applicationDetailReviewStatus-${option.value}`}
+                  value={option.value}
+                  labelText={option.label}
+                />
+              ))}
+            </RadioButtonGroup>
+            {isReviewStatusInvalid && <p role="alert">{reviewValidationMessage}</p>}
+            {(normalizedReviewStatusCode !== 'APP' || canManageRemarks) && (
               <TextArea
                 id="applicationDetailReviewRemark"
                 labelText={requiredLabel(
-                  'Status change remark',
-                  REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode),
+                  'Remarks',
+                  isRetryingApprovalRemark ||
+                    REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode),
                 )}
                 aria-required={
-                  REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode) || undefined
+                  isRetryingApprovalRemark ||
+                  REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode) ||
+                  undefined
                 }
-                helperText="Saved with the status change and included in an email notification, if one is sent."
-                maxCount={250}
+                helperText="Saved to the Remarks tab."
+                maxCount={APPLICATION_REMARK_MAX_LENGTH}
+                maxLength={APPLICATION_REMARK_MAX_LENGTH}
                 invalid={isReviewRemarkInvalid}
                 invalidText={reviewValidationMessage}
                 value={reviewStatusRemark}
                 disabled={
-                  reviewOptionsAvailability !== 'available' || reviewStatusOptions.length === 0
+                  isSubmittingReviewAction ||
+                  (!isRetryingApprovalRemark && reviewOptionsAvailability !== 'available')
                 }
                 onChange={(event) => {
-                  setReviewStatusRemark(event.target.value.slice(0, 250))
+                  setReviewStatusRemark(event.target.value)
                   setReviewValidationMessage('')
                 }}
               />
-            </div>
+            )}
+            {canSendReviewStatusEmail && (
+              <>
+                <Checkbox
+                  id="applicationDetailReviewSendEmail"
+                  labelText="Send email notification to the client, including the remark"
+                  checked={sendReviewEmail}
+                  onChange={(_, { checked }) => setSendReviewEmail(checked)}
+                />
+                {sendReviewEmail && (
+                  <TextInput
+                    id="applicationDetailReviewEmail"
+                    labelText={requiredLabel('Client email address')}
+                    helperText={REVIEW_EMAIL_PREVIEW_HELPER}
+                    value={reviewStatusEmailAddress}
+                    invalid={reviewValidationMessage === REVIEW_EMAIL_REQUIRED_MESSAGE}
+                    invalidText={reviewValidationMessage}
+                    onChange={(event) => {
+                      setReviewStatusEmailOverride({
+                        applicationNumber: applicationNumber ?? '',
+                        value: event.target.value,
+                      })
+                      setReviewValidationMessage('')
+                    }}
+                  />
+                )}
+              </>
+            )}
             {showReviewValidationNotification && (
               <InlineNotification
                 className="detail-context-notification"
                 kind="error"
-                title="Review validation"
+                title={isRetryingApprovalRemark ? 'Remark not saved' : 'Review validation'}
                 subtitle={reviewValidationMessage}
                 lowContrast
                 onCloseButtonClick={() => setReviewValidationMessage('')}
               />
             )}
             <div className="legacy-search-actions">
-              {canApproveApplicationReview && (
-                <Button
-                  kind="primary"
-                  size="sm"
-                  disabled={isSubmittingReviewAction}
-                  onClick={() => void onApproveApplicationFromEdit()}
-                >
-                  Approve Application
-                </Button>
-              )}
               <Button
                 kind="tertiary"
-                size="sm"
-                disabled={
-                  isSubmittingReviewAction ||
-                  reviewOptionsAvailability !== 'available' ||
-                  reviewStatusOptions.length === 0
-                }
-                onClick={() => void onUpdateReviewStatusFromEdit(false)}
-              >
-                Update Review Status
-              </Button>
-              <Button
-                kind="tertiary"
-                size="sm"
-                disabled={
-                  isSubmittingReviewAction ||
-                  !canSendReviewStatusEmail ||
-                  reviewOptionsAvailability !== 'available' ||
-                  reviewStatusOptions.length === 0
-                }
-                onClick={() => void onUpdateReviewStatusFromEdit(true)}
-              >
-                Update Status and Send Email
-              </Button>
-              <Button
-                kind="ghost"
                 size="sm"
                 disabled={isSubmittingReviewAction}
                 onClick={onCancelReviewEditing}
               >
                 Cancel
               </Button>
+              <Button
+                kind="primary"
+                size="sm"
+                disabled={
+                  isSubmittingReviewAction ||
+                  (isRetryingApprovalRemark
+                    ? !canManageRemarks
+                    : reviewOptionsAvailability !== 'available' ||
+                      (normalizedReviewStatusCode === 'APP'
+                        ? !canApproveApplicationReview
+                        : reviewStatusOptions.length === 0))
+                }
+                onClick={() => {
+                  if (normalizedReviewStatusCode === 'APP') {
+                    void onApproveApplicationFromEdit()
+                  } else {
+                    void onUpdateReviewStatusFromEdit(sendReviewEmail && canSendReviewStatusEmail)
+                  }
+                }}
+              >
+                {isRetryingApprovalRemark
+                  ? 'Save remark'
+                  : `${REVIEW_STATUS_ACTION_LABELS[normalizedReviewStatusCode] ?? 'Update status'}${
+                      canSendReviewStatusEmail && sendReviewEmail ? ' and send email' : ''
+                    }`}
+              </Button>
             </div>
           </>
+        ) : isReviewNotStarted ? (
+          <EmptyState
+            title="Not reviewed yet"
+            description="When you've finished checking this application, update its status."
+            icon={<AddDocument width={48} height={48} />}
+            action={canEditApplicationReview ? updateReviewStatusButton : undefined}
+            headingLevel={3}
+          />
         ) : (
           <dl className="detail-field-grid">
             {[
@@ -3998,8 +4075,10 @@ const ProvincialApplicationDetailsPage = () => {
                     reviewStatusCode,
                 ),
               ],
-              ['Client email address', displayValue(reviewStatusEmailCandidate)],
-              ['Latest status change remark', displayValue(reviewStatusRemarkBaseline)],
+              ['Remarks', displayValue(reviewStatusRemarkBaseline)],
+              ...(sentReviewEmail?.applicationNumber === String(detail.applicationNumber)
+                ? [['Client email address', sentReviewEmail.address]]
+                : []),
             ].map(([label, value]) => (
               <div key={label} className="detail-field-item">
                 <dt className="detail-field-label">{label}</dt>
@@ -4107,7 +4186,6 @@ const ProvincialApplicationDetailsPage = () => {
           )}
           {((selectedApplicationTab === 'application' && isEditingSummary) ||
             (selectedApplicationTab === 'owner' && isEditingOwnerDetails) ||
-            (selectedApplicationTab === 'agent' && isEditingAgentDetails) ||
             (selectedApplicationTab === 'items' && isEditingApplicationItems)) &&
             activeRequiredSummaryOptionsMissing && (
               <InlineNotification
@@ -4172,9 +4250,8 @@ const ProvincialApplicationDetailsPage = () => {
                 className="application-tabs__list application-detail-tab-list"
               >
                 <Tab>Applicant</Tab>
-                {isSummaryAgentApplicant && <Tab>Agent</Tab>}
                 <Tab>Application</Tab>
-                <Tab>Items</Tab>
+                <Tab>Scale</Tab>
                 <Tab>Documents</Tab>
                 {canViewRemarks && <Tab>Remarks</Tab>}
                 <Tab>Offers</Tab>
@@ -4189,12 +4266,11 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-clients"
                       >
                         <div className="detail-section-card__header detail-section-card__header--actions-only">
-                          <h2 className="cds--visually-hidden">Applicant client details</h2>
+                          <h2 className="detail-tile-title">Applicant details</h2>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
                             !isEditingOwnerDetails &&
-                            !isEditingAgentDetails &&
                             !isEditingApplicationItems && (
                               <Button
                                 kind="tertiary"
@@ -4339,6 +4415,110 @@ const ProvincialApplicationDetailsPage = () => {
                                 onOwnerApplicantTypeChange(checked ? 'A' : 'O')
                               }
                             />
+                            {isSummaryAgentApplicant && (
+                              <section aria-label="Agent information">
+                                <h3 className="detail-tile-title">Agent information</h3>
+                                <div className="legacy-search-grid application-client-edit-grid">
+                                  <ForestClientComboBox
+                                    id="applicationAgentClientNumberEdit"
+                                    labelText={requiredLabel('Agent number')}
+                                    value={summaryForm.agentClientNumber}
+                                    selectedClientName={agentClientData?.companyName}
+                                    counterpartyClientNumber={summaryForm.ownerClientNumber}
+                                    required
+                                    invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
+                                    invalidText={visibleSummaryFieldError('agentClientNumber')}
+                                    disabled={isSavingSummary}
+                                    onChange={(agentClientNumber) =>
+                                      onSummaryFormChange('agentClientNumber', agentClientNumber)
+                                    }
+                                  />
+                                  <SearchableSelect
+                                    id="applicationAgentClientLocationEdit"
+                                    labelText={requiredLabel('Contact location')}
+                                    required
+                                    value={summaryForm.agentClientLocationCode}
+                                    invalid={Boolean(
+                                      visibleSummaryFieldError('agentClientLocationCode'),
+                                    )}
+                                    invalidText={visibleSummaryFieldError(
+                                      'agentClientLocationCode',
+                                    )}
+                                    disabled={
+                                      isSavingSummary ||
+                                      !summaryForm.agentClientNumber.trim() ||
+                                      isLoadingAgentClientLocations
+                                    }
+                                    placeholder={agentClientLocationPlaceholder}
+                                    options={agentClientLocations
+                                      .filter(isSelectableClientLocation)
+                                      .map((clientLocation) => ({
+                                        value: clientLocation.locationCode,
+                                        label: clientLocationLabel(
+                                          clientLocation.locationCode,
+                                          clientLocation.locationName,
+                                        ),
+                                      }))}
+                                    onChange={(value) =>
+                                      onSummaryFormChange('agentClientLocationCode', value)
+                                    }
+                                  />
+                                  {hasSelectableAgentClientContacts ||
+                                  isLoadingAgentClientContacts ? (
+                                    <SearchableSelect
+                                      id="applicationAgentContactNameEdit"
+                                      labelText={requiredLabel('Contact name')}
+                                      required
+                                      value={summaryForm.agentContactName}
+                                      invalid={Boolean(
+                                        visibleSummaryFieldError('agentContactName'),
+                                      )}
+                                      invalidText={visibleSummaryFieldError('agentContactName')}
+                                      disabled={
+                                        isSavingSummary ||
+                                        !summaryForm.agentClientLocationCode.trim() ||
+                                        isLoadingAgentClientContacts
+                                      }
+                                      placeholder={agentContactPlaceholder}
+                                      options={agentClientContacts
+                                        .filter(isSelectableClientContact)
+                                        .map((contact) => ({
+                                          value: contact.contactName,
+                                          label: contact.contactName,
+                                        }))}
+                                      onChange={(value) =>
+                                        onSummaryFormChange('agentContactName', value)
+                                      }
+                                    />
+                                  ) : (
+                                    <TextInput
+                                      id="applicationAgentContactNameEdit"
+                                      labelText={requiredLabel('Contact name')}
+                                      aria-required="true"
+                                      value={summaryForm.agentContactName}
+                                      invalid={Boolean(
+                                        visibleSummaryFieldError('agentContactName'),
+                                      )}
+                                      invalidText={visibleSummaryFieldError('agentContactName')}
+                                      disabled={
+                                        isSavingSummary ||
+                                        !summaryForm.agentClientLocationCode.trim()
+                                      }
+                                      placeholder="Enter contact name"
+                                      onChange={(event) =>
+                                        onSummaryFormChange('agentContactName', event.target.value)
+                                      }
+                                    />
+                                  )}
+                                </div>
+                                <ClientDataSummary
+                                  title="Agent information"
+                                  showTitle={false}
+                                  clientData={agentClientData}
+                                  isLoading={isLoadingAgentClientData}
+                                />
+                              </section>
+                            )}
                             <div className="legacy-search-actions">
                               <Button
                                 kind="tertiary"
@@ -4353,185 +4533,37 @@ const ProvincialApplicationDetailsPage = () => {
                                 size="sm"
                                 disabled={
                                   isSavingSummary ||
-                                  summaryOptionsUnavailableForSource('owner') ||
-                                  isSummaryClientLookupPendingForSource('owner')
+                                  summaryOptionsUnavailableForSource(
+                                    isSummaryAgentApplicant ? 'agent' : 'owner',
+                                  ) ||
+                                  isSummaryClientLookupPendingForSource(
+                                    isSummaryAgentApplicant ? 'agent' : 'owner',
+                                  )
                                 }
                                 renderIcon={isSavingSummary ? PendingIcon : undefined}
-                                onClick={() => onRequestSaveSummary('owner')}
+                                onClick={() =>
+                                  onRequestSaveSummary(isSummaryAgentApplicant ? 'agent' : 'owner')
+                                }
                               >
                                 {isSavingSummary ? 'Saving…' : 'Save changes'}
                               </Button>
                             </div>
                           </>
                         ) : (
-                          ownerClientSummaryContent
+                          <>
+                            {ownerClientSummaryContent}
+                            {isSummaryAgentApplicant && (
+                              <section aria-label="Agent information">
+                                <h3 className="detail-tile-title">Agent information</h3>
+                                {agentClientSummaryContent}
+                              </section>
+                            )}
+                          </>
                         )}
                       </Tile>
                     </Column>
                   </Grid>
                 </TabPanel>
-                {isSummaryAgentApplicant && (
-                  <TabPanel className="application-detail-tab-panel">
-                    <Grid fullWidth className="application-detail-tab-grid">
-                      <Column sm={4} md={8} lg={16}>
-                        <Tile
-                          id="application-agent-details"
-                          className="application-detail-section application-detail-clients"
-                        >
-                          <div className="detail-section-card__header detail-section-card__header--actions-only">
-                            <h2 className="cds--visually-hidden">Agent details</h2>
-                            {canEditSummary &&
-                              summaryForm &&
-                              !isEditingSummary &&
-                              !isEditingOwnerDetails &&
-                              !isEditingAgentDetails &&
-                              !isEditingApplicationItems && (
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  renderIcon={Edit}
-                                  onClick={() => {
-                                    setActionResult(withoutDraftResult)
-                                    setIsEditingAgentDetails(true)
-                                  }}
-                                >
-                                  Edit agent details
-                                </Button>
-                              )}
-                          </div>
-                          {isEditingAgentDetails && summaryForm ? (
-                            <>
-                              <div className="legacy-search-grid application-client-edit-grid">
-                                <ForestClientComboBox
-                                  id="applicationAgentClientNumberEdit"
-                                  labelText={requiredLabel('Agent number')}
-                                  value={summaryForm.agentClientNumber}
-                                  selectedClientName={agentClientData?.companyName}
-                                  counterpartyClientNumber={summaryForm.ownerClientNumber}
-                                  required
-                                  invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
-                                  invalidText={visibleSummaryFieldError('agentClientNumber')}
-                                  disabled={isSavingSummary}
-                                  onChange={(agentClientNumber) =>
-                                    onSummaryFormChange('agentClientNumber', agentClientNumber)
-                                  }
-                                />
-                                <TextInput
-                                  id="applicationAgentApplicantTypeEdit"
-                                  labelText={requiredLabel('Applicant type')}
-                                  aria-required="true"
-                                  value="Agent"
-                                  readOnly
-                                />
-                                <SearchableSelect
-                                  id="applicationAgentClientLocationEdit"
-                                  labelText={requiredLabel('Contact location')}
-                                  required
-                                  value={summaryForm.agentClientLocationCode}
-                                  invalid={Boolean(
-                                    visibleSummaryFieldError('agentClientLocationCode'),
-                                  )}
-                                  invalidText={visibleSummaryFieldError('agentClientLocationCode')}
-                                  disabled={
-                                    isSavingSummary ||
-                                    !summaryForm.agentClientNumber.trim() ||
-                                    isLoadingAgentClientLocations
-                                  }
-                                  placeholder={agentClientLocationPlaceholder}
-                                  options={agentClientLocations
-                                    .filter(isSelectableClientLocation)
-                                    .map((clientLocation) => ({
-                                      value: clientLocation.locationCode,
-                                      label: clientLocationLabel(
-                                        clientLocation.locationCode,
-                                        clientLocation.locationName,
-                                      ),
-                                    }))}
-                                  onChange={(value) =>
-                                    onSummaryFormChange('agentClientLocationCode', value)
-                                  }
-                                />
-                                {hasSelectableAgentClientContacts ||
-                                isLoadingAgentClientContacts ? (
-                                  <SearchableSelect
-                                    id="applicationAgentContactNameEdit"
-                                    labelText={requiredLabel('Contact name')}
-                                    required
-                                    value={summaryForm.agentContactName}
-                                    invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
-                                    invalidText={visibleSummaryFieldError('agentContactName')}
-                                    disabled={
-                                      isSavingSummary ||
-                                      !summaryForm.agentClientLocationCode.trim() ||
-                                      isLoadingAgentClientContacts
-                                    }
-                                    placeholder={agentContactPlaceholder}
-                                    options={agentClientContacts
-                                      .filter(isSelectableClientContact)
-                                      .map((contact) => ({
-                                        value: contact.contactName,
-                                        label: contact.contactName,
-                                      }))}
-                                    onChange={(value) =>
-                                      onSummaryFormChange('agentContactName', value)
-                                    }
-                                  />
-                                ) : (
-                                  <TextInput
-                                    id="applicationAgentContactNameEdit"
-                                    labelText={requiredLabel('Contact name')}
-                                    aria-required="true"
-                                    value={summaryForm.agentContactName}
-                                    invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
-                                    invalidText={visibleSummaryFieldError('agentContactName')}
-                                    disabled={
-                                      isSavingSummary || !summaryForm.agentClientLocationCode.trim()
-                                    }
-                                    placeholder="Enter contact name"
-                                    onChange={(event) =>
-                                      onSummaryFormChange('agentContactName', event.target.value)
-                                    }
-                                  />
-                                )}
-                              </div>
-                              <ClientDataSummary
-                                title="Agent details"
-                                showTitle={false}
-                                clientData={agentClientData}
-                                isLoading={isLoadingAgentClientData}
-                              />
-                              <div className="legacy-search-actions">
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  disabled={isSavingSummary}
-                                  onClick={onCancelAgentDetails}
-                                >
-                                  Cancel
-                                </Button>
-                                <Button
-                                  kind="primary"
-                                  size="sm"
-                                  disabled={
-                                    isSavingSummary ||
-                                    summaryOptionsUnavailableForSource('agent') ||
-                                    isSummaryClientLookupPendingForSource('agent')
-                                  }
-                                  renderIcon={isSavingSummary ? PendingIcon : undefined}
-                                  onClick={() => onRequestSaveSummary('agent')}
-                                >
-                                  {isSavingSummary ? 'Saving…' : 'Save changes'}
-                                </Button>
-                              </div>
-                            </>
-                          ) : (
-                            agentClientSummaryContent
-                          )}
-                        </Tile>
-                      </Column>
-                    </Grid>
-                  </TabPanel>
-                )}
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
@@ -4540,12 +4572,11 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-summary"
                       >
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">Application summary</h2>
+                          <h2 className="detail-tile-title">Application details</h2>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
                             !isEditingOwnerDetails &&
-                            !isEditingAgentDetails &&
                             !isEditingApplicationItems && (
                               <Button
                                 kind="tertiary"
@@ -4556,7 +4587,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   setIsEditingSummary(true)
                                 }}
                               >
-                                Edit application summary
+                                Edit application details
                               </Button>
                             )}
                         </div>
@@ -4778,12 +4809,11 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-summary"
                       >
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">Application item details</h2>
+                          <h2 className="detail-tile-title">Scale details</h2>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
                             !isEditingOwnerDetails &&
-                            !isEditingAgentDetails &&
                             !applicationItemsEditing &&
                             !applicationItemsDirty &&
                             !applicationItemsBusy &&
@@ -4797,7 +4827,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   setIsEditingApplicationItems(true)
                                 }}
                               >
-                                Edit application item details
+                                Edit scale details
                               </Button>
                             )}
                         </div>
@@ -4893,76 +4923,36 @@ const ProvincialApplicationDetailsPage = () => {
                                   onSummaryFormChange('applicationVolume', event.target.value)
                                 }
                               />
-                              <div className="legacy-field-stack">
-                                <SearchableSelect
-                                  id="applicationSummarySpeciesCandidate"
-                                  labelText="Species list"
-                                  value={applicationSpeciesCandidate}
-                                  disabled={applicationSpeciesSelectOptions.length === 0}
-                                  placeholder={speciesPlaceholder}
-                                  options={applicationSpeciesSelectOptions}
-                                  onChange={setApplicationSpeciesCandidate}
-                                />
-                                <fieldset
-                                  className="application-species-selection"
-                                  aria-describedby={
-                                    summarySpeciesCodesError
-                                      ? 'applicationSummarySelectedSpeciesError'
-                                      : 'applicationSummarySelectedSpeciesRequirement'
-                                  }
-                                >
-                                  <legend className="cds--label">
-                                    {requiredLabel('Selected species')}
-                                  </legend>
-                                  <p
-                                    id="applicationSummarySelectedSpeciesRequirement"
-                                    className="application-species-selection__requirement"
-                                  >
-                                    At least one species is required.
+                              <FilterableMultiSelect
+                                id="applicationSummarySpecies"
+                                titleText={requiredLabel('Species list')}
+                                items={applicationSpeciesMultiSelectOptions}
+                                itemToString={(item) => item?.text ?? ''}
+                                selectedItems={selectedApplicationSpeciesOptions}
+                                placeholder="Select species"
+                                inputProps={{ 'aria-required': true }}
+                                disabled={applicationSpeciesMultiSelectOptions.length === 0}
+                                invalid={Boolean(summarySpeciesCodesError)}
+                                invalidText={summarySpeciesCodesError}
+                                onChange={({ selectedItems }) => {
+                                  setSummaryForm((current) =>
+                                    current
+                                      ? {
+                                          ...current,
+                                          speciesCodes: selectedItems.map((item) => item.id),
+                                        }
+                                      : current,
+                                  )
+                                  setSummaryVolumeWarningAccepted(false)
+                                  setActionResult(withoutVolumeWarning)
+                                }}
+                              />
+                              {summarySpeciesCodesError &&
+                                applicationSpeciesMultiSelectOptions.length === 0 && (
+                                  <p className="legacy-search-error" role="alert">
+                                    {summarySpeciesCodesError}
                                   </p>
-                                  <div className="application-species-actions">
-                                    <Button
-                                      type="button"
-                                      kind="tertiary"
-                                      size="sm"
-                                      disabled={
-                                        !applicationSpeciesCandidate ||
-                                        !availableApplicationSpeciesOptions.some(
-                                          (option) => option.code === applicationSpeciesCandidate,
-                                        )
-                                      }
-                                      onClick={onAddApplicationSpecies}
-                                    >
-                                      Add species
-                                    </Button>
-                                    <ul
-                                      className="application-species-list"
-                                      aria-label="Selected species"
-                                    >
-                                      {summaryForm.speciesCodes.map((speciesCode) => (
-                                        <li key={speciesCode}>
-                                          <DismissibleTag
-                                            type="blue"
-                                            text={speciesCode}
-                                            title={`Remove ${speciesCode} from application`}
-                                            dismissTooltipLabel={`Remove ${speciesCode} from application`}
-                                            onClose={() => onRemoveApplicationSpecies(speciesCode)}
-                                          />
-                                        </li>
-                                      ))}
-                                    </ul>
-                                  </div>
-                                  {summarySpeciesCodesError && (
-                                    <p
-                                      id="applicationSummarySelectedSpeciesError"
-                                      className="legacy-search-error"
-                                      role="alert"
-                                    >
-                                      {summarySpeciesCodesError}
-                                    </p>
-                                  )}
-                                </fieldset>
-                              </div>
+                                )}
                               {summaryProductTypeHasGrowthDetails && (
                                 <SearchableSelect
                                   id="applicationSummaryEndUse"
@@ -5116,6 +5106,8 @@ const ProvincialApplicationDetailsPage = () => {
                             ? summaryBaselineForm.growthTypeCode
                             : undefined
                         }
+                        applicationEndUseCode={summaryBaselineForm?.endUseCode}
+                        applicationSpeciesCodes={summaryBaselineForm?.speciesCodes}
                         editingBlocked={isEditingApplicationItems}
                         onDetailChanged={refreshApplicationDetailPreservingDrafts}
                         actionResult={itemsActionResult}
@@ -5138,27 +5130,9 @@ const ProvincialApplicationDetailsPage = () => {
                         id="application-documents"
                         className="application-detail-section application-detail-documents"
                       >
-                        <div className="detail-section-card__header detail-section-card__header--actions-only">
-                          {canEditApplicationDocuments &&
-                            (isEditingDocuments ? (
-                              <Button
-                                kind="ghost"
-                                size="sm"
-                                disabled={documentUploadBusy || isRemovingDocumentId !== null}
-                                onClick={onCancelDocumentEditing}
-                              >
-                                Cancel
-                              </Button>
-                            ) : (
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                renderIcon={Edit}
-                                onClick={() => setIsEditingDocuments(true)}
-                              >
-                                Edit documents
-                              </Button>
-                            ))}
+                        <div className="detail-section-card__header">
+                          <h2 className="detail-tile-title">Documents</h2>
+                          {!showsEmptyApplicationDocuments && addApplicationDocumentsButton}
                           {isEditingDocuments && canAddApplicationDocuments && (
                             <DetailDocumentUploadPanel
                               key={`application-document-upload-${applicationNumber}-${documentUploadResetKey}`}
@@ -5166,6 +5140,9 @@ const ProvincialApplicationDetailsPage = () => {
                               targetNumber={String(detail.applicationNumber ?? '')}
                               inputId="applicationDocumentUpload"
                               disabled={!detail.applicationNumber}
+                              presentation="side-panel"
+                              initiallyOpen
+                              onClose={onCancelDocumentEditing}
                               onDirtyChange={setDocumentUploadDirty}
                               onBusyChange={setDocumentUploadBusy}
                               onUploadComplete={refreshApplicationDocuments}
@@ -5209,11 +5186,12 @@ const ProvincialApplicationDetailsPage = () => {
                         {documentLookupAvailability === 'loading' && (
                           <InlineLoading description="Loading application documents…" />
                         )}
-                        {documentLookupAvailability === 'available' && !hasApplicationDocuments && (
+                        {showsEmptyApplicationDocuments && (
                           <EmptyState
-                            title="No documents found"
-                            description="No documents are on file for this application yet."
+                            title="No documents for this application"
+                            description="Documents stay with this record through the application, exemption, and permit stages."
                             icon={<AddDocument width={48} height={48} />}
+                            action={addApplicationDocumentsButton}
                             headingLevel={3}
                           />
                         )}
@@ -5250,7 +5228,7 @@ const ProvincialApplicationDetailsPage = () => {
                                           >
                                             Open
                                           </Button>
-                                          {isEditingDocuments && (
+                                          {canDeleteDocuments && (
                                             <Button
                                               kind="danger--ghost"
                                               size="sm"
@@ -5296,28 +5274,17 @@ const ProvincialApplicationDetailsPage = () => {
                           id="application-remarks"
                           className="application-detail-section application-detail-remarks"
                         >
-                          <div className="detail-section-card__header detail-section-card__header--actions-only">
-                            {canManageRemarks && (
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                renderIcon={Add}
-                                onClick={(event) => {
-                                  remarkLauncherRef.current = event.currentTarget
-                                  setRemarkBody('')
-                                  setEditingRemarkId(null)
-                                  setRemarkValidationMessage('')
-                                  setIsEditingRemarks(true)
-                                }}
-                              >
-                                Add remark
-                              </Button>
-                            )}
-                          </div>
-                          {(detail.remarks?.length ?? 0) === 0 ? (
+                          {hasApplicationRemarks && (
+                            <div className="detail-section-card__header detail-section-card__header--actions-only">
+                              {addApplicationRemarkButton}
+                            </div>
+                          )}
+                          {!hasApplicationRemarks ? (
                             <EmptyState
-                              title="No remarks found"
-                              description="No remarks have been added to this provincial application."
+                              title="No remarks for this application"
+                              description="Only staff can see remarks. Remarks added on the Review tab also appear here."
+                              icon={<AddDocument width={48} height={48} />}
+                              action={addApplicationRemarkButton}
                               headingLevel={3}
                             />
                           ) : (
@@ -5346,7 +5313,9 @@ const ProvincialApplicationDetailsPage = () => {
                                               kind="ghost"
                                               size="sm"
                                               renderIcon={Edit}
-                                              disabled={!item.remarkId}
+                                              disabled={
+                                                !item.remarkId || isEditingRemarks || isSavingRemark
+                                              }
                                               onClick={(event) => {
                                                 remarkLauncherRef.current = event.currentTarget
                                                 setEditingRemarkId(
@@ -5368,80 +5337,68 @@ const ProvincialApplicationDetailsPage = () => {
                               </TableFrame>
                             </>
                           )}
-                          {/* Keep the dialog mounted so Carbon can return focus to its launcher. */}
                           {canManageRemarks && (
-                            <Modal
+                            <DetailSidePanel
                               open={isEditingRemarks}
-                              passiveModal
-                              size="sm"
-                              modalHeading={editingRemarkId ? 'Edit remark' : 'Add remark'}
-                              aria-label={editingRemarkId ? 'Edit remark' : 'Add remark'}
-                              selectorPrimaryFocus="#applicationRemarkBody"
-                              launcherButtonRef={remarkLauncherRef}
-                              preventCloseOnClickOutside
-                              onRequestClose={() => {
-                                if (!isSavingRemark) {
-                                  onCancelRemarkEditing()
-                                }
-                              }}
+                              title={editingRemarkId ? 'Edit remark' : 'Add remark'}
+                              contentSelector=".provincial-application-detail"
+                              initialFocusSelector="#applicationRemarkBody"
+                              launcherRef={remarkLauncherRef}
+                              fallbackFocusSelector="#application-remarks button"
+                              busy={isSavingRemark}
+                              onClose={onCancelRemarkEditing}
+                              actions={[
+                                {
+                                  label: 'Cancel',
+                                  kind: 'secondary',
+                                  disabled: isSavingRemark,
+                                  onClick: onCancelRemarkEditing,
+                                },
+                                {
+                                  label: isSavingRemark
+                                    ? 'Saving…'
+                                    : editingRemarkId
+                                      ? 'Update remark'
+                                      : 'Save remark',
+                                  kind: 'primary',
+                                  disabled: isSavingRemark,
+                                  renderIcon: isSavingRemark ? PendingIcon : undefined,
+                                  onClick: () => void onSaveRemark(),
+                                },
+                              ]}
                             >
-                              {isEditingRemarks && (
-                                <>
-                                  <TextArea
-                                    id="applicationRemarkBody"
-                                    labelText={requiredLabel(
-                                      editingRemarkId
-                                        ? `Edit Remark ${editingRemarkId}`
-                                        : 'New Remark',
-                                    )}
-                                    aria-required="true"
-                                    rows={6}
-                                    enableCounter
-                                    maxCount={APPLICATION_REMARK_MAX_LENGTH}
-                                    maxLength={APPLICATION_REMARK_MAX_LENGTH}
-                                    value={remarkBody}
-                                    disabled={isSavingRemark}
-                                    invalid={!!remarkValidationMessage}
-                                    invalidText={remarkValidationMessage}
-                                    onChange={(event) => {
-                                      setRemarkBody(event.target.value)
-                                      if (remarkValidationMessage) {
-                                        setRemarkValidationMessage('')
-                                      }
-                                    }}
-                                  />
-                                  {actionErrorMessage && (
-                                    <AppNotification
-                                      kind="error"
-                                      title="Action failed"
-                                      subtitle={actionErrorMessage}
-                                      onCloseButtonClick={() => setActionResult(null)}
-                                    />
-                                  )}
-                                  <div className="application-remark-modal__actions">
-                                    <Button
-                                      kind="tertiary"
-                                      disabled={isSavingRemark}
-                                      onClick={onCancelRemarkEditing}
-                                    >
-                                      Cancel
-                                    </Button>
-                                    <Button
-                                      kind="primary"
-                                      disabled={isSavingRemark}
-                                      renderIcon={isSavingRemark ? PendingIcon : undefined}
-                                      onClick={() => void onSaveRemark()}
-                                    >
-                                      {isSavingRemark
-                                        ? 'Saving…'
-                                        : editingRemarkId
-                                          ? 'Update Remark'
-                                          : 'Save Remark'}
-                                    </Button>
-                                  </div>
-                                </>
+                              <TextArea
+                                id="applicationRemarkBody"
+                                labelText={requiredLabel(
+                                  editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark',
+                                )}
+                                aria-required="true"
+                                rows={6}
+                                enableCounter
+                                maxCount={APPLICATION_REMARK_MAX_LENGTH}
+                                maxLength={APPLICATION_REMARK_MAX_LENGTH}
+                                value={remarkBody}
+                                disabled={isSavingRemark}
+                                invalid={!!remarkValidationMessage}
+                                invalidText={remarkValidationMessage}
+                                onChange={(event) => {
+                                  setRemarkBody(event.target.value)
+                                  if (remarkValidationMessage) {
+                                    setRemarkValidationMessage('')
+                                  }
+                                }}
+                              />
+                              {actionErrorMessage && (
+                                <AppNotification
+                                  kind="error"
+                                  title="Action failed"
+                                  subtitle={actionErrorMessage}
+                                  onCloseButtonClick={() =>
+                                    setActionResult({ kind: 'error', message: '' })
+                                  }
+                                />
                               )}
-                            </Modal>
+                            </DetailSidePanel>
                           )}
                         </Tile>
                       </Column>
@@ -5534,7 +5491,7 @@ const ProvincialApplicationDetailsPage = () => {
                 : documentUploadDirty
                   ? 'Finish or reset the queued document uploads before leaving, or discard all changes.'
                   : applicationItemsDirty
-                    ? 'Use the Items tab to save or reset package, species, and scale drafts before leaving, or discard all changes.'
+                    ? 'Use the Scale tab to save or cancel package and scale drafts before leaving, or discard all changes.'
                     : undefined
         }
       />

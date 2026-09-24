@@ -44,7 +44,7 @@ import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetai
 
 const getOwnerClientDetailsTile = (): HTMLElement => {
   const title = screen.getByRole('heading', {
-    name: 'Applicant client details',
+    name: 'Applicant details',
     level: 2,
   })
   const tile = title.closest('.cds--tile')
@@ -54,12 +54,12 @@ const getOwnerClientDetailsTile = (): HTMLElement => {
 
 const getAgentDetailsTile = (): HTMLElement => {
   const title = screen.getByRole('heading', {
-    name: 'Agent details',
-    level: 2,
+    name: 'Agent information',
+    level: 3,
   })
-  const tile = title.closest('.cds--tile')
-  expect(tile).toBeTruthy()
-  return tile as HTMLElement
+  const section = title.closest('section')
+  expect(section).toBeTruthy()
+  return section as HTMLElement
 }
 
 describe.sequential('Provincial Application Detail Actions - application', () => {
@@ -105,7 +105,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(summary.queryByText('Status', { exact: true })).not.toBeInTheDocument()
     expect(summary.queryByText('Author')).not.toBeInTheDocument()
     expect(screen.getByText('Author: idir\\application-author')).toBeInTheDocument()
-    expect(summary.getByRole('button', { name: 'Edit application summary' })).toBeInTheDocument()
+    expect(summary.getByRole('button', { name: 'Edit application details' })).toBeInTheDocument()
     expect(summary.queryByRole('button', { name: 'Save Summary' })).not.toBeInTheDocument()
     expect(summary.queryByLabelText('Location of logs')).not.toBeInTheDocument()
     expect(summary.queryByText('Owner client number')).not.toBeInTheDocument()
@@ -119,9 +119,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(itemDetails.getByRole('button', { name: 'Cancel' }))
 
     expect(itemDetails.queryByLabelText('Location of logs')).not.toBeInTheDocument()
-    expect(
-      itemDetails.getByRole('button', { name: 'Edit application item details' }),
-    ).toBeInTheDocument()
+    expect(itemDetails.getByRole('button', { name: 'Edit scale details' })).toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -174,7 +172,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     for (const field of fields) {
       expect(summary.getAllByText(field, { exact: true })).toHaveLength(1)
     }
-    expect(summary.getByRole('button', { name: 'Edit application summary' })).toBeVisible()
+    expect(summary.getByRole('button', { name: 'Edit application details' })).toBeVisible()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -215,9 +213,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByRole('group', { name: 'Application highlights' })).not.toBeInTheDocument()
     expect(tabs.map((tab) => tab.textContent)).toEqual([
       'Applicant',
-      'Agent',
       'Application',
-      'Items',
+      'Scale',
       'Documents',
       'Remarks',
       'Offers',
@@ -379,8 +376,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       screen.queryByRole('heading', { name: 'Owner details unavailable' }),
     ).not.toBeInTheDocument()
 
-    await selectApplicationDetailTab('Agent')
-    const agentDetails = await screen.findByRole('region', { name: 'Agent details' })
+    await selectApplicationDetailTab('Applicant')
+    const agentDetails = await screen.findByRole('region', { name: 'Agent information' })
     expect(within(agentDetails).getByText('00033344')).toBeInTheDocument()
     expect(await within(agentDetails).findByText('01 - Agent Main Location')).toBeInTheDocument()
     expect(within(agentDetails).getByText('Agent Contact')).toBeInTheDocument()
@@ -395,23 +392,27 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       }),
     ).toBeInTheDocument()
 
-    await selectApplicationDetailTab('Items')
-    expect(await screen.findByRole('button', { name: 'Create package' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Items', level: 2 })).not.toBeInTheDocument()
+    await selectApplicationDetailTab('Scale')
+    // The reviewed Figma places each first-record action inside its empty state.
     expect(
-      screen.getByText('Create a package before adding Summary of Scale entries.'),
+      (await screen.findByRole('button', { name: 'Create package' })).closest('.lexis-empty-state'),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Scale', level: 2 })).not.toBeInTheDocument()
+    expect(screen.getByText('Create a package, then add Summary of scale.')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'No packages found' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Package Details' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Summary of Scale' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Package details' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Summary of scale' })).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Documents')
-    expect(screen.queryByRole('heading', { name: 'Documents', level: 2 })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Documents', level: 2 })).toBeInTheDocument()
     expect(
       await screen.findByRole('heading', {
         level: 3,
-        name: 'No documents found',
+        name: 'No documents for this application',
       }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Add documents' }).closest('.lexis-empty-state'),
     ).toBeInTheDocument()
 
     await selectApplicationDetailTab('Remarks')
@@ -419,8 +420,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       await screen.findByRole('heading', {
         level: 3,
-        name: 'No remarks found',
+        name: 'No remarks for this application',
       }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Add remark' }).closest('.lexis-empty-state'),
     ).toBeInTheDocument()
 
     await selectApplicationDetailTab('Offers')
@@ -445,7 +449,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 2, name: 'Applicant client details' })
+    await screen.findByRole('heading', { level: 2, name: 'Applicant details' })
     const ownerTile = getOwnerClientDetailsTile()
     const ownerControls = within(ownerTile)
     expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
@@ -497,7 +501,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 2, name: 'Applicant client details' })
+    await screen.findByRole('heading', { level: 2, name: 'Applicant details' })
     const ownerControls = within(getOwnerClientDetailsTile())
     expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
     await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
@@ -554,7 +558,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Agent')
+    await selectApplicationDetailTab('Applicant')
     const agentDetails = within(getAgentDetailsTile())
     expect(
       agentDetails.getByRole('heading', {
@@ -653,7 +657,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
   })
 
-  it('moves an owner-to-Agent conversion into the conditional Agent editor', async () => {
+  it('edits agent information in Applicant and saves the owner-agent change together', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       agentClientNumber: null,
@@ -684,11 +688,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     await chooseComboBoxOption(applicantType, 'Agent')
-    const agentTab = await screen.findByRole('tab', { name: 'Agent' })
-    await waitFor(() => expect(agentTab).toHaveAttribute('aria-selected', 'true'))
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     let agentControls = within(getAgentDetailsTile())
     expect(agentControls.getByLabelText('Agent number')).toHaveValue('00011122')
-    await userEvent.click(agentControls.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Cancel' }))
 
     await waitFor(() =>
       expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument(),
@@ -700,9 +703,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     expect(getSummaryComboBox(resetOwnerControls, 'Applicant type')).toHaveValue('Ministerial')
     await chooseComboBoxOption(getSummaryComboBox(resetOwnerControls, 'Applicant type'), 'Agent')
-    await waitFor(() =>
-      expect(screen.getByRole('tab', { name: 'Agent' })).toHaveAttribute('aria-selected', 'true'),
-    )
     agentControls = within(getAgentDetailsTile())
 
     await waitFor(() =>
@@ -719,7 +719,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       agentControls.getByRole('combobox', { name: 'Contact name' }),
       'Agent Contact',
     )
-    await userEvent.click(agentControls.getByRole('button', { name: 'Save changes' }))
+    await userEvent.click(resetOwnerControls.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
@@ -885,9 +885,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Application 321' })
-    await selectApplicationDetailTab('Agent')
+    await selectApplicationDetailTab('Applicant')
     const agentTile = getAgentDetailsTile()
-    const agentControls = within(agentTile)
+    let agentControls = within(agentTile)
 
     expect(
       agentControls.queryByRole('heading', {
@@ -898,14 +898,16 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(agentControls.getByText('01 - Agent Main Location')).toBeInTheDocument()
 
     await userEvent.click(
-      agentControls.getByRole('button', {
-        name: 'Edit agent details',
+      within(getOwnerClientDetailsTile()).getByRole('button', {
+        name: 'Edit applicant details',
       }),
     )
+    agentControls = within(getAgentDetailsTile())
 
     expect(agentControls.getByLabelText('Agent number')).toHaveValue('00033344')
-    expect(agentControls.getByLabelText('Applicant type')).toHaveValue('Agent')
-    expect(agentControls.getByLabelText('Applicant type')).toHaveAttribute('readonly')
+    expect(
+      within(getOwnerClientDetailsTile()).getByRole('combobox', { name: 'Applicant type' }),
+    ).toHaveValue('Agent')
 
     await chooseComboBoxOption(
       agentControls.getByRole('combobox', { name: 'Contact location' }),
@@ -923,7 +925,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       'Agent Alternate Contact',
     )
 
-    await userEvent.click(agentControls.getByRole('button', { name: 'Save changes' }))
+    await userEvent.click(
+      within(getOwnerClientDetailsTile()).getByRole('button', { name: 'Save changes' }),
+    )
 
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
@@ -932,16 +936,16 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
           agentClientNumber: '00033344',
           agentClientLocationCode: '02',
           agentContactName: 'Agent Alternate Contact',
-          saveSource: 'agent',
+          saveSource: 'owner-agent',
         }),
       )
     })
     expect(
-      await agentControls.findByRole('button', {
-        name: 'Edit agent details',
+      await within(getOwnerClientDetailsTile()).findByRole('button', {
+        name: 'Edit applicant details',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Agent details saved.')).toBeInTheDocument()
+    expect(screen.getByText('Applicant details saved.')).toBeInTheDocument()
   })
 
   it('cancels agent edits without changing the persisted summary', async () => {
@@ -957,19 +961,23 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Application 321' })
-    await selectApplicationDetailTab('Agent')
-    const agentControls = within(getAgentDetailsTile())
+    await selectApplicationDetailTab('Applicant')
+    let agentControls = within(getAgentDetailsTile())
     await userEvent.click(
-      agentControls.getByRole('button', {
-        name: 'Edit agent details',
+      within(getOwnerClientDetailsTile()).getByRole('button', {
+        name: 'Edit applicant details',
       }),
     )
+    agentControls = within(getAgentDetailsTile())
     fireEvent.change(agentControls.getByLabelText('Agent number'), {
       target: { value: '00099988' },
     })
-    await userEvent.click(agentControls.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(
+      within(getOwnerClientDetailsTile()).getByRole('button', { name: 'Cancel' }),
+    )
 
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+    agentControls = within(getAgentDetailsTile())
     expect(agentControls.queryByLabelText('Agent number')).not.toBeInTheDocument()
     const agentNumberField = agentControls.getByText('Agent number').closest('.detail-field-item')
     expect(agentNumberField).toBeTruthy()
@@ -1017,7 +1025,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       }),
     ).not.toBeInTheDocument()
 
-    await selectApplicationDetailTab('Agent')
+    await selectApplicationDetailTab('Applicant')
     expect(
       within(getAgentDetailsTile()).queryByRole('button', {
         name: 'Edit agent details',
@@ -1050,7 +1058,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     expect(
       within(itemDetailsTile).queryByRole('button', {
-        name: 'Edit application item details',
+        name: 'Edit scale details',
       }),
     ).not.toBeInTheDocument()
 
@@ -1299,16 +1307,15 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     await selectApplicationDetailTab('Application')
-    expect(await screen.findByText('Application summary')).toBeInTheDocument()
+    expect(await screen.findByText('Application details')).toBeInTheDocument()
     expect(
       within(getApplicationSummaryTile()).queryByRole('combobox', {
         name: 'Exemption reason',
       }),
     ).toBeNull()
 
-    await selectApplicationDetailTab('Items')
-    expect(await screen.findByText('Package Details')).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Selected Package' })).toBeInTheDocument()
+    await selectApplicationDetailTab('Scale')
+    expect(await screen.findByRole('heading', { name: 'Scale details' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Package' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Reset package drafts' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Delete Package' })).toBeNull()
@@ -1365,7 +1372,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const summaryTile = getApplicationSummaryTile()
     expect(within(summaryTile).queryByLabelText('Exemption reason')).not.toBeInTheDocument()
 
-    await selectApplicationDetailTab('Items')
+    await selectApplicationDetailTab('Scale')
     expect(screen.queryByRole('button', { name: 'Edit items' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete Package' })).not.toBeInTheDocument()
@@ -1378,7 +1385,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     await selectApplicationDetailTab('Remarks')
     expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save Remark' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save remark' })).not.toBeInTheDocument()
   })
 
   it('ignores stale detail responses after navigating to another application', async () => {
@@ -1543,7 +1550,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(await screen.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
 
-    await selectApplicationDetailTab('Agent')
+    await selectApplicationDetailTab('Applicant')
     expect(screen.getByText('Agent Export Services')).toBeInTheDocument()
     expect(within(getAgentDetailsTile()).getByText('agent@example.test')).toBeInTheDocument()
 
@@ -1595,16 +1602,17 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       )
 
       await screen.findByRole('heading', { level: 1, name: 'Application 321' })
-      await selectApplicationDetailTab(saveSource === 'owner' ? 'Applicant' : 'Agent')
-      const controls = within(
-        saveSource === 'owner' ? getOwnerClientDetailsTile() : getAgentDetailsTile(),
-      )
+      await selectApplicationDetailTab('Applicant')
+      const controls = within(getOwnerClientDetailsTile())
       await userEvent.click(
         controls.getByRole('button', {
-          name: saveSource === 'owner' ? 'Edit applicant details' : 'Edit agent details',
+          name: 'Edit applicant details',
         }),
       )
-      const contactName = controls.getByRole('combobox', { name: 'Contact name' })
+      const contactName =
+        saveSource === 'owner'
+          ? controls.getAllByRole('combobox', { name: 'Contact name' })[0]
+          : within(getAgentDetailsTile()).getByRole('combobox', { name: 'Contact name' })
       await waitFor(() => expect(contactName).toBeEnabled())
       await chooseComboBoxOption(
         contactName,
@@ -1614,22 +1622,17 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
       await waitFor(() =>
         expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
-          saveSource === 'owner'
-            ? {
-                applicationNumber: '321',
-                saveSource: 'owner',
-                ownerClientNumber: '00011122',
-                ownerClientLocationCode: '00',
-                ownerContactName: 'Owner Alternate Contact',
-                applicantTypeCode: 'A',
-              }
-            : {
-                applicationNumber: '321',
-                saveSource: 'agent',
-                agentClientNumber: '00033344',
-                agentClientLocationCode: '01',
-                agentContactName: 'Agent Alternate Contact',
-              },
+          expect.objectContaining({
+            applicationNumber: '321',
+            saveSource: 'owner-agent',
+            ownerClientNumber: '00011122',
+            ownerClientLocationCode: '00',
+            ownerContactName: saveSource === 'owner' ? 'Owner Alternate Contact' : 'Owner Contact',
+            applicantTypeCode: 'A',
+            agentClientNumber: '00033344',
+            agentClientLocationCode: '01',
+            agentContactName: saveSource === 'agent' ? 'Agent Alternate Contact' : 'Agent Contact',
+          }),
         ),
       )
       expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
@@ -1810,7 +1813,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
         'Applicant',
         'Application',
-        'Items',
+        'Scale',
         'Documents',
         'Remarks',
         'Offers',
@@ -2089,7 +2092,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
   })
 
-  it('removes application species through individually labelled dismiss controls', async () => {
+  it('removes application species through the Carbon multi-select', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
       ...applicationSummarySnapshot,
       speciesCodes: ['FI', 'CE'],
@@ -2111,32 +2114,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const itemDetails = within(await selectApplicationItemDetailsTile())
-    const selectedSpecies = itemDetails.getByRole('list', {
-      name: 'Selected species',
-    })
-    const removeFir = within(selectedSpecies).getByRole('button', {
-      name: 'Remove FI from application',
-    })
-
-    expect(
-      within(selectedSpecies).getByRole('button', {
-        name: 'Remove CE from application',
-      }),
-    ).toBeInTheDocument()
-    expect(within(selectedSpecies).queryByRole('button', { name: 'Remove' })).toBeNull()
-
-    await userEvent.click(removeFir)
-
-    expect(
-      within(selectedSpecies).queryByRole('button', {
-        name: 'Remove FI from application',
-      }),
-    ).toBeNull()
-    expect(
-      within(selectedSpecies).getByRole('button', {
-        name: 'Remove CE from application',
-      }),
-    ).toBeInTheDocument()
+    const species = itemDetails.getByRole('combobox', { name: /^Species list/ })
+    expect(species).toHaveAccessibleName(/Total items selected: 2/)
+    await userEvent.click(species)
+    await userEvent.click(await itemDetails.findByRole('option', { name: /FI/ }))
+    expect(species).toHaveAccessibleName(/Total items selected: 1/)
   })
 
   it('requires at least one selected species before saving application item details', async () => {
@@ -2152,29 +2134,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const itemDetails = within(await selectApplicationItemDetailsTile())
-    const speciesCandidate = getSummaryComboBox(itemDetails, 'Species list')
-    expect(speciesCandidate).not.toHaveAttribute('aria-required', 'true')
-    const selectedSpeciesGroup = itemDetails.getByRole('group', {
-      name: 'Selected species',
-    })
-    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
-    const selectedSpecies = within(selectedSpeciesGroup).getByRole('list', {
-      name: 'Selected species',
-    })
-
-    await userEvent.click(
-      within(selectedSpecies).getByRole('button', {
-        name: 'Remove FI from application',
-      }),
-    )
+    const species = itemDetails.getByRole('combobox', { name: /^Species list/ })
+    expect(species).toHaveAttribute('aria-required', 'true')
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Clear all selected items' }))
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
-    expect(
-      await itemDetails.findByText('At least one species is required.', {
-        selector: '.legacy-search-error',
-      }),
-    ).toBeVisible()
-    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
+    expect(await itemDetails.findByText('At least one species is required.')).toBeVisible()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -2849,11 +2814,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       target: { value: 'Sequential remark' },
     })
     const reviewTile = within(await selectApplicationReviewTile())
-    await chooseComboBoxOption(
-      reviewTile.getByRole('combobox', { name: 'Application status' }),
-      'Rejected',
-    )
-    fireEvent.change(reviewTile.getByLabelText('Status change remark'), {
+    await userEvent.click(reviewTile.getByRole('radio', { name: 'Rejected' }))
+    fireEvent.change(reviewTile.getByLabelText('Remarks'), {
       target: { value: 'Needs correction' },
     })
 
@@ -2992,6 +2954,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const reviewTile = await selectApplicationReviewTile()
+    await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Rejected' }))
+    await userEvent.click(
+      within(reviewTile).getByRole('checkbox', {
+        name: 'Send email notification to the client, including the remark',
+      }),
+    )
     await waitFor(() => {
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01', {
         applicationNumber: '321',

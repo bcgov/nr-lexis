@@ -382,9 +382,8 @@ describe('Create Page Core Flows', () => {
 
     for (const tabName of [
       'Applicant',
-      'Agent',
       'Application',
-      'Items',
+      'Scale',
       'Documents',
       'Remarks',
       'Offers',
@@ -429,21 +428,20 @@ describe('Create Page Core Flows', () => {
       within(applicationFormActions)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['Cancel', 'Save'])
+    ).toEqual(['Cancel', 'Save application'])
     expect(within(applicationFormActions).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
       'type',
       'button',
     )
-    expect(within(applicationFormActions).getByRole('button', { name: 'Save' })).toHaveAttribute(
-      'type',
-      'button',
-    )
+    expect(
+      within(applicationFormActions).getByRole('button', { name: 'Save application' }),
+    ).toHaveAttribute('type', 'button')
     expect(screen.queryByRole('group', { name: 'New application state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /application number/i })).not.toBeInTheDocument()
     for (const tabName of [
       'Applicant',
       'Application',
-      'Items',
+      'Scale',
       'Documents',
       'Remarks',
       'Offers',
@@ -455,14 +453,10 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('tab', { name: 'Permits' })).not.toBeInTheDocument()
 
     await selectApplicationCreateTab('Review')
-    expect(screen.getByRole('textbox', { name: 'Application status' })).toHaveValue('New')
-    expect(screen.getByRole('textbox', { name: 'Application status' })).toHaveAttribute('readonly')
-    expect(screen.getByRole('textbox', { name: 'Remarks' })).toBeDisabled()
+    expect(screen.queryByRole('textbox', { name: 'Application status' })).not.toBeInTheDocument()
     expect(
-      screen.getByText(
-        'Save the application before changing its review status or adding review remarks.',
-      ),
-    ).toBeInTheDocument()
+      within(screen.getByRole('tabpanel')).getByText('Available after the application is saved.'),
+    ).toBeVisible()
 
     await selectApplicationCreateTab('Application')
     const applicationSection = screen.getByRole('region', { name: 'Application' })
@@ -479,17 +473,16 @@ describe('Create Page Core Flows', () => {
     ])
 
     await selectApplicationCreateTab('Documents')
-    expect(screen.getByRole('button', { name: 'Add document' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Add document' })).toHaveAttribute(
-      'title',
-      'Save the application before uploading documents.',
-    )
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('tabpanel')).getByText('Available after the application is saved.'),
+    ).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Back to Search' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
 
-    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    const submitButton = await screen.findByRole('button', { name: 'Save application' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
     expect(screen.queryByRole('dialog', { name: 'Confirm application accuracy' })).toBeNull()
@@ -517,7 +510,6 @@ describe('Create Page Core Flows', () => {
       averageLogVolume: '1.2',
       speciesCodes: ['HE'],
       endUseCode: 'SA',
-      comments: 'Ready',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/901', {
       state: {
@@ -528,7 +520,7 @@ describe('Create Page Core Flows', () => {
     })
   }, 20_000)
 
-  it('leads with package creation while requiring the application to be saved first', async () => {
+  it('keeps package and dependent entry unavailable before the application is saved', async () => {
     render(
       <MemoryRouter
         initialEntries={[
@@ -544,45 +536,19 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Items')
-    const createPackageHeading = await screen.findByRole('heading', {
-      name: 'Create Package',
-    })
-    const createPackageCard = createPackageHeading.closest('section')
-    expect(createPackageCard).toHaveClass('application-items-card')
-    expect(createPackageCard).toHaveClass('application-items-section--create-package')
-    expect(createPackageCard?.parentElement).toHaveClass('application-items-grid')
-    expect(screen.queryByRole('heading', { name: 'Package Details' })).not.toBeInTheDocument()
+    await selectApplicationCreateTab('Scale')
+    expect(screen.getByRole('region', { name: 'Scale' })).toBeVisible()
+    expect(screen.getByText('Total pieces')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Create package/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('combobox', { name: 'Selected Package' })).not.toBeInTheDocument()
-    expect(
-      screen.getByText(
-        'Save the application before creating a package or adding Summary of Scale entries.',
-      ),
-    ).toBeInTheDocument()
-
-    const createPackageButton = screen.getByRole('button', { name: 'Create Package' })
-    await userEvent.click(createPackageButton)
-
-    const dialog = screen.getByRole('dialog', { name: 'Application not saved' })
-    expect(
-      within(dialog).getByText('Please save this application before adding packages.'),
-    ).toBeInTheDocument()
-    expect(dialog.querySelector('.cds--modal-footer')).not.toBeInTheDocument()
-    const acknowledgeButton = within(dialog).getByRole('button', { name: 'OK' })
-    expect(acknowledgeButton).toHaveClass('cds--btn--primary')
-    expect(acknowledgeButton.parentElement).toHaveClass(
-      'application-create-package-save-prompt__actions',
-    )
+    for (const name of ['Documents', 'Remarks', 'Offers', 'Review']) {
+      await selectApplicationCreateTab(name)
+      expect(
+        within(screen.getByRole('tabpanel')).getByText('Available after the application is saved.'),
+      ).toBeVisible()
+      expect(screen.getByRole('region', { name }).querySelector('input, textarea')).toBeNull()
+    }
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
-    const modalRoot = dialog.closest('.cds--modal')
-    expect(modalRoot).not.toBeNull()
-
-    await userEvent.click(acknowledgeButton)
-
-    await waitFor(() => {
-      expect(modalRoot).not.toHaveClass('is-visible')
-      expect(createPackageButton).toHaveFocus()
-    })
   })
 
   it('removes selected application species independently', async () => {
@@ -601,43 +567,108 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Items')
-    const speciesCandidate = await screen.findByRole('combobox', { name: 'Species list' })
-    expect(speciesCandidate).not.toHaveAttribute('aria-required', 'true')
-    const selectedSpeciesGroup = screen.getByRole('group', {
-      name: 'Selected species',
-    })
-    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
-    const selectedSpecies = within(selectedSpeciesGroup).getByRole('list', {
-      name: 'Selected species',
-    })
-    const removeHemlock = within(selectedSpecies).getByRole('button', {
-      name: 'Remove HE from application',
-    })
-    expect(
-      within(selectedSpecies).getByRole('button', { name: 'Remove BA from application' }),
-    ).toBeInTheDocument()
-
-    await userEvent.click(removeHemlock)
-
-    expect(
-      screen.queryByRole('button', { name: 'Remove HE from application' }),
-    ).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Remove BA from application' })).toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Remove BA from application' }))
-
-    expect(
-      screen.queryByRole('button', { name: 'Remove BA from application' }),
-    ).not.toBeInTheDocument()
-    expect(
-      await screen.findByText('At least one species is required.', {
-        selector: '.legacy-search-error',
-      }),
-    ).toBeVisible()
-    expect(selectedSpeciesGroup).toHaveAccessibleDescription('At least one species is required.')
+    await selectApplicationCreateTab('Scale')
+    const species = await screen.findByRole('combobox', { name: /^Species list/ })
+    expect(species).toHaveAttribute('aria-required', 'true')
+    await waitFor(() => expect(species).toBeEnabled())
+    await userEvent.click(species)
+    await userEvent.click(await screen.findByRole('option', { name: /HE/ }))
+    await waitFor(() =>
+      expect(mockedFetchApplicationRemainingSpecies).toHaveBeenLastCalledWith('11', 'H', ['BA']),
+    )
+    await waitFor(() => expect(species).toBeEnabled())
+    // Carbon keeps the multiselect open while selections change.
+    await userEvent.click(await screen.findByRole('option', { name: /BA/ }))
+    expect(await screen.findByText('At least one species is required.')).toBeVisible()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   }, 20_000)
+
+  it('keeps selected species descriptions when remaining options omit them', async () => {
+    mockedFetchApplicationRemainingSpecies.mockImplementation(async (_region, _product, selected) =>
+      [
+        { code: 'HE', description: 'Hemlock' },
+        { code: 'BA', description: 'Balsam' },
+      ].filter((option) => !selected.includes(option.code)),
+    )
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create?productTypeCode=H&region=11']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await selectApplicationCreateTab('Scale')
+    const species = await screen.findByRole('combobox', { name: /^Species list/ })
+    await waitFor(() => expect(species).toBeEnabled())
+    await userEvent.click(species)
+    await userEvent.click(await screen.findByRole('option', { name: 'HE - Hemlock' }))
+    await waitFor(() =>
+      expect(mockedFetchApplicationRemainingSpecies).toHaveBeenLastCalledWith('11', 'H', ['HE']),
+    )
+    await waitFor(() => expect(species).toBeEnabled())
+    expect(screen.getByRole('option', { name: 'HE - Hemlock' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByRole('option', { name: 'BA - Balsam' })).toHaveAttribute(
+      'aria-selected',
+      'false',
+    )
+  })
+
+  it('keeps species selectable while the remaining list refreshes after a pick', async () => {
+    const pendingRefreshes: Array<() => void> = []
+    const allSpecies = [
+      { code: 'HE', description: 'Hemlock' },
+      { code: 'BA', description: 'Balsam' },
+    ]
+    mockedFetchApplicationRemainingSpecies.mockImplementation((_region, _product, selected) => {
+      const remaining = allSpecies.filter((option) => !selected.includes(option.code))
+      if (selected.length === 0) return Promise.resolve(remaining)
+      return new Promise((resolve) => pendingRefreshes.push(() => resolve(remaining)))
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create?productTypeCode=H&region=11']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await selectApplicationCreateTab('Scale')
+    const species = await screen.findByRole('combobox', { name: /^Species list/ })
+    await waitFor(() => expect(species).toBeEnabled())
+    await userEvent.click(species)
+    await userEvent.click(await screen.findByRole('option', { name: 'HE - Hemlock' }))
+    await waitFor(() =>
+      expect(mockedFetchApplicationRemainingSpecies).toHaveBeenLastCalledWith('11', 'H', ['HE']),
+    )
+
+    expect(species).toBeEnabled()
+    expect(species).toHaveFocus()
+    await userEvent.click(screen.getByRole('option', { name: 'BA - Balsam' }))
+    await waitFor(() =>
+      expect(mockedFetchApplicationRemainingSpecies).toHaveBeenLastCalledWith('11', 'H', [
+        'HE',
+        'BA',
+      ]),
+    )
+    await act(async () => pendingRefreshes.forEach((resolve) => resolve()))
+
+    expect(screen.getByRole('option', { name: 'HE - Hemlock' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByRole('option', { name: 'BA - Balsam' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+  })
 
   it('shows create validation only in the accuracy dialog until it closes', async () => {
     mockedUseAuth.mockReturnValue(
@@ -662,7 +693,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const saveButton = await screen.findByRole('button', { name: 'Save' })
+    const saveButton = await screen.findByRole('button', { name: 'Save application' })
     await waitFor(() => expect(saveButton).toBeEnabled())
     await userEvent.click(saveButton)
     const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
@@ -670,17 +701,22 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save application' }))
 
     const dialogFeedback = await within(dialog).findByRole('status')
-    expect(dialogFeedback).toHaveTextContent('Validation error')
+    expect(dialogFeedback).toHaveTextContent('Cannot save yet.')
     expect(screen.getAllByRole('status')).toEqual([dialogFeedback])
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(dialog).not.toBeInTheDocument())
-    expect(screen.getByRole('status')).toHaveTextContent('Validation error')
+    expect(screen.getByRole('status')).toHaveTextContent('Cannot save yet.')
 
     await userEvent.click(saveButton)
     expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save application' })).toBeDisabled()
+    expect(
+      within(screen.getByRole('dialog', { name: 'Confirm application accuracy' })).getByRole(
+        'button',
+        { name: 'Save application' },
+      ),
+    ).toBeDisabled()
   })
 
   it('requires and resets application accuracy confirmation for a provincial submitter', async () => {
@@ -711,7 +747,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const saveButton = await screen.findByRole('button', { name: 'Save' })
+    const saveButton = await screen.findByRole('button', { name: 'Save application' })
     await waitFor(() => expect(saveButton).toBeEnabled())
     await userEvent.click(saveButton)
 
@@ -755,7 +791,7 @@ describe('Create Page Core Flows', () => {
       ).not.toBeInTheDocument(),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
     const postSaveDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     const postSaveAcknowledgement = within(postSaveDialog).getByRole('checkbox', {
       name: 'I Agree',
@@ -778,7 +814,7 @@ describe('Create Page Core Flows', () => {
     expect(within(postSaveDialog).getByRole('button', { name: 'Save application' })).toBeEnabled()
     const callsBeforeReopen = mockedSubmitProvincialApplicationCreate.mock.calls.length
     await userEvent.click(within(postSaveDialog).getByRole('button', { name: 'Cancel' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
     const cleanDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledTimes(callsBeforeReopen)
     expect(
@@ -809,7 +845,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByLabelText('Exemption term (months)')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Exemption term (years)')).not.toBeInTheDocument()
 
-    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    const submitButton = await screen.findByRole('button', { name: 'Save application' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -860,14 +896,17 @@ describe('Create Page Core Flows', () => {
     })
 
     await chooseComboBoxOption(regionComboBox, 'West Coast Natural Resource Region')
-    await selectApplicationCreateTab('Items')
+    await selectApplicationCreateTab('Scale')
     await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Species list' }),
+      screen.getByRole('combobox', { name: /^Species list/ }),
       'HE - Hemlock',
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Add species' }))
-    expect(await screen.findByText('HE')).toBeInTheDocument()
-    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    await waitFor(() =>
+      expect(mockedFetchApplicationRemainingSpecies).toHaveBeenLastCalledWith('1910', 'LOG', [
+        'HE',
+      ]),
+    )
+    const submitButton = await screen.findByRole('button', { name: 'Save application' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -904,21 +943,20 @@ describe('Create Page Core Flows', () => {
 
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Applicant',
-      'Agent',
       'Application',
-      'Items',
+      'Scale',
       'Documents',
       'Remarks',
       'Offers',
       'Review',
     ])
-    await selectApplicationCreateTab('Agent')
+    await selectApplicationCreateTab('Applicant')
     await waitFor(() =>
-      expect(screen.getByRole('textbox', { name: 'Agent number' })).toHaveValue('00002176'),
+      expect(screen.getByRole('textbox', { name: 'Agent client' })).toHaveValue('00002176'),
     )
-    expect(screen.getByRole('combobox', { name: 'Contact location' })).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: 'Agent location' })).toBeInTheDocument()
 
-    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    const submitButton = await screen.findByRole('button', { name: 'Save application' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -946,7 +984,6 @@ describe('Create Page Core Flows', () => {
       averageLogVolume: '1.2',
       speciesCodes: ['HE'],
       endUseCode: 'SA',
-      comments: 'Ready',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/application/902', {
       state: {
@@ -986,7 +1023,7 @@ describe('Create Page Core Flows', () => {
     ).not.toBeInTheDocument()
     expect(within(ownerDetails).queryByRole('textbox')).not.toBeInTheDocument()
 
-    await selectApplicationCreateTab('Agent')
+    await selectApplicationCreateTab('Applicant')
     const agentDetails = await screen.findByRole('region', { name: 'Agent client details' })
     expect(within(agentDetails).getByText('Agent Export Services')).toBeInTheDocument()
     expect(within(agentDetails).getByText('456 Export Road')).toBeInTheDocument()
@@ -1001,6 +1038,57 @@ describe('Create Page Core Flows', () => {
 
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011111', '00')
     expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033333', '01')
+  })
+
+  it('keeps agent entry and validation within Applicant and clears it when the agent is removed', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('908'))
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&applicationVolume=125.5&speciesCodes=HE&endUseCode=SA',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+    expect(screen.getByRole('region', { name: 'Agent information' })).toBeVisible()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    await selectApplicationCreateTab('Application')
+    const save = screen.getByRole('button', { name: 'Save application' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await userEvent.click(save)
+    expect(await screen.findByText('Cannot save yet.')).toBeVisible()
+    const applicant = screen.getByRole('tab', { name: 'Applicant' })
+    expect(applicant).toHaveAttribute('aria-selected', 'true')
+    expect(applicant).toHaveAttribute('aria-description', '3 fields need attention')
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+    fireEvent.change(screen.getByRole('textbox', { name: 'Agent client' }), {
+      target: { value: '00033333' },
+    })
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Agent location' })).toBeEnabled(),
+    )
+    await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+    expect(screen.queryByRole('region', { name: 'Agent information' })).not.toBeInTheDocument()
+    expect(applicant).not.toHaveAttribute('aria-description')
+    await waitFor(() => expect(save).toBeEnabled())
+    await userEvent.click(save)
+    await waitFor(() =>
+      expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicantTypeCode: 'O',
+          agentClientNumber: '',
+          agentClientLocationCode: '',
+          agentContactName: '',
+        }),
+      ),
+    )
   })
 
   it('submits a ministerial applicant type without agent fields', async () => {
@@ -1025,7 +1113,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Ministerial')
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
 
-    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    const submitButton = await screen.findByRole('button', { name: 'Save application' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -1059,7 +1147,7 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectApplicationCreateTab('Applicant')
-    const ownerClientNumberInput = screen.getByRole('textbox', { name: 'Client number' })
+    const ownerClientNumberInput = screen.getByRole('textbox', { name: 'Client' })
     mockedFetchApplicationClientLocations.mockClear()
 
     fireEvent.change(ownerClientNumberInput, { target: { value: '00011111' } })
@@ -1097,7 +1185,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const ownerClientNumberInput = await screen.findByRole('textbox', { name: 'Client number' })
+    const ownerClientNumberInput = await screen.findByRole('textbox', { name: 'Client' })
     await waitFor(() =>
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011111', 'owner'),
     )
@@ -1151,15 +1239,15 @@ describe('Create Page Core Flows', () => {
 
     expect(await screen.findByText('Client details unavailable')).toBeInTheDocument()
 
-    const ownerClientNumber = screen.getByRole('textbox', { name: 'Client number' })
+    const ownerClientNumber = screen.getByRole('textbox', { name: 'Client' })
     fireEvent.change(ownerClientNumber, { target: { value: '00099988' } })
     await waitFor(() =>
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00099988', 'owner'),
     )
     expect(screen.getByText('Client details unavailable')).toBeInTheDocument()
 
-    await selectApplicationCreateTab('Agent')
-    const agentClientNumber = screen.getByRole('textbox', { name: 'Agent number' })
+    await selectApplicationCreateTab('Applicant')
+    const agentClientNumber = screen.getByRole('textbox', { name: 'Agent client' })
     fireEvent.change(agentClientNumber, { target: { value: '00033333' } })
     await waitFor(() =>
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033333', 'agent'),
@@ -1190,7 +1278,7 @@ describe('Create Page Core Flows', () => {
         </MemoryRouter>,
       )
 
-      const submitButton = await screen.findByRole('button', { name: 'Save' })
+      const submitButton = await screen.findByRole('button', { name: 'Save application' })
       await waitFor(() => expect(submitButton).toBeEnabled())
       await userEvent.click(submitButton)
 
@@ -1219,9 +1307,9 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationCreateTab('Agent')
-    const agentSection = screen.getByRole('region', { name: 'Agent' })
-    const agentNumber = within(agentSection).getByRole('textbox', { name: 'Agent number' })
+    await selectApplicationCreateTab('Applicant')
+    const agentSection = screen.getByRole('region', { name: 'Agent information' })
+    const agentNumber = within(agentSection).getByRole('textbox', { name: 'Agent client' })
     await waitFor(() => expect(agentNumber).toHaveValue('00002176'))
     await waitFor(() =>
       expect(within(agentSection).getByRole('combobox', { name: 'Contact name' })).toHaveValue(
@@ -1233,7 +1321,7 @@ describe('Create Page Core Flows', () => {
 
     await waitFor(() => {
       const contactLocation = within(agentSection).getByRole('combobox', {
-        name: 'Contact location',
+        name: 'Agent location',
       })
       expect(contactLocation).toHaveValue('')
       expect(contactLocation).toBeDisabled()
@@ -1243,7 +1331,7 @@ describe('Create Page Core Flows', () => {
     })
     expect(screen.queryByRole('region', { name: 'Agent client details' })).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
     expect(await screen.findAllByText('Agent client number is required.')).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   }, 20_000)
@@ -1287,7 +1375,7 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(ownerName).toHaveValue('Owner Contact'))
     fireEvent.change(ownerName, { target: { value: 'Café' } })
 
-    const submitButton = screen.getByRole('button', { name: 'Save' })
+    const submitButton = screen.getByRole('button', { name: 'Save application' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -1296,7 +1384,7 @@ describe('Create Page Core Flows', () => {
         'Applicant contact name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
       ),
     ).not.toHaveLength(0)
-    await selectApplicationCreateTab('Items')
+    await selectApplicationCreateTab('Scale')
     const locationOfLogs = screen.getByRole('textbox', { name: 'Location of logs' })
     expect(locationOfLogs).toHaveAttribute('maxlength', '250')
     expect(
@@ -1306,21 +1394,18 @@ describe('Create Page Core Flows', () => {
       screen.getByText('Location of logs must be 250 characters or fewer.'),
     ).toBeInTheDocument()
     await selectApplicationCreateTab('Remarks')
-    expect(screen.getByText('Remarks must be 254 characters or fewer.')).toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'Remarks' })).not.toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
     await selectApplicationCreateTab('Applicant')
     fireEvent.change(screen.getByRole('combobox', { name: 'Contact name' }), {
       target: { value: 'O'.repeat(120) },
     })
-    await selectApplicationCreateTab('Items')
+    await selectApplicationCreateTab('Scale')
     fireEvent.change(screen.getByRole('textbox', { name: 'Location of logs' }), {
       target: { value: 'L'.repeat(250) },
     })
     await selectApplicationCreateTab('Remarks')
-    fireEvent.change(screen.getByRole('textbox', { name: 'Remarks' }), {
-      target: { value: 'R'.repeat(254) },
-    })
     await userEvent.click(submitButton)
 
     await waitFor(() =>
@@ -1328,7 +1413,6 @@ describe('Create Page Core Flows', () => {
         expect.objectContaining({
           ownerContactName: 'O'.repeat(120),
           productLocation: 'L'.repeat(250),
-          comments: 'R'.repeat(254),
         }),
       ),
     )
@@ -1368,6 +1452,7 @@ describe('Create Page Core Flows', () => {
     expect(applicantType).toHaveValue('Owner')
     expect(applicantType).toHaveAttribute('readonly')
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('checkbox', { name: "I'm an agent" })).not.toBeInTheDocument()
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033333', 'agent')
   })
 
@@ -1421,7 +1506,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('tab', { name: 'Offers' }))
     expect(screen.getByRole('region', { name: 'Offers' })).toBeInTheDocument()
 
-    const saveButton = screen.getByRole('button', { name: 'Save' })
+    const saveButton = screen.getByRole('button', { name: 'Save application' })
     await waitFor(() => expect(saveButton).toBeEnabled())
     await userEvent.click(saveButton)
 
@@ -1451,7 +1536,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    const submitButton = await screen.findByRole('button', { name: 'Save application' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -1510,7 +1595,7 @@ describe('Create Page Core Flows', () => {
 
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
     await selectApplicationCreateTab('Applicant')
-    expect(screen.getByRole('textbox', { name: 'Client number' })).not.toHaveAttribute('readonly')
+    expect(screen.getByRole('textbox', { name: 'Client' })).not.toHaveAttribute('readonly')
   })
 
   it('locks a scoped submitter to its authoritative owner and defaults its valid org unit', async () => {
@@ -1572,8 +1657,8 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('radio', { name: 'No list date' })).not.toBeInTheDocument()
 
     await selectApplicationCreateTab('Applicant')
-    expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00077881')
-    expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveAttribute('readonly')
+    expect(screen.getByRole('textbox', { name: 'Client' })).toHaveValue('00077881')
+    expect(screen.getByRole('textbox', { name: 'Client' })).toHaveAttribute('readonly')
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Client location' })).toHaveValue('00')
     })
@@ -1647,7 +1732,7 @@ describe('Create Page Core Flows', () => {
 
     const ownerNameInput = await screen.findByRole('textbox', { name: 'Contact name' })
     fireEvent.change(ownerNameInput, { target: { value: 'Typed Owner' } })
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
 
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1679,7 +1764,7 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(ownerNameInput).toHaveValue('Owner Contact'))
     fireEvent.change(ownerNameInput, { target: { value: 'Advertising Owner' } })
     await waitFor(() => expect(ownerNameInput).toHaveValue('Advertising Owner'))
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
 
     expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -1704,7 +1789,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    const submitButton = await screen.findByRole('button', { name: 'Save application' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -1735,7 +1820,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    const submitButton = await screen.findByRole('button', { name: 'Save application' })
     await userEvent.click(submitButton)
 
     expect(
@@ -1774,7 +1859,7 @@ describe('Create Page Core Flows', () => {
     await selectApplicationCreateTab('Application')
     const productType = await screen.findByRole('combobox', { name: 'Product type' })
     await waitFor(() => expect(productType).toHaveValue('Harvested Timber'))
-    await selectApplicationCreateTab('Items')
+    await selectApplicationCreateTab('Scale')
     expect(screen.getByRole('combobox', { name: 'Age class' })).toBeInTheDocument()
     expect(screen.getByRole('textbox', { name: 'Location of logs' })).toBeInTheDocument()
     expect(screen.getByRole('spinbutton', { name: 'Average log volume (m³)' })).toBeInTheDocument()
@@ -1784,7 +1869,7 @@ describe('Create Page Core Flows', () => {
       screen.getByRole('combobox', { name: 'Product type' }),
       'Standing Timber',
     )
-    await selectApplicationCreateTab('Items')
+    await selectApplicationCreateTab('Scale')
     expect(screen.getByRole('combobox', { name: 'Age class' })).toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Location of logs' })).not.toBeInTheDocument()
     expect(
@@ -1793,7 +1878,7 @@ describe('Create Page Core Flows', () => {
 
     await selectApplicationCreateTab('Application')
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Product type' }), 'Timber')
-    await selectApplicationCreateTab('Items')
+    await selectApplicationCreateTab('Scale')
     expect(screen.queryByRole('combobox', { name: 'Age class' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Location of logs' })).not.toBeInTheDocument()
     expect(
@@ -1819,7 +1904,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Save' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Save application' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
@@ -1856,7 +1941,7 @@ describe('Create Page Core Flows', () => {
     )
     await waitFor(() => expect(screen.getByPlaceholderText('No remaining species')).toBeDisabled())
 
-    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    const submitButton = await screen.findByRole('button', { name: 'Save application' })
     await userEvent.click(submitButton)
 
     const speciesErrors = await screen.findAllByText(
@@ -1882,7 +1967,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const submitButton = await screen.findByRole('button', { name: 'Save' })
+    const submitButton = await screen.findByRole('button', { name: 'Save application' })
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
@@ -2602,7 +2687,7 @@ describe('Create Page Core Flows', () => {
     expect(await screen.findByText('Options unavailable')).toBeInTheDocument()
     await selectApplicationCreateTab('Application')
     expect(screen.getByRole('combobox', { name: 'Product type' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save application' })).toBeDisabled()
     expect(
       screen.getByText('Options unavailable').closest('[role="status"]')?.querySelector('button'),
     ).toBeNull()
