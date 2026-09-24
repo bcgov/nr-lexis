@@ -161,8 +161,9 @@ public class Oauth2SecurityCustomizer
     // Preserve the approved IDIR staff / Business BCeID separation and the internal
     // forest-client authority contract used throughout business authorization.
     if (isStaffIdentityProvider(identityProvider)) {
-      // Retain the concrete regional grant without adding its unscoped base role. Runtime
-      // authorization still denies regional-only access until all record surfaces are wired.
+      // Retain the concrete regional grant without adding its unscoped base role. The grant
+      // passes route checks with its role's actions; only ProvincialAuthorizationService limits
+      // it to its regions, so every record endpoint must apply those checks.
       return roles.stream()
           .filter(role -> STAFF_ROLES.contains(role) || FamRegionGrant.parse(role).isPresent())
           .toList();
