@@ -92,8 +92,9 @@ In practice each user holds one LEXIS role. These rules are defensive: if someon
 given several staff roles, some province-wide and some regional, the combination never reaches beyond
 what each grant allows on its own. Each grant carries its own reach:
 
-- The same role granted both without and with a region is province-wide; the unscoped grant
-  supersedes the regional one.
+- The same role granted both without and with a region reaches only its regions (least
+  privilege): a regional grant always narrows its role, so making someone province-wide means
+  removing their regional grant of that role.
 - A province-wide grant widens only the actions that role itself holds. Province-wide Read Only
   plus Cariboo Application Approver reads everywhere but writes only in Cariboo; province-wide
   Read Only plus a regional Exemption Approver can read everything and approve exemptions only in

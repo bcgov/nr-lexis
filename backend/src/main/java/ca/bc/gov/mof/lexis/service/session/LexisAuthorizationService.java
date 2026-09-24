@@ -81,7 +81,8 @@ public class LexisAuthorizationService {
 
   /**
    * Resolves staff region access for one action, preserving each grant's role/region pair. A
-   * role with no region is province-wide; the same role granted for regions reaches only those.
+   * role with no region is province-wide; a role granted for regions reaches only those, even if
+   * it is also granted without a region (least privilege).
    */
   public OrgUnitConstraint resolveStaffRegionConstraint(
       List<String> authorities, String action) {
@@ -96,6 +97,7 @@ public class LexisAuthorizationService {
     if (authorities == null || actions == null) {
       return new OrgUnitConstraint(true, List.of());
     }
+    Set<String> regionalRoles = regionalRoles(authorities);
     for (String authority : authorities) {
       if (authority == null) {
         continue;
@@ -106,7 +108,7 @@ public class LexisAuthorizationService {
         if (canPerformAnyAction(grant.role(), actions)) {
           orgUnits.add(grant.region().orgUnitNumber());
         }
-      } else if (PROVINCIAL_STAFF_ROLES.contains(authority)
+      } else if (isProvinceWideGrant(authority, regionalRoles)
           && canPerformAnyAction(authority, actions)) {
         // Only a recognized unscoped grant for THIS action makes its region access global.
         // A province-wide Read Only grant cannot widen a regional Approver's write access.
@@ -127,6 +129,7 @@ public class LexisAuthorizationService {
     if (authorities == null || roles == null) {
       return new OrgUnitConstraint(true, List.of());
     }
+    Set<String> regionalRoles = regionalRoles(authorities);
     for (String authority : authorities) {
       if (authority == null) {
         continue;
@@ -136,7 +139,7 @@ public class LexisAuthorizationService {
         if (roles.contains(regionalGrant.get().role())) {
           orgUnits.add(regionalGrant.get().region().orgUnitNumber());
         }
-      } else if (PROVINCIAL_STAFF_ROLES.contains(authority) && roles.contains(authority)) {
+      } else if (isProvinceWideGrant(authority, regionalRoles) && roles.contains(authority)) {
         return new OrgUnitConstraint(false, List.of());
       }
     }
@@ -157,6 +160,7 @@ public class LexisAuthorizationService {
     // Same answer as resolveStaffRegionConstraint per action, resolving each grant's actions once.
     Set<String> provinceWide = new LinkedHashSet<>();
     Map<String, Set<Long>> regionsByAction = new LinkedHashMap<>();
+    Set<String> regionalRoles = regionalRoles(authorities);
     for (String authority : authorities) {
       if (authority == null) {
         continue;
@@ -172,7 +176,7 @@ public class LexisAuthorizationService {
                 .add(grant.region().orgUnitNumber());
           }
         }
-      } else if (PROVINCIAL_STAFF_ROLES.contains(authority)) {
+      } else if (isProvinceWideGrant(authority, regionalRoles)) {
         Set<String> roleActions = Set.copyOf(resolveGrantedActions(List.of(authority)));
         grantedActions.stream()
             .filter(action -> grantsAction(roleActions, action))
@@ -185,6 +189,22 @@ public class LexisAuthorizationService {
       }
     }
     return actionRegions;
+  }
+
+  /** The staff roles granted for at least one region. */
+  private static Set<String> regionalRoles(Collection<String> authorities) {
+    Set<String> roles = new LinkedHashSet<>();
+    authorities.forEach(
+        authority -> FamRegionGrant.parse(authority).ifPresent(grant -> roles.add(grant.role())));
+    return roles;
+  }
+
+  /**
+   * An unscoped staff grant is province-wide unless the same role is also granted for regions;
+   * then the regional grants are that role's whole reach (least privilege).
+   */
+  private static boolean isProvinceWideGrant(String authority, Set<String> regionalRoles) {
+    return PROVINCIAL_STAFF_ROLES.contains(authority) && !regionalRoles.contains(authority);
   }
 
   private boolean canPerformAnyAction(String role, Collection<String> actions) {
