@@ -1003,11 +1003,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     const view = render(<RouterProvider router={router} />)
 
-    const success = await screen.findByText('Permit created')
+    const success = await screen.findByText('The permit was saved.')
     expect(success.closest('.cds--inline-notification')).toHaveClass(
       'cds--inline-notification--success',
     )
-    expect(screen.getByText('The permit was saved.')).toBeInTheDocument()
+    // The design shows the confirmation as the title alone.
+    expect(screen.getAllByText('The permit was saved.')).toHaveLength(1)
     expect(screen.getByRole('heading', { name: 'Permit 777 (Pending)' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('button', { name: 'Edit permit details' })).toBeInTheDocument()
@@ -1019,9 +1020,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(router.state.location.hash).toBe('#permit')
 
     await userEvent.click(screen.getByRole('button', { name: 'close notification' }))
-    await waitFor(() => expect(screen.queryByText('Permit created')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByText('The permit was saved.')).not.toBeInTheDocument())
     view.rerender(<RouterProvider router={router} />)
-    expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
+    expect(screen.queryByText('The permit was saved.')).not.toBeInTheDocument()
     await selectPermitDetailTab('Applicant')
     const applicantTile = (
       await screen.findByRole('heading', { name: 'Applicant details', level: 2 })
@@ -1032,7 +1033,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ).toBeInTheDocument()
     await selectPermitDetailTab('Shipping')
     expect(await screen.findByRole('button', { name: 'Edit shipping details' })).toBeInTheDocument()
-    expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
+    expect(screen.queryByText('The permit was saved.')).not.toBeInTheDocument()
   })
 
   it('replaces the permit creation notice with a later action result without resurfacing it', async () => {
@@ -1050,19 +1051,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     const view = render(<RouterProvider router={router} />)
 
-    expect(await screen.findByText('Permit created')).toBeInTheDocument()
+    expect(await screen.findByText('The permit was saved.')).toBeInTheDocument()
     const dialog = await openBlanketOicPackageDeleteConfirmation()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Delete package' }))
 
     const latestAction = await screen.findByText('Blanket OIC package was deleted.')
     expect(latestAction).toBeVisible()
-    expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
+    expect(screen.queryByText('The permit was saved.')).not.toBeInTheDocument()
     expect(screen.getAllByRole('button', { name: 'close notification' })).toHaveLength(1)
 
     await userEvent.click(screen.getByRole('button', { name: 'close notification' }))
     expect(screen.queryByText('Blanket OIC package was deleted.')).not.toBeInTheDocument()
     view.rerender(<RouterProvider router={router} />)
-    expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
+    expect(screen.queryByText('The permit was saved.')).not.toBeInTheDocument()
   })
 
   it('shows Blanket OIC creation success once the exemption context identifies the permit', async () => {
@@ -1108,7 +1109,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         blanketOic: true,
       }),
     )
-    expect(await screen.findByText('Permit created')).toBeInTheDocument()
+    expect(await screen.findByText('The permit was saved.')).toBeInTheDocument()
     await waitFor(() => expect(router.state.location.state).toEqual({}))
   })
 
@@ -1123,7 +1124,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       },
     )
     render(<RouterProvider router={router} />)
-    expect(await screen.findByText('Permit created')).toBeInTheDocument()
+    expect(await screen.findByText('The permit was saved.')).toBeInTheDocument()
     await waitFor(() => expect(router.state.location.state).toEqual({}))
 
     mockedFetchProvincialPermitDetail.mockResolvedValue({
@@ -1134,7 +1135,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     await act(() => router.navigate('/provincial/permit/888'))
     expect(await screen.findByRole('heading', { name: 'Permit 888' })).toBeInTheDocument()
-    expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
+    expect(screen.queryByText('The permit was saved.')).not.toBeInTheDocument()
 
     configureEditableBlanketOicPackage()
     await act(() => router.navigate(-1))
@@ -1142,7 +1143,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await screen.findByRole('button', { name: /Edit permit(?: details)?/ }),
     ).toBeInTheDocument()
     expect(screen.getByRole('heading', { name: 'Permit 777 (Pending)' })).toBeInTheDocument()
-    expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
+    expect(screen.queryByText('The permit was saved.')).not.toBeInTheDocument()
   })
 
   it('does not carry an action failure to another permit', async () => {
@@ -1178,7 +1179,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await screen.findByRole('button', { name: /Edit permit(?: details)?/ }),
     ).toBeInTheDocument()
     await waitFor(() => expect(router.state.location.state).toEqual({}))
-    expect(screen.queryByText('Permit created')).not.toBeInTheDocument()
+    expect(screen.queryByText('The permit was saved.')).not.toBeInTheDocument()
   })
 
   it('opens a newly created Ministerial permit in editable tabs and consumes the route signal', async () => {

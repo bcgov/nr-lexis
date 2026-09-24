@@ -17,7 +17,7 @@ export function ActionResultNotification({
     <AppNotification
       kind={result.kind}
       title={actionResultTitle(result)}
-      subtitle={result.message}
+      subtitle={result.message || undefined}
       className={className}
       lowContrast
       onCloseButtonClick={onClose}

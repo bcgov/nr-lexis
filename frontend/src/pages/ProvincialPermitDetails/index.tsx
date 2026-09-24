@@ -2772,8 +2772,8 @@ const ProvincialPermitDetailsPage = () => {
       // eslint-disable-next-line @eslint-react/set-state-in-effect
       setActionResult({
         kind: 'success',
-        title: 'Permit created',
-        message: 'The permit was saved.',
+        title: 'The permit was saved.',
+        message: '',
       })
     }
     const remainingState: Record<string, unknown> = { ...location.state }
