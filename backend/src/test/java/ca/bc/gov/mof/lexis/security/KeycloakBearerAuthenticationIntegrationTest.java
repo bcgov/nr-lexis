@@ -112,7 +112,7 @@ class KeycloakBearerAuthenticationIntegrationTest {
                 .header("Authorization", bearer(b -> b.claim("identity_provider", provider))))
         .andExpect(status().isOk())
         .andExpect(content().contentTypeCompatibleWith(MediaType.APPLICATION_JSON))
-        .andExpect(jsonPath("$.principal").value("IDIR\\staff.user"));
+        .andExpect(jsonPath("$.principal").value("IDIR\\STAFF.USER"));
   }
 
   @Test
@@ -127,7 +127,7 @@ class KeycloakBearerAuthenticationIntegrationTest {
                         List.of("LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00001018")));
     mvc.perform(get("/clients").header("Authorization", token))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.principal").value("BCEIDBUSINESS\\industry.user"))
+        .andExpect(jsonPath("$.principal").value("BCEID\\INDUSTRY.USER"))
         .andExpect(jsonPath("$.clients[0]").value("00001018"));
     mvc.perform(get("/staff").header("Authorization", token)).andExpect(status().isForbidden());
   }

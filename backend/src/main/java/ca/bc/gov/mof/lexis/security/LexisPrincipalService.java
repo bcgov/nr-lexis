@@ -86,6 +86,11 @@ public class LexisPrincipalService {
         "Authenticated JWT does not contain a stable audit identity.");
   }
 
+  /**
+   * Audit names keep legacy LEXIS's WebADE form, IDIR\USERNAME or BCEID\USERNAME, so a person has
+   * one name across legacy and modern rows. WebADE's BCEID directory is the Business BCeID the SSO
+   * integration allows.
+   */
   private String resolveUserId(Map<String, Object> claims) {
     String provider = claimValue(claims, "identity_provider");
     String usernameClaim;
@@ -100,7 +105,7 @@ public class LexisPrincipalService {
       case "bceidbusiness" -> {
         usernameClaim = "bceid_username";
         guidClaim = "bceid_user_guid";
-        auditProvider = "BCEIDBUSINESS";
+        auditProvider = "BCEID";
       }
       default -> {
         return null;
@@ -108,11 +113,11 @@ public class LexisPrincipalService {
     }
     String username = claimValue(claims, usernameClaim);
     if (username.isBlank()) {
-      username = claimValue(claims, guidClaim).toUpperCase(Locale.ROOT);
+      username = claimValue(claims, guidClaim);
     }
     return username.isBlank() || isServiceAccountUsername(username)
         ? null
-        : auditProvider + "\\" + username;
+        : auditProvider + "\\" + username.toUpperCase(Locale.ROOT);
   }
 
   private String resolveServiceClientId(Map<String, Object> claims) {

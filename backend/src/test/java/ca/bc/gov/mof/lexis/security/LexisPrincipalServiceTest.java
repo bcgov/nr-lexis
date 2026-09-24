@@ -33,7 +33,7 @@ class LexisPrincipalServiceTest {
 
     String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
 
-    assertThat(principalName).isEqualTo("IDIR\\staff.user");
+    assertThat(principalName).isEqualTo("IDIR\\STAFF.USER");
   }
 
   @Test
@@ -47,7 +47,7 @@ class LexisPrincipalServiceTest {
 
     String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
 
-    assertThat(principalName).isEqualTo("BCEIDBUSINESS\\industry.user");
+    assertThat(principalName).isEqualTo("BCEID\\INDUSTRY.USER");
   }
 
   @Test
@@ -61,7 +61,7 @@ class LexisPrincipalServiceTest {
 
     String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
 
-    assertThat(principalName).isEqualTo("BCEIDBUSINESS\\AB123456");
+    assertThat(principalName).isEqualTo("BCEID\\AB123456");
   }
 
   @Test
@@ -74,7 +74,7 @@ class LexisPrincipalServiceTest {
                 "idir_username", "staff.user",
                 "preferred_username", "opaque-guid@azureidir"));
     assertThat(service.resolvePrincipalName(new JwtAuthenticationToken(token)))
-        .isEqualTo("IDIR\\staff.user");
+        .isEqualTo("IDIR\\STAFF.USER");
   }
 
   @Test

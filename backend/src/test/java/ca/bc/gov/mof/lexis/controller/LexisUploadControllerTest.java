@@ -1607,7 +1607,7 @@ class LexisUploadControllerTest {
         .thenReturn(payload);
     when(
             applicationSubmissionImportService.importDedicatedFederalApplicationSubmission(
-                submissionData, "federal-direct.xml", "IDIR\\shared-name", "FED-REF-1"))
+                submissionData, "federal-direct.xml", "IDIR\\SHARED-NAME", "FED-REF-1"))
         .thenReturn(payload);
 
     ResponseEntity<ApplicationSubmissionImportResultDto> serviceResponse =
@@ -1659,7 +1659,7 @@ class LexisUploadControllerTest {
             "FED-REF-1");
     verify(applicationSubmissionImportService)
         .importDedicatedFederalApplicationSubmission(
-            submissionData, "federal-direct.xml", "IDIR\\shared-name", "FED-REF-1");
+            submissionData, "federal-direct.xml", "IDIR\\SHARED-NAME", "FED-REF-1");
   }
 
   @Test

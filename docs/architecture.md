@@ -54,7 +54,9 @@ ID (`azp`), then translates client roles into its existing internal authorities.
 (`bceidbusiness`) Provincial Submitter and Federal Read Only roles. Missing or unknown providers
 and incompatible roles grant no corresponding authority. Scoped roles such as
 `LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00001018` retain their eight-digit client scope;
-`FAM:` metadata roles grant no application access. Existing audit usernames are preserved.
+`FAM:` metadata roles grant no application access. Audit usernames keep legacy LEXIS's WebADE
+form, `IDIR\USERNAME` or `BCEID\USERNAME` in upper case, so users keep one name across legacy and
+modern rows.
 When FAM assigns a Provincial Submitter to multiple forest clients, LEXIS requires a per-session
 active organization selection. The frontend sends that selection with each API request and the
 backend validates it against the client-scoped FAM authorities before enforcing it for every
