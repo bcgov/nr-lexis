@@ -1219,6 +1219,55 @@ describe('Reports Page Actions', () => {
     })
   })
 
+  it('limits a regional tenure types report to the user regions', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          grantedActions: ['/tenureReport'],
+          actionRegions: { tenurereport: ['1908'] },
+        }),
+      }),
+    )
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      defaultRegion: '1903',
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1908', label: 'Skeena Natural Resource Region' },
+      ],
+    })
+    const defaultDates = legacyTenureDefaultDates()
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=tenureReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    await waitFor(() => {
+      expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
+    })
+    await chooseComboBoxOption('Report variant', 'Tenure types report')
+    await userEvent.type(screen.getByLabelText('Tenure type 1'), 'A01')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'tenureReport',
+        actionMapping: 'generateTenureReport',
+        values: {
+          ...defaultDates,
+          region: '1908',
+          regionLabel: 'Skeena Natural Resource Region',
+          tenureType1: 'A01',
+        },
+      })
+    })
+  })
+
   it('does not let inactive permit option failures block a timber marks report', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockRejectedValueOnce(new Error('Report options unavailable'))

@@ -45,6 +45,7 @@ import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import Modal from '@/components/Modal'
 import { useAuth } from '@/context/auth/useAuth'
+import { allowedRegions, withinRegions } from '@/context/auth/region-utils'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import {
@@ -1170,7 +1171,11 @@ const ProvincialApplicationDetailsPage = () => {
   // Writes also need the application's region when the user's grant is regional.
   const applicationOrgUnit = detail?.orgUnitNumber ?? null
   const canUploadApplicationDocuments = canPerform('/fileApplicationUpload', applicationOrgUnit)
-  const canDeleteDocuments = canDeleteApplicationDocuments(detail, capabilities?.roles ?? [])
+  // Document deletion stays role-based, limited to the application's region for regional grants;
+  // it does not depend on holding the upload action.
+  const canDeleteDocuments =
+    canDeleteApplicationDocuments(detail, capabilities?.roles ?? []) &&
+    withinRegions(allowedRegions(capabilities, '/fileApplicationUpload'), applicationOrgUnit)
   const documentUploadUnavailableMessage = applicationDocumentUploadUnavailableMessage(
     detail,
     permitRows,

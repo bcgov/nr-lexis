@@ -1043,6 +1043,11 @@ export const ReportsPageContent = () => {
         if (['fromDate', 'toDate', 'outputFormat'].includes(field.key)) {
           return true
         }
+        // Legacy ran the tenure type and timber mark analyses for every region; a regional
+        // user must name their regions instead.
+        if (field.key === 'region' && reportRegionsAllowed) {
+          return true
+        }
         if (selectedActionMapping === 'generateTenureReport') {
           return /^tenureType[1-6]$/.test(field.key)
         }
@@ -1052,7 +1057,7 @@ export const ReportsPageContent = () => {
         return !/^(tenureType|timberMark)[1-6]$/.test(field.key)
       }),
     }
-  }, [selectedReport, selectedActionMapping])
+  }, [selectedReport, selectedActionMapping, reportRegionsAllowed])
   const requiredReportOptionSources = useMemo(
     () => (hasSelectedReportAccess ? getRequiredReportOptionSources(selectedReportVariant) : []),
     [hasSelectedReportAccess, selectedReportVariant],

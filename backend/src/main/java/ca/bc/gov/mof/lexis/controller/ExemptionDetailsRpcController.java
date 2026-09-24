@@ -442,6 +442,7 @@ public class ExemptionDetailsRpcController {
 
     Long parsedDocumentId = parsePositiveLong(documentId);
     requireExemptionAccess(exemptionNumber, authentication);
+    requireExemptionWriteAccess(exemptionNumber, authentication);
     if (!service.documentCanBeRemovedFromExemption(parsedDocumentId, exemptionNumber)) {
       throw new AccessDeniedException(
           "Document is not an exemption-owned attachment for the supplied exemption.");
@@ -462,6 +463,7 @@ public class ExemptionDetailsRpcController {
                 service, exemptionNumbers, List.of()),
         () -> {
           requireExemptionAccess(exemptionNumber, authentication);
+          requireExemptionWriteAccess(exemptionNumber, authentication);
           if (!service.documentCanBeRemovedFromExemption(
               parsedDocumentId, exemptionNumber)) {
             throw new AccessDeniedException(
@@ -535,8 +537,10 @@ public class ExemptionDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
     requireExemptionAccess(exemptionNumber, authentication);
+    requireExemptionWriteAccess(exemptionNumber, authentication);
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
     requireApplicationAccess(parsedApplicationNumber, authentication);
+    requireExemptionApplicationLink(exemptionNumber, parsedApplicationNumber, authentication);
 
     List<String> exemptionNumbers =
         normalizedExemptionNumbers(exemptionNumber);
@@ -551,6 +555,9 @@ public class ExemptionDetailsRpcController {
                 service, exemptionNumbers, additionalApplicationNumbers),
         () -> {
           requireExemptionAccess(exemptionNumber, authentication);
+          requireExemptionWriteAccess(exemptionNumber, authentication);
+          requireExemptionApplicationLink(
+              exemptionNumber, parsedApplicationNumber, authentication);
           List<Long> applicationNumbers =
               linkedApplicationNumbersForMutation(
                   service, exemptionNumbers, additionalApplicationNumbers);
@@ -602,8 +609,10 @@ public class ExemptionDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
     requireExemptionAccess(exemptionNumber, authentication);
+    requireExemptionWriteAccess(exemptionNumber, authentication);
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
     requireApplicationAccess(parsedApplicationNumber, authentication);
+    requireExemptionApplicationLink(exemptionNumber, parsedApplicationNumber, authentication);
 
     List<String> exemptionNumbers =
         normalizedExemptionNumbers(exemptionNumber);
@@ -618,6 +627,9 @@ public class ExemptionDetailsRpcController {
                 service, exemptionNumbers, additionalApplicationNumbers),
         () -> {
           requireExemptionAccess(exemptionNumber, authentication);
+          requireExemptionWriteAccess(exemptionNumber, authentication);
+          requireExemptionApplicationLink(
+              exemptionNumber, parsedApplicationNumber, authentication);
           List<Long> applicationNumbers =
               linkedApplicationNumbersForMutation(
                   service, exemptionNumbers, additionalApplicationNumbers);
@@ -702,7 +714,12 @@ public class ExemptionDetailsRpcController {
                     createRequest,
                     userId(authentication),
                     authorizationService.canPerformAction(
-                        roles, LEGACY_ACTION_APPROVE_EXEMPTION));
+                            roles, LEGACY_ACTION_APPROVE_EXEMPTION)
+                        && canApproveInRegions(
+                            null,
+                            createRequest.regionNumbers(),
+                            createRequest.applicationNumbers(),
+                            authentication));
             return toExemptionPersistenceResponse(result);
           } finally {
             releaseApplicationLocks(applicationLocksToRelease, authentication);
@@ -760,7 +777,8 @@ public class ExemptionDetailsRpcController {
             updateRequest.previousExemptionNumber(), updateRequest.exemptionNumber());
     requireExemptionAccess(existingExemptionNumber, authentication);
     requireExemptionWriteAccess(existingExemptionNumber, authentication);
-    requireBlanketOicRoleScope(updateRequest.exemptionTypeCode(), authentication);
+    requireBlanketOicRoleScope(
+        updateRequest.exemptionTypeCode(), updateRequest.regionNumbers(), authentication);
     requireExemptionRegionAccess(updateRequest.regionNumbers(), authentication);
     List<String> exemptionNumbers =
         normalizedExemptionNumbers(
@@ -777,7 +795,7 @@ public class ExemptionDetailsRpcController {
           requireExemptionAccess(existingExemptionNumber, authentication);
           requireExemptionWriteAccess(existingExemptionNumber, authentication);
           requireBlanketOicRoleScope(
-              updateRequest.exemptionTypeCode(), authentication);
+              updateRequest.exemptionTypeCode(), updateRequest.regionNumbers(), authentication);
           requireExemptionRegionAccess(updateRequest.regionNumbers(), authentication);
           List<Long> applicationNumbers =
               linkedApplicationNumbersForMutation(
@@ -798,7 +816,12 @@ public class ExemptionDetailsRpcController {
                     updateRequest,
                     userId(authentication),
                     authorizationService.canPerformAction(
-                        roles, "approveExemption"));
+                            roles, LEGACY_ACTION_APPROVE_EXEMPTION)
+                        && canApproveInRegions(
+                            existingExemptionNumber,
+                            updateRequest.regionNumbers(),
+                            List.of(),
+                            authentication));
             return toExemptionPersistenceResponse(result);
           } finally {
             releaseApplicationLocks(
@@ -896,6 +919,8 @@ public class ExemptionDetailsRpcController {
 
     requireExemptionAccess(
         firstTrimmedNonBlank(exemptionNumber, legacyExemptionNumber), authentication);
+    requireExemptionWriteAccess(
+        firstTrimmedNonBlank(exemptionNumber, legacyExemptionNumber), authentication);
 
     ExemptionDetailsRpcService.ExemptionApprovalEmailResult result =
         service.sendExemptionApprovalEmail(
@@ -930,6 +955,7 @@ public class ExemptionDetailsRpcController {
         String[] pair = entry.split(":", 2);
         if (pair.length == 2 && !pair[0].isBlank()) {
           requireExemptionAccess(pair[0].trim(), authentication);
+          requireExemptionWriteAccess(pair[0].trim(), authentication);
         }
       }
     }
@@ -1254,18 +1280,36 @@ public class ExemptionDetailsRpcController {
     if (request == null) {
       throw new AccessDeniedException("Exemption details are required.");
     }
-    requireBlanketOicRoleScope(request.exemptionTypeCode(), authentication);
+    requireBlanketOicRoleScope(
+        request.exemptionTypeCode(), request.regionNumbers(), authentication);
     normalizedApplicationNumbers(request.applicationNumbers())
         .forEach(applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
   }
 
   private void requireBlanketOicRoleScope(
-      String exemptionTypeCode, Authentication authentication) {
+      String exemptionTypeCode, List<Long> regionNumbers, Authentication authentication) {
     String exemptionType = firstTrimmedNonBlank(exemptionTypeCode);
-    if ("B".equalsIgnoreCase(exemptionType)
-        && provincialAuthorizationService != null
-        && !provincialAuthorizationService.canViewBlanketOic(authentication)) {
-      throw new AccessDeniedException("Blanket OIC exemptions are outside the authenticated role scope.");
+    if ("B".equalsIgnoreCase(exemptionType) && provincialAuthorizationService != null) {
+      provincialAuthorizationService.requireBlanketOicRegions(authentication, regionNumbers);
+    }
+  }
+
+  /** Activation through save or create is an approval, limited to the approver grants' regions. */
+  private boolean canApproveInRegions(
+      String exemptionNumber,
+      List<Long> regionNumbers,
+      List<Long> applicationNumbers,
+      Authentication authentication) {
+    return provincialAuthorizationService == null
+        || provincialAuthorizationService.canApproveExemption(
+            authentication, exemptionNumber, regionNumbers, applicationNumbers);
+  }
+
+  private void requireExemptionApplicationLink(
+      String exemptionNumber, Long applicationNumber, Authentication authentication) {
+    if (provincialAuthorizationService != null) {
+      provincialAuthorizationService.requireExemptionApplicationLink(
+          authentication, exemptionNumber, applicationNumber);
     }
   }
 

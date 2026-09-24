@@ -603,6 +603,9 @@ public class ExemptionRepository extends OracleRepositorySupport {
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
       addRegionFilter(where, criteria.regionNumbers(), criteria.includeBlanketOic());
     }
+    if (criteria.nonMinisterialRegionNumbers() != null) {
+      addNonMinisterialRegionFilter(where, criteria.nonMinisterialRegionNumbers());
+    }
     return where.build(suffix);
   }
 
@@ -794,19 +797,49 @@ public class ExemptionRepository extends OracleRepositorySupport {
     bindValues.addAll(distinct);
     bindValues.addAll(distinct);
     String condition =
-        " AND ((EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_REGION "
-            + "WHERE EEA_REGION.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
-            + "AND EEA_REGION.OIC_INDICATOR = 'N' "
-            + "AND EEA_REGION.ORG_UNIT_NO IN ("
-            + placeholders
-            + ")) OR EXISTS (SELECT 1 FROM OIC_EXEMPTION_ORG_UNIT OEO_REGION "
-            + "WHERE OEO_REGION.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
-            + "AND OEO_REGION.ORG_UNIT_NO IN ("
-            + placeholders
-            + "))"
+        " AND (("
+            + regionExists(placeholders.toString())
             + (includeBlanketOic ? " OR EE.EXPORT_EXEMPTION_TYPE_CODE = 'B'" : "")
             + "))";
     where.addRawWithBinds(condition, bindValues.toArray());
+  }
+
+  /**
+   * Non-Ministerial exemptions match only in the given regions; Ministerial ones are left to the
+   * other filters. An empty list leaves only Ministerial exemptions.
+   */
+  private void addNonMinisterialRegionFilter(DirectSqlBuilder where, List<Long> regionNumbers) {
+    LinkedHashSet<Long> distinct = new LinkedHashSet<>();
+    regionNumbers.stream()
+        .filter(value -> value != null && value > 0)
+        .forEach(distinct::add);
+    if (distinct.isEmpty()) {
+      where.addRaw(" AND EE.EXPORT_EXEMPTION_TYPE_CODE = 'M'");
+      return;
+    }
+
+    StringJoiner placeholders = new StringJoiner(", ");
+    distinct.forEach(ignored -> placeholders.add("?"));
+    List<Object> bindValues = new java.util.ArrayList<>(distinct.size() * 2);
+    bindValues.addAll(distinct);
+    bindValues.addAll(distinct);
+    where.addRawWithBinds(
+        " AND (EE.EXPORT_EXEMPTION_TYPE_CODE = 'M' OR " + regionExists(placeholders.toString()) + ")",
+        bindValues.toArray());
+  }
+
+  /** Whether the exemption has an application or OIC region in the bound placeholders. */
+  private static String regionExists(String placeholders) {
+    return "EXISTS (SELECT 1 FROM EXPORT_EXEMPTION_APPLICATION EEA_REGION "
+        + "WHERE EEA_REGION.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
+        + "AND EEA_REGION.OIC_INDICATOR = 'N' "
+        + "AND EEA_REGION.ORG_UNIT_NO IN ("
+        + placeholders
+        + ")) OR EXISTS (SELECT 1 FROM OIC_EXEMPTION_ORG_UNIT OEO_REGION "
+        + "WHERE OEO_REGION.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER "
+        + "AND OEO_REGION.ORG_UNIT_NO IN ("
+        + placeholders
+        + "))";
   }
 
   public Optional<ExemptionDetailDto> findByExemptionNumber(String exemptionNumber) {

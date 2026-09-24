@@ -117,6 +117,33 @@ public class LexisAuthorizationService {
   }
 
   /**
+   * As {@link #resolveStaffRegionConstraintForAny}, for grants of the named staff roles. Used where
+   * a capability belongs to a role rather than an action, so another role holding the route's
+   * action province-wide does not widen it.
+   */
+  public OrgUnitConstraint resolveStaffRegionConstraintForRoles(
+      List<String> authorities, Collection<String> roles) {
+    Set<Long> orgUnits = new LinkedHashSet<>();
+    if (authorities == null || roles == null) {
+      return new OrgUnitConstraint(true, List.of());
+    }
+    for (String authority : authorities) {
+      if (authority == null) {
+        continue;
+      }
+      var regionalGrant = FamRegionGrant.parse(authority);
+      if (regionalGrant.isPresent()) {
+        if (roles.contains(regionalGrant.get().role())) {
+          orgUnits.add(regionalGrant.get().region().orgUnitNumber());
+        }
+      } else if (PROVINCIAL_STAFF_ROLES.contains(authority) && roles.contains(authority)) {
+        return new OrgUnitConstraint(false, List.of());
+      }
+    }
+    return new OrgUnitConstraint(true, List.copyOf(orgUnits));
+  }
+
+  /**
    * The organization units each granted action is limited to, for actions a regional grant
    * limits. Actions absent from the result are province-wide; users without a regional grant get
    * an empty map.

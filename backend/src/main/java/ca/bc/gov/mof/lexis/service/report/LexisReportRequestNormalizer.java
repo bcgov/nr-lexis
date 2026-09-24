@@ -62,6 +62,18 @@ public final class LexisReportRequestNormalizer {
           normalized.put(name, value.trim());
         });
 
+    // Report region filters consume region or orgUnitNumber. Populate a missing alias
+    // before authorization so an accepted region cannot disappear during report generation.
+    // If both are supplied, retain both: regional authorization must validate each value.
+    String region = normalized.get("region");
+    String orgUnitNumber = normalized.get("orgUnitNumber");
+    if ((region == null || region.isBlank()) && orgUnitNumber != null) {
+      normalized.put("region", orgUnitNumber);
+    }
+    if ((orgUnitNumber == null || orgUnitNumber.isBlank()) && region != null) {
+      normalized.put("orgUnitNumber", region);
+    }
+
     DATE_RANGES.forEach(range -> normalizeAndValidateDateRange(normalized, range));
     return Map.copyOf(normalized);
   }

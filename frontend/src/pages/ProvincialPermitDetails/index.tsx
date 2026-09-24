@@ -47,6 +47,7 @@ import {
 } from '@carbon/react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import { allowedRegions, withinRegions } from '@/context/auth/region-utils'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole, hasRole, isPureReadOnlyRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -2021,11 +2022,14 @@ const ProvincialPermitDetailsPage = () => {
     adminUser ||
     hasRole(capabilities.roles, 'APPLICATION_APPROVER') ||
     hasProvincialSubmitterRole(capabilities.roles)
+  // Document deletion stays role-based, limited to the permit's region for regional grants; it
+  // does not depend on holding the upload action.
   const canDeletePermitDocuments =
     permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
     !!permitStatusCode &&
+    withinRegions(allowedRegions(capabilities, '/filePermitUpload'), permitOrgUnit) &&
     (adminUser ||
       (hasDocumentActorRole &&
         !readOnlyUser &&
@@ -2034,6 +2038,7 @@ const ProvincialPermitDetailsPage = () => {
     permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
+    withinRegions(allowedRegions(capabilities, '/fileInvoiceUpload'), permitOrgUnit) &&
     hasDocumentActorRole &&
     (adminUser || !readOnlyUser) &&
     permitStatusCode === 'ACT'

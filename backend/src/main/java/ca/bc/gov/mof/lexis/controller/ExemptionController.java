@@ -128,8 +128,9 @@ public class ExemptionController {
       applicantClientNumber = scopedClientNumber;
       ownerClientNumber = null;
     }
-    boolean canSearchOicExemptions =
-        provincialAuthorizationService.canViewBlanketOic(authentication);
+    OrgUnitConstraint nonMinisterialRegions =
+        provincialAuthorizationService.resolveBlanketOicRegions(authentication);
+    boolean canSearchOicExemptions = !nonMinisterialRegions.denied();
     if (!canSearchOicExemptions) {
       exemptionType = "M";
       exemptionTypeCode = null;
@@ -165,7 +166,8 @@ public class ExemptionController {
             scopedClientNumber != null,
             sortField,
             page,
-            size);
+            size,
+            nonMinisterialRegions);
 
     ExemptionSearchResponseDto response;
     if (knownTotal != null) {
@@ -210,8 +212,9 @@ public class ExemptionController {
       applicantClientNumber = scopedClientNumber;
       ownerClientNumber = null;
     }
-    boolean canSearchOicExemptions =
-        provincialAuthorizationService.canViewBlanketOic(authentication);
+    OrgUnitConstraint nonMinisterialRegions =
+        provincialAuthorizationService.resolveBlanketOicRegions(authentication);
+    boolean canSearchOicExemptions = !nonMinisterialRegions.denied();
     if (!canSearchOicExemptions) {
       exemptionType = "M";
       exemptionTypeCode = null;
@@ -247,7 +250,8 @@ public class ExemptionController {
             scopedClientNumber != null,
             null,
             0,
-            1);
+            1,
+            nonMinisterialRegions);
     return ResponseEntity.ok(new SearchCountResponseDto(service.count(criteria)));
   }
 
@@ -351,7 +355,8 @@ public class ExemptionController {
       boolean broadClientMatch,
       String sortField,
       Integer page,
-      Integer size) {
+      Integer size,
+      OrgUnitConstraint nonMinisterialRegions) {
     return new ExemptionSearchCriteria(
         applicationNumber,
         packageNumber,
@@ -370,7 +375,11 @@ public class ExemptionController {
         broadClientMatch,
         sortField,
         page,
-        size);
+        size,
+        // Ministerial exemptions follow the search regions; the rest also need a Blanket OIC region.
+        nonMinisterialRegions.restricted() && !nonMinisterialRegions.denied()
+            ? nonMinisterialRegions.orgUnitNumbers()
+            : null);
   }
 
   private ExemptionSearchResponseDto withSearchLocks(ExemptionSearchResponseDto response) {

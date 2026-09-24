@@ -48,6 +48,7 @@ import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { useAuth } from '@/context/auth/useAuth'
+import { allowedRegions, withinRegions } from '@/context/auth/region-utils'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
@@ -763,6 +764,13 @@ const ProvincialExemptionDetailsPage = () => {
   // Regional users change or approve an exemption only when they hold all of its regions, and
   // create permits from it when they hold one of them (the permit's own region is checked too).
   const exemptionOrgUnits = editContext.regionNumbers
+  // Linking applications and deleting documents are Application Approver capabilities, limited to
+  // the Approver grants' regions even when another role holds saveExemption province-wide. Among
+  // staff roles only Approvers and Administrators hold /createExemption, so its regions are theirs.
+  const withinApproverRegions = withinRegions(
+    allowedRegions(capabilities, '/createExemption'),
+    exemptionOrgUnits,
+  )
   const canPerformInAnyExemptionRegion = (action: string) =>
     // A null record region passes only for province-wide users.
     canPerform(action, null) || exemptionOrgUnits.some((orgUnit) => canPerform(action, orgUnit))
@@ -824,6 +832,7 @@ const ProvincialExemptionDetailsPage = () => {
     documentUploadBusy
   const canLinkApplications =
     isApplicationApprover &&
+    withinApproverRegions &&
     canSaveExemption &&
     !applicationsErrorMessage &&
     !editing &&
@@ -1045,6 +1054,7 @@ const ProvincialExemptionDetailsPage = () => {
     canPerform('/fileExemptionUpload', exemptionOrgUnits) && !exemptionEditLocked
   const canDeleteExemptionDocuments =
     isApplicationApprover &&
+    withinApproverRegions &&
     persistedStatusCode.length > 0 &&
     persistedStatusCode !== 'EXP' &&
     editContextLoaded &&

@@ -841,6 +841,78 @@ class ExemptionDetailsRpcControllerTest {
   }
 
   @Test
+  void linkAndDocumentChangesShouldRequireEveryExemptionRegion() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\regional-approver", "n/a");
+    List<String> roles = List.of("LEXIS_APPLICATION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "saveExemption")).thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new AccessDeniedException("outside write regions"))
+        .when(provincialAuthorizationService)
+        .requireExemptionWrite(authentication, "EX-205");
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+
+    assertThatThrownBy(
+            () -> controller.addApplicationToExemption("1000456", "EX-205", authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(
+            () -> controller.removeApplicationFromExemption("1000456", "EX-205", authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(() -> controller.removeDocument("55", "EX-205", authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void linkingShouldStayInsideTheApplicationApproverRegions() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\mixed-approver", "n/a");
+    List<String> roles = List.of("LEXIS_EXEMPTION_APPROVER", "LEXIS_APPLICATION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "saveExemption")).thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new AccessDeniedException("outside approver regions"))
+        .when(provincialAuthorizationService)
+        .requireExemptionApplicationLink(authentication, "EX-205", 1000456L);
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+
+    assertThatThrownBy(
+            () -> controller.addApplicationToExemption("1000456", "EX-205", authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(
+            () -> controller.removeApplicationFromExemption("1000456", "EX-205", authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void approvalEmailsShouldRequireEveryExemptionRegion() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\regional-exemption-approver", "n/a");
+    List<String> roles = List.of("LEXIS_EXEMPTION_APPROVER");
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
+    when(authorizationService.canPerformAction(roles, "approveExemption")).thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new AccessDeniedException("outside write regions"))
+        .when(provincialAuthorizationService)
+        .requireExemptionWrite(authentication, "EX-205");
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+
+    assertThatThrownBy(
+            () ->
+                controller.sendExemptionApprovalEmail(
+                    "EX-205", null, "client@example.com", authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(
+            () ->
+                controller.sendExemptionApprovalEmails(
+                    "EX-205:client@example.com", authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    verifyNoInteractions(service);
+  }
+
+  @Test
   void addExemptionShouldRequireCreateAuthorityInsteadOfExistingExemptionSaveAuthority() {
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\exemption-approver", "n/a");
@@ -859,6 +931,12 @@ class ExemptionDetailsRpcControllerTest {
   void addExemptionLegacyShouldMapAliasesAndReturnPersistencePayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    when(provincialAuthorizationService.canApproveExemption(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.any()))
+        .thenReturn(true);
     when(service.addExemption(
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.eq("IDIR\\JSMITH"),
@@ -890,7 +968,6 @@ class ExemptionDetailsRpcControllerTest {
         .thenReturn(true);
     when(authorizationService.canPerformAction(List.of("LEXIS_APPLICATION_APPROVER"), "approveExemption"))
         .thenReturn(true);
-    when(provincialAuthorizationService.canViewBlanketOic(authentication)).thenReturn(true);
     ResponseEntity<ExemptionDetailsRpcController.ExemptionPersistenceResponseDto> response =
         controller.addExemptionLegacy(params, authentication);
 
@@ -1018,6 +1095,11 @@ class ExemptionDetailsRpcControllerTest {
             List.of("LEXIS_EXEMPTION_APPROVER"), "/createExemption"))
         .thenReturn(true);
 
+    doThrow(new AccessDeniedException("Blanket OIC exemptions are outside the role scope."))
+        .when(provincialAuthorizationService)
+        .requireBlanketOicRegions(
+            org.mockito.ArgumentMatchers.eq(authentication), org.mockito.ArgumentMatchers.any());
+
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("exemptionNumber", "BOIC-205");
     params.add("exemptionTypeCode", "B");
@@ -1121,13 +1203,18 @@ class ExemptionDetailsRpcControllerTest {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     TestingAuthenticationToken authentication = new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(provincialAuthorizationService.canApproveExemption(
+            org.mockito.ArgumentMatchers.eq(authentication),
+            org.mockito.ArgumentMatchers.eq("EX-205"),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.eq(List.of())))
+        .thenReturn(true);
     when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "saveExemption"))
         .thenReturn(true);
     when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
         .thenReturn(true);
-    when(provincialAuthorizationService.canViewBlanketOic(authentication)).thenReturn(true);
     when(service.updateExemption(
             org.mockito.ArgumentMatchers.any(),
             org.mockito.ArgumentMatchers.eq("IDIR\\JSMITH"),
@@ -1269,6 +1356,12 @@ class ExemptionDetailsRpcControllerTest {
                 true, "updated", "EX-206", false, List.of(), List.of()));
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     controller.setApplicationEditLockService(editLockService);
+    when(provincialAuthorizationService.canApproveExemption(
+            org.mockito.ArgumentMatchers.eq(authentication),
+            org.mockito.ArgumentMatchers.eq("EX-205"),
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.eq(List.of())))
+        .thenReturn(true);
 
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("exemptionNumber", "EX-206");
@@ -1301,6 +1394,10 @@ class ExemptionDetailsRpcControllerTest {
     when(authorizationService.canPerformAction(
             List.of("LEXIS_EXEMPTION_APPROVER"), "saveExemption"))
         .thenReturn(true);
+    doThrow(new AccessDeniedException("Blanket OIC exemptions are outside the role scope."))
+        .when(provincialAuthorizationService)
+        .requireBlanketOicRegions(
+            org.mockito.ArgumentMatchers.eq(authentication), org.mockito.ArgumentMatchers.any());
 
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("exemptionNumber", "EX-205");

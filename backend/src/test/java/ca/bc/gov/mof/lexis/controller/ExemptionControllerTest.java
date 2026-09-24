@@ -66,6 +66,11 @@ class ExemptionControllerTest {
         .thenReturn(true);
     lenient()
         .when(
+            provincialAuthorizationService.resolveBlanketOicRegions(
+                nullable(Authentication.class)))
+        .thenReturn(new ProvincialAuthorizationService.OrgUnitConstraint(false, List.of()));
+    lenient()
+        .when(
             provincialAuthorizationService.constrainOrgUnits(
                 nullable(Authentication.class), any(), any()))
         .thenAnswer(
@@ -317,7 +322,8 @@ class ExemptionControllerTest {
   void searchShouldForceMinisterialTypeForPureExemptionApprover(
       String exemptionType, String exemptionTypeCode) {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(provincialAuthorizationService.canViewBlanketOic(authentication)).thenReturn(false);
+    when(provincialAuthorizationService.resolveBlanketOicRegions(authentication))
+        .thenReturn(new ProvincialAuthorizationService.OrgUnitConstraint(true, List.of()));
     when(service.search(any(ExemptionSearchCriteria.class)))
         .thenReturn(new ExemptionSearchResponseDto(List.of(), 0, 0, 25));
 
@@ -360,7 +366,8 @@ class ExemptionControllerTest {
   void countShouldForceMinisterialTypeForPureExemptionApprover(
       String exemptionType, String exemptionTypeCode) {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(provincialAuthorizationService.canViewBlanketOic(authentication)).thenReturn(false);
+    when(provincialAuthorizationService.resolveBlanketOicRegions(authentication))
+        .thenReturn(new ProvincialAuthorizationService.OrgUnitConstraint(true, List.of()));
     when(service.count(any(ExemptionSearchCriteria.class))).thenReturn(0);
 
     controller.count(
@@ -389,6 +396,47 @@ class ExemptionControllerTest {
     ExemptionSearchCriteria criteria = criteriaCaptor.getValue();
     assertThat(criteria.exemptionType()).isEqualTo("M");
     assertThat(criteria.excludeBlanketOic()).isTrue();
+  }
+
+  @Test
+  void searchShouldLimitNonMinisterialExemptionsToTheBlanketOicRegions() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(provincialAuthorizationService.resolveBlanketOicRegions(authentication))
+        .thenReturn(new ProvincialAuthorizationService.OrgUnitConstraint(true, List.of(1903L)));
+    when(service.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(new ExemptionSearchResponseDto(List.of(), 0, 0, 25));
+
+    controller.search(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        List.of(),
+        null,
+        0,
+        25,
+        null,
+        authentication);
+
+    ArgumentCaptor<ExemptionSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
+    verify(service).search(criteriaCaptor.capture());
+
+    ExemptionSearchCriteria criteria = criteriaCaptor.getValue();
+    assertThat(criteria.exemptionType()).isNull();
+    assertThat(criteria.excludeBlanketOic()).isFalse();
+    assertThat(criteria.nonMinisterialRegionNumbers()).containsExactly(1903L);
   }
 
   @Test

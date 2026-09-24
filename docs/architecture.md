@@ -69,14 +69,44 @@ province-wide; a regional grant such as `LEXIS_APPLICATION_APPROVER_REGION_REGIO
 the same actions for records in its regions only (organization units 1903-1910). Each grant keeps
 its own regions, and record checks apply the regions of both the surface and the action the route
 authorized, so province-wide Read Only plus Cariboo Application Approver reads everywhere but
-writes only in Cariboo. Writing or approving a multi-region record requires every region;
-creating a permit from an exemption needs one of its regions, and the permit's own region must be
-granted. A regional user's reports must name only their regions. Records without a region, or
+writes only in Cariboo. Writing or approving a multi-region record requires every region, including
+linking or unlinking an exemption's applications, removing its documents and sending its approval
+emails. Activating an exemption through a save or create is an approval, so it needs the regions of
+the user's Exemption Approver grants rather than those of the route's save or create action.
+Creating a permit from an exemption needs one of its regions, and the permit's own region must be
+granted. A regional user's reports must name only their regions, including the tenure type and
+timber mark analyses that legacy always ran province-wide; a region sent as either `region` or
+`orgUnitNumber` is copied to the other key before authorization, so the report filters on exactly
+what was authorized. Records without a region, or
 still tagged with a pre-2010 forest region, are outside every regional grant. Administrator and
 Business BCeID roles are never regional. Session capabilities list each region-limited action's regions
 (`actionRegions`), so region pickers offer only usable regions and write actions are hidden on
 records outside them; out-of-region federal applications open read-only and offers are not
 editable.
+
+### Mixed grants
+
+A user can hold several staff roles, some province-wide and some regional. LEXIS assumes each
+grant carries its own reach:
+
+- The same role granted both without and with a region is province-wide; the unscoped grant
+  supersedes the regional one.
+- A province-wide grant widens only the actions that role itself holds. Province-wide Read Only
+  plus Cariboo Application Approver reads everywhere but writes only in Cariboo; province-wide
+  Read Only plus a regional Exemption Approver can read everything and approve exemptions only in
+  the approver's regions.
+- Capabilities tied to a role rather than an action stay within the regions where the user holds
+  that role, even when another province-wide role holds the route's action. Linking applications
+  to exemptions is an Application Approver capability, so province-wide Exemption Approver plus
+  Cariboo Application Approver links only Cariboo applications to exemptions wholly in Cariboo.
+  Seeing Blanket OIC exemptions and searching non-Ministerial ones belongs to Application Approver
+  and Read Only, never a pure Exemption Approver, so the same user sees Ministerial exemptions
+  everywhere but the other types only in Cariboo.
+
+Legacy LEXIS offers no precedent: WebADE gave each user one set of organizations that limited the
+search lists of every non-administrator role alike, and detail pages and actions never checked
+region. The per-grant model is a modern assumption agreed for the FAM regional roles; revisit it
+if FAM assignments need a different combination.
 
 ### Interactive sign-in
 

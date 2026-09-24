@@ -39,6 +39,10 @@ public class ProvincialAuthorizationService {
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
 
   private static final OrgUnitConstraint UNRESTRICTED = new OrgUnitConstraint(false, List.of());
+  // Staff roles whose grants see Blanket OIC exemptions and search non-Ministerial ones; a pure
+  // Exemption Approver does neither.
+  private static final Set<String> NON_MINISTERIAL_EXEMPTION_ROLES =
+      Set.of(ROLE_APPLICATION_APPROVER, ROLE_READ_ONLY);
 
   private final LexisSessionService sessionService;
   private final LexisAuthorizationService authorizationService;
@@ -213,8 +217,8 @@ public class ProvincialAuthorizationService {
 
   private boolean canAccessExemption(
       Authentication authentication, ExemptionAccessDto exemption) {
-    Set<String> currentRoles = roles(authentication);
-    if (!canViewBlanketOic(currentRoles) && exemption.blanketOic()) {
+    if (exemption.blanketOic()
+        && !canViewBlanketOicRecord(authentication, exemption.exemptionNumber())) {
       return false;
     }
 
@@ -244,8 +248,8 @@ public class ProvincialAuthorizationService {
     if (exemption == null) {
       return false;
     }
-    Set<String> roles = roles(authentication);
-    if (!canViewBlanketOic(roles) && exemption.blanketOic()) {
+    if (exemption.blanketOic()
+        && !canViewBlanketOicRecord(authentication, exemption.exemptionNumber())) {
       return false;
     }
 
@@ -275,6 +279,60 @@ public class ProvincialAuthorizationService {
    */
   public boolean canViewBlanketOic(Authentication authentication) {
     return canViewBlanketOic(roles(authentication));
+  }
+
+  /**
+   * Regions where the user may see Blanket OIC exemptions and search non-Ministerial ones: those
+   * of their Application Approver and Read Only grants. A pure Exemption Approver gets none, and a
+   * province-wide Exemption Approver grant does not widen a regional Approver or Read Only grant.
+   */
+  public OrgUnitConstraint resolveBlanketOicRegions(Authentication authentication) {
+    if (!canViewBlanketOic(roles(authentication))) {
+      return new OrgUnitConstraint(true, List.of());
+    }
+    return roleRegions(authentication, NON_MINISTERIAL_EXEMPTION_ROLES);
+  }
+
+  /** A Blanket OIC exemption may only be given regions where the user can see Blanket OICs. */
+  public void requireBlanketOicRegions(Authentication authentication, List<Long> regionNumbers) {
+    OrgUnitConstraint regions = resolveBlanketOicRegions(authentication);
+    if (regions.denied() || !sanitizePositive(regionNumbers).stream().allMatch(regions::allows)) {
+      throw new AccessDeniedException(
+          "Blanket OIC exemptions are outside the authenticated role scope.");
+    }
+  }
+
+  /**
+   * Linking an application to an exemption is an Application Approver capability, so a regional
+   * Approver grant limits it to the Approver's regions: every region of the exemption and the
+   * application's own region. Another province-wide role holding saveExemption does not widen it.
+   */
+  public void requireExemptionApplicationLink(
+      Authentication authentication, String exemptionNumber, Long applicationNumber) {
+    OrgUnitConstraint regions = roleRegions(authentication, Set.of(ROLE_APPLICATION_APPROVER));
+    if (!regions.restricted()) {
+      return;
+    }
+    ExemptionService exemptionService = exemptionServiceProvider.getIfAvailable();
+    LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
+    String normalizedNumber = trimToNull(exemptionNumber);
+    List<Long> exemptionRegions =
+        exemptionService == null || normalizedNumber == null
+            ? List.of()
+            : sanitizePositive(exemptionService.findOrgUnitNumbers(normalizedNumber));
+    Long applicationRegion =
+        applicationService == null || applicationNumber == null || applicationNumber < 1
+            ? null
+            : applicationService
+                .findAccessByApplicationNumber(applicationNumber)
+                .map(ApplicationAccessContextDto::orgUnitNumber)
+                .orElse(null);
+    if (exemptionRegions.isEmpty()
+        || !exemptionRegions.stream().allMatch(regions::allows)
+        || !regions.allows(applicationRegion)) {
+      throw new AccessDeniedException(
+          "Linking applications is limited to the authenticated Application Approver regions.");
+    }
   }
 
   public boolean canAccessPermit(Authentication authentication, Long permitNumber) {
@@ -552,6 +610,47 @@ public class ProvincialAuthorizationService {
     }
   }
 
+  /**
+   * Activation through an ordinary save or create is an approval, so it resolves the regions of the
+   * user's approveExemption grants itself rather than those of the route's saveExemption or
+   * createExemption. Every region the exemption covers must be among them: the stored
+   * exemption's, any requested ones, and those of the applications a new exemption links.
+   */
+  public boolean canApproveExemption(
+      Authentication authentication,
+      String exemptionNumber,
+      List<Long> regionNumbers,
+      List<Long> applicationNumbers) {
+    List<String> authorities = sessionService.authorityNames(authentication);
+    if (!FamRegionGrant.anyIn(authorities) || roles(authentication).contains(ROLE_ADMIN)) {
+      return true;
+    }
+    OrgUnitConstraint regions =
+        authorizationService.resolveStaffRegionConstraint(authorities, "approveExemption");
+    if (!regions.restricted()) {
+      return true;
+    }
+    List<Long> orgUnits = new ArrayList<>(sanitizePositive(regionNumbers));
+    ExemptionService exemptionService = exemptionServiceProvider.getIfAvailable();
+    String normalizedNumber = trimToNull(exemptionNumber);
+    if (exemptionService != null && normalizedNumber != null) {
+      orgUnits.addAll(exemptionService.findOrgUnitNumbers(normalizedNumber));
+    }
+    LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
+    if (applicationService != null && applicationNumbers != null) {
+      for (Long applicationNumber : applicationNumbers) {
+        if (applicationNumber != null && applicationNumber > 0) {
+          applicationService
+              .findAccessByApplicationNumber(applicationNumber)
+              .map(ApplicationAccessContextDto::orgUnitNumber)
+              .ifPresent(orgUnits::add);
+        }
+      }
+    }
+    List<Long> covered = sanitizePositive(orgUnits);
+    return !covered.isEmpty() && covered.stream().allMatch(regions::allows);
+  }
+
   /** Whether a regional user's write grants for the surface cover the record's region. */
   public boolean canWriteRecord(
       Authentication authentication, Long orgUnitNumber, OrgUnitSurface surface) {
@@ -798,6 +897,30 @@ public class ProvincialAuthorizationService {
 
   private boolean isOrgUnitRestricted(Authentication authentication, OrgUnitSurface surface) {
     return regionConstraint(authentication, surface).restricted();
+  }
+
+  /**
+   * Regions where the user holds one of the roles, for capabilities granted by role name rather
+   * than by action (see "Mixed grants" in docs/architecture.md).
+   */
+  private OrgUnitConstraint roleRegions(Authentication authentication, Set<String> roles) {
+    List<String> authorities = sessionService.authorityNames(authentication);
+    if (!FamRegionGrant.anyIn(authorities) || roles(authentication).contains(ROLE_ADMIN)) {
+      return UNRESTRICTED;
+    }
+    return authorizationService.resolveStaffRegionConstraintForRoles(authorities, roles);
+  }
+
+  /** A Blanket OIC exemption is visible when one of its regions allows Blanket OICs. */
+  private boolean canViewBlanketOicRecord(Authentication authentication, String exemptionNumber) {
+    OrgUnitConstraint regions = resolveBlanketOicRegions(authentication);
+    if (!regions.restricted()) {
+      return true;
+    }
+    ExemptionService service = exemptionServiceProvider.getIfAvailable();
+    return !regions.denied()
+        && service != null
+        && service.findOrgUnitNumbers(exemptionNumber).stream().anyMatch(regions::allows);
   }
 
   /**

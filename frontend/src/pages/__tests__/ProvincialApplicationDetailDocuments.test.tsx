@@ -965,6 +965,50 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     ).toBeEnabled()
   })
 
+  it('hides application delete from approvers whose regions exclude the application', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action !== '/fileApplicationUpload',
+      ['LEXIS_APPLICATION_APPROVER'],
+      {
+        grantedActions: ['/fileApplicationUpload'],
+        actionRegions: { fileapplicationupload: ['1903'] },
+      },
+    )
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '104',
+          name: 'other-region-doc.pdf',
+          description: 'outside the approver region',
+          type: 'Attachment',
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
+    const documentRow = (await screen.findByText('other-region-doc.pdf')).closest('tr')
+    expect(documentRow).toBeTruthy()
+    expect(
+      within(documentRow as HTMLElement).queryByRole('button', {
+        name: 'Delete',
+      }),
+    ).not.toBeInTheDocument()
+    expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
+  })
+
   it('disables application document delete when status is unavailable', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,

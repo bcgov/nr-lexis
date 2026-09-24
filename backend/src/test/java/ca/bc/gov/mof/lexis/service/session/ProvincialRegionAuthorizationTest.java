@@ -11,6 +11,7 @@ import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
 import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.security.LexisRequestActions;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
@@ -241,6 +242,76 @@ class ProvincialRegionAuthorizationTest {
     // Regional Read Only can read the exemption but holds no exemption write action anywhere.
     assertThatThrownBy(() -> service.requireExemptionWrite(staff(READ_ONLY_SKEENA), "EX-2"))
         .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void exemptionLinkDocumentAndEmailRoutesAlsoNeedEveryRegion() {
+    when(exemptionService.findOrgUnitNumbers("EX-1")).thenReturn(List.of(CARIBOO, SKEENA));
+    when(exemptionService.findOrgUnitNumbers("EX-2")).thenReturn(List.of(CARIBOO));
+
+    // Link/unlink record saveExemption and document removal records /fileExemptionUpload.
+    for (String action : List.of("saveExemption", "/fileExemptionUpload")) {
+      requestAuthorizedFor(action);
+      assertThatThrownBy(() -> service.requireExemptionWrite(staff(APPROVER_CARIBOO), "EX-1"))
+          .isInstanceOf(AccessDeniedException.class);
+      assertThatCode(() -> service.requireExemptionWrite(staff(APPROVER_CARIBOO), "EX-2"))
+          .doesNotThrowAnyException();
+    }
+    // Approval emails record approveExemption.
+    requestAuthorizedFor("approveExemption");
+    assertThatThrownBy(
+            () -> service.requireExemptionWrite(staff(EXEMPTION_APPROVER_CARIBOO), "EX-1"))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void linkingStaysInTheApproverRegionsDespiteProvinceWideExemptionApproval() {
+    Authentication mixed = staff(EXEMPTION_APPROVER, APPROVER_CARIBOO);
+    when(exemptionService.findOrgUnitNumbers("EX-1")).thenReturn(List.of(CARIBOO));
+    when(exemptionService.findOrgUnitNumbers("EX-2")).thenReturn(List.of(CARIBOO, SKEENA));
+    when(applicationService.findAccessByApplicationNumber(20L))
+        .thenReturn(Optional.of(new ApplicationAccessContextDto(20L, "P", SKEENA, null, null)));
+    when(applicationService.findAccessByApplicationNumber(21L))
+        .thenReturn(Optional.of(new ApplicationAccessContextDto(21L, "P", CARIBOO, null, null)));
+
+    // saveExemption is province-wide through the Exemption Approver, but linking is the
+    // Application Approver's, which this user holds only in Cariboo.
+    assertThatCode(() -> service.requireExemptionApplicationLink(mixed, "EX-1", 21L))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> service.requireExemptionApplicationLink(mixed, "EX-1", 20L))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(() -> service.requireExemptionApplicationLink(mixed, "EX-2", 21L))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatCode(() -> service.requireExemptionApplicationLink(staff(APPROVER), "EX-2", 20L))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void blanketOicVisibilityFollowsTheApproverAndReadOnlyRegions() {
+    when(exemptionService.findAccessByExemptionNumber("B1"))
+        .thenReturn(Optional.of(new ExemptionAccessDto("B1", "B", "ACT", true)));
+    when(exemptionService.findAccessByExemptionNumber("B2"))
+        .thenReturn(Optional.of(new ExemptionAccessDto("B2", "B", "ACT", true)));
+    when(exemptionService.findOrgUnitNumbers("B1")).thenReturn(List.of(KOOTENAY_BOUNDARY));
+    when(exemptionService.findOrgUnitNumbers("B2")).thenReturn(List.of(CARIBOO));
+    requestAuthorizedFor("/exemptionDetails");
+
+    Authentication mixed = staff(EXEMPTION_APPROVER, APPROVER_CARIBOO);
+    assertThat(service.canAccessExemption(staff(EXEMPTION_APPROVER), "B1")).isFalse();
+    assertThat(service.canAccessExemption(mixed, "B1")).isFalse();
+    assertThat(service.canAccessExemption(mixed, "B2")).isTrue();
+    assertThat(service.canAccessExemption(staff(READ_ONLY, EXEMPTION_APPROVER_CARIBOO), "B1"))
+        .isTrue();
+
+    // Search: Ministerial exemptions everywhere, the other types only in Cariboo.
+    assertThat(service.resolveBlanketOicRegions(mixed).orgUnitNumbers()).containsExactly(CARIBOO);
+    assertThat(service.resolveBlanketOicRegions(staff(EXEMPTION_APPROVER)).denied()).isTrue();
+    assertThat(service.resolveBlanketOicRegions(staff(READ_ONLY)).restricted()).isFalse();
+
+    assertThatThrownBy(() -> service.requireBlanketOicRegions(mixed, List.of(KOOTENAY_BOUNDARY)))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatCode(() -> service.requireBlanketOicRegions(mixed, List.of(CARIBOO)))
+        .doesNotThrowAnyException();
   }
 
   @Test
