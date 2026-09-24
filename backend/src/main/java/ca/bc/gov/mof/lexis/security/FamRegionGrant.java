@@ -59,7 +59,10 @@ public record FamRegionGrant(String role, Region region) {
   /**
    * FAM uses Natural Resource Region names, while LEXIS uses Oracle organization-unit numbers.
    * These are the same eight regions used by LEXIS search options, not the RCO/RNI/RSI zone
-   * preferences. Verify reference data in the target environment before regional rollout.
+   * preferences. Verified September 2026 against THE.ORG_UNIT in the TEST and PROD databases: all
+   * eight are current Natural Resource Regions, and the only other current region-level unit
+   * (889, Regional Forestry Office) holds no applications. PROD applications still tagged with
+   * the obsolete forest regions (1833 RNI, 1834 RSI, 1835 RCO) are all older than three years.
    */
   public enum Region {
     CARIBOO(1903L),
