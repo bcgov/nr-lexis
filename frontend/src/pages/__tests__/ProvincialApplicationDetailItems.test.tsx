@@ -1300,8 +1300,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await selectApplicationItemsForEditing()
     const comments = await screen.findByLabelText('Package Comments')
     expect(comments).toHaveAttribute('maxlength', '180')
-    await userEvent.clear(comments)
-    await userEvent.type(comments, 'A'.repeat(181))
+    // Typing each character re-renders the whole detail page, so only type across the limit.
+    fireEvent.change(comments, { target: { value: 'A'.repeat(179) } })
+    await userEvent.type(comments, 'AA')
     expect(comments).toHaveValue('A'.repeat(180))
 
     await userEvent.click(screen.getByRole('button', { name: 'Save package' }))
@@ -2769,12 +2770,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       ...initialDetail,
       packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 2 }],
     }
-    const detailAfterScaleDelete = initialDetail
     mockedFetchProvincialApplicationDetail
       .mockReset()
       .mockResolvedValueOnce(initialDetail)
       .mockResolvedValueOnce(detailAfterScaleAdd)
-      .mockResolvedValue(detailAfterScaleDelete)
+      // Deleting the added scale returns the application to its initial detail.
+      .mockResolvedValue(initialDetail)
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
