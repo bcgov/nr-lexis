@@ -166,6 +166,7 @@ const REVIEW_STATUSES_WITH_PERSISTED_REMARK = new Set(['EXP', 'REJ', 'WDN'])
 const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before updating review status.'
 const REVIEW_REMARK_REQUIRED_MESSAGE =
   'Status change remark is required when rejecting, withdrawing, or expiring an application.'
+const APPROVAL_REMARK_REQUIRED_MESSAGE = 'Remark is required.'
 type LookupAvailability = 'loading' | 'available' | 'unavailable'
 type ApplicationActionResult = ActionResult & {
   /** Keeps the creation notice through this application's own reloads. */
@@ -827,6 +828,7 @@ const ProvincialApplicationDetailsPage = () => {
   >('loading')
   const [reviewStatusCode, setReviewStatusCode] = useState('')
   const [reviewStatusRemark, setReviewStatusRemark] = useState('')
+  const [isRetryingApprovalRemark, setIsRetryingApprovalRemark] = useState(false)
   const [sendReviewEmail, setSendReviewEmail] = useState(false)
   // Sent status emails are not recorded, so only an email sent from this page can be shown.
   const [sentReviewEmail, setSentReviewEmail] = useState<{
@@ -947,6 +949,7 @@ const ProvincialApplicationDetailsPage = () => {
         setIsEditingDocuments(false)
         setIsEditingRemarks(false)
         setIsEditingReview(false)
+        setIsRetryingApprovalRemark(false)
         setReviewStatusCode('')
         setReviewStatusRemark('')
         setReviewStatusBaselineCode('')
@@ -973,6 +976,7 @@ const ProvincialApplicationDetailsPage = () => {
         setIsEditingDocuments(false)
         setIsEditingRemarks(false)
         setIsEditingReview(false)
+        setIsRetryingApprovalRemark(false)
         setReviewStatusEmailOverride(null)
         setIndustryViewableExemptionNumber(null)
         setDocumentRows([])
@@ -1236,7 +1240,9 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const canSendReviewStatusEmail = EMAIL_SUPPORTED_STATUS_CODES.has(normalizedReviewStatusCode)
   const isReviewStatusInvalid = reviewValidationMessage === REVIEW_STATUS_REQUIRED_MESSAGE
-  const isReviewRemarkInvalid = reviewValidationMessage === REVIEW_REMARK_REQUIRED_MESSAGE
+  const isReviewRemarkInvalid =
+    reviewValidationMessage === REVIEW_REMARK_REQUIRED_MESSAGE ||
+    reviewValidationMessage === APPROVAL_REMARK_REQUIRED_MESSAGE
   const showReviewValidationNotification =
     !!reviewValidationMessage && !isReviewStatusInvalid && !isReviewRemarkInvalid
   const hasSummaryForm = summaryForm !== null
@@ -3158,6 +3164,7 @@ const ProvincialApplicationDetailsPage = () => {
     setSendReviewEmail(false)
     setReviewValidationMessage('')
     setIsEditingReview(false)
+    setIsRetryingApprovalRemark(false)
   }, [reviewStatusBaselineCode, reviewStatusRemarkBaseline])
 
   const onRequestSaveSummary = useCallback(
@@ -3248,38 +3255,46 @@ const ProvincialApplicationDetailsPage = () => {
   )
 
   const onApproveApplication = useCallback(async (): Promise<'saved' | 'partial' | 'failed'> => {
-    if (!detail || !canEditApplicationReview || isSubmittingReviewAction) {
+    if (
+      !detail ||
+      isSubmittingReviewAction ||
+      (isRetryingApprovalRemark ? !canManageRemarks : !canApproveApplicationReview)
+    ) {
       return 'failed'
     }
 
     setActionResult(null)
+    const approvalRemark = reviewStatusRemark.trim()
+    if (isRetryingApprovalRemark && !approvalRemark) {
+      setReviewValidationMessage(APPROVAL_REMARK_REQUIRED_MESSAGE)
+      return 'failed'
+    }
     setReviewValidationMessage('')
     setIsSubmittingReviewAction(true)
     try {
-      const result = await approveApplicationReview(String(detail.applicationNumber))
-      if (!result.valid || !result.updated) {
-        setActionResult({
-          kind: 'error',
-          message: result.message || 'Unable to approve application.',
-        })
-        return 'failed'
-      }
-
-      const approvalRemark = reviewStatusRemark.trim()
-      applyReviewStatusResult(result, '')
-      if (approvalRemark && canManageRemarks) {
-        const retainFailedRemark = (reason?: string) => {
-          setRemarkBody(approvalRemark)
-          setEditingRemarkId(null)
-          setIsEditingRemarks(true)
-          setReviewStatusEmailOverride(null)
-          setIsEditingReview(false)
-          selectApplicationTab('remarks')
-          // Kept as an error so the reopened remark drawer shows why the retry is needed.
+      if (!isRetryingApprovalRemark) {
+        const result = await approveApplicationReview(String(detail.applicationNumber))
+        if (!result.valid || !result.updated) {
           setActionResult({
             kind: 'error',
-            message: `Application approved, but the remark was not saved. Retry saving it from Remarks.${reason ? ` ${reason}` : ''}`,
+            message: result.message || 'Unable to approve application.',
           })
+          return 'failed'
+        }
+        applyReviewStatusResult(result, '')
+      }
+
+      if (approvalRemark && canManageRemarks) {
+        const retainFailedRemark = (reason?: string) => {
+          // Review owns this draft; the separate Remarks editor may already have unsaved work.
+          setReviewStatusRemark(approvalRemark)
+          setIsRetryingApprovalRemark(true)
+          setReviewStatusEmailOverride(null)
+          setIsEditingReview(true)
+          selectApplicationTab('review')
+          setReviewValidationMessage(
+            `Application approved, but the remark was not saved. Retry saving the remark.${reason ? ` ${reason}` : ''}`,
+          )
         }
         try {
           const remarkResult = await saveApplicationRemark({
@@ -3294,6 +3309,7 @@ const ProvincialApplicationDetailsPage = () => {
           retainFailedRemark()
           return 'partial'
         }
+        setIsRetryingApprovalRemark(false)
         try {
           // Approval updates the status in both summary states; keep unrelated edits and
           // their saved baseline while refreshing the newly persisted review remark.
@@ -3306,7 +3322,12 @@ const ProvincialApplicationDetailsPage = () => {
           return 'saved'
         }
       }
-      setActionResult({ kind: 'success', title: 'Application approved.', message: '' })
+      setIsRetryingApprovalRemark(false)
+      setActionResult({
+        kind: 'success',
+        title: isRetryingApprovalRemark ? 'Application remark saved.' : 'Application approved.',
+        message: '',
+      })
       return 'saved'
     } catch {
       setActionResult({ kind: 'error', message: 'Unable to approve application.' })
@@ -3316,9 +3337,10 @@ const ProvincialApplicationDetailsPage = () => {
     }
   }, [
     applyReviewStatusResult,
-    canEditApplicationReview,
+    canApproveApplicationReview,
     canManageRemarks,
     detail,
+    isRetryingApprovalRemark,
     isSubmittingReviewAction,
     loadApplicationDetail,
     reviewStatusRemark,
@@ -3415,7 +3437,7 @@ const ProvincialApplicationDetailsPage = () => {
   )
 
   const onApproveApplicationFromEdit = useCallback(async () => {
-    if ((await onApproveApplication()) !== 'failed') {
+    if ((await onApproveApplication()) === 'saved') {
       setReviewStatusEmailOverride(null)
       setIsEditingReview(false)
     }
@@ -3507,13 +3529,14 @@ const ProvincialApplicationDetailsPage = () => {
     : ''
   const remarkDirty = canManageRemarks && isEditingRemarks && remarkBody !== remarkBaselineBody
   const reviewDirty =
-    canEditApplicationReview &&
-    isEditingReview &&
-    // The review form opens on its default status; only a different choice is a change.
-    (normalizedReviewStatusCode !== reviewFormDefaultStatusCode ||
-      reviewStatusRemark !== reviewStatusRemarkBaseline ||
-      reviewStatusEmailAddress !== reviewStatusEmailCandidate ||
-      (canSendReviewStatusEmail && sendReviewEmail))
+    isRetryingApprovalRemark ||
+    (canEditApplicationReview &&
+      isEditingReview &&
+      // The review form opens on its default status; only a different choice is a change.
+      (normalizedReviewStatusCode !== reviewFormDefaultStatusCode ||
+        reviewStatusRemark !== reviewStatusRemarkBaseline ||
+        reviewStatusEmailAddress !== reviewStatusEmailCandidate ||
+        (canSendReviewStatusEmail && sendReviewEmail)))
   const isApplicationDirty =
     summaryDirty || remarkDirty || reviewDirty || applicationItemsDirty || documentUploadDirty
 
@@ -3574,6 +3597,7 @@ const ProvincialApplicationDetailsPage = () => {
     setIsEditingDocuments(false)
     setIsEditingRemarks(false)
     setIsEditingReview(false)
+    setIsRetryingApprovalRemark(false)
     closeSummaryAccuracyConfirmation()
     setShowSummaryValidationErrors(false)
     setRemarkBody('')
@@ -3900,7 +3924,11 @@ const ProvincialApplicationDetailsPage = () => {
               legendText={requiredLabel('Application status')}
               name="applicationDetailReviewStatus"
               valueSelected={reviewStatusCode}
-              disabled={reviewOptionsAvailability !== 'available'}
+              disabled={
+                isRetryingApprovalRemark ||
+                isSubmittingReviewAction ||
+                reviewOptionsAvailability !== 'available'
+              }
               onChange={(value) => {
                 const nextStatus = String(value)
                 setReviewStatusCode(nextStatus)
@@ -3911,7 +3939,9 @@ const ProvincialApplicationDetailsPage = () => {
               }}
             >
               {[
-                ...(canApproveApplicationReview ? [{ value: 'APP', label: 'Approved' }] : []),
+                ...(canApproveApplicationReview || isRetryingApprovalRemark
+                  ? [{ value: 'APP', label: 'Approved' }]
+                  : []),
                 ...reviewStatusOptions.filter((option) => option.value !== 'APP'),
               ].map((option) => (
                 <RadioButton
@@ -3928,10 +3958,13 @@ const ProvincialApplicationDetailsPage = () => {
                 id="applicationDetailReviewRemark"
                 labelText={requiredLabel(
                   'Remarks',
-                  REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode),
+                  isRetryingApprovalRemark ||
+                    REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode),
                 )}
                 aria-required={
-                  REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode) || undefined
+                  isRetryingApprovalRemark ||
+                  REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode) ||
+                  undefined
                 }
                 helperText="Saved to the Remarks tab."
                 maxCount={APPLICATION_REMARK_MAX_LENGTH}
@@ -3939,7 +3972,10 @@ const ProvincialApplicationDetailsPage = () => {
                 invalid={isReviewRemarkInvalid}
                 invalidText={reviewValidationMessage}
                 value={reviewStatusRemark}
-                disabled={reviewOptionsAvailability !== 'available'}
+                disabled={
+                  isSubmittingReviewAction ||
+                  (!isRetryingApprovalRemark && reviewOptionsAvailability !== 'available')
+                }
                 onChange={(event) => {
                   setReviewStatusRemark(event.target.value)
                   setReviewValidationMessage('')
@@ -3977,7 +4013,7 @@ const ProvincialApplicationDetailsPage = () => {
               <InlineNotification
                 className="detail-context-notification"
                 kind="error"
-                title="Review validation"
+                title={isRetryingApprovalRemark ? 'Remark not saved' : 'Review validation'}
                 subtitle={reviewValidationMessage}
                 lowContrast
                 onCloseButtonClick={() => setReviewValidationMessage('')}
@@ -3997,10 +4033,12 @@ const ProvincialApplicationDetailsPage = () => {
                 size="sm"
                 disabled={
                   isSubmittingReviewAction ||
-                  reviewOptionsAvailability !== 'available' ||
-                  (normalizedReviewStatusCode === 'APP'
-                    ? !canApproveApplicationReview
-                    : reviewStatusOptions.length === 0)
+                  (isRetryingApprovalRemark
+                    ? !canManageRemarks
+                    : reviewOptionsAvailability !== 'available' ||
+                      (normalizedReviewStatusCode === 'APP'
+                        ? !canApproveApplicationReview
+                        : reviewStatusOptions.length === 0))
                 }
                 onClick={() => {
                   if (normalizedReviewStatusCode === 'APP') {
@@ -4010,9 +4048,11 @@ const ProvincialApplicationDetailsPage = () => {
                   }
                 }}
               >
-                {`${REVIEW_STATUS_ACTION_LABELS[normalizedReviewStatusCode] ?? 'Update status'}${
-                  canSendReviewStatusEmail && sendReviewEmail ? ' and send email' : ''
-                }`}
+                {isRetryingApprovalRemark
+                  ? 'Save remark'
+                  : `${REVIEW_STATUS_ACTION_LABELS[normalizedReviewStatusCode] ?? 'Update status'}${
+                      canSendReviewStatusEmail && sendReviewEmail ? ' and send email' : ''
+                    }`}
               </Button>
             </div>
           </>

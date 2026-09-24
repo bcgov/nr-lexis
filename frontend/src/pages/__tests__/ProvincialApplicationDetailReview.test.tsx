@@ -710,7 +710,107 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(screen.getByLabelText('Exemption term (days)')).toHaveValue(30)
   })
 
-  it('keeps an optional approval remark available to retry when only its save fails', async () => {
+  it.each(['add', 'edit'] as const)(
+    'preserves the desktop %s remark draft and retries only the failed approval note',
+    async (mode) => {
+      const originalMatchMedia = window.matchMedia
+      vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+        ...originalMatchMedia(query),
+        matches: query === '(min-width: 1312px)',
+      }))
+      if (mode === 'add') {
+        mockedSaveApplicationRemark.mockResolvedValueOnce({
+          success: false,
+          message: 'Remark storage unavailable.',
+          remarkId: '',
+          remark: '',
+          title: '',
+          user: '',
+          status: '',
+        })
+      } else {
+        mockedSaveApplicationRemark.mockRejectedValueOnce(new Error('Remark storage unavailable.'))
+      }
+      const approvedDetail = {
+        ...reviewableApplicationDetail,
+        applicationStatusCode: 'APP',
+        statusDescription: 'Approved',
+      }
+      mockedFetchProvincialApplicationDetail
+        .mockResolvedValueOnce(reviewableApplicationDetail)
+        .mockResolvedValue(approvedDetail)
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectApplicationDetailTab('Remarks')
+      await userEvent.click(
+        await screen.findByRole('button', { name: mode === 'add' ? 'Add remark' : 'Edit' }),
+      )
+      const remarkLabel = mode === 'add' ? 'New Remark' : 'Edit Remark 88'
+      fireEvent.change(await screen.findByLabelText(remarkLabel), {
+        target: { value: 'Unrelated remark draft' },
+      })
+      const review = within(await selectApplicationReviewTile())
+      fireEvent.change(review.getByLabelText('Remarks'), { target: { value: 'Approval note' } })
+      await userEvent.click(review.getByRole('button', { name: 'Approve application' }))
+
+      expect(
+        await screen.findByText(/Application approved, but the remark was not saved/),
+      ).toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Review' })).toHaveAttribute('aria-selected', 'true')
+      expect(review.getByLabelText('Remarks')).toHaveValue('Approval note')
+      expect(review.getByRole('radio', { name: 'Approved' })).toBeChecked()
+      expect(review.getByRole('radio', { name: 'Approved' })).toBeDisabled()
+      expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
+      expect(mockedSaveApplicationRemark).toHaveBeenNthCalledWith(1, {
+        applicationNumber: '321',
+        remarkBody: 'Approval note',
+      })
+
+      // Saving the independent draft must keep its original add/edit target and the retry note.
+      await selectApplicationDetailTab('Remarks')
+      expect(screen.getByLabelText(remarkLabel)).toHaveValue('Unrelated remark draft')
+      await userEvent.click(
+        screen.getByRole('button', { name: mode === 'add' ? 'Save remark' : 'Update remark' }),
+      )
+      await screen.findByText(
+        mode === 'add' ? 'Application remark saved.' : 'Application remark updated.',
+      )
+      expect(mockedSaveApplicationRemark).toHaveBeenNthCalledWith(2, {
+        applicationNumber: '321',
+        remarkBody: 'Unrelated remark draft',
+        remarkId: mode === 'edit' ? '88' : undefined,
+      })
+      const retry = within(await selectApplicationReviewTile(false))
+      expect(retry.getByLabelText('Remarks')).toHaveValue('Approval note')
+      const dirtyUnload = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(dirtyUnload)
+      expect(dirtyUnload.defaultPrevented).toBe(true)
+
+      await userEvent.click(retry.getByRole('button', { name: 'Save remark' }))
+      await waitFor(() => expect(retry.queryByLabelText('Remarks')).not.toBeInTheDocument())
+      expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
+      expect(mockedSaveApplicationRemark).toHaveBeenCalledTimes(3)
+      expect(mockedSaveApplicationRemark).toHaveBeenNthCalledWith(3, {
+        applicationNumber: '321',
+        remarkBody: 'Approval note',
+      })
+      const cleanUnload = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(cleanUnload)
+      expect(cleanUnload.defaultPrevented).toBe(false)
+    },
+  )
+
+  it('validates an empty approval remark retry and allows explicitly cancelling it', async () => {
     mockedSaveApplicationRemark.mockResolvedValueOnce({
       success: false,
       message: 'Remark storage unavailable.',
@@ -742,13 +842,26 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(
       await screen.findByText(/Application approved, but the remark was not saved/),
     ).toBeInTheDocument()
-    expect(screen.getByLabelText('New Remark')).toHaveValue('Approval note')
-    expect(screen.getByRole('tab', { name: 'Remarks' })).toHaveAttribute('aria-selected', 'true')
+    const review = within(reviewTile)
+    fireEvent.change(review.getByLabelText('Remarks'), { target: { value: '   ' } })
+    await userEvent.click(review.getByRole('button', { name: 'Save remark' }))
+
+    expect(await review.findByText('Remark is required.')).toBeInTheDocument()
     expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
-    expect(mockedSaveApplicationRemark).toHaveBeenCalledWith({
-      applicationNumber: '321',
-      remarkBody: 'Approval note',
-    })
+    expect(mockedSaveApplicationRemark).toHaveBeenCalledTimes(1)
+    const dirtyUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(dirtyUnload)
+    expect(dirtyUnload.defaultPrevented).toBe(true)
+
+    await userEvent.click(review.getByRole('button', { name: 'Cancel' }))
+    const cleanUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(cleanUnload)
+    expect(cleanUnload.defaultPrevented).toBe(false)
+    expect(review.queryByRole('button', { name: 'Save remark' })).not.toBeInTheDocument()
+    await userEvent.click(review.getByRole('button', { name: 'Update status' }))
+    expect(review.getByLabelText('Remarks')).toHaveValue('')
+    expect(review.queryByRole('radio', { name: 'Approved' })).not.toBeInTheDocument()
+    expect(review.getByRole('radio', { name: 'Rejected' })).toBeEnabled()
   })
 
   it('keeps navigation blocked after approval when its optional remark could not be saved', async () => {
@@ -792,9 +905,21 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       await screen.findByText(/Application approved, but the remark was not saved/),
     ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Next page' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('New Remark')).toHaveValue('Approval note')
-    expect(screen.getByRole('tab', { name: 'Remarks' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(reviewTile).getByLabelText('Remarks')).toHaveValue('Approval note')
+    expect(screen.getByRole('tab', { name: 'Review' })).toHaveAttribute('aria-selected', 'true')
     expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
+
+    await userEvent.click(screen.getByRole('link', { name: 'Leave application' }))
+    const retryDialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
+    await userEvent.click(within(retryDialog).getByRole('button', { name: 'Save and leave' }))
+
+    expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
+    expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
+    expect(mockedSaveApplicationRemark).toHaveBeenCalledTimes(2)
+    expect(mockedSaveApplicationRemark).toHaveBeenNthCalledWith(2, {
+      applicationNumber: '321',
+      remarkBody: 'Approval note',
+    })
   })
 
   it('leaves without an unsaved prompt when the opened review form is unchanged', async () => {
