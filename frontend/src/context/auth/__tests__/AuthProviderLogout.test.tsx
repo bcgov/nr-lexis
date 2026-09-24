@@ -19,21 +19,14 @@ import {
 import { fetchSessionCapabilities } from '@/service/session-service'
 
 const authMocks = vi.hoisted(() => ({
-  fetchAuthSession: vi.fn(),
-  signInWithRedirect: vi.fn(),
-  signOut: vi.fn(),
+  getOidcUser: vi.fn(),
+  startOidcLogin: vi.fn(),
+  endOidcSession: vi.fn(),
 }))
-const logoutChainMocks = vi.hoisted(() => ({
-  startFederatedLogout: vi.fn(),
-}))
-
-vi.mock('aws-amplify/auth', () => authMocks)
-vi.mock('@/context/auth/logout-chain', () => logoutChainMocks)
-
-vi.mock('@/config/fam/config', () => ({
-  businessBceidProviderName: 'DEV-BCEIDBUSINESS',
-  idirProviderName: 'DEV-IDIR',
-  isCognitoConfigured: true,
+vi.mock('@/service/oidc-service', () => ({
+  ...authMocks,
+  isOidcConfigured: true,
+  AUTH_CALLBACK_PATH: '/authCallback',
 }))
 
 vi.mock('@/service/session-service', () => ({
@@ -74,16 +67,8 @@ describe('AuthProvider logout', () => {
     vi.clearAllMocks()
     clearActiveForestClientNumber()
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
-    authMocks.fetchAuthSession.mockResolvedValue({
-      tokens: {
-        accessToken: 'access-token',
-        idToken: {
-          payload: {},
-        },
-      },
-    })
-    authMocks.signOut.mockResolvedValue(undefined)
-    logoutChainMocks.startFederatedLogout.mockReturnValue(false)
+    authMocks.getOidcUser.mockResolvedValue({ access_token: 'access-token', profile: {} })
+    authMocks.endOidcSession.mockResolvedValue(undefined)
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
       principal: 'idir\\tester',
@@ -107,7 +92,7 @@ describe('AuthProvider logout', () => {
     window.sessionStorage.removeItem('lexis.login-destination')
   })
 
-  it('signs out of Cognito', async () => {
+  it('signs out of OIDC', async () => {
     markSessionExpiredLoginNotice()
     setActiveForestClientNumber('00012345')
     window.sessionStorage.setItem(
@@ -126,9 +111,9 @@ describe('AuthProvider logout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Logout' }))
 
     await waitFor(() => {
-      expect(authMocks.signOut).toHaveBeenCalledTimes(1)
+      expect(authMocks.endOidcSession).toHaveBeenCalledTimes(1)
     })
-    expect(authMocks.signOut).toHaveBeenCalledWith()
+    expect(authMocks.endOidcSession).toHaveBeenCalledWith()
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
     expect(hasSessionExpiredLoginNotice()).toBe(false)
     expect(getActiveForestClientNumber()).toBeNull()
@@ -137,34 +122,18 @@ describe('AuthProvider logout', () => {
     expect(window.sessionStorage.getItem('lexis.login-destination')).toBeNull()
   })
 
-  it('uses the FSPTS-style federated logout chain when it is configured', async () => {
-    logoutChainMocks.startFederatedLogout.mockReturnValue(true)
-    markSessionExpiredLoginNotice()
-    renderProbe()
-
-    await waitFor(() => {
-      expect(screen.getByTestId('loading')).toHaveTextContent('false')
-    })
-
-    await userEvent.click(screen.getByRole('button', { name: 'Logout' }))
-
-    expect(logoutChainMocks.startFederatedLogout).toHaveBeenCalledOnce()
-    expect(authMocks.signOut).not.toHaveBeenCalled()
-    expect(hasSessionExpiredLoginNotice()).toBe(false)
-  })
-
-  it('uses the FSPTS 30 minute idle timeout', () => {
-    expect(SESSION_IDLE_TIMEOUT_MS).toBe(30 * 60 * 1000)
+  it('uses the REPT 25 minute idle timeout', () => {
+    expect(SESSION_IDLE_TIMEOUT_MS).toBe(25 * 60 * 1000)
     expect(SESSION_IDLE_WARNING_MS).toBe(5 * 60 * 1000)
   })
 
-  it('preserves the inactivity notice while bootstrapping without Cognito tokens', async () => {
+  it('preserves the inactivity notice while bootstrapping without OIDC tokens', async () => {
     markSessionExpiredLoginNotice()
     window.sessionStorage.setItem(
       'lexis.search-state.v1.provincial-review',
       'applicationNumber=43278',
     )
-    authMocks.fetchAuthSession.mockResolvedValue({ tokens: undefined })
+    authMocks.getOidcUser.mockResolvedValue(null)
 
     renderProbe()
 
@@ -178,15 +147,10 @@ describe('AuthProvider logout', () => {
     expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBeNull()
   })
 
-  it('restores an existing Cognito session instead of starting another login flow', async () => {
-    authMocks.fetchAuthSession.mockResolvedValueOnce({ tokens: undefined }).mockResolvedValue({
-      tokens: {
-        accessToken: 'access-token',
-        idToken: {
-          payload: {},
-        },
-      },
-    })
+  it('restores an existing OIDC session instead of starting another login flow', async () => {
+    authMocks.getOidcUser
+      .mockResolvedValueOnce(null)
+      .mockResolvedValue({ access_token: 'access-token', profile: {} })
 
     renderProbe()
 
@@ -201,41 +165,11 @@ describe('AuthProvider logout', () => {
       expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true')
     })
     expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
-    expect(authMocks.signInWithRedirect).not.toHaveBeenCalled()
+    expect(authMocks.startOidcLogin).not.toHaveBeenCalled()
   })
 
-  it('recovers when Cognito reports that login raced with an existing session', async () => {
-    const alreadyAuthenticated = new Error('There is already a signed in user.')
-    alreadyAuthenticated.name = 'UserAlreadyAuthenticatedException'
-    authMocks.fetchAuthSession
-      .mockResolvedValueOnce({ tokens: undefined })
-      .mockResolvedValueOnce({ tokens: undefined })
-      .mockResolvedValue({
-        tokens: {
-          accessToken: 'access-token',
-          idToken: {
-            payload: {},
-          },
-        },
-      })
-    authMocks.signInWithRedirect.mockRejectedValueOnce(alreadyAuthenticated)
-
-    renderProbe()
-
-    await waitFor(() => {
-      expect(screen.getByTestId('loading')).toHaveTextContent('false')
-    })
-    await userEvent.click(screen.getByRole('button', { name: 'Login' }))
-
-    await waitFor(() => {
-      expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true')
-    })
-    expect(screen.getByTestId('default-route')).toHaveTextContent('/provincial/review')
-    expect(authMocks.signInWithRedirect).toHaveBeenCalledOnce()
-  })
-
-  it('starts the configured login flow when no Cognito session exists', async () => {
-    authMocks.fetchAuthSession.mockResolvedValue({ tokens: undefined })
+  it('starts the configured login flow when no OIDC session exists', async () => {
+    authMocks.getOidcUser.mockResolvedValue(null)
     window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
 
     renderProbe()
@@ -245,31 +179,37 @@ describe('AuthProvider logout', () => {
     })
     await userEvent.click(screen.getByRole('button', { name: 'Login' }))
 
-    expect(authMocks.signInWithRedirect).toHaveBeenCalledWith({
-      provider: { custom: 'DEV-IDIR' },
-    })
+    expect(authMocks.startOidcLogin).toHaveBeenCalledWith('idir')
     expect(mockedFetchSessionCapabilities).not.toHaveBeenCalled()
     expect(window.sessionStorage.getItem('lexis.login-destination')).toBe('/provincial/offers/123')
   })
 
-  it.each(['?code=expired&state=oauth-state', '?error=access_denied'])(
-    'discards the return destination after an unsuccessful OAuth callback %s',
-    async (callbackSearch) => {
-      window.history.replaceState({}, document.title, `/${callbackSearch}`)
-      window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
-      authMocks.fetchAuthSession.mockResolvedValue({ tokens: undefined })
-      renderProbe()
+  it('keeps the saved destination when a stored session can no longer be renewed', async () => {
+    authMocks.getOidcUser.mockRejectedValue(new Error('refresh token expired'))
 
-      await waitFor(
-        () => {
-          expect(screen.getByTestId('loading')).toHaveTextContent('false')
-        },
-        { timeout: 3000 },
-      )
-      expect(window.sessionStorage.getItem('lexis.login-destination')).toBeNull()
-      expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
-    },
-  )
+    renderProbe()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('loading')).toHaveTextContent('false')
+    })
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
+    window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
+    await userEvent.click(screen.getByRole('button', { name: 'Login' }))
+
+    expect(authMocks.startOidcLogin).toHaveBeenCalledWith('idir')
+    expect(mockedFetchSessionCapabilities).not.toHaveBeenCalled()
+    expect(window.sessionStorage.getItem('lexis.login-destination')).toBe('/provincial/offers/123')
+  })
+
+  it('leaves callback processing and the saved destination to the callback route', async () => {
+    window.history.replaceState({}, document.title, '/authCallback?code=valid&state=oauth-state')
+    window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
+    renderProbe()
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    expect(authMocks.getOidcUser).not.toHaveBeenCalled()
+    expect(mockedFetchSessionCapabilities).not.toHaveBeenCalled()
+    expect(window.sessionStorage.getItem('lexis.login-destination')).toBe('/provincial/offers/123')
+  })
 
   it('discards the return destination if session capabilities fail to load', async () => {
     window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
@@ -280,8 +220,8 @@ describe('AuthProvider logout', () => {
     expect(window.sessionStorage.getItem('lexis.login-destination')).toBeNull()
   })
 
-  it('clears local auth state after Cognito signout fails', async () => {
-    authMocks.signOut.mockRejectedValue(new Error('cognito unavailable'))
+  it('clears local auth state after OIDC signout fails', async () => {
+    authMocks.endOidcSession.mockRejectedValue(new Error('OIDC unavailable'))
     renderProbe()
 
     await waitFor(() => {
@@ -291,24 +231,24 @@ describe('AuthProvider logout', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Logout' }))
 
     await waitFor(() => {
-      expect(authMocks.signOut).toHaveBeenCalledTimes(1)
+      expect(authMocks.endOidcSession).toHaveBeenCalledTimes(1)
     })
-    expect(authMocks.signOut).toHaveBeenCalledWith()
+    expect(authMocks.endOidcSession).toHaveBeenCalledWith()
     expect(consoleWarnSpy).toHaveBeenCalledWith(
-      'Unable to complete Cognito sign-out. Clearing local auth state.',
+      'Unable to complete OIDC sign-out. Clearing local auth state.',
       expect.any(Error),
     )
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
   })
 
-  it('expires authenticated sessions after 30 minutes of inactivity', async () => {
+  it('expires authenticated sessions after 25 minutes of inactivity', async () => {
     window.history.replaceState({}, document.title, '/provincial/review')
     window.sessionStorage.setItem(
       'lexis.search-state.v1.provincial-review',
       'applicationNumber=43278',
     )
     let pathnameWhenSignOutStarted = ''
-    authMocks.signOut.mockImplementation(async () => {
+    authMocks.endOidcSession.mockImplementation(async () => {
       pathnameWhenSignOutStarted = window.location.pathname
     })
     renderProbe()
@@ -330,13 +270,13 @@ describe('AuthProvider logout', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SESSION_IDLE_WARNING_MS - 1)
     })
-    expect(authMocks.signOut).not.toHaveBeenCalled()
+    expect(authMocks.endOidcSession).not.toHaveBeenCalled()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1)
     })
 
-    expect(authMocks.signOut).toHaveBeenCalledTimes(1)
+    expect(authMocks.endOidcSession).toHaveBeenCalledTimes(1)
     expect(pathnameWhenSignOutStarted).toBe('/')
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
     expect(window.location.pathname).toBe('/')
@@ -344,7 +284,7 @@ describe('AuthProvider logout', () => {
     expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBeNull()
   })
 
-  it('resets the 30 minute inactivity timer when the user interacts with the page', async () => {
+  it('resets the 25 minute inactivity timer when the user interacts with the page', async () => {
     window.history.replaceState({}, document.title, '/provincial/review')
     renderProbe()
 
@@ -367,17 +307,17 @@ describe('AuthProvider logout', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - 2)
     })
-    expect(authMocks.signOut).not.toHaveBeenCalled()
+    expect(authMocks.endOidcSession).not.toHaveBeenCalled()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1)
     })
 
-    expect(authMocks.signOut).toHaveBeenCalledTimes(1)
+    expect(authMocks.endOidcSession).toHaveBeenCalledTimes(1)
     expect(window.location.pathname).toBe('/')
   })
 
-  it('keeps the Cognito token fresh while the user remains active', async () => {
+  it('keeps the OIDC token fresh while the user remains active', async () => {
     // Start the session on the same clock as its activity/keepalive timestamps.
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
@@ -385,30 +325,30 @@ describe('AuthProvider logout', () => {
       renderProbe()
     })
     expect(screen.getByTestId('loading')).toHaveTextContent('false')
-    authMocks.fetchAuthSession.mockClear()
+    authMocks.getOidcUser.mockClear()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(60_000)
       window.dispatchEvent(new MouseEvent('mousemove'))
     })
-    expect(authMocks.fetchAuthSession).toHaveBeenCalledOnce()
-    expect(authMocks.fetchAuthSession).toHaveBeenLastCalledWith({ forceRefresh: false })
+    expect(authMocks.getOidcUser).toHaveBeenCalledOnce()
+    expect(authMocks.getOidcUser).toHaveBeenLastCalledWith()
 
     window.dispatchEvent(new MouseEvent('mousemove'))
-    expect(authMocks.fetchAuthSession).toHaveBeenCalledOnce()
+    expect(authMocks.getOidcUser).toHaveBeenCalledOnce()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(59_999)
     })
     window.dispatchEvent(new MouseEvent('mousemove'))
-    expect(authMocks.fetchAuthSession).toHaveBeenCalledOnce()
+    expect(authMocks.getOidcUser).toHaveBeenCalledOnce()
 
     await act(async () => {
       await vi.advanceTimersByTimeAsync(1)
       window.dispatchEvent(new MouseEvent('mousemove'))
     })
-    expect(authMocks.fetchAuthSession).toHaveBeenCalledTimes(2)
-    expect(authMocks.fetchAuthSession).toHaveBeenLastCalledWith({ forceRefresh: false })
+    expect(authMocks.getOidcUser).toHaveBeenCalledTimes(2)
+    expect(authMocks.getOidcUser).toHaveBeenLastCalledWith()
   })
 
   it('extends the idle session only when the user chooses to stay logged in', async () => {
@@ -432,7 +372,7 @@ describe('AuthProvider logout', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Stay logged in' }))
       await Promise.resolve()
     })
-    expect(authMocks.fetchAuthSession).toHaveBeenCalledWith({ forceRefresh: true })
+    expect(authMocks.getOidcUser).toHaveBeenCalledWith({ forceRefresh: true })
     expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument()
     expect(screen.getByText('You’re still logged in')).toBeInTheDocument()
     expect(screen.getByText('Your session has been extended.')).toBeInTheDocument()
@@ -455,7 +395,7 @@ describe('AuthProvider logout', () => {
     await act(async () => {
       await vi.advanceTimersByTimeAsync(SESSION_IDLE_TIMEOUT_MS - SESSION_IDLE_WARNING_MS)
     })
-    authMocks.fetchAuthSession.mockRejectedValueOnce(new Error('refresh token expired'))
+    authMocks.getOidcUser.mockRejectedValueOnce(new Error('refresh token expired'))
 
     await act(async () => {
       fireEvent.click(screen.getByRole('button', { name: 'Stay logged in' }))
@@ -463,8 +403,8 @@ describe('AuthProvider logout', () => {
       await Promise.resolve()
     })
 
-    expect(authMocks.fetchAuthSession).toHaveBeenCalledWith({ forceRefresh: true })
-    expect(authMocks.signOut).toHaveBeenCalledOnce()
+    expect(authMocks.getOidcUser).toHaveBeenCalledWith({ forceRefresh: true })
+    expect(authMocks.endOidcSession).toHaveBeenCalledOnce()
     expect(hasSessionExpiredLoginNotice()).toBe(false)
   })
 
@@ -475,7 +415,7 @@ describe('AuthProvider logout', () => {
     window.history.replaceState({}, document.title, '/provincial/review')
     window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
     let pathnameWhenSignOutStarted = ''
-    authMocks.signOut.mockImplementation(async () => {
+    authMocks.endOidcSession.mockImplementation(async () => {
       pathnameWhenSignOutStarted = window.location.pathname
     })
     renderProbe()
@@ -492,7 +432,7 @@ describe('AuthProvider logout', () => {
     )
 
     await waitFor(() => {
-      expect(authMocks.signOut).toHaveBeenCalledTimes(1)
+      expect(authMocks.endOidcSession).toHaveBeenCalledTimes(1)
     })
     expect(pathnameWhenSignOutStarted).toBe('/')
     expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')

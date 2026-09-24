@@ -6,6 +6,7 @@ import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import java.io.InputStream;
 import java.math.BigDecimal;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import javax.xml.parsers.DocumentBuilderFactory;
@@ -150,12 +151,11 @@ class LexisJasperReportParameterProviderTest {
   }
 
   @Test
-  void tenureGenerateTenureReportShouldForceOrgUnitAndClientFieldsToLegacyDefaults() {
+  void tenureGenerateTenureReportShouldForceClientFieldsToLegacyDefaults() {
     LexisReportRequestDto request =
         new LexisReportRequestDto(
             Map.of(
                 "legacyActionMapping", "generateTenureReport",
-                "region", "1,2",
                 "clientNumber", "12345",
                 "clientType", "P",
                 "fromDate", "2026-01-01",
@@ -173,6 +173,19 @@ class LexisJasperReportParameterProviderTest {
         .containsEntry("P_TENURE_TYPE_1", "A01")
         .containsEntry("P_TIMBER_MARK_1", "")
         .containsEntry("P_FOREST_FILE_ID", "");
+  }
+
+  @Test
+  void tenureTypeMarkAndFileReportsShouldApplyASubmittedRegion() {
+    for (String variant : List.of("generateTenureReport", "generateMarkReport", "generateFileReport")) {
+      LexisReportRequestDto request =
+          new LexisReportRequestDto(
+              Map.of("legacyActionMapping", variant, "region", "[1903, 1904]"), "PDF");
+
+      assertThat(provider.buildParameters(LexisJasperReportDefinition.TENURE_REPORT, request))
+          .as(variant)
+          .containsEntry("P_ORG_UNIT_NUMBER", "1903,1904");
+    }
   }
 
   @Test

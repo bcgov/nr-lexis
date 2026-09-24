@@ -147,7 +147,8 @@ public interface ExemptionDetailsRpcService {
       long permitNumber,
       String applicantClientNumber,
       String ownerClientNumber,
-      boolean oicLike) {}
+      boolean oicLike,
+      Long orgUnitNumber) {}
 
   record BlanketOicTotalsResponse(String requestedVolume, String completedVolume) {}
 

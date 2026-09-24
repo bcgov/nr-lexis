@@ -199,7 +199,8 @@ public class ExemptionOracleService implements ExemptionService {
         input.broadClientMatch(),
         trimToNull(input.sortField()),
         page,
-        size);
+        size,
+        input.nonMinisterialRegionNumbers());
   }
 
 }

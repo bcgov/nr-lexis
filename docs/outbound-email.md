@@ -28,7 +28,7 @@ regional recipient.
 | Purchase offer — new, updated, or withdrawn | Provincial/system mailbox | Applicant recipient | Regional positional mailbox |
 
 Applicant defaults come from the workflow record's owner or agent client/location. They do not
-come from the logged-in WebADE, Cognito, or FAM identity, and `CLIENT_CONTACT` is not an automatic
+come from the logged-in WebADE or Keycloak (FAM) identity, and `CLIENT_CONTACT` is not an automatic
 fallback. Application Review follows the legacy agent-email-when-present, otherwise-owner rule.
 Authorized staff may replace an applicant recipient for that send only; the edited address is not
 persisted.

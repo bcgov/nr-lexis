@@ -1,6 +1,6 @@
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import axios from 'axios'
-import { fetchAuthSession } from 'aws-amplify/auth'
+import { getOidcUser } from '@/service/oidc-service'
 import { notifySessionExpired } from '@/context/auth/session-expiry'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import {
@@ -140,8 +140,8 @@ class APIService {
 
       if (!this.hasHeader(requestConfig.headers, 'authorization')) {
         try {
-          const { tokens } = (await fetchAuthSession()) ?? {}
-          const accessToken = tokens?.accessToken?.toString()
+          const user = await getOidcUser()
+          const accessToken = user?.access_token
           if (accessToken) {
             this.setHeader(requestConfig.headers, 'Authorization', `Bearer ${accessToken}`)
           }
@@ -364,13 +364,13 @@ class APIService {
 
   private async resolveAuthCacheContext(): Promise<AuthCacheContext | null> {
     try {
-      const { tokens } = (await fetchAuthSession()) ?? {}
-      const accessToken = tokens?.accessToken?.toString()
-      const payload = tokens?.accessToken?.payload ?? tokens?.idToken?.payload
+      const user = await getOidcUser()
+      const accessToken = user?.access_token
+      const payload = user?.profile
       const subject = this.asCachePart(payload?.sub)
-      const username = this.asCachePart(payload?.username)
+      const username = this.asCachePart(payload?.preferred_username)
       const identityProvider = this.asCachePart(payload?.identity_provider)
-      const clientId = this.asCachePart(payload?.client_id)
+      const clientId = this.asCachePart(payload?.azp)
       const forestClientNumber = getActiveForestClientNumber()
       const identityScopeParts = [subject, username, identityProvider, clientId].filter(Boolean)
       const identityScope =

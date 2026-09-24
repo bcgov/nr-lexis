@@ -9,6 +9,8 @@ export type LexisSessionCapabilities = {
   forestClientNumber: string | null
   availableForestClientNumbers: string[]
   forestClientSelectionRequired: boolean
+  /** Region-limited granted actions, keyed like normalized actions; absent means province-wide. */
+  actionRegions?: Record<string, string[]>
 }
 
 export type LexisSessionLogoutResponse = {

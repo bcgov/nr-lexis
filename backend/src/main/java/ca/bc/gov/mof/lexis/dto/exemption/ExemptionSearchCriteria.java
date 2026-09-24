@@ -21,7 +21,51 @@ public record ExemptionSearchCriteria(
     boolean broadClientMatch,
     String sortField,
     int page,
-    int size) {
+    int size,
+    // When set, non-Ministerial exemptions match only in these regions (see
+    // ProvincialAuthorizationService.resolveBlanketOicRegions); null applies no extra limit.
+    List<Long> nonMinisterialRegionNumbers) {
+
+  public ExemptionSearchCriteria(
+      String applicationNumber,
+      String packageNumber,
+      String exemptionNumber,
+      String exemptionType,
+      String exemptionStatus,
+      String applicantClientNumber,
+      String ownerClientNumber,
+      LocalDate approvalFromDate,
+      LocalDate approvalToDate,
+      LocalDate listingFromDate,
+      LocalDate listingToDate,
+      List<Long> regionNumbers,
+      boolean includeBlanketOic,
+      boolean excludeBlanketOic,
+      boolean broadClientMatch,
+      String sortField,
+      int page,
+      int size) {
+    this(
+        applicationNumber,
+        packageNumber,
+        exemptionNumber,
+        exemptionType,
+        exemptionStatus,
+        applicantClientNumber,
+        ownerClientNumber,
+        approvalFromDate,
+        approvalToDate,
+        listingFromDate,
+        listingToDate,
+        regionNumbers,
+        includeBlanketOic,
+        excludeBlanketOic,
+        broadClientMatch,
+        sortField,
+        page,
+        size,
+        null);
+  }
 
   public ExemptionSearchCriteria(
       String applicationNumber,

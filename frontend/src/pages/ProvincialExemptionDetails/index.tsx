@@ -48,6 +48,8 @@ import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { useAuth } from '@/context/auth/useAuth'
+import { allowedRegions, withinRegions } from '@/context/auth/region-utils'
+import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
@@ -329,7 +331,12 @@ const ProvincialExemptionDetailsPage = () => {
   const [editContextLoaded, setEditContextLoaded] = useState(false)
   const [editContextRefreshing, setEditContextRefreshing] = useState(false)
   const [editForm, setEditForm] = useState<ExemptionEditForm | null>(null)
-  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
+  const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
+  const regionOptions = useAllowedRegionOptions(
+    allRegionOptions,
+    ['saveExemption', 'approveExemption'],
+    'id',
+  )
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>([])
   const [optionsAvailability, setOptionsAvailability] = useState<
@@ -716,7 +723,7 @@ const ProvincialExemptionDetailsPage = () => {
         const options = await fetchProvincialExemptionOptions()
         setExemptionTypeOptions(options.exemptionTypes)
         setExemptionStatusOptions(options.exemptionStatuses)
-        setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+        setAllRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
         setOptionsAvailability('available')
       } catch {
         setOptionsAvailability('unavailable')
@@ -754,7 +761,22 @@ const ProvincialExemptionDetailsPage = () => {
   const exemptionEditLockMessage = exemptionEditLocked
     ? editContext.lockMessage || 'This exemption is currently locked for editing by another user.'
     : ''
-  const hasExemptionEditPermission = canPerform('saveExemption') && persistedStatusCode !== 'EXP'
+  // Regional users change or approve an exemption only when they hold all of its regions, and
+  // create permits from it when they hold one of them (the permit's own region is checked too).
+  const exemptionOrgUnits = editContext.regionNumbers
+  // Linking applications and deleting documents are Application Approver capabilities, limited to
+  // the Approver grants' regions even when another role holds saveExemption province-wide. Among
+  // staff roles only Approvers and Administrators hold /createExemption, so its regions are theirs.
+  const withinApproverRegions = withinRegions(
+    allowedRegions(capabilities, '/createExemption'),
+    exemptionOrgUnits,
+  )
+  const canPerformInAnyExemptionRegion = (action: string) =>
+    // A null record region passes only for province-wide users.
+    canPerform(action, null) || exemptionOrgUnits.some((orgUnit) => canPerform(action, orgUnit))
+  const hasExemptionEditRole = canPerform('saveExemption') && persistedStatusCode !== 'EXP'
+  const hasExemptionEditPermission =
+    hasExemptionEditRole && canPerform('saveExemption', exemptionOrgUnits)
   const canSaveExemption = hasExemptionEditPermission && editContextLoaded && !exemptionEditLocked
   const isExemptionFormDirty = useMemo(
     () =>
@@ -768,20 +790,18 @@ const ProvincialExemptionDetailsPage = () => {
     isApplicationApprover && applicationNumberToAdd.trim().length > 0
   const isExemptionDirty =
     isExemptionFormDirty || applicationRelationshipDraftDirty || documentUploadDirty
+  // The regions come from the edit context, so its failure is reported by role alone.
   const editContextUnavailableMessage =
-    hasExemptionEditPermission &&
-    !editContextLoaded &&
-    !editContextRefreshing &&
-    !isRefreshingDetail
+    hasExemptionEditRole && !editContextLoaded && !editContextRefreshing && !isRefreshingDetail
       ? 'Exemption edit settings could not be loaded. Editing is unavailable until the data can be retrieved.'
       : ''
   const canApproveExemption =
-    canPerform('approveExemption') &&
+    canPerform('approveExemption', exemptionOrgUnits) &&
     persistedStatusCode === 'NEW' &&
     !editing &&
     !exemptionEditLocked
   const canStartApplicationBackedPermitCreation =
-    canPerform('createPermit') &&
+    canPerformInAnyExemptionRegion('createPermit') &&
     (isApplicationApprover || isProvincialSubmitter) &&
     (persistedTypeCode === 'M' || persistedTypeCode === 'O') &&
     persistedStatusCode === 'ACT' &&
@@ -791,8 +811,8 @@ const ProvincialExemptionDetailsPage = () => {
   const canCreateApplicationBackedPermit =
     canStartApplicationBackedPermitCreation && !editing && !isExemptionDirty
   const canStartBlanketOicPermitCreation =
-    canPerform('createPermit') &&
-    canPerform('savePermit') &&
+    canPerformInAnyExemptionRegion('createPermit') &&
+    canPerformInAnyExemptionRegion('savePermit') &&
     (isApplicationApprover || isProvincialSubmitter) &&
     persistedTypeCode === 'B' &&
     persistedStatusCode === 'ACT' &&
@@ -812,6 +832,7 @@ const ProvincialExemptionDetailsPage = () => {
     documentUploadBusy
   const canLinkApplications =
     isApplicationApprover &&
+    withinApproverRegions &&
     canSaveExemption &&
     !applicationsErrorMessage &&
     !editing &&
@@ -1029,9 +1050,11 @@ const ProvincialExemptionDetailsPage = () => {
           ? 'Add or clear the typed application number before leaving, or discard all changes.'
           : undefined
 
-  const canUploadExemptionDocuments = canPerform('/fileExemptionUpload') && !exemptionEditLocked
+  const canUploadExemptionDocuments =
+    canPerform('/fileExemptionUpload', exemptionOrgUnits) && !exemptionEditLocked
   const canDeleteExemptionDocuments =
     isApplicationApprover &&
+    withinApproverRegions &&
     persistedStatusCode.length > 0 &&
     persistedStatusCode !== 'EXP' &&
     editContextLoaded &&

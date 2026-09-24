@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { gotoSyntheticRoute, installSyntheticCognitoSession } from './utils'
+import { gotoSyntheticRoute, installSyntheticOidcSession } from './utils'
 
 const expectTooltipOutsideRail = async (tooltip: Locator) => {
   const content = tooltip.locator('.cds--popover-content')
@@ -363,7 +363,7 @@ const submitApplicationSearch = async (page: Page) => {
 
 test.describe('FSPTS-aligned LEXIS shell', () => {
   test.beforeEach(async ({ page }) => {
-    await installSyntheticCognitoSession(page, {
+    await installSyntheticOidcSession(page, {
       username: authenticatedAdminSession.principal,
       orgUnitNo: authenticatedAdminSession.orgUnitNo,
     })

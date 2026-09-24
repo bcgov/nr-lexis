@@ -232,10 +232,18 @@ public class PurchaseOfferController {
         || !provincialAuthorizationService.canAccessOffer(authentication, detail)) {
       return Optional.empty();
     }
-    boolean canEditScheduleDates = canEditScheduleDates(roles);
-    boolean canEditOfferRemarks = canEditOfferRemarks(roles);
-    boolean canEditOfferDetails = canEditOfferDetails(scopedClientNumber, roles, detail);
-    boolean canEditWithdrawFields = canEditWithdrawFields(scopedClientNumber, roles, detail);
+    // A regional user edits only offers whose application is in one of their write regions.
+    boolean inWriteRegion =
+        provincialAuthorizationService.canWriteRecord(
+            authentication,
+            application.map(LexisApplicationDetailDto::orgUnitNumber).orElse(null),
+            OrgUnitSurface.OFFER_WRITE);
+    boolean canEditScheduleDates = inWriteRegion && canEditScheduleDates(roles);
+    boolean canEditOfferRemarks = inWriteRegion && canEditOfferRemarks(roles);
+    boolean canEditOfferDetails =
+        inWriteRegion && canEditOfferDetails(scopedClientNumber, roles, detail);
+    boolean canEditWithdrawFields =
+        inWriteRegion && canEditWithdrawFields(scopedClientNumber, roles, detail);
     PurchaseOfferDetailDto enriched =
         detail
             .withApplicationContext(

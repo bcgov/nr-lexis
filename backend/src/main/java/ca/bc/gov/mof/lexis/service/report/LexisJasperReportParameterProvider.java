@@ -213,7 +213,7 @@ public class LexisJasperReportParameterProvider {
   private Map<String, Object> tenureTypeAnalysisReport(Map<String, String> parameters) {
     Map<String, Object> reportParameters = new HashMap<>();
 
-    reportParameters.put("P_ORG_UNIT_NUMBER", "-1");
+    reportParameters.put("P_ORG_UNIT_NUMBER", regionsOrAll(parameters));
     reportParameters.put("P_EXEMPTION_REASON", "");
     reportParameters.put("P_EXEMPTION_TYPE", "");
     reportParameters.put("P_EXEMPTION_NUMBER", "");
@@ -241,7 +241,7 @@ public class LexisJasperReportParameterProvider {
   private Map<String, Object> tenureMarkAnalysisReport(Map<String, String> parameters) {
     Map<String, Object> reportParameters = new HashMap<>();
 
-    reportParameters.put("P_ORG_UNIT_NUMBER", "-1");
+    reportParameters.put("P_ORG_UNIT_NUMBER", regionsOrAll(parameters));
     reportParameters.put("P_EXEMPTION_REASON", "");
     reportParameters.put("P_EXEMPTION_TYPE", "");
     reportParameters.put("P_EXEMPTION_NUMBER", "");
@@ -269,7 +269,7 @@ public class LexisJasperReportParameterProvider {
   private Map<String, Object> tenureFileAnalysisReport(Map<String, String> parameters) {
     Map<String, Object> reportParameters = new HashMap<>();
 
-    reportParameters.put("P_ORG_UNIT_NUMBER", "-1");
+    reportParameters.put("P_ORG_UNIT_NUMBER", regionsOrAll(parameters));
     reportParameters.put("P_EXEMPTION_REASON", "");
     reportParameters.put("P_EXEMPTION_TYPE", "");
     reportParameters.put("P_EXEMPTION_NUMBER", "");
@@ -315,6 +315,16 @@ public class LexisJasperReportParameterProvider {
   private String csvValueOrEmpty(Map<String, String> parameters, String... keys) {
     String value = csvValue(parameters, keys);
     return value == null ? "" : value;
+  }
+
+  /**
+   * Legacy ran the tenure type, timber mark and file analyses for every region ("-1"). A
+   * submitted region still applies, since regional users are only authorized for the regions
+   * they name.
+   */
+  private String regionsOrAll(Map<String, String> parameters) {
+    String regions = csvValue(parameters, "region");
+    return isBlank(regions) ? "-1" : regions;
   }
 
   private String normalizeCsv(String value) {

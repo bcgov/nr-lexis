@@ -26,8 +26,9 @@ import org.springframework.test.web.servlet.MockMvc;
 @SpringBootTest(
     properties = {
       "spring.profiles.active=stub-reports,stub-services",
-      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://cognito.example.test/user-pool",
-      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://cognito.example.test/user-pool/.well-known/jwks.json",
+      "lexis.auth.oidc.client-id=lexis-test",
+      "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://loginproxy.example.test/auth/realms/standard",
+      "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://loginproxy.example.test/auth/realms/standard/protocol/openid-connect/certs",
       "ALLOWED_ORIGINS=http://localhost:3000",
       "LEXIS_PROD_RTM_ONLY=true"
     })
@@ -379,7 +380,7 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
         .jwt(
             token ->
                 token
-                    .claim("custom:idp_name", "idir")
-                    .claim("custom:idp_username", "lexis-test-user"));
+                    .claim("identity_provider", "idir")
+                    .claim("idir_username", "lexis-test-user"));
   }
 }

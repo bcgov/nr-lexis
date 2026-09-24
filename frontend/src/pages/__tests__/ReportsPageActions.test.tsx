@@ -11,7 +11,7 @@ import {
   fetchProvincialExemptionOptions,
   fetchProvincialPermitOptions,
 } from '@/service/search-options-service'
-import { createTestAuthContext } from '@/test-utils/auth'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 import { businessDateParts, formatIsoDateParts } from '@/utils/date'
 import { triggerBrowserDownload } from '@/utils/download'
 
@@ -705,6 +705,51 @@ describe('Reports Page Actions', () => {
     })
   })
 
+  it('limits a regional report to its own regions even when another report is province-wide', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          grantedActions: ['/offerReport', '/permitLedgerReport'],
+          actionRegions: { permitledgerreport: ['1908'] },
+        }),
+      }),
+    )
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      defaultRegion: '1903',
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1908', label: 'Skeena Natural Resource Region' },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=permitLedgerReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Permits Report' })
+    await waitFor(() => {
+      expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          reportId: 'permitLedgerReport',
+          values: expect.objectContaining({
+            region: '1908',
+            regionLabel: 'Skeena Natural Resource Region',
+          }),
+        }),
+      )
+    })
+  })
+
   it('submits all regions after explicitly clearing the configured default region', async () => {
     mockReportPermissions()
     mockedFetchReportOptions.mockResolvedValueOnce({
@@ -1169,6 +1214,55 @@ describe('Reports Page Actions', () => {
           ...defaultDates,
           timberMark1: 'tm-a',
           timberMark2: 'tm-b',
+        },
+      })
+    })
+  })
+
+  it('limits a regional tenure types report to the user regions', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          grantedActions: ['/tenureReport'],
+          actionRegions: { tenurereport: ['1908'] },
+        }),
+      }),
+    )
+    mockedFetchReportOptions.mockResolvedValueOnce({
+      ...emptyReportOptions(),
+      defaultRegion: '1903',
+      regions: [
+        { value: '1903', label: 'Cariboo Natural Resource Region' },
+        { value: '1908', label: 'Skeena Natural Resource Region' },
+      ],
+    })
+    const defaultDates = legacyTenureDefaultDates()
+
+    render(
+      <MemoryRouter initialEntries={['/reports?report=tenureReport']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    await waitFor(() => {
+      expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
+    })
+    await chooseComboBoxOption('Report variant', 'Tenure types report')
+    await userEvent.type(screen.getByLabelText('Tenure type 1'), 'A01')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+
+    await waitFor(() => {
+      expect(mockedRunReport).toHaveBeenCalledWith({
+        reportId: 'tenureReport',
+        actionMapping: 'generateTenureReport',
+        values: {
+          ...defaultDates,
+          region: '1908',
+          regionLabel: 'Skeena Natural Resource Region',
+          tenureType1: 'A01',
         },
       })
     })

@@ -27,12 +27,13 @@ class LexisPrincipalServiceTest {
         jwt(
             SYNTHETIC_UUID_SUBJECT,
             Map.of(
-                "custom:idp_name", "idir",
-                "custom:idp_username", "amcdermid"));
+                "identity_provider", "idir",
+                "idir_username", "staff.user",
+                "preferred_username", "some-guid@azureidir"));
 
     String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
 
-    assertThat(principalName).isEqualTo("IDIR\\amcdermid");
+    assertThat(principalName).isEqualTo("IDIR\\STAFF.USER");
   }
 
   @Test
@@ -41,44 +42,67 @@ class LexisPrincipalServiceTest {
         jwt(
             SYNTHETIC_UUID_SUBJECT,
             Map.of(
-                "custom:idp_name", "bceidbusiness",
-                "custom:idp_username", "industry.user"));
+                "identity_provider", "bceidbusiness",
+                "bceid_username", "industry.user"));
 
     String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
 
-    assertThat(principalName).isEqualTo("BCEIDBUSINESS\\industry.user");
+    assertThat(principalName).isEqualTo("BCEID\\INDUSTRY.USER");
   }
 
   @Test
-  void shouldResolveBceidUserIdWhenUsernameClaimIsMissing() {
+  void shouldResolveBceidGuidWhenUsernameClaimIsMissing() {
     Jwt accessToken =
         jwt(
             SYNTHETIC_UUID_SUBJECT,
             Map.of(
-                "custom:idp_name", "dev-bceidbusiness",
-                "custom:idp_user_id", "ab123456"));
+                "identity_provider", "bceidbusiness",
+                "bceid_user_guid", "ab123456"));
 
     String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
 
-    assertThat(principalName).isEqualTo("DEV-BCEIDBUSINESS\\ab123456");
+    assertThat(principalName).isEqualTo("BCEID\\AB123456");
   }
 
   @Test
-  void shouldResolveBcscIdentityFromStableIdpUserId() {
-    Jwt accessToken =
+  void shouldResolveAzureIdirToTheSameAuditIdentity() {
+    Jwt token =
         jwt(
             SYNTHETIC_UUID_SUBJECT,
             Map.of(
-                "custom:idp_name", "ca.bc.gov.flnr.fam.test",
-                "custom:idp_user_id", "bcsc-user-guid"));
-
-    String principalName = service.resolvePrincipalName(new JwtAuthenticationToken(accessToken));
-
-    assertThat(principalName).isEqualTo("BCSC\\bcsc-user-guid");
+                "identity_provider", "azureidir",
+                "idir_username", "staff.user",
+                "preferred_username", "opaque-guid@azureidir"));
+    assertThat(service.resolvePrincipalName(new JwtAuthenticationToken(token)))
+        .isEqualTo("IDIR\\STAFF.USER");
   }
 
   @Test
-  void shouldResolveCognitoM2mClientIdWithExplicitServicePrefix() {
+  void shouldNormalizeGuidFallbackAndRejectUnverifiedUsernames() {
+    Jwt token =
+        jwt(
+            SYNTHETIC_UUID_SUBJECT,
+            Map.of("identity_provider", "azureidir", "idir_user_guid", "abc123"));
+    assertThat(service.resolvePrincipalName(new JwtAuthenticationToken(token)))
+        .isEqualTo("IDIR\\ABC123");
+    for (Map<String, Object> claims :
+        List.<Map<String, Object>>of(
+            Map.of("identity_provider", "unknown", "idir_username", "staff.user", "azp", "lexis-test"),
+            Map.of(
+                "identity_provider", "idir",
+                "preferred_username", "opaque-guid@idir",
+                "azp", "lexis-test"),
+            Map.of("preferred_username", "opaque-guid@idir", "azp", "lexis-test"))) {
+      assertThatThrownBy(
+              () ->
+                  service.resolvePrincipalName(
+                      new JwtAuthenticationToken(jwt(SYNTHETIC_UUID_SUBJECT, claims))))
+          .isInstanceOf(AccessDeniedException.class);
+    }
+  }
+
+  @Test
+  void shouldResolveM2mClientIdWithExplicitServicePrefix() {
     Jwt accessToken =
         jwt("opaque-service-subject", Map.of("client_id", "nexcol-service-client"));
 
@@ -122,7 +146,7 @@ class LexisPrincipalServiceTest {
 
   @Test
   void shouldResolveOrgUnitFromAccessTokenClaims() {
-    Jwt accessToken = jwt(SYNTHETIC_UUID_SUBJECT, Map.of("custom:org_unit_no", "76"));
+    Jwt accessToken = jwt(SYNTHETIC_UUID_SUBJECT, Map.of("org_unit_no", "76"));
 
     String orgUnitNo = service.resolveOrgUnitNo(new JwtAuthenticationToken(accessToken));
 
@@ -134,7 +158,7 @@ class LexisPrincipalServiceTest {
     Jwt accessToken =
         jwt(
             SYNTHETIC_UUID_SUBJECT,
-            Map.of("custom:org_unit_nos", List.of("76", "1826, 76", "invalid")));
+            Map.of("org_unit_nos", List.of("76", "1826, 76", "invalid")));
 
     assertThat(service.resolveOrgUnitNumbers(new JwtAuthenticationToken(accessToken)))
         .containsExactly(76L, 1826L);
@@ -148,7 +172,7 @@ class LexisPrincipalServiceTest {
     Instant now = Instant.now();
     Map<String, Object> claims = new java.util.HashMap<>(additionalClaims);
     claims.put("sub", subject);
-    claims.put("token_use", "access");
+    claims.put("typ", "Bearer");
     return new Jwt(
         "token",
         now,

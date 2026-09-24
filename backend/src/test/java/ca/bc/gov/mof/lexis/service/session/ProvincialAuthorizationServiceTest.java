@@ -15,7 +15,6 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
-import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
@@ -37,7 +36,6 @@ import org.springframework.security.core.Authentication;
 @ExtendWith(MockitoExtension.class)
 class ProvincialAuthorizationServiceTest {
 
-  @Mock private LexisPrincipalService principalService;
   @Mock private ObjectProvider<LexisApplicationService> applicationServiceProvider;
   @Mock private ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   @Mock private ObjectProvider<ExemptionService> exemptionServiceProvider;
@@ -49,14 +47,16 @@ class ProvincialAuthorizationServiceTest {
   @Mock private PermitService permitService;
   @Mock private PurchaseOfferService offerService;
 
+  private final LexisSessionService sessionService =
+      new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER");
   private ProvincialAuthorizationService service;
 
   @BeforeEach
   void setUp() {
     service =
         new ProvincialAuthorizationService(
-            new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER"),
-            principalService,
+            sessionService,
+            ProvincialRegionAuthorizationTest.configuredAuthorizationService(sessionService),
             applicationServiceProvider,
             applicationDetailsServiceProvider,
             exemptionServiceProvider,
@@ -88,7 +88,6 @@ class ProvincialAuthorizationServiceTest {
         .isTrue();
     assertThatThrownBy(() -> service.requireApplicationAttachmentMutation(authentication, 1L))
         .isInstanceOf(AccessDeniedException.class);
-    verifyNoInteractions(principalService);
   }
 
   @Test
@@ -145,7 +144,6 @@ class ProvincialAuthorizationServiceTest {
     assertThat(service.canAccessApplication(approver, 1L)).isTrue();
 
     verify(applicationService).findAccessByApplicationNumber(1L);
-    verifyNoInteractions(principalService);
   }
 
   @Test
@@ -613,8 +611,6 @@ class ProvincialAuthorizationServiceTest {
         assertThat(constrained.orgUnitNumbers()).containsExactly(12L, 76L);
       }
     }
-
-    verifyNoInteractions(principalService);
   }
 
   @Test
@@ -639,7 +635,6 @@ class ProvincialAuthorizationServiceTest {
     assertThat(searchConstraint.orgUnitNumbers()).containsExactly(12L, 76L);
     assertThat(detailConstraint.restricted()).isFalse();
     assertThat(detailConstraint.orgUnitNumbers()).containsExactly(12L, 76L);
-    verifyNoInteractions(principalService);
   }
 
   @Test
@@ -656,7 +651,6 @@ class ProvincialAuthorizationServiceTest {
     assertThat(constrained.restricted()).isFalse();
     assertThat(constrained.denied()).isFalse();
     assertThat(constrained.orgUnitNumbers()).isEmpty();
-    verifyNoInteractions(principalService);
   }
 
   @Test
@@ -672,7 +666,6 @@ class ProvincialAuthorizationServiceTest {
 
     assertThat(constrained.restricted()).isFalse();
     assertThat(constrained.denied()).isFalse();
-    verifyNoInteractions(principalService);
   }
 
   @Test
@@ -699,8 +692,6 @@ class ProvincialAuthorizationServiceTest {
         noOrgApprover,
         76L,
         ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
-
-    verifyNoInteractions(principalService);
   }
 
   @Test
@@ -733,7 +724,6 @@ class ProvincialAuthorizationServiceTest {
     assertThat(constrained.restricted()).isFalse();
     assertThat(constrained.denied()).isFalse();
     assertThat(constrained.orgUnitNumbers()).isEmpty();
-    verifyNoInteractions(principalService);
   }
 
   @Test
@@ -913,7 +903,6 @@ class ProvincialAuthorizationServiceTest {
         .thenReturn(Optional.of(application(1L, "00012345", null, 76L)));
 
     assertThat(service.canReviewApplication(approver, 1L)).isTrue();
-    verifyNoInteractions(principalService);
   }
 
   @Test
@@ -985,7 +974,7 @@ class ProvincialAuthorizationServiceTest {
     return application(applicationNumber, owner, agent, orgUnit, "P");
   }
 
-  private LexisApplicationDetailDto application(
+  static LexisApplicationDetailDto application(
       long applicationNumber, String owner, String agent, Long orgUnit, String jurisdiction) {
     return new LexisApplicationDetailDto(
         applicationNumber,

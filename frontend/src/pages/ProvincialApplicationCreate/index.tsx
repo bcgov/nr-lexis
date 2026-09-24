@@ -80,6 +80,7 @@ import {
   type ApplicationCodeOption,
 } from '@/service/provincial-application-items-service'
 import { useAuth } from '@/context/auth/useAuth'
+import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { formatBusinessIsoDate } from '@/utils/date'
@@ -400,7 +401,8 @@ const ProvincialApplicationCreatePage = () => {
   const [productTypes, setProductTypes] = useState<SearchOption[]>([])
   const [growthTypes, setGrowthTypes] = useState<SearchOption[]>([])
   const [exemptionReasons, setExemptionReasons] = useState<SearchOption[]>([])
-  const [regions, setRegions] = useState<SearchOption[]>([])
+  const [allRegions, setAllRegions] = useState<SearchOption[]>([])
+  const regions = useAllowedRegionOptions(allRegions, 'createApplication', 'value')
   const [currentSchedules, setCurrentSchedules] = useState<SearchOption[]>([])
   const [optionsLoaded, setOptionsLoaded] = useState(false)
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
@@ -501,7 +503,7 @@ const ProvincialApplicationCreatePage = () => {
         setProductTypes(options.productTypes)
         setGrowthTypes(options.growthTypes)
         setExemptionReasons(options.exemptionReasons)
-        setRegions(options.regions)
+        setAllRegions(options.regions)
         setCurrentSchedules(scheduleOptions)
         setForm((current) => {
           const withScheduleDefaults = applyScheduleDefaults(

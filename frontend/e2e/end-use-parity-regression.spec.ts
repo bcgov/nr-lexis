@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test'
-import { gotoSyntheticRoute, installSyntheticCognitoSession } from './utils'
+import { gotoSyntheticRoute, installSyntheticOidcSession } from './utils'
 
 type CapturedWrite = {
   method: string
@@ -99,7 +99,7 @@ const respond = async (route: Parameters<Parameters<Page['route']>[1]>[0], body:
 }
 
 const installEndUseParityFixtures = async (page: Page): Promise<EndUseParityFixture> => {
-  await installSyntheticCognitoSession(page, {
+  await installSyntheticOidcSession(page, {
     username: 'END.USE.PARITY.TESTER',
     orgUnitNo: '1903',
   })

@@ -3,13 +3,13 @@ import { expect, test, type Page } from '@playwright/test'
 import {
   createUnsignedToken,
   E2E_BASE_URL,
-  installSyntheticCognitoSession,
-  type SyntheticCognitoSession,
+  installSyntheticOidcSession,
+  type SyntheticOidcSession,
 } from './utils'
 import { getWithAuth } from './utils/regression-auth'
 import { gotoWithRecovery } from './utils/navigation'
 
-const SESSION_IDLE_WARNING_DELAY_MS = 25 * 60 * 1000
+const SESSION_IDLE_WARNING_DELAY_MS = 20 * 60 * 1000
 const SESSION_IDLE_WARNING_DURATION_MS = 5 * 60 * 1000
 const URGENT_COUNTDOWN_DURATION_MS = 30 * 1000
 const SESSION_START_ISO = '2026-07-22T12:00:00.000Z'
@@ -80,7 +80,10 @@ const installSyntheticLexisApi = async (
 const installSyntheticLogoutRedirect = async (page: Page, sessionState: SyntheticSessionState) => {
   const loginUrl = new URL('/', E2E_BASE_URL).toString()
 
-  await page.route('**/clp-cgi/logoff.cgi**', async (route) => {
+  await page.route('**/protocol/openid-connect/logout**', async (route) => {
+    const request = new URL(route.request().url())
+    expect(request.searchParams.get('id_token_hint')).toMatch(/^eyJ[^.]+\.[^.]+\.[^.]+$/)
+    expect(request.searchParams.get('post_logout_redirect_uri')).toBe(new URL(E2E_BASE_URL).origin)
     sessionState.authenticated = false
     await route.fulfill({
       status: 302,
@@ -92,44 +95,39 @@ const installSyntheticLogoutRedirect = async (page: Page, sessionState: Syntheti
   })
 }
 
-const installSyntheticCognitoRefresh = async (
+const installSyntheticOidcRefresh = async (
   page: Page,
-  syntheticSession: SyntheticCognitoSession,
-  refreshedAtSeconds = Math.floor(Date.parse(SESSION_START_ISO) / 1000) + 29 * 60 + 30,
+  syntheticSession: SyntheticOidcSession,
+  refreshedAtSeconds = Math.floor(Date.parse(SESSION_START_ISO) / 1000) + 24 * 60 + 30,
 ) => {
   let refreshRequestCount = 0
-  await page.route('https://cognito-idp.ca-central-1.amazonaws.com/**', async (route) => {
-    const target = route.request().headers()['x-amz-target']
-    if (!target?.endsWith('GetTokensFromRefreshToken')) {
-      await route.abort()
-      return
-    }
+  await page.route(`${syntheticSession.issuer}/protocol/openid-connect/token`, async (route) => {
+    const parameters = new URLSearchParams(route.request().postData() ?? '')
+    expect(parameters.get('grant_type')).toBe('refresh_token')
+    expect(parameters.get('client_id')).toBe(syntheticSession.clientId)
+    expect(parameters.get('refresh_token')).toBe('initial-refresh-token')
 
     refreshRequestCount += 1
     await route.fulfill({
       status: 200,
-      contentType: 'application/x-amz-json-1.1',
+      contentType: 'application/json',
+      headers: { 'access-control-allow-origin': new URL(E2E_BASE_URL).origin },
       body: JSON.stringify({
-        AuthenticationResult: {
-          AccessToken: createUnsignedToken({
-            sub: 'session-timeout-test-user',
-            username: TEST_USERNAME,
-            client_id: syntheticSession.clientId,
-            token_use: 'access',
-            iat: refreshedAtSeconds,
-            exp: refreshedAtSeconds + 5 * 60,
-          }),
-          IdToken: createUnsignedToken({
-            sub: 'session-timeout-test-user',
-            'custom:org_unit_no': '1903',
-            token_use: 'id',
-            iat: refreshedAtSeconds,
-            exp: refreshedAtSeconds + 5 * 60,
-          }),
-          RefreshToken: 'rotated-refresh-token',
-          ExpiresIn: 300,
-          TokenType: 'Bearer',
-        },
+        access_token: createUnsignedToken({
+          ...syntheticSession.profile,
+          iat: refreshedAtSeconds,
+          exp: refreshedAtSeconds + 5 * 60,
+          typ: 'Bearer',
+        }),
+        id_token: createUnsignedToken({
+          ...syntheticSession.profile,
+          iat: refreshedAtSeconds,
+          exp: refreshedAtSeconds + 5 * 60,
+        }),
+        refresh_token: 'rotated-refresh-token',
+        expires_in: 300,
+        token_type: 'Bearer',
+        scope: 'openid profile email',
       }),
     })
   })
@@ -179,14 +177,14 @@ test.describe('session timeout regression', () => {
   test.describe.configure({ timeout: 240_000 })
   test('refreshes an expired token before direct regression API calls', async ({ page }) => {
     const nowSeconds = Math.floor(Date.now() / 1000)
-    const syntheticSession = await installSyntheticCognitoSession(page, {
+    const syntheticSession = await installSyntheticOidcSession(page, {
       username: TEST_USERNAME,
       orgUnitNo: '1903',
       issuedAtSeconds: nowSeconds,
-      expiresInSeconds: 60,
+      expiresInSeconds: 60 * 60,
       refreshToken: 'initial-refresh-token',
     })
-    const getRefreshRequestCount = await installSyntheticCognitoRefresh(
+    const getRefreshRequestCount = await installSyntheticOidcRefresh(
       page,
       syntheticSession,
       nowSeconds,
@@ -201,30 +199,22 @@ test.describe('session timeout regression', () => {
     ).toBeVisible()
 
     const expiredAccessToken = createUnsignedToken({
-      sub: 'session-timeout-test-user',
-      username: TEST_USERNAME,
-      client_id: syntheticSession.clientId,
-      token_use: 'access',
+      ...syntheticSession.profile,
       iat: nowSeconds - 301,
       exp: nowSeconds - 1,
-    })
-    const expiredIdToken = createUnsignedToken({
-      sub: 'session-timeout-test-user',
-      'custom:org_unit_no': '1903',
-      token_use: 'id',
-      iat: nowSeconds - 301,
-      exp: nowSeconds - 1,
+      typ: 'Bearer',
     })
     await page.evaluate(
-      ({ prefix, username, accessToken, idToken }) => {
-        window.localStorage.setItem(`${prefix}.${username}.accessToken`, accessToken)
-        window.localStorage.setItem(`${prefix}.${username}.idToken`, idToken)
+      ({ key, accessToken, expiresAt }) => {
+        const user = JSON.parse(window.sessionStorage.getItem(key)!)
+        user.access_token = accessToken
+        user.expires_at = expiresAt
+        window.sessionStorage.setItem(key, JSON.stringify(user))
       },
       {
-        prefix: syntheticSession.storagePrefix,
-        username: syntheticSession.username,
+        key: syntheticSession.storageKey,
         accessToken: expiredAccessToken,
-        idToken: expiredIdToken,
+        expiresAt: nowSeconds - 1,
       },
     )
 
@@ -236,14 +226,11 @@ test.describe('session timeout regression', () => {
 
       expect(getRefreshRequestCount()).toBe(1)
       const refreshedAccessToken = await page.evaluate(
-        ({ prefix, username }) => window.localStorage.getItem(`${prefix}.${username}.accessToken`),
-        {
-          prefix: syntheticSession.storagePrefix,
-          username: syntheticSession.username,
-        },
+        (key) => JSON.parse(window.sessionStorage.getItem(key)!).access_token as string,
+        syntheticSession.storageKey,
       )
       if (!refreshedAccessToken) {
-        throw new Error('The synthetic Cognito access token was not refreshed.')
+        throw new Error('The synthetic OIDC access token was not refreshed.')
       }
 
       expect(refreshedAccessToken).not.toBe(expiredAccessToken)
@@ -256,13 +243,13 @@ test.describe('session timeout regression', () => {
   test('opens, renders, and resets the warning without real-time waiting', async ({ page }) => {
     await page.clock.install({ time: new Date(SESSION_START_ISO) })
     const sessionStartSeconds = Math.floor(Date.parse(SESSION_START_ISO) / 1000)
-    const syntheticSession = await installSyntheticCognitoSession(page, {
+    const syntheticSession = await installSyntheticOidcSession(page, {
       username: TEST_USERNAME,
       orgUnitNo: '1903',
       issuedAtSeconds: sessionStartSeconds,
       refreshToken: 'initial-refresh-token',
     })
-    const getRefreshRequestCount = await installSyntheticCognitoRefresh(page, syntheticSession)
+    const getRefreshRequestCount = await installSyntheticOidcRefresh(page, syntheticSession)
     await installSyntheticLexisApi(page)
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoWithRecovery(page, new URL('/provincial/application', E2E_BASE_URL).toString(), {
@@ -354,12 +341,8 @@ test.describe('session timeout regression', () => {
     await expect
       .poll(() =>
         page.evaluate(
-          ({ prefix, username }) =>
-            window.localStorage.getItem(`${prefix}.${username}.refreshToken`),
-          {
-            prefix: syntheticSession.storagePrefix,
-            username: syntheticSession.username,
-          },
+          (key) => JSON.parse(window.sessionStorage.getItem(key)!).refresh_token as string,
+          syntheticSession.storageKey,
         ),
       )
       .toBe('rotated-refresh-token')
@@ -369,11 +352,43 @@ test.describe('session timeout regression', () => {
     await expect(dialog.getByText('5:00', { exact: true })).toBeVisible()
   })
 
+  test('ends the session when Stay logged in cannot renew it', async ({ page }) => {
+    await page.clock.install({ time: new Date(SESSION_START_ISO) })
+    const sessionState = { authenticated: true }
+    const syntheticSession = await installSyntheticOidcSession(page, {
+      username: TEST_USERNAME,
+      orgUnitNo: '1903',
+      issuedAtSeconds: Math.floor(Date.parse(SESSION_START_ISO) / 1000),
+    })
+    await page.route(`${syntheticSession.issuer}/protocol/openid-connect/token`, async (route) => {
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': new URL(E2E_BASE_URL).origin },
+        body: JSON.stringify({ error: 'invalid_grant' }),
+      })
+    })
+    await installSyntheticLexisApi(page, sessionState)
+    await installSyntheticLogoutRedirect(page, sessionState)
+    await gotoWithRecovery(page, new URL('/provincial/application', E2E_BASE_URL).toString(), {
+      ready: page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+    })
+    await page.clock.fastForward(SESSION_IDLE_WARNING_DELAY_MS)
+    const dialog = page.getByRole('alertdialog', { name: 'You’re about to be logged out' })
+    await expect(dialog).toBeVisible()
+    await dialog.getByRole('button', { name: 'Stay logged in' }).click()
+    await expect(page.getByRole('button', { name: /log in with idir/i })).toBeVisible()
+    await expect(page.getByText('You’re still logged in', { exact: true })).toHaveCount(0)
+    await expect
+      .poll(() => page.evaluate((key) => sessionStorage.getItem(key), syntheticSession.storageKey))
+      .toBeNull()
+  })
+
   test('shows the warning after automatic inactivity logout', async ({ page }) => {
     await page.clock.install({ time: new Date(SESSION_START_ISO) })
     const sessionState = { authenticated: true }
     const sessionStartSeconds = Math.floor(Date.parse(SESSION_START_ISO) / 1000)
-    await installSyntheticCognitoSession(page, {
+    await installSyntheticOidcSession(page, {
       username: TEST_USERNAME,
       orgUnitNo: '1903',
       issuedAtSeconds: sessionStartSeconds,
@@ -396,7 +411,7 @@ test.describe('session timeout regression', () => {
 
   test('does not show the warning after manual logout', async ({ page }) => {
     const sessionState = { authenticated: true }
-    await installSyntheticCognitoSession(page, {
+    await installSyntheticOidcSession(page, {
       username: TEST_USERNAME,
       orgUnitNo: '1903',
     })

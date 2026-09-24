@@ -216,7 +216,8 @@ jobs:
             -p MIN_MEM="${{ inputs.backend_memory_request }}"
             -p MAX_CPU="${{ inputs.backend_cpu_limit }}"
             -p MAX_MEM="${{ inputs.backend_memory_limit }}"
-            -p AWS_COGNITO_ISSUER_URI="${{ vars.AWS_COGNITO_ISSUER_URI }}"
+            -p LEXIS_OIDC_ISSUER_URI="${{ vars.LEXIS_OIDC_ISSUER_URI }}"
+            -p LEXIS_OIDC_CLIENT_ID="${{ vars.LEXIS_OIDC_CLIENT_ID }}"
             -p KEYCLOAK_ISSUER_URI="${{ vars.KEYCLOAK_ISSUER_URI }}"
             -p ALLOWED_ORIGINS="${{ vars.ALLOWED_ORIGINS || 'https://openapi.apps.gov.bc.ca' }}"
             -p DATABASE_HOST="$DATABASE_HOST"
@@ -278,29 +279,6 @@ jobs:
             fi
           done
 
-      - name: Resolve frontend logout URL
-        env:
-          CONFIGURED_SIGN_OUT: ${{ vars.VITE_REDIRECT_SIGN_OUT }}
-          DEPLOY_ENVIRONMENT: ${{ inputs.environment }}
-          LEXIS_SLOT: ${{ inputs.slot || inputs.target }}
-          REPOSITORY_NAME: ${{ github.event.repository.name }}
-        run: |
-          set -euo pipefail
-          if [ "${DEPLOY_ENVIRONMENT}" = "dev" ]; then
-            if [[ ! "${LEXIS_SLOT}" =~ ^([0-9]|[1-4][0-9])$ ]]; then
-              echo "::error title=Invalid DEV logout slot::Expected a Cognito slot from 0 through 49."
-              exit 1
-            fi
-            sign_out="https://${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca"
-          else
-            sign_out="${CONFIGURED_SIGN_OUT}"
-          fi
-          if [ -z "${sign_out}" ]; then
-            echo "::error title=Missing logout URL::VITE_REDIRECT_SIGN_OUT is required outside DEV."
-            exit 1
-          fi
-          printf 'VITE_REDIRECT_SIGN_OUT=%s\n' "${sign_out}" >> "${GITHUB_ENV}"
-
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
         env:
@@ -322,16 +300,11 @@ jobs:
             -p MIN_MEM="${{ inputs.frontend_memory_request }}"
             -p MAX_CPU="${{ inputs.frontend_cpu_limit }}"
             -p MAX_MEM="${{ inputs.frontend_memory_limit }}"
-            -p VITE_USER_POOLS_ID="${{ vars.VITE_USER_POOLS_ID }}"
-            -p VITE_USER_POOLS_WEB_CLIENT_ID="${{ vars.VITE_USER_POOLS_WEB_CLIENT_ID }}"
-            -p VITE_COGNITO_DOMAIN="${{ vars.VITE_COGNITO_DOMAIN }}"
-            -p VITE_REDIRECT_SIGN_IN="${{ vars.VITE_REDIRECT_SIGN_IN }}"
-            -p VITE_REDIRECT_SIGN_OUT="$VITE_REDIRECT_SIGN_OUT"
-            -p VITE_LOGOUT_SITEMINDER_URL="${{ vars.VITE_LOGOUT_SITEMINDER_URL }}"
-            -p VITE_LOGOUT_KEYCLOAK_URL="${{ vars.VITE_LOGOUT_KEYCLOAK_URL }}"
-            -p VITE_LOGOUT_KEYCLOAK_CLIENT_ID="${{ vars.VITE_LOGOUT_KEYCLOAK_CLIENT_ID }}"
-            -p VITE_COGNITO_SCOPES="${{ vars.VITE_COGNITO_SCOPES }}"
-            -p VITE_ZONE="${{ vars.VITE_ZONE }}"
+            -p VITE_OIDC_ISSUER_URI="${{ vars.LEXIS_OIDC_ISSUER_URI }}"
+            -p VITE_OIDC_CLIENT_ID="${{ vars.LEXIS_OIDC_CLIENT_ID }}"
+            -p VITE_OIDC_IDIR_HINT="${{ vars.LEXIS_OIDC_IDIR_HINT || 'azureidir' }}"
+            -p VITE_OIDC_BCEID_HINT="${{ vars.LEXIS_OIDC_BCEID_HINT || 'bceidbusiness' }}"
+            -p VITE_OIDC_SITEMINDER_LOGOUT_URL="${{ vars.LEXIS_OIDC_SITEMINDER_LOGOUT_URL || (inputs.environment == 'prod' && 'https://logon7.gov.bc.ca/clp-cgi/logoff.cgi' || 'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi') }}"
             -p VITE_LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
             -p VITE_LEXIS_REPORT_ENDPOINT_BASE="${{ vars.VITE_LEXIS_REPORT_ENDPOINT_BASE }}"
             -p VITE_LEXIS_REPORT_API_BASE="${{ vars.VITE_LEXIS_REPORT_API_BASE }}"

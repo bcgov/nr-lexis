@@ -24,9 +24,15 @@ regression coverage uses a separate TEST-only Playwright config.
 
 ## CI setup
 
-- The scheduled/manual `Regression` workflow runs on the default branch and reads TEST credentials
-  from GitHub `test` environment secrets before running Playwright. Pushing a feature branch does
-  not run this credentialed gate against that branch.
+- The `Regression` workflow is manual-only while the FAM team fixes the TEST IDIR regression account
+  for Keycloak. Removing its weekly trigger takes effect when the migration PR reaches the default
+  branch. Manual dispatch runs on the default branch and reads TEST credentials from GitHub `test`
+  environment secrets before running Playwright; pushing a feature branch does not run this gate.
+- To resume weekly regression, confirm the account can sign in through the approved provider and
+  has its required TEST role, then complete a successful manual `Regression` run. Restore the
+  `schedule` trigger in `.github/workflows/regression.yml` with cron `0 10 * * 3` (Wednesdays at
+  10:00 UTC; 3 AM Pacific during daylight time). Keep existing credential validation and failure
+  reporting. PR/merge Basic E2E and scheduled security scans continue during the pause.
 - Required `test` environment secrets:
   - `E2E_IDIR_USER`
   - `E2E_IDIR_PASSWORD`
@@ -65,7 +71,7 @@ regression coverage uses a separate TEST-only Playwright config.
   requirements.
 - Business BCeID browser regression is intentionally not scheduled because repeated automated login
   attempts can lock the TEST account. BCeID button and routing behavior stay covered by smoke and
-  unit tests; the BCeID-only permit review-request email remains outside the scheduled suite.
+  unit tests; the BCeID-only permit review-request email remains outside this suite.
 - Credentialed regression jobs are scoped to the `test` GitHub environment, so dev preview deploys
   stay on smoke coverage.
 - Credentialed page loads and the session-timeout setup recover from connection failures, frontend
@@ -79,11 +85,11 @@ regression coverage uses a separate TEST-only Playwright config.
   saves and cleanup are never replayed by navigation recovery. Wrong headings on rendered pages,
   denied/missing resources, and unrelated JavaScript errors remain failures.
 - IDIR button actionability and federated-navigation completion have separate waits. Authenticated
-  API GETs retain bounded transport retries but do not follow redirects, so custom CSRF headers
-  stay on the requested endpoint and unexpected login redirects remain visible failures.
-  POST/PUT/DELETE retry only an explicit connection refusal before sending, with redirect following
-  and implicit retries disabled. They do not retry ambiguous resets, timeouts, or HTTP responses;
-  the existing single auth-refresh retry remains unchanged.
+  API GETs retain bounded transport retries but do not follow redirects, so custom CSRF headers stay
+  on the requested endpoint and unexpected login redirects remain visible failures. POST/PUT/DELETE
+  retry only an explicit connection refusal before sending, with redirect following and implicit
+  retries disabled. They do not retry ambiguous resets, timeouts, or HTTP responses; the existing
+  single auth-refresh retry remains unchanged.
 - Both the regression config and workflow use `safe-regression-reporter.ts`. Public output contains
   static test names, counts, failure categories, source locations, and fixed recovery messages. Raw
   exceptions, headers, assertion values, page contents, attachments, and arbitrary test
@@ -95,9 +101,20 @@ regression coverage uses a separate TEST-only Playwright config.
   [GitHub's secure-use guidance](https://docs.github.com/en/actions/reference/security/secure-use).
 - The Chromium job retains `continue-on-error` so the separate **TEST Regression Result** job can
   report the outcome outside the deployment environment. A green Chromium job alone is not a pass.
-- Logout follows the FSPTS chain: Siteminder → Keycloak → Cognito → LEXIS. The app builds the nested
-  URL from the three `VITE_LOGOUT_*` values so Cognito runs last, clears its session, and returns to
-  the Cognito-registered LEXIS origin in `VITE_REDIRECT_SIGN_OUT`.
+- Login uses the CSS integration's Keycloak authorization-code flow with PKCE; logout chains
+  SiteMinder `logoff.cgi` (when configured) to the realm's end-session endpoint and returns to the
+  registered LEXIS origin. IDIR MFA
+  requirements must be checked before enabling credentialed CI; credentials alone do not establish
+  that unattended federation will work.
+- Synthetic browser coverage uses the real `oidc-client-ts` user format in `sessionStorage` and
+  intercepts discovery, refresh and logout endpoints. Tokens are synthetic and backend routes are
+  intercepted; these tests prove browser behavior, not live CSS provisioning or Oracle
+  authorization. The real 25-minute idle timer and warning at 20 minutes run under Playwright's clock,
+  including refresh-token rotation; production code has no webdriver bypass.
+- Each credentialed test signs in within its own browser page. There is no reusable `storageState`
+  file: Playwright's normal storage state does not include `sessionStorage`. Any future shared-login
+  fixture must explicitly capture and restore OIDC session storage and retain refresh-token
+  rotations.
 
 ## Run commands
 

@@ -19,6 +19,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -141,7 +142,8 @@ class LexisSessionControllerTest {
                 null,
                 List.of(),
                 false,
-                "76"));
+                "76",
+                Map.of()));
 
     verify(sessionService).parseRolesFromPrincipal(authentication);
     verify(sessionService).resolveWelcomeRoute("idir\\jsmith", List.of("LEXIS_READ_ONLY", "LEXIS_ADMIN"));

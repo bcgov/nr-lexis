@@ -19,7 +19,6 @@ import java.nio.file.StandardCopyOption;
 import java.sql.Connection;
 import java.sql.SQLException;
 import java.util.HashMap;
-import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import java.util.Set;
@@ -47,7 +46,6 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.security.core.Authentication;
-import org.springframework.security.core.GrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
 
@@ -391,11 +389,8 @@ public class OracleLexisReportService implements LexisReportService {
     if (authentication == null || authentication.getAuthorities() == null) {
       return false;
     }
-    return authentication.getAuthorities().stream()
-        .map(GrantedAuthority::getAuthority)
-        .filter(authority -> authority != null)
-        .map(authority -> authority.trim().toUpperCase(Locale.ROOT))
-        .anyMatch(role::equals);
+    // Normalized roles count a regional grant as its role; record access is checked separately.
+    return sessionService.parseRolesFromPrincipal(authentication).contains(role);
   }
 
   private LexisReportRequestDto applyLegacySpeciesGradeDefaults(LexisReportRequestDto request) {

@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -75,6 +76,13 @@ class PurchaseOfferControllerTest {
             provincialAuthorizationService,
             editLockService,
             offerWithdrawalPolicy);
+    lenient()
+        .when(
+            provincialAuthorizationService.canWriteRecord(
+                org.mockito.ArgumentMatchers.nullable(Authentication.class),
+                org.mockito.ArgumentMatchers.nullable(Long.class),
+                eq(OrgUnitSurface.OFFER_WRITE)))
+        .thenReturn(true);
     lenient()
         .when(
             provincialAuthorizationService.constrainOrgUnits(
@@ -499,6 +507,32 @@ class PurchaseOfferControllerTest {
             offer.withApplicationContext(45.5, "FI/HE/LUM")
                 .withEditPermissions(true, true, true, true));
     assertThat(response.getBody().offerRemark()).isEqualTo("Initial offer");
+  }
+
+  @Test
+  void detailShouldBeReadOnlyOutsideTheRegionalWriteGrant() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_READ_ONLY", "LEXIS_APPLICATION_APPROVER"));
+    PurchaseOfferDetailDto offer = offerDetail("00077881");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    mockApplicationSpeciesGradeCode();
+    when(provincialAuthorizationService.canWriteRecord(
+            eq(authentication),
+            org.mockito.ArgumentMatchers.nullable(Long.class),
+            eq(OrgUnitSurface.OFFER_WRITE)))
+        .thenReturn(false);
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(false, false, false, false));
+    verify(editLockService, never()).acquireOffer(any(), any(), any(), anyBoolean());
   }
 
   @Test

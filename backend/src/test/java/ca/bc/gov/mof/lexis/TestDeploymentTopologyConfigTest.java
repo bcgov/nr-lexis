@@ -329,11 +329,7 @@ class TestDeploymentTopologyConfigTest {
         frontendJob.substring(0, frontendJob.indexOf("      - uses: bcgov/action-deployer-openshift@"));
     String frontendDeployStep =
         frontendJob.substring(frontendJob.indexOf("      - uses: bcgov/action-deployer-openshift@"));
-    String logoutStep =
-        between(
-            frontendJob,
-            "      - name: Resolve frontend logout URL",
-            "      - uses: bcgov/action-deployer-openshift@");
+
 
     assertThat(backendJobHeader)
         .doesNotContain(
@@ -429,24 +425,22 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_REGION_RCO_ADDRESS",
             "LEXIS_MAIL_REGION_RNI_ADDRESS",
             "LEXIS_MAIL_REGION_RSI_ADDRESS");
-    assertThat(logoutStep)
-        .contains("CONFIGURED_SIGN_OUT: ${{ vars.VITE_REDIRECT_SIGN_OUT }}")
-        .contains("LEXIS_SLOT: ${{ inputs.slot || inputs.target }}")
-        .contains("^([0-9]|[1-4][0-9])$")
-        .contains(
-            "https://${REPOSITORY_NAME}-${LEXIS_SLOT}.apps.gold.devops.gov.bc.ca")
-        .contains("VITE_REDIRECT_SIGN_OUT is required outside DEV")
-        .doesNotContain("logontest7.gov.bc.ca")
-        .doesNotContain("COGNITO_LOGOUT_CHAIN_URL")
-        .contains("printf 'VITE_REDIRECT_SIGN_OUT=%s\\n'");
+    assertThat(backendDeployStep)
+        .contains("-p LEXIS_OIDC_ISSUER_URI=\"${{ vars.LEXIS_OIDC_ISSUER_URI }}\"")
+        .contains("-p LEXIS_OIDC_CLIENT_ID=\"${{ vars.LEXIS_OIDC_CLIENT_ID }}\"")
+        .contains("-p KEYCLOAK_ISSUER_URI=\"${{ vars.KEYCLOAK_ISSUER_URI }}\"");
     assertThat(frontendDeployStep)
         .contains("LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}")
-        .contains("-p VITE_REDIRECT_SIGN_OUT=\"$VITE_REDIRECT_SIGN_OUT\"")
-        .contains("-p VITE_LOGOUT_SITEMINDER_URL=\"${{ vars.VITE_LOGOUT_SITEMINDER_URL }}\"")
-        .contains("-p VITE_LOGOUT_KEYCLOAK_URL=\"${{ vars.VITE_LOGOUT_KEYCLOAK_URL }}\"")
+        .contains("-p VITE_OIDC_ISSUER_URI=\"${{ vars.LEXIS_OIDC_ISSUER_URI }}\"")
+        .contains("-p VITE_OIDC_CLIENT_ID=\"${{ vars.LEXIS_OIDC_CLIENT_ID }}\"")
+        .contains("-p VITE_OIDC_IDIR_HINT=\"${{ vars.LEXIS_OIDC_IDIR_HINT || 'azureidir' }}\"")
+        .contains("-p VITE_OIDC_BCEID_HINT=\"${{ vars.LEXIS_OIDC_BCEID_HINT || 'bceidbusiness' }}\"")
         .contains(
-            "-p VITE_LOGOUT_KEYCLOAK_CLIENT_ID=\"${{ vars.VITE_LOGOUT_KEYCLOAK_CLIENT_ID }}\"")
-        .doesNotContain("-p VITE_REDIRECT_SIGN_OUT=\"${{ vars.VITE_REDIRECT_SIGN_OUT }}\"");
+            "-p VITE_OIDC_SITEMINDER_LOGOUT_URL=\"${{ vars.LEXIS_OIDC_SITEMINDER_LOGOUT_URL"
+                + " || (inputs.environment == 'prod'"
+                + " && 'https://logon7.gov.bc.ca/clp-cgi/logoff.cgi'"
+                + " || 'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi') }}\"");
+    assertThat(workflow).doesNotContain("COGNITO", "VITE_LOGOUT", "VITE_REDIRECT_SIGN");
   }
 
   @Test

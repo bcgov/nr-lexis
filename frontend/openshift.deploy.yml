@@ -36,28 +36,19 @@ parameters:
     value: ghcr.io/bcgov/nr-lexis/frontend
   - name: FRONTEND_LOG_LEVEL
     value: INFO
-  - name: VITE_USER_POOLS_ID
-    value: ""
-  - name: VITE_USER_POOLS_WEB_CLIENT_ID
-    value: ""
-  - name: VITE_COGNITO_DOMAIN
-    value: ""
-  - name: VITE_REDIRECT_SIGN_IN
-    value: ""
-  - name: VITE_REDIRECT_SIGN_OUT
-    description: Fallback Amplify sign-out target registered in Cognito; normally the application origin
+  - name: VITE_OIDC_ISSUER_URI
+    description: BC Gov SSO issuer for interactive users
     required: true
-  - name: VITE_LOGOUT_SITEMINDER_URL
-    description: Siteminder logoff.cgi base URL for the application-built federated logout chain
-  - name: VITE_LOGOUT_KEYCLOAK_URL
-    description: Keycloak end-session URL for the application-built federated logout chain
-  - name: VITE_LOGOUT_KEYCLOAK_CLIENT_ID
-    description: Cognito client id registered in the environment's shared Keycloak client
-  - name: VITE_COGNITO_SCOPES
-    value: "openid profile email"
-  - name: VITE_ZONE
-    description: Authentication environment; supported values are dev, test, and prod
+  - name: VITE_OIDC_CLIENT_ID
+    description: LEXIS public browser client in the same SSO environment
     required: true
+  - name: VITE_OIDC_IDIR_HINT
+    value: azureidir
+  - name: VITE_OIDC_BCEID_HINT
+    value: bceidbusiness
+  - name: VITE_OIDC_SITEMINDER_LOGOUT_URL
+    description: SiteMinder logoff.cgi chained before Keycloak end-session so Business BCeID logout ends the upstream session
+    value: ""
   - name: VITE_LEXIS_PROD_RTM_ONLY
     value: "false"
   - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
@@ -134,26 +125,16 @@ objects:
                   value: /tmp
                 - name: XDG_CONFIG_HOME
                   value: /tmp
-                - name: VITE_USER_POOLS_ID
-                  value: ${VITE_USER_POOLS_ID}
-                - name: VITE_USER_POOLS_WEB_CLIENT_ID
-                  value: ${VITE_USER_POOLS_WEB_CLIENT_ID}
-                - name: VITE_COGNITO_DOMAIN
-                  value: ${VITE_COGNITO_DOMAIN}
-                - name: VITE_REDIRECT_SIGN_IN
-                  value: ${VITE_REDIRECT_SIGN_IN}
-                - name: VITE_REDIRECT_SIGN_OUT
-                  value: ${VITE_REDIRECT_SIGN_OUT}
-                - name: VITE_LOGOUT_SITEMINDER_URL
-                  value: ${VITE_LOGOUT_SITEMINDER_URL}
-                - name: VITE_LOGOUT_KEYCLOAK_URL
-                  value: ${VITE_LOGOUT_KEYCLOAK_URL}
-                - name: VITE_LOGOUT_KEYCLOAK_CLIENT_ID
-                  value: ${VITE_LOGOUT_KEYCLOAK_CLIENT_ID}
-                - name: VITE_COGNITO_SCOPES
-                  value: ${VITE_COGNITO_SCOPES}
-                - name: VITE_ZONE
-                  value: ${VITE_ZONE}
+                - name: VITE_OIDC_ISSUER_URI
+                  value: ${VITE_OIDC_ISSUER_URI}
+                - name: VITE_OIDC_CLIENT_ID
+                  value: ${VITE_OIDC_CLIENT_ID}
+                - name: VITE_OIDC_IDIR_HINT
+                  value: ${VITE_OIDC_IDIR_HINT}
+                - name: VITE_OIDC_BCEID_HINT
+                  value: ${VITE_OIDC_BCEID_HINT}
+                - name: VITE_OIDC_SITEMINDER_LOGOUT_URL
+                  value: ${VITE_OIDC_SITEMINDER_LOGOUT_URL}
                 - name: VITE_LEXIS_PROD_RTM_ONLY
                   value: ${VITE_LEXIS_PROD_RTM_ONLY}
                 - name: VITE_LEXIS_REPORT_ENDPOINT_BASE

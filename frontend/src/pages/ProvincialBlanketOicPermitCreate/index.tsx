@@ -5,6 +5,7 @@ import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailLoadError from '@/components/DetailLoadError'
 import PageHeader from '@/components/PageHeader'
 import { useAuth } from '@/context/auth/useAuth'
+import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import { readDetailReturnTo, withDetailReturnTo } from '@/pages/shared/detail-navigation'
@@ -38,7 +39,8 @@ const BlanketOicPermitCreateContent = ({
 }: BlanketOicPermitCreateContentProps) => {
   const [detail, setDetail] = useState<ProvincialExemptionDetail | null>(null)
   const [editContext, setEditContext] = useState<ExemptionEditContext | null>(null)
-  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
+  const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
+  const regionOptions = useAllowedRegionOptions(allRegionOptions, 'createPermit', 'id')
   const [loading, setLoading] = useState(() => Boolean(normalizedExemptionNumber))
   const [errorMessage, setErrorMessage] = useState(() =>
     normalizedExemptionNumber ? '' : 'An exemption number is required to create a permit.',
@@ -86,7 +88,7 @@ const BlanketOicPermitCreateContent = ({
 
         setDetail(detailResult.value)
         setEditContext(editContextResult.value)
-        setRegionOptions(mapValueLabelOptionsToIdTextOptions(optionsResult.value.regions))
+        setAllRegionOptions(mapValueLabelOptionsToIdTextOptions(optionsResult.value.regions))
       } catch (error) {
         if (active) {
           console.error(error)

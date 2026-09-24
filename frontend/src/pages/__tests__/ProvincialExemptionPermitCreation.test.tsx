@@ -27,6 +27,7 @@ import { fetchProvincialExemptionOptions } from '@/service/search-options-servic
 import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
+import { withinRegions, type RecordOrgUnits } from '@/context/auth/region-utils'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -180,6 +181,21 @@ const mockRole = (roles: string[], allowedActions = ['createPermit']) => {
     createTestAuthContext({
       capabilities: createTestCapabilities({ roles }),
       canPerform: vi.fn((action: string) => allowedActions.includes(action)),
+    }),
+  )
+}
+
+// A Cariboo-only Application Approver: canPerform applies record regions like AuthProvider.
+const mockCaribooApprover = () => {
+  const cariboo = new Set(['1903'])
+  vi.mocked(useAuth).mockReturnValue(
+    createTestAuthContext({
+      capabilities: createTestCapabilities({ roles: ['LEXIS_APPLICATION_APPROVER'] }),
+      canPerform: vi.fn(
+        (action: string, ...recordOrgUnits: [recordOrgUnits?: RecordOrgUnits]) =>
+          action === 'createPermit' &&
+          (recordOrgUnits.length === 0 || withinRegions(cariboo, recordOrgUnits[0])),
+      ),
     }),
   )
 }
@@ -354,6 +370,38 @@ describe('permit creation from an exemption', () => {
     await openPermitsTab()
     expect(screen.getByRole('button', { name: 'Apply for new permit' })).toBeInTheDocument()
   })
+
+  it.each([
+    [['1903'], true],
+    [['1903', '1909'], true],
+    [['1909'], false],
+    [[], false],
+  ])(
+    'offers permit creation to a regional approver only in an exemption region they hold (%j)',
+    async (regionNumbers, offered) => {
+      mockCaribooApprover()
+      vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+        rateOverrideEnabled: false,
+        fixedFeeRate: '',
+        regionNumbers,
+        locked: false,
+        lockMessage: '',
+      })
+      renderPage(activeMinisterialExemption)
+
+      await openPermitsTab()
+      await waitFor(() => expect(fetchExemptionEditContext).toHaveBeenCalled())
+      if (offered) {
+        expect(
+          await screen.findByRole('button', { name: 'Apply for new permit' }),
+        ).toBeInTheDocument()
+      } else {
+        expect(
+          screen.queryByRole('button', { name: 'Apply for new permit' }),
+        ).not.toBeInTheDocument()
+      }
+    },
+  )
 
   it.each(['LEXIS_EXEMPTION_APPROVER', 'LEXIS_READ_ONLY'])(
     'does not expose Blanket OIC permit creation to %s even if permit actions are present',

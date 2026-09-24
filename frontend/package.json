@@ -16,7 +16,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "test:unit": "vitest --mode test",
     "test:security-config": "node scripts/check-security-config.mjs",
-    "test:session-timeout": "vitest --mode test --run src/components/SessionTimeoutWarning/SessionTimeoutWarning.test.tsx src/context/auth/__tests__/AuthProviderLogout.test.tsx src/context/auth/__tests__/logout-chain.test.ts src/context/auth/__tests__/session-expiry.test.ts src/pages/__tests__/LandingAuthFlow.test.tsx",
+    "test:session-timeout": "vitest --mode test --run src/components/SessionTimeoutWarning/SessionTimeoutWarning.test.tsx src/context/auth/__tests__/AuthProviderLogout.test.tsx src/context/auth/__tests__/session-expiry.test.ts src/pages/__tests__/LandingAuthFlow.test.tsx src/service/__tests__/oidc-service.test.ts",
     "test:cov": "vitest run --mode test --coverage --maxWorkers=2",
     "build": "vite build",
     "pree2e": "playwright install chromium",
@@ -32,13 +32,13 @@
     "@carbon/icons-react": "^11.64.0",
     "@carbon/pictograms-react": "^11.109.0",
     "@carbon/react": "^1.88.0",
-    "@tiptap/extension-link": "3.30.4",
-    "@tiptap/react": "3.30.4",
-    "@tiptap/starter-kit": "3.30.4",
+    "@tiptap/extension-link": "3.30.5",
+    "@tiptap/react": "3.30.5",
+    "@tiptap/starter-kit": "3.30.5",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-react": "^6.0.0",
-    "aws-amplify": "^6.15.5",
     "axios": "^1.18.0",
+    "oidc-client-ts": "^3.5.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
     "react-router-dom": "^7.18.2",
@@ -75,7 +75,7 @@
     },
     "rollup@<4.22.4": "^4.22.4",
     "@types/react": "^19.0.10",
-    "@tiptap/extension-bubble-menu": "3.30.4",
-    "@tiptap/extension-floating-menu": "3.30.4"
+    "@tiptap/extension-bubble-menu": "3.30.5",
+    "@tiptap/extension-floating-menu": "3.30.5"
   }
 }

@@ -14,6 +14,7 @@ import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpStatus;
@@ -78,6 +79,12 @@ public class LexisSessionController {
     boolean forestClientSelectionRequired =
         forestClientScope.selectionRequired() || forestClientScope.invalid();
     String orgUnitNo = principalService.resolveOrgUnitNo(principal);
+    Map<String, List<Long>> actionRegions =
+        authorizationService.resolveActionRegions(
+            principal instanceof Authentication authentication
+                ? sessionService.authorityNames(authentication)
+                : List.of(),
+            grantedActions);
 
     LOGGER.debug(
         "Resolved LEXIS session capabilities: authenticated={}, principalPresent={}, roles={}, welcomeTarget={}, grantedActionCount={}, forestClientScoped={}, orgUnitNo={}",
@@ -100,7 +107,8 @@ public class LexisSessionController {
             forestClientNumber,
             forestClientScope.availableClientNumbers(),
             forestClientSelectionRequired,
-            orgUnitNo));
+            orgUnitNo,
+            actionRegions));
   }
 
   @GetMapping("/canPerformAction")

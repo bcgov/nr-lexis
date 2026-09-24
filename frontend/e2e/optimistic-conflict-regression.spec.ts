@@ -1,10 +1,10 @@
 import { expect, test, type Page } from '@playwright/test'
-import { gotoSyntheticRoute, installSyntheticCognitoSession } from './utils'
+import { gotoSyntheticRoute, installSyntheticOidcSession } from './utils'
 
 // Real Carbon dialogs and API interception exercise browser stacking/focus and refresh recovery.
 // These synthetic responses do not verify Oracle concurrency or deployed TEST persistence.
 const installConflictFixture = async (page: Page, code: string) => {
-  await installSyntheticCognitoSession(page, { username: 'CONFLICT.TESTER', orgUnitNo: '1903' })
+  await installSyntheticOidcSession(page, { username: 'CONFLICT.TESTER', orgUnitNo: '1903' })
   let writes = 0
   let reads = 0
   const application = {

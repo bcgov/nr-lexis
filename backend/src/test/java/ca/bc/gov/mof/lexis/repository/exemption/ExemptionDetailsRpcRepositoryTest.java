@@ -4,8 +4,10 @@ import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.EXEMPTIO
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ORG_UNIT_BY_NUMBER;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -26,6 +28,7 @@ import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.jdbc.core.RowCallbackHandler;
 import org.springframework.jdbc.core.RowMapper;
 
 @DisplayName("Unit Test | ExemptionDetailsRpcRepository")
@@ -96,6 +99,35 @@ class ExemptionDetailsRpcRepositoryTest {
         .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
         .hasMessageContaining("ORG_UNIT_NO")
         .hasCause(failure);
+  }
+
+  @Test
+  void permitRegionsShouldBeReadDirectlyForTheExemptionsPermits() throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getLong("EXPORT_PERMIT_DETAIL_NUMBER")).thenReturn(7000123L, 7000124L);
+    when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(1903L, 0L);
+    // The second permit has no region.
+    when(resultSet.wasNull()).thenReturn(false, false, false, true);
+    doAnswer(
+            invocation -> {
+              RowCallbackHandler handler = invocation.getArgument(1);
+              handler.processRow(resultSet);
+              handler.processRow(resultSet);
+              return null;
+            })
+        .when(jdbcTemplate)
+        .query(any(String.class), any(RowCallbackHandler.class), eq("BO-001"));
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findPermitRegionsByExemptionNumber(" BO-001 "))
+        .containsExactly(entry(7000123L, 1903L));
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowCallbackHandler.class), eq("BO-001"));
+    assertThat(sql.getValue())
+        .contains("ORG_UNIT_NO")
+        .contains("FROM EXPORT_PERMIT_DETAIL")
+        .contains("WHERE EXEMPTION_NUMBER = ?");
   }
 
   @Test

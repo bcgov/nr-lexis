@@ -43,7 +43,95 @@ public record FederalApplicationDetailDto(
     boolean locked,
     boolean lockHeldByCurrentUser,
     String lockedBy,
-    String lockMessage) {
+    String lockMessage,
+    // The application's region, so the page can hide region-limited writes.
+    Long orgUnitNumber) {
+
+  /** The pre-region shape; the application's region is added separately. */
+  public FederalApplicationDetailDto(
+      Long applicationNumber,
+      String federalApplicationNumber,
+      String statusCode,
+      String statusDescription,
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String exemptionNumber,
+      String exemptionType,
+      String exemptionReason,
+      LocalDate receivedDate,
+      LocalDate listingDate,
+      boolean readOnly,
+      List<String> packages,
+      List<String> remarks,
+      List<FederalApplicationOfferDto> offers,
+      FederalApplicationPermitDto federalPermit,
+      String ownerApplicantType,
+      String ownerContactName,
+      String ownerCompanyName,
+      String agentApplicantType,
+      String agentContactName,
+      String agentCompanyName,
+      String region,
+      String productType,
+      LocalDate applicationDate,
+      Long termDays,
+      String logLocation,
+      String ageClass,
+      Double averageLogVolume,
+      Double applicationVolume,
+      String endUse,
+      String author,
+      FederalApplicationClientContextDto ownerClientContext,
+      FederalApplicationClientContextDto agentClientContext,
+      boolean locked,
+      boolean lockHeldByCurrentUser,
+      String lockedBy,
+      String lockMessage) {
+    this(
+        applicationNumber,
+        federalApplicationNumber,
+        statusCode,
+        statusDescription,
+        ownerClientNumber,
+        ownerClientLocationCode,
+        agentClientNumber,
+        agentClientLocationCode,
+        exemptionNumber,
+        exemptionType,
+        exemptionReason,
+        receivedDate,
+        listingDate,
+        readOnly,
+        packages,
+        remarks,
+        offers,
+        federalPermit,
+        ownerApplicantType,
+        ownerContactName,
+        ownerCompanyName,
+        agentApplicantType,
+        agentContactName,
+        agentCompanyName,
+        region,
+        productType,
+        applicationDate,
+        termDays,
+        logLocation,
+        ageClass,
+        averageLogVolume,
+        applicationVolume,
+        endUse,
+        author,
+        ownerClientContext,
+        agentClientContext,
+        locked,
+        lockHeldByCurrentUser,
+        lockedBy,
+        lockMessage,
+        null);
+  }
 
   public FederalApplicationDetailDto(
       Long applicationNumber,
@@ -228,7 +316,8 @@ public record FederalApplicationDetailDto(
         locked,
         lockHeldByCurrentUser,
         lockedBy,
-        lockMessage);
+        lockMessage,
+        orgUnitNumber);
   }
 
   public FederalApplicationDetailDto withEndUse(String resolvedEndUse) {
@@ -272,7 +361,8 @@ public record FederalApplicationDetailDto(
         locked,
         lockHeldByCurrentUser,
         lockedBy,
-        lockMessage);
+        lockMessage,
+        orgUnitNumber);
   }
 
   public FederalApplicationDetailDto withProductDescriptions(
@@ -317,7 +407,8 @@ public record FederalApplicationDetailDto(
         locked,
         lockHeldByCurrentUser,
         lockedBy,
-        lockMessage);
+        lockMessage,
+        orgUnitNumber);
   }
 
   public FederalApplicationDetailDto withReadOnly(boolean resolvedReadOnly) {
@@ -361,7 +452,8 @@ public record FederalApplicationDetailDto(
         locked,
         lockHeldByCurrentUser,
         lockedBy,
-        lockMessage);
+        lockMessage,
+        orgUnitNumber);
   }
 
   public FederalApplicationDetailDto withEditLock(
@@ -409,6 +501,52 @@ public record FederalApplicationDetailDto(
         locked,
         lockHeldByCurrentUser,
         lockedBy,
-        lockMessage);
+        lockMessage,
+        orgUnitNumber);
+  }
+
+  public FederalApplicationDetailDto withOrgUnitNumber(Long resolvedOrgUnitNumber) {
+    return new FederalApplicationDetailDto(
+        applicationNumber,
+        federalApplicationNumber,
+        statusCode,
+        statusDescription,
+        ownerClientNumber,
+        ownerClientLocationCode,
+        agentClientNumber,
+        agentClientLocationCode,
+        exemptionNumber,
+        exemptionType,
+        exemptionReason,
+        receivedDate,
+        listingDate,
+        readOnly,
+        packages,
+        remarks,
+        offers,
+        federalPermit,
+        ownerApplicantType,
+        ownerContactName,
+        ownerCompanyName,
+        agentApplicantType,
+        agentContactName,
+        agentCompanyName,
+        region,
+        productType,
+        applicationDate,
+        termDays,
+        logLocation,
+        ageClass,
+        averageLogVolume,
+        applicationVolume,
+        endUse,
+        author,
+        ownerClientContext,
+        agentClientContext,
+        locked,
+        lockHeldByCurrentUser,
+        lockedBy,
+        lockMessage,
+        resolvedOrgUnitNumber);
   }
 }

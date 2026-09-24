@@ -12,6 +12,7 @@ import RegionMultiSelect from '@/components/RegionMultiSelect'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import { setSearchParam } from '@/pages/shared/search-query-utils'
 import { useAuth } from '@/context/auth/useAuth'
+import { allowedRegions, filterRegionOptions } from '@/context/auth/region-utils'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { triggerBrowserDownload } from '@/utils/download'
 import { businessDateParts, formatIsoDateParts, formatLocalIsoDate } from '@/utils/date'
@@ -798,6 +799,25 @@ const appendSelectedOptionLabels = (
   return result
 }
 
+// A region default the user cannot choose, such as "All" for a regional user, falls back to
+// their default region.
+const resolveFieldDefault = (
+  field: ReportFieldDefinition,
+  optionsByKey: Record<string, SearchOption[]>,
+  defaultRegion: string,
+): string | undefined => {
+  const options = optionsByKey[field.optionKey ?? field.key]
+  if (
+    field.defaultValue !== undefined &&
+    (field.key === 'region' || field.key === 'orgUnitNumber') &&
+    options !== undefined &&
+    !options.some((option) => option.value === field.defaultValue)
+  ) {
+    return defaultRegion
+  }
+  return field.defaultValue
+}
+
 const buildEffectiveReportValues = (
   report: ReportDefinition,
   values: Record<string, string>,
@@ -809,7 +829,7 @@ const buildEffectiveReportValues = (
     report.id === 'speciesGradeReport' && hasOwnValue(values, 'permitStatus')
   report.fields.forEach((field) => {
     if (field.defaultValue !== undefined && !hasOwnValue(values, field.key)) {
-      effectiveValues[field.key] = field.defaultValue
+      effectiveValues[field.key] = resolveFieldDefault(field, optionsByKey, defaultRegion) ?? ''
       return
     }
 
@@ -950,7 +970,7 @@ const validateReportLaunch = (
 export const ReportsPageContent = () => {
   const { reportId: routeReportId } = useParams<{ reportId?: string }>()
   const [searchParams, setSearchParams] = useSearchParams()
-  const { canPerform } = useAuth()
+  const { canPerform, capabilities } = useAuth()
   const requestedReportId = useMemo(() => {
     const requestedReportId = (routeReportId ?? searchParams.get('report') ?? '').trim()
     if (REPORT_DEFINITIONS.some((report) => report.id === requestedReportId)) {
@@ -999,6 +1019,11 @@ export const ReportsPageContent = () => {
   const hasSelectedReportAccess = accessibleReports.some(
     (report) => report.id === selectedReport.id,
   )
+  // Regional users may only name their own regions; "All" and region-less reports are refused.
+  const reportRegionsAllowed = useMemo(
+    () => allowedRegions(capabilities, selectedReport.action),
+    [capabilities, selectedReport.action],
+  )
 
   const selectedReportValues = useMemo(() => {
     return reportValuesById[selectedReport.id] ?? {}
@@ -1018,6 +1043,11 @@ export const ReportsPageContent = () => {
         if (['fromDate', 'toDate', 'outputFormat'].includes(field.key)) {
           return true
         }
+        // Legacy ran the tenure type and timber mark analyses for every region; a regional
+        // user must name their regions instead.
+        if (field.key === 'region' && reportRegionsAllowed) {
+          return true
+        }
         if (selectedActionMapping === 'generateTenureReport') {
           return /^tenureType[1-6]$/.test(field.key)
         }
@@ -1027,13 +1057,17 @@ export const ReportsPageContent = () => {
         return !/^(tenureType|timberMark)[1-6]$/.test(field.key)
       }),
     }
-  }, [selectedReport, selectedActionMapping])
+  }, [selectedReport, selectedActionMapping, reportRegionsAllowed])
   const requiredReportOptionSources = useMemo(
     () => (hasSelectedReportAccess ? getRequiredReportOptionSources(selectedReportVariant) : []),
     [hasSelectedReportAccess, selectedReportVariant],
   )
   const reportFieldOptionsByKey = useMemo<Record<string, SearchOption[]>>(() => {
-    const reportOptions = reportOptionSourcesByKey.report
+    const reportSource = reportOptionSourcesByKey.report
+    const reportOptions = reportSource && {
+      ...reportSource,
+      regions: filterRegionOptions(reportSource.regions, reportRegionsAllowed, (o) => o.value),
+    }
     const destinationCountryOptions =
       expandedDestinationCountryReports[selectedReport.id] &&
       reportOptions?.allDestinationCountries.length
@@ -1048,7 +1082,9 @@ export const ReportsPageContent = () => {
     return {
       ...(reportOptions
         ? {
-            applicationRegions: [{ value: '0', label: 'All' }, ...reportOptions.regions],
+            applicationRegions: reportRegionsAllowed
+              ? reportOptions.regions
+              : [{ value: '0', label: 'All' }, ...reportOptions.regions],
           }
         : {}),
       ...(exemptionTypeOptions.length > 0
@@ -1120,7 +1156,12 @@ export const ReportsPageContent = () => {
           }
         : {}),
     }
-  }, [expandedDestinationCountryReports, reportOptionSourcesByKey, selectedReport.id])
+  }, [
+    expandedDestinationCountryReports,
+    reportOptionSourcesByKey,
+    reportRegionsAllowed,
+    selectedReport.id,
+  ])
 
   const requiredReportOptionsFailed = requiredReportOptionSources.some((source) =>
     Boolean(reportOptionFailuresByKey[source]),
@@ -1130,7 +1171,11 @@ export const ReportsPageContent = () => {
   )
   const reportGenerationDisabled = requiredReportOptionsLoading || requiredReportOptionsFailed
 
-  const defaultReportRegion = reportOptionSourcesByKey.report?.defaultRegion ?? ''
+  const backendDefaultRegion = reportOptionSourcesByKey.report?.defaultRegion ?? ''
+  const defaultReportRegion =
+    !reportRegionsAllowed || reportRegionsAllowed.has(backendDefaultRegion)
+      ? backendDefaultRegion
+      : (reportFieldOptionsByKey.region?.[0]?.value ?? '')
   const hasInvalidReportDate = selectedReportVariant.fields.some(
     (field) =>
       field.type === 'date' &&
@@ -1408,7 +1453,7 @@ export const ReportsPageContent = () => {
                   const currentValue =
                     (hasSelectedFieldValue
                       ? selectedReportValues[field.key]
-                      : field.defaultValue) ??
+                      : resolveFieldDefault(field, reportFieldOptionsByKey, defaultReportRegion)) ??
                     (defaultMultiselectValue || (field.key === 'outputFormat' ? 'PDF' : ''))
                   const dynamicOptions = reportFieldOptionsByKey[field.optionKey ?? field.key] ?? []
                   const optionSource = getReportOptionSource(field)

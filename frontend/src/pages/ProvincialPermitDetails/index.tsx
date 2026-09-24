@@ -47,6 +47,8 @@ import {
 } from '@carbon/react'
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '@/context/auth/useAuth'
+import { allowedRegions, withinRegions } from '@/context/auth/region-utils'
+import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole, hasRole, isPureReadOnlyRole } from '@/context/auth/role-utils'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
@@ -1015,7 +1017,12 @@ const ProvincialPermitDetailsPage = () => {
   const [isShippingReferencesLoading, setIsShippingReferencesLoading] = useState(true)
   const [shippingReferencesErrorMessage, setShippingReferencesErrorMessage] = useState('')
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
-  const [permitRegionOptions, setPermitRegionOptions] = useState<SearchOption[]>([])
+  const [allPermitRegionOptions, setAllPermitRegionOptions] = useState<SearchOption[]>([])
+  const permitRegionOptions = useAllowedRegionOptions(
+    allPermitRegionOptions,
+    ['savePermit', 'createPermit'],
+    'value',
+  )
   const [blanketOicRegionLookup, setBlanketOicRegionLookup] = useState<{
     key: string
     regionNumbers: string[]
@@ -1206,14 +1213,14 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
         setPermitStatusOptions(options.permitStatuses)
-        setPermitRegionOptions(options.regions)
+        setAllPermitRegionOptions(options.regions)
         setPermitOptionsUnavailable(false)
         setPermitOptionsErrorMessage('')
       })
       .catch(() => {
         if (active) {
           setPermitStatusOptions([])
-          setPermitRegionOptions([])
+          setAllPermitRegionOptions([])
           setPermitOptionsUnavailable(true)
           setPermitOptionsErrorMessage(SEARCH_OPTIONS_UNAVAILABLE_MESSAGE)
         }
@@ -1949,27 +1956,29 @@ const ProvincialPermitDetailsPage = () => {
     permitRegionOptions,
   ])
   const permitExpired = permitStatusCode === 'EXP'
+  // Writes also need the permit's region when the user's grant is regional.
+  const permitOrgUnit = detail?.orgUnitNumber ?? null
   const canUploadPermitDocuments =
     permitExemptionContextReady &&
-    canPerform('/filePermitUpload') &&
+    canPerform('/filePermitUpload', permitOrgUnit) &&
     editContextLoaded &&
     !permitEditLocked
   const canUploadInvoiceDocuments =
     permitExemptionContextReady &&
-    canPerform('/fileInvoiceUpload') &&
+    canPerform('/fileInvoiceUpload', permitOrgUnit) &&
     editContextLoaded &&
     !permitEditLocked &&
     permitStatusCode === 'ACT'
   const canMutatePermit =
     permitExemptionContextReady &&
-    canPerform('savePermit') &&
+    canPerform('savePermit', permitOrgUnit) &&
     editContextLoaded &&
     !permitEditLocked &&
     !permitExpired
   const canSavePermit =
     canMutatePermit &&
     !(permitStatusCode === 'COM' && hasProvincialSubmitterRole(capabilities.roles))
-  const canReviewPermits = canPerform('/permitsReview')
+  const canReviewPermits = canPerform('/permitsReview', permitOrgUnit)
   const canCorrectPermitSubmitDate = canSavePermit && canReviewPermits && permitStatusCode === 'ACT'
   const canEditShipping = canMutatePermit && permitStatusCode !== 'CAN'
   const canEditPermitClients =
@@ -2013,11 +2022,14 @@ const ProvincialPermitDetailsPage = () => {
     adminUser ||
     hasRole(capabilities.roles, 'APPLICATION_APPROVER') ||
     hasProvincialSubmitterRole(capabilities.roles)
+  // Document deletion stays role-based, limited to the permit's region for regional grants; it
+  // does not depend on holding the upload action.
   const canDeletePermitDocuments =
     permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
     !!permitStatusCode &&
+    withinRegions(allowedRegions(capabilities, '/filePermitUpload'), permitOrgUnit) &&
     (adminUser ||
       (hasDocumentActorRole &&
         !readOnlyUser &&
@@ -2026,6 +2038,7 @@ const ProvincialPermitDetailsPage = () => {
     permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
+    withinRegions(allowedRegions(capabilities, '/fileInvoiceUpload'), permitOrgUnit) &&
     hasDocumentActorRole &&
     (adminUser || !readOnlyUser) &&
     permitStatusCode === 'ACT'
@@ -2066,7 +2079,7 @@ const ProvincialPermitDetailsPage = () => {
   const canEditFeeOverride =
     permitTablesAvailable &&
     canSavePermit &&
-    canPerform('/permitsReview') &&
+    canReviewPermits &&
     !feeOverrideLockedStatuses.has(permitStatusCode ?? '')
   const permitBaselineForm = useMemo(
     () => (detail ? buildPermitDetailForm(detail) : null),

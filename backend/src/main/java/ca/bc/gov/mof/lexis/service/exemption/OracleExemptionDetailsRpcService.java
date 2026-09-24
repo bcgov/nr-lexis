@@ -187,6 +187,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     boolean oicLike =
         EXEMPTION_TYPE_OIC.equalsIgnoreCase(exemptionTypeCode)
             || EXEMPTION_TYPE_BOIC.equalsIgnoreCase(exemptionTypeCode);
+    Map<Long, Long> permitRegions = repository.findPermitRegionsByExemptionNumber(exemptionNumber);
 
     return repository.findPermitsByExemptionNumber(exemptionNumber).stream()
         .map(
@@ -197,7 +198,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                           row.permitNumber(),
                           row.agentNumber(),
                           row.clientNumber(),
-                          oicLike));
+                          oicLike,
+                          permitRegions.get(row.permitNumber())));
               return new PermitItem(
                   row.permitNumber(),
                   formatVolume(row.permitVolume()),

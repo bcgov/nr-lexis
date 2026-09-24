@@ -40,10 +40,8 @@ public class LexisPrincipalService {
     Map<String, Object> claims = jwtAuthentication.getToken().getClaims();
     LinkedHashSet<Long> orgUnits = new LinkedHashSet<>();
     Stream.of(
-            claims.get("custom:org_unit_no"),
             claims.get("org_unit_no"),
             claims.get("orgUnitNo"),
-            claims.get("custom:org_unit_nos"),
             claims.get("org_unit_nos"),
             claims.get("orgUnitNos"))
         .forEach(value -> appendPositiveLongs(orgUnits, value));
@@ -88,28 +86,38 @@ public class LexisPrincipalService {
         "Authenticated JWT does not contain a stable audit identity.");
   }
 
+  /**
+   * Audit names keep legacy LEXIS's WebADE form, IDIR\USERNAME or BCEID\USERNAME, so a person has
+   * one name across legacy and modern rows. WebADE's BCEID directory is the Business BCeID the SSO
+   * integration allows.
+   */
   private String resolveUserId(Map<String, Object> claims) {
-    String username =
-        Stream.of(
-                claimValue(claims, "custom:idp_username"),
-                claimValue(claims, "custom:idp_user_id"),
-                claimValue(claims, "preferred_username"),
-                claimValue(claims, "username"),
-                claimValue(claims, "cognito:username"))
-            .filter(value -> !value.isBlank())
-            .filter(value -> !isServiceAccountUsername(value))
-            .findFirst()
-            .orElse(null);
-
-    if (username == null) {
-      return null;
+    String provider = claimValue(claims, "identity_provider");
+    String usernameClaim;
+    String guidClaim;
+    String auditProvider;
+    switch (provider) {
+      case "idir", "azureidir" -> {
+        usernameClaim = "idir_username";
+        guidClaim = "idir_user_guid";
+        auditProvider = "IDIR";
+      }
+      case "bceidbusiness" -> {
+        usernameClaim = "bceid_username";
+        guidClaim = "bceid_user_guid";
+        auditProvider = "BCEID";
+      }
+      default -> {
+        return null;
+      }
     }
-
-    String provider = resolveProvider(claims);
-    if (provider == null) {
-      return username;
+    String username = claimValue(claims, usernameClaim);
+    if (username.isBlank()) {
+      username = claimValue(claims, guidClaim);
     }
-    return provider + "\\" + username;
+    return username.isBlank() || isServiceAccountUsername(username)
+        ? null
+        : auditProvider + "\\" + username.toUpperCase(Locale.ROOT);
   }
 
   private String resolveServiceClientId(Map<String, Object> claims) {
@@ -126,13 +134,14 @@ public class LexisPrincipalService {
 
   private boolean hasInteractiveIdentitySignal(Map<String, Object> claims) {
     if (Stream.of(
-            "custom:idp_name",
-            "custom:idp_username",
-            "custom:idp_user_id",
+            "identity_provider",
+            "idir_username",
+            "idir_user_guid",
+            "bceid_username",
+            "bceid_user_guid",
+            "bceid_business_guid",
             "username",
-            "cognito:username",
-            "email",
-            "cognito:groups")
+            "email")
         .map(claims::get)
         .anyMatch(this::hasClaimValue)) {
       return true;
@@ -154,17 +163,6 @@ public class LexisPrincipalService {
 
   private boolean isServiceAccountUsername(String username) {
     return username.toLowerCase(Locale.ROOT).startsWith("service-account-");
-  }
-
-  private String resolveProvider(Map<String, Object> claims) {
-    String provider = claimValue(claims, "custom:idp_name");
-    if (provider.isBlank()) {
-      return null;
-    }
-    if (provider.startsWith("ca.bc.gov.flnr.fam.")) {
-      return "BCSC";
-    }
-    return provider.toUpperCase(Locale.ROOT);
   }
 
   private String claimValue(Map<String, Object> claims, String claimName) {

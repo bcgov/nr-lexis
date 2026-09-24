@@ -82,6 +82,11 @@ jobs:
   deploy-prod:
     name: PROD Deploys (${{ needs.init.outputs.pr }})
     # Pause PROD deployments until the deployment restriction is lifted.
+    # TODO: once PROD runs the BC Gov SSO build (after the IDIM team enables PROD Business BCeID),
+    # delete the PROD environment's unused Cognito variables: AWS_COGNITO_ISSUER_URI,
+    # VITE_COGNITO_DOMAIN, VITE_USER_POOLS_ID, VITE_USER_POOLS_WEB_CLIENT_ID, VITE_REDIRECT_SIGN_IN,
+    # VITE_REDIRECT_SIGN_OUT, VITE_LOGOUT_KEYCLOAK_URL, VITE_LOGOUT_KEYCLOAK_CLIENT_ID,
+    # VITE_LOGOUT_SITEMINDER_URL and VITE_ZONE.
     if: ${{ false }}
     needs: [tests, init]
     permissions:

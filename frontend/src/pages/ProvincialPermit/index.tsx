@@ -30,6 +30,7 @@ import type {
   ProvincialPermitSearchSortField,
 } from '@/interfaces/ProvincialPermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
+import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
@@ -143,7 +144,8 @@ const buildSearchParams = (
 const ProvincialPermitPage = () => {
   const { capabilities } = useAuth()
   const [searchParams, setSearchParams] = usePersistedSearchParams('provincial-permits')
-  const [regionOptions, setRegionOptions] = useState<IdTextOption[]>([])
+  const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
+  const regionOptions = useAllowedRegionOptions(allRegionOptions, '/permitSearch', 'id')
   const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
     hasProvincialStaffRole(capabilities.roles),
   )
@@ -375,7 +377,7 @@ const ProvincialPermitPage = () => {
       try {
         const options = await fetchProvincialPermitOptions()
         setPermitStatusOptions(options.permitStatuses)
-        setRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
+        setAllRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
         setOptionsUnavailable(false)
       } catch {
         setOptionsUnavailable(true)

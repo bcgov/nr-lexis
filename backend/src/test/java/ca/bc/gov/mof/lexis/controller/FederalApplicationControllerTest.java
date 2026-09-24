@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -31,6 +32,7 @@ import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
@@ -83,6 +85,10 @@ class FederalApplicationControllerTest {
         .when(editLockService.requireEditable(any(), any(), any()))
         .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
     lenient().when(editPolicyService.canEdit(any(), any(), any())).thenReturn(true);
+    lenient()
+        .when(provincialAuthorizationService.canWriteRecord(
+            any(), any(), eq(OrgUnitSurface.FEDERAL_APPLICATION_WRITE)))
+        .thenReturn(true);
     lenient()
         .when(
             provincialAuthorizationService.constrainOrgUnits(
@@ -372,6 +378,26 @@ class FederalApplicationControllerTest {
     assertThat(detail).isNotNull();
     assertThat(detail.readOnly()).isTrue();
     verify(editLockService).snapshot(1000456L, "idir\\viewer", false);
+    verify(editLockService, never()).acquire(any(), any(), any(), anyBoolean());
+  }
+
+  @Test
+  void detailShouldBeReadOnlyOutsideTheRegionalManageGrant() {
+    FederalApplicationDetailDto dto = federalDetail();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findByApplicationNumber(1000456L)).thenReturn(Optional.of(dto));
+    when(provincialAuthorizationService.canAccessFederalApplication(authentication, 1000456L))
+        .thenReturn(true);
+    when(provincialAuthorizationService.canWriteRecord(
+            eq(authentication), any(), eq(OrgUnitSurface.FEDERAL_APPLICATION_WRITE)))
+        .thenReturn(false);
+    when(authentication.getName()).thenReturn("idir\\regional");
+
+    FederalApplicationDetailDto detail =
+        controller.getByApplicationNumber(1000456L, authentication).getBody();
+
+    assertThat(detail).isNotNull();
+    assertThat(detail.readOnly()).isTrue();
     verify(editLockService, never()).acquire(any(), any(), any(), anyBoolean());
   }
 
