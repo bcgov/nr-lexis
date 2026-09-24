@@ -355,7 +355,7 @@ const getApplicationReviewTile = (): HTMLElement => {
 
 const getApplicationSummaryTile = (): HTMLElement => {
   const summaryTitle = screen.getByRole('heading', {
-    name: /application summary/i,
+    name: /application details/i,
   })
   const summaryTile = summaryTitle.closest('.cds--tile')
   expect(summaryTile).toBeTruthy()
@@ -364,7 +364,7 @@ const getApplicationSummaryTile = (): HTMLElement => {
 
 const getApplicationItemDetailsTile = (): HTMLElement => {
   const itemDetailsTitle = screen.getByRole('heading', {
-    name: 'Application item details',
+    name: 'Scale details',
     level: 2,
   })
   const itemDetailsTile = itemDetailsTitle.closest('.cds--tile')
@@ -393,7 +393,7 @@ const selectApplicationSummaryTile = async (edit = true): Promise<HTMLElement> =
   const summaryTile = await waitFor(() => getApplicationSummaryTile())
   if (edit) {
     const editButton = within(summaryTile).queryByRole('button', {
-      name: 'Edit application summary',
+      name: 'Edit application details',
     })
     if (editButton) {
       await userEvent.click(editButton)
@@ -403,11 +403,11 @@ const selectApplicationSummaryTile = async (edit = true): Promise<HTMLElement> =
 }
 
 const selectApplicationItemDetailsTile = async (edit = true): Promise<HTMLElement> => {
-  await selectApplicationDetailTab('Items')
+  await selectApplicationDetailTab('Scale')
   const itemDetailsTile = await waitFor(() => getApplicationItemDetailsTile())
   if (edit) {
     const editButton = within(itemDetailsTile).queryByRole('button', {
-      name: 'Edit application item details',
+      name: 'Edit scale details',
     })
     if (editButton) {
       await userEvent.click(editButton)
@@ -421,7 +421,7 @@ const selectApplicationReviewTile = async (edit = true): Promise<HTMLElement> =>
   const reviewTile = await waitFor(() => getApplicationReviewTile())
   if (edit) {
     const editButton = within(reviewTile).queryByRole('button', {
-      name: 'Edit application review',
+      name: 'Update status',
     })
     if (editButton) {
       await userEvent.click(editButton)
@@ -431,14 +431,14 @@ const selectApplicationReviewTile = async (edit = true): Promise<HTMLElement> =>
 }
 
 const selectApplicationItemsForEditing = async (): Promise<void> => {
-  await selectApplicationDetailTab('Items')
-  const editButton = await screen.findByRole('button', { name: 'Edit items' })
+  await selectApplicationDetailTab('Scale')
+  const editButton = await screen.findByRole('button', { name: 'Edit package' })
   await userEvent.click(editButton)
 }
 
 const selectApplicationDocumentsForEditing = async (): Promise<void> => {
   await selectApplicationDetailTab('Documents')
-  const editButton = await screen.findByRole('button', { name: 'Edit documents' })
+  const editButton = await screen.findByRole('button', { name: /^(Add|Edit) documents$/ })
   await userEvent.click(editButton)
 }
 

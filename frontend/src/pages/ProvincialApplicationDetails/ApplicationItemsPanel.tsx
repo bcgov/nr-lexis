@@ -22,9 +22,12 @@ import {
   TextInput,
 } from '@carbon/react'
 import { Add, Box, Edit, TrashCan } from '@carbon/icons-react'
+import { Archive } from '@carbon/pictograms-react'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '../../components/ConfirmationModal'
+import EmptyState from '../../components/EmptyState'
+import DetailSidePanel from '../../components/DetailSidePanel'
 import PendingIcon from '../../components/PendingIcon'
 import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
@@ -69,6 +72,7 @@ import {
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { requiredLabel } from '@/utils/required-label'
 import { formatPackageNumberLabel } from '@/utils/text'
+import './ApplicationItemsPanel.scss'
 
 type PackageFormState = {
   packageNumber: string
@@ -134,6 +138,7 @@ type ApplicationItemField =
   | 'createPackageStatus'
   | 'createPackageProductType'
   | 'createPackageAgeClass'
+  | 'createPackageComments'
   | 'scaleTimberMark'
   | 'scaleSpeciesCode'
   | 'scaleGradeCode'
@@ -163,6 +168,8 @@ type ProvincialApplicationItemsPanelProps = {
   productTypeOptions: ApplicationCodeOption[]
   growthTypeOptions: ApplicationCodeOption[]
   applicationGrowthTypeCode?: string
+  applicationEndUseCode?: string
+  applicationSpeciesCodes?: string[]
   editingBlocked?: boolean
   onDetailChanged: () => Promise<void>
   /** The page's latest action result when an item action produced it. */
@@ -178,7 +185,11 @@ type ProvincialApplicationItemsPanelProps = {
   focusScalesRequestId?: number
 }
 
-const emptyPackageForm = (productTypeCode: string | null | undefined): PackageFormState => ({
+const emptyPackageForm = (
+  productTypeCode: string | null | undefined,
+  growthTypeCode = '',
+  endUseCode = '',
+): PackageFormState => ({
   packageNumber: '',
   newPackageNumber: '',
   volume: '',
@@ -188,9 +199,9 @@ const emptyPackageForm = (productTypeCode: string | null | undefined): PackageFo
   status: '',
   comments: '',
   reprocessed: 'N',
-  ageClass: '',
+  ageClass: ['H', 'S'].includes((productTypeCode ?? '').trim().toUpperCase()) ? growthTypeCode : '',
   productType: productTypeCode ?? '',
-  endUseCode: '',
+  endUseCode,
 })
 
 const emptyScaleForm: ScaleFormState = {
@@ -200,6 +211,7 @@ const emptyScaleForm: ScaleFormState = {
   pieces: '',
   volume: '',
 }
+const NO_SPECIES_CODES: string[] = []
 
 const normalizePackageNumberInput = (value: string): string => value.toUpperCase()
 
@@ -393,6 +405,8 @@ function ProvincialApplicationItemsPanel({
   productTypeOptions,
   growthTypeOptions,
   applicationGrowthTypeCode,
+  applicationEndUseCode = '',
+  applicationSpeciesCodes = NO_SPECIES_CODES,
   editingBlocked = false,
   onDetailChanged,
   actionResult,
@@ -420,8 +434,12 @@ function ProvincialApplicationItemsPanel({
     emptyPackageForm(productTypeCode),
   )
   const [isEditingItems, setIsEditingItems] = useState(false)
+  const [activeDrawer, setActiveDrawer] = useState<'create' | 'edit' | 'scale' | null>(null)
+  const [pendingDrawerClose, setPendingDrawerClose] = useState(false)
+  const packageLauncherRef = useRef<HTMLElement>(null)
+  const scaleLauncherRef = useRef<HTMLElement>(null)
   const [packageBaselineForm, setPackageBaselineForm] = useState<PackageFormState>(() =>
-    emptyPackageForm(productTypeCode),
+    emptyPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
   )
   const [createPackageForm, setCreatePackageForm] = useState<PackageFormState>(() =>
     emptyPackageForm(productTypeCode),
@@ -429,7 +447,10 @@ function ProvincialApplicationItemsPanel({
   const [packageSpeciesRows, setPackageSpeciesRows] = useState<ApplicationPackageSpeciesRow[]>([])
   const [speciesDraft, setSpeciesDraft] = useState<string[]>([])
   const [packageSpeciesBaseline, setPackageSpeciesBaseline] = useState<string[]>([])
-  const [createSpeciesDraft, setCreateSpeciesDraft] = useState<string[]>([])
+  const [createSpeciesDraft, setCreateSpeciesDraft] = useState<string[]>(applicationSpeciesCodes)
+  const applicationSpeciesCodesRef = useRef(applicationSpeciesCodes)
+  applicationSpeciesCodesRef.current = applicationSpeciesCodes
+  const applicationSpeciesCodesKey = applicationSpeciesCodes.join('|')
   const [scales, setScales] = useState<ApplicationPackageScaleRow[]>([])
   const [applicationScaleRows, setApplicationScaleRows] = useState<ApplicationScaleSummaryRow[]>([])
   const [speciesOptions, setSpeciesOptions] = useState<ApplicationCodeOption[]>([])
@@ -462,8 +483,16 @@ function ProvincialApplicationItemsPanel({
     useState<PackageDataAvailability>(unavailablePackageData)
   const [packageLoadWarning, setPackageLoadWarning] = useState('')
   const [itemsErrorMessage, setItemsErrorMessage] = useState('')
-  const showItemActionError = (message: string) =>
-    onActionResult({ kind: 'error', title: 'Item action failed', message })
+  // A failure inside an open drawer stays in that drawer; the page behind it is inert.
+  const showItemActionError = (message: string) => {
+    if (activeDrawer === 'scale') {
+      setScaleActionErrorMessage(message)
+    } else if (activeDrawer) {
+      setItemsErrorMessage(message)
+    } else {
+      onActionResult({ kind: 'error', title: 'Item action failed', message })
+    }
+  }
   const showItemActionResult = (kind: 'success' | 'warning', message: string) =>
     onActionResult({
       kind,
@@ -496,12 +525,32 @@ function ProvincialApplicationItemsPanel({
       JSON.stringify(speciesDraft) !== JSON.stringify(packageSpeciesBaseline))
   const createPackageDraftDirty =
     createPackageDraftTouched &&
-    (JSON.stringify(createPackageForm) !== JSON.stringify(emptyPackageForm(productTypeCode)) ||
-      createSpeciesDraft.length > 0)
+    (JSON.stringify(createPackageForm) !==
+      JSON.stringify(
+        emptyPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
+      ) ||
+      JSON.stringify(createSpeciesDraft) !== JSON.stringify(applicationSpeciesCodes))
   const scaleDraftDirty =
     scaleDraftTouched && JSON.stringify(scaleForm) !== JSON.stringify(emptyScaleForm)
   const itemsDirty = selectedPackageDraftDirty || createPackageDraftDirty || scaleDraftDirty
   const itemsBusy = isSavingPackage || isSavingScale || !!deletingScaleId
+
+  useEffect(() => {
+    if (activeDrawer || createPackageDraftTouched) return
+    // The saved summary can arrive after this panel mounts; refresh only an untouched create draft.
+    // eslint-disable-next-line @eslint-react/set-state-in-effect
+    setCreatePackageForm(
+      emptyPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
+    )
+    setCreateSpeciesDraft(applicationSpeciesCodesRef.current)
+  }, [
+    activeDrawer,
+    applicationEndUseCode,
+    applicationGrowthTypeCode,
+    applicationSpeciesCodesKey,
+    createPackageDraftTouched,
+    productTypeCode,
+  ])
   const packageDataLoaded =
     packageDataAvailability.details &&
     packageDataAvailability.species &&
@@ -600,6 +649,7 @@ function ProvincialApplicationItemsPanel({
       createPackageAgeClass: packageRequiresAgeClass(createPackageForm.productType)
         ? (requiredFieldError(createPackageForm.ageClass, 'Age class') ?? undefined)
         : undefined,
+      createPackageComments: packageCommentsFieldError(createPackageForm.comments),
       scaleTimberMark: requiredFieldError(scaleForm.timberMark, 'Timber mark') ?? undefined,
       scaleSpeciesCode: requiredFieldError(scaleForm.speciesCode, 'Species') ?? undefined,
       scaleGradeCode: requiredFieldError(scaleForm.gradeCode, 'Grade') ?? undefined,
@@ -650,7 +700,8 @@ function ProvincialApplicationItemsPanel({
     itemFieldErrors.createPackageAverageDiameter ||
     itemFieldErrors.createPackageStatus ||
     itemFieldErrors.createPackageProductType ||
-    itemFieldErrors.createPackageAgeClass,
+    itemFieldErrors.createPackageAgeClass ||
+    itemFieldErrors.createPackageComments,
   )
   const hasScaleValidationError = Boolean(
     itemFieldErrors.scaleTimberMark ||
@@ -692,7 +743,7 @@ function ProvincialApplicationItemsPanel({
 
   const requestPackageSelection = useCallback(
     (packageNumber: string) => {
-      if (packageNumber === selectedPackageNumber) return
+      if (itemsBusy || packageNumber === selectedPackageNumber) return
       if (selectedPackageDraftDirty || scaleDraftDirty) {
         setPendingPackageSelection(packageNumber)
         return
@@ -700,7 +751,7 @@ function ProvincialApplicationItemsPanel({
       onActionResult(withoutActionError)
       dispatchPackageSelection({ type: 'select', packageNumber })
     },
-    [onActionResult, scaleDraftDirty, selectedPackageDraftDirty, selectedPackageNumber],
+    [itemsBusy, onActionResult, scaleDraftDirty, selectedPackageDraftDirty, selectedPackageNumber],
   )
   const requestPackageSelectionRef = useRef(requestPackageSelection)
 
@@ -1143,8 +1194,10 @@ function ProvincialApplicationItemsPanel({
   }
 
   const resetCreatePackageDraft = () => {
-    setCreatePackageForm(emptyPackageForm(productTypeCode))
-    setCreateSpeciesDraft([])
+    setCreatePackageForm(
+      emptyPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
+    )
+    setCreateSpeciesDraft(applicationSpeciesCodes)
     setCreateSpeciesToAdd('')
     setCreatePackageDraftTouched(false)
     setTouchedItemFields({})
@@ -1166,6 +1219,22 @@ function ProvincialApplicationItemsPanel({
     setItemsErrorMessage('')
     onActionResult(withoutActionError)
     setIsEditingItems(false)
+    setActiveDrawer(null)
+  }
+
+  const requestDrawerClose = () => {
+    if (itemsBusy) return
+    const dirty =
+      activeDrawer === 'create'
+        ? createPackageDraftDirty
+        : activeDrawer === 'edit'
+          ? selectedPackageDraftDirty
+          : scaleDraftDirty
+    if (dirty) {
+      setPendingDrawerClose(true)
+    } else {
+      cancelItemEditing()
+    }
   }
 
   const selectedPackageTotalPieces = scales.reduce((total, row) => total + row.pieces, 0)
@@ -1211,16 +1280,15 @@ function ProvincialApplicationItemsPanel({
   const canManageItems =
     !hideMutationActions &&
     (canEditPackages || canAddPackages || (scaleBackedItems && canAddScales))
-  // INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW): Lead with the prerequisite
-  // package action instead of rendering empty package and Summary of Scale sections.
   const packageFirstEmptyState = packageBackedItems && packageNumbers.length === 0
   const canOpenItemsEditor =
     !standingTimberItems &&
     !editingBlocked &&
     (packageFirstEmptyState ? !hideMutationActions && canAddPackages : canManageItems)
+  const otherItemActionDisabled = activeDrawer !== null || itemsBusy
   const showMutationActions = canManageItems && isEditingItems
   const canSaveSelectedPackage =
-    showMutationActions &&
+    activeDrawer === 'edit' &&
     canEditPackages &&
     selectedPackageReferenceOptionsAvailable &&
     packageDataLoaded &&
@@ -1228,11 +1296,15 @@ function ProvincialApplicationItemsPanel({
     !isSavingPackage &&
     !selectedPackageHasPermittedScale
   const canCreatePackages =
-    showMutationActions && canAddPackages && createPackageReferenceOptionsAvailable
+    activeDrawer === 'create' &&
+    canAddPackages &&
+    createPackageReferenceOptionsAvailable &&
+    !itemsBusy
   const canAddScalesWithReferenceOptions =
-    showMutationActions && canAddScales && baseReferenceOptionsAvailable
+    activeDrawer === 'scale' && canAddScales && baseReferenceOptionsAvailable && !itemsBusy
   const canDeleteSelectedPackage =
-    showMutationActions &&
+    activeDrawer === null &&
+    !itemsBusy &&
     canAddPackages &&
     packageDataLoaded &&
     !!selectedPackageNumber &&
@@ -1309,6 +1381,8 @@ function ProvincialApplicationItemsPanel({
         previousPackageNumber: selectedPackageNumber,
         nextPackageNumber,
       })
+      setActiveDrawer(null)
+      setIsEditingItems(false)
       try {
         await onDetailChanged()
         await loadApplicationScaleSummary()
@@ -1343,6 +1417,7 @@ function ProvincialApplicationItemsPanel({
           'createPackageStatus',
           'createPackageProductType',
           'createPackageAgeClass',
+          'createPackageComments',
         ) ?? 'Please fix validation errors before creating the package.',
       )
       return
@@ -1374,6 +1449,8 @@ function ProvincialApplicationItemsPanel({
       const nextPackageNumber = result.packageNumber || createPackageForm.packageNumber
       dispatchPackageSelection({ type: 'add', packageNumber: nextPackageNumber })
       resetCreatePackageDraft()
+      setActiveDrawer(null)
+      setIsEditingItems(false)
       try {
         await onDetailChanged()
         await loadApplicationScaleSummary()
@@ -1483,6 +1560,8 @@ function ProvincialApplicationItemsPanel({
 
       setScales((current) => [...current, result.result as ApplicationPackageScaleRow])
       resetScaleDraft()
+      setActiveDrawer(null)
+      setIsEditingItems(false)
       setScaleLookupResult('')
       try {
         await onDetailChanged()
@@ -1616,34 +1695,44 @@ function ProvincialApplicationItemsPanel({
     createPackageForm.ageClass,
   )
   return (
-    <div id="application-items" className="application-detail-section application-items-panel">
+    <div
+      id="application-items"
+      className="application-detail-section application-items-panel"
+      tabIndex={-1}
+    >
       <section className="application-items-overview">
-        <header className="application-items-panel__header application-items-panel__header--actions-only">
-          {isEditingItems ? (
-            <Button kind="tertiary" size="sm" disabled={itemsBusy} onClick={cancelItemEditing}>
-              Cancel
-            </Button>
-          ) : (
-            canOpenItemsEditor && (
-              <Button
-                kind="tertiary"
-                size="sm"
-                renderIcon={packageFirstEmptyState ? Add : Edit}
-                onClick={() => setIsEditingItems(true)}
-              >
-                {packageFirstEmptyState ? 'Create package' : 'Edit items'}
-              </Button>
-            )
-          )}
-        </header>
-        {packageFirstEmptyState && !isEditingItems && (
-          <p className="detail-field-value">
-            {canOpenItemsEditor
-              ? scaleBackedItems
-                ? 'Create a package before adding Summary of Scale entries.'
-                : 'Create a package to add package details.'
-              : 'No package has been created for this application.'}
-          </p>
+        {packageFirstEmptyState && (
+          <section className="application-items-card application-items-section application-items-empty-package">
+            <div className="application-items-section-header">
+              <h3 className="application-items-section-title--icon">
+                <Box size={20} aria-hidden="true" />
+                <span>Package details</span>
+              </h3>
+            </div>
+            <EmptyState
+              title="No packages for this application"
+              description="Create a package, then add Summary of scale."
+              icon={<Archive width={48} height={48} />}
+              headingLevel={4}
+              action={
+                canOpenItemsEditor ? (
+                  <Button
+                    kind="tertiary"
+                    size="sm"
+                    renderIcon={Add}
+                    disabled={otherItemActionDisabled}
+                    onClick={(event) => {
+                      packageLauncherRef.current = event.currentTarget
+                      setActiveDrawer('create')
+                      setIsEditingItems(true)
+                    }}
+                  >
+                    Create package
+                  </Button>
+                ) : undefined
+              }
+            />
+          </section>
         )}
         {itemsLoading && <InlineLoading description="Loading item data…" />}
         {isEditingItems &&
@@ -1673,7 +1762,7 @@ function ProvincialApplicationItemsPanel({
             hideCloseButton
           />
         )}
-        {!!itemsErrorMessage && (
+        {!!itemsErrorMessage && !activeDrawer && (
           <AppNotification
             kind="error"
             title="Item action failed"
@@ -1697,13 +1786,66 @@ function ProvincialApplicationItemsPanel({
             <div className="application-items-section-header">
               <h3 className="application-items-section-title--icon">
                 <Box size={20} aria-hidden="true" />
-                <span>Package Details</span>
+                <span>
+                  {selectedPackageNumber ? `Package ${selectedPackageNumber}` : 'Package details'}
+                </span>
               </h3>
+              <div className="application-items-card-actions">
+                {canOpenItemsEditor && canEditPackages && selectedPackageNumber && (
+                  <Button
+                    kind="tertiary"
+                    size="sm"
+                    renderIcon={Edit}
+                    disabled={
+                      otherItemActionDisabled ||
+                      !packageDataLoaded ||
+                      selectedPackageHasPermittedScale
+                    }
+                    onClick={(event) => {
+                      packageLauncherRef.current = event.currentTarget
+                      setActiveDrawer('edit')
+                      setIsEditingItems(true)
+                    }}
+                  >
+                    Edit package
+                  </Button>
+                )}
+                {canOpenItemsEditor && canDeleteSelectedPackage && (
+                  <Button
+                    kind="danger--ghost"
+                    size="sm"
+                    renderIcon={TrashCan}
+                    onClick={() => {
+                      setItemsErrorMessage('')
+                      onActionResult(null)
+                      setPackagePendingDeletion(selectedPackageNumber)
+                    }}
+                  >
+                    Delete package
+                  </Button>
+                )}
+                {canOpenItemsEditor && canAddPackages && (
+                  <Button
+                    kind="tertiary"
+                    size="sm"
+                    renderIcon={Add}
+                    disabled={otherItemActionDisabled}
+                    onClick={(event) => {
+                      packageLauncherRef.current = event.currentTarget
+                      setActiveDrawer('create')
+                      setIsEditingItems(true)
+                    }}
+                  >
+                    Create package
+                  </Button>
+                )}
+              </div>
               <SearchableSelect
                 id="applicationItemsPackageSelect"
                 labelText="Selected Package"
                 value={selectedPackageNumber}
                 placeholder="Select package"
+                disabled={itemsBusy}
                 options={packageNumbers.map((packageNumber) => ({
                   value: packageNumber,
                   label: formatPackageNumberLabel(packageNumber),
@@ -1749,7 +1891,40 @@ function ProvincialApplicationItemsPanel({
               ))}
             </dl>
             <div className="application-items-package-workspace">
-              {showMutationActions && (
+              <DetailSidePanel
+                open={activeDrawer === 'edit'}
+                title="Edit package"
+                className="application-items-drawer"
+                contentSelector=".provincial-application-detail"
+                initialFocusSelector="#applicationItemsPackageNumber"
+                launcherRef={packageLauncherRef}
+                fallbackFocusSelector="#applicationItemsPackageSelect"
+                busy={isSavingPackage}
+                onClose={requestDrawerClose}
+                actions={[
+                  {
+                    label: 'Cancel',
+                    kind: 'secondary',
+                    disabled: isSavingPackage,
+                    onClick: requestDrawerClose,
+                  },
+                  {
+                    label: isSavingPackage ? 'Saving…' : 'Save package',
+                    kind: 'primary',
+                    disabled: !canSaveSelectedPackage,
+                    onClick: () => void onSaveSelectedPackage(),
+                  },
+                ]}
+              >
+                {!!itemsErrorMessage && (
+                  <InlineNotification
+                    kind="error"
+                    title="Package save failed"
+                    subtitle={itemsErrorMessage}
+                    lowContrast
+                    hideCloseButton
+                  />
+                )}
                 <div className="application-items-package-edit-panel">
                   <div className="application-items-form">
                     <TextInput
@@ -1873,7 +2048,9 @@ function ProvincialApplicationItemsPanel({
                               ? 'Select end use'
                               : 'End uses unavailable'
                       }
-                      options={endUseOptions.map(toSearchableOption)}
+                      options={optionsWithCurrentCode(endUseOptions, packageForm.endUseCode).map(
+                        toSearchableOption,
+                      )}
                       onChange={(value) => setPackageField('endUseCode', value)}
                     />
                   </div>
@@ -1891,120 +2068,99 @@ function ProvincialApplicationItemsPanel({
                     onBlur={() => markItemFieldTouched('packageComments')}
                     onChange={(event) => setPackageField('comments', event.target.value)}
                   />
-                  <div className="legacy-search-actions">
-                    <Button
-                      kind="primary"
-                      size="sm"
-                      disabled={!canSaveSelectedPackage}
-                      renderIcon={isSavingPackage ? PendingIcon : undefined}
-                      onClick={() => void onSaveSelectedPackage()}
-                    >
-                      {isSavingPackage ? 'Saving…' : 'Save Package'}
-                    </Button>
-                    <Button
-                      kind="tertiary"
-                      size="sm"
-                      disabled={!selectedPackageDraftDirty && !scaleDraftDirty}
-                      onClick={resetSelectedPackageDrafts}
-                    >
-                      Reset package drafts
-                    </Button>
-                    <Button
-                      kind="danger--ghost"
-                      size="sm"
-                      disabled={!canDeleteSelectedPackage}
-                      renderIcon={TrashCan}
-                      onClick={() => {
-                        setItemsErrorMessage('')
-                        onActionResult(null)
-                        setPackagePendingDeletion(selectedPackageNumber)
-                      }}
-                    >
-                      Delete Package
-                    </Button>
+                </div>
+                <div className="application-items-species-panel">
+                  <h4>Package Species</h4>
+                  {showMutationActions && (
+                    <div className="application-items-inline-form">
+                      <SearchableSelect
+                        id="applicationItemsSpeciesToAdd"
+                        labelText="Species"
+                        value={speciesToAdd}
+                        disabled={!canSaveSelectedPackage}
+                        placeholder="Select species"
+                        options={remainingSpeciesOptions
+                          .filter((option) => !speciesDraft.includes(option.code))
+                          .map(toSearchableOption)}
+                        onChange={setSpeciesToAdd}
+                      />
+                      <Button
+                        kind="tertiary"
+                        size="sm"
+                        disabled={!canSaveSelectedPackage || !speciesToAdd}
+                        onClick={onAddSpecies}
+                      >
+                        Add Species
+                      </Button>
+                    </div>
+                  )}
+                  <div className="application-items-table-scroll">
+                    <Table size="md" useZebraStyles>
+                      <TableHead>
+                        <TableRow>
+                          <TableHeader>Species</TableHeader>
+                          <TableHeader>End use</TableHeader>
+                          {showMutationActions && <TableHeader>Action</TableHeader>}
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {packageSpeciesUnavailable ? (
+                          <TableRow>
+                            <TableCell colSpan={showMutationActions ? 3 : 2}>
+                              Package species could not be loaded.
+                            </TableCell>
+                          </TableRow>
+                        ) : (
+                          selectedSpeciesOptions.map((row) => {
+                            const existing = packageSpeciesRows.find(
+                              (item) => item.species === row.code,
+                            )
+                            return (
+                              <TableRow key={row.code}>
+                                <TableCell>{asOptionText(row)}</TableCell>
+                                <TableCell>
+                                  {existing?.endUseDescription || packageForm.endUseCode || '-'}
+                                </TableCell>
+                                {showMutationActions && (
+                                  <TableCell>
+                                    <Button
+                                      kind="ghost"
+                                      size="sm"
+                                      disabled={!canSaveSelectedPackage}
+                                      onClick={() => onRemoveSpecies(row.code)}
+                                    >
+                                      Remove
+                                    </Button>
+                                  </TableCell>
+                                )}
+                              </TableRow>
+                            )
+                          })
+                        )}
+                        {!packageSpeciesUnavailable && speciesDraft.length === 0 && (
+                          <TableRow>
+                            <TableCell colSpan={showMutationActions ? 3 : 2}>
+                              No species assigned to this package.
+                            </TableCell>
+                          </TableRow>
+                        )}
+                      </TableBody>
+                    </Table>
                   </div>
+                </div>
+              </DetailSidePanel>
+              {activeDrawer !== 'edit' && (
+                <div className="application-items-species-summary">
+                  <h4>Package species</h4>
+                  <p>
+                    {packageSpeciesUnavailable
+                      ? 'Package species could not be loaded.'
+                      : selectedSpeciesOptions.length
+                        ? selectedSpeciesOptions.map(asOptionText).join(', ')
+                        : 'No species assigned to this package.'}
+                  </p>
                 </div>
               )}
-
-              <div className="application-items-species-panel">
-                <h4>Package Species</h4>
-                {showMutationActions && (
-                  <div className="application-items-inline-form">
-                    <SearchableSelect
-                      id="applicationItemsSpeciesToAdd"
-                      labelText="Species"
-                      value={speciesToAdd}
-                      disabled={!canSaveSelectedPackage}
-                      placeholder="Select species"
-                      options={remainingSpeciesOptions
-                        .filter((option) => !speciesDraft.includes(option.code))
-                        .map(toSearchableOption)}
-                      onChange={setSpeciesToAdd}
-                    />
-                    <Button
-                      kind="tertiary"
-                      size="sm"
-                      disabled={!canSaveSelectedPackage || !speciesToAdd}
-                      onClick={onAddSpecies}
-                    >
-                      Add Species
-                    </Button>
-                  </div>
-                )}
-                <div className="application-items-table-scroll">
-                  <Table size="md" useZebraStyles>
-                    <TableHead>
-                      <TableRow>
-                        <TableHeader>Species</TableHeader>
-                        <TableHeader>End use</TableHeader>
-                        {showMutationActions && <TableHeader>Action</TableHeader>}
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {packageSpeciesUnavailable ? (
-                        <TableRow>
-                          <TableCell colSpan={showMutationActions ? 3 : 2}>
-                            Package species could not be loaded.
-                          </TableCell>
-                        </TableRow>
-                      ) : (
-                        selectedSpeciesOptions.map((row) => {
-                          const existing = packageSpeciesRows.find(
-                            (item) => item.species === row.code,
-                          )
-                          return (
-                            <TableRow key={row.code}>
-                              <TableCell>{asOptionText(row)}</TableCell>
-                              <TableCell>
-                                {existing?.endUseDescription || packageForm.endUseCode || '-'}
-                              </TableCell>
-                              {showMutationActions && (
-                                <TableCell>
-                                  <Button
-                                    kind="ghost"
-                                    size="sm"
-                                    disabled={!canSaveSelectedPackage}
-                                    onClick={() => onRemoveSpecies(row.code)}
-                                  >
-                                    Remove
-                                  </Button>
-                                </TableCell>
-                              )}
-                            </TableRow>
-                          )
-                        })
-                      )}
-                      {!packageSpeciesUnavailable && speciesDraft.length === 0 && (
-                        <TableRow>
-                          <TableCell colSpan={showMutationActions ? 3 : 2}>
-                            No species assigned to this package.
-                          </TableCell>
-                        </TableRow>
-                      )}
-                    </TableBody>
-                  </Table>
-                </div>
-              </div>
             </div>
           </section>
         )}
@@ -2036,337 +2192,411 @@ function ProvincialApplicationItemsPanel({
           </section>
         )}
 
-        {packageBackedItems && showMutationActions && (
-          <section className="application-items-card application-items-section application-items-section--create-package">
-            <h3>Create Package</h3>
-            <div className="application-items-form">
-              <TextInput
-                id="applicationItemsCreatePackageNumber"
-                labelText={requiredLabel('Package Number')}
-                aria-required="true"
-                value={createPackageForm.packageNumber}
-                disabled={!canCreatePackages}
-                invalid={!!createPackageFieldError('createPackageNumber')}
-                invalidText={createPackageFieldError('createPackageNumber')}
-                onBlur={() => markItemFieldTouched('createPackageNumber')}
-                onChange={(event) => setCreatePackageField('packageNumber', event.target.value)}
-              />
-              <TextInput
-                id="applicationItemsCreatePackageVolume"
-                labelText={requiredLabel('Package Volume (m³)')}
-                aria-required="true"
-                value={createPackageForm.volume}
-                disabled={!canCreatePackages}
-                invalid={!!createPackageFieldError('createPackageVolume')}
-                invalidText={createPackageFieldError('createPackageVolume')}
-                onBlur={() => markItemFieldTouched('createPackageVolume')}
-                onChange={(event) => setCreatePackageField('volume', event.target.value)}
-              />
-              <TextInput
-                id="applicationItemsCreatePackageLength"
-                labelText={requiredLabel('Average Length (m)')}
-                aria-required="true"
-                value={createPackageForm.averageLength}
-                disabled={!canCreatePackages}
-                invalid={!!createPackageFieldError('createPackageAverageLength')}
-                invalidText={createPackageFieldError('createPackageAverageLength')}
-                onBlur={() => markItemFieldTouched('createPackageAverageLength')}
-                onChange={(event) => setCreatePackageField('averageLength', event.target.value)}
-              />
-              <TextInput
-                id="applicationItemsCreatePackageDiameter"
-                labelText={requiredLabel('Average top diameter (rads)')}
-                aria-required="true"
-                value={createPackageForm.averageDiameter}
-                disabled={!canCreatePackages}
-                invalid={!!createPackageFieldError('createPackageAverageDiameter')}
-                invalidText={createPackageFieldError('createPackageAverageDiameter')}
-                onBlur={() => markItemFieldTouched('createPackageAverageDiameter')}
-                onChange={(event) => setCreatePackageField('averageDiameter', event.target.value)}
-              />
-              <SearchableSelect
-                id="applicationItemsCreatePackageStatus"
-                labelText={requiredLabel('Status Code')}
-                required
-                value={createPackageForm.status}
-                disabled={!canCreatePackages}
-                invalid={!!createPackageFieldError('createPackageStatus')}
-                invalidText={createPackageFieldError('createPackageStatus')}
-                placeholder="Select package status"
-                options={createPackageStatusOptions.map(toSearchableOption)}
-                onBlur={() => markItemFieldTouched('createPackageStatus')}
-                onChange={(value) => setCreatePackageField('status', value)}
-              />
-              <SearchableSelect
-                id="applicationItemsCreatePackageProductType"
-                labelText={requiredLabel('Product Type')}
-                required
-                value={createPackageForm.productType}
-                disabled={!canCreatePackages}
-                invalid={!!createPackageFieldError('createPackageProductType')}
-                invalidText={createPackageFieldError('createPackageProductType')}
-                placeholder="Select product type"
-                options={createPackageProductTypeOptions.map(toSearchableOption)}
-                onBlur={() => markItemFieldTouched('createPackageProductType')}
-                onChange={(value) => {
-                  setCreatePackageDraftTouched(true)
-                  setCreatePackageForm((current) => ({
-                    ...current,
-                    productType: value,
-                    ageClass: packageRequiresAgeClass(value) ? current.ageClass : '',
-                  }))
-                }}
-              />
-              <SearchableSelect
-                id="applicationItemsCreatePackageAgeClass"
-                labelText={requiredLabel(
-                  'Age Class',
-                  packageRequiresAgeClass(createPackageForm.productType),
-                )}
-                required={packageRequiresAgeClass(createPackageForm.productType)}
-                value={createPackageForm.ageClass}
-                disabled={
-                  !canCreatePackages || !packageRequiresAgeClass(createPackageForm.productType)
-                }
-                invalid={!!createPackageFieldError('createPackageAgeClass')}
-                invalidText={createPackageFieldError('createPackageAgeClass')}
-                placeholder="Select age class"
-                options={createPackageGrowthTypeOptions.map(toSearchableOption)}
-                onBlur={() => markItemFieldTouched('createPackageAgeClass')}
-                onChange={(value) => setCreatePackageField('ageClass', value)}
-              />
-              <SearchableSelect
-                id="applicationItemsCreatePackageEndUse"
-                labelText="End Use"
-                value={createPackageForm.endUseCode}
-                disabled={!canCreatePackages || createEndUseAvailability !== 'available'}
-                placeholder={
-                  createEndUseAvailability === 'loading'
-                    ? 'Loading end uses'
-                    : createSpeciesDraft.length === 0
-                      ? 'Select species first'
-                      : createEndUseAvailability === 'available'
-                        ? 'Select end use'
-                        : 'End uses unavailable'
-                }
-                options={createEndUseOptions.map(toSearchableOption)}
-                onChange={(value) => setCreatePackageField('endUseCode', value)}
-              />
-            </div>
-            <div className="application-items-inline-form">
-              <SearchableSelect
-                id="applicationItemsCreateSpeciesToAdd"
-                labelText="Create Package Species"
-                value={createSpeciesToAdd}
-                disabled={!canCreatePackages}
-                placeholder="Select species"
-                options={createRemainingSpeciesOptions
-                  .filter((option) => !createSpeciesDraft.includes(option.code))
-                  .map(toSearchableOption)}
-                onChange={setCreateSpeciesToAdd}
-              />
-              <Button
-                kind="tertiary"
-                size="sm"
-                aria-label="Add species to new package"
-                disabled={!canCreatePackages || !createSpeciesToAdd}
-                onClick={onAddCreateSpecies}
-              >
-                Add Species
-              </Button>
-            </div>
-            <div className="application-items-table-scroll">
-              <Table size="md" useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Species</TableHeader>
-                    <TableHeader>Action</TableHeader>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {selectedCreateSpeciesOptions.map((row) => (
-                    <TableRow key={row.code}>
-                      <TableCell>{asOptionText(row)}</TableCell>
-                      <TableCell>
-                        <Button
-                          kind="ghost"
-                          size="sm"
-                          disabled={!canCreatePackages}
-                          onClick={() => onRemoveCreateSpecies(row.code)}
-                        >
-                          Remove
-                        </Button>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                  {createSpeciesDraft.length === 0 && (
-                    <TableRow>
-                      <TableCell colSpan={2}>No species selected for the new package.</TableCell>
-                    </TableRow>
+        {packageBackedItems && (
+          <DetailSidePanel
+            open={activeDrawer === 'create'}
+            title="Create package"
+            className="application-items-drawer"
+            contentSelector=".provincial-application-detail"
+            initialFocusSelector="#applicationItemsCreatePackageNumber"
+            launcherRef={packageLauncherRef}
+            fallbackFocusSelector="#applicationItemsPackageSelect"
+            busy={isSavingPackage}
+            onClose={requestDrawerClose}
+            actions={[
+              {
+                label: 'Cancel',
+                kind: 'secondary',
+                disabled: isSavingPackage,
+                onClick: requestDrawerClose,
+              },
+              {
+                label: isSavingPackage ? 'Saving…' : 'Save package',
+                kind: 'primary',
+                disabled: !canCreatePackages,
+                onClick: () => void onCreatePackage(),
+              },
+            ]}
+          >
+            <div className="application-items-drawer-content">
+              {!!itemsErrorMessage && (
+                <InlineNotification
+                  kind="error"
+                  title="Package creation failed"
+                  subtitle={itemsErrorMessage}
+                  lowContrast
+                  hideCloseButton
+                />
+              )}
+              <div className="application-items-form">
+                <TextInput
+                  id="applicationItemsCreatePackageNumber"
+                  labelText={requiredLabel('Package Number')}
+                  aria-required="true"
+                  value={createPackageForm.packageNumber}
+                  disabled={!canCreatePackages}
+                  invalid={!!createPackageFieldError('createPackageNumber')}
+                  invalidText={createPackageFieldError('createPackageNumber')}
+                  onBlur={() => markItemFieldTouched('createPackageNumber')}
+                  onChange={(event) => setCreatePackageField('packageNumber', event.target.value)}
+                />
+                <TextInput
+                  id="applicationItemsCreatePackageVolume"
+                  labelText={requiredLabel('Package Volume (m³)')}
+                  aria-required="true"
+                  value={createPackageForm.volume}
+                  disabled={!canCreatePackages}
+                  invalid={!!createPackageFieldError('createPackageVolume')}
+                  invalidText={createPackageFieldError('createPackageVolume')}
+                  onBlur={() => markItemFieldTouched('createPackageVolume')}
+                  onChange={(event) => setCreatePackageField('volume', event.target.value)}
+                />
+                <TextInput
+                  id="applicationItemsCreatePackageLength"
+                  labelText={requiredLabel('Average Length (m)')}
+                  aria-required="true"
+                  value={createPackageForm.averageLength}
+                  disabled={!canCreatePackages}
+                  invalid={!!createPackageFieldError('createPackageAverageLength')}
+                  invalidText={createPackageFieldError('createPackageAverageLength')}
+                  onBlur={() => markItemFieldTouched('createPackageAverageLength')}
+                  onChange={(event) => setCreatePackageField('averageLength', event.target.value)}
+                />
+                <TextInput
+                  id="applicationItemsCreatePackageDiameter"
+                  labelText={requiredLabel('Average top diameter (rads)')}
+                  aria-required="true"
+                  value={createPackageForm.averageDiameter}
+                  disabled={!canCreatePackages}
+                  invalid={!!createPackageFieldError('createPackageAverageDiameter')}
+                  invalidText={createPackageFieldError('createPackageAverageDiameter')}
+                  onBlur={() => markItemFieldTouched('createPackageAverageDiameter')}
+                  onChange={(event) => setCreatePackageField('averageDiameter', event.target.value)}
+                />
+                <SearchableSelect
+                  id="applicationItemsCreatePackageStatus"
+                  labelText={requiredLabel('Status Code')}
+                  required
+                  value={createPackageForm.status}
+                  disabled={!canCreatePackages}
+                  invalid={!!createPackageFieldError('createPackageStatus')}
+                  invalidText={createPackageFieldError('createPackageStatus')}
+                  placeholder="Select package status"
+                  options={createPackageStatusOptions.map(toSearchableOption)}
+                  onBlur={() => markItemFieldTouched('createPackageStatus')}
+                  onChange={(value) => setCreatePackageField('status', value)}
+                />
+                <SearchableSelect
+                  id="applicationItemsCreatePackageProductType"
+                  labelText={requiredLabel('Product Type')}
+                  required
+                  value={createPackageForm.productType}
+                  disabled={!canCreatePackages}
+                  invalid={!!createPackageFieldError('createPackageProductType')}
+                  invalidText={createPackageFieldError('createPackageProductType')}
+                  placeholder="Select product type"
+                  options={createPackageProductTypeOptions.map(toSearchableOption)}
+                  onBlur={() => markItemFieldTouched('createPackageProductType')}
+                  onChange={(value) => {
+                    setCreatePackageDraftTouched(true)
+                    setCreatePackageForm((current) => ({
+                      ...current,
+                      productType: value,
+                      ageClass: packageRequiresAgeClass(value) ? current.ageClass : '',
+                    }))
+                  }}
+                />
+                <SearchableSelect
+                  id="applicationItemsCreatePackageAgeClass"
+                  labelText={requiredLabel(
+                    'Age Class',
+                    packageRequiresAgeClass(createPackageForm.productType),
                   )}
-                </TableBody>
-              </Table>
+                  required={packageRequiresAgeClass(createPackageForm.productType)}
+                  value={createPackageForm.ageClass}
+                  disabled={
+                    !canCreatePackages || !packageRequiresAgeClass(createPackageForm.productType)
+                  }
+                  invalid={!!createPackageFieldError('createPackageAgeClass')}
+                  invalidText={createPackageFieldError('createPackageAgeClass')}
+                  placeholder="Select age class"
+                  options={createPackageGrowthTypeOptions.map(toSearchableOption)}
+                  onBlur={() => markItemFieldTouched('createPackageAgeClass')}
+                  onChange={(value) => setCreatePackageField('ageClass', value)}
+                />
+                <SearchableSelect
+                  id="applicationItemsCreatePackageEndUse"
+                  labelText="End Use"
+                  value={createPackageForm.endUseCode}
+                  disabled={!canCreatePackages || createEndUseAvailability !== 'available'}
+                  placeholder={
+                    createEndUseAvailability === 'loading'
+                      ? 'Loading end uses'
+                      : createSpeciesDraft.length === 0
+                        ? 'Select species first'
+                        : createEndUseAvailability === 'available'
+                          ? 'Select end use'
+                          : 'End uses unavailable'
+                  }
+                  options={optionsWithCurrentCode(
+                    createEndUseOptions,
+                    createPackageForm.endUseCode,
+                  ).map(toSearchableOption)}
+                  onChange={(value) => setCreatePackageField('endUseCode', value)}
+                />
+              </div>
+              <TextArea
+                id="applicationItemsCreatePackageComments"
+                labelText="Comments"
+                helperText="Use unaccented letters, numbers, spaces, or standard punctuation."
+                enableCounter
+                maxCount={PACKAGE_COMMENTS_MAX_LENGTH}
+                maxLength={PACKAGE_COMMENTS_MAX_LENGTH}
+                value={createPackageForm.comments}
+                disabled={!canCreatePackages}
+                invalid={!!createPackageFieldError('createPackageComments')}
+                invalidText={createPackageFieldError('createPackageComments')}
+                onBlur={() => markItemFieldTouched('createPackageComments')}
+                onChange={(event) => setCreatePackageField('comments', event.target.value)}
+              />
+              <div className="application-items-inline-form">
+                <SearchableSelect
+                  id="applicationItemsCreateSpeciesToAdd"
+                  labelText="Create Package Species"
+                  value={createSpeciesToAdd}
+                  disabled={!canCreatePackages}
+                  placeholder="Select species"
+                  options={createRemainingSpeciesOptions
+                    .filter((option) => !createSpeciesDraft.includes(option.code))
+                    .map(toSearchableOption)}
+                  onChange={setCreateSpeciesToAdd}
+                />
+                <Button
+                  kind="tertiary"
+                  size="sm"
+                  aria-label="Add species to new package"
+                  disabled={!canCreatePackages || !createSpeciesToAdd}
+                  onClick={onAddCreateSpecies}
+                >
+                  Add Species
+                </Button>
+              </div>
+              <div className="application-items-table-scroll">
+                <Table size="md" useZebraStyles>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>Species</TableHeader>
+                      <TableHeader>Action</TableHeader>
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {selectedCreateSpeciesOptions.map((row) => (
+                      <TableRow key={row.code}>
+                        <TableCell>{asOptionText(row)}</TableCell>
+                        <TableCell>
+                          <Button
+                            kind="ghost"
+                            size="sm"
+                            disabled={!canCreatePackages}
+                            onClick={() => onRemoveCreateSpecies(row.code)}
+                          >
+                            Remove
+                          </Button>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                    {createSpeciesDraft.length === 0 && (
+                      <TableRow>
+                        <TableCell colSpan={2}>No species selected for the new package.</TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </div>
             </div>
-            <div className="legacy-search-actions">
-              <Button
-                kind="tertiary"
-                size="sm"
-                disabled={!canCreatePackages || isSavingPackage}
-                renderIcon={isSavingPackage ? PendingIcon : undefined}
-                onClick={() => void onCreatePackage()}
-              >
-                {isSavingPackage ? 'Creating…' : 'Create Package'}
-              </Button>
-              <Button
-                kind="ghost"
-                size="sm"
-                disabled={!createPackageDraftDirty}
-                onClick={resetCreatePackageDraft}
-              >
-                Reset new package
-              </Button>
-            </div>
-          </section>
+          </DetailSidePanel>
         )}
 
         {scaleBackedItems && (
           <section
             id="application-items-scales"
+            tabIndex={-1}
             ref={scalesSectionRef}
             className="application-items-card application-items-section application-items-section--scales"
             hidden={packageFirstEmptyState}
             style={packageFirstEmptyState ? { display: 'none' } : undefined}
           >
-            <h3>Summary of Scale</h3>
-            {showMutationActions && (
-              <>
-                <div className="application-items-form">
-                  <TextInput
-                    id="applicationItemsScaleTimberMark"
-                    labelText={requiredLabel('Timber Mark')}
-                    aria-required="true"
-                    value={scaleForm.timberMark}
-                    disabled={
-                      !canAddScalesWithReferenceOptions ||
-                      !packageDataLoaded ||
-                      !selectedPackageNumber
-                    }
-                    invalid={!!scaleFieldError('scaleTimberMark')}
-                    invalidText={scaleFieldError('scaleTimberMark')}
-                    onBlur={() => markItemFieldTouched('scaleTimberMark')}
-                    onChange={(event) => setScaleField('timberMark', event.target.value)}
-                  />
-                  <SearchableSelect
-                    id="applicationItemsScaleSpecies"
-                    labelText={requiredLabel('Species')}
-                    required
-                    value={scaleForm.speciesCode}
-                    disabled={
-                      !canAddScalesWithReferenceOptions ||
-                      !packageDataLoaded ||
-                      !selectedPackageNumber
-                    }
-                    invalid={!!scaleFieldError('scaleSpeciesCode')}
-                    invalidText={scaleFieldError('scaleSpeciesCode')}
-                    placeholder="Select species"
-                    options={scaleSpeciesOptions.map(toSearchableOption)}
-                    onBlur={() => markItemFieldTouched('scaleSpeciesCode')}
-                    onChange={(value) => setScaleField('speciesCode', value)}
-                  />
-                  <SearchableSelect
-                    id="applicationItemsScaleGrade"
-                    labelText={requiredLabel('Grade')}
-                    required
-                    value={scaleForm.gradeCode}
-                    disabled={
-                      !canAddScalesWithReferenceOptions ||
-                      !packageDataLoaded ||
-                      !selectedPackageNumber
-                    }
-                    invalid={!!scaleFieldError('scaleGradeCode')}
-                    invalidText={scaleFieldError('scaleGradeCode')}
-                    placeholder="Select grade"
-                    options={gradeOptions.map(toSearchableOption)}
-                    onBlur={() => markItemFieldTouched('scaleGradeCode')}
-                    onChange={(value) => setScaleField('gradeCode', value)}
-                  />
-                  <TextInput
-                    id="applicationItemsScalePieces"
-                    labelText={requiredLabel('Pieces')}
-                    aria-required="true"
-                    value={scaleForm.pieces}
-                    disabled={
-                      !canAddScalesWithReferenceOptions ||
-                      !packageDataLoaded ||
-                      !selectedPackageNumber
-                    }
-                    invalid={!!scaleFieldError('scalePieces')}
-                    invalidText={scaleFieldError('scalePieces')}
-                    onBlur={() => markItemFieldTouched('scalePieces')}
-                    onChange={(event) => setScaleField('pieces', event.target.value)}
-                  />
-                  <TextInput
-                    id="applicationItemsScaleVolume"
-                    labelText={requiredLabel('Scale Volume (m³)')}
-                    aria-required="true"
-                    value={scaleForm.volume}
-                    disabled={
-                      !canAddScalesWithReferenceOptions ||
-                      !packageDataLoaded ||
-                      !selectedPackageNumber
-                    }
-                    invalid={!!scaleFieldError('scaleVolume')}
-                    invalidText={scaleFieldError('scaleVolume')}
-                    onBlur={() => markItemFieldTouched('scaleVolume')}
-                    onChange={(event) => setScaleField('volume', event.target.value)}
-                  />
+            <div className="application-items-section-header">
+              <h3>Summary of scale</h3>
+              {canOpenItemsEditor && canAddScales && selectedPackageNumber && (
+                <Button
+                  kind="tertiary"
+                  size="sm"
+                  renderIcon={Add}
+                  disabled={otherItemActionDisabled || !packageDataLoaded}
+                  onClick={(event) => {
+                    scaleLauncherRef.current = event.currentTarget
+                    setActiveDrawer('scale')
+                    setIsEditingItems(true)
+                  }}
+                >
+                  Add scale
+                </Button>
+              )}
+            </div>
+            <div className="application-items-scale-totals">
+              <span>
+                Total pieces:{' '}
+                {itemsLoading
+                  ? 'Loading…'
+                  : packageScalesUnavailable
+                    ? 'Not available'
+                    : selectedPackageTotalPieces.toLocaleString()}
+              </span>
+              <span>
+                Total scale volume (m³):{' '}
+                {itemsLoading
+                  ? 'Loading…'
+                  : packageScalesUnavailable
+                    ? 'Not available'
+                    : selectedPackageScaleVolume.toFixed(1)}
+              </span>
+            </div>
+            {scaleBackedItems && (
+              <DetailSidePanel
+                open={activeDrawer === 'scale'}
+                title="Add scale"
+                className="application-items-drawer"
+                contentSelector=".provincial-application-detail"
+                initialFocusSelector="#applicationItemsScaleTimberMark"
+                launcherRef={scaleLauncherRef}
+                fallbackFocusSelector="#application-items-scales"
+                busy={isSavingScale}
+                onClose={requestDrawerClose}
+                actions={[
+                  {
+                    label: 'Cancel',
+                    kind: 'secondary',
+                    disabled: isSavingScale,
+                    onClick: requestDrawerClose,
+                  },
+                  {
+                    label: isSavingScale ? 'Saving…' : 'Save scale',
+                    kind: 'primary',
+                    disabled: !canAddScalesWithReferenceOptions || !packageDataLoaded,
+                    onClick: () => void onAddScale(),
+                  },
+                ]}
+              >
+                <div className="application-items-drawer-content">
+                  <div className="application-items-form">
+                    <TextInput
+                      id="applicationItemsScaleTimberMark"
+                      labelText={requiredLabel('Timber Mark')}
+                      aria-required="true"
+                      value={scaleForm.timberMark}
+                      disabled={
+                        !canAddScalesWithReferenceOptions ||
+                        !packageDataLoaded ||
+                        !selectedPackageNumber
+                      }
+                      invalid={!!scaleFieldError('scaleTimberMark')}
+                      invalidText={scaleFieldError('scaleTimberMark')}
+                      onBlur={() => markItemFieldTouched('scaleTimberMark')}
+                      onChange={(event) => setScaleField('timberMark', event.target.value)}
+                    />
+                    <SearchableSelect
+                      id="applicationItemsScaleSpecies"
+                      labelText={requiredLabel('Species')}
+                      required
+                      value={scaleForm.speciesCode}
+                      disabled={
+                        !canAddScalesWithReferenceOptions ||
+                        !packageDataLoaded ||
+                        !selectedPackageNumber
+                      }
+                      invalid={!!scaleFieldError('scaleSpeciesCode')}
+                      invalidText={scaleFieldError('scaleSpeciesCode')}
+                      placeholder="Select species"
+                      options={scaleSpeciesOptions.map(toSearchableOption)}
+                      onBlur={() => markItemFieldTouched('scaleSpeciesCode')}
+                      onChange={(value) => setScaleField('speciesCode', value)}
+                    />
+                    <SearchableSelect
+                      id="applicationItemsScaleGrade"
+                      labelText={requiredLabel('Grade')}
+                      required
+                      value={scaleForm.gradeCode}
+                      disabled={
+                        !canAddScalesWithReferenceOptions ||
+                        !packageDataLoaded ||
+                        !selectedPackageNumber
+                      }
+                      invalid={!!scaleFieldError('scaleGradeCode')}
+                      invalidText={scaleFieldError('scaleGradeCode')}
+                      placeholder="Select grade"
+                      options={gradeOptions.map(toSearchableOption)}
+                      onBlur={() => markItemFieldTouched('scaleGradeCode')}
+                      onChange={(value) => setScaleField('gradeCode', value)}
+                    />
+                    <TextInput
+                      id="applicationItemsScalePieces"
+                      labelText={requiredLabel('Pieces')}
+                      aria-required="true"
+                      value={scaleForm.pieces}
+                      disabled={
+                        !canAddScalesWithReferenceOptions ||
+                        !packageDataLoaded ||
+                        !selectedPackageNumber
+                      }
+                      invalid={!!scaleFieldError('scalePieces')}
+                      invalidText={scaleFieldError('scalePieces')}
+                      onBlur={() => markItemFieldTouched('scalePieces')}
+                      onChange={(event) => setScaleField('pieces', event.target.value)}
+                    />
+                    <TextInput
+                      id="applicationItemsScaleVolume"
+                      labelText={requiredLabel('Scale Volume (m³)')}
+                      aria-required="true"
+                      value={scaleForm.volume}
+                      disabled={
+                        !canAddScalesWithReferenceOptions ||
+                        !packageDataLoaded ||
+                        !selectedPackageNumber
+                      }
+                      invalid={!!scaleFieldError('scaleVolume')}
+                      invalidText={scaleFieldError('scaleVolume')}
+                      onBlur={() => markItemFieldTouched('scaleVolume')}
+                      onChange={(event) => setScaleField('volume', event.target.value)}
+                    />
+                  </div>
+                  {!!scaleActionErrorMessage && (
+                    <p className="application-items-inline-error" role="alert">
+                      {scaleActionErrorMessage}
+                    </p>
+                  )}
+                  <div className="application-items-inline-form">
+                    <TextInput
+                      id="applicationItemsScaleLookup"
+                      labelText="Scale ID or timber mark"
+                      value={scaleLookupId}
+                      onChange={(event) => {
+                        setScaleLookupId(event.target.value)
+                        setScaleLookupResult('')
+                      }}
+                    />
+                    <Button
+                      type="button"
+                      kind="ghost"
+                      size="sm"
+                      onClick={() => void onLookupScale()}
+                    >
+                      Lookup Scale
+                    </Button>
+                  </div>
+                  {scaleLookupResult && <p className="detail-field-value">{scaleLookupResult}</p>}
                 </div>
-                <div className="legacy-search-actions">
-                  <Button
-                    type="button"
-                    kind="tertiary"
-                    size="sm"
-                    disabled={
-                      !canAddScalesWithReferenceOptions ||
-                      !packageDataLoaded ||
-                      !selectedPackageNumber ||
-                      isSavingScale
-                    }
-                    renderIcon={isSavingScale ? PendingIcon : undefined}
-                    onClick={() => void onAddScale()}
-                  >
-                    {isSavingScale ? 'Adding…' : 'Add Scale'}
-                  </Button>
-                  <Button
-                    kind="ghost"
-                    size="sm"
-                    disabled={!scaleDraftDirty}
-                    onClick={resetScaleDraft}
-                  >
-                    Reset scale
-                  </Button>
-                </div>
-                {!!scaleActionErrorMessage && (
-                  <p className="application-items-inline-error" role="alert">
-                    {scaleActionErrorMessage}
-                  </p>
-                )}
-                <div className="application-items-inline-form">
-                  <TextInput
-                    id="applicationItemsScaleLookup"
-                    labelText="Scale ID or timber mark"
-                    value={scaleLookupId}
-                    onChange={(event) => {
-                      setScaleLookupId(event.target.value)
-                      setScaleLookupResult('')
-                    }}
-                  />
-                  <Button type="button" kind="ghost" size="sm" onClick={() => void onLookupScale()}>
-                    Lookup Scale
-                  </Button>
-                </div>
-                {scaleLookupResult && <p className="detail-field-value">{scaleLookupResult}</p>}
-              </>
+              </DetailSidePanel>
             )}
             <div className="application-items-table-scroll application-items-table-scroll--scales">
               <Table size="md" useZebraStyles>
@@ -2378,13 +2608,13 @@ function ProvincialApplicationItemsPanel({
                     <TableHeader>Species</TableHeader>
                     <TableHeader>Grade</TableHeader>
                     <TableHeader>Volume (m³)</TableHeader>
-                    {showMutationActions && <TableHeader>Delete</TableHeader>}
+                    {canOpenItemsEditor && <TableHeader>Delete</TableHeader>}
                   </TableRow>
                 </TableHead>
                 <TableBody>
                   {packageScalesUnavailable ? (
                     <TableRow>
-                      <TableCell colSpan={showMutationActions ? 7 : 6}>
+                      <TableCell colSpan={canOpenItemsEditor ? 7 : 6}>
                         Package scales could not be loaded.
                       </TableCell>
                     </TableRow>
@@ -2397,7 +2627,7 @@ function ProvincialApplicationItemsPanel({
                         <TableCell>{row.species}</TableCell>
                         <TableCell>{row.grade}</TableCell>
                         <TableCell>{row.volume}</TableCell>
-                        {showMutationActions && (
+                        {canOpenItemsEditor && (
                           <TableCell>
                             <Button
                               type="button"
@@ -2405,6 +2635,7 @@ function ProvincialApplicationItemsPanel({
                               size="sm"
                               disabled={
                                 !canAddScales ||
+                                otherItemActionDisabled ||
                                 !packageDataLoaded ||
                                 deletingScaleId === row.id ||
                                 row.permitted
@@ -2425,9 +2656,7 @@ function ProvincialApplicationItemsPanel({
                   )}
                   {!packageScalesUnavailable && scales.length === 0 && (
                     <TableRow>
-                      <TableCell colSpan={showMutationActions ? 7 : 6}>
-                        No scales assigned to this package.
-                      </TableCell>
+                      <TableCell colSpan={canOpenItemsEditor ? 7 : 6}>No scales yet.</TableCell>
                     </TableRow>
                   )}
                 </TableBody>
@@ -2487,6 +2716,18 @@ function ProvincialApplicationItemsPanel({
           dispatchPackageSelection({ type: 'select', packageNumber: nextPackageNumber })
         }}
         onClose={() => setPendingPackageSelection('')}
+      />
+      <ConfirmationModal
+        open={pendingDrawerClose}
+        title="Discard unsaved changes?"
+        description="Your changes to this package or scale will be lost."
+        confirmLabel="Discard changes"
+        danger
+        onConfirm={() => {
+          setPendingDrawerClose(false)
+          cancelItemEditing()
+        }}
+        onClose={() => setPendingDrawerClose(false)}
       />
     </div>
   )

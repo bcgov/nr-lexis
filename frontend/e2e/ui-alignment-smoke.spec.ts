@@ -1515,17 +1515,80 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       }),
     })
     await page.getByRole('tab', { name: 'Remarks' }).click()
-    const remarks = page.getByRole('textbox', { name: 'Remarks' })
-    await expect(remarks).toBeVisible()
-    await expect(remarks).toHaveAttribute('rows', '4')
-    await expect(remarks).not.toHaveCSS('height', '40px')
-    await expect(remarks).toHaveCSS('min-height', '40px')
-    await expect(remarks).toHaveCSS('resize', 'vertical')
+    await expect(page.getByRole('region', { name: 'Remarks' })).toHaveText(
+      'Available after the application is saved.',
+    )
+    await page.getByRole('tab', { name: 'Scale' }).click()
+    const scaleSection = page.getByRole('region', { name: 'Scale' })
+    await expect(scaleSection).toBeVisible()
+    await expect(scaleSection).toHaveCSS('background-color', 'rgb(38, 38, 38)')
+  })
 
-    await page.getByRole('tab', { name: 'Items' }).click()
-    const applicationItemsCard = page.locator('.application-items-card').first()
-    await expect(applicationItemsCard).toBeVisible()
-    await expect(applicationItemsCard).toHaveCSS('border-color', 'rgb(82, 82, 82)')
+  test('keeps application creation and agent entry within the viewport', async ({
+    page,
+  }, testInfo) => {
+    await page.route('**/api/lexis/session/capabilities', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({
+          ...authenticatedAdminSession,
+          grantedActions: [
+            ...authenticatedAdminSession.grantedActions,
+            '/changeApplicantType',
+            '/applicationRemarks',
+          ],
+        }),
+      }),
+    )
+    await gotoSyntheticRoute(page, '/provincial/application/create', {
+      ready: page.getByRole('heading', { name: 'Create provincial application', exact: true }),
+    })
+    await expect(page.getByRole('button', { name: 'Save application', exact: true })).toBeVisible()
+    await expect(page.getByRole('combobox', { name: 'Client', exact: true })).toBeVisible()
+    await expect(
+      page.getByRole('combobox', { name: 'Client location', exact: true }),
+    ).toBeDisabled()
+    await page.locator('label[for="applicationCreateAgentUsed"]').click()
+    await expect(page.getByRole('checkbox', { name: "I'm an agent", exact: true })).toBeChecked()
+    await expect(page.getByRole('region', { name: 'Agent information', exact: true })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Agent', exact: true })).toHaveCount(0)
+    for (const width of [1440, 768, 390]) {
+      await page.setViewportSize({ width, height: 1000 })
+      await page.mouse.move(width - 10, 60)
+      const closeMenu = page.getByRole('button', { name: 'Close menu', exact: true })
+      if (await closeMenu.isVisible()) await closeMenu.click()
+      await page.mouse.move(width - 10, 60)
+      await expect(page.getByRole('navigation', { name: 'Side navigation' })).toHaveCSS(
+        'width',
+        '48px',
+      )
+      await expect(page.getByRole('combobox', { name: 'Agent client', exact: true })).toBeVisible()
+      expect(
+        await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
+      ).toBe(true)
+    }
+    await page.screenshot({
+      path: testInfo.outputPath('application-create-mobile.png'),
+      fullPage: true,
+      animations: 'disabled',
+    })
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    await expect(page.getByRole('navigation', { name: 'Side navigation' })).toHaveCSS(
+      'width',
+      '48px',
+    )
+    await page.screenshot({
+      path: testInfo.outputPath('application-create-desktop.png'),
+      fullPage: true,
+      animations: 'disabled',
+    })
+    for (const section of ['Documents', 'Remarks', 'Offers', 'Review']) {
+      await page.getByRole('tab', { name: section, exact: true }).click()
+      await expect(page.getByRole('region', { name: section, exact: true })).toHaveText(
+        'Available after the application is saved.',
+      )
+    }
   })
 
   test('exposes only the spreadsheet RTM AMV workflow', async ({ page }) => {

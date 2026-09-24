@@ -1,0 +1,21 @@
+.application-items-panel {
+  .application-items-card-actions,
+  .application-items-scale-totals {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    align-items: center;
+  }
+
+  .application-items-scale-totals {
+    margin: 0.5rem 0 1.25rem;
+  }
+}
+
+.application-items-drawer {
+  .application-items-drawer-content,
+  .application-items-package-edit-panel {
+    display: grid;
+    gap: 1rem;
+  }
+}

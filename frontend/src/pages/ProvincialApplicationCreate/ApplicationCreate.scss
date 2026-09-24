@@ -1,0 +1,56 @@
+.provincial-application-create-page {
+  .application-create-actions {
+    margin: 0;
+  }
+
+  .application-create-required {
+    margin-block-end: 1rem;
+  }
+
+  .application-create-client-grid {
+    grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+
+    > :first-child {
+      grid-column: 1 / -1;
+      max-inline-size: 24rem;
+    }
+  }
+
+  .application-create-applicant-type {
+    margin-block-start: 1.5rem;
+    padding-block-start: 1rem;
+    border-block-start: 1px solid var(--cds-border-subtle-01, #c6c6c6);
+    display: flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1.5rem;
+    > .cds--form-item {
+      max-inline-size: 24rem;
+    }
+  }
+
+  .application-create-agent-details {
+    padding: 0;
+    margin-block-start: 1.5rem;
+    background: transparent;
+    h2 {
+      font-size: 1rem;
+      font-weight: 600;
+      margin-block-end: 1rem;
+    }
+  }
+
+  .application-create-tab-errors {
+    margin-inline-start: 0.5rem;
+    padding-inline: 0.35rem;
+    border-radius: 50%;
+    background: var(--cds-support-error, #da1e28);
+    color: var(--cds-text-on-color, white);
+  }
+
+  @media (max-width: 671px) {
+    .application-create-client-grid {
+      grid-template-columns: minmax(0, 1fr);
+    }
+  }
+}

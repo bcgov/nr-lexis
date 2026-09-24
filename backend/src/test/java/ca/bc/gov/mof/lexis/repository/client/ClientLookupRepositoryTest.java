@@ -5,7 +5,6 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -121,19 +120,27 @@ class ClientLookupRepositoryTest {
         .query(sql.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
     assertThat(sql.getValue())
         .contains("FROM THE.V_CLIENT_PUBLIC FC")
-        .doesNotContain("THE.CLIENT_ACRONYM", "THE.FOREST_CLIENT")
+        .doesNotContain("THE.FOREST_CLIENT")
+        .contains("FROM THE.CLIENT_ACRONYM CA")
         .contains("FROM THE.EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("COALESCE(")
         .contains("AND (? IS NULL OR FC.CLIENT_NUMBER = ?)")
         .contains("EEA.EXPORT_JURISDICTION_CODE = 'F'")
-        .contains("ORDER BY UPPER(FC.CLIENT_NAME), FC.CLIENT_NUMBER")
+        .contains("UPPER(CA.CLIENT_ACRONYM) = UPPER(?)")
+        .contains("ORDER BY MATCH_RANK, UPPER(FC.CLIENT_NAME), FC.CLIENT_NUMBER")
         .endsWith("WHERE ROWNUM <= 15\n");
     verify(statement).setInt(1, 0);
-    verify(statement).setString(2, "Acme%_\\");
+    verify(statement).setString(2, "Acme\\%\\_\\\\");
     verify(statement).setInt(3, 0);
-    verify(statement).setString(4, "Acme\\%\\_\\\\");
-    verify(statement).setString(5, "00077881");
-    verify(statement).setString(6, "00077881");
-    verify(statement).setInt(7, 1);
+    verify(statement).setString(4, "Acme%_\\");
+    verify(statement).setInt(5, 0);
+    verify(statement).setString(6, "Acme%_\\");
+    verify(statement).setInt(7, 0);
+    verify(statement).setString(8, "Acme\\%\\_\\\\");
+    verify(statement).setString(9, "Acme\\%\\_\\\\");
+    verify(statement).setString(10, "00077881");
+    verify(statement).setString(11, "00077881");
+    verify(statement).setInt(12, 1);
   }
 
   @Test
@@ -157,12 +164,14 @@ class ClientLookupRepositoryTest {
         .query(sql.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
     assertThat(sql.getValue()).contains("FC.CLIENT_NUMBER = LPAD(?, 8, '0')");
     verify(statement).setInt(1, 1);
-    verify(statement).setString(2, "77881");
     verify(statement).setInt(3, 1);
     verify(statement).setString(4, "77881");
-    verify(statement).setString(5, null);
-    verify(statement).setString(6, null);
-    verify(statement).setInt(7, 0);
+    verify(statement).setInt(5, 1);
+    verify(statement).setString(6, "77881");
+    verify(statement).setInt(7, 1);
+    verify(statement).setString(10, null);
+    verify(statement).setString(11, null);
+    verify(statement).setInt(12, 0);
   }
 
   @Test
@@ -185,6 +194,7 @@ class ClientLookupRepositoryTest {
     ResultSet resultSet = mock(ResultSet.class);
     when(resultSet.getString("CLIENT_NUMBER")).thenReturn(" 00077881 ");
     when(resultSet.getString("COMPANY_NAME")).thenReturn(" Acme Forestry ");
+    when(resultSet.getString("CLIENT_ACRONYM")).thenReturn(" ACME ");
     when(jdbcTemplate.query(
             anyString(), any(PreparedStatementSetter.class), any(RowMapper.class)))
         .thenAnswer(
@@ -197,8 +207,7 @@ class ClientLookupRepositoryTest {
     assertThat(repository.findClientSuggestions("Acme", false, null))
         .containsExactly(
             new ClientLookupRepository.ClientSuggestionRow(
-                "00077881", "Acme Forestry", null));
-    verify(resultSet, never()).getString("CLIENT_ACRONYM");
+                "00077881", "Acme Forestry", "ACME"));
   }
 
   @Test

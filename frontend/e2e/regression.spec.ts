@@ -2657,7 +2657,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(listDate.getByRole('radio', { name: 'No list date' })).not.toBeChecked()
     await expect(page.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue('180')
 
-    await page.getByRole('tab', { name: 'Items' }).click()
+    await page.getByRole('tab', { name: 'Scale' }).click()
     const paragraphField = page.getByLabel('Location of logs')
     const normalField = page.getByLabel('Application volume (m³)')
     const [paragraphMetrics, normalFieldMetrics] = await Promise.all([
@@ -2688,7 +2688,7 @@ test.describe('TEST IDIR admin regression', () => {
       /create provincial application/i,
     )
 
-    for (const tabName of ['Applicant', 'Application', 'Items', 'Documents', 'Remarks', 'Offers']) {
+    for (const tabName of ['Applicant', 'Application', 'Scale', 'Documents', 'Remarks', 'Offers']) {
       await expect(page.getByRole('tab', { name: tabName })).toBeVisible()
     }
     await expect(page.getByRole('tab', { name: 'Agent' })).toHaveCount(0)
@@ -2696,18 +2696,11 @@ test.describe('TEST IDIR admin regression', () => {
     const reviewTab = page.getByRole('tab', { name: 'Review' })
     await expect(reviewTab).toBeVisible()
     await reviewTab.click()
-    await expect(page.getByRole('textbox', { name: 'Application status' })).toHaveValue('New')
-    await expect(page.getByRole('textbox', { name: 'Application status' })).toHaveAttribute(
-      'readonly',
+    await expect(page.getByRole('region', { name: 'Review' })).toHaveText(
+      'Available after the application is saved.',
     )
-    await expect(page.getByRole('textbox', { name: 'Remarks' })).toBeDisabled()
-    await expect(
-      page.getByText(
-        'Save the application before changing its review status or adding review remarks.',
-      ),
-    ).toBeVisible()
 
-    await expect(page.getByRole('button', { name: 'Save' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Save application' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Save Draft' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
@@ -2726,93 +2719,34 @@ test.describe('TEST IDIR admin regression', () => {
       await page.locator(`#${regionMenuId}`).getByRole('option').first().click()
     }
 
-    await page.getByRole('tab', { name: 'Items' }).click()
-    const itemsPanel = page.getByRole('region', { name: 'Items' })
+    await page.getByRole('tab', { name: 'Scale' }).click()
+    const itemsPanel = page.getByRole('region', { name: 'Scale' })
     await expect(itemsPanel).toBeVisible()
     await expect(itemsPanel).toHaveCSS('overflow', 'visible')
 
     const speciesSelect = itemsPanel.getByRole('combobox', {
-      name: 'Species list',
+      name: /^Species list/,
     })
     await expect(speciesSelect).toBeEnabled({ timeout: 30_000 })
-    await expect(speciesSelect).not.toHaveValue('')
-    const firstSpeciesLabel = (await speciesSelect.inputValue()).trim()
-    const firstSpeciesCode = firstSpeciesLabel.split(/\s+-\s+/, 1)[0]?.trim() ?? ''
-    expect(
-      firstSpeciesCode,
-      'application species should prefill the first available code',
-    ).not.toBe('')
+    await expect(speciesSelect).toHaveAttribute('aria-required', 'true')
+    await speciesSelect.click()
+    const firstSpecies = page.getByRole('option').first()
+    const firstSpeciesLabel = (await firstSpecies.innerText()).trim()
+    await firstSpecies.click()
+    await expect(speciesSelect).toHaveAccessibleName(/Total items selected: 1/)
+    await expect(speciesSelect).toBeEnabled()
+    await page.getByRole('option', { name: firstSpeciesLabel, exact: true }).click()
+    await expect(speciesSelect).toHaveAccessibleName(/Total items selected: 0/)
+    await expect(itemsPanel.getByText('At least one species is required.')).toBeVisible()
+    await expect(page.getByRole('button', { name: /Create package/i })).toHaveCount(0)
 
-    const addSpeciesButton = itemsPanel.getByRole('button', {
-      name: 'Add species',
-      exact: true,
-    })
-    await expect(addSpeciesButton).toBeEnabled()
-    await addSpeciesButton.click()
-
-    const selectedSpeciesList = itemsPanel.getByRole('list', {
-      name: 'Selected species',
-    })
-    const selectedSpeciesItem = selectedSpeciesList.getByRole('listitem').filter({
-      hasText: firstSpeciesCode,
-    })
-    const removeSpeciesButton = selectedSpeciesItem.getByRole('button', {
-      name: `Remove ${firstSpeciesCode} from application`,
-      exact: true,
-    })
-    await expect(removeSpeciesButton).toBeVisible()
-    await expect(itemsPanel.getByRole('button', { name: 'Remove', exact: true })).toHaveCount(0)
-
-    const [addSpeciesBox, selectedSpeciesBox] = await Promise.all([
-      addSpeciesButton.boundingBox(),
-      selectedSpeciesItem.boundingBox(),
-    ])
-    expect(addSpeciesBox).not.toBeNull()
-    expect(selectedSpeciesBox).not.toBeNull()
-    expect(selectedSpeciesBox!.x).toBeGreaterThanOrEqual(addSpeciesBox!.x + addSpeciesBox!.width)
-    expect(Math.abs(selectedSpeciesBox!.y - addSpeciesBox!.y)).toBeLessThan(12)
-
-    await removeSpeciesButton.click()
-    await expect(removeSpeciesButton).toHaveCount(0)
-
-    await expect(page.getByRole('heading', { name: 'Create Package', exact: true })).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Package Details', exact: true })).toHaveCount(0)
-    await expect(
-      page.getByText(
-        'Save the application before creating a package or adding Summary of Scale entries.',
-      ),
-    ).toBeVisible()
-    const createPackageButton = page.getByRole('button', {
-      name: 'Create Package',
-      exact: true,
-    })
-    await expect(createPackageButton).toBeEnabled()
-    await createPackageButton.click()
-
-    const unsavedPackageDialog = page.getByRole('dialog', { name: 'Application not saved' })
-    await expect(unsavedPackageDialog).toBeVisible()
-    await expect(
-      unsavedPackageDialog.getByText('Please save this application before adding packages.'),
-    ).toBeVisible()
-    await unsavedPackageDialog.getByRole('button', { name: 'OK', exact: true }).click()
-    await expect(unsavedPackageDialog).toBeHidden()
-    await expect(createPackageButton).toBeFocused()
+    for (const section of ['Documents', 'Remarks', 'Offers', 'Review']) {
+      await page.getByRole('tab', { name: section }).click()
+      const panel = page.getByRole('region', { name: section, exact: true })
+      await expect(panel).toHaveText('Available after the application is saved.')
+      await expect(panel.locator('input, textarea')).toHaveCount(0)
+    }
     await expect(page).toHaveURL(/\/provincial\/application\/create(?:\?|$)/)
-
-    await page.getByRole('tab', { name: 'Documents' }).click()
-    const createDocumentsRegion = page.getByRole('region', { name: 'Documents', exact: true })
-    await expect(createDocumentsRegion).toBeVisible()
-    await expect(createDocumentsRegion).not.toContainText('API')
-    const addDocumentButton = createDocumentsRegion.getByRole('button', {
-      name: 'Add document',
-      exact: true,
-    })
-    await expect(addDocumentButton).toBeDisabled()
-    await expect(addDocumentButton).toHaveAttribute(
-      'title',
-      'Save the application before uploading documents.',
-    )
-    await expect(page.getByLabel('Document File')).toHaveCount(0)
   })
 
   test('uses save and cancel workflow on provincial create/edit pages', async () => {
@@ -2820,7 +2754,12 @@ test.describe('TEST IDIR admin regression', () => {
 
     for (const [path, heading] of createWorkflowPages) {
       await expectAccessiblePage(page, path, heading)
-      await expect(page.getByRole('button', { name: 'Save' })).toBeVisible()
+      await expect(
+        page.getByRole('button', {
+          name: path === '/provincial/application/create' ? 'Save application' : 'Save',
+          exact: true,
+        }),
+      ).toBeVisible()
       await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Save Draft' })).toHaveCount(0)
       await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)

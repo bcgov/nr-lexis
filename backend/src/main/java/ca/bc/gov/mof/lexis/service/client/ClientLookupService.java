@@ -14,7 +14,7 @@ public interface ClientLookupService {
 
   List<ClientContact> getContactsForLocation(String clientNumber, String locationCode);
 
-  /** Returns at most fifteen name or client-number matches for the authorized search scope. */
+  /** Returns at most fifteen name, acronym, or client-number matches for the authorized search scope. */
   List<ClientSuggestion> findClientSuggestions(
       String searchTerm, boolean federalOnly, String allowedClientNumber);
 
