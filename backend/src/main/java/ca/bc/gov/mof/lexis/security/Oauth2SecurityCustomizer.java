@@ -1,9 +1,20 @@
 package ca.bc.gov.mof.lexis.security;
 
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.jwk.source.JWKSource;
+import com.nimbusds.jose.jwk.source.JWKSourceBuilder;
+import com.nimbusds.jose.proc.JWSVerificationKeySelector;
+import com.nimbusds.jose.proc.SecurityContext;
+import com.nimbusds.jose.util.DefaultResourceRetriever;
 import com.nimbusds.jwt.SignedJWT;
+import com.nimbusds.jwt.proc.DefaultJWTProcessor;
+import com.nimbusds.jwt.proc.JWTProcessor;
+import java.net.MalformedURLException;
 import java.net.URI;
+import java.net.URL;
 import java.text.ParseException;
+import java.time.Duration;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
@@ -46,6 +57,9 @@ public class Oauth2SecurityCustomizer
           "LEXIS_READ_ONLY",
           "LEXIS_APPLICATION_APPROVER",
           "LEXIS_EXEMPTION_APPROVER");
+  private static final int JWKS_CONNECT_TIMEOUT_MILLIS = (int) Duration.ofSeconds(10).toMillis();
+  private static final int JWKS_READ_TIMEOUT_MILLIS = (int) Duration.ofSeconds(15).toMillis();
+  private static final int JWKS_SIZE_LIMIT_BYTES = 50 * 1024;
 
   private final JwtDecoder jwtDecoder;
   private final LexisSessionService sessionService;
@@ -247,7 +261,7 @@ public class Oauth2SecurityCustomizer
     }
   }
 
-  private static JwtDecoder createDecoder(
+  static JwtDecoder createDecoder(
       String issuerUri,
       String jwkSetUri,
       String issuerPropertyName,
@@ -256,11 +270,40 @@ public class Oauth2SecurityCustomizer
     requireAbsoluteUri(issuerUri, issuerPropertyName);
     requireAbsoluteUri(jwkSetUri, jwkSetPropertyName);
 
-    NimbusJwtDecoder decoder = NimbusJwtDecoder.withJwkSetUri(jwkSetUri).build();
+    NimbusJwtDecoder decoder = new NimbusJwtDecoder(jwtProcessor(jwkSetUri, jwkSetPropertyName));
     decoder.setJwtValidator(
         new DelegatingOAuth2TokenValidator<>(
             JwtValidators.createDefaultWithIssuer(issuerUri), tokenValidator));
     return decoder;
+  }
+
+  /**
+   * Spring's JWK-set decoder caches keys for five minutes, then refetches them on a request thread
+   * with no timeout or retry, so a slow SSO response at that moment fails the request with a 401.
+   * As in nr-rept, keys are refreshed before they expire, a failed fetch is retried once and each
+   * fetch is time-bounded. Otherwise this matches Spring's processor: RS256 signatures, with the
+   * claims left to the token validators.
+   */
+  private static JWTProcessor<SecurityContext> jwtProcessor(
+      String jwkSetUri, String jwkSetPropertyName) {
+    URL jwkSetUrl;
+    try {
+      jwkSetUrl = URI.create(jwkSetUri).toURL();
+    } catch (IllegalArgumentException | MalformedURLException exception) {
+      throw new IllegalStateException(jwkSetPropertyName + " must be a valid URL", exception);
+    }
+    JWKSource<SecurityContext> jwkSource =
+        JWKSourceBuilder.create(
+                jwkSetUrl,
+                new DefaultResourceRetriever(
+                    JWKS_CONNECT_TIMEOUT_MILLIS, JWKS_READ_TIMEOUT_MILLIS, JWKS_SIZE_LIMIT_BYTES))
+            .retrying(true)
+            .refreshAheadCache(true)
+            .build();
+    DefaultJWTProcessor<SecurityContext> processor = new DefaultJWTProcessor<>();
+    processor.setJWSKeySelector(new JWSVerificationKeySelector<>(JWSAlgorithm.RS256, jwkSource));
+    processor.setJWTClaimsSetVerifier((claims, context) -> {});
+    return processor;
   }
 
   static OAuth2TokenValidator<Jwt> accessTokenUseValidator() {

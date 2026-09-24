@@ -4,15 +4,30 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import com.nimbusds.jose.JWSAlgorithm;
+import com.nimbusds.jose.JWSHeader;
+import com.nimbusds.jose.crypto.RSASSASigner;
+import com.nimbusds.jose.jwk.JWKSet;
+import com.nimbusds.jose.jwk.RSAKey;
+import com.nimbusds.jose.jwk.gen.RSAKeyGenerator;
+import com.nimbusds.jwt.JWTClaimsSet;
+import com.nimbusds.jwt.SignedJWT;
+import com.sun.net.httpserver.HttpServer;
+import java.net.InetSocketAddress;
+import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.core.GrantedAuthority;
+import org.springframework.security.oauth2.core.OAuth2TokenValidatorResult;
 import org.springframework.security.oauth2.jwt.Jwt;
+import org.springframework.security.oauth2.jwt.JwtDecoder;
 
 class Oauth2SecurityCustomizerTest {
   private static final String ISSUER = "https://loginproxy.example.test/auth/realms/standard";
@@ -207,6 +222,54 @@ class Oauth2SecurityCustomizerTest {
         .isInstanceOf(IllegalStateException.class)
         .hasMessageContaining("distinct");
     assertThat(Oauth2SecurityCustomizer.normalizeIssuerUri(ISSUER + "/")).isEqualTo(ISSUER);
+  }
+
+  @Test
+  void signingKeyFetchShouldSurviveOneTransientSsoFailure() throws Exception {
+    RSAKey key = new RSAKeyGenerator(2048).keyID("sso-key").generate();
+    byte[] jwks = new JWKSet(key.toPublicJWK()).toString().getBytes(StandardCharsets.UTF_8);
+    AtomicInteger requests = new AtomicInteger();
+    HttpServer sso = HttpServer.create(new InetSocketAddress("127.0.0.1", 0), 0);
+    sso.createContext(
+        "/",
+        exchange -> {
+          if (requests.incrementAndGet() == 1) {
+            exchange.sendResponseHeaders(503, -1);
+            exchange.close();
+            return;
+          }
+          exchange.getResponseHeaders().set("Content-Type", "application/json");
+          exchange.sendResponseHeaders(200, jwks.length);
+          try (var response = exchange.getResponseBody()) {
+            response.write(jwks);
+          }
+        });
+    sso.start();
+    try {
+      String issuer = "http://127.0.0.1:" + sso.getAddress().getPort() + "/realms/standard";
+      JwtDecoder decoder =
+          Oauth2SecurityCustomizer.createDecoder(
+              issuer,
+              issuer + "/protocol/openid-connect/certs",
+              "issuer-uri",
+              "jwk-set-uri",
+              token -> OAuth2TokenValidatorResult.success());
+      SignedJWT token =
+          new SignedJWT(
+              new JWSHeader.Builder(JWSAlgorithm.RS256).keyID("sso-key").build(),
+              new JWTClaimsSet.Builder()
+                  .issuer(issuer)
+                  .subject("user")
+                  .expirationTime(Date.from(Instant.now().plusSeconds(300)))
+                  .build());
+      token.sign(new RSASSASigner(key));
+
+      // Spring's default decoder rejects this token outright when the key fetch fails.
+      assertThat(decoder.decode(token.serialize()).getSubject()).isEqualTo("user");
+      assertThat(requests).hasValue(2);
+    } finally {
+      sso.stop(0);
+    }
   }
 
   private List<String> authorities(Map<String, Object> claims) {
