@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react'
 import {
   Button,
   Checkbox,
@@ -139,6 +139,7 @@ import {
 } from '@/pages/shared/create-form-utils'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
+import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { triggerBrowserDownload } from '@/utils/download'
 import { requiredLabel } from '@/utils/required-label'
 import {
@@ -146,6 +147,7 @@ import {
   normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
 } from '@/utils/text'
+import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 
@@ -156,6 +158,23 @@ const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before upda
 const REVIEW_REMARK_REQUIRED_MESSAGE =
   'Status change remark is required when rejecting, withdrawing, or expiring an application.'
 type LookupAvailability = 'loading' | 'available' | 'unavailable'
+type ApplicationActionResult = ActionResult & {
+  /** Keeps the creation notice through this application's own reloads. */
+  createdFor?: string
+  /** Item results render beside the item controls instead of the page header. */
+  source?: 'items'
+  /** Prompts a second save; any change to the summary draft makes it stale. */
+  volumeWarning?: boolean
+}
+
+const withoutVolumeWarning = (
+  current: ApplicationActionResult | null,
+): ApplicationActionResult | null => (current?.volumeWarning ? null : current)
+
+/** Opening or leaving an editor drops prompts about the old draft but keeps committed results. */
+const withoutDraftResult = (
+  current: ApplicationActionResult | null,
+): ApplicationActionResult | null => withoutVolumeWarning(withoutActionError(current))
 type ApplicationDetailTabKey =
   | 'owner'
   | 'agent'
@@ -677,7 +696,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [loading, setLoading] = useState(true)
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
-  const [actionErrorMessage, setActionErrorMessage] = useState('')
+  const [partialLoadMessage, setPartialLoadMessage] = useState('')
   const [clientLookupFailures, setClientLookupFailures] = useState<
     ReadonlySet<ApplicationClientLookupFailure>
   >(() => new Set())
@@ -699,14 +718,33 @@ const ProvincialApplicationDetailsPage = () => {
     },
     [],
   )
-  const [actionFeedback, setActionFeedback] = useState<{
-    kind: 'success' | 'warning'
-    message: string
-  } | null>(null)
-  const [creationSuccessMessage, setCreationSuccessMessage] = useState(() =>
-    createdApplicationNumber ? `Created application ${createdApplicationNumber}.` : '',
+  const [actionResult, setActionResult] = useState<ApplicationActionResult | null>(() =>
+    createdApplicationNumber
+      ? {
+          kind: 'success',
+          title: 'Action complete',
+          message: `Created application ${createdApplicationNumber}.`,
+          createdFor: createdApplicationNumber,
+        }
+      : null,
   )
-  const [actionWarningMessage, setActionWarningMessage] = useState('')
+  // Item results share this page's single result but render beside the item controls.
+  const setItemsActionResult = useCallback((update: SetStateAction<ActionResult | null>) => {
+    setActionResult((current) => {
+      if (typeof update !== 'function') {
+        return update && { ...update, source: 'items' }
+      }
+      const itemsResult = current?.source === 'items' ? current : null
+      const next = update(itemsResult)
+      if (next === itemsResult) {
+        return current
+      }
+      return next && { ...next, source: 'items' }
+    })
+  }, [])
+  const itemsActionResult = actionResult?.source === 'items' ? actionResult : null
+  const pageActionResult = actionResult?.source === 'items' ? null : actionResult
+  const actionErrorMessage = pageActionResult?.kind === 'error' ? pageActionResult.message : ''
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] =
     useState<ProvincialApplicationDocumentRow | null>(null)
@@ -888,8 +926,8 @@ const ProvincialApplicationDetailsPage = () => {
         setDocumentLookupAvailability('unavailable')
         setPermitLookupAvailability('unavailable')
         setDocumentsErrorMessage('')
-        setActionErrorMessage('')
-        setActionFeedback(null)
+        setPartialLoadMessage('')
+        setActionResult(null)
         setLoading(false)
         setSummaryForm(null)
         setSummaryBaselineForm(null)
@@ -917,8 +955,8 @@ const ProvincialApplicationDetailsPage = () => {
       setLoading(true)
       setErrorMessage('')
       setDocumentsErrorMessage('')
-      setActionErrorMessage('')
-      setActionFeedback(null)
+      setPartialLoadMessage('')
+      setActionResult((current) => (current?.createdFor === applicationNumber ? current : null))
       setPermitLookupAvailability('loading')
       if (!retainingCurrentDetail) {
         setIsEditingSummary(false)
@@ -1008,7 +1046,7 @@ const ProvincialApplicationDetailsPage = () => {
             toSummarySnapshotFormState(summarySnapshotResult.value),
           )
         } else if (summarySnapshotResult.status === 'rejected') {
-          setActionErrorMessage('Unable to retrieve complete application summary fields.')
+          setPartialLoadMessage('Unable to retrieve complete application summary fields.')
         }
 
         if (applicationSpeciesResult.status === 'fulfilled' && editableSummaryForm) {
@@ -1017,7 +1055,7 @@ const ProvincialApplicationDetailsPage = () => {
             applicationSpeciesResult.value,
           )
         } else if (applicationSpeciesResult.status === 'rejected') {
-          setActionErrorMessage('Unable to retrieve species and end-use fields.')
+          setPartialLoadMessage('Unable to retrieve species and end-use fields.')
         }
 
         if (editableSummaryForm) {
@@ -1044,7 +1082,7 @@ const ProvincialApplicationDetailsPage = () => {
               setPermitRows([])
             }
             setPermitLookupAvailability('unavailable')
-            setActionErrorMessage('Unable to retrieve application permits.')
+            setPartialLoadMessage('Unable to retrieve application permits.')
           }
 
           if (detailDocumentRequestSequence !== documentRequestSequenceRef.current) {
@@ -2487,14 +2525,13 @@ const ProvincialApplicationDetailsPage = () => {
         return
       }
 
-      setActionErrorMessage('')
-      setActionFeedback(null)
+      setActionResult(null)
 
       try {
         const result = await openApplicationDocument(row.id, row.name, applicationNumber)
         triggerBrowserDownload(result.blob, result.filename || row.name)
       } catch {
-        setActionErrorMessage('Unable to open the selected document.')
+        setActionResult({ kind: 'error', message: 'Unable to open the selected document.' })
       }
     },
     [applicationNumber],
@@ -2511,8 +2548,7 @@ const ProvincialApplicationDetailsPage = () => {
       const isCurrentDocumentRequest = () =>
         isCurrentApplication() && documentRequestSequence === documentRequestSequenceRef.current
       setIsRemovingDocumentId(row.id)
-      setActionErrorMessage('')
-      setActionFeedback(null)
+      setActionResult(null)
 
       try {
         const removeResult = await removeApplicationDocument(row.id, applicationNumber)
@@ -2529,7 +2565,7 @@ const ProvincialApplicationDetailsPage = () => {
             setDocumentRows(documentsResult.rows)
             setDocumentLookupAvailability('available')
             setDocumentsErrorMessage('')
-            setActionFeedback({
+            setActionResult({
               kind: 'success',
               message: `${row.name || 'Document'} was deleted.`,
             })
@@ -2541,7 +2577,7 @@ const ProvincialApplicationDetailsPage = () => {
             setDocumentsErrorMessage(
               'The document was deleted, but application documents could not be refreshed. Reload the page.',
             )
-            setActionFeedback({
+            setActionResult({
               kind: 'warning',
               message: `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
             })
@@ -2581,8 +2617,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
 
       setRemarkValidationMessage('')
-      setActionErrorMessage('')
-      setActionFeedback(null)
+      setActionResult(null)
       setIsSavingRemark(true)
       try {
         const result = await saveApplicationRemark({
@@ -2591,7 +2626,10 @@ const ProvincialApplicationDetailsPage = () => {
           remarkId: editingRemarkId ?? undefined,
         })
         if (!result.success) {
-          setActionErrorMessage(result.message || 'Unable to save application remark.')
+          setActionResult({
+            kind: 'error',
+            message: result.message || 'Unable to save application remark.',
+          })
           return false
         }
 
@@ -2636,13 +2674,13 @@ const ProvincialApplicationDetailsPage = () => {
         setIsEditingRemarks(false)
         setRemarkBody('')
         setEditingRemarkId(null)
-        setActionFeedback({
+        setActionResult({
           kind: 'success',
           message: editingRemarkId ? 'Application remark updated.' : 'Application remark saved.',
         })
         return true
       } catch {
-        setActionErrorMessage('Unable to save application remark.')
+        setActionResult({ kind: 'error', message: 'Unable to save application remark.' })
         return false
       } finally {
         setIsSavingRemark(false)
@@ -2732,7 +2770,7 @@ const ProvincialApplicationDetailsPage = () => {
         return key === 'applicantTypeCode' ? normalizeSummaryAgentFields(next) : next
       })
       setSummaryVolumeWarningAccepted(false)
-      setActionWarningMessage('')
+      setActionResult(withoutVolumeWarning)
     },
     [],
   )
@@ -2761,7 +2799,7 @@ const ProvincialApplicationDetailsPage = () => {
         selectApplicationTab('agent')
       }
       setSummaryVolumeWarningAccepted(false)
-      setActionWarningMessage('')
+      setActionResult(withoutVolumeWarning)
     },
     [isSummaryAgentApplicant, selectApplicationTab],
   )
@@ -2787,8 +2825,7 @@ const ProvincialApplicationDetailsPage = () => {
     setIsTransitioningApplicantToAgent(false)
     setShowSummaryValidationErrors(false)
     setSummaryVolumeWarningAccepted(false)
-    setActionErrorMessage('')
-    setActionWarningMessage('')
+    setActionResult(withoutDraftResult)
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
@@ -2820,8 +2857,7 @@ const ProvincialApplicationDetailsPage = () => {
     setIsTransitioningApplicantToAgent(false)
     setShowSummaryValidationErrors(false)
     setSummaryVolumeWarningAccepted(false)
-    setActionErrorMessage('')
-    setActionWarningMessage('')
+    setActionResult(withoutDraftResult)
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
@@ -2851,8 +2887,7 @@ const ProvincialApplicationDetailsPage = () => {
     setShowSummaryValidationErrors(false)
     setSummaryVolumeWarningAccepted(false)
     setApplicationSpeciesCandidate('')
-    setActionErrorMessage('')
-    setActionWarningMessage('')
+    setActionResult(withoutDraftResult)
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
@@ -2880,8 +2915,7 @@ const ProvincialApplicationDetailsPage = () => {
     setShowSummaryValidationErrors(false)
     setSummaryVolumeWarningAccepted(false)
     setApplicationSpeciesCandidate('')
-    setActionErrorMessage('')
-    setActionWarningMessage('')
+    setActionResult(withoutDraftResult)
     setSummaryAccuracyConfirmationOpen(false)
     setSummaryAccuracyConfirmed(false)
     setSummaryAccuracyApplicationNumber(null)
@@ -2908,7 +2942,7 @@ const ProvincialApplicationDetailsPage = () => {
       return { ...current, speciesCodes: [...current.speciesCodes, nextSpecies] }
     })
     setSummaryVolumeWarningAccepted(false)
-    setActionWarningMessage('')
+    setActionResult(withoutVolumeWarning)
   }, [applicationSpeciesCandidate])
 
   const onRemoveApplicationSpecies = useCallback((speciesCode: string) => {
@@ -2922,7 +2956,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
     })
     setSummaryVolumeWarningAccepted(false)
-    setActionWarningMessage('')
+    setActionResult(withoutVolumeWarning)
   }, [])
 
   const onSaveSummary = useCallback(
@@ -2945,34 +2979,38 @@ const ProvincialApplicationDetailsPage = () => {
         return false
       }
       if (!canEditSummary) {
-        setActionErrorMessage(
-          'Application details can only be edited while the application is New or Approved.',
-        )
+        setActionResult({
+          kind: 'error',
+          message:
+            'Application details can only be edited while the application is New or Approved.',
+        })
         return false
       }
       if (
         source === 'items' &&
         (applicationItemsEditing || applicationItemsDirty || applicationItemsBusy)
       ) {
-        setActionErrorMessage(
-          'Save or reset the package, species, or scale draft before saving application item details.',
-        )
+        setActionResult({
+          kind: 'error',
+          message:
+            'Save or reset the package, species, or scale draft before saving application item details.',
+        })
         return false
       }
 
       const sourceValidationErrors = summaryValidationErrorsForSource(source)
       if (sourceValidationErrors.length > 0) {
         setShowSummaryValidationErrors(true)
-        setActionErrorMessage(
-          sourceValidationErrors[0] ??
+        setActionResult({
+          kind: 'error',
+          message:
+            sourceValidationErrors[0] ??
             'Please fix validation errors before saving these application details.',
-        )
+        })
         return false
       }
 
-      setActionErrorMessage('')
-      setActionFeedback(null)
-      setActionWarningMessage('')
+      setActionResult(null)
       setIsSavingSummary(true)
       try {
         let summaryRequestForm = normalizeSummaryAgentFields(summaryForm)
@@ -3031,9 +3069,13 @@ const ProvincialApplicationDetailsPage = () => {
           const volumeUsage = await checkApplicationVolumeUsage(String(detail.applicationNumber))
           if (!volumeUsage.volumeUsed) {
             setSummaryVolumeWarningAccepted(true)
-            setActionWarningMessage(
-              'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
-            )
+            setActionResult({
+              kind: 'warning',
+              title: 'Review package volumes',
+              message:
+                'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
+              volumeWarning: true,
+            })
             return false
           }
         }
@@ -3077,11 +3119,13 @@ const ProvincialApplicationDetailsPage = () => {
           }),
         })
         if (!result.valid) {
-          setActionErrorMessage(
-            result.errors.length > 0
-              ? result.errors.join(' ')
-              : result.message || 'Unable to save application summary.',
-          )
+          setActionResult({
+            kind: 'error',
+            message:
+              result.errors.length > 0
+                ? result.errors.join(' ')
+                : result.message || 'Unable to save application summary.',
+          })
           return false
         }
 
@@ -3104,13 +3148,13 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setShowSummaryValidationErrors(false)
         setSummaryVolumeWarningAccepted(false)
-        setActionFeedback({
+        setActionResult({
           kind: 'success',
           message: result.message || 'Application summary saved.',
         })
         return true
       } catch {
-        setActionErrorMessage('Unable to save application summary.')
+        setActionResult({ kind: 'error', message: 'Unable to save application summary.' })
         return false
       } finally {
         setIsSavingSummary(false)
@@ -3158,16 +3202,16 @@ const ProvincialApplicationDetailsPage = () => {
       if (saved && source === 'owner') {
         setIsEditingOwnerDetails(false)
         setIsTransitioningApplicantToAgent(false)
-        setActionFeedback({ kind: 'success', message: 'Applicant client details saved.' })
+        setActionResult({ kind: 'success', message: 'Applicant client details saved.' })
       }
       if (saved && source === 'agent') {
         setIsEditingAgentDetails(false)
         setIsTransitioningApplicantToAgent(false)
-        setActionFeedback({ kind: 'success', message: 'Agent details saved.' })
+        setActionResult({ kind: 'success', message: 'Agent details saved.' })
       }
       if (saved && source === 'items') {
         setIsEditingApplicationItems(false)
-        setActionFeedback({ kind: 'success', message: 'Application item details saved.' })
+        setActionResult({ kind: 'success', message: 'Application item details saved.' })
       }
       return saved
     },
@@ -3188,8 +3232,7 @@ const ProvincialApplicationDetailsPage = () => {
         void completeSummarySave(source)
         return
       }
-      setActionErrorMessage('')
-      setActionFeedback(null)
+      setActionResult(null)
       setPendingSummarySaveSource(source)
       setSummaryAccuracyConfirmed(false)
       setSummaryAccuracyApplicationNumber(applicationNumber ?? null)
@@ -3275,22 +3318,24 @@ const ProvincialApplicationDetailsPage = () => {
       return false
     }
 
-    setActionErrorMessage('')
-    setActionFeedback(null)
+    setActionResult(null)
     setReviewValidationMessage('')
     setIsSubmittingReviewAction(true)
     try {
       const result = await approveApplicationReview(String(detail.applicationNumber))
       if (!result.valid || !result.updated) {
-        setActionErrorMessage(result.message || 'Unable to approve application.')
+        setActionResult({
+          kind: 'error',
+          message: result.message || 'Unable to approve application.',
+        })
         return false
       }
 
       applyReviewStatusResult(result, reviewStatusRemark)
-      setActionFeedback({ kind: 'success', message: result.message || 'Application approved.' })
+      setActionResult({ kind: 'success', message: result.message || 'Application approved.' })
       return true
     } catch {
-      setActionErrorMessage('Unable to approve application.')
+      setActionResult({ kind: 'error', message: 'Unable to approve application.' })
       return false
     } finally {
       setIsSubmittingReviewAction(false)
@@ -3321,8 +3366,7 @@ const ProvincialApplicationDetailsPage = () => {
         return false
       }
 
-      setActionErrorMessage('')
-      setActionFeedback(null)
+      setActionResult(null)
       setReviewValidationMessage('')
       setIsSubmittingReviewAction(true)
       try {
@@ -3331,7 +3375,10 @@ const ProvincialApplicationDetailsPage = () => {
           payloadResult.payload,
         )
         if (!updateResult.valid || !updateResult.updated) {
-          setActionErrorMessage(updateResult.message || 'Unable to update application status.')
+          setActionResult({
+            kind: 'error',
+            message: updateResult.message || 'Unable to update application status.',
+          })
           return false
         }
 
@@ -3342,18 +3389,20 @@ const ProvincialApplicationDetailsPage = () => {
           )
           if (!emailResult.success) {
             applyReviewStatusResult(updateResult, payloadResult.payload.remark)
-            setActionErrorMessage(
-              emailResult.message ===
+            setActionResult({
+              kind: 'error',
+              message:
+                emailResult.message ===
                 'Application status email is not configured yet. No email was sent.'
-                ? 'Application status email is not configured yet. The application status was updated, but no email was sent.'
-                : emailResult.message || 'Application status updated; email could not be sent.',
-            )
+                  ? 'Application status email is not configured yet. The application status was updated, but no email was sent.'
+                  : emailResult.message || 'Application status updated; email could not be sent.',
+            })
             return false
           }
         }
 
         applyReviewStatusResult(updateResult, payloadResult.payload.remark)
-        setActionFeedback({
+        setActionResult({
           kind: 'success',
           message: sendEmail
             ? 'Application status updated and email sent.'
@@ -3361,7 +3410,7 @@ const ProvincialApplicationDetailsPage = () => {
         })
         return true
       } catch {
-        setActionErrorMessage('Unable to update application status.')
+        setActionResult({ kind: 'error', message: 'Unable to update application status.' })
         return false
       } finally {
         setIsSubmittingReviewAction(false)
@@ -3487,16 +3536,20 @@ const ProvincialApplicationDetailsPage = () => {
 
   const onSaveUnsavedApplicationChanges = useCallback(async (): Promise<boolean> => {
     if (documentUploadDirty) {
-      setActionErrorMessage(
-        'Queued document uploads must be submitted or reset before leaving this application.',
-      )
+      setActionResult({
+        kind: 'error',
+        message:
+          'Queued document uploads must be submitted or reset before leaving this application.',
+      })
       return false
     }
     if (applicationItemsDirty) {
       selectApplicationTab('items')
-      setActionErrorMessage(
-        'Save or reset the package, species, or scale draft in the Items tab before leaving this application.',
-      )
+      setActionResult({
+        kind: 'error',
+        message:
+          'Save or reset the package, species, or scale draft in the Items tab before leaving this application.',
+      })
       return false
     }
     if (summaryDirty && !(await onSaveSummary(activeSummarySaveSource, false, true))) return false
@@ -3548,8 +3601,7 @@ const ProvincialApplicationDetailsPage = () => {
     setReviewStatusRemark(reviewStatusRemarkBaseline)
     setReviewStatusEmailOverride(null)
     setReviewValidationMessage('')
-    setActionErrorMessage('')
-    setActionWarningMessage('')
+    setActionResult(withoutDraftResult)
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
@@ -4029,13 +4081,22 @@ const ProvincialApplicationDetailsPage = () => {
 
       {!loading && !!errorMessage && <DetailLoadError message={errorMessage} />}
 
-      {!!creationSuccessMessage && (
+      {!!pageActionResult &&
+        // The remark editor and accuracy confirmation show their own failures.
+        !(!!actionErrorMessage && (summaryAccuracyConfirmationOpen || isEditingRemarks)) && (
+          <ActionResultNotification
+            result={pageActionResult}
+            onClose={() => setActionResult(null)}
+          />
+        )}
+
+      {!!partialLoadMessage && (
         <AppNotification
-          kind="success"
-          title="Action complete"
-          subtitle={creationSuccessMessage}
+          kind="error"
+          title="Application data unavailable"
+          subtitle={partialLoadMessage}
           lowContrast
-          onCloseButtonClick={() => setCreationSuccessMessage('')}
+          onCloseButtonClick={() => setPartialLoadMessage('')}
         />
       )}
 
@@ -4080,35 +4141,6 @@ const ProvincialApplicationDetailsPage = () => {
               subtitle={CLIENT_LOOKUP_UNAVAILABLE_MESSAGE}
               lowContrast
               onCloseButtonClick={() => setClientLookupFailures(new Set())}
-            />
-          )}
-          {!!actionErrorMessage && !summaryAccuracyConfirmationOpen && !isEditingRemarks && (
-            <AppNotification
-              kind="error"
-              title="Action failed"
-              subtitle={actionErrorMessage}
-              lowContrast
-              onCloseButtonClick={() => setActionErrorMessage('')}
-            />
-          )}
-          {!!actionWarningMessage && (
-            <AppNotification
-              kind="warning"
-              title="Review package volumes"
-              subtitle={actionWarningMessage}
-              lowContrast
-              onCloseButtonClick={() => setActionWarningMessage('')}
-            />
-          )}
-          {!!actionFeedback && (
-            <AppNotification
-              kind={actionFeedback.kind}
-              title={
-                actionFeedback.kind === 'success' ? 'Action completed' : 'Action needs attention'
-              }
-              subtitle={actionFeedback.message}
-              lowContrast
-              onCloseButtonClick={() => setActionFeedback(null)}
             />
           )}
           {!!detail.locked && !!detail.lockMessage && (
@@ -4169,8 +4201,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 size="sm"
                                 renderIcon={Edit}
                                 onClick={() => {
-                                  setActionErrorMessage('')
-                                  setActionWarningMessage('')
+                                  setActionResult(withoutDraftResult)
                                   setIsEditingOwnerDetails(true)
                                 }}
                               >
@@ -4360,8 +4391,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   size="sm"
                                   renderIcon={Edit}
                                   onClick={() => {
-                                    setActionErrorMessage('')
-                                    setActionWarningMessage('')
+                                    setActionResult(withoutDraftResult)
                                     setIsEditingAgentDetails(true)
                                   }}
                                 >
@@ -4522,8 +4552,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 size="sm"
                                 renderIcon={Edit}
                                 onClick={() => {
-                                  setActionErrorMessage('')
-                                  setActionWarningMessage('')
+                                  setActionResult(withoutDraftResult)
                                   setIsEditingSummary(true)
                                 }}
                               >
@@ -4764,8 +4793,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 size="sm"
                                 renderIcon={Edit}
                                 onClick={() => {
-                                  setActionErrorMessage('')
-                                  setActionWarningMessage('')
+                                  setActionResult(withoutDraftResult)
                                   setIsEditingApplicationItems(true)
                                 }}
                               >
@@ -5090,6 +5118,8 @@ const ProvincialApplicationDetailsPage = () => {
                         }
                         editingBlocked={isEditingApplicationItems}
                         onDetailChanged={refreshApplicationDetailPreservingDrafts}
+                        actionResult={itemsActionResult}
+                        onActionResult={setItemsActionResult}
                         onDirtyChange={setApplicationItemsDirty}
                         onBusyChange={setApplicationItemsBusy}
                         onEditingChange={setApplicationItemsEditing}
@@ -5139,6 +5169,13 @@ const ProvincialApplicationDetailsPage = () => {
                               onDirtyChange={setDocumentUploadDirty}
                               onBusyChange={setDocumentUploadBusy}
                               onUploadComplete={refreshApplicationDocuments}
+                              onUploadSuccess={(message) =>
+                                setActionResult({
+                                  kind: 'success',
+                                  title: 'Document uploaded',
+                                  message,
+                                })
+                              }
                             />
                           )}
                         </div>
@@ -5229,8 +5266,7 @@ const ProvincialApplicationDetailsPage = () => {
                                               }
                                               renderIcon={TrashCan}
                                               onClick={() => {
-                                                setActionErrorMessage('')
-                                                setActionFeedback(null)
+                                                setActionResult(null)
                                                 setDocumentPendingDeletion(row)
                                               }}
                                             >
@@ -5379,7 +5415,7 @@ const ProvincialApplicationDetailsPage = () => {
                                       kind="error"
                                       title="Action failed"
                                       subtitle={actionErrorMessage}
-                                      onCloseButtonClick={() => setActionErrorMessage('')}
+                                      onCloseButtonClick={() => setActionResult(null)}
                                     />
                                   )}
                                   <div className="application-remark-modal__actions">

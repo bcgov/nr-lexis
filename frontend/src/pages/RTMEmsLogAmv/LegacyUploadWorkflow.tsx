@@ -1050,6 +1050,8 @@ const RtmEmsLogAmvUploadPage = () => {
     validationRequestRef.current += 1
     replacementPreviewRef.current = previewResult
     replacementReviewValuesRef.current = { ...reviewValues }
+    setNotification('')
+    setSavedNotification(null)
     setReplacementUploadOpen(true)
     setSelectedUploadFile(null)
     setPendingUploadValidation(null)
@@ -1797,6 +1799,7 @@ const RtmEmsLogAmvUploadPage = () => {
                   setReplacementUploadOpen(false)
                   replacementPreviewRef.current = null
                   replacementReviewValuesRef.current = null
+                  setNotification('')
                   setSavedNotification('discarded')
                   setUploadResult(null)
                 }

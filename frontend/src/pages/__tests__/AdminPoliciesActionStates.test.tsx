@@ -353,6 +353,32 @@ describe('Admin policy action states', () => {
     },
   )
 
+  it('shows one warning when a policy is deleted but the list refresh fails', async () => {
+    const { container } = renderPage('fee')
+    const policyRow = (await screen.findByText('2099-01-01')).closest('tr')
+    expect(policyRow).not.toBeNull()
+    mockedFetchFeePolicyPage.mockRejectedValueOnce(new Error('Refresh unavailable'))
+
+    await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: 'Delete' }))
+    const dialog = screen.getByRole('dialog', { name: 'Delete fee policy?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByText('Policy update needs attention')).toBeInTheDocument()
+    expect(screen.getByText('Fee policy deleted. Unable to load policy data.')).toBeInTheDocument()
+    expect(container.querySelectorAll('.app-notification-container')).toHaveLength(1)
+    const warning = screen
+      .getByText('Policy update needs attention')
+      .closest('div.app-notification-container')
+    expect(warning).not.toBeNull()
+    await userEvent.click(
+      within(warning as HTMLElement).getByRole('button', { name: 'close notification' }),
+    )
+    expect(screen.queryByText('Policy update needs attention')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Fee policy deleted. Unable to load policy data.'),
+    ).not.toBeInTheDocument()
+  })
+
   it('surfaces backend policy mutation errors', async () => {
     mockedUpsertFeePolicy.mockRejectedValue(
       new AdminPolicyMutationError(['Effective Date must be greater than the current date.']),

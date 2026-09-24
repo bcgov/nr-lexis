@@ -662,7 +662,7 @@ test.describe('Provincial permit parity regressions', () => {
     await save.click()
 
     await expect(page).toHaveURL(/\/provincial\/permit\/91002$/)
-    await expect(page.getByText('Permit created', { exact: true })).toBeVisible()
+    await expect(page.getByText('The permit was saved.', { exact: true })).toBeVisible()
     await expect(
       page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
     ).toBeVisible()

@@ -37,7 +37,7 @@ import TableFrame from '@/components/TableFrame'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { useAuth } from '@/context/auth/useAuth'
 import { hasRole } from '@/context/auth/role-utils'
-import { AppNotification } from '../../components/AppNotification'
+import { ActionResultNotification } from '../../components/ActionResultNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
@@ -60,6 +60,7 @@ import {
   removeFederalApplicationDocument,
   type FederalApplicationDocumentRow,
 } from '@/service/federal-application-documents-service'
+import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { triggerBrowserDownload } from '@/utils/download'
 import {
   saveFederalPermit,
@@ -182,11 +183,7 @@ const FederalApplicationDetailsPage = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [remarksErrorMessage, setRemarksErrorMessage] = useState('')
-  const [actionErrorMessage, setActionErrorMessage] = useState('')
-  const [actionFeedback, setActionFeedback] = useState<{
-    kind: 'success' | 'warning'
-    message: string
-  } | null>(null)
+  const [actionResult, setActionResult] = useState<ActionResult | null>(null)
   const [statusCode, setStatusCode] = useState('')
   const [statusRemark, setStatusRemark] = useState('')
   const [remarkDraft, setRemarkDraft] = useState('')
@@ -382,7 +379,7 @@ const FederalApplicationDetailsPage = () => {
         setScaleErrorMessage('')
         setDocumentsErrorMessage('')
         setRemarksErrorMessage('')
-        setActionErrorMessage('')
+        setActionResult(null)
         setLoading(false)
         return
       }
@@ -400,7 +397,7 @@ const FederalApplicationDetailsPage = () => {
         setScaleRows([])
       }
       setScaleErrorMessage('')
-      setActionErrorMessage('')
+      setActionResult(null)
       try {
         const response = await fetchFederalApplicationDetail(applicationNumber)
         if (!isLatestRequest()) {
@@ -565,8 +562,7 @@ const FederalApplicationDetailsPage = () => {
       !statusTransitions.some((transition) => transition.code === statusCode)
     )
       return false
-    setActionErrorMessage('')
-    setActionFeedback(null)
+    setActionResult(null)
     setIsSavingMutation(true)
     try {
       const result = await updateFederalApplicationStatus(
@@ -575,17 +571,20 @@ const FederalApplicationDetailsPage = () => {
         statusRemark,
       )
       if (!result.success) {
-        setActionErrorMessage(result.errors[0] || 'Unable to update federal application status.')
+        setActionResult({
+          kind: 'error',
+          message: result.errors[0] || 'Unable to update federal application status.',
+        })
         return false
       }
       try {
         await refreshDetail('status')
-        setActionFeedback({
+        setActionResult({
           kind: 'success',
           message: result.message || 'Federal application status updated.',
         })
       } catch {
-        setActionFeedback({
+        setActionResult({
           kind: 'warning',
           message:
             'Federal application status updated, but details could not be refreshed. Reload before making more changes.',
@@ -595,7 +594,7 @@ const FederalApplicationDetailsPage = () => {
       return true
     } catch (error) {
       console.error(error)
-      setActionErrorMessage('Unable to update federal application status.')
+      setActionResult({ kind: 'error', message: 'Unable to update federal application status.' })
       return false
     } finally {
       setIsSavingMutation(false)
@@ -612,32 +611,38 @@ const FederalApplicationDetailsPage = () => {
   const onSavePermit = useCallback(async (): Promise<boolean> => {
     if (!applicationNumber || !canMutateFederalApplication) return false
     if (!shippingReferences) {
-      setActionErrorMessage(
-        'Shipping reference options are unavailable. Reload the page before saving the federal permit.',
-      )
+      setActionResult({
+        kind: 'error',
+        message:
+          'Shipping reference options are unavailable. Reload the page before saving the federal permit.',
+      })
       return false
     }
     if (hasPermitValidationError) {
-      setActionErrorMessage(
-        Object.values(permitFieldErrors).find((error): error is string => !!error) ??
+      setActionResult({
+        kind: 'error',
+        message:
+          Object.values(permitFieldErrors).find((error): error is string => !!error) ??
           'Please fix the federal permit fields before saving.',
-      )
+      })
       return false
     }
-    setActionErrorMessage('')
-    setActionFeedback(null)
+    setActionResult(null)
     setIsSavingMutation(true)
     try {
       const result = await saveFederalPermit(applicationNumber, permitForm, !!detail?.federalPermit)
       if (!result.success) {
-        setActionErrorMessage(result.errors[0] || 'Unable to save federal permit.')
+        setActionResult({
+          kind: 'error',
+          message: result.errors[0] || 'Unable to save federal permit.',
+        })
         return false
       }
       try {
         await refreshDetail('permit')
-        setActionFeedback({ kind: 'success', message: result.message || 'Federal permit saved.' })
+        setActionResult({ kind: 'success', message: result.message || 'Federal permit saved.' })
       } catch {
-        setActionFeedback({
+        setActionResult({
           kind: 'warning',
           message:
             'Federal permit saved, but details could not be refreshed. Reload before making more changes.',
@@ -647,7 +652,7 @@ const FederalApplicationDetailsPage = () => {
       return true
     } catch (error) {
       console.error(error)
-      setActionErrorMessage('Unable to save federal permit.')
+      setActionResult({ kind: 'error', message: 'Unable to save federal permit.' })
       return false
     } finally {
       setIsSavingMutation(false)
@@ -673,13 +678,13 @@ const FederalApplicationDetailsPage = () => {
       return
     }
     setPermitForm(permitFormFromDetail(detail))
-    setActionErrorMessage('')
+    setActionResult(withoutActionError)
     setIsEditingFederalPermit(true)
   }, [canMutateFederalApplication, detail, isShippingReferencesLoading, shippingReferences])
 
   const onCancelFederalPermitEdit = useCallback(() => {
     setPermitForm(detail ? permitFormFromDetail(detail) : emptyPermitForm())
-    setActionErrorMessage('')
+    setActionResult(withoutActionError)
     setIsEditingFederalPermit(false)
   }, [detail])
 
@@ -697,8 +702,7 @@ const FederalApplicationDetailsPage = () => {
     }
 
     setRemarkValidationMessage('')
-    setActionErrorMessage('')
-    setActionFeedback(null)
+    setActionResult(null)
     setIsSavingRemark(true)
     try {
       const result = await saveFederalApplicationRemark(
@@ -707,18 +711,21 @@ const FederalApplicationDetailsPage = () => {
         editingRemarkId ?? undefined,
       )
       if (!result.success) {
-        setActionErrorMessage(result.errors[0] || 'Unable to save federal application remark.')
+        setActionResult({
+          kind: 'error',
+          message: result.errors[0] || 'Unable to save federal application remark.',
+        })
         return false
       }
       try {
         setRemarkRows(await fetchFederalApplicationRemarks(applicationNumber))
         setRemarksErrorMessage('')
-        setActionFeedback({
+        setActionResult({
           kind: 'success',
           message: result.message || 'Federal application remark saved.',
         })
       } catch {
-        setActionFeedback({
+        setActionResult({
           kind: 'warning',
           message:
             'Federal application remark saved, but remarks could not be refreshed. Reload before making more changes.',
@@ -731,7 +738,7 @@ const FederalApplicationDetailsPage = () => {
       return true
     } catch (error) {
       console.error(error)
-      setActionErrorMessage('Unable to save federal application remark.')
+      setActionResult({ kind: 'error', message: 'Unable to save federal application remark.' })
       return false
     } finally {
       setIsSavingRemark(false)
@@ -751,7 +758,7 @@ const FederalApplicationDetailsPage = () => {
   const onCancelFederalStatusEdit = useCallback(() => {
     setStatusCode(statusTransitions[0]?.code ?? '')
     setStatusRemark('')
-    setActionErrorMessage('')
+    setActionResult(withoutActionError)
     setIsEditingFederalStatus(false)
   }, [statusTransitions])
 
@@ -759,7 +766,7 @@ const FederalApplicationDetailsPage = () => {
     setRemarkDraft('')
     setEditingRemarkId(null)
     setRemarkValidationMessage('')
-    setActionErrorMessage('')
+    setActionResult(withoutActionError)
     setIsEditingFederalRemarks(false)
   }, [])
 
@@ -767,7 +774,7 @@ const FederalApplicationDetailsPage = () => {
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
-    setActionErrorMessage('')
+    setActionResult(withoutActionError)
     setIsEditingFederalDocuments(false)
   }, [])
 
@@ -777,14 +784,14 @@ const FederalApplicationDetailsPage = () => {
         return
       }
 
-      setActionErrorMessage('')
+      setActionResult(null)
 
       try {
         const result = await openFederalApplicationDocument(row.id, row.name, applicationNumber)
         triggerBrowserDownload(result.blob, result.filename || row.name)
       } catch (error) {
         console.error(error)
-        setActionErrorMessage('Unable to open the selected document.')
+        setActionResult({ kind: 'error', message: 'Unable to open the selected document.' })
       }
     },
     [applicationNumber],
@@ -798,7 +805,7 @@ const FederalApplicationDetailsPage = () => {
 
       const isLatestRequest = beginDetailRequest()
       setIsRemovingDocumentId(row.id)
-      setActionErrorMessage('')
+      setActionResult(null)
 
       try {
         const removeResult = await removeFederalApplicationDocument(row.id, applicationNumber)
@@ -814,7 +821,7 @@ const FederalApplicationDetailsPage = () => {
           if (isLatestRequest()) {
             setDocumentRows(documentsResult.rows)
             setDocumentsErrorMessage('')
-            setActionFeedback({
+            setActionResult({
               kind: 'success',
               message: `${row.name || 'Document'} was deleted.`,
             })
@@ -825,7 +832,7 @@ const FederalApplicationDetailsPage = () => {
             setDocumentsErrorMessage(
               'The document was deleted, but federal application documents could not be refreshed. Reload the page.',
             )
-            setActionFeedback({
+            setActionResult({
               kind: 'warning',
               message: `${row.name || 'Document'} was deleted. Reload before changing documents again.`,
             })
@@ -869,15 +876,19 @@ const FederalApplicationDetailsPage = () => {
 
   const onSaveUnsavedFederalApplicationChanges = useCallback(async (): Promise<boolean> => {
     if (documentUploadDirty) {
-      setActionErrorMessage(
-        'Queued document uploads must be submitted or reset before leaving this federal application.',
-      )
+      setActionResult({
+        kind: 'error',
+        message:
+          'Queued document uploads must be submitted or reset before leaving this federal application.',
+      })
       return false
     }
     if ([statusDraftDirty, remarkDraftDirty, permitDraftDirty].filter(Boolean).length > 1) {
-      setActionErrorMessage(
-        'Save each federal application draft from its tab before leaving this application.',
-      )
+      setActionResult({
+        kind: 'error',
+        message:
+          'Save each federal application draft from its tab before leaving this application.',
+      })
       return false
     }
     if (statusDraftDirty) return onSaveStatus()
@@ -908,7 +919,7 @@ const FederalApplicationDetailsPage = () => {
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
-    setActionErrorMessage('')
+    setActionResult(withoutActionError)
   }, [detail, statusTransitions])
 
   return (
@@ -952,27 +963,16 @@ const FederalApplicationDetailsPage = () => {
 
       {detail && currentDetail && (
         <>
-          {!!actionErrorMessage && (
-            <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <AppNotification
-                kind="error"
-                title="Action failed"
-                subtitle={actionErrorMessage}
-                lowContrast
-                onCloseButtonClick={() => setActionErrorMessage('')}
-              />
-            </Column>
-          )}
-          {!!actionFeedback && (
-            <Column sm={4} md={8} lg={16}>
-              <AppNotification
-                kind={actionFeedback.kind}
-                title={
-                  actionFeedback.kind === 'success' ? 'Action completed' : 'Action needs attention'
-                }
-                subtitle={actionFeedback.message}
-                lowContrast
-                onCloseButtonClick={() => setActionFeedback(null)}
+          {!!actionResult && (
+            <Column
+              sm={4}
+              md={8}
+              lg={16}
+              className={actionResult.kind === 'error' ? 'detail-page-error' : undefined}
+            >
+              <ActionResultNotification
+                result={actionResult}
+                onClose={() => setActionResult(null)}
               />
             </Column>
           )}
@@ -1177,7 +1177,7 @@ const FederalApplicationDetailsPage = () => {
                               onClick={() => {
                                 setStatusCode(statusTransitions[0]?.code ?? '')
                                 setStatusRemark('')
-                                setActionErrorMessage('')
+                                setActionResult(withoutActionError)
                                 setIsEditingFederalStatus(true)
                               }}
                             >
@@ -1645,6 +1645,13 @@ const FederalApplicationDetailsPage = () => {
                             onDirtyChange={setDocumentUploadDirty}
                             onBusyChange={setDocumentUploadBusy}
                             onUploadComplete={refreshFederalApplicationDocuments}
+                            onUploadSuccess={(message) =>
+                              setActionResult({
+                                kind: 'success',
+                                title: 'Document uploaded',
+                                message,
+                              })
+                            }
                           />
                         )}
                         {documentsErrorMessage ? (
@@ -1692,8 +1699,7 @@ const FederalApplicationDetailsPage = () => {
                                               }
                                               renderIcon={TrashCan}
                                               onClick={() => {
-                                                setActionErrorMessage('')
-                                                setActionFeedback(null)
+                                                setActionResult(null)
                                                 setDocumentPendingDeletion(row)
                                               }}
                                             >

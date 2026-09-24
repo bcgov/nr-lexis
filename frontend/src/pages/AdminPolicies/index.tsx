@@ -20,6 +20,7 @@ import {
 } from '@carbon/react'
 import { Add, TrashCan } from '@carbon/icons-react'
 import { useAuth } from '@/context/auth/useAuth'
+import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
@@ -63,6 +64,7 @@ import {
 import { fetchReportOptions, type SearchOption } from '@/service/search-options-service'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { toCarbonSortDirection } from '@/pages/shared/search-query-utils'
+import { combineActionMessages } from '@/utils/action-result'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { getResponseMessage, getResponseStatus } from '@/utils/http-error'
 import { requiredLabel } from '@/utils/required-label'
@@ -278,6 +280,11 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         : 'Loading fee policies…'
   const notificationTitle = area === 'schedule' ? 'Schedule update' : 'Policy update'
   const errorTitle = area === 'schedule' ? 'Schedule error' : 'Policy error'
+  const pageActionResult = combineActionMessages(successMessage, errorMessage, {
+    error: errorTitle,
+    success: notificationTitle,
+    warning: `${notificationTitle} needs attention`,
+  })
   const fieldErrors = useMemo<FieldErrors<PolicyField>>(
     () => ({
       feeEffectiveDate:
@@ -661,6 +668,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   }
 
   const editFeePolicy = (row: FeePolicyRow): void => {
+    clearNotifications()
     if (!feeRegionOptions.some((option) => option.value === row.orgUnitNo)) {
       setErrorMessage(
         `Region ${row.orgUnitCode || row.orgUnitNo || 'unknown'} is not available in the authoritative region list and cannot be edited.`,
@@ -673,7 +681,6 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setFeePolicyPercentage(row.policyPercentage)
     setEditingFeePolicyId(row.id)
     setShowFeeValidationErrors(false)
-    clearNotifications()
     setIsPolicyEditorOpen(true)
   }
 
@@ -903,23 +910,8 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         <PageHeader title={pageTitle} subtitle={pageSubtitle} />
       </Column>
 
-      {successMessage && (
-        <AppNotification
-          kind="success"
-          title={notificationTitle}
-          subtitle={successMessage}
-          lowContrast
-          onCloseButtonClick={() => setSuccessMessage('')}
-        />
-      )}
-      {errorMessage && !isPolicyEditorOpen && !pendingDeletion && (
-        <AppNotification
-          kind="error"
-          title={errorTitle}
-          subtitle={errorMessage}
-          lowContrast
-          onCloseButtonClick={() => setErrorMessage('')}
-        />
+      {pageActionResult && !isPolicyEditorOpen && !pendingDeletion && (
+        <ActionResultNotification result={pageActionResult} onClose={clearNotifications} />
       )}
       {area === 'fee' && feeRegionOptionsError && (
         <AppNotification

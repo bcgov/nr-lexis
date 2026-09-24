@@ -530,6 +530,73 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
   })
 
+  it('does not restore an old save banner after a rejected replacement upload is dismissed', async () => {
+    const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
+    const nextMonth = monthOffset(currentMonth, 1)
+    const comparisonMonth = monthOffset(nextMonth, -1)
+    mockedSearch.mockResolvedValueOnce([
+      {
+        species: 'BA',
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: nextMonth,
+        updateDate: nextMonth,
+        currentValue: 78.14,
+        newValue: 78.14,
+        returnCode: '0',
+      },
+    ])
+    mockedSearch.mockResolvedValueOnce([
+      {
+        species: 'BA',
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: comparisonMonth,
+        updateDate: comparisonMonth,
+        currentValue: 75.29,
+        newValue: 75.29,
+        returnCode: '0',
+      },
+    ])
+    mockedPreviewUpload.mockResolvedValueOnce({
+      status: 'validation_failed',
+      fileName: 'wrong-month.xlsx',
+      fileSize: 1,
+      message: "This file couldn't be used.",
+      rowCount: 0,
+      retrievalDate: comparisonMonth,
+      updateDate: nextMonth,
+      errors: ['The file has no numeric values.'],
+      warnings: [],
+      rows: [],
+    })
+
+    await renderUploadPage()
+    const value = screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
+    await userEvent.clear(value)
+    await userEvent.type(value, '79.25')
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+    await waitFor(() => expect(mockedSaveBatch).toHaveBeenCalledTimes(1))
+    expect(screen.getByText('Values saved')).toBeVisible()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
+    const replacement = new File([new Uint8Array([1])], 'wrong-month.xlsx', {
+      type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    })
+    await userEvent.upload(
+      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      replacement,
+    )
+    expect(await screen.findByText(/The file has no numeric values/)).toBeVisible()
+    expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Keep current values' }))
+    expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
+      '79.25',
+    )
+    expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
+  })
+
   it('advances to the next editable month and clears the prior workflow at rollover', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-01T06:59:30Z'))

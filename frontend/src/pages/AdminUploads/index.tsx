@@ -10,7 +10,7 @@ import {
   InformationFilled,
 } from '@carbon/icons-react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { AppNotification } from '../../components/AppNotification'
+import { ActionResultNotification } from '../../components/ActionResultNotification'
 import PageHeader from '@/components/PageHeader'
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
 import { shouldFilterSearchableDropdownItem } from '../../components/dropdown-filtering'
@@ -64,6 +64,7 @@ import {
 } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
+import { combineActionMessages } from '@/utils/action-result'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -835,6 +836,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       return
     }
     if (selectedWorkflowType === 'invoice' && files.length > 1) {
+      setSuccessMessage('')
       setErrorMessage('Choose one file per invoice.')
       setFileInputKey((current) => current + 1)
       return
@@ -1273,6 +1275,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
   const onReviewApplicationSubmissions = (): void => {
     setErrorMessage('')
+    setSuccessMessage('')
 
     if (validationErrors.length > 0) {
       setShowValidationErrors(true)
@@ -1292,7 +1295,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       return
     }
 
-    setSuccessMessage('')
     setApplicationSubmissionStep('review')
   }
 
@@ -1417,6 +1419,14 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       ? APPLICATION_SUBMISSION_UPLOAD_STEPS
       : DOCUMENT_UPLOAD_STEPS
   const activeCompletedSteps = activeUploadStep === 'review' ? ['upload'] : []
+  const uploadActionResult = combineActionMessages(successMessage, errorMessage, {
+    error: 'Upload error',
+    success: successTitle,
+    warning:
+      selectedWorkflowType === 'applicationSubmission'
+        ? 'Some submissions need attention'
+        : 'Some uploads need attention',
+  })
   const showGlobalUploadFeedback =
     selectedWorkflowType !== 'applicationSubmission' ||
     activeUploadStep !== 'upload' ||
@@ -1689,23 +1699,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content">
         <div className="admin-upload-workflow">
-          {successMessage && showGlobalUploadFeedback && (
-            <AppNotification
-              kind="success"
-              title={successTitle}
-              subtitle={successMessage}
-              lowContrast
-              onCloseButtonClick={() => setSuccessMessage('')}
-            />
-          )}
-          {errorMessage && showGlobalUploadFeedback && (
-            <AppNotification
-              kind="error"
-              title="Upload error"
-              subtitle={errorMessage}
-              lowContrast
-              onCloseButtonClick={() => setErrorMessage('')}
-            />
+          {uploadActionResult && showGlobalUploadFeedback && (
+            <ActionResultNotification result={uploadActionResult} onClose={clearUploadFeedback} />
           )}
 
           {activeUploadStep === 'upload' ? (

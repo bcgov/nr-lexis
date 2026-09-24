@@ -1491,8 +1491,12 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByRole('heading', { name: 'Review' })).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { name: 'Submission metadata' })).toHaveLength(2)
     expect(
-      await screen.findByText('1 submission failed. Review the queue for details.'),
+      await screen.findByText(/1 submission failed\. Review the queue for details\./),
     ).toBeInTheDocument()
+    expect(screen.getByText('Some submissions need attention')).toBeInTheDocument()
+    expect(
+      document.querySelectorAll('.admin-upload-workflow > .app-notification-container'),
+    ).toHaveLength(1)
     expect(screen.getAllByText('first.xml').length).toBeGreaterThan(0)
     expect(screen.getAllByText('second.xml').length).toBeGreaterThan(0)
     expect(screen.getAllByText(/Application 9001/).length).toBeGreaterThan(0)
@@ -1534,6 +1538,7 @@ describe('Admin upload workflow smoke', () => {
       mockedSubmitAdminUpload.mock.calls.filter(([, payload]) => payload.file === firstFile),
     ).toHaveLength(1)
     expect(await screen.findByText('Application submission complete')).toBeInTheDocument()
+    expect(screen.queryByText('Some submissions need attention')).not.toBeInTheDocument()
   })
 
   it('shows duplicate package conflict when submitted after another validated submission wins', async () => {

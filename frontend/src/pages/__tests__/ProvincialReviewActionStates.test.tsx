@@ -892,6 +892,36 @@ describe('Provincial Review Action State Smoke', () => {
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
 
+  it('replaces a rejection error with a later email lookup error', async () => {
+    mockedUpdateApplicationReviewStatus.mockResolvedValueOnce({
+      updated: false,
+      valid: false,
+      statusCode: 'REJ',
+      clientEmail: '',
+      remark: '',
+      message: 'Unable to reject application.',
+    })
+    mockedFetchApplicationSummarySnapshot.mockRejectedValueOnce(new Error('Lookup failed'))
+
+    renderPage()
+    await screen.findByText('1000123')
+    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
+    await waitForSendStatusEmailCheckbox()
+    await userEvent.type(screen.getByLabelText('Remarks'), 'Rejection reason')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    expect(await screen.findByText('Unable to reject application.')).toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Send status email' }))
+    expect(
+      await screen.findByText('Unable to load client email for this application.'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Unable to reject application.')).not.toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Update application 1000123' })
+    expect(dialog.querySelectorAll('.cds--inline-notification')).toHaveLength(1)
+    await userEvent.click(within(dialog).getByRole('button', { name: 'close notification' }))
+    expect(screen.queryByText('Unable to reject application.')).not.toBeInTheDocument()
+  })
+
   it('requires a valid client email before rejecting when the client account has no email', async () => {
     mockedFetchApplicationClientData.mockResolvedValueOnce({
       clientNumber: '00012345',
