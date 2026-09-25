@@ -55,12 +55,25 @@ class LexisStaffRegionConstraintTest {
   }
 
   @Test
-  void explicitUnscopedGrantForTheActionRemainsGlobal() {
+  void regionalGrantLimitsItsRoleEvenWhenTheRoleIsAlsoGrantedProvinceWide() {
     for (var authorities : List.of(
         List.of(REGIONAL_APP, "LEXIS_APPLICATION_APPROVER"),
         List.of("LEXIS_APPLICATION_APPROVER", REGIONAL_APP))) {
-      assertThat(service.resolveStaffRegionConstraint(authorities, WRITE).restricted()).isFalse();
+      var writes = service.resolveStaffRegionConstraint(authorities, WRITE);
+      assertThat(writes.restricted()).isTrue();
+      assertThat(writes.orgUnitNumbers()).containsExactly(1903L);
+      assertThat(service.resolveStaffRegionConstraintForRoles(
+              authorities, List.of("LEXIS_APPLICATION_APPROVER")).orgUnitNumbers())
+          .containsExactly(1903L);
+      assertThat(service.resolveActionRegions(authorities, List.of(READ, WRITE)))
+          .containsEntry(READ, List.of(1903L))
+          .containsEntry(WRITE, List.of(1903L));
     }
+    // A different province-wide role keeps its own reach.
+    var withReadOnly = List.of("LEXIS_READ_ONLY", "LEXIS_APPLICATION_APPROVER", REGIONAL_APP);
+    assertThat(service.resolveStaffRegionConstraint(withReadOnly, READ).restricted()).isFalse();
+    assertThat(service.resolveStaffRegionConstraint(withReadOnly, WRITE).orgUnitNumbers())
+        .containsExactly(1903L);
   }
 
   @Test
