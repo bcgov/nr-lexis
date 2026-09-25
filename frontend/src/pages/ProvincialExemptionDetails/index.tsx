@@ -763,7 +763,9 @@ const ProvincialExemptionDetailsPage = () => {
     : ''
   // Regional users change or approve an exemption only when they hold all of its regions, and
   // create permits from it when they hold one of them (the permit's own region is checked too).
-  const exemptionOrgUnits = editContext.regionNumbers
+  // Its regions include those of its linked applications, which are usually a Ministerial
+  // exemption's only ones; the stored regionNumbers stay for the Blanket OIC region field.
+  const exemptionOrgUnits = editContext.accessRegionNumbers ?? editContext.regionNumbers
   // Linking applications and deleting documents are Application Approver capabilities, limited to
   // the Approver grants' regions even when another role holds saveExemption province-wide. Among
   // staff roles only Approvers and Administrators hold /createExemption, so its regions are theirs.

@@ -52,7 +52,13 @@ export type ExemptionRegionContext = {
 export type ExemptionEditContext = {
   rateOverrideEnabled: boolean
   fixedFeeRate: string
+  /** The stored OIC regions, which the Blanket OIC edit form shows and posts back. */
   regionNumbers: string[]
+  /**
+   * The regions regional access is checked against: the stored ones and those of the linked
+   * applications. Absent from older responses, where the stored regions apply.
+   */
+  accessRegionNumbers?: string[]
   locked: boolean
   lockMessage: string
 }
@@ -234,10 +240,14 @@ export const fetchExemptionEditContext = async (
   }
   apiService.registerRecordVersion('exemption', normalizedExemptionNumber, response, path, config)
   const payload = response.data
+  const regionNumbers = asStringArray(payload.regionNumbers)
   return {
     rateOverrideEnabled: asBoolean(payload.rateOverrideEnabled),
     fixedFeeRate: asString(payload.fixedFeeRate),
-    regionNumbers: asStringArray(payload.regionNumbers),
+    regionNumbers,
+    accessRegionNumbers: Array.isArray(payload.accessRegionNumbers)
+      ? asStringArray(payload.accessRegionNumbers)
+      : regionNumbers,
     locked: asBoolean(payload.locked),
     lockMessage: asString(payload.lockMessage),
   }

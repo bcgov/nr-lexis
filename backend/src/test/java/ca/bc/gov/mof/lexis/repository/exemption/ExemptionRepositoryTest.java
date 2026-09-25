@@ -186,8 +186,55 @@ class ExemptionRepositoryTest {
     assertThat(repository.findAccessByExemptionNumber(" ")).isEmpty();
     assertThat(repository.hasLinkedProvincialApplicationForClient("EX-205", " "))
         .isFalse();
+    assertThat(repository.findAccessOrgUnitNumbers(" ")).isEmpty();
 
     verifyNoInteractions(jdbcTemplate);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void accessRegionsShouldCombineLinkedApplicationAndStoredOicRegions() throws SQLException {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    List<ResultSet> resultRows = new java.util.ArrayList<>();
+    for (Long orgUnit : new Long[] {1903L, 1908L, 1903L, 0L, null}) {
+      ResultSet resultSet = mock(ResultSet.class);
+      when(resultSet.getLong("ORG_UNIT_NO")).thenReturn(orgUnit == null ? 0L : orgUnit);
+      when(resultSet.wasNull()).thenReturn(orgUnit == null);
+      resultRows.add(resultSet);
+    }
+    when(
+            jdbcTemplate.query(
+                anyString(),
+                any(RowMapper.class),
+                eq("test-exemption"),
+                eq("test-exemption")))
+        .thenAnswer(
+            invocation -> {
+              RowMapper<Long> mapper = invocation.getArgument(1);
+              List<Long> rows = new java.util.ArrayList<>();
+              for (ResultSet resultSet : resultRows) {
+                rows.add(mapper.mapRow(resultSet, rows.size()));
+              }
+              return rows;
+            });
+    ExemptionRepository repository = new ExemptionRepository(jdbcTemplate);
+
+    assertThat(repository.findAccessOrgUnitNumbers(" test-exemption "))
+        .containsExactly(1903L, 1908L);
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate)
+        .query(sql.capture(), any(RowMapper.class), eq("test-exemption"), eq("test-exemption"));
+    // Mirrors the search region filter: linked applications' regions, excluding system-owned
+    // Blanket OIC permit applications, together with the stored OIC region rows.
+    assertThat(sql.getValue())
+        .contains("FROM EXPORT_EXEMPTION_APPLICATION EEA")
+        .contains("EEA.EXEMPTION_NUMBER = ?")
+        .contains("EEA.OIC_INDICATOR = 'N'")
+        .contains("UNION")
+        .contains("FROM OIC_EXEMPTION_ORG_UNIT OEO")
+        .contains("OEO.EXEMPTION_NUMBER = ?")
+        .doesNotContain("FIND_EXEMPTION_ORG_UNIT");
   }
 
   @Test

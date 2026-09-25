@@ -94,8 +94,8 @@ public class ExemptionOracleService implements ExemptionService {
   }
 
   @Override
-  public List<Long> findOrgUnitNumbers(String exemptionNumber) {
-    return repository.findOrgUnitNumbers(exemptionNumber);
+  public List<Long> findAccessOrgUnitNumbers(String exemptionNumber) {
+    return repository.findAccessOrgUnitNumbers(exemptionNumber);
   }
 
   private ExemptionDetailDto resolveExemptionTypeDescription(ExemptionDetailDto detail) {

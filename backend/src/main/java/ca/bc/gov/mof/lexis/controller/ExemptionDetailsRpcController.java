@@ -290,10 +290,12 @@ public class ExemptionDetailsRpcController {
     if (service == null) {
       return ResponseEntity.noContent().build();
     }
+    List<Long> regionNumbers = service.getEditContext(normalizedExemptionNumber).regionNumbers();
     return ResponseEntity.ok(
         new ExemptionRegionContextResponseDto(
             normalizedExemptionNumber,
-            service.getEditContext(normalizedExemptionNumber).regionNumbers()));
+            regionNumbers,
+            accessRegionNumbers(normalizedExemptionNumber, regionNumbers)));
   }
 
   @GetMapping("/rpc/exemption-details/edit-context")
@@ -319,8 +321,18 @@ public class ExemptionDetailsRpcController {
             context.rateOverrideEnabled(),
             context.fixedFeeRate(),
             context.regionNumbers(),
+            accessRegionNumbers(exemptionNumber, context.regionNumbers()),
             lock != null && lock.locked(),
             lock == null ? null : lock.message()));
+  }
+
+  /** The regions regional access is checked against, so the page offers what the server allows. */
+  private List<Long> accessRegionNumbers(String exemptionNumber, List<Long> storedRegionNumbers) {
+    String normalizedExemptionNumber = firstTrimmedNonBlank(exemptionNumber);
+    if (exemptionService == null || normalizedExemptionNumber == null) {
+      return storedRegionNumbers;
+    }
+    return exemptionService.findAccessOrgUnitNumbers(normalizedExemptionNumber);
   }
 
   @PostMapping("/rpc/exemption-details/release-lock")
@@ -1638,13 +1650,23 @@ public class ExemptionDetailsRpcController {
 
   public record BlanketOicTotalsResponseDto(String requestedVolume, String completedVolume) {}
 
+  /**
+   * regionNumbers are the exemption's stored OIC regions; accessRegionNumbers add its linked
+   * applications' regions and decide regional access.
+   */
   public record ExemptionRegionContextResponseDto(
-      String exemptionNumber, List<Long> regionNumbers) {}
+      String exemptionNumber, List<Long> regionNumbers, List<Long> accessRegionNumbers) {}
 
+  /**
+   * regionNumbers are the exemption's stored OIC regions, which the Blanket OIC edit form shows
+   * and posts back; accessRegionNumbers add its linked applications' regions and decide regional
+   * access.
+   */
   public record ExemptionEditContextResponseDto(
       boolean rateOverrideEnabled,
       Double fixedFeeRate,
       List<Long> regionNumbers,
+      List<Long> accessRegionNumbers,
       boolean locked,
       String lockMessage) {}
 

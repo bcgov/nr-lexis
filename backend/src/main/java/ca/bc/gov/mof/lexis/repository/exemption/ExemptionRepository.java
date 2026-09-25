@@ -443,8 +443,21 @@ public class ExemptionRepository extends OracleRepositorySupport {
       END
       FROM DUAL
       """;
-  private static final String FIND_EXEMPTION_ORG_UNIT =
-      LEXIS_GROUP_5_PACKAGE + "FIND_EXEMPTION_ORG_UNIT(?,?)";
+  // An exemption's regions for access checks: those of its linked applications and its stored OIC
+  // region rows, matching the search region filter (regionExists). Ministerial exemptions usually
+  // have only application regions, so the OIC-only FIND_EXEMPTION_ORG_UNIT cursor is not enough.
+  // System-owned Blanket OIC permit applications (OIC_INDICATOR 'Y') are excluded, as in search.
+  private static final String FIND_EXEMPTION_ACCESS_ORG_UNITS =
+      """
+      SELECT EEA.ORG_UNIT_NO
+      FROM EXPORT_EXEMPTION_APPLICATION EEA
+      WHERE EEA.EXEMPTION_NUMBER = ?
+        AND EEA.OIC_INDICATOR = 'N'
+      UNION
+      SELECT OEO.ORG_UNIT_NO
+      FROM OIC_EXEMPTION_ORG_UNIT OEO
+      WHERE OEO.EXEMPTION_NUMBER = ?
+      """;
   private static final Map<String, String> SEARCH_SORT_COLUMNS =
       Map.ofEntries(
           Map.entry("exemptionNumber", "EE.EXEMPTION_NUMBER"),
@@ -482,16 +495,21 @@ public class ExemptionRepository extends OracleRepositorySupport {
     return loadOrgUnitOptionsRequired(true);
   }
 
-  public List<Long> findOrgUnitNumbers(String exemptionNumber) {
+  /**
+   * The regions that decide who may view or change an exemption: its linked applications' regions
+   * together with its stored OIC regions. Editing a Blanket OIC's regions uses only the stored
+   * ones (see ExemptionDetailsRpcRepository#findExemptionOrgUnitNumbers).
+   */
+  public List<Long> findAccessOrgUnitNumbers(String exemptionNumber) {
     String normalized = trim(exemptionNumber);
     if (normalized == null) {
       return List.of();
     }
-    return queryCursorProcedureRequired(
-            FIND_EXEMPTION_ORG_UNIT,
-            cs -> cs.setString(1, normalized),
-            2,
-            rs -> getLong(rs, "ORG_UNIT_NO"))
+    return queryDirectRequired(
+            FIND_EXEMPTION_ACCESS_ORG_UNITS,
+            rs -> getLong(rs, "ORG_UNIT_NO"),
+            normalized,
+            normalized)
         .stream()
         .filter(value -> value != null && value > 0)
         .distinct()

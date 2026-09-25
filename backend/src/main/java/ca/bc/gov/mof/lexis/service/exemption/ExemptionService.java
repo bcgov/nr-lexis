@@ -32,7 +32,11 @@ public interface ExemptionService {
   boolean hasLinkedProvincialApplicationForClient(
       String exemptionNumber, String clientNumber);
 
-  default List<Long> findOrgUnitNumbers(String exemptionNumber) {
+  /**
+   * The regions that decide regional access to an exemption: those of its linked applications and
+   * its stored OIC regions. An exemption with none is outside every regional grant.
+   */
+  default List<Long> findAccessOrgUnitNumbers(String exemptionNumber) {
     return List.of();
   }
 }
