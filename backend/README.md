@@ -6,7 +6,7 @@ Spring Boot backend service for the Log Exemption Information System (LEXIS).
 
 | Technology | Version | Purpose |
 |------------|---------|---------|
-| Java | 21 | Runtime |
+| Java | 21.0.12+ | Runtime |
 | Spring Boot | 3.5.x | Framework |
 | Spring Security | Spring Boot managed | OAuth2 Resource Server + JWT |
 | Oracle JDBC | 21.3.x (ojdbc11) | Database connectivity (TCPS to BC Gov shared Oracle) |
@@ -28,6 +28,25 @@ nc -z localhost 8080
 ```
 
 ## Configuration
+
+### B.C. Pacific Time
+
+B.C. stays on UTC−7 from November 1, 2026. Java carries its own copy of the timezone rules, so
+the backend needs Java 21.0.12 or newer, which includes the new rules
+([IANA tzdata 2026b](https://www.iana.org/time-zones/releases/2026b)). The production image and CI
+use Temurin 21.0.12. Keep `America/Vancouver` for business dates and scheduler zones so past
+winter dates stay at UTC−8. Setting `TZ` only picks the zone; the rules come from the JDK.
+
+From `backend`, check a local JDK with:
+
+```bash
+java checks/VerifyTimezone.java
+```
+
+The Docker build runs the same check on the runtime image and fails if either `java.time` or
+legacy `TimeZone` has old rules. Backend tests cover the removed November 1 fallback, Pacific
+midnight, RTM month and year rollover, and the expiry schedule's next run. Docker Compose runs
+the backend on a separate Maven image, so neither the check nor the Java version applies there.
 
 ### Environment Variables
 

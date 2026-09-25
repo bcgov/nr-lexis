@@ -33,13 +33,17 @@ import net.javacrumbs.shedlock.core.SimpleLock;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
+import org.springframework.mock.env.MockEnvironment;
 import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.scheduling.support.CronExpression;
 
 @ExtendWith(MockitoExtension.class)
 class ExemptionExpirySchedulerTest {
@@ -127,6 +131,30 @@ class ExemptionExpirySchedulerTest {
 
     assertThat(schedule.cron()).isEqualTo("${lexis.expiry.cron:30 0 0 * * *}");
     assertThat(schedule.zone()).isEqualTo("${lexis.expiry.zone:America/Vancouver}");
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "2026-11-01T06:59:59Z, 2026-11-01T07:00:30Z",
+    "2026-11-01T07:00:30Z, 2026-11-02T07:00:30Z",
+    "2026-11-02T07:00:31Z, 2026-11-03T07:00:30Z",
+    "2027-01-01T06:59:59Z, 2027-01-01T07:00:30Z"
+  })
+  void scheduledExpiryShouldStayAtPacificMidnightAfterTheFormerFallback(
+      String timestamp, String expectedRun) throws NoSuchMethodException {
+    Scheduled schedule =
+        ExemptionExpiryScheduler.class
+            .getDeclaredMethod("expireDueExemptions")
+            .getAnnotation(Scheduled.class);
+    MockEnvironment environment = new MockEnvironment();
+    CronExpression cron =
+        CronExpression.parse(environment.resolveRequiredPlaceholders(schedule.cron()));
+    ZoneId zone = ZoneId.of(environment.resolveRequiredPlaceholders(schedule.zone()));
+
+    var nextRun = cron.next(Instant.parse(timestamp).atZone(zone));
+
+    assertThat(nextRun).isNotNull();
+    assertThat(nextRun.toInstant()).isEqualTo(Instant.parse(expectedRun));
   }
 
   @Test

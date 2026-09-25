@@ -7,6 +7,8 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class RtmEmsLogAmvDateUtilsTest {
 
@@ -44,5 +46,19 @@ class RtmEmsLogAmvDateUtilsTest {
     assertThat(RtmEmsLogAmvDateUtils.isNextMonth(LocalDate.of(2026, 7, 1), clock)).isTrue();
     assertThat(RtmEmsLogAmvDateUtils.isNextMonth(LocalDate.of(2026, 6, 1), clock)).isFalse();
     assertThat(RtmEmsLogAmvDateUtils.isNextMonth(LocalDate.of(2026, 8, 1), clock)).isFalse();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "2026-12-01T06:59:59Z, 2026-12-01",
+    "2026-12-01T07:00:00Z, 2027-01-01",
+    "2027-01-01T07:00:00Z, 2027-02-01"
+  })
+  void nextMonthShouldChangeAtPacificMidnightInWinter(String timestamp, String expectedMonth) {
+    Clock clock = Clock.fixed(Instant.parse(timestamp), LexisBusinessTime.ZONE);
+    LocalDate nextMonth = LocalDate.parse(expectedMonth);
+
+    assertThat(RtmEmsLogAmvDateUtils.isNextMonth(nextMonth, clock)).isTrue();
+    assertThat(RtmEmsLogAmvDateUtils.isNextMonth(nextMonth.minusMonths(1), clock)).isFalse();
   }
 }
