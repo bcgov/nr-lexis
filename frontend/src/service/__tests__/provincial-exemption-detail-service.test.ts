@@ -74,6 +74,7 @@ describe('provincial exemption detail service', () => {
         rateOverrideEnabled: false,
         fixedFeeRate: '',
         regionNumbers: [1903, 1904],
+        accessRegionNumbers: [1903, 1904],
         locked: false,
         lockMessage: '',
       },
@@ -83,6 +84,7 @@ describe('provincial exemption detail service', () => {
       rateOverrideEnabled: false,
       fixedFeeRate: '',
       regionNumbers: ['1903', '1904'],
+      accessRegionNumbers: ['1903', '1904'],
       locked: false,
       lockMessage: '',
     })
@@ -96,6 +98,41 @@ describe('provincial exemption detail service', () => {
       '/lexis/rpc/exemption-details/edit-context',
       { params: { exemptionNumber: 'BOIC-205' } },
     )
+  })
+
+  it('keeps linked application access regions apart from the stored exemption regions', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        rateOverrideEnabled: false,
+        fixedFeeRate: '',
+        regionNumbers: [],
+        accessRegionNumbers: [1903, 1908],
+        locked: false,
+        lockMessage: '',
+      },
+    })
+
+    await expect(fetchExemptionEditContext('test-exemption')).resolves.toMatchObject({
+      regionNumbers: [],
+      accessRegionNumbers: ['1903', '1908'],
+    })
+  })
+
+  it('falls back to the stored regions when a response has no access regions', async () => {
+    getMock.mockResolvedValue({
+      data: {
+        rateOverrideEnabled: false,
+        fixedFeeRate: '',
+        regionNumbers: [1909],
+        locked: false,
+        lockMessage: '',
+      },
+    })
+
+    await expect(fetchExemptionEditContext('test-exemption')).resolves.toMatchObject({
+      regionNumbers: ['1909'],
+      accessRegionNumbers: ['1909'],
+    })
   })
 
   it('parses authoritative permit rows including record-specific visibility', async () => {

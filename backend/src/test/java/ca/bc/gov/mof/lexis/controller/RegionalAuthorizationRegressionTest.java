@@ -196,7 +196,7 @@ class RegionalAuthorizationRegressionTest {
     when(exemptions.findAccessByExemptionNumber("EX-1"))
         .thenReturn(Optional.of(new ExemptionAccessDto("EX-1", "M", "NEW", false)));
     // Province-wide grants deliberately skip region lookups.
-    lenient().when(exemptions.findOrgUnitNumbers("EX-1")).thenReturn(recordRegions);
+    lenient().when(exemptions.findAccessOrgUnitNumbers("EX-1")).thenReturn(recordRegions);
     when(exemptionRpc.updateExemption(any(), anyString(), anyBoolean()))
         .thenReturn(new ExemptionDetailsRpcService.CreateExemptionResult(
             true, "Saved", "EX-1", false, List.of(), List.of()));
@@ -231,7 +231,7 @@ class RegionalAuthorizationRegressionTest {
     requestAuthorizedFor("saveExemption", authentication);
     when(exemptions.findAccessByExemptionNumber("EX-1"))
         .thenReturn(Optional.of(new ExemptionAccessDto("EX-1", "M", "NEW", false)));
-    when(exemptions.findOrgUnitNumbers("EX-1")).thenReturn(List.of(1903L));
+    when(exemptions.findAccessOrgUnitNumbers("EX-1")).thenReturn(List.of(1903L));
 
     var repository = mock(ExemptionDetailsRpcRepository.class);
     var today = LexisBusinessTime.today();
@@ -284,7 +284,7 @@ class RegionalAuthorizationRegressionTest {
     requestAuthorizedFor("createApplication", authentication);
     when(exemptions.findAccessByExemptionNumber("EX-1"))
         .thenReturn(Optional.of(new ExemptionAccessDto("EX-1", "M", "NEW", false)));
-    when(exemptions.findOrgUnitNumbers("EX-1")).thenReturn(exemptionRegions);
+    when(exemptions.findAccessOrgUnitNumbers("EX-1")).thenReturn(exemptionRegions);
     var parameters = new LinkedMultiValueMap<String, String>();
     parameters.add("exemptionNumber", "EX-1");
     parameters.add("region", "1903");
@@ -310,12 +310,36 @@ class RegionalAuthorizationRegressionTest {
   }
 
   @Test
+  void regionalApproverOpensAnExemptionWhoseOnlyRegionIsALinkedApplication() {
+    exemptionController.setExemptionService(exemptions);
+    when(exemptions.findAccessByExemptionNumber("test-exemption"))
+        .thenReturn(Optional.of(new ExemptionAccessDto("test-exemption", "M", "NEW", false)));
+    // No stored OIC region rows: the region is that of the linked application.
+    when(exemptions.findAccessOrgUnitNumbers("test-exemption")).thenReturn(List.of(1903L));
+    when(exemptionRpc.getEditContext("test-exemption"))
+        .thenReturn(new ExemptionDetailsRpcService.ExemptionEditContext(false, null, List.of()));
+    var cariboo = staff(APPLICATION_CARIBOO);
+    requestAuthorizedFor("/exemptionDetails", cariboo);
+
+    var response = exemptionController.getRegionContext("test-exemption", cariboo);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().regionNumbers()).isEmpty();
+    assertThat(response.getBody().accessRegionNumbers()).containsExactly(1903L);
+
+    var skeena = staff(EXEMPTION_SKEENA);
+    requestAuthorizedFor("/exemptionDetails", skeena);
+    assertThatThrownBy(() -> exemptionController.getRegionContext("test-exemption", skeena))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
   void regionalUsersSeeTheExemptionPermitsInTheirRegions() {
     var authentication = staff("LEXIS_READ_ONLY_REGION_REGION-CARIBOO");
     requestAuthorizedFor("/exemptionDetails", authentication);
     when(exemptions.findAccessByExemptionNumber("EX-1"))
         .thenReturn(Optional.of(new ExemptionAccessDto("EX-1", "M", "NEW", false)));
-    when(exemptions.findOrgUnitNumbers("EX-1")).thenReturn(List.of(1903L, 1908L));
+    when(exemptions.findAccessOrgUnitNumbers("EX-1")).thenReturn(List.of(1903L, 1908L));
     when(exemptionRpc.getPermits(eq("EX-1"), any()))
         .thenAnswer(invocation -> {
           Predicate<ExemptionDetailsRpcService.PermitAccessContext> access =
