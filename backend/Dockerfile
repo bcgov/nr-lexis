@@ -6,7 +6,11 @@ COPY src src
 RUN mvn package -DskipTests
 RUN mkdir -p target/dependency && (cd target/dependency; jar -xf ../*.jar)
 
-FROM eclipse-temurin:21.0.9_10-jdk-alpine-3.23
+FROM eclipse-temurin:21.0.12_8-jdk-alpine-3.23
+
+# Check the runtime JDK itself: the Maven build stage and CI use separate JDKs.
+COPY checks/VerifyTimezone.java /tmp/VerifyTimezone.java
+RUN java /tmp/VerifyTimezone.java && rm /tmp/VerifyTimezone.java
 
 ENV HOME=/tmp \
     XDG_CACHE_HOME=/tmp/.cache

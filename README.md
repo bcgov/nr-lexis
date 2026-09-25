@@ -51,7 +51,9 @@ Users sign in through BC Gov SSO (Keycloak) with roles managed in FAM; see
 ### Shared prerequisites
 
 1. **Network access to the BC Gov Oracle environment.** Compose cannot route that for you.
-2. **Maven 3.9+ and Java 21** (Option A only). The repo has no Maven wrapper.
+2. **Maven 3.9+ and Java 21.0.12 or newer** (Option A only). Older Java 21 builds have outdated
+   B.C. time rules, so backend tests fail; see [B.C. Pacific Time](backend/README.md#bc-pacific-time)
+   to check your JDK. The repo has no Maven wrapper.
 3. **Node 24+** (Option A only).
 4. **Docker Desktop** (Option B only).
 

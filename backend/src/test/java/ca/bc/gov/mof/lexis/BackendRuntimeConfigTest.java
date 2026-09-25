@@ -40,6 +40,20 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
+  void applicationShouldAllowOracleRsaKeyExchangeBeforeSpringStarts() throws IOException {
+    String application =
+        Files.readString(
+            resolve(
+                Path.of(
+                    "backend", "src", "main", "java", "ca", "bc", "gov", "mof", "lexis",
+                    "LexisApiApplication.java")));
+
+    assertThat(application.indexOf("OracleTlsCompatibility.allowRsaKeyExchange();"))
+        .isNotNegative()
+        .isLessThan(application.indexOf("SpringApplication.run("));
+  }
+
+  @Test
   void containerShouldSizeHeapFromItsMemoryLimitAndAllowDeploymentOverrides() throws IOException {
     String dockerfile = Files.readString(resolve(Path.of("backend", "Dockerfile")));
 
