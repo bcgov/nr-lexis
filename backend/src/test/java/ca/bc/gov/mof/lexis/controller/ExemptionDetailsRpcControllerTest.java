@@ -2,8 +2,10 @@ package ca.bc.gov.mof.lexis.controller;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
@@ -120,6 +122,42 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(response.getBody().regionNumbers()).containsExactly(1909L, 1910L);
     verify(provincialAuthorizationService).requireExemption(authentication, "EX-700");
     verifyNoInteractions(editLockService, authorizationService);
+  }
+
+  @Test
+  void regionContextShouldReturnLinkedApplicationRegionsSeparatelyFromStoredRegions() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\test-user", "n/a");
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getEditContext("test-exemption"))
+        .thenReturn(new ExemptionDetailsRpcService.ExemptionEditContext(false, null, List.of()));
+    when(exemptionService.findAccessOrgUnitNumbers("test-exemption"))
+        .thenReturn(List.of(1903L, 1908L));
+
+    var response = controller.getRegionContext("test-exemption", authentication);
+
+    assertThat(response.getBody().regionNumbers()).isEmpty();
+    assertThat(response.getBody().accessRegionNumbers()).containsExactly(1903L, 1908L);
+  }
+
+  @Test
+  void editContextShouldKeepStoredRegionsForTheFormAndReturnAccessRegionsForControls() {
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getEditContext("test-exemption"))
+        .thenReturn(new ExemptionDetailsRpcService.ExemptionEditContext(false, null, List.of()));
+    when(exemptionService.findAccessOrgUnitNumbers("test-exemption"))
+        .thenReturn(List.of(1903L, 1908L));
+
+    var response = controller.getEditContext("test-exemption");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    // Stored regions are posted back by the Blanket OIC edit form, so linked application regions
+    // must not appear there.
+    assertThat(response.getBody().regionNumbers()).isEmpty();
+    assertThat(response.getBody().accessRegionNumbers()).containsExactly(1903L, 1908L);
+    verify(provincialAuthorizationService).requireExemption(any(), eq("test-exemption"));
   }
 
   @Test

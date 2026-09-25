@@ -2,6 +2,13 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  allowedRegions,
+  normalizeAction,
+  normalizeActionRegions,
+  type RecordOrgUnits,
+  withinRegions,
+} from '@/context/auth/region-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
@@ -1717,4 +1724,163 @@ describe('Provincial exemption edit context', () => {
       )
     },
   )
+})
+
+describe('regional exemption controls', () => {
+  // A Ministerial exemption without stored regions, linked to applications in two regions.
+  const linkedExemption: ProvincialExemptionDetail = {
+    ...exemptionDetail,
+    exemptionNumber: 'test-exemption',
+    exemptionTypeCode: 'M',
+    exemptionTypeDescription: 'Ministerial',
+    exemptionStatusCode: 'NEW',
+    exemptionStatusDescription: 'New',
+    expiryDate: '2099-12-31',
+    blanketOic: false,
+  }
+
+  // canPerform applies record regions the way AuthProvider does.
+  const mockRegionalAuth = (roles: string[], actionRegions: Record<string, string[]>) => {
+    const capabilities = createTestCapabilities({
+      roles,
+      grantedActions: Object.keys(actionRegions),
+      actionRegions: normalizeActionRegions(actionRegions),
+    })
+    const granted = new Set(capabilities.grantedActions.map(normalizeAction))
+    vi.mocked(useAuth).mockReturnValue(
+      createTestAuthContext({
+        capabilities,
+        canPerform: vi.fn(
+          (action: string, ...recordOrgUnits: [recordOrgUnits?: RecordOrgUnits]) =>
+            granted.has(normalizeAction(action)) &&
+            (recordOrgUnits.length === 0 ||
+              withinRegions(allowedRegions(capabilities, action), recordOrgUnits[0])),
+        ),
+      }),
+    )
+  }
+
+  const applicationApproverIn = (regions: string[]) =>
+    mockRegionalAuth(['LEXIS_APPLICATION_APPROVER'], {
+      '/exemptionDetails': regions,
+      '/createExemption': regions,
+      saveExemption: regions,
+      '/fileExemptionUpload': regions,
+    })
+
+  const renderLinkedExemption = (accessRegionNumbers: string[]) => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue(linkedExemption)
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: [],
+      accessRegionNumbers,
+      locked: false,
+      lockMessage: '',
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/test-exemption']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(fetchProvincialExemptionOptions).mockResolvedValue({
+      exemptionTypes: [{ value: 'M', label: 'Ministerial' }],
+      exemptionStatuses: [
+        { value: 'NEW', label: 'New' },
+        { value: 'ACT', label: 'Active' },
+      ],
+      regions: [
+        { value: '1903', label: 'Region 1903' },
+        { value: '1908', label: 'Region 1908' },
+      ],
+    })
+    vi.mocked(fetchExemptionApplications).mockResolvedValue({
+      applications: [],
+      containsUnmanu: false,
+      ownerNumber: '00012345',
+    })
+    vi.mocked(fetchExemptionPermits).mockResolvedValue([])
+  })
+
+  it.each([
+    [['1903', '1908'], true],
+    [['1903'], false],
+  ])(
+    'offers editing and linking to an application approver in %j only when they hold every linked application region',
+    async (grantedRegions, offered) => {
+      applicationApproverIn(grantedRegions)
+      renderLinkedExemption(['1903', '1908'])
+
+      await screen.findByRole('heading', { name: 'Exemption test-exemption', level: 1 })
+      await waitFor(() => expect(fetchExemptionEditContext).toHaveBeenCalled())
+      if (offered) {
+        expect(await screen.findByRole('button', { name: 'Edit exemption' })).toBeInTheDocument()
+        await userEvent.click(screen.getByRole('tab', { name: 'Applications' }))
+        expect(await screen.findByLabelText('Application number')).toBeInTheDocument()
+      } else {
+        expect(screen.queryByRole('button', { name: 'Edit exemption' })).not.toBeInTheDocument()
+        await userEvent.click(screen.getByRole('tab', { name: 'Applications' }))
+        expect(screen.queryByLabelText('Application number')).not.toBeInTheDocument()
+      }
+    },
+  )
+
+  it.each([
+    [['1908'], true],
+    [['1903', '1908'], false],
+  ])(
+    'offers approval to a regional exemption approver for linked application regions %j only when they hold them all',
+    async (accessRegionNumbers, offered) => {
+      mockRegionalAuth(['LEXIS_EXEMPTION_APPROVER'], {
+        '/exemptionDetails': ['1908'],
+        saveExemption: ['1908'],
+        approveExemption: ['1908'],
+      })
+      renderLinkedExemption(accessRegionNumbers)
+
+      await screen.findByRole('heading', { name: 'Exemption test-exemption', level: 1 })
+      await waitFor(() => expect(fetchExemptionEditContext).toHaveBeenCalled())
+      if (offered) {
+        expect(await screen.findByRole('button', { name: 'Approve exemption' })).toBeInTheDocument()
+      } else {
+        expect(screen.queryByRole('button', { name: 'Approve exemption' })).not.toBeInTheDocument()
+      }
+    },
+  )
+
+  it('saves only the stored regions, never the linked application regions', async () => {
+    applicationApproverIn(['1903', '1908'])
+    vi.mocked(updateExemption).mockResolvedValue({
+      success: true,
+      message: 'The exemption was updated successfully.',
+      exemptionNumber: 'test-exemption',
+      errors: [],
+      warnings: [],
+    })
+    renderLinkedExemption(['1903', '1908'])
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    await userEvent.clear(screen.getByLabelText('Conditions'))
+    await userEvent.type(screen.getByLabelText('Conditions'), 'Updated conditions')
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+
+    await waitFor(() =>
+      expect(vi.mocked(updateExemption)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exemptionNumber: 'test-exemption',
+          otherConditions: 'Updated conditions',
+          regionNumbers: [],
+        }),
+      ),
+    )
+  })
 })

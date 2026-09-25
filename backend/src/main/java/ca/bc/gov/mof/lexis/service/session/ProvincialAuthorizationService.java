@@ -235,12 +235,10 @@ public class ProvincialAuthorizationService {
     if (!isOrgUnitRestricted(authentication, OrgUnitSurface.EXEMPTION_DETAIL)) {
       return true;
     }
-    ExemptionService service = exemptionServiceProvider.getIfAvailable();
-    return service != null
-        && canAccessOrgUnits(
-            authentication,
-            service.findOrgUnitNumbers(exemption.exemptionNumber()),
-            OrgUnitSurface.EXEMPTION_DETAIL);
+    return canAccessOrgUnits(
+        authentication,
+        exemptionRegions(exemption.exemptionNumber()),
+        OrgUnitSurface.EXEMPTION_DETAIL);
   }
 
   public boolean canAccessExemption(
@@ -264,12 +262,10 @@ public class ProvincialAuthorizationService {
     if (!isOrgUnitRestricted(authentication, OrgUnitSurface.EXEMPTION_DETAIL)) {
       return true;
     }
-    ExemptionService service = exemptionServiceProvider.getIfAvailable();
-    return service != null
-        && canAccessOrgUnits(
-            authentication,
-            service.findOrgUnitNumbers(exemption.exemptionNumber()),
-            OrgUnitSurface.EXEMPTION_DETAIL);
+    return canAccessOrgUnits(
+        authentication,
+        exemptionRegions(exemption.exemptionNumber()),
+        OrgUnitSurface.EXEMPTION_DETAIL);
   }
 
   /**
@@ -337,14 +333,9 @@ public class ProvincialAuthorizationService {
     if (!regions.restricted()) {
       return;
     }
-    ExemptionService exemptionService = exemptionServiceProvider.getIfAvailable();
-    String normalizedNumber = trimToNull(exemptionNumber);
-    List<Long> exemptionRegions =
-        exemptionService == null || normalizedNumber == null
-            ? List.of()
-            : sanitizePositive(exemptionService.findOrgUnitNumbers(normalizedNumber));
-    if (exemptionRegions.isEmpty()
-        || !exemptionRegions.stream().allMatch(regions::allows)
+    List<Long> recordRegions = sanitizePositive(exemptionRegions(exemptionNumber));
+    if (recordRegions.isEmpty()
+        || !recordRegions.stream().allMatch(regions::allows)
         || !regions.allows(applicationRegion.get())) {
       throw new AccessDeniedException(
           "Linking applications is limited to the authenticated Application Approver regions.");
@@ -612,15 +603,8 @@ public class ProvincialAuthorizationService {
    * user must hold all of them. Province-wide users skip the region lookup.
    */
   public void requireExemptionWrite(Authentication authentication, String exemptionNumber) {
-    ExemptionService service = exemptionServiceProvider.getIfAvailable();
-    String normalizedNumber = trimToNull(exemptionNumber);
     if (!canWriteOrgUnits(
-        authentication,
-        () ->
-            service == null || normalizedNumber == null
-                ? List.of()
-                : service.findOrgUnitNumbers(normalizedNumber),
-        OrgUnitSurface.EXEMPTION_WRITE)) {
+        authentication, () -> exemptionRegions(exemptionNumber), OrgUnitSurface.EXEMPTION_WRITE)) {
       throw new AccessDeniedException(
           "The exemption covers regions outside the authenticated write scope.");
     }
@@ -630,7 +614,8 @@ public class ProvincialAuthorizationService {
    * Activation through an ordinary save or create is an approval, so it resolves the regions of the
    * user's approveExemption grants itself rather than those of the route's saveExemption or
    * createExemption. Every region the exemption covers must be among them: the stored
-   * exemption's, any requested ones, and those of the applications a new exemption links.
+   * exemption's (including those of its linked applications), any requested ones, and those of
+   * the applications a new exemption links.
    */
   public boolean canApproveExemption(
       Authentication authentication,
@@ -647,11 +632,7 @@ public class ProvincialAuthorizationService {
       return true;
     }
     List<Long> orgUnits = new ArrayList<>(sanitizePositive(regionNumbers));
-    ExemptionService exemptionService = exemptionServiceProvider.getIfAvailable();
-    String normalizedNumber = trimToNull(exemptionNumber);
-    if (exemptionService != null && normalizedNumber != null) {
-      orgUnits.addAll(exemptionService.findOrgUnitNumbers(normalizedNumber));
-    }
+    orgUnits.addAll(exemptionRegions(exemptionNumber));
     LexisApplicationService applicationService = applicationServiceProvider.getIfAvailable();
     if (applicationService != null && applicationNumbers != null) {
       for (Long applicationNumber : applicationNumbers) {
@@ -748,7 +729,7 @@ public class ProvincialAuthorizationService {
         isStaffAttachmentWriter(currentRoles)
             && canWriteOrgUnits(
                 authentication,
-                () -> service.findOrgUnitNumbers(exemption.exemptionNumber()),
+                () -> exemptionRegions(exemption.exemptionNumber()),
                 OrgUnitSurface.EXEMPTION_WRITE);
     if (!allowed) {
       // INTENTIONAL_LEGACY_DIVERGENCE(SUBMITTER_EXEMPTION_ATTACHMENTS): legacy let industry users
@@ -935,10 +916,22 @@ public class ProvincialAuthorizationService {
     if (!regions.restricted()) {
       return true;
     }
-    ExemptionService service = exemptionServiceProvider.getIfAvailable();
     return !regions.denied()
-        && service != null
-        && service.findOrgUnitNumbers(exemptionNumber).stream().anyMatch(regions::allows);
+        && exemptionRegions(exemptionNumber).stream().anyMatch(regions::allows);
+  }
+
+  /**
+   * The regions that decide regional access to an exemption: its linked applications' and its
+   * stored OIC regions (see ExemptionService#findAccessOrgUnitNumbers). Every exemption view,
+   * change, approval, link, and document check uses them, so a Ministerial exemption, whose
+   * regions usually come only from its applications, is not treated as having no region.
+   */
+  private List<Long> exemptionRegions(String exemptionNumber) {
+    ExemptionService service = exemptionServiceProvider.getIfAvailable();
+    String normalizedNumber = trimToNull(exemptionNumber);
+    return service == null || normalizedNumber == null
+        ? List.of()
+        : service.findAccessOrgUnitNumbers(normalizedNumber);
   }
 
   /**
