@@ -77,8 +77,8 @@ const ForestClientSelectionPage = ({ onSelected }: ForestClientSelectionPageProp
               <h1 id="organization-heading">Select organization</h1>
               <p>
                 Your Business BCeID account is registered with more than one forest-client
-                organization. Pick which one you want to work under for this session. You can sign
-                out and back in to switch later.
+                organization. Pick which one you want to work under for this session. You can switch
+                later with Switch organization in your profile.
               </p>
             </div>
 

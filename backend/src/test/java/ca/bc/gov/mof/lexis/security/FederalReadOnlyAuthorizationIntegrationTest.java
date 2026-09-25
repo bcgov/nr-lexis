@@ -98,6 +98,26 @@ class FederalReadOnlyAuthorizationIntegrationTest {
     }));
   }
 
+  @Test
+  void businessBceidHoldingSubmitterAndFederalRolesShouldHaveNoAccess() throws Exception {
+    var bothRoles =
+        businessBceid(
+            List.of(
+                "LEXIS_FEDERAL_READ_ONLY", "LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00001018"));
+    mvc.perform(get("/api/lexis/session/capabilities").with(bothRoles))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.roles").isEmpty())
+        .andExpect(jsonPath("$.grantedActions").isEmpty())
+        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"))
+        .andExpect(jsonPath("$.availableForestClientNumbers").isEmpty())
+        .andExpect(jsonPath("$.forestClientSelectionRequired").value(false));
+    for (String path :
+        List.of("/api/lexis/federal/applications/search", "/api/lexis/applications/search")) {
+      mvc.perform(get(path).with(bothRoles)).andExpect(status().isForbidden());
+    }
+    verify(federalApplications, never()).search(any());
+  }
+
   @ParameterizedTest
   @ValueSource(strings = {"/api/lexis/applications/search", "/api/lexis/applications/1001",
       "/api/lexis/exemptions/search", "/api/lexis/exemptions/EX-1",
@@ -175,6 +195,10 @@ class FederalReadOnlyAuthorizationIntegrationTest {
   }
 
   private RequestPostProcessor federalReader() {
+    return businessBceid(List.of("LEXIS_FEDERAL_READ_ONLY"));
+  }
+
+  private RequestPostProcessor businessBceid(List<String> clientRoles) {
     String issuer = "https://loginproxy.example.test/auth/realms/standard";
     Jwt token =
         Jwt.withTokenValue("test-token")
@@ -187,7 +211,7 @@ class FederalReadOnlyAuthorizationIntegrationTest {
             .claim("typ", "Bearer")
             .claim("identity_provider", "bceidbusiness")
             .claim("bceid_username", "nexcol-reader")
-            .claim("client_roles", List.of("LEXIS_FEDERAL_READ_ONLY"))
+            .claim("client_roles", clientRoles)
             .build();
     var converter =
         new Oauth2SecurityCustomizer(

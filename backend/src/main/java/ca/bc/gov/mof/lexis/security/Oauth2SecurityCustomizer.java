@@ -51,6 +51,7 @@ public class Oauth2SecurityCustomizer
   private static final Set<String> STAFF_IDENTITY_PROVIDERS = Set.of("idir", "azureidir");
   private static final String IDP_BCEID_BUSINESS = "bceidbusiness";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
+  private static final String ROLE_FEDERAL_READ_ONLY = "LEXIS_FEDERAL_READ_ONLY";
   private static final Set<String> STAFF_ROLES =
       Set.of(
           "LEXIS_ADMIN",
@@ -185,20 +186,28 @@ public class Oauth2SecurityCustomizer
     if (!IDP_BCEID_BUSINESS.equals(identityProvider)) {
       return List.of();
     }
-    return roles.stream()
-        .map(
-            role -> {
-              if ("LEXIS_FEDERAL_READ_ONLY".equals(role)) {
-                return role;
-              }
-              String prefix = ROLE_PROVINCIAL_SUBMITTER + "_FOREST_CLIENT-";
-              if (role.startsWith(prefix) && role.substring(prefix.length()).matches("[0-9]{8}")) {
-                return ROLE_PROVINCIAL_SUBMITTER + "_" + role.substring(prefix.length());
-              }
-              return null;
-            })
-        .filter(Objects::nonNull)
-        .toList();
+    List<String> bceidRoles =
+        roles.stream()
+            .map(
+                role -> {
+                  if (ROLE_FEDERAL_READ_ONLY.equals(role)) {
+                    return role;
+                  }
+                  String prefix = ROLE_PROVINCIAL_SUBMITTER + "_FOREST_CLIENT-";
+                  if (role.startsWith(prefix)
+                      && role.substring(prefix.length()).matches("[0-9]{8}")) {
+                    return ROLE_PROVINCIAL_SUBMITTER + "_" + role.substring(prefix.length());
+                  }
+                  return null;
+                })
+            .filter(Objects::nonNull)
+            .toList();
+    // A Business BCeID account is either a provincial submitter (for one or more forest clients)
+    // or a federal reader. An account assigned both is misconfigured and gets no LEXIS access.
+    boolean federalReader = bceidRoles.contains(ROLE_FEDERAL_READ_ONLY);
+    boolean provincialSubmitter =
+        bceidRoles.stream().anyMatch(role -> !ROLE_FEDERAL_READ_ONLY.equals(role));
+    return federalReader && provincialSubmitter ? List.of() : bceidRoles;
   }
 
   private OAuth2TokenValidator<Jwt> interactiveTokenValidator() {

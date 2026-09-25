@@ -1050,8 +1050,15 @@ const ProvincialExemptionDetailsPage = () => {
           ? 'Add or clear the typed application number before leaving, or discard all changes.'
           : undefined
 
+  // As on the server, submitters cannot attach documents to new or Blanket OIC exemptions.
+  const submitterAttachmentBlocked =
+    isProvincialSubmitter &&
+    !isApplicationApprover &&
+    (persistedStatusCode === 'NEW' || currentDetail?.blanketOic === true)
   const canUploadExemptionDocuments =
-    canPerform('/fileExemptionUpload', exemptionOrgUnits) && !exemptionEditLocked
+    canPerform('/fileExemptionUpload', exemptionOrgUnits) &&
+    !exemptionEditLocked &&
+    !submitterAttachmentBlocked
   const canDeleteExemptionDocuments =
     isApplicationApprover &&
     withinApproverRegions &&
