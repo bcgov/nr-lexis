@@ -384,6 +384,38 @@ test.describe('session timeout regression', () => {
       .toBeNull()
   })
 
+  test('removes a stored session that SSO rejects at startup instead of retrying it', async ({
+    page,
+  }) => {
+    const syntheticSession = await installSyntheticOidcSession(page, {
+      username: TEST_USERNAME,
+      orgUnitNo: '1903',
+      issuedAtSeconds: Math.floor(Date.now() / 1000) - 2 * 60 * 60,
+    })
+    let refreshRequests = 0
+    await page.route(`${syntheticSession.issuer}/protocol/openid-connect/token`, async (route) => {
+      refreshRequests += 1
+      await route.fulfill({
+        status: 400,
+        contentType: 'application/json',
+        headers: { 'access-control-allow-origin': new URL(E2E_BASE_URL).origin },
+        body: JSON.stringify({ error: 'invalid_grant' }),
+      })
+    })
+    await installSyntheticLexisApi(page)
+    const idirLogin = page.getByRole('button', { name: /log in with idir/i })
+
+    await gotoWithRecovery(page, new URL('/', E2E_BASE_URL).toString(), { ready: idirLogin })
+    await expect
+      .poll(() => page.evaluate((key) => sessionStorage.getItem(key), syntheticSession.storageKey))
+      .toBeNull()
+    expect(refreshRequests).toBe(1)
+
+    await page.reload()
+    await expect(idirLogin).toBeVisible()
+    expect(refreshRequests).toBe(1)
+  })
+
   test('shows the warning after automatic inactivity logout', async ({ page }) => {
     await page.clock.install({ time: new Date(SESSION_START_ISO) })
     const sessionState = { authenticated: true }

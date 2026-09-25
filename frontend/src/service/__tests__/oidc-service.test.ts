@@ -134,6 +134,49 @@ describe('OIDC session service', () => {
     expect(mocks.manager.signinSilent).not.toHaveBeenCalled()
   })
 
+  it('removes a restored session whose refresh token SSO rejected', async () => {
+    mocks.manager.getUser.mockResolvedValue(storedUser(0))
+    const { restoreOidcUser } = await import('../oidc-service')
+    const { ErrorResponse } = await import('oidc-client-ts')
+    mocks.manager.signinSilent.mockRejectedValue(new ErrorResponse({ error: 'invalid_grant' }))
+    expect(await restoreOidcUser()).toBeNull()
+    expect(mocks.manager.removeUser).toHaveBeenCalledOnce()
+  })
+
+  it('keeps a restored session after a temporary failure so a reload can recover', async () => {
+    mocks.manager.getUser.mockResolvedValue(storedUser(0))
+    const { restoreOidcUser } = await import('../oidc-service')
+    const { ErrorResponse } = await import('oidc-client-ts')
+    mocks.manager.signinSilent
+      .mockRejectedValueOnce(new Error('Network Error'))
+      .mockRejectedValueOnce(new Error('Bad Gateway (502)'))
+      .mockRejectedValueOnce(new ErrorResponse({ error: 'temporarily_unavailable' }))
+      .mockRejectedValueOnce(new ErrorResponse({ error: 'server_error' }))
+    for (let attempt = 0; attempt < 4; attempt += 1) {
+      expect(await restoreOidcUser()).toBeNull()
+    }
+    expect(mocks.manager.removeUser).not.toHaveBeenCalled()
+    expect(await restoreOidcUser()).toMatchObject({ access_token: 'access-token' })
+  })
+
+  it('treats only a rejected or unrenewable session as ended', async () => {
+    mocks.manager.getUser.mockResolvedValue({ ...storedUser(0), refresh_token: undefined })
+    const { getOidcUser, isSessionEnded } = await import('../oidc-service')
+    const { ErrorResponse } = await import('oidc-client-ts')
+    const unrenewable = await getOidcUser().catch((error: unknown) => error)
+
+    expect(isSessionEnded(unrenewable)).toBe(true)
+    expect(isSessionEnded(new ErrorResponse({ error: 'invalid_grant' }))).toBe(true)
+    for (const temporary of [
+      new TypeError('Failed to fetch'),
+      new Error('Bad Gateway (502)'),
+      new ErrorResponse({ error: 'temporarily_unavailable' }),
+      new ErrorResponse({ error: 'server_error' }),
+    ]) {
+      expect(isSessionEnded(temporary)).toBe(false)
+    }
+  })
+
   it('shares one renewal between concurrent API, activity and forced-extension calls', async () => {
     mocks.manager.getUser.mockResolvedValue(storedUser(60))
     const refreshed = deferred<User>()

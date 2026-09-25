@@ -4,6 +4,8 @@ import {
   endOidcSession,
   getOidcUser,
   isOidcConfigured,
+  isSessionEnded,
+  restoreOidcUser,
   startOidcLogin,
 } from '@/service/oidc-service'
 import { isProdRtmOnlyMode, PROD_RTM_ONLY_ROUTE } from '@/config/features'
@@ -371,7 +373,7 @@ export function AuthProvider({ children }: AuthProviderProps) {
           if (window.location.pathname === AUTH_CALLBACK_PATH) return
           // A stored session that can no longer be renewed is simply signed out,
           // not a capabilities failure: keep the destination for the next login.
-          const user = await getOidcUser().catch(() => null)
+          const user = await restoreOidcUser()
           if (!user?.access_token) {
             if (sessionGenerationRef.current === refreshGeneration) {
               sessionExpiryInFlightRef.current = false
@@ -520,8 +522,9 @@ export function AuthProvider({ children }: AuthProviderProps) {
               void expireSession('token-unavailable')
             }
           })
-          .catch(() => {
-            void expireSession('token-unavailable')
+          .catch((error: unknown) => {
+            // After a temporary failure, later activity tries again instead of signing out.
+            if (isSessionEnded(error)) void expireSession('token-unavailable')
           })
       }
     }

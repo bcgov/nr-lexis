@@ -113,6 +113,29 @@ class TestDeploymentTopologyConfigTest {
   }
 
   @Test
+  void deploymentJobsShouldFirstRequireTheirEnvironmentNamespace() throws IOException {
+    String workflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
+    String namespaceCheck =
+        "      - name: Validate OpenShift namespace\n"
+            + "        env:\n"
+            + "          DEPLOY_ENV: ${{ inputs.environment }}\n"
+            + "          OC_NAMESPACE: ${{ secrets.oc_namespace }}\n"
+            + "        run: |\n"
+            + "          if [[ \"$OC_NAMESPACE\" != *-\"$DEPLOY_ENV\" ]]; then\n";
+
+    for (String job :
+        new String[] {
+          workflowJob(workflow, "backend", "frontend"),
+          workflowJob(workflow, "frontend", "deployment-result")
+        }) {
+      String steps = job.substring(job.indexOf("    steps:\n"));
+
+      assertThat(steps).containsOnlyOnce(namespaceCheck);
+      assertThat(steps.indexOf("      - ")).isEqualTo(steps.indexOf(namespaceCheck));
+    }
+  }
+
+  @Test
   void federalSubmissionCreateShouldNotBeFeatureGated() throws IOException {
     String deploymentConfiguration =
         Files.readString(resolve(".github/workflows/reusable-deploy.yml"))
