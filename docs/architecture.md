@@ -52,7 +52,9 @@ The backend validates signature, issuer, expiry, access-token type and the confi
 ID (`azp`), then translates client roles into its existing internal authorities. The signed
 `identity_provider` claim separates IDIR staff (`idir` or `azureidir`) from Business BCeID
 (`bceidbusiness`) Provincial Submitter and Federal Read Only roles. Missing or unknown providers
-and incompatible roles grant no corresponding authority. Scoped roles such as
+and incompatible roles grant no corresponding authority. A Business BCeID account holds either
+Provincial Submitter (for one or more forest clients) or Federal Read Only; an account assigned
+both gets no LEXIS access and sees the no-access page until FAM removes one. Scoped roles such as
 `LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00001018` retain their eight-digit client scope;
 `FAM:` metadata roles grant no application access. Audit usernames keep legacy LEXIS's WebADE
 form, `IDIR\USERNAME` or `BCEID\USERNAME` in upper case, so users keep one name across legacy and

@@ -74,13 +74,14 @@ class Oauth2SecurityCustomizerTest {
                 Map.of(
                     "identity_provider", "bceidbusiness",
                     "client_roles",
-                        List.of(
-                            "lexis_provincial_submitter_forest_client-00001018",
-                            " lexis_federal_read_only"))))
-        .containsExactly(
-            "LEXIS_PROVINCIAL_SUBMITTER_00001018",
-            "LEXIS_PROVINCIAL_SUBMITTER",
-            "LEXIS_FEDERAL_READ_ONLY");
+                        List.of("lexis_provincial_submitter_forest_client-00001018"))))
+        .containsExactly("LEXIS_PROVINCIAL_SUBMITTER_00001018", "LEXIS_PROVINCIAL_SUBMITTER");
+    assertThat(
+            authorities(
+                Map.of(
+                    "identity_provider", "bceidbusiness",
+                    "client_roles", List.of(" lexis_federal_read_only"))))
+        .containsExactly("LEXIS_FEDERAL_READ_ONLY");
   }
 
   @Test
@@ -95,17 +96,49 @@ class Oauth2SecurityCustomizerTest {
                         "LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00002019",
                         "LEXIS_ADMIN",
                         "LEXIS_READ_ONLY",
-                        "LEXIS_PROVINCIAL_SUBMITTER",
-                        "LEXIS_FEDERAL_READ_ONLY")));
+                        "LEXIS_PROVINCIAL_SUBMITTER")));
     assertThat(authorities)
         .containsExactly(
             "LEXIS_PROVINCIAL_SUBMITTER_00001018",
             "LEXIS_PROVINCIAL_SUBMITTER",
-            "LEXIS_PROVINCIAL_SUBMITTER_00002019",
-            "LEXIS_FEDERAL_READ_ONLY");
+            "LEXIS_PROVINCIAL_SUBMITTER_00002019");
     var scope = sessionService.resolveForestClientScope(authorities);
     assertThat(scope.availableClientNumbers()).containsExactly("00001018", "00002019");
     assertThat(scope.selectionRequired()).isTrue();
+  }
+
+  @Test
+  void bceidHoldingBothSubmitterAndFederalRolesShouldReceiveNoAuthorities() {
+    for (List<String> roles :
+        List.of(
+            List.of(
+                "LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00001018", "LEXIS_FEDERAL_READ_ONLY"),
+            List.of(
+                "LEXIS_FEDERAL_READ_ONLY",
+                "LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00001018",
+                "LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00002019",
+                "LEXIS_ADMIN"))) {
+      assertThat(
+              authorities(
+                  Map.of("identity_provider", "bceidbusiness", "client_roles", roles)))
+          .as("client_roles %s", roles)
+          .isEmpty();
+    }
+  }
+
+  @Test
+  void ignoredRolesShouldNotCountAsASecondBceidRole() {
+    assertThat(
+            authorities(
+                Map.of(
+                    "identity_provider", "bceidbusiness",
+                    "client_roles",
+                        List.of(
+                            "LEXIS_FEDERAL_READ_ONLY",
+                            "LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-1018",
+                            "LEXIS_PROVINCIAL_SUBMITTER",
+                            "LEXIS_ADMIN"))))
+        .containsExactly("LEXIS_FEDERAL_READ_ONLY");
   }
 
   @ParameterizedTest

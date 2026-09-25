@@ -540,6 +540,67 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByLabelText('Document File')).toBeInTheDocument()
   })
 
+  it.each([
+    ['a NEW exemption', { exemptionStatusCode: 'NEW', exemptionStatusDescription: 'New' }],
+    [
+      'a Blanket OIC exemption',
+      { exemptionTypeCode: 'B', exemptionTypeDescription: 'BOIC', blanketOic: true },
+    ],
+  ])(
+    'does not offer exemption uploads to a Provincial Submitter on %s',
+    async (_label, overrides) => {
+      mockedFetchProvincialExemptionDetail.mockResolvedValue({ ...exemptionDetail, ...overrides })
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          capabilities: createTestCapabilities({
+            principal: 'bceid\\scoped-submitter',
+            roles: ['LEXIS_PROVINCIAL_SUBMITTER_00055566'],
+          }),
+          canPerform: (action: string) => action === '/fileExemptionUpload',
+        }),
+      )
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+          <Routes>
+            <Route
+              path="/provincial/exemption/:exemptionNumber"
+              element={<ProvincialExemptionDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectDetailTab('Documents')
+      expect(await screen.findByText('No documents found')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    },
+  )
+
+  it('keeps exemption uploads available to staff on NEW exemptions', async () => {
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+    await openDocumentUploadModal()
+    expect(screen.getByLabelText('Document File')).toBeInTheDocument()
+  })
+
   it('renders semantic empty states for empty exemption detail collections', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue({
       ...exemptionDetail,

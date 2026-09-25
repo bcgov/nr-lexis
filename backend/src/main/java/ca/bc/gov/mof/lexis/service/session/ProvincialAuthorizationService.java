@@ -732,6 +732,8 @@ public class ProvincialAuthorizationService {
                 () -> exemptionRegions(exemption.exemptionNumber()),
                 OrgUnitSurface.EXEMPTION_WRITE);
     if (!allowed) {
+      // INTENTIONAL_LEGACY_DIVERGENCE(SUBMITTER_EXEMPTION_ATTACHMENTS): legacy let industry users
+      // attach documents to any exemption they could open, including NEW and Blanket OIC ones.
       String scopedClientNumber = scopedClientNumber(authentication);
       allowed =
           scopedClientNumber != null
