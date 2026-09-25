@@ -1,4 +1,4 @@
-import { UserManager, WebStorageStateStore, type User } from 'oidc-client-ts'
+import { ErrorResponse, UserManager, WebStorageStateStore, type User } from 'oidc-client-ts'
 import { env } from '@/env'
 import type { LoginProvider } from '@/context/auth/types'
 
@@ -32,6 +32,24 @@ export const getUserManager = (): UserManager => {
   return manager
 }
 
+class SessionNotRenewableError extends Error {
+  constructor() {
+    super('The session cannot be renewed.')
+    this.name = 'SessionNotRenewableError'
+  }
+}
+
+// SSO answers invalid_grant when the refresh token is expired or revoked, or its
+// session has ended.
+const isRefreshTokenRejected = (error: unknown): boolean =>
+  error instanceof ErrorResponse && error.error === 'invalid_grant'
+
+// Whether a renewal failure means the session is over. Anything else, such as a
+// network failure or an OAuth error like temporarily_unavailable or server_error,
+// may succeed on a later attempt and must not sign the user out.
+export const isSessionEnded = (error: unknown): boolean =>
+  error instanceof SessionNotRenewableError || isRefreshTokenRejected(error)
+
 // Provider bootstrap, API requests, activity and "Stay logged in" all use this
 // renewal. A rotating refresh token must never be spent by competing callers.
 export const getOidcUser = async ({
@@ -46,7 +64,7 @@ export const getOidcUser = async ({
   if (renewal) return renewal
 
   const attempt = (async () => {
-    if (!user.refresh_token) throw new Error('The session cannot be renewed.')
+    if (!user.refresh_token) throw new SessionNotRenewableError()
     const refreshed = await getUserManager().signinSilent()
     if (started !== generation || signedOut) {
       // oidc-client-ts stores the result before resolving. Remove a late result
@@ -62,6 +80,24 @@ export const getOidcUser = async ({
     return await attempt
   } finally {
     if (renewal === attempt) renewal = undefined
+  }
+}
+
+// Startup and login treat a session that cannot be renewed as signed out. When
+// SSO rejected its refresh token as invalid_grant (expired, revoked or its
+// session ended), also remove it so each load does not spend a request on it.
+// Other failures, including OAuth errors such as temporarily_unavailable or
+// server_error, keep it so a reload can still recover the session.
+export const restoreOidcUser = async (): Promise<User | null> => {
+  try {
+    return await getOidcUser()
+  } catch (error) {
+    if (isRefreshTokenRejected(error)) {
+      await getUserManager()
+        .removeUser()
+        .catch(() => undefined)
+    }
+    return null
   }
 }
 

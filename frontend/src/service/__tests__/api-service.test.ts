@@ -1,4 +1,5 @@
 import type { AxiosRequestConfig, AxiosResponse } from 'axios'
+import { ErrorResponse } from 'oidc-client-ts'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { SESSION_EXPIRED_EVENT } from '@/context/auth/session-expiry'
 import {
@@ -19,6 +20,7 @@ import {
   RECORD_VERSION_HEADER,
   type OptimisticConflictEvent,
 } from '@/service/optimistic-conflict'
+import type * as OidcService from '@/service/oidc-service'
 
 type RequestInterceptor = (
   config: AxiosRequestConfig,
@@ -84,8 +86,9 @@ vi.mock('axios', () => ({
   },
 }))
 
-vi.mock('@/service/oidc-service', () => ({
+vi.mock('@/service/oidc-service', async (importOriginal) => ({
   getOidcUser: getOidcUserMock,
+  isSessionEnded: (await importOriginal<typeof OidcService>()).isSessionEnded,
 }))
 
 vi.mock('@/utils/page-unload', () => ({
@@ -869,10 +872,10 @@ describe('api-service cached GET support', () => {
     expect(getMock).toHaveBeenCalledTimes(2)
   })
 
-  it('emits a session-expired event when an auth token cannot be resolved', async () => {
+  it('emits a session-expired event when SSO has ended the session', async () => {
     const listener = vi.fn()
     window.addEventListener(SESSION_EXPIRED_EVENT, listener)
-    getOidcUserMock.mockRejectedValueOnce(new Error('session unavailable'))
+    getOidcUserMock.mockRejectedValueOnce(new ErrorResponse({ error: 'invalid_grant' }))
 
     const result = await registeredRequestInterceptor()({
       method: 'get',
@@ -888,6 +891,28 @@ describe('api-service cached GET support', () => {
     )
 
     window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+  })
+
+  it.each([
+    new TypeError('Failed to fetch'),
+    new Error('Bad Gateway (502)'),
+    new ErrorResponse({ error: 'server_error' }),
+  ])('fails only the request when session renewal fails temporarily: %s', async (failure) => {
+    const listener = vi.fn()
+    window.addEventListener(SESSION_EXPIRED_EVENT, listener)
+    getOidcUserMock.mockRejectedValueOnce(failure)
+
+    try {
+      await expect(
+        registeredRequestInterceptor()({
+          method: 'get',
+          headers: {},
+        }),
+      ).rejects.toBe(failure)
+      expect(listener).not.toHaveBeenCalled()
+    } finally {
+      window.removeEventListener(SESSION_EXPIRED_EVENT, listener)
+    }
   })
 
   it('emits a session-expired event and clears cached GETs on API 401 responses', async () => {

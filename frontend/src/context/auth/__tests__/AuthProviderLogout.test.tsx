@@ -1,6 +1,7 @@
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { ErrorResponse } from 'oidc-client-ts'
 import { AuthProvider } from '../AuthProvider'
 import {
   clearSessionExpiredLoginNotice,
@@ -17,14 +18,17 @@ import {
   setActiveForestClientNumber,
 } from '@/service/forest-client-selection'
 import { fetchSessionCapabilities } from '@/service/session-service'
+import type * as OidcService from '@/service/oidc-service'
 
 const authMocks = vi.hoisted(() => ({
   getOidcUser: vi.fn(),
+  restoreOidcUser: vi.fn(),
   startOidcLogin: vi.fn(),
   endOidcSession: vi.fn(),
 }))
-vi.mock('@/service/oidc-service', () => ({
+vi.mock('@/service/oidc-service', async (importOriginal) => ({
   ...authMocks,
+  isSessionEnded: (await importOriginal<typeof OidcService>()).isSessionEnded,
   isOidcConfigured: true,
   AUTH_CALLBACK_PATH: '/authCallback',
 }))
@@ -68,6 +72,7 @@ describe('AuthProvider logout', () => {
     clearActiveForestClientNumber()
     consoleWarnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {})
     authMocks.getOidcUser.mockResolvedValue({ access_token: 'access-token', profile: {} })
+    authMocks.restoreOidcUser.mockResolvedValue({ access_token: 'access-token', profile: {} })
     authMocks.endOidcSession.mockResolvedValue(undefined)
     mockedFetchSessionCapabilities.mockResolvedValue({
       authenticated: true,
@@ -133,7 +138,7 @@ describe('AuthProvider logout', () => {
       'lexis.search-state.v1.provincial-review',
       'applicationNumber=43278',
     )
-    authMocks.getOidcUser.mockResolvedValue(null)
+    authMocks.restoreOidcUser.mockResolvedValue(null)
 
     renderProbe()
 
@@ -148,7 +153,7 @@ describe('AuthProvider logout', () => {
   })
 
   it('restores an existing OIDC session instead of starting another login flow', async () => {
-    authMocks.getOidcUser
+    authMocks.restoreOidcUser
       .mockResolvedValueOnce(null)
       .mockResolvedValue({ access_token: 'access-token', profile: {} })
 
@@ -169,7 +174,7 @@ describe('AuthProvider logout', () => {
   })
 
   it('starts the configured login flow when no OIDC session exists', async () => {
-    authMocks.getOidcUser.mockResolvedValue(null)
+    authMocks.restoreOidcUser.mockResolvedValue(null)
     window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
 
     renderProbe()
@@ -185,7 +190,7 @@ describe('AuthProvider logout', () => {
   })
 
   it('keeps the saved destination when a stored session can no longer be renewed', async () => {
-    authMocks.getOidcUser.mockRejectedValue(new Error('refresh token expired'))
+    authMocks.restoreOidcUser.mockResolvedValue(null)
 
     renderProbe()
 
@@ -206,6 +211,7 @@ describe('AuthProvider logout', () => {
     window.sessionStorage.setItem('lexis.login-destination', '/provincial/offers/123')
     renderProbe()
     await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    expect(authMocks.restoreOidcUser).not.toHaveBeenCalled()
     expect(authMocks.getOidcUser).not.toHaveBeenCalled()
     expect(mockedFetchSessionCapabilities).not.toHaveBeenCalled()
     expect(window.sessionStorage.getItem('lexis.login-destination')).toBe('/provincial/offers/123')
@@ -406,6 +412,35 @@ describe('AuthProvider logout', () => {
     expect(authMocks.getOidcUser).toHaveBeenCalledWith({ forceRefresh: true })
     expect(authMocks.endOidcSession).toHaveBeenCalledOnce()
     expect(hasSessionExpiredLoginNotice()).toBe(false)
+  })
+
+  it('keeps the session after a temporary activity renewal failure', async () => {
+    renderProbe()
+    await waitFor(() => expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true'))
+    authMocks.getOidcUser.mockClear()
+    authMocks.getOidcUser.mockRejectedValueOnce(new TypeError('Failed to fetch'))
+
+    await act(async () => {
+      window.dispatchEvent(new Event('keydown'))
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+
+    expect(authMocks.getOidcUser).toHaveBeenCalledOnce()
+    expect(authMocks.endOidcSession).not.toHaveBeenCalled()
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true')
+  })
+
+  it('ends the session when activity renewal finds it rejected by SSO', async () => {
+    renderProbe()
+    await waitFor(() => expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true'))
+    authMocks.getOidcUser.mockRejectedValueOnce(new ErrorResponse({ error: 'invalid_grant' }))
+
+    await act(async () => {
+      window.dispatchEvent(new Event('keydown'))
+    })
+
+    await waitFor(() => expect(authMocks.endOidcSession).toHaveBeenCalledOnce())
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('false')
   })
 
   it.each([

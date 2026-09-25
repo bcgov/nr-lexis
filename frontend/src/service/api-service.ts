@@ -1,6 +1,6 @@
 import type { AxiosInstance, AxiosRequestConfig, AxiosResponse } from 'axios'
 import axios from 'axios'
-import { getOidcUser } from '@/service/oidc-service'
+import { getOidcUser, isSessionEnded } from '@/service/oidc-service'
 import { notifySessionExpired } from '@/context/auth/session-expiry'
 import { clearAllPageDataCache } from '@/pages/shared/page-data-cache'
 import {
@@ -145,7 +145,11 @@ class APIService {
           if (accessToken) {
             this.setHeader(requestConfig.headers, 'Authorization', `Bearer ${accessToken}`)
           }
-        } catch {
+        } catch (error) {
+          // A temporary renewal failure, such as a dropped connection after sleep, fails
+          // only this request. Sending it without a token would return 401 and end the
+          // session.
+          if (!isSessionEnded(error)) throw error
           notifySessionExpired('token-unavailable')
         }
       }

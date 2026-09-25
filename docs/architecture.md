@@ -143,9 +143,11 @@ sequenceDiagram
 
 The browser uses the public LEXIS client with no secret and keeps tokens in sessionStorage, so
 each tab signs in separately. It renews from the refresh token on activity and before API calls,
-sharing one renewal between concurrent callers, and signs out after 25 idle minutes. Logout
-chains SiteMinder `logoff.cgi` before Keycloak end-session so a Business BCeID SiteMinder session
-does not survive LEXIS logout.
+sharing one renewal between concurrent callers, and signs out after 25 idle minutes. A failed
+renewal ends the session only when SSO rejects the refresh token as `invalid_grant` or none is
+stored. A network failure or temporary SSO error fails only the affected request, and later activity
+tries again. Logout chains SiteMinder `logoff.cgi` before Keycloak end-session so a Business BCeID
+SiteMinder session does not survive LEXIS logout.
 
 FAM delegated administration controls who may assign the LEXIS application roles. It is a FAM
 permission type, not a LEXIS runtime role, and does not grant or appear as application access. FAM
@@ -332,7 +334,10 @@ GitHub Actions builds and scans the frontend and backend images, then deploys th
 OpenShift cluster. The reusable deployment workflow derives the shared scanner endpoint from the
 environment-specific `CLAMAV_NAMESPACE` secret. Environment-specific credentials are supplied
 through GitHub environment secrets and OpenShift Secrets; non-sensitive behavior is supplied through
-environment variables and template parameters.
+environment variables and template parameters. Keep deployment secrets and variables out of the
+repository level: an environment value replaces a same-named repository value only when it exists,
+so a missing TEST or PROD value would otherwise inherit the repository one. Each deployment job
+also fails before deploying unless `OC_NAMESPACE` ends in `-<environment>`.
 
 Pull requests deploy an isolated DEV preview after their required builds and tests pass. A merge to
 `main` deploys the accepted images to the persistent TEST environment, runs the smoke suite, and then
