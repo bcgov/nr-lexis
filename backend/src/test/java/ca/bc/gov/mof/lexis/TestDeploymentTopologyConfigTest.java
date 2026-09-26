@@ -343,13 +343,23 @@ class TestDeploymentTopologyConfigTest {
         between(
             backendJob,
             "      - name: Ensure Keycloak scopes and NEXCOL client",
+            "      - name: Mask template secrets");
+    String backendMaskStep =
+        between(
+            backendJob,
+            "      - name: Mask template secrets",
+            "      - uses: bcgov/action-deployer-openshift@");
+    String frontendMaskStep =
+        between(
+            frontendJob,
+            "      - name: Mask template secrets",
             "      - uses: bcgov/action-deployer-openshift@");
     String backendDeployStep =
         backendJob.substring(backendJob.indexOf("      - uses: bcgov/action-deployer-openshift@"));
-    String backendBeforeDeploy =
-        backendJob.substring(0, backendJob.indexOf("      - uses: bcgov/action-deployer-openshift@"));
-    String frontendBeforeDeploy =
-        frontendJob.substring(0, frontendJob.indexOf("      - uses: bcgov/action-deployer-openshift@"));
+    String backendBeforeMask =
+        backendJob.substring(0, backendJob.indexOf("      - name: Mask template secrets"));
+    String frontendBeforeMask =
+        frontendJob.substring(0, frontendJob.indexOf("      - name: Mask template secrets"));
     String frontendDeployStep =
         frontendJob.substring(frontendJob.indexOf("      - uses: bcgov/action-deployer-openshift@"));
 
@@ -391,7 +401,17 @@ class TestDeploymentTopologyConfigTest {
             "LEXIS_MAIL_REGION_RCO_ADDRESS",
             "LEXIS_MAIL_REGION_RNI_ADDRESS",
             "LEXIS_MAIL_REGION_RSI_ADDRESS");
-    assertThat(backendBeforeDeploy)
+    // Only the mask step sees template secrets before the deployer, and it only runs the mask script.
+    assertThat(backendMaskStep)
+        .contains("run: bash ./.github/scripts/mask-template-secrets.sh")
+        .contains("MASK_DATABASE_PASSWORD: ${{ secrets.database_password }}")
+        .contains("MASK_KEYSTORE_SECRET: ${{ secrets.keystore_secret }}")
+        .doesNotContain("uses:", "\n          echo", "if:");
+    assertThat(frontendMaskStep)
+        .contains("run: bash ./.github/scripts/mask-template-secrets.sh")
+        .contains("MASK_VANITY_TLS_KEY: ${{ secrets.vanity_tls_key }}")
+        .doesNotContain("uses:", "\n          echo", "if:");
+    assertThat(backendBeforeMask)
         .doesNotContain(
             "DATABASE_HOST",
             "DATABASE_SERVICE_NAME",
@@ -440,7 +460,7 @@ class TestDeploymentTopologyConfigTest {
         .contains(
             "LEXIS_MAIL_REGION_RSI_ADDRESS:"
                 + " ${{ secrets.lexis_mail_region_rsi_address }}");
-    assertThat(frontendBeforeDeploy).doesNotContain("LEXIS_PROD_RTM_ONLY");
+    assertThat(frontendBeforeMask).doesNotContain("LEXIS_PROD_RTM_ONLY");
     assertThat(frontendJob)
         .doesNotContain(
             "LEXIS_MAIL_FROM",

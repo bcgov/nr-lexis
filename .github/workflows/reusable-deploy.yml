@@ -179,6 +179,24 @@ jobs:
           NEXCOL_KEYCLOAK_CLIENT_ID: ${{ vars.NEXCOL_KEYCLOAK_CLIENT_ID }}
         run: bash ./.github/scripts/ensure-keycloak-scopes.sh
 
+      # The deployer publishes the processed template, including Secret values, to later steps.
+      # Mask the JSON-escaped form of every secret it receives before it runs.
+      - name: Mask template secrets
+        env:
+          MASK_DATABASE_HOST: ${{ secrets.database_host }}
+          MASK_DATABASE_SERVICE_NAME: ${{ secrets.database_service_name }}
+          MASK_DATABASE_USER: ${{ secrets.database_user }}
+          MASK_DATABASE_PASSWORD: ${{ secrets.database_password }}
+          MASK_KEYSTORE_SECRET: ${{ secrets.keystore_secret }}
+          MASK_CLAMAV_NAMESPACE: ${{ secrets.clamav_namespace }}
+          MASK_LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only }}
+          MASK_LEXIS_MAIL_FROM: ${{ secrets.lexis_mail_from }}
+          MASK_LEXIS_MAIL_OVERRIDE_RECIPIENTS: ${{ secrets.lexis_mail_override_recipients }}
+          MASK_LEXIS_MAIL_REGION_RCO_ADDRESS: ${{ secrets.lexis_mail_region_rco_address }}
+          MASK_LEXIS_MAIL_REGION_RNI_ADDRESS: ${{ secrets.lexis_mail_region_rni_address }}
+          MASK_LEXIS_MAIL_REGION_RSI_ADDRESS: ${{ secrets.lexis_mail_region_rsi_address }}
+        run: bash ./.github/scripts/mask-template-secrets.sh
+
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
         env:
@@ -301,6 +319,19 @@ jobs:
               exit 1
             fi
           done
+
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      # See the backend job: mask every secret the deployer steps below receive.
+      - name: Mask template secrets
+        env:
+          MASK_LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only }}
+          MASK_VANITY_TLS_CERTIFICATE: ${{ secrets.vanity_tls_certificate }}
+          MASK_VANITY_TLS_KEY: ${{ secrets.vanity_tls_key }}
+          MASK_VANITY_TLS_CA_CERTIFICATE: ${{ secrets.vanity_tls_ca_certificate }}
+        run: bash ./.github/scripts/mask-template-secrets.sh
 
       - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
         id: deploy
