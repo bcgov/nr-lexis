@@ -40,6 +40,11 @@ server:
   port: 8080
   forward-headers-strategy: framework
   shutdown: graceful
+  undertow:
+    threads:
+      # Undertow defaults to 8 workers per I/O thread, only 16 on a 2-CPU pod. Reports render and
+      # uploads persist on request threads, so keep headroom for health probes and short requests.
+      worker: ${LEXIS_HTTP_WORKER_THREADS:64}
   servlet:
     session:
       cookie:

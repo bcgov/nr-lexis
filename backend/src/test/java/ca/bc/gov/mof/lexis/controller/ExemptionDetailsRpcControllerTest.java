@@ -6,9 +6,11 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.RETURNS_DEFAULTS;
 import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -102,6 +104,29 @@ class ExemptionDetailsRpcControllerTest {
             principalService,
             new ApplicationPermitOperationCoordinator(operationMutex));
     controller.setExemptionService(exemptionService);
+    controller.setProvincialAuthorizationService(permissiveAuthorization());
+  }
+
+  /** Allows every object check, for tests that exercise behaviour other than authorization. */
+  private static ProvincialAuthorizationService permissiveAuthorization() {
+    return mock(
+        ProvincialAuthorizationService.class,
+        invocation ->
+            invocation.getMethod().getReturnType() == boolean.class
+                ? true
+                : RETURNS_DEFAULTS.answer(invocation));
+  }
+
+  @Test
+  void objectChecksShouldFailClosedWithoutAnAuthorizationService() {
+    controller.setProvincialAuthorizationService(null);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\admin", "n/a");
+
+    assertThatThrownBy(() -> controller.getRegionContext("EX-700", authentication))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessage("Provincial authorization is not configured.");
+    verifyNoInteractions(serviceProvider, service);
   }
 
   @Test

@@ -40,6 +40,7 @@ import {
   fetchNotifications,
   updateNotification,
 } from '@/service/notification-service'
+import { formatBusinessIsoDate, formatLocalIsoDate } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
 import './Notifications.scss'
 
@@ -75,19 +76,14 @@ type NotificationMessage = {
   subtitle: string
 }
 
-const toDateValue = (date: Date): string => {
-  const month = String(date.getMonth() + 1).padStart(2, '0')
-  const day = String(date.getDate()).padStart(2, '0')
-  return `${date.getFullYear()}-${month}-${day}`
-}
-
-const today = (): string => toDateValue(new Date())
+// Notification windows are business dates, so "today" follows LEXIS business time, not the browser.
+const today = (): string => formatBusinessIsoDate()
 
 const addDays = (value: string, days: number): string => {
   const [year, month, day] = value.split('-').map(Number)
   const date = new Date(year, month - 1, day)
   date.setDate(date.getDate() + days)
-  return toDateValue(date)
+  return formatLocalIsoDate(date)
 }
 
 const emptyForm = (): NotificationForm => {

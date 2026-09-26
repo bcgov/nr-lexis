@@ -134,6 +134,14 @@ public class PermitDetailsRpcController {
     this.provincialAuthorizationService = provincialAuthorizationService;
   }
 
+  /** Object-level checks fail closed: without the authorization service the controller refuses. */
+  private ProvincialAuthorizationService authorization() {
+    if (provincialAuthorizationService == null) {
+      throw new IllegalStateException("Provincial authorization is not configured.");
+    }
+    return provincialAuthorizationService;
+  }
+
   @Autowired
   void setLexisPrincipalService(LexisPrincipalService principalService) {
     this.principalService = principalService;
@@ -581,11 +589,10 @@ public class PermitDetailsRpcController {
     if (requestedOicApplicationNumber != null) {
       requireApplicationAccess(requestedOicApplicationNumber, authentication);
     }
-    if (provincialAuthorizationService != null
-        && !provincialAuthorizationService.canCreateForClient(
-            authentication,
-            mutationRequest.ownerClientNumber(),
-            mutationRequest.agentClientNumber())) {
+    if (!authorization().canCreateForClient(
+        authentication,
+        mutationRequest.ownerClientNumber(),
+        mutationRequest.agentClientNumber())) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -649,11 +656,10 @@ public class PermitDetailsRpcController {
       Authentication authentication) {
     String exemptionNumber = requiredExemptionNumber(mutationRequest.exemptionNumber());
     requireExemptionAccess(exemptionNumber, authentication);
-    if (provincialAuthorizationService != null
-        && !provincialAuthorizationService.canCreateForClient(
-            authentication,
-            mutationRequest.ownerClientNumber(),
-            mutationRequest.agentClientNumber())) {
+    if (!authorization().canCreateForClient(
+        authentication,
+        mutationRequest.ownerClientNumber(),
+        mutationRequest.agentClientNumber())) {
       throw new AccessDeniedException(
           "Permit client scope changed while the mutation was waiting.");
     }
@@ -788,14 +794,13 @@ public class PermitDetailsRpcController {
       PermitDetailsRpcService service,
       Long permitNumber,
       Authentication authentication) {
-    if (provincialAuthorizationService == null
-        || !provincialAuthorizationService.hasClientScope(authentication)
+    if (!authorization().hasClientScope(authentication)
         || !isCanonicalBlanketOicPermit(service, permitNumber)) {
       return true;
     }
     PermitDetailsRpcService.PermitMutationClientScope clientScope =
         service.getClientScopeForPermitMutation(permitNumber);
-    return provincialAuthorizationService.canCreateForClient(
+    return authorization().canCreateForClient(
         authentication, clientScope.ownerClientNumber(), clientScope.agentClientNumber());
   }
 
@@ -842,9 +847,6 @@ public class PermitDetailsRpcController {
   /** A regional user's new or re-regioned permit must land in one of their granted regions. */
   private void requirePermitRegions(
       PermitMutationRequestDto mutationRequest, Authentication authentication) {
-    if (provincialAuthorizationService == null) {
-      return;
-    }
     List<Long> requestedRegions = new ArrayList<>();
     for (String region : new String[] {mutationRequest.orgUnitNumber(), mutationRequest.oicRegion()}) {
       Long orgUnitNumber = region == null ? null : parsePositiveLong(region);
@@ -852,7 +854,7 @@ public class PermitDetailsRpcController {
         requestedRegions.add(orgUnitNumber);
       }
     }
-    provincialAuthorizationService.requireOrgUnits(
+    authorization().requireOrgUnits(
         authentication,
         requestedRegions,
         ProvincialAuthorizationService.OrgUnitSurface.PERMIT_WRITE);
@@ -1245,11 +1247,10 @@ public class PermitDetailsRpcController {
     Long permitNumber = parsePositiveLong(mutationRequest.permitNumber());
     if (permitNumber != null) {
       requirePermitAccess(permitNumber, authentication);
-    } else if (provincialAuthorizationService != null
-        && !provincialAuthorizationService.canCreateForClient(
-            authentication,
-            mutationRequest.ownerClientNumber(),
-            mutationRequest.agentClientNumber())) {
+    } else if (!authorization().canCreateForClient(
+        authentication,
+        mutationRequest.ownerClientNumber(),
+        mutationRequest.agentClientNumber())) {
       throw new AccessDeniedException("The permit is outside the authenticated client scope.");
     }
     boolean permitChanged = service.hasFormChanges(mutationRequest);
@@ -1678,9 +1679,7 @@ public class PermitDetailsRpcController {
   }
 
   private void requirePermitAccess(Long permitNumber, Authentication authentication) {
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requirePermit(authentication, permitNumber);
-    }
+    authorization().requirePermit(authentication, permitNumber);
   }
 
   private void requirePermitAccess(Long permitNumber) {
@@ -1689,10 +1688,7 @@ public class PermitDetailsRpcController {
 
   private void requireExemptionAccess(
       String exemptionNumber, Authentication authentication) {
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireExemption(
-          authentication, exemptionNumber);
-    }
+    authorization().requireExemption(authentication, exemptionNumber);
   }
 
   private void requireExemptionAccess(String exemptionNumber) {
@@ -1702,9 +1698,7 @@ public class PermitDetailsRpcController {
 
   private void requireApplicationAccess(
       Long applicationNumber, Authentication authentication) {
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireApplication(authentication, applicationNumber);
-    }
+    authorization().requireApplication(authentication, applicationNumber);
   }
 
   private Predicate<Long> applicationAccessPredicate(Authentication authentication) {
@@ -1714,8 +1708,7 @@ public class PermitDetailsRpcController {
             LEGACY_ACTION_APPLICATION_DETAILS);
     return applicationNumber ->
         canViewApplicationDetails
-            && provincialAuthorizationService != null
-            && provincialAuthorizationService.canAccessApplication(
+            && authorization().canAccessApplication(
                 authentication, applicationNumber);
   }
 
@@ -1727,8 +1720,7 @@ public class PermitDetailsRpcController {
             LEGACY_ACTION_APPLICATION_DETAILS);
     return application ->
         canViewApplicationDetails
-            && provincialAuthorizationService != null
-            && provincialAuthorizationService.canAccessApplication(authentication, application);
+            && authorization().canAccessApplication(authentication, application);
   }
 
   private void requirePackageAccess(

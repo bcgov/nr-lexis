@@ -18,6 +18,7 @@ import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.upload.ApplicationSubmissionImportService;
 import ca.bc.gov.mof.lexis.service.upload.DocumentUploadMutationPolicy;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
+import ca.bc.gov.mof.lexis.service.upload.UploadInspection;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
@@ -146,6 +147,14 @@ public class LexisUploadController {
     this.provincialAuthorizationService = provincialAuthorizationService;
   }
 
+  /** Object-level checks fail closed: without the authorization service the controller refuses. */
+  private ProvincialAuthorizationService authorization() {
+    if (provincialAuthorizationService == null) {
+      throw new IllegalStateException("Provincial authorization is not configured.");
+    }
+    return provincialAuthorizationService;
+  }
+
   @Autowired
   void setDocumentUploadMutationPolicy(
       DocumentUploadMutationPolicy documentUploadMutationPolicy) {
@@ -178,17 +187,26 @@ public class LexisUploadController {
       return uploadBadRequest(
           "application", "Choose a file and enter a valid application number before uploading documents.");
     }
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireApplicationAttachmentPersistence(
-          authentication, applicationNumber);
+    authorization().requireApplicationAttachmentPersistence(authentication, applicationNumber);
+    // Reject unavailable targets before scanning; the lock below repeats the check.
+    requireApplicationAttachmentTarget(applicationNumber);
+    LexisUploadService service = uploadServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Upload service unavailable - returning no content for fileApplicationUpload");
+      return ResponseEntity.noContent().build();
+    }
+    // Validate and virus-scan before taking row locks so scanner latency never holds them.
+    UploadInspection inspection =
+        service.inspectUpload(
+            "application", uploadFile, firstNonBlank(fileDescription, descriptionAlias));
+    if (!inspection.isAccepted()) {
+      return uploadResponse(inspection.rejection());
     }
     return permitOperationMutex.executeRootCreateAggregate(
         List.of(), List.of(applicationNumber), List.of(),
         () -> {
-          if (provincialAuthorizationService != null) {
-            provincialAuthorizationService.requireApplicationAttachmentPersistence(
-                authentication, applicationNumber);
-          }
+          authorization().requireApplicationAttachmentPersistence(
+              authentication, applicationNumber);
           requireApplicationAttachmentTarget(applicationNumber);
           ApplicationEditLockDto lock =
               applicationEditLockService.acquire(
@@ -205,18 +223,10 @@ public class LexisUploadController {
                             ? "The application edit lock could not be acquired."
                             : lock.message()));
           }
-
-          LexisUploadService service = uploadServiceProvider.getIfAvailable();
-          if (service == null) {
-            LOGGER.warn(
-                "Upload service unavailable - returning no content for fileApplicationUpload");
-            return ResponseEntity.noContent().build();
-          }
           return service
               .uploadApplication(
-                  uploadFile,
+                  inspection,
                   applicationNumber,
-                  firstNonBlank(fileDescription, descriptionAlias),
                   resolveEntryUserId(authentication))
               .map(this::uploadResponse)
               .orElseGet(
@@ -240,10 +250,7 @@ public class LexisUploadController {
       return uploadBadRequest(
           "application", "Choose a file and enter a valid application number before validating documents.");
     }
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireApplicationAttachmentMutation(
-          authentication, applicationNumber);
-    }
+    authorization().requireApplicationAttachmentMutation(authentication, applicationNumber);
     return validateDocumentUpload("application", uploadFile);
   }
 
@@ -262,16 +269,25 @@ public class LexisUploadController {
       return uploadBadRequest(
           "permit", "Choose a file and enter a valid permit number before uploading documents.");
     }
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
+    authorization().requirePermitAttachmentMutation(authentication, permitNumber);
+    // Reject unavailable targets before scanning; the lock below repeats the check.
+    requirePermitAttachmentTarget(permitNumber);
+    LexisUploadService service = uploadServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Upload service unavailable - returning no content for filePermitUpload");
+      return ResponseEntity.noContent().build();
+    }
+    // Validate and virus-scan before taking row locks so scanner latency never holds them.
+    UploadInspection inspection =
+        service.inspectUpload(
+            "permit", uploadFile, firstNonBlank(fileDescription, descriptionAlias));
+    if (!inspection.isAccepted()) {
+      return uploadResponse(inspection.rejection());
     }
     return permitOperationMutex.executeRootCreateAggregate(
         List.of(), List.of(), List.of(permitNumber),
         () -> {
-          if (provincialAuthorizationService != null) {
-            provincialAuthorizationService.requirePermitAttachmentMutation(
-                authentication, permitNumber);
-          }
+          authorization().requirePermitAttachmentMutation(authentication, permitNumber);
           requirePermitAttachmentTarget(permitNumber);
           ApplicationEditLockDto lock =
               applicationEditLockService.acquirePermit(
@@ -285,16 +301,10 @@ public class LexisUploadController {
                             ? "The permit edit lock could not be acquired."
                             : lock.message()));
           }
-          LexisUploadService service = uploadServiceProvider.getIfAvailable();
-          if (service == null) {
-            LOGGER.warn("Upload service unavailable - returning no content for filePermitUpload");
-            return ResponseEntity.noContent().build();
-          }
           return service
               .uploadPermit(
-                  uploadFile,
+                  inspection,
                   permitNumber,
-                  firstNonBlank(fileDescription, descriptionAlias),
                   resolveEntryUserId(authentication))
               .map(this::uploadResponse)
               .orElseGet(
@@ -318,9 +328,7 @@ public class LexisUploadController {
       return uploadBadRequest(
           "permit", "Choose a file and enter a valid permit number before validating documents.");
     }
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
-    }
+    authorization().requirePermitAttachmentMutation(authentication, permitNumber);
     return validateDocumentUpload("permit", uploadFile);
   }
 
@@ -342,17 +350,25 @@ public class LexisUploadController {
       return uploadBadRequest(
           "exemption", "Choose a file and enter a valid exemption number before uploading documents.");
     }
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireExemptionAttachmentMutation(
-          authentication, exemptionNumber);
+    authorization().requireExemptionAttachmentMutation(authentication, exemptionNumber);
+    // Reject unavailable targets before scanning; the lock below repeats the check.
+    requireExemptionAttachmentTarget(exemptionNumber);
+    LexisUploadService service = uploadServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Upload service unavailable - returning no content for fileExemptionUpload");
+      return ResponseEntity.noContent().build();
+    }
+    // Validate and virus-scan before taking row locks so scanner latency never holds them.
+    UploadInspection inspection =
+        service.inspectUpload(
+            "exemption", uploadFile, firstNonBlank(fileDescription, descriptionAlias));
+    if (!inspection.isAccepted()) {
+      return uploadResponse(inspection.rejection());
     }
     return permitOperationMutex.executeRootCreateAggregate(
         List.of(exemptionNumber), List.of(), List.of(),
         () -> {
-          if (provincialAuthorizationService != null) {
-            provincialAuthorizationService.requireExemptionAttachmentMutation(
-                authentication, exemptionNumber);
-          }
+          authorization().requireExemptionAttachmentMutation(authentication, exemptionNumber);
           requireExemptionAttachmentTarget(exemptionNumber);
           ApplicationEditLockDto lock =
               applicationEditLockService.acquireExemption(
@@ -366,18 +382,10 @@ public class LexisUploadController {
                             ? "The exemption edit lock could not be acquired."
                             : lock.message()));
           }
-
-          LexisUploadService service = uploadServiceProvider.getIfAvailable();
-          if (service == null) {
-            LOGGER.warn(
-                "Upload service unavailable - returning no content for fileExemptionUpload");
-            return ResponseEntity.noContent().build();
-          }
           return service
               .uploadExemption(
-                  uploadFile,
+                  inspection,
                   exemptionNumber,
-                  firstNonBlank(fileDescription, descriptionAlias),
                   resolveEntryUserId(authentication))
               .map(this::uploadResponse)
               .orElseGet(
@@ -404,10 +412,7 @@ public class LexisUploadController {
       return uploadBadRequest(
           "exemption", "Choose a file and enter a valid exemption number before validating documents.");
     }
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireExemptionAttachmentMutation(
-          authentication, exemptionNumber);
-    }
+    authorization().requireExemptionAttachmentMutation(authentication, exemptionNumber);
     return validateDocumentUpload("exemption", uploadFile);
   }
 
@@ -453,16 +458,25 @@ public class LexisUploadController {
     if (invoiceValidationMessage != null) {
       return uploadBadRequest("invoice", invoiceValidationMessage);
     }
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
+    authorization().requirePermitAttachmentMutation(authentication, permitNumber);
+    // Reject unavailable targets before scanning; the lock below repeats the check.
+    requireInvoicePermitActive(permitNumber);
+    LexisUploadService service = uploadServiceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Upload service unavailable - returning no content for fileInvoiceUpload");
+      return ResponseEntity.noContent().build();
+    }
+    // Validate and virus-scan before taking row locks so scanner latency never holds them.
+    UploadInspection inspection =
+        service.inspectUpload(
+            "invoice", uploadFile, firstNonBlank(fileDescription, descriptionAlias));
+    if (!inspection.isAccepted()) {
+      return uploadResponse(inspection.rejection());
     }
     return permitOperationMutex.executeRootCreateAggregate(
         List.of(), List.of(), List.of(permitNumber),
         () -> {
-          if (provincialAuthorizationService != null) {
-            provincialAuthorizationService.requirePermitAttachmentMutation(
-                authentication, permitNumber);
-          }
+          authorization().requirePermitAttachmentMutation(authentication, permitNumber);
           requireInvoicePermitActive(permitNumber);
           ApplicationEditLockDto lock =
               applicationEditLockService.acquirePermit(
@@ -476,17 +490,11 @@ public class LexisUploadController {
                             ? "The permit edit lock could not be acquired."
                             : lock.message()));
           }
-          LexisUploadService service = uploadServiceProvider.getIfAvailable();
-          if (service == null) {
-            LOGGER.warn("Upload service unavailable - returning no content for fileInvoiceUpload");
-            return ResponseEntity.noContent().build();
-          }
           return service
               .uploadInvoice(
-                  uploadFile,
+                  inspection,
                   permitNumber,
                   salesInvoiceNumber,
-                  firstNonBlank(fileDescription, descriptionAlias),
                   resolvedExportValue,
                   resolvedConversionRate,
                   resolvedFeeInLieu,
@@ -536,9 +544,7 @@ public class LexisUploadController {
     if (invoiceValidationMessage != null) {
       return uploadBadRequest("invoice", invoiceValidationMessage);
     }
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requirePermitAttachmentMutation(authentication, permitNumber);
-    }
+    authorization().requirePermitAttachmentMutation(authentication, permitNumber);
     return validateDocumentUpload("invoice", uploadFile);
   }
 
@@ -573,9 +579,7 @@ public class LexisUploadController {
             uploadFile,
             resolveEntryUserId(authentication),
             userReference,
-            provincialAuthorizationService == null
-                ? null
-                : provincialAuthorizationService.scopedForestClientNumber(authentication),
+            authorization().scopedForestClientNumber(authentication),
             resolveApplicationSubmissionOrgUnitConstraint(authentication));
     return ResponseEntity.status(applicationSubmissionResponseStatus(result)).body(result);
   }
@@ -610,22 +614,15 @@ public class LexisUploadController {
         service.validateApplicationSubmission(
             uploadFile,
             userReference,
-            provincialAuthorizationService == null
-                ? null
-                : provincialAuthorizationService.scopedForestClientNumber(authentication),
+            authorization().scopedForestClientNumber(authentication),
             resolveApplicationSubmissionOrgUnitConstraint(authentication));
     return ResponseEntity.status(applicationSubmissionResponseStatus(result)).body(result);
   }
 
   private OrgUnitConstraint resolveApplicationSubmissionOrgUnitConstraint(
       Authentication authentication) {
-    if (provincialAuthorizationService == null) {
-      throw new AccessDeniedException(
-          "Application submission organization-unit authorization is unavailable.");
-    }
     OrgUnitConstraint constraint =
-        provincialAuthorizationService.resolveOrgUnitConstraint(
-            authentication, OrgUnitSurface.APPLICATION_WRITE);
+        authorization().resolveOrgUnitConstraint(authentication, OrgUnitSurface.APPLICATION_WRITE);
     if (constraint == null) {
       throw new AccessDeniedException(
           "Application submission organization-unit authorization is unavailable.");

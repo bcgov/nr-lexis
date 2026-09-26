@@ -94,6 +94,14 @@ public class FederalApplicationController {
     this.provincialAuthorizationService = provincialAuthorizationService;
   }
 
+  /** Object-level checks fail closed: without the authorization service the controller refuses. */
+  private ProvincialAuthorizationService authorization() {
+    if (provincialAuthorizationService == null) {
+      throw new IllegalStateException("Provincial authorization is not configured.");
+    }
+    return provincialAuthorizationService;
+  }
+
   @GetMapping("/search/options")
   public ResponseEntity<FederalApplicationSearchOptionsDto> searchOptions() {
     FederalApplicationService service = serviceProvider.getIfAvailable();
@@ -207,7 +215,7 @@ public class FederalApplicationController {
     return service.findByApplicationNumber(applicationNumber)
         .filter(
             ignored ->
-                provincialAuthorizationService.canAccessFederalApplication(
+                authorization().canAccessFederalApplication(
                     authentication, applicationNumber))
         .map(
             detail ->
@@ -225,8 +233,7 @@ public class FederalApplicationController {
       LOGGER.warn("Federal application service unavailable - returning no content for permit lookup");
       return ResponseEntity.noContent().build();
     }
-    provincialAuthorizationService.requireFederalApplication(
-        authentication, applicationNumber);
+    authorization().requireFederalApplication(authentication, applicationNumber);
     return service.findPermitByApplicationNumber(applicationNumber)
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.notFound().build());
@@ -240,8 +247,7 @@ public class FederalApplicationController {
     if (service == null) {
       return ResponseEntity.noContent().build();
     }
-    provincialAuthorizationService.requireFederalApplication(
-        authentication, applicationNumber);
+    authorization().requireFederalApplication(authentication, applicationNumber);
     return service.findRemarksByApplicationNumber(applicationNumber)
         .map(ResponseEntity::ok)
         .orElseGet(() -> ResponseEntity.notFound().build());
@@ -259,15 +265,13 @@ public class FederalApplicationController {
     if (service == null) {
       return ResponseEntity.noContent().build();
     }
-    provincialAuthorizationService.requireFederalApplication(
-        authentication, applicationNumber);
+    authorization().requireFederalApplication(authentication, applicationNumber);
     String userId = principal(authentication);
     return ResponseEntity.ok(
         operationCoordinator.executeApplicationLocalMutation(
             applicationNumber,
             () -> {
-              provincialAuthorizationService.requireFederalApplication(
-                  authentication, applicationNumber);
+              authorization().requireFederalApplication(authentication, applicationNumber);
               requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
@@ -289,15 +293,13 @@ public class FederalApplicationController {
     if (service == null) {
       return ResponseEntity.noContent().build();
     }
-    provincialAuthorizationService.requireFederalApplication(
-        authentication, applicationNumber);
+    authorization().requireFederalApplication(authentication, applicationNumber);
     String userId = principal(authentication);
     return ResponseEntity.ok(
         operationCoordinator.executeApplicationLocalMutation(
             applicationNumber,
             () -> {
-              provincialAuthorizationService.requireFederalApplication(
-                  authentication, applicationNumber);
+              authorization().requireFederalApplication(authentication, applicationNumber);
               requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
@@ -318,15 +320,13 @@ public class FederalApplicationController {
     }
     FederalApplicationService service = serviceProvider.getIfAvailable();
     if (service == null) return ResponseEntity.noContent().build();
-    provincialAuthorizationService.requireFederalApplication(
-        authentication, applicationNumber);
+    authorization().requireFederalApplication(authentication, applicationNumber);
     String userId = principal(authentication);
     return ResponseEntity.ok(
         operationCoordinator.executeApplicationLocalMutation(
             applicationNumber,
             () -> {
-              provincialAuthorizationService.requireFederalApplication(
-                  authentication, applicationNumber);
+              authorization().requireFederalApplication(authentication, applicationNumber);
               requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
@@ -345,15 +345,13 @@ public class FederalApplicationController {
     }
     FederalApplicationService service = serviceProvider.getIfAvailable();
     if (service == null) return ResponseEntity.noContent().build();
-    provincialAuthorizationService.requireFederalApplication(
-        authentication, applicationNumber);
+    authorization().requireFederalApplication(authentication, applicationNumber);
     String userId = principal(authentication);
     return ResponseEntity.ok(
         operationCoordinator.executeApplicationLocalMutation(
             applicationNumber,
             () -> {
-              provincialAuthorizationService.requireFederalApplication(
-                  authentication, applicationNumber);
+              authorization().requireFederalApplication(authentication, applicationNumber);
               requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
@@ -372,15 +370,13 @@ public class FederalApplicationController {
     }
     FederalApplicationService service = serviceProvider.getIfAvailable();
     if (service == null) return ResponseEntity.noContent().build();
-    provincialAuthorizationService.requireFederalApplication(
-        authentication, applicationNumber);
+    authorization().requireFederalApplication(authentication, applicationNumber);
     String userId = principal(authentication);
     return ResponseEntity.ok(
         operationCoordinator.executeApplicationLocalMutation(
             applicationNumber,
             () -> {
-              provincialAuthorizationService.requireFederalApplication(
-                  authentication, applicationNumber);
+              authorization().requireFederalApplication(authentication, applicationNumber);
               requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
@@ -401,8 +397,7 @@ public class FederalApplicationController {
     List<Long> ids = parseApplicationNumbers(applications);
     ids.forEach(
         applicationNumber ->
-            provincialAuthorizationService.requireFederalApplication(
-                authentication, applicationNumber));
+            authorization().requireFederalApplication(authentication, applicationNumber));
     return ResponseEntity.ok(new FederalApplicationValidationDto(service.verifyApplicationClients(ids)));
   }
 
@@ -438,10 +433,7 @@ public class FederalApplicationController {
   }
 
   private OrgUnitConstraint federalSearchOrgUnits() {
-    if (provincialAuthorizationService == null) {
-      return new OrgUnitConstraint(false, List.of());
-    }
-    return provincialAuthorizationService.constrainOrgUnits(
+    return authorization().constrainOrgUnits(
         SecurityContextHolder.getContext().getAuthentication(),
         List.of(),
         OrgUnitSurface.FEDERAL_APPLICATION_SEARCH);
@@ -457,11 +449,8 @@ public class FederalApplicationController {
     // Out-of-region records are read-only for a regional user, so the page offers no edits.
     return detail.withReadOnly(
         !editPolicyService.canEdit(authentication, detail.statusCode(), detail.listingDate())
-            || (provincialAuthorizationService != null
-                && !provincialAuthorizationService.canWriteRecord(
-                    authentication,
-                    detail.orgUnitNumber(),
-                    OrgUnitSurface.FEDERAL_APPLICATION_WRITE)));
+            || !authorization().canWriteRecord(
+                authentication, detail.orgUnitNumber(), OrgUnitSurface.FEDERAL_APPLICATION_WRITE));
   }
 
   private void requireApplicationEdit(

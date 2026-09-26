@@ -54,6 +54,14 @@ public class BlanketOicPackageController {
     this.provincialAuthorizationService = provincialAuthorizationService;
   }
 
+  /** Object-level checks fail closed: without the authorization service the controller refuses. */
+  private ProvincialAuthorizationService authorization() {
+    if (provincialAuthorizationService == null) {
+      throw new IllegalStateException("Provincial authorization is not configured.");
+    }
+    return provincialAuthorizationService;
+  }
+
   @Autowired
   void setApplicationEditLockService(ApplicationEditLockService editLockService) {
     this.editLockService = editLockService;
@@ -149,9 +157,7 @@ public class BlanketOicPackageController {
   }
 
   private void requirePermitAccess(Long permitNumber, Authentication authentication) {
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requirePermit(authentication, permitNumber);
-    }
+    authorization().requirePermit(authentication, permitNumber);
   }
 
   private void requirePermitEditable(Long permitNumber, Authentication authentication) {

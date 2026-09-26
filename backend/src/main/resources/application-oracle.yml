@@ -29,4 +29,8 @@ management:
     health:
       group:
         readiness:
-          include: readinessState,db
+          # Every replica shares one Oracle pool per pod and one database. Gating readiness on a
+          # pool that long reports can fill would take all replicas out of the Service together.
+          # Startup still fails without Oracle (OracleJpaConfiguration), and /actuator/health
+          # still reports db for monitoring.
+          include: readinessState
