@@ -173,6 +173,8 @@ public final class FederalSubmissionPrevalidationXmlCodec {
     factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
     factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
     factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+    // Legacy prevalidation requests are shallow; this rejects pathological nesting while parsing.
+    factory.setAttribute("jdk.xml.maxElementDepth", "128");
     return factory;
   }
 
