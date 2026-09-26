@@ -163,17 +163,57 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const summary = within(await selectApplicationSummaryTile())
-    const fields = ['Region', 'List date', 'Jurisdiction', 'Order in Council indicator']
+    const fields = ['Region', 'List date', 'Jurisdiction']
     for (const field of fields) {
       expect(summary.getAllByText(field, { exact: true })).toHaveLength(1)
     }
+    expect(summary.queryByText('Order in Council indicator')).not.toBeInTheDocument()
 
     await userEvent.click(summary.getByRole('button', { name: 'Cancel' }))
-    for (const field of fields) {
+    for (const field of [...fields, 'Order in Council indicator']) {
       expect(summary.getAllByText(field, { exact: true })).toHaveLength(1)
     }
     expect(summary.getByRole('button', { name: 'Edit application details' })).toBeVisible()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
+  it('shows the Order in Council indicator read-only and never saves it', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const summary = within(await selectApplicationSummaryTile(false))
+    const indicatorField = summary
+      .getByText('Order in Council indicator', { exact: true })
+      .closest('.detail-field-item') as HTMLElement
+    expect(within(indicatorField).getByText('No', { selector: 'dd' })).toBeInTheDocument()
+
+    await userEvent.click(summary.getByRole('button', { name: 'Edit application details' }))
+    expect(summary.queryByText('Order in Council indicator')).not.toBeInTheDocument()
+    fireEvent.change(summary.getByLabelText('Exemption term (days)'), {
+      target: { value: '45' },
+    })
+    const saveButton = summary.getByRole('button', { name: 'Save Summary' })
+    await waitFor(() => {
+      expect(saveButton).toBeEnabled()
+    })
+    await userEvent.click(saveButton)
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
+    })
+    expect(mockedUpdateApplicationSummary.mock.calls[0][0]).toMatchObject({
+      saveSource: 'summary',
+      termDays: '45',
+    })
+    expect(mockedUpdateApplicationSummary.mock.calls[0][0]).not.toHaveProperty('oicIndicator')
   })
 
   it('uses the legacy application detail tab order', async () => {
@@ -1567,7 +1607,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         exemptionReasonCode: 'S',
         exportScheduleId: '988',
         orgUnitNumber: '13',
-        oicIndicator: 'Y',
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })

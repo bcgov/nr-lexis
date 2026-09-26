@@ -844,7 +844,7 @@ class OracleApplicationDetailsRpcServiceTest {
                 "O",
                 "Agent Contact",
                 "Owner Contact",
-                null,
+                "Y",
                 "LU",
                 List.of("FI", "HE"),
                 null,
@@ -858,6 +858,7 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(recordCaptor.getValue().applicationStatusCode()).isEqualTo("NEW");
     assertThat(recordCaptor.getValue().jurisdictionCode()).isEqualTo("P");
     assertThat(recordCaptor.getValue().federalApplicationNumber()).isNull();
+    assertThat(recordCaptor.getValue().oicIndicator()).isEqualTo("N");
   }
 
   @Test
@@ -5288,6 +5289,37 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository, never()).updateApplication(any());
   }
 
+  @ParameterizedTest
+  @CsvSource({"FULL, Y", "SUMMARY, Y", "SUMMARY, X"})
+  void updateApplicationSummaryShouldRejectOicIndicatorChange(
+      ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource, String oicIndicator) {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            oicIndicatorUpdateRequest(oicIndicator, saveSource), "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Order in Council indicator cannot be changed from application details.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldKeepStoredOicIndicator() {
+    when(repository.updateApplication(any())).thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            oicIndicatorUpdateRequest(
+                "n", ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository).updateApplication(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().oicIndicator()).isEqualTo("N");
+  }
+
   @Test
   void updateApplicationSummaryShouldRejectLegacyVolumeRangeBeforeOracleUpdate() {
     when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
@@ -6045,6 +6077,35 @@ class OracleApplicationDetailsRpcServiceTest {
         null,
         null,
         true);
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest oicIndicatorUpdateRequest(
+      String oicIndicator, ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource) {
+    return applicationSummaryUpdateRequest(
+        1000456L,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        oicIndicator,
+        true,
+        saveSource);
   }
 
   private void stubPersistedApplicationEndUse(Long orgUnitNumber, boolean valid) {

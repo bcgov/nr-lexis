@@ -53,6 +53,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String OIC_INDICATOR_YES = "Y";
   private static final String SYSTEM_OIC_APPLICATION_MESSAGE =
       "Blanket OIC system applications can only be changed through Blanket OIC workflows.";
+  private static final String OIC_INDICATOR_CHANGE_MESSAGE =
+      "Order in Council indicator cannot be changed from application details.";
   private static final String EXPORT_PRODUCT_TYPE_HARVESTED = "H";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
@@ -443,6 +445,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
           null,
           scoped.applicationNumber(),
           List.of(APPLICATION_DETAILS_LOCKED_MESSAGE),
+          List.of());
+    }
+    if (changesOicIndicator(existing.get(), scoped)) {
+      return new CreateApplicationResult(
+          false,
+          null,
+          scoped.applicationNumber(),
+          List.of(OIC_INDICATOR_CHANGE_MESSAGE),
           List.of());
     }
 
@@ -2134,6 +2144,15 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         && OIC_INDICATOR_YES.equalsIgnoreCase(trimToNull(application.oicIndicator()));
   }
 
+  // OIC_INDICATOR 'Y' makes an application system-owned, so only the Blanket OIC workflow sets it.
+  private boolean changesOicIndicator(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationSummaryUpdateRequest request) {
+    String requestedOicIndicator = trimToNull(request.oicIndicator());
+    return requestedOicIndicator != null
+        && !requestedOicIndicator.equalsIgnoreCase(trimToNull(existing.oicIndicator()));
+  }
+
   private void validateTimberMarkForContext(
       String timberMark,
       Long orgUnitNumber,
@@ -2585,7 +2604,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private CreateApplicationRequest normalizePublicProvincialCreateRequest(
       CreateApplicationRequest input) {
     CreateApplicationRequest normalized = normalizeCreateApplicationRequest(input);
-    // Legacy stamps Date received when creating an application, independent of form input.
+    // Legacy stamps Date received and OIC indicator N when creating an application, independent of
+    // form input; only the Blanket OIC workflow creates OIC applications.
     return new CreateApplicationRequest(
         null,
         normalized.applicationDate(),
@@ -2609,7 +2629,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         normalized.growthTypeCode(),
         normalized.agentContactName(),
         normalized.ownerContactName(),
-        normalized.oicIndicator(),
+        OIC_INDICATOR_NO,
         normalized.endUseCode(),
         normalized.speciesCodes(),
         normalized.remarkBody(),
@@ -3580,9 +3600,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         !updatesOwnerFields || request.ownerContactName() == null
             ? existing.ownerContactName()
             : request.ownerContactName(),
-        !updatesSummaryFields || request.oicIndicator() == null
-            ? existing.oicIndicator()
-            : request.oicIndicator());
+        existing.oicIndicator());
   }
 
   private ApplicationDetailsRpcRepository.ApplicationUpdateRecord copyApplicationWithOwner(
