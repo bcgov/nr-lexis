@@ -81,18 +81,6 @@ public abstract class OracleRepositorySupport {
     return fallbackCodeNameOptions(procedureSignature);
   }
 
-  /**
-   * Loads an authoritative code list without treating an Oracle failure as an empty result or
-   * replacing a legitimately empty result with static values.
-   */
-  protected List<CodeNameDto> loadCodeNameOptionsRequired(String procedureSignature) {
-    return queryCursorProcedureFailClosed(
-        procedureSignature,
-        null,
-        1,
-        rs -> new CodeNameDto(trim(rs.getString(1)), trim(rs.getString(2))));
-  }
-
   /** Loads a direct code list with the same positional mapping and failure contract. */
   protected List<CodeNameDto> loadCodeNameOptionsDirectRequired(String sql) {
     return queryDirectRequired(
