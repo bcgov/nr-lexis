@@ -149,8 +149,9 @@ type ApplicationSummaryFields = {
   speciesCodes: string[]
 }
 
+// Only Blanket OIC workflows set the Order in Council indicator; summary saves never send it.
 type ApplicationSummaryMutation = Pick<ApplicationSummaryFields, 'applicationNumber'> &
-  Partial<Omit<ApplicationSummaryFields, 'applicationNumber'>> & {
+  Partial<Omit<ApplicationSummaryFields, 'applicationNumber' | 'oicIndicator'>> & {
     saveSource?: 'owner' | 'agent' | 'owner-agent' | 'summary' | 'items'
   }
 
@@ -750,7 +751,6 @@ export const updateApplicationSummary = async (
         growthTypeCode: request.growthTypeCode,
         agentContactName: request.agentContactName,
         ownerContactName: request.ownerContactName,
-        oicIndicator: request.oicIndicator,
         applicationEndUseCode: request.endUseCode,
         applicationSelectedSpecies: request.speciesCodes?.join(','),
       },
