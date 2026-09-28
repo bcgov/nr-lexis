@@ -39,7 +39,11 @@ import java.time.Clock;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.IdentityHashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -82,6 +86,13 @@ public class ApplicationSubmissionImportService {
   private static final String LEXIS_NAMESPACE = "http://www.for.gov.bc.ca/schema/lexis";
   private static final String SOAP_11_NAMESPACE = "http://schemas.xmlsoap.org/soap/envelope/";
   private static final String SOAP_12_NAMESPACE = "http://www.w3.org/2003/05/soap-envelope";
+  // Submissions nest a few dozen levels at most. Rejecting deeper XML while parsing also keeps the
+  // recursive DOM walks that follow (text content, schema validation) within the thread stack.
+  static final int MAX_XML_ELEMENT_DEPTH = 128;
+  // SOAP submissionData can carry an escaped ESF envelope, which can carry an escaped payload.
+  private static final int MAX_EMBEDDED_XML_DEPTH = 3;
+  // A SOAP payload carrier is the operation element, one of its parts, or a part's child.
+  private static final int MAX_SOAP_CARRIER_DEPTH = 3;
   private static final String XML_SCHEMA_INSTANCE_NAMESPACE = XMLConstants.W3C_XML_SCHEMA_INSTANCE_NS_URI;
   private static final String EXPECTED_ESF_SCHEMA_LOCATION =
       "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd";
@@ -1736,6 +1747,11 @@ public class ApplicationSubmissionImportService {
   }
 
   private Element resolveLexisSubmissionPayload(Element root, List<String> errors) {
+    return resolveLexisSubmissionPayload(root, errors, 0);
+  }
+
+  private Element resolveLexisSubmissionPayload(
+      Element root, List<String> errors, int embeddedDepth) {
     if (root == null) {
       errors.add("The XML root must be a LEXIS submission payload, ESF submission envelope, or SOAP envelope.");
       return null;
@@ -1754,16 +1770,19 @@ public class ApplicationSubmissionImportService {
               "The XML file must include ESF submission content.",
               "The XML file must include only one ESF submission content section.",
               errors);
-      return submissionContent == null ? null : lexisPayloadFromSubmissionContent(submissionContent, errors);
+      return submissionContent == null
+          ? null
+          : lexisPayloadFromSubmissionContent(submissionContent, errors, embeddedDepth);
     }
     if ("Envelope".equals(root.getLocalName()) && isSoapNamespace(root.getNamespaceURI())) {
-      return lexisPayloadFromSoapEnvelope(root, errors);
+      return lexisPayloadFromSoapEnvelope(root, errors, embeddedDepth);
     }
     errors.add("The XML root must be a LEXIS submission payload, ESF submission envelope, or SOAP envelope.");
     return null;
   }
 
-  private Element lexisPayloadFromSoapEnvelope(Element envelope, List<String> errors) {
+  private Element lexisPayloadFromSoapEnvelope(
+      Element envelope, List<String> errors, int embeddedDepth) {
     Element body = soapBody(envelope);
     if (body == null) {
       errors.add("SOAP envelope must include a Body.");
@@ -1778,7 +1797,7 @@ public class ApplicationSubmissionImportService {
             "SOAP envelope must include only one ESF submission envelope.",
             errors);
     if (esfPayload != null) {
-      return resolveLexisSubmissionPayload(esfPayload, errors);
+      return resolveLexisSubmissionPayload(esfPayload, errors, embeddedDepth);
     }
 
     Element lexisPayload =
@@ -1789,16 +1808,22 @@ public class ApplicationSubmissionImportService {
             "SOAP envelope must include only one LEXIS submission payload.",
             errors);
     if (lexisPayload != null) {
-      return resolveLexisSubmissionPayload(lexisPayload, errors);
+      return resolveLexisSubmissionPayload(lexisPayload, errors, embeddedDepth);
     }
 
+    Map<String, Element> soapIds = soapIds(envelope);
     List<Element> submissionDataElements = descendants(body, "submissionData");
     if (submissionDataElements.size() > 1) {
       errors.add("SOAP envelope must include only one submissionData element.");
     }
     if (!submissionDataElements.isEmpty()) {
       int errorCount = errors.size();
-      Element submissionDataPayload = lexisPayloadFromSoapCarrier(submissionDataElements.get(0), errors);
+      Element submissionDataPayload =
+          lexisPayloadFromSoapCarrier(
+              soapCarrier(submissionDataElements.get(0), soapIds),
+              errors,
+              new HashSet<>(),
+              embeddedDepth);
       if (submissionDataPayload != null) {
         return submissionDataPayload;
       }
@@ -1808,10 +1833,20 @@ public class ApplicationSubmissionImportService {
       return null;
     }
 
+    // Any other carrier is the operation element, one of its parts, or the Axis multiRef element a
+    // part references. Only those top levels are searched, and each carrier and payload text is
+    // examined once, so the work stays linear in the size of the upload.
     List<String> firstCandidateErrors = new ArrayList<>();
-    for (Element candidate : elementDescendants(body)) {
+    Set<Element> examinedCarriers = Collections.newSetFromMap(new IdentityHashMap<>());
+    Set<String> examinedTexts = new HashSet<>();
+    for (Element candidate : elementDescendants(body, MAX_SOAP_CARRIER_DEPTH)) {
+      Element carrier = soapCarrier(candidate, soapIds);
+      if (!examinedCarriers.add(carrier)) {
+        continue;
+      }
       List<String> candidateErrors = new ArrayList<>();
-      Element payload = lexisPayloadFromSoapCarrier(candidate, candidateErrors);
+      Element payload =
+          lexisPayloadFromSoapCarrier(carrier, candidateErrors, examinedTexts, embeddedDepth);
       if (payload != null) {
         return payload;
       }
@@ -1828,12 +1863,8 @@ public class ApplicationSubmissionImportService {
     return null;
   }
 
-  private Element lexisPayloadFromSoapCarrier(Element carrier, List<String> errors) {
-    Element resolvedCarrier = soapReferencedElement(carrier);
-    if (resolvedCarrier != null) {
-      carrier = resolvedCarrier;
-    }
-
+  private Element lexisPayloadFromSoapCarrier(
+      Element carrier, List<String> errors, Set<String> examinedTexts, int embeddedDepth) {
     Element esfPayload =
         singlePayloadDescendant(
             carrier,
@@ -1842,7 +1873,7 @@ public class ApplicationSubmissionImportService {
             "SOAP payload carrier must include only one ESF submission envelope.",
             errors);
     if (esfPayload != null) {
-      return resolveLexisSubmissionPayload(esfPayload, errors);
+      return resolveLexisSubmissionPayload(esfPayload, errors, embeddedDepth);
     }
 
     Element lexisPayload =
@@ -1853,17 +1884,18 @@ public class ApplicationSubmissionImportService {
             "SOAP payload carrier must include only one LEXIS submission payload.",
             errors);
     if (lexisPayload != null) {
-      return resolveLexisSubmissionPayload(lexisPayload, errors);
+      return resolveLexisSubmissionPayload(lexisPayload, errors, embeddedDepth);
     }
 
     String xmlText = trimToNull(carrier.getTextContent());
-    if (xmlText == null || !xmlText.startsWith("<")) {
+    if (xmlText == null || !xmlText.startsWith("<") || !examinedTexts.add(xmlText)) {
       return null;
     }
-    return lexisPayloadFromXmlText(xmlText, "SOAP payload XML text", errors);
+    return lexisPayloadFromXmlText(xmlText, "SOAP payload XML text", errors, embeddedDepth);
   }
 
-  private Element lexisPayloadFromSubmissionContent(Element submissionContent, List<String> errors) {
+  private Element lexisPayloadFromSubmissionContent(
+      Element submissionContent, List<String> errors, int embeddedDepth) {
     List<Element> lexisSubmissions = children(submissionContent, LEXIS_NAMESPACE, "LexisSubmission");
     if (lexisSubmissions.size() > 1) {
       errors.add("The XML file must include only one LEXIS submission payload.");
@@ -1873,7 +1905,8 @@ public class ApplicationSubmissionImportService {
     }
 
     int errorCount = errors.size();
-    Element escapedPayload = lexisPayloadFromEscapedSubmissionContent(submissionContent, errors);
+    Element escapedPayload =
+        lexisPayloadFromEscapedSubmissionContent(submissionContent, errors, embeddedDepth);
     if (escapedPayload != null) {
       return escapedPayload;
     }
@@ -1884,15 +1917,21 @@ public class ApplicationSubmissionImportService {
     return null;
   }
 
-  private Element lexisPayloadFromEscapedSubmissionContent(Element submissionContent, List<String> errors) {
+  private Element lexisPayloadFromEscapedSubmissionContent(
+      Element submissionContent, List<String> errors, int embeddedDepth) {
     String escapedXml = trimToNull(submissionContent.getTextContent());
     if (escapedXml == null || !escapedXml.startsWith("<")) {
       return null;
     }
-    return lexisPayloadFromXmlText(escapedXml, "ESF submission content text", errors);
+    return lexisPayloadFromXmlText(escapedXml, "ESF submission content text", errors, embeddedDepth);
   }
 
-  private Element lexisPayloadFromXmlText(String xmlText, String label, List<String> errors) {
+  private Element lexisPayloadFromXmlText(
+      String xmlText, String label, List<String> errors, int embeddedDepth) {
+    if (embeddedDepth >= MAX_EMBEDDED_XML_DEPTH) {
+      errors.add("The " + label + " contains too many levels of embedded XML.");
+      return null;
+    }
     Document document;
     try (InputStream inputStream = new ByteArrayInputStream(xmlText.getBytes(StandardCharsets.UTF_8))) {
       var builder = secureDocumentBuilderFactory().newDocumentBuilder();
@@ -1910,7 +1949,7 @@ public class ApplicationSubmissionImportService {
     }
 
     Element root = document.getDocumentElement();
-    return resolveLexisSubmissionPayload(root, errors);
+    return resolveLexisSubmissionPayload(root, errors, embeddedDepth + 1);
   }
 
   private Element soapBody(Element envelope) {
@@ -1940,39 +1979,68 @@ public class ApplicationSubmissionImportService {
     return nodes.getLength() == 0 || !(nodes.item(0) instanceof Element element) ? null : element;
   }
 
-  private List<Element> elementDescendants(Element root) {
-    if (root == null) {
-      return List.of();
-    }
+  /** Returns the elements up to maxDepth levels below root, in document order, without recursion. */
+  private List<Element> elementDescendants(Element root, int maxDepth) {
     List<Element> elements = new ArrayList<>();
-    collectElementDescendants(root, elements);
+    if (root == null) {
+      return elements;
+    }
+    Node node = root.getFirstChild();
+    int depth = 1;
+    while (node != null) {
+      if (node instanceof Element element) {
+        elements.add(element);
+        if (depth < maxDepth && element.getFirstChild() != null) {
+          node = element.getFirstChild();
+          depth++;
+          continue;
+        }
+      }
+      while (node.getNextSibling() == null) {
+        node = node.getParentNode();
+        depth--;
+        if (node == root) {
+          return elements;
+        }
+      }
+      node = node.getNextSibling();
+    }
     return elements;
   }
 
-  private void collectElementDescendants(Element root, List<Element> elements) {
-    for (Node child = root.getFirstChild(); child != null; child = child.getNextSibling()) {
-      if (child instanceof Element element) {
-        elements.add(element);
-        collectElementDescendants(element, elements);
+  /**
+   * Indexes the id-bearing children of the SOAP Header and Body, where Axis RPC encoding places its
+   * multiRef elements, so each href resolves without rescanning the document.
+   */
+  private Map<String, Element> soapIds(Element envelope) {
+    Map<String, Element> ids = new HashMap<>();
+    for (Node section = envelope.getFirstChild(); section != null; section = section.getNextSibling()) {
+      if (!(section instanceof Element sectionElement)
+          || !isSoapNamespace(sectionElement.getNamespaceURI())) {
+        continue;
+      }
+      for (Node child = sectionElement.getFirstChild(); child != null; child = child.getNextSibling()) {
+        if (child instanceof Element element) {
+          for (String attribute : List.of("id", "xml:id")) {
+            String id = element.getAttribute(attribute);
+            if (!id.isEmpty()) {
+              // Keep the first match in document order, as the previous document scan did.
+              ids.putIfAbsent(id, element);
+            }
+          }
+        }
       }
     }
+    return ids;
   }
 
-  private Element soapReferencedElement(Element element) {
-    if (element == null || element.getOwnerDocument() == null) {
-      return null;
-    }
-    String href = trimToNull(element.getAttribute("href"));
+  /** Follows an Axis RPC href="#id" to its multiRef element; other elements carry themselves. */
+  private Element soapCarrier(Element candidate, Map<String, Element> soapIds) {
+    String href = trimToNull(candidate.getAttribute("href"));
     if (href == null || !href.startsWith("#") || href.length() == 1) {
-      return null;
+      return candidate;
     }
-    String id = href.substring(1);
-    for (Element candidate : elementDescendants(element.getOwnerDocument().getDocumentElement())) {
-      if (id.equals(candidate.getAttribute("id")) || id.equals(candidate.getAttribute("xml:id"))) {
-        return candidate;
-      }
-    }
-    return null;
+    return soapIds.getOrDefault(href.substring(1), candidate);
   }
 
   private void validateSchemaLocation(Element root, boolean requireEsfSchema, List<String> errors) {
@@ -2057,6 +2125,7 @@ public class ApplicationSubmissionImportService {
     factory.setFeature("http://apache.org/xml/features/nonvalidating/load-external-dtd", false);
     factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_DTD, "");
     factory.setAttribute(XMLConstants.ACCESS_EXTERNAL_SCHEMA, "");
+    factory.setAttribute("jdk.xml.maxElementDepth", Integer.toString(MAX_XML_ELEMENT_DEPTH));
     return factory;
   }
 
@@ -2077,6 +2146,9 @@ public class ApplicationSubmissionImportService {
     String normalized = trimToNull(message);
     if (normalized == null) {
       return "The submission is not a well-formed XML document.";
+    }
+    if (normalized.contains("maxElementDepth")) {
+      return "XML elements must not be nested more than " + MAX_XML_ELEMENT_DEPTH + " levels deep.";
     }
 
     Matcher unterminatedTag = UNTERMINATED_XML_TAG_PATTERN.matcher(normalized);
