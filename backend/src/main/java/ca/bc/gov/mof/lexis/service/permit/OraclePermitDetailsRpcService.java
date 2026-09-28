@@ -94,6 +94,7 @@ import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.Gbms
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.InternalInvoiceDetail;
 import ca.bc.gov.mof.lexis.service.permit.PermitInvoiceOrchestrationService.InternalInvoiceSnapshot;
 import ca.bc.gov.mof.lexis.service.permit.ProvincialPermitMutationValidator.ValidationResult;
+import ca.bc.gov.mof.lexis.util.LegacyExcolSort;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.math.BigDecimal;
@@ -139,7 +140,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final String EXEMPTION_TYPE_ORDER_IN_COUNCIL = "O";
   private static final String EXEMPTION_TYPE_BLANKET_OIC = "B";
   private static final String EXPORT_GROWTH_TYPE_OLD = "O";
-  private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
   private static final String EXPORT_SCALE_METHOD_WEIGHT = "W";
   private static final String EXPORT_PERMIT_STATUS_ACTIVE = "ACT";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
@@ -3642,32 +3642,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                 firstEndUse.endUseCode(),
                 applicationInfo.orgUnitNo());
 
-    if (candidateExcolCodes.size() == 1) {
-      return candidateExcolCodes.get(0);
-    }
-
-    for (String excolCode : candidateExcolCodes) {
-      boolean candidateMatches = true;
-      for (EndUsePairRow endUse : endUses) {
-        String speciesCode = trimToNull(endUse.speciesCode());
-        if (speciesCode == null || !excolCode.contains(speciesCode)) {
-          candidateMatches = false;
-          break;
-        }
-
-        if (!EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equalsIgnoreCase(trimToNull(applicationInfo.productTypeCode()))
-            && !excolCode.contains(nonNull(firstEndUse.endUseCode()))) {
-          candidateMatches = false;
-          break;
-        }
-      }
-
-      if (candidateMatches) {
-        return excolCode;
-      }
-    }
-
-    return "";
+    return LegacyExcolSort.select(
+            applicationInfo.productTypeCode(),
+            endUses.stream().map(EndUsePairRow::speciesCode).toList(),
+            firstEndUse.endUseCode(),
+            candidateExcolCodes)
+        .orElse("");
   }
 
   private String buildBlanketPackageEndUseSort(

@@ -339,6 +339,29 @@ describe('Notifications page', () => {
     expect(mockedDeleteNotification).not.toHaveBeenCalled()
   })
 
+  it('defaults new notifications to the LEXIS business date, not the browser date', async () => {
+    // 22:30 in Vancouver is already the next day in UTC and every zone east of BC.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-09-26T05:30:00Z'))
+    try {
+      const user = userEvent.setup()
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+        }),
+      )
+
+      render(<NotificationsPage />)
+
+      await user.click(await screen.findByRole('button', { name: 'New notification' }))
+      const dialog = await screen.findByRole('dialog', { name: 'New notification' })
+      expect(within(dialog).getByLabelText(/^Start date/)).toHaveValue('2026-09-25')
+      expect(within(dialog).getByLabelText(/^End date/)).toHaveValue('2026-10-02')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it('clears and disables individual audiences when all roles are selected', async () => {
     const user = userEvent.setup()
     mockedUseAuth.mockReturnValue(

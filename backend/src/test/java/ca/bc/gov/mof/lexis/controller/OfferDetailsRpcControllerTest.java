@@ -3,7 +3,9 @@ package ca.bc.gov.mof.lexis.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.RETURNS_DEFAULTS;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -81,6 +83,7 @@ class OfferDetailsRpcControllerTest {
             new ApplicationPermitOperationCoordinator(new PermitOperationMutex()),
             editLockService,
             offerWithdrawalPolicy);
+    controller.setProvincialAuthorizationService(permissiveAuthorization());
     lenient().when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     lenient().when(federalApplicationServiceProvider.getIfAvailable()).thenReturn(federalApplicationService);
     lenient()
@@ -97,6 +100,16 @@ class OfferDetailsRpcControllerTest {
     lenient()
         .when(federalApplicationService.findByApplicationNumber(anyLong()))
         .thenReturn(Optional.empty());
+  }
+
+  /** Allows every object check, for tests that exercise behaviour other than authorization. */
+  private static ProvincialAuthorizationService permissiveAuthorization() {
+    return mock(
+        ProvincialAuthorizationService.class,
+        invocation ->
+            invocation.getMethod().getReturnType() == boolean.class
+                ? true
+                : RETURNS_DEFAULTS.answer(invocation));
   }
 
   @Test

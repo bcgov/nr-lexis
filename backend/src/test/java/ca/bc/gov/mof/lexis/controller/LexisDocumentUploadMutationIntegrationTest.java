@@ -21,6 +21,7 @@ import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
+import ca.bc.gov.mof.lexis.service.upload.UploadInspection;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -35,6 +36,7 @@ import org.springframework.security.test.web.servlet.request.SecurityMockMvcRequ
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.test.web.servlet.ResultActions;
+import org.springframework.web.multipart.MultipartFile;
 
 @SpringBootTest(
     properties = {
@@ -60,6 +62,13 @@ class LexisDocumentUploadMutationIntegrationTest {
 
   @BeforeEach
   void allowEditLocks() {
+    when(uploadService.inspectUpload(any(), any(), any()))
+        .thenAnswer(
+            invocation ->
+                inspected(
+                    invocation.getArgument(0),
+                    invocation.getArgument(1),
+                    invocation.getArgument(2)));
     ApplicationEditLockDto acquired =
         new ApplicationEditLockDto(false, true, null, null, null);
     when(applicationEditLockService.acquire(any(), any(), any(), anyBoolean()))
@@ -74,11 +83,11 @@ class LexisDocumentUploadMutationIntegrationTest {
   void directPersistedUploadsShouldAllowExpiredApplicationExemptionAndPermitTargets()
       throws Exception {
     canonicalStatuses("EXP", "EXP", "EXP");
-    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any()))
+    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any()))
         .thenReturn(Optional.of(accepted("application")));
-    when(uploadService.uploadExemption(any(), eq(EXEMPTION_NUMBER), any(), any()))
+    when(uploadService.uploadExemption(any(), eq(EXEMPTION_NUMBER), any()))
         .thenReturn(Optional.of(accepted("exemption")));
-    when(uploadService.uploadPermit(any(), eq(PERMIT_NUMBER), any(), any()))
+    when(uploadService.uploadPermit(any(), eq(PERMIT_NUMBER), any()))
         .thenReturn(Optional.of(accepted("permit")));
 
     performApplicationUpload().andExpect(status().isOk());
@@ -86,11 +95,11 @@ class LexisDocumentUploadMutationIntegrationTest {
     performPermitUpload().andExpect(status().isOk());
     performInvoiceUpload().andExpect(status().isForbidden());
 
-    verify(uploadService).uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any());
-    verify(uploadService).uploadExemption(any(), eq(EXEMPTION_NUMBER), any(), any());
-    verify(uploadService).uploadPermit(any(), eq(PERMIT_NUMBER), any(), any());
+    verify(uploadService).uploadApplication(any(), eq(APPLICATION_NUMBER), any());
+    verify(uploadService).uploadExemption(any(), eq(EXEMPTION_NUMBER), any());
+    verify(uploadService).uploadPermit(any(), eq(PERMIT_NUMBER), any());
     verify(uploadService, never())
-        .uploadInvoice(any(), any(), any(), any(), any(), any(), any(), any());
+        .uploadInvoice(any(), any(), any(), any(), any(), any(), any());
   }
 
   @Test
@@ -99,9 +108,9 @@ class LexisDocumentUploadMutationIntegrationTest {
     canonicalStatuses("EXP", "EXP", "EXP");
     when(applicationDetailsService.getApplicationEditContext(APPLICATION_NUMBER))
         .thenReturn(Optional.of(applicationEditContext(false)));
-    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any()))
+    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any()))
         .thenReturn(Optional.of(accepted("application")));
-    when(uploadService.uploadPermit(any(), eq(PERMIT_NUMBER), any(), any()))
+    when(uploadService.uploadPermit(any(), eq(PERMIT_NUMBER), any()))
         .thenReturn(Optional.of(accepted("permit")));
 
     performApplicationUpload(applicationApproverJwt()).andExpect(status().isOk());
@@ -110,8 +119,8 @@ class LexisDocumentUploadMutationIntegrationTest {
     performPermitUpload(submitterJwt()).andExpect(status().isOk());
 
     verify(uploadService, times(2))
-        .uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any());
-    verify(uploadService, times(2)).uploadPermit(any(), eq(PERMIT_NUMBER), any(), any());
+        .uploadApplication(any(), eq(APPLICATION_NUMBER), any());
+    verify(uploadService, times(2)).uploadPermit(any(), eq(PERMIT_NUMBER), any());
   }
 
   @Test
@@ -142,15 +151,15 @@ class LexisDocumentUploadMutationIntegrationTest {
   void directPersistedUploadsShouldAllowNonExpiredTargetsIncludingCancelledExemptions()
       throws Exception {
     canonicalStatuses("NEW", "CAN", "ACT");
-    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any()))
+    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any()))
         .thenReturn(Optional.of(accepted("application")));
-    when(uploadService.uploadExemption(any(), eq(EXEMPTION_NUMBER), any(), any()))
+    when(uploadService.uploadExemption(any(), eq(EXEMPTION_NUMBER), any()))
         .thenReturn(Optional.of(accepted("exemption")));
-    when(uploadService.uploadPermit(any(), eq(PERMIT_NUMBER), any(), any()))
+    when(uploadService.uploadPermit(any(), eq(PERMIT_NUMBER), any()))
         .thenReturn(Optional.of(accepted("permit")));
     when(
             uploadService.uploadInvoice(
-                any(), eq(PERMIT_NUMBER), eq("INV-1001"), any(), any(), any(), any(), any()))
+                any(), eq(PERMIT_NUMBER), eq("INV-1001"), any(), any(), any(), any()))
         .thenReturn(Optional.of(accepted("invoice")));
 
     performApplicationUpload().andExpect(status().isOk());
@@ -166,7 +175,7 @@ class LexisDocumentUploadMutationIntegrationTest {
         .thenReturn(Optional.of(application("NEW")));
     when(applicationDetailsService.getApplicationEditContext(APPLICATION_NUMBER))
         .thenReturn(Optional.of(applicationEditContext(false)));
-    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any()))
+    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any()))
         .thenReturn(Optional.of(accepted("application")));
 
     performApplicationUpload(submitterJwt()).andExpect(status().isOk());
@@ -182,7 +191,7 @@ class LexisDocumentUploadMutationIntegrationTest {
 
     performApplicationUpload(submitterJwt()).andExpect(status().isForbidden());
 
-    verify(uploadService, never()).uploadApplication(any(), any(), any(), any());
+    verify(uploadService, never()).uploadApplication(any(), any(), any());
   }
 
   @Test
@@ -248,7 +257,7 @@ class LexisDocumentUploadMutationIntegrationTest {
     }
 
     verify(uploadService, never())
-        .uploadInvoice(any(), any(), any(), any(), any(), any(), any(), any());
+        .uploadInvoice(any(), any(), any(), any(), any(), any(), any());
   }
 
   @Test
@@ -412,15 +421,15 @@ class LexisDocumentUploadMutationIntegrationTest {
   private void allowSuccessfulDocumentOperations() {
     when(uploadService.validateDocument(any(), any()))
         .thenReturn(Optional.of(accepted("document")));
-    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any(), any()))
+    when(uploadService.uploadApplication(any(), eq(APPLICATION_NUMBER), any()))
         .thenReturn(Optional.of(accepted("application")));
-    when(uploadService.uploadExemption(any(), eq(EXEMPTION_NUMBER), any(), any()))
+    when(uploadService.uploadExemption(any(), eq(EXEMPTION_NUMBER), any()))
         .thenReturn(Optional.of(accepted("exemption")));
-    when(uploadService.uploadPermit(any(), eq(PERMIT_NUMBER), any(), any()))
+    when(uploadService.uploadPermit(any(), eq(PERMIT_NUMBER), any()))
         .thenReturn(Optional.of(accepted("permit")));
     when(
             uploadService.uploadInvoice(
-                any(), eq(PERMIT_NUMBER), eq("INV-1001"), any(), any(), any(), any(), any()))
+                any(), eq(PERMIT_NUMBER), eq("INV-1001"), any(), any(), any(), any()))
         .thenReturn(Optional.of(accepted("invoice")));
   }
 
@@ -438,11 +447,11 @@ class LexisDocumentUploadMutationIntegrationTest {
 
   private void verifyNoDocumentOperations() {
     verify(uploadService, never()).validateDocument(any(), any());
-    verify(uploadService, never()).uploadApplication(any(), any(), any(), any());
-    verify(uploadService, never()).uploadExemption(any(), any(), any(), any());
-    verify(uploadService, never()).uploadPermit(any(), any(), any(), any());
+    verify(uploadService, never()).uploadApplication(any(), any(), any());
+    verify(uploadService, never()).uploadExemption(any(), any(), any());
+    verify(uploadService, never()).uploadPermit(any(), any(), any());
     verify(uploadService, never())
-        .uploadInvoice(any(), any(), any(), any(), any(), any(), any(), any());
+        .uploadInvoice(any(), any(), any(), any(), any(), any(), any());
   }
 
   private ResultActions performApplicationUpload() throws Exception {
@@ -592,5 +601,11 @@ class LexisDocumentUploadMutationIntegrationTest {
                     .claim("identity_provider", "idir")
                     .claim("idir_username", "lexis-exemption-approver-test-user"))
         .authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"));
+  }
+
+  /** Inspection the upload service mock returns for an accepted file. */
+  private static UploadInspection inspected(
+      String uploadType, MultipartFile file, String description) {
+    return UploadInspection.accepted(uploadType, file, description, "PDF");
   }
 }

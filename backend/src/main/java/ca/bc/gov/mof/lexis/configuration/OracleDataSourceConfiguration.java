@@ -10,7 +10,7 @@ import org.springframework.jdbc.core.JdbcTemplate;
 
 @Configuration
 @Profile("oracle")
-public class OracleJpaConfiguration {
+public class OracleDataSourceConfiguration {
 
   @Bean
   public InitializingBean warmOraclePool(DataSource dataSource) {

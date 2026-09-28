@@ -67,7 +67,7 @@ class BackendRuntimeConfigTest {
   }
 
   @Test
-  void healthChecksShouldSeparateLivenessFromOracleReadiness() throws IOException {
+  void healthChecksShouldNotGateReadinessOnTheSharedOraclePool() throws IOException {
     String dockerfile = Files.readString(resolve(Path.of("backend", "Dockerfile")));
     String applicationConfig =
         Files.readString(resolve(Path.of("backend", "src", "main", "resources", "application.yml")));
@@ -79,7 +79,9 @@ class BackendRuntimeConfigTest {
     assertThat(applicationConfig)
         .contains("probes:")
         .contains("enabled: true");
-    assertThat(oracleConfig).contains("include: readinessState,db");
+    assertThat(oracleConfig).contains("include: readinessState").doesNotContain("readinessState,db");
+    assertThat(applicationConfig).contains("worker: ${LEXIS_HTTP_WORKER_THREADS:64}");
+    assertThat(dockerfile).doesNotContain("\"-XX:TieredStopAtLevel=1\"");
 
     String deployment =
         Files.readString(resolve(Path.of("backend", "openshift.deploy.yml")));

@@ -117,7 +117,7 @@ import {
   type ExemptionPermitRow,
 } from '@/service/provincial-exemption-detail-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
-import { formatLocalIsoDate } from '@/utils/date'
+import { formatBusinessIsoDate } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
 
 type ExemptionDetailTabKey =
@@ -1844,7 +1844,7 @@ const ProvincialExemptionDetailsPage = () => {
                     onClick={() => {
                       setActionResult(null)
                       setApprovalCertified(false)
-                      setApprovalDate(formatLocalIsoDate(new Date()))
+                      setApprovalDate(formatBusinessIsoDate())
                       setApprovalConfirmationTarget(currentDetail.exemptionNumber)
                       setApprovalConfirmationOpen(true)
                     }}

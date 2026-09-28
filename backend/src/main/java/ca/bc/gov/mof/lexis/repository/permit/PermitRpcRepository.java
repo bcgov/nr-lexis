@@ -5,6 +5,7 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries;
+import ca.bc.gov.mof.lexis.util.LegacyExcolSort;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.IOException;
 import java.io.InputStream;
@@ -1964,16 +1965,12 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return List.of();
     }
 
-    StringBuilder pattern = new StringBuilder();
-    for (int i = 0; i < speciesCount; i++) {
-      pattern.append("__/");
-    }
-    pattern.append("__");
+    String pattern = LegacyExcolSort.candidatePattern(speciesCount);
 
     return queryCursorProcedureFailClosed(
             FIND_CANDIDATE_EXCOL_VALUES,
             cs -> {
-              cs.setString(1, pattern.toString());
+              cs.setString(1, pattern);
               cs.setString(2, normalizedSpecies);
               cs.setString(3, normalizedEndUse);
               cs.setLong(4, orgUnitNumber);

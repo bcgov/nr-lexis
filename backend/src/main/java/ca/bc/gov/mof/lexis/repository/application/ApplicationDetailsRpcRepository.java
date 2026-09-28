@@ -4,6 +4,7 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.positiveOrNull;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries;
+import ca.bc.gov.mof.lexis.util.LegacyExcolSort;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -1070,18 +1071,8 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
   }
 
   private String excolPattern(int speciesCount, boolean includeAdditionalSpecies) {
-    if (speciesCount < 1) {
-      return null;
-    }
-    StringBuilder pattern = new StringBuilder();
-    for (int i = 0; i < speciesCount; i++) {
-      pattern.append("__/");
-    }
-    pattern.append("__");
-    if (includeAdditionalSpecies) {
-      pattern.append("/%");
-    }
-    return pattern.toString();
+    String pattern = LegacyExcolSort.candidatePattern(speciesCount);
+    return pattern != null && includeAdditionalSpecies ? pattern + "/%" : pattern;
   }
 
   private Optional<CodeRow> findCodeRow(String sql, String code, boolean required) {

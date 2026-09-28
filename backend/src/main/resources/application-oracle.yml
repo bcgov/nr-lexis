@@ -1,6 +1,6 @@
 spring:
   autoconfigure:
-    # Re-enable datasource + JPA for Oracle profile.
+    # Re-enable the datasource for the Oracle profile.
     exclude: []
 
   datasource:
@@ -19,14 +19,13 @@ spring:
         javax.net.ssl.trustStore: ${TRUSTSTORE_PATH:/cert/jssecacerts}
         javax.net.ssl.trustStorePassword: ${KEYSTORE_SECRET}
 
-  jpa:
-    properties:
-      hibernate:
-        format_sql: false
-
 management:
   endpoint:
     health:
       group:
         readiness:
-          include: readinessState,db
+          # Every replica shares one Oracle pool per pod and one database. Gating readiness on a
+          # pool that long reports can fill would take all replicas out of the Service together.
+          # Startup still fails without Oracle (OracleDataSourceConfiguration), and /actuator/health
+          # still reports db for monitoring.
+          include: readinessState

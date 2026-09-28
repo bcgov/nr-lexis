@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
@@ -27,6 +28,7 @@ import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUni
 import ca.bc.gov.mof.lexis.service.upload.ApplicationSubmissionImportService;
 import ca.bc.gov.mof.lexis.service.upload.DocumentUploadMutationPolicy;
 import ca.bc.gov.mof.lexis.service.upload.LexisUploadService;
+import ca.bc.gov.mof.lexis.service.upload.UploadInspection;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import jakarta.servlet.http.HttpServletRequest;
@@ -49,9 +51,11 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.InOrder;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
@@ -81,6 +85,24 @@ class LexisUploadControllerTest {
   @Mock private ProvincialAuthorizationService provincialAuthorizationService;
   @Mock private DocumentUploadMutationPolicy documentUploadMutationPolicy;
   @Mock private HttpServletRequest httpServletRequest;
+
+  @BeforeEach
+  void inspectUploadsAsAccepted() {
+    lenient()
+        .when(uploadService.inspectUpload(any(), any(), any()))
+        .thenAnswer(
+            invocation ->
+                inspected(
+                    invocation.getArgument(0),
+                    invocation.getArgument(1),
+                    invocation.getArgument(2)));
+  }
+
+  /** Inspection the upload service mock returns for an accepted file. */
+  private static UploadInspection inspected(
+      String uploadType, MultipartFile file, String description) {
+    return UploadInspection.accepted(uploadType, file, description, "PDF");
+  }
 
   @Test
   void uploadShouldReturnBadRequestForEmptyFile() {
@@ -119,7 +141,7 @@ class LexisUploadControllerTest {
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("application", "application.csv", file.getSize(), "accepted", "queued");
-    when(uploadService.uploadApplication(file, 7000123L, "App file", "idir\\jsmith"))
+    when(uploadService.uploadApplication(inspected("application", file, "App file"), 7000123L, "idir\\jsmith"))
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -129,10 +151,10 @@ class LexisUploadControllerTest {
     assertThat(response.getBody()).isEqualTo(payload);
     verify(provincialAuthorizationService, times(2))
         .requireApplicationAttachmentPersistence(authentication, 7000123L);
-    verify(documentUploadMutationPolicy).requireApplicationAttachmentTarget(7000123L);
+    verify(documentUploadMutationPolicy, times(2)).requireApplicationAttachmentTarget(7000123L);
     verify(applicationEditLockService)
         .acquire(7000123L, "idir\\jsmith", "idir\\jsmith", false);
-    verify(uploadService).uploadApplication(file, 7000123L, "App file", "idir\\jsmith");
+    verify(uploadService).uploadApplication(inspected("application", file, "App file"), 7000123L, "idir\\jsmith");
   }
 
   @Test
@@ -171,18 +193,17 @@ class LexisUploadControllerTest {
     MultipartFile permitFile = sampleFile("permit.pdf");
     MultipartFile exemptionFile = sampleFile("exemption.pdf");
     MultipartFile invoiceFile = sampleFile("invoice.pdf");
-    when(uploadService.uploadApplication(applicationFile, 999000001L, "Application", null))
+    when(uploadService.uploadApplication(inspected("application", applicationFile, "Application"), 999000001L, null))
         .thenReturn(Optional.of(uploadResult("application", applicationFile)));
-    when(uploadService.uploadPermit(permitFile, 999000002L, "Permit", null))
+    when(uploadService.uploadPermit(inspected("permit", permitFile, "Permit"), 999000002L, null))
         .thenReturn(Optional.of(uploadResult("permit", permitFile)));
-    when(uploadService.uploadExemption(exemptionFile, "TEST-EX-001", "Exemption", null))
+    when(uploadService.uploadExemption(inspected("exemption", exemptionFile, "Exemption"), "TEST-EX-001", null))
         .thenReturn(Optional.of(uploadResult("exemption", exemptionFile)));
     when(
             uploadService.uploadInvoice(
-                invoiceFile,
+                inspected("invoice", invoiceFile, "Invoice"),
                 999000002L,
                 "INV-001",
-                "Invoice",
                 new BigDecimal("100.00"),
                 new BigDecimal("1.25"),
                 new BigDecimal("12.00"),
@@ -223,13 +244,55 @@ class LexisUploadControllerTest {
   }
 
   @Test
+  void rejectedUploadShouldNotTakeRowLocks() {
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    LexisUploadController classifiedController = controllerWithRowLocks(rowLocks);
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
+    MultipartFile file = sampleFile("application.pdf");
+    LexisUploadResultDto rejection =
+        new LexisUploadResultDto(
+            "application", "application.pdf", file.getSize(), "rejected", "Malware detected.");
+    when(uploadService.inspectUpload("application", file, "App file"))
+        .thenReturn(UploadInspection.rejected("application", file, rejection));
+
+    ResponseEntity<LexisUploadResultDto> response =
+        classifiedController.fileApplicationUpload(file, null, 999000001L, "App file", null, null);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
+    assertThat(response.getBody()).isEqualTo(rejection);
+    verifyNoInteractions(rowLocks);
+    verify(uploadService, never()).uploadApplication(any(), any(), any());
+  }
+
+  @Test
+  void uploadShouldBeInspectedBeforeRowLocksAreTaken() {
+    OracleAggregateRowLockService rowLocks = mock(OracleAggregateRowLockService.class);
+    when(rowLocks.executeRootCreateMutation(any(), any(), any(), any(), any()))
+        .thenAnswer(
+            invocation ->
+                invocation.<Supplier<ResponseEntity<LexisUploadResultDto>>>getArgument(4).get());
+    LexisUploadController classifiedController = controllerWithRowLocks(rowLocks);
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
+    MultipartFile file = sampleFile("permit.pdf");
+    when(uploadService.uploadPermit(inspected("permit", file, "Permit"), 999000002L, null))
+        .thenReturn(Optional.of(uploadResult("permit", file)));
+
+    classifiedController.filePermitUpload(file, null, 999000002L, "Permit", null, null);
+
+    InOrder order = inOrder(uploadService, rowLocks);
+    order.verify(uploadService).inspectUpload("permit", file, "Permit");
+    order.verify(rowLocks).executeRootCreateMutation(any(), any(), any(), any(), any());
+    order.verify(uploadService).uploadPermit(inspected("permit", file, "Permit"), 999000002L, null);
+  }
+
+  @Test
   void fileApplicationUploadShouldAcceptReactFormFileField() {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = controller();
     MultipartFile formFile = sampleFile("application.pdf");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("application", "application.pdf", formFile.getSize(), "accepted", "queued");
-    when(uploadService.uploadApplication(formFile, 7000123L, "App file", null))
+    when(uploadService.uploadApplication(inspected("application", formFile, "App file"), 7000123L, null))
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -237,7 +300,7 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(uploadService).uploadApplication(formFile, 7000123L, "App file", null);
+    verify(uploadService).uploadApplication(inspected("application", formFile, "App file"), 7000123L, null);
   }
 
   @Test
@@ -376,7 +439,7 @@ class LexisUploadControllerTest {
     when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = controller();
     MultipartFile formFile = sampleFile("application.pdf");
-    when(uploadService.uploadApplication(formFile, 7000123L, "App file", null))
+    when(uploadService.uploadApplication(inspected("application", formFile, "App file"), 7000123L, null))
         .thenReturn(Optional.empty());
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -387,7 +450,7 @@ class LexisUploadControllerTest {
     assertThat(response.getBody().message())
         .isEqualTo(
             "We were unable to save this application document. Confirm the application exists and try again.");
-    verify(uploadService).uploadApplication(formFile, 7000123L, "App file", null);
+    verify(uploadService).uploadApplication(inspected("application", formFile, "App file"), 7000123L, null);
   }
 
   @Test
@@ -402,7 +465,7 @@ class LexisUploadControllerTest {
             formFile.getSize(),
             "rejected",
             "Could not attach file to application 7000123. Confirm the application exists before uploading.");
-    when(uploadService.uploadApplication(formFile, 7000123L, "App file", null))
+    when(uploadService.uploadApplication(inspected("application", formFile, "App file"), 7000123L, null))
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -410,11 +473,12 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNPROCESSABLE_ENTITY);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(uploadService).uploadApplication(formFile, 7000123L, "App file", null);
+    verify(uploadService).uploadApplication(inspected("application", formFile, "App file"), 7000123L, null);
   }
 
   @Test
   void fileApplicationUploadShouldRejectWhenApplicationLockedByAnotherUser() {
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = controller();
     MultipartFile file = sampleFile("application.pdf");
     TestingAuthenticationToken authentication =
@@ -436,7 +500,7 @@ class LexisUploadControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().message())
         .isEqualTo("This application is currently locked for editing by another user.");
-    verify(uploadServiceProvider, never()).getIfAvailable();
+    verify(uploadService, never()).uploadApplication(any(), any(), any());
   }
 
   @Test
@@ -454,7 +518,7 @@ class LexisUploadControllerTest {
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Application status is unavailable for mutation.");
 
-    verify(provincialAuthorizationService, times(2))
+    verify(provincialAuthorizationService)
         .requireApplicationAttachmentPersistence(null, 7000123L);
     verifyNoInteractions(applicationEditLockService, uploadService);
     verify(uploadServiceProvider, never()).getIfAvailable();
@@ -469,7 +533,7 @@ class LexisUploadControllerTest {
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("permit", "permit.csv", file.getSize(), "accepted", "queued");
-    when(uploadService.uploadPermit(file, 7000123L, "Permit file", "idir\\jsmith"))
+    when(uploadService.uploadPermit(inspected("permit", file, "Permit file"), 7000123L, "idir\\jsmith"))
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -477,14 +541,15 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(documentUploadMutationPolicy).requirePermitAttachmentTarget(7000123L);
+    verify(documentUploadMutationPolicy, times(2)).requirePermitAttachmentTarget(7000123L);
     verify(applicationEditLockService)
         .acquirePermit(7000123L, "idir\\jsmith", "idir\\jsmith", false);
-    verify(uploadService).uploadPermit(file, 7000123L, "Permit file", "idir\\jsmith");
+    verify(uploadService).uploadPermit(inspected("permit", file, "Permit file"), 7000123L, "idir\\jsmith");
   }
 
   @Test
   void filePermitUploadShouldRejectWhenPermitLockedByAnotherUser() {
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = controller();
     MultipartFile file = sampleFile("permit.pdf");
     TestingAuthenticationToken authentication =
@@ -506,7 +571,7 @@ class LexisUploadControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().message())
         .isEqualTo("This permit is currently locked for editing by another user.");
-    verify(uploadServiceProvider, never()).getIfAvailable();
+    verify(uploadService, never()).uploadPermit(any(), any(), any());
   }
 
   @Test
@@ -550,7 +615,7 @@ class LexisUploadControllerTest {
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
     LexisUploadResultDto payload =
         new LexisUploadResultDto("exemption", "exemption.csv", file.getSize(), "accepted", "queued");
-    when(uploadService.uploadExemption(file, "E-123", "Exemption file", "idir\\jsmith"))
+    when(uploadService.uploadExemption(inspected("exemption", file, "Exemption file"), "E-123", "idir\\jsmith"))
         .thenReturn(Optional.of(payload));
 
     ResponseEntity<LexisUploadResultDto> response =
@@ -558,14 +623,15 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(documentUploadMutationPolicy).requireExemptionAttachmentTarget("E-123");
+    verify(documentUploadMutationPolicy, times(2)).requireExemptionAttachmentTarget("E-123");
     verify(applicationEditLockService)
         .acquireExemption("E-123", "idir\\jsmith", "idir\\jsmith", false);
-    verify(uploadService).uploadExemption(file, "E-123", "Exemption file", "idir\\jsmith");
+    verify(uploadService).uploadExemption(inspected("exemption", file, "Exemption file"), "E-123", "idir\\jsmith");
   }
 
   @Test
   void fileExemptionUploadShouldRejectWhenExemptionLockedByAnotherUser() {
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = controller();
     MultipartFile file = sampleFile("exemption.pdf");
     TestingAuthenticationToken authentication =
@@ -588,7 +654,7 @@ class LexisUploadControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().message())
         .isEqualTo("This exemption is currently locked for editing by another user.");
-    verify(uploadServiceProvider, never()).getIfAvailable();
+    verify(uploadService, never()).uploadExemption(any(), any(), any());
   }
 
   @Test
@@ -606,7 +672,7 @@ class LexisUploadControllerTest {
         .isInstanceOf(AccessDeniedException.class)
         .hasMessage("Exemption status is unavailable for mutation.");
 
-    verify(provincialAuthorizationService, times(2))
+    verify(provincialAuthorizationService)
         .requireExemptionAttachmentMutation(null, "E-123");
     verify(applicationEditLockService, never())
         .acquireExemption(any(), any(), any(), anyBoolean());
@@ -624,10 +690,9 @@ class LexisUploadControllerTest {
         new LexisUploadResultDto("invoice", "invoice.csv", file.getSize(), "accepted", "queued");
     when(
             uploadService.uploadInvoice(
-                file,
+                inspected("invoice", file, "Invoice INV-1001"),
                 7000123L,
                 "INV-1001",
-                "Invoice INV-1001",
                 BigDecimal.valueOf(1234.56),
                 BigDecimal.valueOf(1.25),
                 BigDecimal.valueOf(55.0),
@@ -652,15 +717,14 @@ class LexisUploadControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(payload);
-    verify(documentUploadMutationPolicy).requireInvoicePermitActive(7000123L);
+    verify(documentUploadMutationPolicy, times(2)).requireInvoicePermitActive(7000123L);
     verify(applicationEditLockService)
         .acquirePermit(7000123L, "idir\\jsmith", "idir\\jsmith", false);
     verify(uploadService)
         .uploadInvoice(
-            file,
+            inspected("invoice", file, "Invoice INV-1001"),
             7000123L,
             "INV-1001",
-            "Invoice INV-1001",
             BigDecimal.valueOf(1234.56),
             BigDecimal.valueOf(1.25),
             BigDecimal.valueOf(55.0),
@@ -699,6 +763,7 @@ class LexisUploadControllerTest {
 
   @Test
   void fileInvoiceUploadShouldRejectWhenPermitLockedByAnotherUser() {
+    when(uploadServiceProvider.getIfAvailable()).thenReturn(uploadService);
     LexisUploadController controller = controller();
     MultipartFile file = sampleFile("invoice.pdf");
     TestingAuthenticationToken authentication =
@@ -733,7 +798,7 @@ class LexisUploadControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().message())
         .isEqualTo("This permit is currently locked for editing by another user.");
-    verify(uploadServiceProvider, never()).getIfAvailable();
+    verify(uploadService, never()).uploadInvoice(any(), any(), any(), any(), any(), any(), any());
   }
 
   @Test
@@ -3537,6 +3602,25 @@ class LexisUploadControllerTest {
     verify(applicationSubmissionImportService)
         .validateDedicatedFederalApplicationSubmission(
             submissionData, "federal-direct.xml", "FED-REF-1");
+  }
+
+  private LexisUploadController controllerWithRowLocks(OracleAggregateRowLockService rowLocks) {
+    @SuppressWarnings("unchecked")
+    ObjectProvider<OracleAggregateRowLockService> rowLockProvider = mock(ObjectProvider.class);
+    when(rowLockProvider.getIfAvailable()).thenReturn(rowLocks);
+    lenient()
+        .when(applicationEditLockService.acquirePermit(any(), any(), any(), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, true, null, null, null));
+    LexisUploadController controller =
+        new LexisUploadController(
+            uploadServiceProvider,
+            applicationSubmissionImportServiceProvider,
+            applicationEditLockService,
+            meterRegistryProvider,
+            new PermitOperationMutex(rowLockProvider));
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    controller.setDocumentUploadMutationPolicy(documentUploadMutationPolicy);
+    return controller;
   }
 
   private LexisUploadController controller() {
