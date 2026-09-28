@@ -167,17 +167,16 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     for (const field of fields) {
       expect(summary.getAllByText(field, { exact: true })).toHaveLength(1)
     }
-    expect(summary.queryByText('Order in Council indicator')).not.toBeInTheDocument()
 
     await userEvent.click(summary.getByRole('button', { name: 'Cancel' }))
-    for (const field of [...fields, 'Order in Council indicator']) {
+    for (const field of fields) {
       expect(summary.getAllByText(field, { exact: true })).toHaveLength(1)
     }
     expect(summary.getByRole('button', { name: 'Edit application details' })).toBeVisible()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
-  it('shows the Order in Council indicator read-only and never saves it', async () => {
+  it('neither shows nor saves the Order in Council indicator', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -190,10 +189,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const summary = within(await selectApplicationSummaryTile(false))
-    const indicatorField = summary
-      .getByText('Order in Council indicator', { exact: true })
-      .closest('.detail-field-item') as HTMLElement
-    expect(within(indicatorField).getByText('No', { selector: 'dd' })).toBeInTheDocument()
+    expect(summary.getByText('Jurisdiction', { exact: true })).toBeInTheDocument()
+    expect(summary.queryByText('Order in Council indicator')).not.toBeInTheDocument()
 
     await userEvent.click(summary.getByRole('button', { name: 'Edit application details' }))
     expect(summary.queryByText('Order in Council indicator')).not.toBeInTheDocument()
