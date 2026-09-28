@@ -55,24 +55,10 @@ public class OracleLexisUploadService implements LexisUploadService {
       return Optional.empty();
     }
 
-    ValidationResult validation = attachmentUploadValidator.validate(file, null);
-    if (!validation.accepted()) {
-      return Optional.of(rejected(normalizedUploadType, file, validation.rejectionMessage()));
+    UploadInspection inspection = inspect(normalizedUploadType, file, null);
+    if (!inspection.isAccepted()) {
+      return Optional.of(inspection.rejection());
     }
-    String fileTypeCode = validation.fileTypeCode();
-
-    Optional<LexisUploadResultDto> fileTypeRejection =
-        rejectUnsupportedFileType(normalizedUploadType, file, fileTypeCode);
-    if (fileTypeRejection.isPresent()) {
-      return fileTypeRejection;
-    }
-
-    Optional<LexisUploadResultDto> virusScanRejection =
-        rejectFailedVirusScan(normalizedUploadType, file);
-    if (virusScanRejection.isPresent()) {
-      return virusScanRejection;
-    }
-
     return Optional.of(
         new LexisUploadResultDto(
             normalizedUploadType,
@@ -83,26 +69,28 @@ public class OracleLexisUploadService implements LexisUploadService {
   }
 
   @Override
+  public UploadInspection inspectUpload(
+      String uploadType, MultipartFile file, String description) {
+    String normalizedUploadType = normalizeUploadType(uploadType);
+    if (!validFile(file) || normalizedUploadType == null) {
+      throw new IllegalArgumentException(
+          "A non-empty file and a supported upload type are required.");
+    }
+    // A blank invoice description becomes "Invoice <number>" when persisted; that default is ASCII.
+    String normalizedDescription =
+        "invoice".equals(normalizedUploadType)
+            ? trimToNull(description)
+            : defaultDescription(description);
+    return inspect(normalizedUploadType, file, normalizedDescription);
+  }
+
+  @Override
   @Transactional
   public Optional<LexisUploadResultDto> uploadApplication(
-      MultipartFile file, Long applicationNumber, String description, String entryUserId) {
-    if (!validFile(file) || applicationNumber == null || applicationNumber < 1) {
+      UploadInspection inspection, Long applicationNumber, String entryUserId) {
+    MultipartFile file = inspection.requireAcceptedFile("application");
+    if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
-    }
-    String normalizedDescription = defaultDescription(description);
-    ValidationResult validation = attachmentUploadValidator.validate(file, normalizedDescription);
-    if (!validation.accepted()) {
-      return Optional.of(rejected("application", file, validation.rejectionMessage()));
-    }
-    String fileTypeCode = validation.fileTypeCode();
-    Optional<LexisUploadResultDto> fileTypeRejection =
-        rejectUnsupportedFileType("application", file, fileTypeCode);
-    if (fileTypeRejection.isPresent()) {
-      return fileTypeRejection;
-    }
-    Optional<LexisUploadResultDto> virusScanRejection = rejectFailedVirusScan("application", file);
-    if (virusScanRejection.isPresent()) {
-      return virusScanRejection;
     }
 
     UploadPersistenceResult persistenceResult =
@@ -112,9 +100,9 @@ public class OracleLexisUploadService implements LexisUploadService {
                 uploadRepository.insertApplicationFile(
                     applicationNumber,
                     resolveFileName(file),
-                    normalizedDescription,
+                    inspection.description(),
                     ATTACHMENT_TYPE_APPLICATION,
-                    fileTypeCode,
+                    inspection.fileTypeCode(),
                     defaultSystemUser(entryUserId),
                     content,
                     contentLength));
@@ -136,24 +124,10 @@ public class OracleLexisUploadService implements LexisUploadService {
   @Override
   @Transactional
   public Optional<LexisUploadResultDto> uploadPermit(
-      MultipartFile file, Long permitNumber, String description, String entryUserId) {
-    if (!validFile(file) || permitNumber == null || permitNumber < 1) {
+      UploadInspection inspection, Long permitNumber, String entryUserId) {
+    MultipartFile file = inspection.requireAcceptedFile("permit");
+    if (permitNumber == null || permitNumber < 1) {
       return Optional.empty();
-    }
-    String normalizedDescription = defaultDescription(description);
-    ValidationResult validation = attachmentUploadValidator.validate(file, normalizedDescription);
-    if (!validation.accepted()) {
-      return Optional.of(rejected("permit", file, validation.rejectionMessage()));
-    }
-    String fileTypeCode = validation.fileTypeCode();
-    Optional<LexisUploadResultDto> fileTypeRejection =
-        rejectUnsupportedFileType("permit", file, fileTypeCode);
-    if (fileTypeRejection.isPresent()) {
-      return fileTypeRejection;
-    }
-    Optional<LexisUploadResultDto> virusScanRejection = rejectFailedVirusScan("permit", file);
-    if (virusScanRejection.isPresent()) {
-      return virusScanRejection;
     }
 
     UploadPersistenceResult persistenceResult =
@@ -163,9 +137,9 @@ public class OracleLexisUploadService implements LexisUploadService {
                 uploadRepository.insertPermitFile(
                     permitNumber,
                     resolveFileName(file),
-                    normalizedDescription,
+                    inspection.description(),
                     ATTACHMENT_TYPE_PERMIT,
-                    fileTypeCode,
+                    inspection.fileTypeCode(),
                     defaultSystemUser(entryUserId),
                     content,
                     contentLength));
@@ -185,25 +159,11 @@ public class OracleLexisUploadService implements LexisUploadService {
   @Override
   @Transactional
   public Optional<LexisUploadResultDto> uploadExemption(
-      MultipartFile file, String exemptionNumber, String description, String entryUserId) {
+      UploadInspection inspection, String exemptionNumber, String entryUserId) {
+    MultipartFile file = inspection.requireAcceptedFile("exemption");
     String normalizedExemptionNumber = trimToNull(exemptionNumber);
-    if (!validFile(file) || normalizedExemptionNumber == null) {
+    if (normalizedExemptionNumber == null) {
       return Optional.empty();
-    }
-    String normalizedDescription = defaultDescription(description);
-    ValidationResult validation = attachmentUploadValidator.validate(file, normalizedDescription);
-    if (!validation.accepted()) {
-      return Optional.of(rejected("exemption", file, validation.rejectionMessage()));
-    }
-    String fileTypeCode = validation.fileTypeCode();
-    Optional<LexisUploadResultDto> fileTypeRejection =
-        rejectUnsupportedFileType("exemption", file, fileTypeCode);
-    if (fileTypeRejection.isPresent()) {
-      return fileTypeRejection;
-    }
-    Optional<LexisUploadResultDto> virusScanRejection = rejectFailedVirusScan("exemption", file);
-    if (virusScanRejection.isPresent()) {
-      return virusScanRejection;
     }
 
     UploadPersistenceResult persistenceResult =
@@ -213,9 +173,9 @@ public class OracleLexisUploadService implements LexisUploadService {
                 uploadRepository.insertExemptionFile(
                     normalizedExemptionNumber,
                     resolveFileName(file),
-                    normalizedDescription,
+                    inspection.description(),
                     ATTACHMENT_TYPE_EXEMPTION,
-                    fileTypeCode,
+                    inspection.fileTypeCode(),
                     defaultSystemUser(entryUserId),
                     content,
                     contentLength));
@@ -235,19 +195,18 @@ public class OracleLexisUploadService implements LexisUploadService {
   @Override
   @Transactional
   public Optional<LexisUploadResultDto> uploadInvoice(
-      MultipartFile file,
+      UploadInspection inspection,
       Long permitNumber,
       String salesInvoiceNumber,
-      String description,
       BigDecimal exportValue,
       BigDecimal currencyConversionRate,
       BigDecimal feeInLieu,
       String entryUserId) {
+    MultipartFile file = inspection.requireAcceptedFile("invoice");
     String normalizedSalesInvoiceNumber = trimToNull(salesInvoiceNumber);
     // INTENTIONAL_LEGACY_DIVERGENCE(INVOICE_NUMBER_ENCODING_VALIDATION): Reject multibyte input before
     // it reaches Oracle's VARCHAR2(9 BYTE) invoice-number columns.
-    if (!validFile(file)
-        || permitNumber == null
+    if (permitNumber == null
         || permitNumber < 1
         || !isValidInvoiceNumber(normalizedSalesInvoiceNumber)
         || !isValidInvoiceAmount(exportValue)
@@ -259,25 +218,10 @@ public class OracleLexisUploadService implements LexisUploadService {
     BigDecimal storedConversionRate =
         roundInvoiceConversionRateForStorage(currencyConversionRate);
     BigDecimal storedFeeInLieu = roundInvoiceAmountForStorage(feeInLieu);
-    String requestedDescription = trimToNull(description);
     String normalizedDescription =
-        requestedDescription == null
+        inspection.description() == null
             ? "Invoice " + normalizedSalesInvoiceNumber
-            : requestedDescription;
-    ValidationResult validation = attachmentUploadValidator.validate(file, normalizedDescription);
-    if (!validation.accepted()) {
-      return Optional.of(rejected("invoice", file, validation.rejectionMessage()));
-    }
-    String fileTypeCode = validation.fileTypeCode();
-    Optional<LexisUploadResultDto> fileTypeRejection =
-        rejectUnsupportedFileType("invoice", file, fileTypeCode);
-    if (fileTypeRejection.isPresent()) {
-      return fileTypeRejection;
-    }
-    Optional<LexisUploadResultDto> virusScanRejection = rejectFailedVirusScan("invoice", file);
-    if (virusScanRejection.isPresent()) {
-      return virusScanRejection;
-    }
+            : inspection.description();
 
     UploadPersistenceResult persistenceResult =
         persistFile(
@@ -289,7 +233,7 @@ public class OracleLexisUploadService implements LexisUploadService {
                     resolveFileName(file),
                     normalizedDescription,
                     ATTACHMENT_TYPE_INVOICE,
-                    fileTypeCode,
+                    inspection.fileTypeCode(),
                     storedExportValue,
                     storedConversionRate,
                     storedFeeInLieu,
@@ -309,6 +253,21 @@ public class OracleLexisUploadService implements LexisUploadService {
                   persistenceResult.failureReason())));
     }
     return Optional.of(success("invoice", file, "Invoice upload persisted."));
+  }
+
+  private UploadInspection inspect(String uploadType, MultipartFile file, String description) {
+    ValidationResult validation = attachmentUploadValidator.validate(file, description);
+    if (!validation.accepted()) {
+      return UploadInspection.rejected(
+          uploadType, file, rejected(uploadType, file, validation.rejectionMessage()));
+    }
+    String fileTypeCode = validation.fileTypeCode();
+    Optional<LexisUploadResultDto> rejection =
+        rejectUnsupportedFileType(uploadType, file, fileTypeCode)
+            .or(() -> rejectFailedVirusScan(uploadType, file));
+    return rejection
+        .map(value -> UploadInspection.rejected(uploadType, file, value))
+        .orElseGet(() -> UploadInspection.accepted(uploadType, file, description, fileTypeCode));
   }
 
   private LexisUploadResultDto success(String uploadType, MultipartFile file, String message) {

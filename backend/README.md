@@ -92,7 +92,6 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_MAIL_REGION_RNI_ADDRESS` | RNI positional mailbox; selected as a sender or recipient by the persisted organization unit | Required in every environment |
 | `LEXIS_MAIL_REGION_RSI_ADDRESS` | RSI positional mailbox; selected as a sender or recipient by the persisted organization unit | Required in every environment |
 | `APP_LOG_LEVEL` | Application logging level | INFO |
-| `SPRING_JPA_SHOW_SQL` | SQL logging toggle | false |
 
 The reusable deployment workflow maps these GitHub settings:
 
@@ -156,11 +155,11 @@ scheduler uses `THE.LEXIS_SHEDLOCK` through the existing Oracle connection.
 
 | Profile | Description |
 |---------|-------------|
-| `default` | Boots without datasource/JPA autoconfig so backend can run while DB wiring is incomplete. |
+| `default` | Boots without datasource autoconfig so backend can run while DB wiring is incomplete. |
 | `oracle` | Activates Oracle-profiled repository/service beans (e.g., exemptions service/repository). |
 | `local` | Local-dev profile. Loads `application-local.yml` (gitignored). Activate alongside `oracle` (`SPRING_PROFILES_ACTIVE=local,oracle`). |
-| `stub-services` | Explicitly enables local in-memory application, admin, upload, and RTM/EMS services. Never use for a deployed environment. The stubs stay disabled when `oracle` is also active. |
-| `stub-reports` | Explicitly enables local placeholder report output. Never use for a deployed environment. The stub stays disabled when `oracle` is also active. |
+| `stub-services` | Test-only: enables the in-memory application, admin, upload, and RTM/EMS services under `src/test`, so Spring Boot tests can start without Oracle. They are not in the production image. |
+| `stub-reports` | Test-only: enables placeholder report output from `src/test` for Spring Boot tests. It is not in the production image. |
 
 ## API Endpoints
 

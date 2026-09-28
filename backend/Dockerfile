@@ -38,4 +38,6 @@ ENV JAVA_TOOL_OPTIONS="-XX:InitialRAMPercentage=20.0 -XX:MaxRAMPercentage=60.0"
 # variable set by openshift.deploy.yml. The JDK includes the named-zone data,
 # so no OS tzdata package is required on this Alpine image. Do not add
 # -Duser.timezone here because it would override the deployment setting.
-ENTRYPOINT ["java","-Duser.name=LEXIS-API","-Duser.home=/tmp","-Djava.io.tmpdir=/tmp","-Djava.awt.headless=true","-XX:TieredStopAtLevel=1","-XX:+UseParallelGC","-XX:MinHeapFreeRatio=20","-XX:MaxHeapFreeRatio=40","-XX:GCTimeRatio=4","-XX:AdaptiveSizePolicyWeight=90","-XX:ParallelGCThreads=2","-Djava.util.concurrent.ForkJoinPool.common.parallelism=8","-XX:CICompilerCount=2","-XX:+ExitOnOutOfMemoryError","-Djava.security.egd=file:/dev/./urandom","-cp","app:app/lib/*","ca.bc.gov.mof.lexis.LexisApiApplication"]
+# Keep the full tiered JIT (no -XX:TieredStopAtLevel=1): report rendering, XML parsing and
+# attachment inspection are CPU-bound and run while holding pooled Oracle connections.
+ENTRYPOINT ["java","-Duser.name=LEXIS-API","-Duser.home=/tmp","-Djava.io.tmpdir=/tmp","-Djava.awt.headless=true","-XX:+UseParallelGC","-XX:MinHeapFreeRatio=20","-XX:MaxHeapFreeRatio=40","-XX:GCTimeRatio=4","-XX:AdaptiveSizePolicyWeight=90","-XX:ParallelGCThreads=2","-Djava.util.concurrent.ForkJoinPool.common.parallelism=8","-XX:CICompilerCount=2","-XX:+ExitOnOutOfMemoryError","-Djava.security.egd=file:/dev/./urandom","-cp","app:app/lib/*","ca.bc.gov.mof.lexis.LexisApiApplication"]

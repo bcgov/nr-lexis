@@ -129,6 +129,14 @@ public class ExemptionDetailsRpcController {
     this.provincialAuthorizationService = provincialAuthorizationService;
   }
 
+  /** Object-level checks fail closed: without the authorization service the controller refuses. */
+  private ProvincialAuthorizationService authorization() {
+    if (provincialAuthorizationService == null) {
+      throw new IllegalStateException("Provincial authorization is not configured.");
+    }
+    return provincialAuthorizationService;
+  }
+
   @Autowired
   void setApplicationEditLockService(ApplicationEditLockService editLockService) {
     this.editLockService = editLockService;
@@ -192,9 +200,7 @@ public class ExemptionDetailsRpcController {
             exemptionNumber,
             authorizationService.canPerformAction(roles, "viewFederalApplication"),
             applicationNumber ->
-                provincialAuthorizationService != null
-                    && provincialAuthorizationService.canAccessApplication(
-                        authentication, applicationNumber));
+                authorization().canAccessApplication(authentication, applicationNumber));
 
     return ResponseEntity.ok(toApplicationsResponse(payload));
   }
@@ -227,8 +233,7 @@ public class ExemptionDetailsRpcController {
                 exemptionNumber,
                 permit ->
                     canViewPermitDetails
-                        && provincialAuthorizationService != null
-                        && provincialAuthorizationService.canAccessExemptionPermit(
+                        && authorization().canAccessExemptionPermit(
                             authentication,
                             new PermitAccessDto(
                                 permit.permitNumber(),
@@ -1243,9 +1248,7 @@ public class ExemptionDetailsRpcController {
 
   private void requireExemptionAccess(
       String exemptionNumber, Authentication authentication) {
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireExemption(authentication, exemptionNumber);
-    }
+    authorization().requireExemption(authentication, exemptionNumber);
   }
 
   private void requireExemptionAccess(String exemptionNumber) {
@@ -1255,9 +1258,7 @@ public class ExemptionDetailsRpcController {
 
   private void requireApplicationAccess(
       Long applicationNumber, Authentication authentication) {
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireApplication(authentication, applicationNumber);
-    }
+    authorization().requireApplication(authentication, applicationNumber);
   }
 
   private boolean canAccessExemptionDocument(
@@ -1301,8 +1302,8 @@ public class ExemptionDetailsRpcController {
   private void requireBlanketOicRoleScope(
       String exemptionTypeCode, List<Long> regionNumbers, Authentication authentication) {
     String exemptionType = firstTrimmedNonBlank(exemptionTypeCode);
-    if ("B".equalsIgnoreCase(exemptionType) && provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireBlanketOicRegions(authentication, regionNumbers);
+    if ("B".equalsIgnoreCase(exemptionType)) {
+      authorization().requireBlanketOicRegions(authentication, regionNumbers);
     }
   }
 
@@ -1312,32 +1313,24 @@ public class ExemptionDetailsRpcController {
       List<Long> regionNumbers,
       List<Long> applicationNumbers,
       Authentication authentication) {
-    return provincialAuthorizationService == null
-        || provincialAuthorizationService.canApproveExemption(
-            authentication, exemptionNumber, regionNumbers, applicationNumbers);
+    return authorization().canApproveExemption(
+        authentication, exemptionNumber, regionNumbers, applicationNumbers);
   }
 
   private void requireExemptionApplicationLink(
       String exemptionNumber, Long applicationNumber, Authentication authentication) {
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireExemptionApplicationLink(
-          authentication, exemptionNumber, applicationNumber);
-    }
+    authorization().requireExemptionApplicationLink(
+        authentication, exemptionNumber, applicationNumber);
   }
 
   private void requireExemptionWriteAccess(
       String exemptionNumber, Authentication authentication) {
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireExemptionWrite(authentication, exemptionNumber);
-    }
+    authorization().requireExemptionWrite(authentication, exemptionNumber);
   }
 
   private void requireExemptionRegionAccess(
       List<Long> regions, Authentication authentication) {
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireOrgUnits(
-          authentication, regions, OrgUnitSurface.EXEMPTION_WRITE);
-    }
+    authorization().requireOrgUnits(authentication, regions, OrgUnitSurface.EXEMPTION_WRITE);
   }
 
   private List<Long> acquireApplicationLocksForMutation(
@@ -1577,9 +1570,8 @@ public class ExemptionDetailsRpcController {
   }
 
   private void requireClientAccess(String clientNumber) {
-    if (provincialAuthorizationService != null
-        && !provincialAuthorizationService.canCreateForClient(
-            SecurityContextHolder.getContext().getAuthentication(), clientNumber, null)) {
+    if (!authorization().canCreateForClient(
+        SecurityContextHolder.getContext().getAuthentication(), clientNumber, null)) {
       throw new AccessDeniedException("Client is outside the authenticated client scope.");
     }
   }

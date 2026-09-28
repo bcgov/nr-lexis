@@ -9,20 +9,25 @@ public interface LexisUploadService {
 
   Optional<LexisUploadResultDto> validateDocument(MultipartFile file, String uploadType);
 
+  /**
+   * Validates, type-checks and virus-scans a non-empty attachment without touching its target
+   * record. Call this before taking aggregate row locks, then persist only an accepted inspection.
+   */
+  UploadInspection inspectUpload(String uploadType, MultipartFile file, String description);
+
   Optional<LexisUploadResultDto> uploadApplication(
-      MultipartFile file, Long applicationNumber, String description, String entryUserId);
+      UploadInspection inspection, Long applicationNumber, String entryUserId);
 
   Optional<LexisUploadResultDto> uploadPermit(
-      MultipartFile file, Long permitNumber, String description, String entryUserId);
+      UploadInspection inspection, Long permitNumber, String entryUserId);
 
   Optional<LexisUploadResultDto> uploadExemption(
-      MultipartFile file, String exemptionNumber, String description, String entryUserId);
+      UploadInspection inspection, String exemptionNumber, String entryUserId);
 
   Optional<LexisUploadResultDto> uploadInvoice(
-      MultipartFile file,
+      UploadInspection inspection,
       Long permitNumber,
       String salesInvoiceNumber,
-      String description,
       BigDecimal exportValue,
       BigDecimal currencyConversionRate,
       BigDecimal feeInLieu,

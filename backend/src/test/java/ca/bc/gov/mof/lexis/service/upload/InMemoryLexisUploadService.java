@@ -47,38 +47,51 @@ public class InMemoryLexisUploadService implements LexisUploadService {
   }
 
   @Override
+  public UploadInspection inspectUpload(
+      String uploadType, MultipartFile file, String description) {
+    String normalizedDescription =
+        "invoice".equals(uploadType) ? trimToNull(description) : defaultDescription(description);
+    LexisUploadResultDto result =
+        buildResult(uploadType, file, normalizedDescription)
+            .orElseThrow(
+                () -> new IllegalArgumentException("A non-empty file is required."));
+    return "accepted".equalsIgnoreCase(result.status())
+        ? UploadInspection.accepted(uploadType, file, normalizedDescription, null)
+        : UploadInspection.rejected(uploadType, file, result);
+  }
+
+  @Override
   public Optional<LexisUploadResultDto> uploadApplication(
-      MultipartFile file, Long applicationNumber, String description, String entryUserId) {
+      UploadInspection inspection, Long applicationNumber, String entryUserId) {
     if (applicationNumber == null || applicationNumber < 1) {
       return Optional.empty();
     }
-    return buildResult("application", file, defaultDescription(description));
+    return accepted("application", inspection);
   }
 
   @Override
   public Optional<LexisUploadResultDto> uploadPermit(
-      MultipartFile file, Long permitNumber, String description, String entryUserId) {
+      UploadInspection inspection, Long permitNumber, String entryUserId) {
     if (permitNumber == null || permitNumber < 1) {
       return Optional.empty();
     }
-    return buildResult("permit", file, defaultDescription(description));
+    return accepted("permit", inspection);
   }
 
   @Override
   public Optional<LexisUploadResultDto> uploadExemption(
-      MultipartFile file, String exemptionNumber, String description, String entryUserId) {
+      UploadInspection inspection, String exemptionNumber, String entryUserId) {
     if (exemptionNumber == null || exemptionNumber.isBlank()) {
       return Optional.empty();
     }
-    return buildResult("exemption", file, defaultDescription(description));
+    return accepted("exemption", inspection);
   }
 
   @Override
   public Optional<LexisUploadResultDto> uploadInvoice(
-      MultipartFile file,
+      UploadInspection inspection,
       Long permitNumber,
       String salesInvoiceNumber,
-      String description,
       BigDecimal exportValue,
       BigDecimal currencyConversionRate,
       BigDecimal feeInLieu,
@@ -89,10 +102,18 @@ public class InMemoryLexisUploadService implements LexisUploadService {
     if (salesInvoiceNumber == null || salesInvoiceNumber.isBlank()) {
       return Optional.empty();
     }
-    String requestedDescription = trimToNull(description);
-    String normalizedDescription =
-        requestedDescription == null ? "Invoice " + salesInvoiceNumber : requestedDescription;
-    return buildResult("invoice", file, normalizedDescription);
+    return accepted("invoice", inspection);
+  }
+
+  private Optional<LexisUploadResultDto> accepted(String uploadType, UploadInspection inspection) {
+    MultipartFile file = inspection.requireAcceptedFile(uploadType);
+    return Optional.of(
+        new LexisUploadResultDto(
+            uploadType,
+            resolveFileName(file),
+            file.getSize(),
+            "accepted",
+            "Upload accepted in local profile; persistence pipeline is not enabled."));
   }
 
   private Optional<LexisUploadResultDto> buildResult(

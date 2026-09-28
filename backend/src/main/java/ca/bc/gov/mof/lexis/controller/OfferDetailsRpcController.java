@@ -112,6 +112,14 @@ public class OfferDetailsRpcController {
     this.provincialAuthorizationService = provincialAuthorizationService;
   }
 
+  /** Object-level checks fail closed: without the authorization service the controller refuses. */
+  private ProvincialAuthorizationService authorization() {
+    if (provincialAuthorizationService == null) {
+      throw new IllegalStateException("Provincial authorization is not configured.");
+    }
+    return provincialAuthorizationService;
+  }
+
   @Autowired
   void setLexisPrincipalService(LexisPrincipalService principalService) {
     this.principalService = principalService;
@@ -242,7 +250,7 @@ public class OfferDetailsRpcController {
       return ResponseEntity.badRequest().build();
     }
     ApplicationDetailsRpcService service = applicationDetailsServiceProvider.getIfAvailable();
-    if (service == null || provincialAuthorizationService == null) {
+    if (service == null) {
       return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE).build();
     }
 
@@ -256,7 +264,7 @@ public class OfferDetailsRpcController {
       if (offer == null) {
         return ResponseEntity.notFound().build();
       }
-      if (!provincialAuthorizationService.canAccessOffer(authentication, offer)) {
+      if (!authorization().canAccessOffer(authentication, offer)) {
         throw new AccessDeniedException("The offer is outside the authenticated access scope.");
       }
       // Existing offers retain their read-only scale view after the offer window closes.
@@ -466,9 +474,7 @@ public class OfferDetailsRpcController {
           withOfferingClientIdentity(
               request, scopedClientNumber, bidder.get().companyName());
     }
-    if (provincialAuthorizationService != null
-        && !provincialAuthorizationService.canCreateForClient(
-            authentication, request.offeringClientNumber(), null)) {
+    if (!authorization().canCreateForClient(authentication, request.offeringClientNumber(), null)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     if (!isOfferApprover(roles)) {
@@ -602,8 +608,7 @@ public class OfferDetailsRpcController {
       Authentication authentication) {
     if (offerNumber == null
         || offerNumber < 1
-        || provincialAuthorizationService == null
-        || !provincialAuthorizationService.canAccessOffer(authentication, offerNumber)) {
+        || !authorization().canAccessOffer(authentication, offerNumber)) {
       throw new AccessDeniedException("The purchase offer is outside the authenticated scope.");
     }
     editLockService.releaseOffer(offerNumber, userId(authentication));
@@ -648,9 +653,7 @@ public class OfferDetailsRpcController {
 
   private void requireApplicationAccess(
       Long applicationNumber, Authentication authentication) {
-    if (provincialAuthorizationService != null) {
-      provincialAuthorizationService.requireApplication(authentication, applicationNumber);
-    }
+    authorization().requireApplication(authentication, applicationNumber);
   }
 
   private Optional<LexisApplicationDetailDto> findApplication(Long applicationNumber) {
@@ -743,9 +746,7 @@ public class OfferDetailsRpcController {
   }
 
   private void requireClientAccess(String clientNumber) {
-    if (provincialAuthorizationService != null
-        && !provincialAuthorizationService.canCreateForClient(
-            currentAuthentication(), clientNumber, null)) {
+    if (!authorization().canCreateForClient(currentAuthentication(), clientNumber, null)) {
       throw new AccessDeniedException("Client is outside the authenticated client scope.");
     }
   }
