@@ -197,7 +197,7 @@ jobs:
           MASK_LEXIS_MAIL_REGION_RSI_ADDRESS: ${{ secrets.lexis_mail_region_rsi_address }}
         run: bash ./.github/scripts/mask-template-secrets.sh
 
-      - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
+      - uses: bcgov/action-deployer-openshift@bb9d143f4f03187239580c17c4b77da04cdb6e66 # v4.2.2
         id: deploy
         env:
           DATABASE_HOST: ${{ secrets.database_host }}
@@ -333,7 +333,7 @@ jobs:
           MASK_VANITY_TLS_CA_CERTIFICATE: ${{ secrets.vanity_tls_ca_certificate }}
         run: bash ./.github/scripts/mask-template-secrets.sh
 
-      - uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
+      - uses: bcgov/action-deployer-openshift@bb9d143f4f03187239580c17c4b77da04cdb6e66 # v4.2.2
         id: deploy
         env:
           LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
@@ -366,7 +366,7 @@ jobs:
 
       - name: Default Route (non-PROD)
         if: ${{ inputs.target != 'prod' }}
-        uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
+        uses: bcgov/action-deployer-openshift@bb9d143f4f03187239580c17c4b77da04cdb6e66 # v4.2.2
         with:
           file: frontend/openshift.route.yml
           oc_namespace: ${{ secrets.oc_namespace }}
@@ -382,7 +382,7 @@ jobs:
 
       - name: Vanity Route (PROD)
         if: ${{ inputs.target == 'prod' }}
-        uses: bcgov/action-deployer-openshift@f7bd61ec357fb1dfd1d43f1287bcd21382d06348 # v4.1.0
+        uses: bcgov/action-deployer-openshift@bb9d143f4f03187239580c17c4b77da04cdb6e66 # v4.2.2
         env:
           VANITY_TLS_CERTIFICATE: ${{ secrets.vanity_tls_certificate }}
           VANITY_TLS_KEY: ${{ secrets.vanity_tls_key }}
