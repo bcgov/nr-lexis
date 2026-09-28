@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.upload;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -34,6 +35,7 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Clock;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.ZoneOffset;
@@ -1091,6 +1093,98 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"));
   }
 
+  @Test
+  void shouldValidateSoapSubmissionDataReferencedThroughAnAxisMultiRef() {
+    stubFederalSampleValidation();
+    String soap =
+        soapEnvelopeWithBody(
+            """
+            <sub:makeSubmission xmlns:sub="http://submissions.ws.esf.mof.gov.bc.ca">
+              <submissionData href="#id0"/>
+            </sub:makeSubmission>
+            <multiRef id="id0">%s</multiRef>
+            """
+                .formatted(xmlTextEscape(federalSampleXmlText())));
+
+    ApplicationSubmissionImportResultDto result = validateDedicatedFederal(soap);
+
+    assertThat(result.status()).as(String.join("; ", result.errors())).isEqualTo("validated");
+    assertThat(result.packageNumber()).isEqualTo("FED26-700123");
+  }
+
+  @Test
+  void shouldValidateSoapPayloadCarriedByAnotherOperationPart() {
+    stubFederalSampleValidation();
+    String soap =
+        soapEnvelopeWithBody(
+            """
+            <sub:makeSubmission xmlns:sub="http://submissions.ws.esf.mof.gov.bc.ca">
+              <submissionType>LEXIS</submissionType>
+              <payload>%s</payload>
+            </sub:makeSubmission>
+            """
+                .formatted(xmlTextEscape(federalSampleXmlText())));
+
+    ApplicationSubmissionImportResultDto result = validateDedicatedFederal(soap);
+
+    assertThat(result.status()).as(String.join("; ", result.errors())).isEqualTo("validated");
+    assertThat(result.packageNumber()).isEqualTo("FED26-700123");
+  }
+
+  @Test
+  void shouldRejectSoapReferencesWithoutAPayloadInLinearTime() {
+    // Every href used to trigger a scan of the whole document, so this took minutes.
+    String soap = soapEnvelopeWithBody("<a href=\"#missing\"/>".repeat(40_000));
+
+    ApplicationSubmissionImportResultDto result =
+        assertTimeoutPreemptively(Duration.ofSeconds(10), () -> validateDedicatedFederal(soap));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("SOAP envelope must include a LEXIS submission payload.");
+  }
+
+  @Test
+  void shouldRejectXmlNestedDeeperThanTheElementDepthLimit() {
+    int depth = ApplicationSubmissionImportService.MAX_XML_ELEMENT_DEPTH + 1;
+
+    ApplicationSubmissionImportResultDto result =
+        assertTimeoutPreemptively(
+            Duration.ofSeconds(10),
+            () -> validateDedicatedFederal("<a>".repeat(depth) + "</a>".repeat(depth)));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .anySatisfy(
+            error -> assertThat(error).contains("must not be nested more than 128 levels deep"));
+  }
+
+  @Test
+  void shouldRejectSoapPayloadsEmbeddedTooManyLevelsDeep() {
+    String soap = "<x/>";
+    for (int level = 0; level < 4; level++) {
+      soap = soapEnvelopeWithSubmissionData(xmlTextEscape(soap)).strip();
+    }
+
+    ApplicationSubmissionImportResultDto result = validateDedicatedFederal(soap);
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains("The SOAP payload XML text contains too many levels of embedded XML.");
+  }
+
+  private void stubFederalSampleValidation() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.isPackageValid("FED26-700123"))
+        .thenReturn(new PackageValidityItem(true, null));
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+  }
+
+  private ApplicationSubmissionImportResultDto validateDedicatedFederal(String xml) {
+    return service()
+        .validateDedicatedFederalApplicationSubmission(
+            xml.getBytes(StandardCharsets.UTF_8), "test-2026-09-25.xml", "test-2026-09-25");
+  }
 
   @Test
   void shouldImportDedicatedBareFederalXmlAsApplicationPackageAndScales() {
@@ -2708,6 +2802,16 @@ class ApplicationSubmissionImportServiceTest {
 
   private static String xmlTextEscape(String value) {
     return value.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+  }
+
+  private static String soapEnvelopeWithBody(String bodyContent) {
+    return """
+      <?xml version="1.0" encoding="UTF-8"?>
+      <soapenv:Envelope xmlns:soapenv="http://schemas.xmlsoap.org/soap/envelope/">
+        <soapenv:Body>%s</soapenv:Body>
+      </soapenv:Envelope>
+      """
+        .formatted(bodyContent);
   }
 
   private static String soapEnvelopeWithSubmissionData(String submissionData) {
