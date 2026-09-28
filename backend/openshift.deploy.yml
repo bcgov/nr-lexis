@@ -51,8 +51,6 @@ parameters:
     value: INFO
   - name: SPRING_BOOT_AUTOCONFIG_LOG_LEVEL
     value: INFO
-  - name: SPRING_JPA_SHOW_SQL
-    value: "false"
   - name: LEXIS_PROD_RTM_ONLY
     value: "false"
   - name: LEXIS_EXPIRY_ENABLED
@@ -267,8 +265,6 @@ objects:
                   value: ${SPRING_WEB_LOG_LEVEL}
                 - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_BOOT_AUTOCONFIGURE
                   value: ${SPRING_BOOT_AUTOCONFIG_LOG_LEVEL}
-                - name: SPRING_JPA_SHOW_SQL
-                  value: ${SPRING_JPA_SHOW_SQL}
                 - name: LEXIS_PROD_RTM_ONLY
                   value: ${LEXIS_PROD_RTM_ONLY}
                 - name: LEXIS_EXPIRY_ENABLED

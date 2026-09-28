@@ -1,5 +1,9 @@
 package ca.bc.gov.mof.lexis.service.upload;
 
+import static ca.bc.gov.mof.lexis.service.upload.UploadInspectionTestSupport.uploadApplication;
+import static ca.bc.gov.mof.lexis.service.upload.UploadInspectionTestSupport.uploadExemption;
+import static ca.bc.gov.mof.lexis.service.upload.UploadInspectionTestSupport.uploadInvoice;
+import static ca.bc.gov.mof.lexis.service.upload.UploadInspectionTestSupport.uploadPermit;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -69,7 +73,7 @@ class OracleLexisUploadServiceTest {
         .thenReturn(UploadPersistenceResult.success());
 
     LexisUploadResultDto result =
-        service.uploadApplication(file, 7000123L, "  App file  ", "jsmith").orElseThrow();
+        uploadApplication(service, file, 7000123L, "  App file  ", "jsmith").orElseThrow();
 
     assertThat(result.uploadType()).isEqualTo("application");
     assertThat(result.fileName()).isEqualTo("application.pdf");
@@ -110,7 +114,7 @@ class OracleLexisUploadServiceTest {
         .thenReturn(UploadPersistenceResult.success());
 
     LexisUploadResultDto result =
-        service.uploadApplication(file, 7000123L, "Application document", "jsmith").orElseThrow();
+        uploadApplication(service, file, 7000123L, "Application document", "jsmith").orElseThrow();
 
     assertThat(result.status()).isEqualTo("accepted");
     InOrder ordered = inOrder(virusScanService, uploadRepository);
@@ -135,7 +139,7 @@ class OracleLexisUploadServiceTest {
         new MockMultipartFile(
             "formFile", "application.xyz", "application/octet-stream", "bytes".getBytes(StandardCharsets.UTF_8));
     LexisUploadResultDto result =
-        service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
+        uploadApplication(service, file, 7000123L, "App file", "jsmith").orElseThrow();
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.message())
@@ -152,7 +156,7 @@ class OracleLexisUploadServiceTest {
     when(uploadRepository.isFileTypeCodeValidRequired("PDF")).thenReturn(false);
 
     LexisUploadResultDto result =
-        service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
+        uploadApplication(service, file, 7000123L, "App file", "jsmith").orElseThrow();
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.message())
@@ -171,7 +175,7 @@ class OracleLexisUploadServiceTest {
     when(uploadRepository.isFileTypeCodeValidRequired("PDF")).thenThrow(failure);
 
     assertThatThrownBy(
-            () -> service.uploadApplication(file, 7000123L, "App file", "jsmith"))
+            () -> uploadApplication(service, file, 7000123L, "App file", "jsmith"))
         .isSameAs(failure);
     verifyNoInteractions(virusScanService);
   }
@@ -188,7 +192,7 @@ class OracleLexisUploadServiceTest {
         .assertClean(file);
 
     LexisUploadResultDto result =
-        service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
+        uploadApplication(service, file, 7000123L, "App file", "jsmith").orElseThrow();
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.message()).isEqualTo("The uploaded file failed virus scanning.");
@@ -204,7 +208,7 @@ class OracleLexisUploadServiceTest {
             "formFile", "application", "application/octet-stream", "bytes".getBytes(StandardCharsets.UTF_8));
 
     LexisUploadResultDto result =
-        service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
+        uploadApplication(service, file, 7000123L, "App file", "jsmith").orElseThrow();
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.message()).contains("file extension");
@@ -219,26 +223,23 @@ class OracleLexisUploadServiceTest {
     String unsafeDescription = "non-ASCII café";
 
     assertThat(
-            service
-                .uploadApplication(file, 7000123L, unsafeDescription, "jsmith")
+            uploadApplication(service, file, 7000123L, unsafeDescription, "jsmith")
                 .orElseThrow()
                 .status())
         .isEqualTo("rejected");
     assertThat(
-            service
-                .uploadPermit(file, 7000123L, unsafeDescription, "jsmith")
+            uploadPermit(service, file, 7000123L, unsafeDescription, "jsmith")
                 .orElseThrow()
                 .status())
         .isEqualTo("rejected");
     assertThat(
-            service
-                .uploadExemption(file, "E-100", unsafeDescription, "jsmith")
+            uploadExemption(service, file, "E-100", unsafeDescription, "jsmith")
                 .orElseThrow()
                 .status())
         .isEqualTo("rejected");
     assertThat(
-            service
-                .uploadInvoice(
+            uploadInvoice(
+                    service,
                     file,
                     7000123L,
                     "123456789",
@@ -266,8 +267,7 @@ class OracleLexisUploadServiceTest {
     assertThat(service.validateDocument(executable, "application").orElseThrow().status())
         .isEqualTo("rejected");
     assertThat(
-            service
-                .uploadApplication(executable, 7000123L, "description", "jsmith")
+            uploadApplication(service, executable, 7000123L, "description", "jsmith")
                 .orElseThrow()
                 .status())
         .isEqualTo("rejected");
@@ -311,7 +311,7 @@ class OracleLexisUploadServiceTest {
         new MockMultipartFile("formFile", "café.pdf", "application/pdf", validPdf());
 
     LexisUploadResultDto result =
-        service.uploadApplication(file, 7000123L, "description", "jsmith").orElseThrow();
+        uploadApplication(service, file, 7000123L, "description", "jsmith").orElseThrow();
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.message()).contains("US-ASCII");
@@ -338,7 +338,7 @@ class OracleLexisUploadServiceTest {
         .thenReturn(UploadPersistenceResult.failed(UploadFailureReason.UNKNOWN));
 
     LexisUploadResultDto result =
-        service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
+        uploadApplication(service, file, 7000123L, "App file", "jsmith").orElseThrow();
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.message())
@@ -366,8 +366,7 @@ class OracleLexisUploadServiceTest {
     RecordingTransactionManager transactionManager = new RecordingTransactionManager();
 
     LexisUploadResultDto result =
-        transactionalService(transactionManager)
-            .uploadApplication(file, 7000123L, "App file", "jsmith")
+        uploadApplication(transactionalService(transactionManager), file, 7000123L, "App file", "jsmith")
             .orElseThrow();
 
     assertThat(result.status()).isEqualTo("rejected");
@@ -395,7 +394,7 @@ class OracleLexisUploadServiceTest {
         .thenReturn(UploadPersistenceResult.failed(UploadFailureReason.PARENT_NOT_FOUND));
 
     LexisUploadResultDto result =
-        service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
+        uploadApplication(service, file, 7000123L, "App file", "jsmith").orElseThrow();
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.message())
@@ -415,10 +414,9 @@ class OracleLexisUploadServiceTest {
 
     assertThat(
             service.uploadInvoice(
-                file,
+                UploadInspection.accepted("invoice", file, null, "PDF"),
                 7000123L,
                 "1234567890",
-                "",
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
                 BigDecimal.ZERO,
@@ -439,10 +437,9 @@ class OracleLexisUploadServiceTest {
 
     assertThat(
             service.uploadInvoice(
-                file,
+                UploadInspection.accepted("invoice", file, null, "PDF"),
                 7000123L,
                 "INV-1",
-                "",
                 new BigDecimal("10000000"),
                 BigDecimal.ONE,
                 BigDecimal.ONE,
@@ -450,10 +447,9 @@ class OracleLexisUploadServiceTest {
         .isEmpty();
     assertThat(
             service.uploadInvoice(
-                file,
+                UploadInspection.accepted("invoice", file, null, "PDF"),
                 7000123L,
                 "INV-1",
-                "",
                 BigDecimal.ONE,
                 new BigDecimal("10"),
                 BigDecimal.ONE,
@@ -461,10 +457,9 @@ class OracleLexisUploadServiceTest {
         .isEmpty();
     assertThat(
             service.uploadInvoice(
-                file,
+                UploadInspection.accepted("invoice", file, null, "PDF"),
                 7000123L,
                 "INV-1",
-                "",
                 new BigDecimal("1E+2147483647"),
                 BigDecimal.ONE,
                 BigDecimal.ONE,
@@ -496,8 +491,8 @@ class OracleLexisUploadServiceTest {
         .thenReturn(UploadPersistenceResult.success());
 
     LexisUploadResultDto result =
-        service
-            .uploadInvoice(
+        uploadInvoice(
+                service,
                 file,
                 7000123L,
                 "INV-1",
@@ -534,10 +529,9 @@ class OracleLexisUploadServiceTest {
 
     assertThat(
             service.uploadInvoice(
-                file,
+                UploadInspection.accepted("invoice", file, null, "PDF"),
                 7000123L,
                 "é".repeat(9),
-                "",
                 BigDecimal.ONE,
                 BigDecimal.ONE,
                 BigDecimal.ONE,
@@ -569,7 +563,7 @@ class OracleLexisUploadServiceTest {
         .thenReturn(UploadPersistenceResult.success());
 
     LexisUploadResultDto result =
-        service.uploadApplication(file, 7000123L, "App file", "jsmith").orElseThrow();
+        uploadApplication(service, file, 7000123L, "App file", "jsmith").orElseThrow();
 
     assertThat(result.status()).isEqualTo("accepted");
     verify(file, times(2)).getInputStream();

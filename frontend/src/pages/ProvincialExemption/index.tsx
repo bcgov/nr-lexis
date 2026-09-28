@@ -98,7 +98,7 @@ import {
   type ExemptionApprovalResult,
 } from '@/service/provincial-exemption-detail-service'
 import { fetchCurrentExemptionRecordVersion } from '@/service/record-version-service'
-import { formatLocalIsoDate } from '@/utils/date'
+import { formatBusinessIsoDate } from '@/utils/date'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 import { firstStringField, isRecord } from '@/utils/record'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
@@ -700,7 +700,7 @@ const ProvincialExemptionPage = () => {
 
     setApprovalStatus(null)
     setApprovalCertified(false)
-    setApprovalDate(formatLocalIsoDate(new Date()))
+    setApprovalDate(formatBusinessIsoDate())
     setApprovalConfirmationOpen(true)
   }
 

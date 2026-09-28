@@ -12,6 +12,7 @@ import ca.bc.gov.mof.lexis.service.ScaleDomainValidator;
 import ca.bc.gov.mof.lexis.service.ScaleDomainValidator.ScaleValues;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.federal.FederalSubmissionPackagePolicy;
+import ca.bc.gov.mof.lexis.util.LegacyExcolSort;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import java.math.BigDecimal;
@@ -834,19 +835,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     List<ApplicationDetailsRpcRepository.ExcolValidationRow> candidates =
         repository.findCandidateExcolCodesRequired(
             endUses.size(), firstSpeciesCode, firstEndUseCode, application.orgUnitNumber());
-    if (candidates.size() == 1) {
-      String candidate = trimToNull(candidates.get(0).excolCode());
-      return candidate == null ? "" : candidate;
-    }
-
-    for (ApplicationDetailsRpcRepository.ExcolValidationRow candidateRow : candidates) {
-      String candidate = trimToNull(candidateRow.excolCode());
-      if (matchesLegacyApplicationEndUseSort(
-          candidate, endUses, firstEndUseCode, application.productTypeCode())) {
-        return candidate;
-      }
-    }
-    return "";
+    return LegacyExcolSort.select(
+            application.productTypeCode(),
+            endUses.stream().map(ApplicationDetailsRpcRepository.EndUseRow::speciesCode).toList(),
+            firstEndUseCode,
+            candidates.stream()
+                .map(ApplicationDetailsRpcRepository.ExcolValidationRow::excolCode)
+                .toList())
+        .orElse("");
   }
 
   @Override
@@ -2326,24 +2322,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       }
     }
     return true;
-  }
-
-  private boolean matchesLegacyApplicationEndUseSort(
-      String candidate,
-      List<ApplicationDetailsRpcRepository.EndUseRow> endUses,
-      String firstEndUseCode,
-      String productTypeCode) {
-    if (candidate == null || firstEndUseCode == null) {
-      return false;
-    }
-    for (ApplicationDetailsRpcRepository.EndUseRow endUse : endUses) {
-      String speciesCode = trimToNull(endUse.speciesCode());
-      if (speciesCode == null || !candidate.contains(speciesCode)) {
-        return false;
-      }
-    }
-    return EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(trimToNull(productTypeCode))
-        || candidate.contains(firstEndUseCode);
   }
 
   private CodeItem toCodeItem(ApplicationDetailsRpcRepository.CodeRow row) {

@@ -13,6 +13,7 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.LexisRemarkQueries;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import ca.bc.gov.mof.lexis.util.LegacyExcolSort;
 import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
@@ -116,7 +117,6 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       LEXIS_GROUP_14_PACKAGE + "UPDATE_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String INSERT_EXEMPTION_APP_REMARK =
       LEXIS_GROUP_14_PACKAGE + "INSERT_EXEMPTION_APP_REMARK(?,?,?,?,?,?)";
-  private static final String PRODUCT_TYPE_UNMANUFACTURED = "T";
 
   public ApplicationReviewRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
     super(jdbcTemplate);
@@ -558,7 +558,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
         continue;
       }
       EndUseSortRow firstEndUse = endUses.get(0);
-      String pattern = excolPattern(endUses.size());
+      String pattern = LegacyExcolSort.candidatePattern(endUses.size());
       List<String> candidates =
           candidatesByKey
               .getOrDefault(
@@ -613,6 +613,19 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       }
     }
     return sorts;
+  }
+
+  private String legacySpeciesEndUseSort(
+      String productTypeCode,
+      List<EndUseSortRow> endUses,
+      EndUseSortRow firstEndUse,
+      List<String> candidates) {
+    return LegacyExcolSort.select(
+            productTypeCode,
+            endUses.stream().map(EndUseSortRow::speciesCode).toList(),
+            firstEndUse.endUseCode(),
+            candidates)
+        .orElse(null);
   }
 
   protected List<EndUseSortRow> findEndUsesByApplicationNumbers(
@@ -730,7 +743,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
 
   protected List<String> findCandidateExcolCodes(
       int speciesCount, String speciesCode, String endUseCode, Long orgUnitNo) {
-    String pattern = excolPattern(speciesCount);
+    String pattern = LegacyExcolSort.candidatePattern(speciesCount);
     if (pattern == null
         || speciesCode == null
         || endUseCode == null
@@ -748,40 +761,6 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
         },
         5,
         rs -> getString(rs, "EXCOL_TRANSLATION_VALUE"));
-  }
-
-  private String legacySpeciesEndUseSort(
-      String productTypeCode,
-      List<EndUseSortRow> endUses,
-      EndUseSortRow firstEndUse,
-      List<String> candidates) {
-    if (candidates.size() == 1) {
-      return candidates.get(0);
-    }
-
-    for (String candidate : candidates) {
-      if (matchesLegacyExcolCandidate(candidate, endUses, firstEndUse, productTypeCode)) {
-        return candidate;
-      }
-    }
-    return null;
-  }
-
-  private boolean matchesLegacyExcolCandidate(
-      String candidate,
-      List<EndUseSortRow> endUses,
-      EndUseSortRow firstEndUse,
-      String productTypeCode) {
-    if (candidate == null || firstEndUse.endUseCode() == null) {
-      return false;
-    }
-    for (EndUseSortRow endUse : endUses) {
-      if (endUse.speciesCode() == null || !candidate.contains(endUse.speciesCode())) {
-        return false;
-      }
-    }
-    return PRODUCT_TYPE_UNMANUFACTURED.equalsIgnoreCase(productTypeCode)
-        || candidate.contains(firstEndUse.endUseCode());
   }
 
   private boolean matchesLegacyExcolPattern(String candidate, String pattern) {
@@ -807,17 +786,6 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
       }
     }
     return true;
-  }
-
-  private String excolPattern(int speciesCount) {
-    if (speciesCount < 1) {
-      return null;
-    }
-    StringBuilder pattern = new StringBuilder();
-    for (int i = 0; i < speciesCount; i++) {
-      pattern.append("__/");
-    }
-    return pattern.append("__").toString();
   }
 
   private List<String> normalizedCodes(Collection<String> codes) {
