@@ -440,7 +440,7 @@ describe('provincial-application-items-service', () => {
       growthTypeCode: 'O',
       agentContactName: 'Agent Contact',
       ownerContactName: 'Owner Contact',
-      oicIndicator: 'N',
+      oicIndicator: 'Y',
       endUseCode: 'LU',
       speciesCodes: ['FI', 'CE'],
     }
@@ -482,7 +482,7 @@ describe('provincial-application-items-service', () => {
     expect(body.get('growthTypeCode')).toBe('O')
     expect(body.get('agentContactName')).toBe('Agent Contact')
     expect(body.get('ownerContactName')).toBe('Owner Contact')
-    expect(body.get('oicIndicator')).toBe('N')
+    expect(body.has('oicIndicator')).toBe(false)
     expect(body.get('applicationEndUseCode')).toBe('LU')
     expect(body.get('applicationSelectedSpecies')).toBe('FI,CE')
 

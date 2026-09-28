@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
@@ -16,10 +17,12 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
+import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
+import ca.bc.gov.mof.lexis.service.application.OracleApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
@@ -1856,6 +1859,33 @@ class ApplicationDetailsRpcControllerTest {
         .canCreateForClient(authentication, "00999999", "00888888");
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "idir\\jsmith, LEXIS_APPLICATION_APPROVER",
+    "bceid\\submitter, LEXIS_PROVINCIAL_SUBMITTER_00011111"
+  })
+  void updateApplicationSummaryShouldNotSaveOrderInCouncilIndicator(String userId, String role) {
+    var repository = mock(ApplicationDetailsRpcRepository.class);
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(ordinaryApplicationUpdateRecord()));
+    when(serviceProvider.getIfAvailable())
+        .thenReturn(new OracleApplicationDetailsRpcService(repository, null, null));
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(userId, List.of(role), "createApplication");
+    MultiValueMap<String, String> params = summaryListDateParams("summary", "1234");
+    params.add("oicIndicator", "Y");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("Order in Council indicator cannot be changed from application details.");
+    verify(repository, never()).updateApplication(any());
+  }
+
   @Test
   void updateApplicationSummaryShouldDenyAgentScopedUserWhenOwnerSaveChangesApplicantToOwner() {
     TestingAuthenticationToken authentication =
@@ -2857,6 +2887,38 @@ class ApplicationDetailsRpcControllerTest {
         "P",
         "O",
         "Agent Contact",
+        "Owner Contact",
+        "N");
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationUpdateRecord ordinaryApplicationUpdateRecord() {
+    return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
+        1000456L,
+        null,
+        LocalDate.of(2026, 3, 1),
+        30L,
+        LocalDate.of(2026, 3, 2),
+        125.5d,
+        2.4d,
+        "Camp 1",
+        "idir\\creator",
+        Instant.parse("2026-03-01T18:00:00Z"),
+        null,
+        null,
+        1234L,
+        null,
+        null,
+        "00011111",
+        "02",
+        null,
+        "U",
+        "NEW",
+        "O",
+        11L,
+        "H",
+        "P",
+        "O",
+        null,
         "Owner Contact",
         "N");
   }

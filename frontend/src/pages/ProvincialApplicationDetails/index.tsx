@@ -242,10 +242,6 @@ const JURISDICTION_OPTIONS: SearchOption[] = [
   { value: 'P', label: 'Provincial' },
   { value: 'F', label: 'Federal' },
 ]
-const OIC_INDICATOR_OPTIONS: SearchOption[] = [
-  { value: 'N', label: 'No' },
-  { value: 'Y', label: 'Yes' },
-]
 
 const optionLabel = (option: SearchOption): string =>
   option.label === option.value ? option.label : `${option.value} - ${option.label}`
@@ -426,7 +422,6 @@ const SUMMARY_SAVE_FIELDS: Record<SummarySaveSource, ApplicationSummaryField[]> 
     'applicationDate',
     'exportScheduleId',
     'termDays',
-    'oicIndicator',
   ],
   owner: ['ownerClientNumber', 'ownerClientLocationCode', 'ownerContactName', 'applicantTypeCode'],
   agent: ['agentClientNumber', 'agentClientLocationCode', 'agentContactName'],
@@ -1649,13 +1644,6 @@ const ProvincialApplicationDetailsPage = () => {
       averageLogVolume: productTypeRequiresLogDetails(summaryForm.productTypeCode)
         ? averageLogVolumeFieldError(summaryForm.averageLogVolume)
         : undefined,
-      oicIndicator: firstValidationError(
-        () => requiredFieldError(summaryForm.oicIndicator, 'Order in Council indicator'),
-        () =>
-          summaryForm.oicIndicator === 'Y' || summaryForm.oicIndicator === 'N'
-            ? null
-            : 'Order in Council indicator must be Yes or No.',
-      ),
     }
   }, [
     canReviewApplication,
@@ -2878,7 +2866,6 @@ const ProvincialApplicationDetailsPage = () => {
         applicationStatusCode: summaryBaselineForm.applicationStatusCode,
         orgUnitNumber: summaryBaselineForm.orgUnitNumber,
         jurisdictionCode: summaryBaselineForm.jurisdictionCode,
-        oicIndicator: summaryBaselineForm.oicIndicator,
       }
     })
     setIsEditingSummary(false)
@@ -3070,7 +3057,6 @@ const ProvincialApplicationDetailsPage = () => {
             exemptionReasonCode: summaryRequestForm.exemptionReasonCode,
             exportScheduleId: summaryRequestForm.exportScheduleId,
             orgUnitNumber: summaryRequestForm.orgUnitNumber,
-            oicIndicator: summaryRequestForm.oicIndicator,
           }),
           ...(source === 'items' && {
             applicationVolume: summaryRequestForm.applicationVolume,
@@ -3699,10 +3685,6 @@ const ProvincialApplicationDetailsPage = () => {
   const summaryEndUseDescription =
     applicationEndUseOptions.find((option) => option.code === summaryEndUseCode)?.description ??
     summaryEndUseCode
-  const summaryOicIndicatorDescription = optionDescription(
-    OIC_INDICATOR_OPTIONS,
-    summaryForm?.oicIndicator,
-  )
   const ownerClientDetailFields: Array<[string, string]> = [
     ['Client number', summaryForm?.ownerClientNumber ?? String(detail?.ownerClientNumber ?? '')],
     ['Applicant type', ownerApplicantTypeLabel],
@@ -4750,25 +4732,6 @@ const ProvincialApplicationDetailsPage = () => {
                                 value={summaryJurisdictionLabel}
                                 readOnly
                               />
-                              <SearchableSelect
-                                id="applicationSummaryOicIndicator"
-                                labelText={requiredLabel('Order in Council indicator')}
-                                required
-                                value={summaryForm.oicIndicator}
-                                placeholder="Select Order in Council indicator"
-                                options={optionsWithCurrentValue(
-                                  OIC_INDICATOR_OPTIONS,
-                                  summaryForm.oicIndicator,
-                                ).map((option) => ({
-                                  value: option.value,
-                                  label: optionLabel(option),
-                                }))}
-                                invalid={Boolean(visibleSummaryFieldError('oicIndicator'))}
-                                invalidText={visibleSummaryFieldError('oicIndicator')}
-                                onChange={(value) =>
-                                  onSummaryFormChange('oicIndicator', value.toUpperCase())
-                                }
-                              />
                             </div>
                             <div className="legacy-search-actions">
                               <Button
@@ -4800,10 +4763,6 @@ const ProvincialApplicationDetailsPage = () => {
                               ['Region', displayValue(summaryRegionDescription)],
                               ['List date', displayValue(detail.listingDate)],
                               ['Jurisdiction', displayValue(summaryJurisdictionLabel)],
-                              [
-                                'Order in Council indicator',
-                                displayValue(summaryOicIndicatorDescription),
-                              ],
                               ['Exemption reason', displayValue(summaryExemptionReasonDescription)],
                               ['Application date', displayValue(detail.applicationDate)],
                               ['Exemption term (days)', displayValue(detail.termDays)],
