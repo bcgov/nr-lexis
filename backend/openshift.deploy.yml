@@ -340,6 +340,13 @@ objects:
                   cpu: ${MAX_CPU}
                   memory: ${MAX_MEM}
                   ephemeral-storage: "4Gi"
+              # Keep serving normally while the Service removes this pod; Spring's graceful shutdown
+              # answers every request with 503 once SIGTERM arrives. The sleep counts against
+              # terminationGracePeriodSeconds (10s here + 60s shutdown phase < 90s).
+              lifecycle:
+                preStop:
+                  exec:
+                    command: ["sleep", "10"]
               startupProbe:
                 httpGet:
                   path: /actuator/health/liveness

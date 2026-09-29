@@ -84,6 +84,12 @@
 	reverse_proxy /api* {$BACKEND_URL} {
 		header_up Host {http.reverse_proxy.upstream.hostport}
 		header_up X-Real-IP {remote_host}
+		# Open a new backend connection per request. A draining backend pod answers 503 on its
+		# existing connections until it exits, and pooled connections stay on it after the Service
+		# drops it; during a rolling deploy that pinned all API traffic to the draining pod.
+		transport http {
+			keepalive off
+		}
 	}
 	# Vite fingerprints production asset filenames, so assets can use a one-year immutable cache policy.
 	# Keep the SPA shell, runtime config, API responses, and unversioned public files uncached.
