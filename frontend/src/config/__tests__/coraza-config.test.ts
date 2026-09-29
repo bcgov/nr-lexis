@@ -59,6 +59,15 @@ describe('Coraza WAF config', () => {
     expect(config).not.toMatch(/^\s*admin\s+(?:0\.0\.0\.0|\[::\]|\*|:)/m)
   })
 
+  it('opens a new backend connection for each proxied API request', () => {
+    const config = readCaddyConfig()
+    const apiProxy = config.match(
+      /^\s*reverse_proxy \/api\* \{\$BACKEND_URL\} \{([\s\S]*?)\n\t\}$/m,
+    )
+
+    expect(apiProxy?.[1]).toMatch(/^\s*transport http \{\s*keepalive off\s*\}$/m)
+  })
+
   it('omits all headers from both the default and access log encoders', () => {
     const config = readCaddyConfig()
     const requestLogFilters = [...config.matchAll(/fields \{([\s\S]*?)\n\s*\}/g)]

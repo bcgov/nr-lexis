@@ -102,7 +102,13 @@ class BackendRuntimeConfigTest {
         .contains("timeout-per-shutdown-phase: ${LEXIS_SHUTDOWN_PHASE_TIMEOUT:60s}")
         .contains("shutdown: graceful")
         .contains("request-timeout: ${LEXIS_ASYNC_REQUEST_TIMEOUT:5m}");
-    assertThat(deployment).contains("terminationGracePeriodSeconds: 90");
+    assertThat(deployment)
+        .contains("terminationGracePeriodSeconds: 90")
+        .contains(
+            "lifecycle:\n"
+                + "                preStop:\n"
+                + "                  exec:\n"
+                + "                    command: [\"sleep\", \"10\"]");
     int probeStart = deployment.indexOf("startupProbe:");
     int probeEnd = deployment.indexOf("volumeMounts:", probeStart);
     assertThat(probeStart).isNotNegative();
