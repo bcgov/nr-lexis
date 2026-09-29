@@ -1158,8 +1158,9 @@ class ApplicationDetailsRpcControllerTest {
     verify(service, never()).addApplication(any(), any());
   }
 
-  @Test
-  void provincialSubmitterCannotClearApplicationListDate() {
+  @ParameterizedTest
+  @ValueSource(strings = {"summary", "summary-items"})
+  void provincialSubmitterCannotClearApplicationListDate(String saveSource) {
     TestingAuthenticationToken authentication =
         authenticatedWithActions(
             "bceid\\submitter",
@@ -1167,7 +1168,7 @@ class ApplicationDetailsRpcControllerTest {
             "createApplication");
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("applicationNumber", "1000456");
-    params.add("saveSource", "summary");
+    params.add("saveSource", saveSource);
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
         controller.updateApplicationSummary(params, authentication);
@@ -1178,8 +1179,9 @@ class ApplicationDetailsRpcControllerTest {
     verify(service, never()).updateApplicationSummary(any(), any());
   }
 
-  @Test
-  void provincialSubmitterCannotChangeApprovedApplicationListDate() {
+  @ParameterizedTest
+  @ValueSource(strings = {"summary", "summary-items"})
+  void provincialSubmitterCannotChangeApprovedApplicationListDate(String saveSource) {
     TestingAuthenticationToken authentication =
         authenticatedWithActions(
             "bceid\\submitter",
@@ -1191,7 +1193,7 @@ class ApplicationDetailsRpcControllerTest {
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
         controller.updateApplicationSummary(
-            summaryListDateParams("summary", "5678"), authentication);
+            summaryListDateParams(saveSource, "5678"), authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody().valid()).isFalse();
@@ -1747,6 +1749,7 @@ class ApplicationDetailsRpcControllerTest {
     "agent, AGENT",
     "owner-agent, OWNER_AGENT",
     "summary, SUMMARY",
+    "summary-items, SUMMARY_ITEMS",
     "items, ITEMS"
   })
   void updateApplicationSummaryShouldParseSupportedSaveSources(

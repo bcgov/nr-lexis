@@ -109,6 +109,181 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(review.queryByRole('group', { name: /Application status/ })).not.toBeInTheDocument()
   })
 
+  it('omits the Remarks row from a review summary when the latest remark is empty', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'REJ',
+      statusDescription: 'Rejected',
+      remarks: [
+        {
+          remarkId: 90,
+          title: '',
+          remark: '  ',
+          user: 'idir\\reviewer',
+          date: '2026-01-06',
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reviewTile = within(await selectApplicationReviewTile(false))
+    expect(reviewTile.getByText('Rejected')).toBeVisible()
+    expect(reviewTile.queryByText('Remarks', { exact: true })).not.toBeInTheDocument()
+  })
+
+  it('lists remarks newest first by remark number and shows the Date and time column', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...reviewableApplicationDetail,
+      remarks: [
+        {
+          remarkId: 91,
+          title: '',
+          remark: 'Earlier note',
+          user: 'idir\\reviewer',
+          date: '2026-09-24',
+          timestamp: '2026-09-24T16:00:00Z',
+        },
+        {
+          remarkId: 93,
+          title: '',
+          remark: 'Date-only note',
+          user: 'idir\\reviewer',
+          date: '2026-09-24',
+        },
+        {
+          remarkId: 92,
+          title: '',
+          remark: 'Later note',
+          user: 'idir\\reviewer',
+          date: '2026-09-24',
+          timestamp: '2026-09-24T17:30:00Z',
+        },
+      ],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Remarks')
+    const remarksRegion = await screen.findByRole('region', { name: 'Application remarks' })
+    const remarksTable = within(remarksRegion).getByRole('table')
+    expect(within(remarksTable).getByRole('columnheader', { name: 'Date and time' })).toBeVisible()
+    const rows = within(remarksTable)
+      .getAllByRole('row')
+      .filter((row) => row.textContent?.includes('note'))
+    expect(rows).toHaveLength(3)
+    expect(rows[0]).toHaveTextContent('Date-only note')
+    expect(rows[0]).toHaveTextContent('2026-09-24')
+    expect(rows[1]).toHaveTextContent('Later note')
+    expect(rows[1]).toHaveTextContent('2026-09-24 10:30:00')
+    expect(rows[2]).toHaveTextContent('Earlier note')
+    expect(rows[2]).toHaveTextContent('2026-09-24 09:00:00')
+  })
+
+  it.each(['add', 'edit'] as const)(
+    'keeps a saved remark in newest-first order during the %s reload',
+    async (mode) => {
+      const remarksDetail: ProvincialApplicationDetail = {
+        ...reviewableApplicationDetail,
+        remarks: [
+          {
+            remarkId: 88,
+            title: '',
+            remark: 'Recent note',
+            user: 'idir\\reviewer',
+            date: '2026-09-24',
+            timestamp: '2026-09-24T17:30:00Z',
+          },
+          {
+            remarkId: 87,
+            title: '',
+            remark: 'Older note',
+            user: 'idir\\reviewer',
+            date: '2026-09-23',
+            timestamp: '2026-09-23T17:00:00Z',
+          },
+        ],
+      }
+      let resolveReload: (detail: ProvincialApplicationDetail) => void = () => undefined
+      mockedFetchProvincialApplicationDetail
+        .mockResolvedValueOnce(remarksDetail)
+        .mockImplementationOnce(() => new Promise((resolve) => (resolveReload = resolve)))
+      const savedText = mode === 'add' ? 'test-2026-09-29 new note' : 'Older note edited'
+      mockedSaveApplicationRemark.mockResolvedValueOnce({
+        success: true,
+        remarkId: mode === 'add' ? '89' : '87',
+        remark: savedText,
+        title: savedText,
+        user: 'idir\\reviewer',
+        status: 'ok',
+      })
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectApplicationDetailTab('Remarks')
+      if (mode === 'add') {
+        await userEvent.click(await screen.findByRole('button', { name: 'Add remark' }))
+      } else {
+        await screen.findByText('Older note')
+        await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])
+      }
+      fireEvent.change(
+        await screen.findByLabelText(mode === 'add' ? 'New Remark' : 'Edit Remark 87'),
+        { target: { value: savedText } },
+      )
+      await userEvent.click(
+        screen.getByRole('button', { name: mode === 'add' ? 'Save remark' : 'Update remark' }),
+      )
+      await waitFor(() => expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2))
+
+      const remarksRegion = screen.getByRole('region', { name: 'Application remarks' })
+      const rows = within(within(remarksRegion).getByRole('table'))
+        .getAllByRole('row')
+        .filter((row) => row.textContent?.includes('note'))
+      if (mode === 'add') {
+        expect(rows.map((row) => row.textContent)).toEqual([
+          expect.stringContaining(savedText),
+          expect.stringContaining('Recent note'),
+          expect.stringContaining('Older note'),
+        ])
+      } else {
+        expect(rows).toHaveLength(2)
+        expect(rows[0]).toHaveTextContent('Recent note')
+        expect(rows[1]).toHaveTextContent(savedText)
+        expect(rows[1]).toHaveTextContent('2026-09-23 10:00:00')
+      }
+
+      await act(async () => resolveReload(remarksDetail))
+    },
+  )
+
   it.each(['add', 'edit'] as const)(
     'protects the desktop %s remark draft from background launchers through save',
     async (mode) => {
@@ -589,7 +764,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     fireEvent.change(await screen.findByLabelText('Exemption term (days)'), {
       target: { value: '181' },
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Save Summary' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1))
 
     await selectApplicationDetailTab('Remarks')

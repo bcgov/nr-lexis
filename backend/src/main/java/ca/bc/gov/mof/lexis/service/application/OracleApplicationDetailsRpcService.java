@@ -2792,6 +2792,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return switch (request.saveSource()) {
       case FULL -> validateFullApplicationUpdate(existing, record, request);
       case SUMMARY -> validateSummaryApplicationUpdate(existing, record, request);
+      case SUMMARY_ITEMS -> {
+        List<String> errors = validateSummaryApplicationUpdate(existing, record, request);
+        if (errors.isEmpty()) {
+          errors.addAll(validateItemsApplicationUpdate(existing, record, request));
+        }
+        yield errors;
+      }
       case OWNER -> validateOwnerApplicationUpdate(existing, record, request);
       case AGENT -> validateAgentApplicationUpdate(record);
       case OWNER_AGENT -> validateOwnerAgentApplicationUpdate(record);
@@ -3535,7 +3542,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         existing.entryTimestamp(),
         updateUserId,
         Instant.now(),
-        saveSource == ApplicationSummarySaveSource.SUMMARY
+        (saveSource == ApplicationSummarySaveSource.SUMMARY
+                || saveSource == ApplicationSummarySaveSource.SUMMARY_ITEMS)
             ? request.exportScheduleId()
             : !updatesSummaryFields || request.exportScheduleId() == null
                 ? existing.exportScheduleId()

@@ -702,6 +702,7 @@ class LexisApplicationRepositoryTest {
     assertThat(remark.remark()).isEqualTo("Admin note");
     assertThat(remark.user()).isEqualTo("idir\\admin");
     assertThat(remark.date()).isEqualTo(LocalDate.of(2026, 6, 17));
+    assertThat(remark.timestamp()).isEqualTo(entryTimestamp.toInstant());
     verify(rs).getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR");
   }
 
@@ -718,6 +719,20 @@ class LexisApplicationRepositoryTest {
     assertThat(remark.remark()).isNull();
     assertThat(remark.user()).isNull();
     assertThat(remark.date()).isNull();
+    assertThat(remark.timestamp()).isNull();
+  }
+
+  @Test
+  void mapRemarkRowShouldKeepDateWhenTimestampCannotBeRead() throws Exception {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+    ResultSet rs = org.mockito.Mockito.mock(ResultSet.class);
+    when(rs.getTimestamp("ENTRY_TIMESTAMP")).thenThrow(new SQLException("timestamp unavailable"));
+    when(rs.getDate("ENTRY_TIMESTAMP")).thenReturn(java.sql.Date.valueOf("2026-06-17"));
+
+    LexisApplicationDetailDto.LexisRemarkDto remark = repository.mapRemarkRow(rs);
+
+    assertThat(remark.date()).isEqualTo(LocalDate.of(2026, 6, 17));
+    assertThat(remark.timestamp()).isNull();
   }
 
   @ParameterizedTest

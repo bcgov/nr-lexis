@@ -4313,7 +4313,7 @@ class OracleApplicationDetailsRpcServiceTest {
   @ParameterizedTest
   @EnumSource(
       value = ApplicationDetailsRpcService.ApplicationSummarySaveSource.class,
-      names = {"FULL", "ITEMS"})
+      names = {"FULL", "ITEMS", "SUMMARY_ITEMS"})
   void updateApplicationSummaryShouldAllowTransitionToUnmanufacturedWithoutPersistedScales(
       ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource) {
     when(repository.findScaleMutationsByApplicationNumber(1000456L)).thenReturn(List.of());
@@ -4410,7 +4410,7 @@ class OracleApplicationDetailsRpcServiceTest {
   @ParameterizedTest
   @EnumSource(
       value = ApplicationDetailsRpcService.ApplicationSummarySaveSource.class,
-      names = {"FULL", "ITEMS"})
+      names = {"FULL", "ITEMS", "SUMMARY_ITEMS"})
   void updateApplicationSummaryShouldAllowTransitionToStandingWithoutPersistedPackages(
       ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource) {
     when(repository.findPackageMutationsByApplicationNumber(1000456L)).thenReturn(List.of());
@@ -4692,8 +4692,12 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository, never()).updateApplication(any());
   }
 
-  @Test
-  void itemsSaveShouldRejectTransitionToUnmanufacturedWithPersistedScales() {
+  @ParameterizedTest
+  @EnumSource(
+      value = ApplicationDetailsRpcService.ApplicationSummarySaveSource.class,
+      names = {"ITEMS", "SUMMARY_ITEMS"})
+  void itemsSaveShouldRejectTransitionToUnmanufacturedWithPersistedScales(
+      ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource) {
     when(repository.findScaleMutationsByApplicationNumber(1000456L))
         .thenReturn(List.of(scaleMutationRow("SCALE-1", null, Instant.EPOCH)));
     stubPersistedApplicationEndUse(11L, true);
@@ -4702,7 +4706,7 @@ class OracleApplicationDetailsRpcServiceTest {
         service.updateApplicationSummary(
             withSaveSource(
                 productTypeUpdateRequest("T", null),
-                ApplicationDetailsRpcService.ApplicationSummarySaveSource.ITEMS),
+                saveSource),
             "idir\\jsmith");
 
     assertThat(response.valid()).isFalse();
@@ -4713,8 +4717,12 @@ class OracleApplicationDetailsRpcServiceTest {
     verify(repository, never()).updateApplication(any());
   }
 
-  @Test
-  void itemsSaveShouldRejectTransitionToStandingWithPersistedPackages() {
+  @ParameterizedTest
+  @EnumSource(
+      value = ApplicationDetailsRpcService.ApplicationSummarySaveSource.class,
+      names = {"ITEMS", "SUMMARY_ITEMS"})
+  void itemsSaveShouldRejectTransitionToStandingWithPersistedPackages(
+      ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource) {
     when(repository.findPackageMutationsByApplicationNumber(1000456L))
         .thenReturn(List.of(packageMutationRow("PKG-120", Instant.EPOCH)));
     stubPersistedApplicationEndUse(11L, true);
@@ -4723,7 +4731,7 @@ class OracleApplicationDetailsRpcServiceTest {
         service.updateApplicationSummary(
             withSaveSource(
                 productTypeUpdateRequest("S", "O"),
-                ApplicationDetailsRpcService.ApplicationSummarySaveSource.ITEMS),
+                saveSource),
             "idir\\jsmith");
 
     assertThat(response.valid()).isFalse();
@@ -4789,6 +4797,93 @@ class OracleApplicationDetailsRpcServiceTest {
         .replaceApplicationEndUses(
             1000456L,
             List.of(new ApplicationDetailsRpcRepository.EndUseMutationRecord("HE", "PL")));
+  }
+
+  @Test
+  void summaryItemsSaveShouldPersistSummaryAndProductTypeTogether() {
+    when(repository.findPackageMutationsByApplicationNumber(1000456L)).thenReturn(List.of());
+    when(repository.updateApplication(any())).thenReturn(true);
+    stubPersistedApplicationEndUse(11L, true);
+
+    ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request =
+        applicationSummaryUpdateRequest(
+            1000456L,
+            LocalDate.of(2026, 4, 1),
+            45L,
+            null,
+            125.0d,
+            null,
+            "U",
+            null,
+            1234L,
+            null,
+            null,
+            "00999999",
+            null,
+            null,
+            null,
+            null,
+            "S",
+            null,
+            "O",
+            null,
+            null,
+            null,
+            true,
+            ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY_ITEMS);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(request, "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository).updateApplication(recordCaptor.capture());
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord record = recordCaptor.getValue();
+    assertThat(record.applicationDate()).isEqualTo(LocalDate.of(2026, 4, 1));
+    assertThat(record.termDays()).isEqualTo(45L);
+    assertThat(record.exemptionReasonCode()).isEqualTo("U");
+    assertThat(record.exportScheduleId()).isEqualTo(1234L);
+    assertThat(record.applicationVolume()).isEqualTo(125.0d);
+    assertThat(record.productTypeCode()).isEqualTo("S");
+    assertThat(record.ownerClientNumber()).isEqualTo("00011111");
+  }
+
+  @Test
+  void summaryItemsSaveShouldValidateSummaryBeforeWritingItems() {
+    ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request =
+        applicationSummaryUpdateRequest(
+            1000456L,
+            null,
+            0L,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "S",
+            null,
+            "O",
+            null,
+            null,
+            null,
+            true,
+            ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY_ITEMS);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(request, "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("The application term days must be greater than 0.");
+    verify(repository, never()).updateApplication(any());
   }
 
   @Test

@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.dto.application;
 
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
 
@@ -238,7 +239,11 @@ public record LexisApplicationDetailDto(
   public record LexisPackageDto(String packageNumber, double volume, long pieceCount) {}
 
   public record LexisRemarkDto(
-      Long remarkId, String title, String remark, String user, LocalDate date) {}
+      Long remarkId, String title, String remark, String user, LocalDate date, Instant timestamp) {
+    public LexisRemarkDto(Long remarkId, String title, String remark, String user, LocalDate date) {
+      this(remarkId, title, remark, user, date, null);
+    }
+  }
 
   public record LexisOfferDto(
       String offerNumber, String companyName, LocalDate receivedDate, boolean validOffer, LocalDate withdrawalDate) {}
