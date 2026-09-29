@@ -18,14 +18,19 @@ import {
 } from '@carbon/react'
 import { Add } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
-import { AppNotification } from '../../components/AppNotification'
-import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
-import ExemptionApprovalEmailModal, {
-  type ExemptionApprovalRecipient,
-} from '@/components/ExemptionApprovalEmailModal'
+import ExemptionApprovalModal, {
+  type ExemptionApprovalOutcome,
+} from '@/components/ExemptionApprovalModal'
+import {
+  exemptionApprovalResults,
+  type ExemptionApprovalFailure,
+} from '@/components/exemption-approval-results'
+import { ActionResultNotification } from '@/components/ActionResultNotification'
+import type { ActionResult } from '@/utils/action-result'
+import UnsavedChangesGuard from '@/components/UnsavedChangesGuard'
 import PageHeader from '@/components/PageHeader'
 import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
@@ -41,7 +46,7 @@ import type {
 } from '@/interfaces/ProvincialExemptionSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
-import { hasProvincialStaffRole } from '@/context/auth/role-utils'
+import { hasProvincialStaffRole, isPureExemptionApprover } from '@/context/auth/role-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
@@ -94,30 +99,14 @@ import {
 import IsoDatePicker from '../../components/IsoDatePicker'
 import {
   approveExemptions,
-  sendExemptionApprovalEmails,
   type ExemptionApprovalResult,
 } from '@/service/provincial-exemption-detail-service'
 import { fetchCurrentExemptionRecordVersion } from '@/service/record-version-service'
-import { formatBusinessIsoDate } from '@/utils/date'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
+import { isClientErrorResponse } from '@/utils/http-error'
 import { firstStringField, isRecord } from '@/utils/record'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { displayTableValue } from '@/utils/text'
-
-type ApprovalStatus = {
-  kind: 'error' | 'success' | 'warning'
-  message: string
-}
-
-type ApprovalEmailContext = {
-  approvedCount: number
-  partialFailure: string
-}
-
-type ExemptionApprovalFailure = {
-  exemptionNumber: string
-  message: string
-}
 
 const APPROVAL_REQUEST_FAILED_MESSAGE = 'The approval request could not be completed.'
 
@@ -253,18 +242,12 @@ const ProvincialExemptionPage = () => {
   const [selectedRowsById, setSelectedRowsById] = useState<
     Record<string, ProvincialExemptionSearchItem>
   >({})
-  const [approvalStatus, setApprovalStatus] = useState<ApprovalStatus | null>(null)
+  // A batch can approve some exemptions and not others, so each outcome has its own notification.
+  const [approvalResults, setApprovalResults] = useState<ActionResult[]>([])
+  const approvalRowsRef = useRef<Record<string, ProvincialExemptionSearchItem>>({})
   const [approvalConfirmationOpen, setApprovalConfirmationOpen] = useState(false)
-  const [approvalCertified, setApprovalCertified] = useState(false)
-  const [approvalDate, setApprovalDate] = useState('')
   const [approving, setApproving] = useState(false)
-  const [approvalEmailRecipients, setApprovalEmailRecipients] = useState<
-    ExemptionApprovalRecipient[]
-  >([])
-  const [approvalEmailContext, setApprovalEmailContext] = useState<ApprovalEmailContext | null>(
-    null,
-  )
-  const [sendingApprovalEmail, setSendingApprovalEmail] = useState(false)
+  const [approvalDialogBusy, setApprovalDialogBusy] = useState(false)
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canApproveExemption = canPerform('approveExemption')
@@ -275,6 +258,8 @@ const ProvincialExemptionPage = () => {
     capabilities?.roles.includes('EXEMPTION_APPROVER') ||
     capabilities?.roles.includes('LEXIS_EXEMPTION_APPROVER') ||
     false
+  // The server searches only Ministerial exemptions for these users, so the filter shows that.
+  const exemptionTypeLocked = isPureExemptionApprover(capabilities?.roles)
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const selectedExemptionNumbers = Object.keys(selectedRowsById)
   const withCurrentSearch = useCallback(
@@ -292,7 +277,7 @@ const ProvincialExemptionPage = () => {
       approvalToDate: searchParams.get('approvalToDate') ?? '',
       listFromDate: searchParams.get('listFromDate') ?? '',
       listToDate: searchParams.get('listToDate') ?? '',
-      exemptionTypeCode: searchParams.get('exemptionTypeCode') ?? '',
+      exemptionTypeCode: exemptionTypeLocked ? 'M' : (searchParams.get('exemptionTypeCode') ?? ''),
       exemptionStatusCode: searchParams.get('exemptionStatusCode') ?? '',
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
@@ -316,7 +301,7 @@ const ProvincialExemptionPage = () => {
         SEARCH_PAGE_SIZE_OPTIONS,
       ),
     }
-  }, [searchParams])
+  }, [exemptionTypeLocked, searchParams])
   const appliedFilters = urlState.filters
   const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
   const [clientSearchResetKey, setClientSearchResetKey] = useState(0)
@@ -327,7 +312,7 @@ const ProvincialExemptionPage = () => {
   const hasSearchQuery = searchParams.toString().length > 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
-    setApprovalStatus(null)
+    setApprovalResults([])
   }, [])
   const updateFilter = useCallback(
     <K extends keyof ProvincialExemptionSearchFilters>(
@@ -379,7 +364,10 @@ const ProvincialExemptionPage = () => {
   )
 
   const runSearch = useCallback(
-    async (request: ProvincialExemptionSearchRequest, options: { force?: boolean } = {}) => {
+    async (
+      request: ProvincialExemptionSearchRequest,
+      options: { force?: boolean } = {},
+    ): Promise<boolean> => {
       const pageCacheGeneration = getPageDataCacheGeneration()
       const pageCacheKey = buildPageDataCacheKey(
         'provincial-exemption-search',
@@ -406,7 +394,7 @@ const ProvincialExemptionPage = () => {
           commitResults(cachedResults, 'exact')
           setLoading(false)
           setErrorMessage('')
-          return
+          return true
         }
       }
 
@@ -419,7 +407,7 @@ const ProvincialExemptionPage = () => {
         )
       ) {
         setLoading(false)
-        return
+        return false
       }
 
       setLoading(true)
@@ -474,12 +462,14 @@ const ProvincialExemptionPage = () => {
               }
             })
         }
+        return true
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
           setErrorMessage('Unable to retrieve exemption search results.')
           commitResults(EMPTY_RESULTS, 'exact')
         }
+        return false
       } finally {
         if (isLatestRequest()) {
           setLoading(false)
@@ -653,7 +643,7 @@ const ProvincialExemptionPage = () => {
   }, [selectableRows, selectedRowsById])
 
   const toggleRowSelection = (row: ProvincialExemptionSearchItem, checked: boolean) => {
-    setApprovalStatus(null)
+    setApprovalResults([])
     setSelectedRowsById((current) => {
       const next = { ...current }
       if (checked) {
@@ -666,7 +656,7 @@ const ProvincialExemptionPage = () => {
   }
 
   const toggleSelectAllRowsOnPage = (checked: boolean) => {
-    setApprovalStatus(null)
+    setApprovalResults([])
     setSelectedRowsById((current) => {
       const next = { ...current }
       selectableRows.forEach((row) => {
@@ -682,111 +672,85 @@ const ProvincialExemptionPage = () => {
 
   const onApproveSelectedClick = () => {
     if (!canApproveExemption) {
-      setApprovalStatus({
-        kind: 'error',
-        message: 'Your account is not authorized to approve exemptions.',
-      })
+      setApprovalResults([
+        {
+          kind: 'error',
+          title: 'Approval failed',
+          message: 'Your account is not authorized to approve exemptions.',
+        },
+      ])
       return
     }
 
     const selectedRows = Object.values(selectedRowsById)
     if (selectedRows.length === 0) {
-      setApprovalStatus({
-        kind: 'error',
-        message: 'Select at least one new exemption before approving.',
-      })
+      setApprovalResults([
+        {
+          kind: 'error',
+          title: 'Approval failed',
+          message: 'Select at least one new exemption before approving.',
+        },
+      ])
       return
     }
 
-    setApprovalStatus(null)
-    setApprovalCertified(false)
-    setApprovalDate(formatBusinessIsoDate())
+    setApprovalResults([])
+    approvalRowsRef.current = { ...selectedRowsById }
     setApprovalConfirmationOpen(true)
   }
 
-  const closeApprovalConfirmation = () => {
-    if (approving) return
-    setApprovalConfirmationOpen(false)
-    setApprovalCertified(false)
-    setApprovalDate('')
-  }
+  const closeApprovalConfirmation = () => setApprovalConfirmationOpen(false)
 
-  const closeApprovalEmail = () => {
-    if (sendingApprovalEmail) return
-    const approvedCount = approvalEmailContext?.approvedCount ?? approvalEmailRecipients.length
-    const messages = [
-      approvedExemptionMessage(approvedCount),
-      approvedCount === 1
-        ? 'Approval notification was skipped.'
-        : 'Approval notifications were skipped.',
-    ]
-    if (approvalEmailContext?.partialFailure) {
-      messages.push(approvalEmailContext.partialFailure)
-    }
-    setApprovalStatus({ kind: 'warning', message: messages.join(' ') })
-    setApprovalEmailRecipients([])
-    setApprovalEmailContext(null)
-  }
+  const exemptionResultLink = (exemptionNumber: string) =>
+    approvalRowsRef.current[exemptionNumber]?.canViewExemption
+      ? {
+          to: withCurrentSearch(`/provincial/exemption/${exemptionNumber}`),
+          state: {
+            returnTo: {
+              label: 'Provincial exemption search',
+              to: withCurrentSearch('/provincial/exemption'),
+            },
+          },
+        }
+      : {}
 
-  const onSendApprovalEmails = async (recipients: ExemptionApprovalRecipient[]) => {
-    if (sendingApprovalEmail) return
-    const approvedCount = approvalEmailContext?.approvedCount ?? recipients.length
-    const partialFailure = approvalEmailContext?.partialFailure ?? ''
-    setSendingApprovalEmail(true)
-    try {
-      const email = await sendExemptionApprovalEmails(recipients)
-      const messages = [approvedExemptionMessage(approvedCount)]
-      messages.push(
-        email.success
-          ? email.message || 'Approval emails sent.'
-          : email.message || 'Approval emails could not be sent.',
-      )
-      if (partialFailure) {
-        messages.push(partialFailure)
-      }
-      setApprovalStatus({
-        kind: email.success && !partialFailure ? 'success' : 'warning',
-        message: messages.join(' '),
-      })
-    } catch (error) {
-      console.error(error)
-      const messages = [
-        approvedExemptionMessage(approvedCount),
-        'Approval emails could not be sent.',
-      ]
-      if (partialFailure) {
-        messages.push(partialFailure)
-      }
-      setApprovalStatus({ kind: 'warning', message: messages.join(' ') })
-    } finally {
-      setSendingApprovalEmail(false)
-      setApprovalEmailRecipients([])
-      setApprovalEmailContext(null)
-    }
-  }
-
-  const onConfirmApproval = async (): Promise<boolean> => {
+  const onConfirmApproval = async (): Promise<ExemptionApprovalOutcome> => {
     const selectedRows = { ...selectedRowsById }
     const selectedNumbers = Object.keys(selectedRows)
-    if (approving || !approvalCertified) {
-      return false
+    if (approving) {
+      return { approvedNumbers: [], message: 'Approval is already in progress.', warning: true }
     }
     if (selectedNumbers.length === 0) {
-      setApprovalStatus({ kind: 'error', message: 'Select at least one exemption to approve.' })
-      return false
+      setApprovalResults([
+        {
+          kind: 'error',
+          title: 'Approval failed',
+          message: 'Select at least one exemption to approve.',
+        },
+      ])
+      return {
+        approvedNumbers: [],
+        message: 'Select at least one exemption to approve.',
+        warning: true,
+      }
     }
 
     setApproving(true)
-    setApprovalStatus(null)
+    setApprovalResults([])
     try {
       const approvals: ExemptionApprovalResult[] = []
       const failures: ExemptionApprovalFailure[] = []
+      const unconfirmedNumbers: string[] = []
+      const approvedNumbers: string[] = []
       for (const exemptionNumber of selectedNumbers) {
+        let approvalRequested = false
         try {
           const recordVersion = await fetchCurrentExemptionRecordVersion(exemptionNumber)
+          approvalRequested = true
           const approval = await approveExemptions([exemptionNumber], recordVersion)
           if (approval.success && approval.valid) {
             approvals.push(approval)
+            approvedNumbers.push(exemptionNumber)
           } else {
             failures.push({
               exemptionNumber,
@@ -795,64 +759,59 @@ const ProvincialExemptionPage = () => {
           }
         } catch (error) {
           console.warn(`Unable to approve exemption ${exemptionNumber}.`, error)
-          failures.push({
-            exemptionNumber,
-            message: approvalRequestFailureMessage(error),
-          })
+          // After a 5xx or lost response the approval may still have been saved.
+          if (approvalRequested && !isClientErrorResponse(error)) {
+            unconfirmedNumbers.push(exemptionNumber)
+          } else {
+            failures.push({
+              exemptionNumber,
+              message: approvalRequestFailureMessage(error),
+            })
+          }
         }
       }
 
-      const failureCount = failures.length
-      const failureDetails = failures
-        .map(({ exemptionNumber, message }) => `${exemptionNumber} — ${message}`)
-        .join('; ')
-      const failedRowsById = Object.fromEntries(
-        failures.flatMap(({ exemptionNumber }) => {
+      const unresolvedNumbers = new Set([
+        ...failures.map(({ exemptionNumber }) => exemptionNumber),
+        ...unconfirmedNumbers,
+      ])
+      const unresolvedRowsById = Object.fromEntries(
+        selectedNumbers.flatMap((exemptionNumber) => {
+          if (!unresolvedNumbers.has(exemptionNumber)) return []
           const row = selectedRows[exemptionNumber]
           return row ? ([[exemptionNumber, row]] as const) : []
         }),
       )
-      setSelectedRowsById(failedRowsById)
+      setSelectedRowsById(unresolvedRowsById)
 
       if (approvals.length === 0) {
-        setApprovalStatus({
-          kind: 'error',
-          message: `No selected exemptions were approved; ${failureCount} failed. Failed exemptions: ${failureDetails}`,
-        })
-        return false
-      }
-
-      const partialMessages = approvals
-        .map((approval) => normalizeApprovalMessage(approval.errorMessage))
-        .filter(Boolean)
-      if (failureCount > 0) {
-        partialMessages.push(
-          `${failureCount} selected ${failureCount === 1 ? 'exemption' : 'exemptions'} failed to approve. Failed exemptions: ${failureDetails}`,
+        // The dialog lists these; the page keeps them after the dialog closes.
+        setApprovalResults(
+          exemptionApprovalResults(
+            { approved: [], failures, unconfirmedNumbers, notes: [] },
+            exemptionResultLink,
+          ),
         )
-      }
-      const partialFailure = [...new Set(partialMessages)].join(' ')
-      const recipients = approvals.flatMap((approval) =>
-        approval.sendGrid.map(([number, email]): ExemptionApprovalRecipient => [number, email]),
-      )
-      const approvedCount = approvals.length
-      const messages = [approvedExemptionMessage(approvedCount)]
-      messages.push(
-        recipients.length > 0
-          ? 'Review the applicant recipients before sending notifications.'
-          : 'No applicant notification recipients were returned.',
-      )
-      if (partialFailure) {
-        messages.push(partialFailure)
+        return {
+          approvedNumbers: [],
+          message: 'No selected exemptions were approved.',
+          warning: true,
+          unconfirmed: unconfirmedNumbers.length > 0,
+          failures,
+          unconfirmedNumbers,
+        }
       }
 
-      setApprovalStatus({
-        kind: recipients.length > 0 && !partialFailure ? 'success' : 'warning',
-        message: messages.join(' '),
-      })
-      setApprovalEmailContext(recipients.length > 0 ? { approvedCount, partialFailure } : null)
-      setApprovalEmailRecipients(recipients)
+      const notes = [
+        ...new Set(
+          approvals
+            .map((approval) => normalizeApprovalMessage(approval.errorMessage))
+            .filter(Boolean),
+        ),
+      ]
+      let refreshed = false
       try {
-        await runSearch(
+        refreshed = await runSearch(
           {
             filters: urlState.filters,
             page: urlState.page - 1,
@@ -864,19 +823,30 @@ const ProvincialExemptionPage = () => {
         )
       } catch (refreshError) {
         console.error(refreshError)
-        setApprovalStatus((current) => ({
-          kind: 'warning',
-          message: `${current?.message || approvedExemptionMessage(approvedCount)} Refresh the page to see the latest status.`,
-        }))
       }
-      return true
+      if (!refreshed) notes.push('Refresh the page to see the latest status.')
+      return {
+        approvedNumbers,
+        message: approvedExemptionMessage(approvals.length),
+        warning: notes.length > 0,
+        failures,
+        unconfirmedNumbers,
+        notes,
+      }
     } catch (error) {
       console.error(error)
-      setApprovalStatus({
-        kind: 'error',
+      setApprovalResults([
+        {
+          kind: 'error',
+          title: 'Approval failed',
+          message: 'Unable to approve the selected exemptions.',
+        },
+      ])
+      return {
+        approvedNumbers: [],
         message: 'Unable to approve the selected exemptions.',
-      })
-      return false
+        warning: true,
+      }
     } finally {
       setApproving(false)
     }
@@ -991,6 +961,7 @@ const ProvincialExemptionPage = () => {
                   placeholder="All types"
                   options={exemptionTypeOptions}
                   disabled={optionsLoading || optionsUnavailable}
+                  readOnly={exemptionTypeLocked}
                   onChange={(value) => updateFilter('exemptionTypeCode', value)}
                 />
                 <SearchableSelect
@@ -1033,23 +1004,17 @@ const ProvincialExemptionPage = () => {
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
               </div>
-              {approvalStatus &&
-                !approvalConfirmationOpen &&
-                approvalEmailRecipients.length === 0 && (
-                  <AppNotification
+              {!approvalConfirmationOpen &&
+                approvalResults.map((result) => (
+                  <ActionResultNotification
+                    key={result.kind}
                     className="legacy-inline-notification"
-                    kind={approvalStatus.kind}
-                    title={
-                      approvalStatus.kind === 'error'
-                        ? 'Approval failed'
-                        : approvalStatus.kind === 'warning'
-                          ? 'Approval completed with warnings'
-                          : 'Approval completed'
+                    result={result}
+                    onClose={() =>
+                      setApprovalResults((current) => current.filter((item) => item !== result))
                     }
-                    subtitle={approvalStatus.message}
-                    onCloseButtonClick={() => setApprovalStatus(null)}
                   />
-                )}
+                ))}
             </form>
           </Tile>
         </section>
@@ -1243,73 +1208,23 @@ const ProvincialExemptionPage = () => {
       </Column>
 
       {approvalConfirmationOpen && (
-        <ConfirmationModal
-          open
-          title="Approve selected exemptions"
-          description={`You are about to approve the following ${
-            selectedRowsCount === 1 ? 'exemption' : 'exemptions'
-          }:`}
-          confirmLabel="Approve exemptions"
-          pendingLabel="Approving…"
-          confirmDisabled={approving || !approvalCertified}
-          onClose={closeApprovalConfirmation}
-          errorTitle="Approval failed"
-          errorMessage={approvalStatus?.kind === 'error' ? approvalStatus.message : undefined}
-          onError={() => undefined}
-          onConfirm={async () => {
-            const approved = await onConfirmApproval()
-            if (!approved) {
-              throw new Error('Exemption approval failed.')
-            }
-          }}
-        >
-          <ul>
-            {selectedExemptionNumbers.map((number) => (
-              <li key={number}>{number}</li>
-            ))}
-          </ul>
-          <p>
-            By checking the box below you certify that{' '}
-            {selectedRowsCount === 1 ? 'this exemption has' : 'these exemptions have'} been
-            approved.
-            {selectedRowsCount === 1 ? ' This exemption' : ' These exemptions'} will be marked with
-            an approval date of {approvalDate}.
-          </p>
-          <Checkbox
-            id="approveSelectedExemptionsCertification"
-            labelText={`I certify that ${
-              selectedRowsCount === 1 ? 'this exemption has' : 'these exemptions have'
-            } been approved.`}
-            checked={approvalCertified}
-            disabled={approving}
-            onChange={(_, { checked }) => setApprovalCertified(Boolean(checked))}
-          />
-        </ConfirmationModal>
-      )}
-      {approvalEmailRecipients.length > 0 && (
-        <ExemptionApprovalEmailModal
-          recipients={approvalEmailRecipients}
-          sending={sendingApprovalEmail}
-          feedback={
-            approvalStatus && (
-              <AppNotification
-                kind={approvalStatus.kind}
-                title={
-                  approvalStatus.kind === 'error'
-                    ? 'Approval failed'
-                    : approvalStatus.kind === 'warning'
-                      ? 'Approval completed with warnings'
-                      : 'Approval completed'
-                }
-                subtitle={approvalStatus.message}
-              />
-            )
+        <ExemptionApprovalModal
+          exemptionNumbers={selectedExemptionNumbers}
+          onApprove={onConfirmApproval}
+          onComplete={(report) =>
+            setApprovalResults(exemptionApprovalResults(report, exemptionResultLink))
           }
-          onRecipientsChange={setApprovalEmailRecipients}
-          onSend={(recipients) => void onSendApprovalEmails(recipients)}
-          onSkip={closeApprovalEmail}
+          onClose={closeApprovalConfirmation}
+          onBusyChange={setApprovalDialogBusy}
         />
       )}
+      <UnsavedChangesGuard
+        isDirty={false}
+        isBusy={approving || approvalDialogBusy}
+        onSave={async () => false}
+        onDiscard={() => {}}
+        subject="these exemptions"
+      />
     </Grid>
   )
 }

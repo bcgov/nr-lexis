@@ -343,7 +343,7 @@ test.describe('Frontend parity with mocked API responses', () => {
     await gotoSyntheticRoute(page, '/provincial/exemption/PARITY-BOIC', {
       ready: page.getByRole('heading', { level: 1, name: 'Exemption PARITY-BOIC', exact: true }),
     })
-    await page.getByRole('button', { name: 'Edit exemption' }).click()
+    await page.getByRole('button', { name: 'Edit exemption details', exact: true }).click()
     for (const label of ['Approval date', 'Expiry date']) {
       const date = page.getByLabel(label, { exact: true })
       await expect(date).toBeDisabled()
@@ -352,11 +352,11 @@ test.describe('Frontend parity with mocked API responses', () => {
     }
     await expect(page.getByLabel('Approved volume (m³)', { exact: true })).toBeDisabled()
     await expect(page.getByLabel('Conditions', { exact: true })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
+    await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled()
     await page.getByRole('combobox', { name: 'Status', exact: true }).click()
     await page.getByRole('option', { name: 'New', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Save exemption' })).toBeEnabled()
-    await page.getByRole('button', { name: 'Save exemption' }).click()
+    await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeEnabled()
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click()
     await expect(page.getByText('Exemption updated.', { exact: true })).toBeVisible()
 
     expect(fixture.writes).toEqual([

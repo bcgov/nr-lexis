@@ -14,6 +14,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
+import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
@@ -51,6 +52,7 @@ class OracleExemptionDetailsRpcServiceTest {
 
   @Mock private ExemptionDetailsRpcRepository repository;
   @Mock private ApplicationNotificationRecipientResolver notificationRecipientResolver;
+  @Mock private AuthoritativeClientEmailResolver clientEmailResolver;
   @Mock private EmailNotificationService notificationService;
   @Mock private ExemptionActivationEligibilityValidator activationEligibilityValidator;
 
@@ -2457,7 +2459,7 @@ class OracleExemptionDetailsRpcServiceTest {
     }
     OracleExemptionDetailsRpcService serviceWithRealValidator =
         new OracleExemptionDetailsRpcService(
-            repository, notificationRecipientResolver, notificationService,
+            repository, notificationRecipientResolver, clientEmailResolver, notificationService,
             new ExemptionActivationEligibilityValidator(repository));
 
     ExemptionDetailsRpcService.CreateExemptionResult response =
@@ -2681,6 +2683,68 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(updateRecord.approvalDate()).isEqualTo(LexisBusinessTime.today());
     assertThat(updateRecord.updateUserId()).isEqualTo("idir\\jsmith");
     assertThat(updateRecord.regionNumbers()).isNull();
+  }
+
+  @Test
+  void approvalShouldAllowManualNotificationWhenClientLookupIsUnavailable() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(
+            Optional.of(exemption("NEW")),
+            Optional.of(exemption("NEW")),
+            Optional.of(exemption("ACT")));
+    stubFirstLinkedApplication(application("EXE", "EX-205", "P", "A"));
+    when(clientEmailResolver.resolve("00077881", "00"))
+        .thenThrow(new DataRetrievalFailureException("client lookup unavailable"));
+    when(notificationRecipientResolver.resolve(
+            1000456L, "A", "00077881", "00", "00055667", "00"))
+        .thenThrow(new DataRetrievalFailureException("client lookup unavailable"));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
+
+    assertThat(service.getApprovalRecipients(List.of("EX-205")))
+        .containsExactly(
+            new ExemptionDetailsRpcService.ApprovalRecipientPreview(
+                "EX-205",
+                "",
+                "",
+                true,
+                true,
+                "Client email addresses could not be loaded. Enter an address to send the approval"
+                    + " email."));
+
+    ExemptionDetailsRpcService.ExemptionApprovalResult approval =
+        service.approveExemptions("EX-205", "idir\\jsmith", true);
+    assertThat(approval.success()).isTrue();
+    assertThat(approval.valid()).isTrue();
+    assertThat(approval.sendGrid()).containsExactly(List.of("EX-205", ""));
+    verify(repository).updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class));
+
+    assertThat(
+            service.queueApprovalEmails(
+                List.of(
+                    new ExemptionDetailsRpcService.ApprovalRecipients(
+                        "EX-205", "manual@example.com", ""))))
+        .containsExactly(
+            new ExemptionDetailsRpcService.ApprovalEmailOutcome(
+                "EX-205", true, "Approval email queued."));
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.ExemptionApproval(
+                "EX-205", "1000456", "manual@example.com", RegionalMailRoute.RCO));
+  }
+
+  @Test
+  void approvalShouldStillPropagatePersistenceFailure() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("NEW")));
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("exemption update unavailable");
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenThrow(failure);
+
+    assertThatThrownBy(() -> service.approveExemptions("EX-205", "idir\\jsmith", true))
+        .isSameAs(failure);
+    verifyNoInteractions(notificationRecipientResolver, notificationService);
   }
 
   @ParameterizedTest
@@ -2940,6 +3004,178 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     verifyNoInteractions(notificationRecipientResolver, notificationService);
+  }
+
+  @Test
+  void approvalPreviewShouldResolveOwnerAndAgentContactsForAgentApplicantWithoutChangingThem() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("NEW")));
+    stubFirstLinkedApplication(application("EXE", "EX-205", "P", "A"));
+    when(clientEmailResolver.resolve("00077881", "00"))
+        .thenReturn(Optional.of("owner@example.com"));
+    when(clientEmailResolver.resolve("00055667", "00"))
+        .thenReturn(Optional.of("agent@example.com"));
+
+    assertThat(service.getApprovalRecipients(List.of("EX-205")))
+        .containsExactly(new ExemptionDetailsRpcService.ApprovalRecipientPreview(
+            "EX-205", "owner@example.com", "agent@example.com", true, true, ""));
+    verify(repository, never()).updateExemption(any());
+    verifyNoInteractions(notificationService);
+  }
+
+  @Test
+  void approvalPreviewShouldIgnoreStoredAgentWhenApplicantIsOwner() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("NEW")));
+    stubFirstLinkedApplication(application("EXE", "EX-205", "P", "O"));
+    when(clientEmailResolver.resolve("00077881", "00"))
+        .thenReturn(Optional.of("owner@example.com"));
+
+    assertThat(service.getApprovalRecipients(List.of("EX-205")))
+        .containsExactly(new ExemptionDetailsRpcService.ApprovalRecipientPreview(
+            "EX-205", "owner@example.com", "", false, true, ""));
+    verify(clientEmailResolver, never()).resolve("00055667", "00");
+  }
+
+  @Test
+  void approvalPreviewShouldReportEachUnavailableExemptionWithoutFailingTheBatch() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findExemptionRecord("EX-206")).thenReturn(Optional.of(exemption("NEW")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-206")).thenReturn(List.of());
+
+    assertThat(service.getApprovalRecipients(List.of("EX-205", "EX-206")))
+        .containsExactly(
+            new ExemptionDetailsRpcService.ApprovalRecipientPreview(
+                "EX-205", "", "", false, false, "Only NEW exemptions can be approved."),
+            new ExemptionDetailsRpcService.ApprovalRecipientPreview(
+                "EX-206",
+                "",
+                "",
+                false,
+                false,
+                "An approval email can't be sent because this exemption has no linked"
+                    + " application."));
+    verifyNoInteractions(clientEmailResolver, notificationService);
+  }
+
+  @Test
+  void approvalPreviewShouldIncludeNewOicExemptionsLikeLegacyApprovalEmail() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("NEW", "O")));
+    stubFirstLinkedApplication(application("EXE", "EX-205", "P", "O"));
+    when(clientEmailResolver.resolve("00077881", "00"))
+        .thenReturn(Optional.of("owner@example.com"));
+
+    assertThat(service.getApprovalRecipients(List.of("EX-205")))
+        .extracting(ExemptionDetailsRpcService.ApprovalRecipientPreview::sendable)
+        .containsExactly(true);
+  }
+
+  @Test
+  void approvalPreviewShouldAllowManualEntryWhenClientLookupFails() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("NEW")));
+    stubFirstLinkedApplication(application("EXE", "EX-205", "P", "A"));
+    when(clientEmailResolver.resolve("00077881", "00"))
+        .thenThrow(new DataRetrievalFailureException("client lookup unavailable"));
+
+    assertThat(service.getApprovalRecipients(List.of("EX-205")))
+        .containsExactly(new ExemptionDetailsRpcService.ApprovalRecipientPreview(
+            "EX-205",
+            "",
+            "",
+            true,
+            true,
+            "Client email addresses could not be loaded. Enter an address to send the approval"
+                + " email."));
+  }
+
+  @Test
+  void approvalPreviewShouldKeepTheOwnerContactWhenOnlyTheAgentLookupFails() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("NEW")));
+    stubFirstLinkedApplication(application("EXE", "EX-205", "P", "A"));
+    when(clientEmailResolver.resolve("00077881", "00"))
+        .thenReturn(Optional.of("owner@example.com"));
+    when(clientEmailResolver.resolve("00055667", "00"))
+        .thenThrow(new DataRetrievalFailureException("client lookup unavailable"));
+
+    assertThat(service.getApprovalRecipients(List.of("EX-205")))
+        .containsExactly(new ExemptionDetailsRpcService.ApprovalRecipientPreview(
+            "EX-205",
+            "owner@example.com",
+            "",
+            true,
+            true,
+            "Client email addresses could not be loaded. Enter an address to send the approval"
+                + " email."));
+  }
+
+  @Test
+  void structuredApprovalEmailShouldQueueForActiveOicExemptionLikeLegacyApprovalEmail() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT", "O")));
+    stubFirstLinkedApplication(application("EXE", "EX-205", "P"));
+
+    assertThat(service.queueApprovalEmails(List.of(new ExemptionDetailsRpcService.ApprovalRecipients(
+        "EX-205", "owner@example.com", ""))))
+        .containsExactly(new ExemptionDetailsRpcService.ApprovalEmailOutcome(
+            "EX-205", true, "Approval email queued."));
+  }
+
+  @Test
+  void structuredApprovalEmailShouldExplainWhyAnExemptionCannotBeNotified() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205")).thenReturn(List.of());
+
+    assertThat(service.queueApprovalEmails(List.of(new ExemptionDetailsRpcService.ApprovalRecipients(
+        "EX-205", "owner@example.com", ""))))
+        .containsExactly(new ExemptionDetailsRpcService.ApprovalEmailOutcome(
+            "EX-205",
+            false,
+            "An approval email can't be sent because this exemption has no linked application."));
+    verifyNoInteractions(notificationService);
+  }
+
+  private void stubFirstLinkedApplication(
+      ExemptionDetailsRpcRepository.ApplicationLinkRecord application) {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(List.of(new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+            1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
+  }
+
+  @Test
+  void structuredApprovalEmailShouldQueueOneEventForBothContacts() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(List.of(new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+            1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(application("EXE", "EX-205", "P")));
+
+    assertThat(service.queueApprovalEmails(List.of(new ExemptionDetailsRpcService.ApprovalRecipients(
+        "EX-205", "owner@example.com", "agent@example.com"))))
+        .containsExactly(new ExemptionDetailsRpcService.ApprovalEmailOutcome(
+            "EX-205", true, "Approval email queued."));
+    verify(notificationService).publish(new WorkflowEmailEvent.ExemptionApproval(
+        "EX-205", "1000456", List.of("owner@example.com", "agent@example.com"),
+        RegionalMailRoute.RCO));
+    verify(repository, never()).updateExemption(any());
+  }
+
+  @Test
+  void structuredApprovalEmailShouldDeduplicateAndRejectInvalidOrBlankRecipients() {
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(List.of(new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+            1000456L, 95.0d, 95.0d, "00077881", "P", "S")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(application("EXE", "EX-205", "P")));
+
+    var outcomes = service.queueApprovalEmails(List.of(
+        new ExemptionDetailsRpcService.ApprovalRecipients("EX-205", "owner@example.com", "OWNER@example.com"),
+        new ExemptionDetailsRpcService.ApprovalRecipients("EX-205", "bad address", "agent@example.com"),
+        new ExemptionDetailsRpcService.ApprovalRecipients("EX-205", "", null)));
+
+    assertThat(outcomes).extracting(ExemptionDetailsRpcService.ApprovalEmailOutcome::queued)
+        .containsExactly(true, false, false);
+    verify(notificationService).publish(new WorkflowEmailEvent.ExemptionApproval(
+        "EX-205", "1000456", List.of("owner@example.com"), RegionalMailRoute.RCO));
   }
 
   private static Stream<Arguments> mismatchedApplicantIdentities() {

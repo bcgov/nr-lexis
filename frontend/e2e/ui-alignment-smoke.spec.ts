@@ -2116,9 +2116,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/provincial/exemption/create', {
       waitUntil: 'domcontentloaded',
-      ready: page.getByRole('heading', { level: 1, name: 'Create exemption', exact: true }),
+      ready: page.getByRole('heading', { level: 1, name: 'Create new exemption', exact: true }),
     })
-    await expect(page.getByRole('heading', { level: 1, name: 'Create exemption' })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { level: 1, name: 'Create new exemption' }),
+    ).toBeVisible()
     await page.getByRole('tab', { name: 'Exemption details', exact: true }).click()
     const exemptionForm = page
       .getByRole('tabpanel', { name: 'Exemption details', exact: true })
@@ -2140,10 +2142,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       })
     })
     await gotoSyntheticRoute(page, '/provincial/exemption/create', {
-      ready: page.getByRole('heading', { level: 1, name: 'Create exemption', exact: true }),
+      ready: page.getByRole('heading', { level: 1, name: 'Create new exemption', exact: true }),
     })
     await page.getByRole('tab', { name: 'Exemption details', exact: true }).click()
-    await expect(page.getByRole('combobox', { name: 'Exemption type', exact: true })).toBeEnabled()
+    await expect(
+      page.getByRole('group', { name: 'Exemption type' }).getByRole('radio').first(),
+    ).toBeEnabled()
     const expiry = page.getByRole('textbox', { name: 'Expiry date (YYYY-MM-DD)', exact: true })
     await expiry.fill('2026-10-01')
     await expiry.press('Escape')

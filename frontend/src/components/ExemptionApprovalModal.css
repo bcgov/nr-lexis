@@ -1,0 +1,79 @@
+.exemption-approval-modal .cds--modal-container {
+  max-inline-size: 42rem;
+}
+.exemption-approval-modal .lexis-confirmation-modal__body {
+  display: grid;
+  gap: 1.5rem;
+}
+.exemption-approval-modal hr {
+  width: 100%;
+  margin: 0;
+  border: 0;
+  border-top: 1px solid var(--cds-border-subtle-01, #c6c6c6);
+}
+.exemption-approval-modal__send {
+  display: grid;
+  gap: 0.75rem;
+}
+.exemption-approval-modal__recipient {
+  border-top: 1px solid var(--cds-border-subtle-01, #c6c6c6);
+  padding-top: 1rem;
+  display: grid;
+  gap: 1rem;
+}
+.exemption-approval-modal__recipient--batch {
+  grid-template-columns: 5rem minmax(0, 1fr);
+  align-items: start;
+}
+.exemption-approval-modal__recipient h3 {
+  margin: 0;
+  font-size: 0.875rem;
+  font-weight: 600;
+  line-height: 1.5rem;
+}
+.exemption-approval-modal__recipient-body {
+  display: grid;
+  gap: 1rem;
+  min-width: 0;
+}
+.exemption-approval-modal__recipient-summary {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 1rem;
+  align-items: baseline;
+}
+.exemption-approval-modal__recipient dl {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr);
+  gap: 1rem;
+  margin: 0;
+}
+.exemption-approval-modal__recipient dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+.exemption-approval-modal__error,
+.exemption-approval-modal__note {
+  margin: 0;
+  font-size: 0.75rem;
+  line-height: 1rem;
+}
+.exemption-approval-modal__error {
+  display: flex;
+  gap: 0.5rem;
+  align-items: flex-start;
+  color: var(--cds-text-error, #da1e28);
+}
+.exemption-approval-modal__error svg {
+  flex: none;
+  fill: var(--cds-support-error, #da1e28);
+}
+.exemption-approval-modal__note {
+  color: var(--cds-text-helper, #6f6f6f);
+}
+@media (max-width: 42rem) {
+  .exemption-approval-modal__recipient--batch,
+  .exemption-approval-modal__recipient-summary {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

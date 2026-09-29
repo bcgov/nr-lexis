@@ -1,7 +1,7 @@
 import { Tile } from '@carbon/react'
 import type { ReactNode } from 'react'
 
-type DetailField = {
+export type DetailField = {
   label: string
   value: ReactNode
 }
@@ -12,6 +12,22 @@ type DetailFieldTileProps = {
   headerAction?: ReactNode
   icon?: ReactNode
   children?: ReactNode
+}
+
+export function DetailFieldGrid({ fields }: { fields: DetailField[] }) {
+  return (
+    <dl className="detail-field-grid">
+      {fields.map((field) => (
+        <div
+          key={field.label}
+          className={`detail-field-item${fields.length === 1 ? ' detail-field-item--full' : ''}`}
+        >
+          <dt className="detail-field-label">{field.label}</dt>
+          <dd className="detail-field-value">{field.value}</dd>
+        </div>
+      ))}
+    </dl>
+  )
 }
 
 // INTENTIONAL_LEGACY_DIVERGENCE(DETAIL_VIEW_EDIT_MODES):
@@ -32,17 +48,7 @@ export function DetailFieldTile({
         </h2>
         {headerAction}
       </div>
-      <dl className="detail-field-grid">
-        {fields.map((field) => (
-          <div
-            key={field.label}
-            className={`detail-field-item${fields.length === 1 ? ' detail-field-item--full' : ''}`}
-          >
-            <dt className="detail-field-label">{field.label}</dt>
-            <dd className="detail-field-value">{field.value}</dd>
-          </div>
-        ))}
-      </dl>
+      <DetailFieldGrid fields={fields} />
       {children}
     </Tile>
   )

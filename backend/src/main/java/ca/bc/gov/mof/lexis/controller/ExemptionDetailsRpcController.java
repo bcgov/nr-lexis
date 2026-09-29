@@ -52,6 +52,7 @@ import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
@@ -989,6 +990,70 @@ public class ExemptionDetailsRpcController {
     return sendExemptionApprovalEmails(sendGrid, authentication);
   }
 
+  @GetMapping("/rpc/exemption-details/approval-recipients")
+  public ResponseEntity<List<ExemptionDetailsRpcService.ApprovalRecipientPreview>>
+      getApprovalRecipients(
+      @RequestParam(name = "exemptionNumbers") String exemptionNumbers,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_APPROVE_EXEMPTION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      return ResponseEntity.noContent().build();
+    }
+    List<String> numbers = normalizedExemptionNumbers(exemptionNumbers);
+    if (numbers.isEmpty()) {
+      return ResponseEntity.badRequest().build();
+    }
+    numbers.forEach(
+        number -> {
+          requireExemptionAccess(number, authentication);
+          requireExemptionWriteAccess(number, authentication);
+        });
+    linkedApplicationNumbersForMutation(service, numbers, List.of())
+        .forEach(number -> requireApplicationAccess(number, authentication));
+    return ResponseEntity.ok(service.getApprovalRecipients(numbers));
+  }
+
+  @PostMapping("/rpc/exemption-details/approval-emails/structured")
+  public ResponseEntity<ApprovalEmailOutcomesDto> queueApprovalEmails(
+      @RequestBody List<ExemptionDetailsRpcService.ApprovalRecipients> recipients,
+      Authentication authentication) {
+    if (!canPerform(authentication, LEGACY_ACTION_APPROVE_EXEMPTION)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      return ResponseEntity.noContent().build();
+    }
+    if (recipients == null
+        || recipients.isEmpty()
+        || recipients.stream()
+            .anyMatch(
+                row ->
+                    row == null
+                        || row.exemptionNumber() == null
+                        || row.exemptionNumber().isBlank())) {
+      return ResponseEntity.badRequest().build();
+    }
+    List<String> numbers =
+        recipients.stream()
+            .map(row -> row.exemptionNumber().trim().toUpperCase(Locale.ROOT))
+            .toList();
+    if (numbers.stream().distinct().count() != numbers.size()) {
+      return ResponseEntity.badRequest().build();
+    }
+    numbers.forEach(
+        number -> {
+          requireExemptionAccess(number, authentication);
+          requireExemptionWriteAccess(number, authentication);
+        });
+    linkedApplicationNumbersForMutation(service, numbers, List.of())
+        .forEach(number -> requireApplicationAccess(number, authentication));
+    return ResponseEntity.ok(new ApprovalEmailOutcomesDto(service.queueApprovalEmails(recipients)));
+  }
+
   @GetMapping("/rpc/exemption-details/client-data")
   public ResponseEntity<ExemptionClientDataResponseDto> getClientData(
       @RequestParam(name = "clientNumber", required = false) String clientNumber,
@@ -1705,6 +1770,9 @@ public class ExemptionDetailsRpcController {
       List<String> errors) {}
 
   public record ExemptionApprovalEmailResponseDto(boolean success, String message) {}
+
+  public record ApprovalEmailOutcomesDto(
+      List<ExemptionDetailsRpcService.ApprovalEmailOutcome> outcomes) {}
 
   public record ExemptionClientDataResponseDto(
       String clientNumber,

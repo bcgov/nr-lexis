@@ -153,9 +153,9 @@ const createCases = [
     name: 'exemption',
     createPath: '/provincial/exemption/create',
     targetPath: '/provincial/exemption',
-    heading: 'Create exemption',
+    heading: 'Create new exemption',
     fieldLabel: 'Conditions',
-    saveButtonName: 'Save',
+    saveButtonName: 'Save exemption',
     element: <ProvincialExemptionCreatePage />,
   },
   {
@@ -359,15 +359,12 @@ describe('create page unsaved changes', () => {
     expect(router.state.location.pathname).toBe(testCase.createPath)
   })
 
-  it('treats a Carbon combobox selection as a dirty create-form change', async () => {
+  it('treats an exemption type selection as a dirty create-form change', async () => {
     const testCase = createCases[1]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
-    const exemptionType = screen.getByRole('combobox', { name: 'Exemption type' })
-    await userEvent.click(exemptionType)
-    const options = await screen.findAllByRole('option', { name: 'Order in Council' })
-    await userEvent.click(options.find((option) => option.tagName === 'LI') ?? options[0])
+    await userEvent.click(screen.getByRole('radio', { name: 'Order in Council' }))
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
@@ -408,10 +405,12 @@ describe('create page unsaved changes', () => {
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
+    )
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '10')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/exemption/EX-123'))
     expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
@@ -429,7 +428,9 @@ describe('create page unsaved changes', () => {
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
+    )
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '10')
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await screen.findByRole('dialog', { name: 'Unsaved changes' })

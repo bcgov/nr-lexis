@@ -8,13 +8,14 @@ import {
   RouterProvider,
   Routes,
 } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { FederalApplicationDetail, ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import FederalApplicationDetailsPage from '@/pages/FederalApplicationDetails'
 import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
 import {
   fetchFederalApplicationDetail,
+  fetchProvincialApplicationDetail,
   fetchProvincialExemptionDetail,
   releaseApplicationEditLock,
 } from '@/service/lexis-detail-service'
@@ -34,6 +35,7 @@ import {
   removeExemptionDocument,
 } from '@/service/provincial-exemption-documents-service'
 import {
+  addApplicationToExemption,
   fetchExemptionApplications,
   fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
@@ -50,6 +52,12 @@ import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-s
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 const openDocumentUploadModal = async (): Promise<void> => {
+  const addDocumentsButton = screen.queryByRole('button', { name: 'Add documents' })
+  if (addDocumentsButton) {
+    await userEvent.click(addDocumentsButton)
+    await screen.findByRole('dialog', { name: 'Add documents' })
+    return
+  }
   const editButton = screen.queryByRole('button', { name: 'Edit documents' })
   if (editButton) {
     await userEvent.click(editButton)
@@ -64,6 +72,7 @@ vi.mock('@/context/auth/useAuth', () => ({
 
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchFederalApplicationDetail: vi.fn(),
+  fetchProvincialApplicationDetail: vi.fn(),
   fetchProvincialExemptionDetail: vi.fn(),
   releaseApplicationEditLock: vi.fn(),
 }))
@@ -298,6 +307,7 @@ const federalDetail: FederalApplicationDetail = {
 }
 
 describe('Exemption and Federal Detail Document Actions', () => {
+  afterEach(() => vi.restoreAllMocks())
   beforeEach(() => {
     vi.clearAllMocks()
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
@@ -441,9 +451,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(exemptionHeader).toBeTruthy()
     expect(
-      within(exemptionHeader as HTMLElement).getByText(
-        'Check and manage this provincial exemption',
-      ),
+      within(exemptionHeader as HTMLElement).getByText('Author: Not provided'),
     ).toBeInTheDocument()
     expect(within(exemptionHeader as HTMLElement).getByText('Active')).toHaveAttribute(
       'data-status-variant',
@@ -451,7 +459,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
     expect(screen.queryByLabelText('Exemption highlights')).not.toBeInTheDocument()
     const exemptionSummaryTile = screen
-      .getByRole('heading', { name: 'Exemption summary' })
+      .getByRole('heading', { name: 'Exemption details' })
       .closest('.cds--tile')
     expect(exemptionSummaryTile).toBeTruthy()
     expect(
@@ -478,10 +486,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Open Approved Exemption Report' })).toBeNull()
 
     await selectDetailTab('Documents')
-    expect(await screen.findByRole('button', { name: 'Edit documents' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
-    await enterDocumentEditMode()
-    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
     expect(
       await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
     ).toBeInTheDocument()
@@ -540,6 +546,83 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByLabelText('Document File')).toBeInTheDocument()
   })
 
+  it('keeps staff exemption controls away from a scoped Provincial Submitter', async () => {
+    const submitterActions = new Set([
+      '/exemptionDetails',
+      '/fileExemptionUpload',
+      '/applicationDetails',
+    ])
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    mockedFetchExemptionApplications.mockResolvedValue({
+      applications: [
+        {
+          applicationNumber: '654',
+          requestedVolume: '12.5',
+          scaleVolume: '',
+          locked: false,
+          jurisdiction: 'P',
+          ownerClientNumber: '00055566',
+          agentClientNumber: '',
+          ownerClientLocationCode: '00',
+          agentClientLocationCode: '',
+          applicantTypeCode: 'O',
+          ownerContactName: '',
+          agentContactName: '',
+          ownerCompanyName: '',
+          agentCompanyName: '',
+        },
+      ],
+      containsUnmanu: false,
+      ownerNumber: '00055566',
+    })
+    mockedFetchExemptionDocuments.mockResolvedValue({
+      rows: [{ id: '700', name: 'exemption-doc.pdf', description: 'API file', type: 'Attachment' }],
+      source: 'api',
+    })
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'bceid\\scoped-submitter',
+          roles: ['LEXIS_PROVINCIAL_SUBMITTER_00055566'],
+        }),
+        canPerform: (action: string) => submitterActions.has(action),
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+    expect(await screen.findByRole('link', { name: '654' })).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /Remove/ })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Approve exemption' })).not.toBeInTheDocument()
+
+    await selectDetailTab('Exemption details')
+    expect(screen.queryByRole('button', { name: 'Edit exemption details' })).not.toBeInTheDocument()
+
+    await selectDetailTab('Documents')
+    expect(await screen.findByRole('button', { name: 'Open' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
+  })
+
   it.each([
     ['a NEW exemption', { exemptionStatusCode: 'NEW', exemptionStatusDescription: 'New' }],
     [
@@ -573,8 +656,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
       await selectDetailTab('Documents')
       expect(await screen.findByText('No documents found')).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
     },
   )
 
@@ -640,7 +722,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
   })
 
-  it('explains why adding an associated application is unavailable until a number is entered', async () => {
+  it('keeps application saving unavailable until a number is entered', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
         <Routes>
@@ -653,22 +735,220 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Applications')
-
-    const applicationInput = await screen.findByLabelText('Application number')
     const addButton = screen.getByRole('button', { name: 'Add application' })
-    const tooltipTrigger = addButton.parentElement as HTMLElement
-
-    expect(applicationInput.closest('.exemption-application-add-form')).toBeTruthy()
-    expect(addButton).toBeDisabled()
-
-    await userEvent.hover(tooltipTrigger)
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'Enter an application number to add it.',
-    )
+    expect(addButton).toBeEnabled()
+    await userEvent.click(addButton)
+    const applicationInput = await screen.findByLabelText('Application number')
+    expect(screen.getByRole('button', { name: 'Save application' })).toBeDisabled()
 
     await userEvent.type(applicationInput, '654')
-    expect(screen.getByRole('button', { name: 'Add application' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save application' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(addButton).toHaveFocus())
   })
+
+  it('shows an add application failure inline and clears it when the panel is cancelled', async () => {
+    vi.mocked(addApplicationToExemption).mockResolvedValueOnce({
+      success: false,
+      message: '',
+      exemptionNumber: 'EX-777',
+      errors: ['Applications must have a status of approved.'],
+      warnings: [],
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+    const applicationInput = await screen.findByLabelText('Application number')
+    expect(screen.getByText('Approved applications for client 00055566 only.')).toBeVisible()
+    await userEvent.type(applicationInput, '654')
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+
+    const message = 'Application 654 is not approved. Only approved applications can be added.'
+    expect(await screen.findAllByText(message)).toHaveLength(1)
+    expect(applicationInput).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.queryByText('Application could not be added')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByText(message)).not.toBeInTheDocument())
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+    expect(await screen.findByLabelText('Application number')).not.toHaveAttribute(
+      'aria-invalid',
+      'true',
+    )
+    expect(screen.queryByText(message)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    [
+      'Application 654 does not exist',
+      'No application found with number 654. Check the number and try again.',
+    ],
+    [
+      'Application cannot be added to this exemption because its owner or agent client details do not match the other applications.',
+      'Application 654 belongs to a different client. This exemption only includes applications from client 00055566.',
+    ],
+    [
+      'Application listing date has not passed.',
+      "Application 654 can't be added while it's being advertised or has a valid offer.",
+    ],
+    [
+      'Application has valid offers and cannot be added to an exemption.',
+      "Application 654 can't be added while it's being advertised or has a valid offer.",
+    ],
+    [
+      'Insufficient privileges to add this application.',
+      "Application 654 can't be added. Insufficient privileges to add this application.",
+    ],
+    [
+      '',
+      "Application 654 can't be added. Check that it's approved, belongs to client 00055566 and isn't on another exemption.",
+    ],
+  ])('explains the add application failure "%s" on the field', async (serverError, copy) => {
+    vi.mocked(addApplicationToExemption).mockResolvedValueOnce({
+      success: false,
+      message: '',
+      exemptionNumber: 'EX-777',
+      errors: [serverError],
+      warnings: [],
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+    const applicationInput = await screen.findByLabelText('Application number')
+    await userEvent.type(applicationInput, '654')
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+
+    expect(await screen.findByText(copy)).toBeVisible()
+    // The error text is not a live region, so focus returns to the field it describes.
+    await waitFor(() => expect(applicationInput).toHaveFocus())
+    expect(applicationInput).toHaveAccessibleDescription(expect.stringContaining(copy))
+    await userEvent.type(applicationInput, '1')
+    expect(screen.queryByText(copy)).not.toBeInTheDocument()
+  })
+
+  it.each([
+    [
+      'a permission error',
+      { response: { status: 403, data: { message: 'Forbidden' } } },
+      'You do not have permission to add application 654 to this exemption.',
+      false,
+    ],
+    [
+      'a validation error',
+      { response: { status: 400, data: { detail: 'Expired exemptions are read-only.' } } },
+      "Application 654 can't be added. Expired exemptions are read-only.",
+      false,
+    ],
+    [
+      'a server error',
+      { response: { status: 503, data: {} } },
+      'Adding application 654 could not be confirmed. Check the Applications list before trying again.',
+      true,
+    ],
+    [
+      'a lost response',
+      new Error('Network Error'),
+      'Adding application 654 could not be confirmed. Check the Applications list before trying again.',
+      true,
+    ],
+  ])('explains %s when adding an application', async (_case, error, copy, refreshes) => {
+    vi.mocked(addApplicationToExemption).mockRejectedValueOnce(error)
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+    const applicationInput = await screen.findByLabelText('Application number')
+    await userEvent.type(applicationInput, '654')
+    const applicationLoads = mockedFetchExemptionApplications.mock.calls.length
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+
+    expect(await screen.findByText(copy)).toBeVisible()
+    await waitFor(() => expect(applicationInput).toHaveFocus())
+    // Only an unconfirmed link reloads the list, since it may have been saved.
+    expect(mockedFetchExemptionApplications.mock.calls.length > applicationLoads).toBe(refreshes)
+  })
+
+  it.each([
+    [
+      'This application is already assigned to an exemption.',
+      'EX-900',
+      'Application 654 is already on exemption EX-900.',
+    ],
+    [
+      'This application is already assigned to an exemption.',
+      'EX-777',
+      'Application 654 is already on this exemption.',
+    ],
+    // The server checks the approved status first, and an application on an exemption is Exempted.
+    [
+      'Applications must have a status of approved.',
+      'EX-900',
+      'Application 654 is already on exemption EX-900.',
+    ],
+  ])(
+    'answers "%s" by naming the exemption %s the application is on',
+    async (serverError, assignedExemptionNumber, copy) => {
+      vi.mocked(addApplicationToExemption).mockResolvedValueOnce({
+        success: false,
+        message: '',
+        exemptionNumber: 'EX-777',
+        errors: [serverError],
+        warnings: [],
+      })
+      vi.mocked(fetchProvincialApplicationDetail).mockResolvedValueOnce({
+        exemptionNumber: assignedExemptionNumber,
+      } as Awaited<ReturnType<typeof fetchProvincialApplicationDetail>>)
+      render(
+        <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+          <Routes>
+            <Route
+              path="/provincial/exemption/:exemptionNumber"
+              element={<ProvincialExemptionDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectDetailTab('Applications')
+      await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+      await userEvent.type(await screen.findByLabelText('Application number'), '654')
+      await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+
+      expect(await screen.findByText(copy)).toBeVisible()
+      expect(fetchProvincialApplicationDetail).toHaveBeenCalledWith('654')
+    },
+  )
 
   it('rejects malformed associated application numbers without rewriting them', async () => {
     render(
@@ -683,6 +963,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Applications')
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
 
     const applicationInput = await screen.findByLabelText('Application number')
     await userEvent.type(applicationInput, '654x')
@@ -691,7 +972,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(
       screen.getAllByText('Application number must be a positive whole number.').length,
     ).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Add application' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save application' })).toBeDisabled()
   })
 
   it('rejects associated application numbers beyond the Oracle boundary', async () => {
@@ -707,6 +988,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Applications')
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
 
     const applicationInput = await screen.findByLabelText('Application number')
     await userEvent.type(applicationInput, '12345678901')
@@ -715,7 +997,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(
       screen.getAllByText('Application number must be 10 digits or fewer.').length,
     ).toBeGreaterThan(0)
-    expect(screen.getByRole('button', { name: 'Add application' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save application' })).toBeDisabled()
   })
 
   it('renders authoritative permit metadata and omits rows without record access', async () => {
@@ -875,8 +1157,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
       screen.queryByRole('heading', { name: 'No fee rate override', level: 3 }),
     ).not.toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit exemption' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+    await selectDetailTab('Exemption details')
+    await userEvent.click(screen.getByRole('button', { name: 'Edit exemption details' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => expect(mockedUpdateExemption).toHaveBeenCalledTimes(1))
     expect(mockedUpdateExemption).toHaveBeenCalledWith(
       expect.objectContaining({ manageFeeRate: false }),
@@ -926,7 +1209,15 @@ describe('Exemption and Federal Detail Document Actions', () => {
       ],
       source: 'api',
     })
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
+    const previewTarget = {
+      closed: false,
+      close: vi.fn(),
+      location: { replace: vi.fn() },
+      opener: null,
+    } as unknown as Window
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(previewTarget)
+    const objectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:exemption-document')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
 
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/EX-777?documentsFilter=not-a-match']}>
@@ -940,7 +1231,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
-    await enterDocumentEditMode()
     const documentName = await screen.findByText('exemption-doc.pdf')
     expect(screen.queryByLabelText('Filter document rows')).not.toBeInTheDocument()
     const documentRow = documentName.closest('tr')
@@ -953,6 +1243,43 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await waitFor(() => {
       expect(mockedOpenExemptionDocument).toHaveBeenCalledWith('700', 'exemption-doc.pdf', 'EX-777')
     })
+    expect(openSpy).toHaveBeenCalledWith('about:blank', '_blank')
+    await waitFor(() =>
+      expect(previewTarget.location.replace).toHaveBeenCalledWith('blob:exemption-document'),
+    )
+    expect(objectUrlSpy).toHaveBeenCalled()
+    expect(previewTarget.close).not.toHaveBeenCalled()
+  })
+
+  it('downloads an exemption document without opening a preview tab', async () => {
+    mockedFetchExemptionDocuments.mockResolvedValue({
+      rows: [{ id: '701', name: 'download.pdf', description: '', type: 'Attachment' }],
+      source: 'api',
+    })
+    const openSpy = vi.spyOn(window, 'open')
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
+    const objectUrlSpy = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:download')
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+    const documentRow = (await screen.findByText('download.pdf')).closest('tr') as HTMLElement
+    await userEvent.click(within(documentRow).getByRole('button', { name: 'Download' }))
+    await waitFor(() =>
+      expect(mockedOpenExemptionDocument).toHaveBeenCalledWith('701', 'download.pdf', 'EX-777'),
+    )
+    await waitFor(() => expect(clickSpy).toHaveBeenCalled())
+    expect(objectUrlSpy).toHaveBeenCalled()
     expect(openSpy).not.toHaveBeenCalled()
   })
 
@@ -986,7 +1313,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
-    await enterDocumentEditMode()
     const documentName = await screen.findByText('exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -1008,7 +1334,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
   })
 
-  it('keeps an exemption delete result after leaving document edit mode', async () => {
+  it('keeps an exemption delete result after switching sections', async () => {
     mockedFetchExemptionDocuments
       .mockResolvedValueOnce({
         rows: [{ id: '700', name: 'exemption-doc.pdf', description: '', type: 'Attachment' }],
@@ -1028,7 +1354,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
-    await enterDocumentEditMode()
     const documentRow = (await screen.findByText('exemption-doc.pdf')).closest('tr')
     await userEvent.click(
       within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
@@ -1037,8 +1362,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
     expect(await screen.findByText('exemption-doc.pdf was deleted.')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByRole('button', { name: 'Edit documents' })).toBeInTheDocument()
+    await selectDetailTab('Exemption details')
+    await selectDetailTab('Documents')
     expect(screen.getByText('exemption-doc.pdf was deleted.')).toBeInTheDocument()
   })
 
@@ -1069,7 +1394,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
-    await enterDocumentEditMode()
     const documentRow = (await screen.findByText('application-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(within(documentRow as HTMLElement).getByText('Application')).toBeInTheDocument()
@@ -1110,8 +1434,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Documents')
     expect(screen.queryByRole('button', { name: 'Upload Exemption Document' })).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
-    await enterDocumentEditMode()
+    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
     const documentName = await screen.findByText('locked-exemption-doc.pdf')
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
@@ -1199,13 +1522,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Documents')
-    await enterDocumentEditMode()
-    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
     const documentRow = (await screen.findByText('expired-exemption-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(
-      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
-    ).toBeDisabled()
+      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+    ).not.toBeInTheDocument()
   })
 
   it('renders federal application details with the legacy tab structure', async () => {

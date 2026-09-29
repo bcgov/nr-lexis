@@ -727,7 +727,7 @@ const retiredReportPages: Array<[path: string, heading: RegExp]> = [
 
 const createWorkflowPages: Array<[path: string, heading: RegExp]> = [
   ['/provincial/application/create', /create provincial application/i],
-  ['/provincial/exemption/create', /create exemption/i],
+  ['/provincial/exemption/create', /create new exemption/i],
   ['/provincial/offers/create', /create provincial offer/i],
 ]
 
@@ -4015,8 +4015,8 @@ test.describe('TEST IDIR admin regression', () => {
           `/provincial/exemption/${encodeURIComponent(exemptionNumber)}`,
           new RegExp(`exemption ${exemptionNumber}`, 'i'),
         )
-        await page.getByRole('button', { name: 'Edit exemption', exact: true }).click()
         await page.getByRole('tab', { name: 'Exemption details', exact: true }).click()
+        await page.getByRole('button', { name: 'Edit exemption details', exact: true }).click()
         for (const label of [
           'Approval date',
           'Expiry date',
@@ -4036,14 +4036,14 @@ test.describe('TEST IDIR admin regression', () => {
                 '/api/lexis/rpc/exemption-details/exemption/update' &&
               response.request().method() === 'POST',
           ),
-          page.getByRole('button', { name: 'Save exemption', exact: true }).click(),
+          page.getByRole('button', { name: 'Save changes', exact: true }).click(),
         ])
         expect(response.status()).toBe(200)
         const result = (await response.json()) as ExemptionPersistenceResponse
         expect(result.success).toBe(true)
         expect(asStringArray(result.errors)).toEqual([])
         await expect(
-          page.getByRole('button', { name: 'Edit exemption', exact: true }),
+          page.getByRole('button', { name: 'Edit exemption details', exact: true }),
         ).toBeVisible()
 
         const reopened = await readVersionedJson<Record<string, unknown>>(

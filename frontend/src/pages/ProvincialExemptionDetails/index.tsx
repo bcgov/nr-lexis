@@ -10,11 +10,12 @@ import {
 import { Edit, TrashCan } from '@carbon/icons-react'
 import {
   Button,
-  Checkbox,
   Column,
   Grid,
   InlineNotification,
   Loading,
+  RadioButton,
+  RadioButtonGroup,
   Tab,
   TabList,
   TabPanel,
@@ -31,17 +32,19 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import Modal from '@/components/Modal'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailLoadError from '@/components/DetailLoadError'
+import DetailSidePanel from '@/components/DetailSidePanel'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
-import ExemptionApprovalEmailModal, {
-  type ExemptionApprovalRecipient,
-} from '@/components/ExemptionApprovalEmailModal'
+import ExemptionApprovalModal, {
+  type ExemptionApprovalOutcome,
+} from '@/components/ExemptionApprovalModal'
+import { exemptionApprovalResults } from '@/components/exemption-approval-results'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import StatusTag from '@/components/StatusTag'
@@ -56,7 +59,7 @@ import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import { formatDocumentSource } from '@/service/document-service-utils'
-import { DetailFieldTile } from '../shared/DetailSections'
+import { DetailFieldGrid, DetailFieldTile, type DetailField } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
 import {
@@ -66,7 +69,10 @@ import {
 } from '@/pages/shared/detail-navigation'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
-import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
+import {
+  fetchProvincialApplicationDetail,
+  fetchProvincialExemptionDetail,
+} from '@/service/lexis-detail-service'
 import {
   fetchExemptionClientData,
   fetchExemptionClientLocations,
@@ -80,8 +86,12 @@ import {
   type ProvincialExemptionDocumentRow,
 } from '@/service/provincial-exemption-documents-service'
 import { createPermitFromExemption } from '@/service/provincial-permit-documents-invoices-service'
-import { actionResultTitle, withoutActionError, type ActionResult } from '@/utils/action-result'
+import { withoutActionError, type ActionResult } from '@/utils/action-result'
+import { getResponseStatus, isClientErrorResponse } from '@/utils/http-error'
+import { sanitizeNotificationText } from '@/utils/notification-messages'
+import { firstStringField, isRecord } from '@/utils/record'
 import { triggerBrowserDownload } from '@/utils/download'
+import { openDocumentPreview } from '@/utils/document-preview'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
@@ -109,7 +119,6 @@ import {
   fetchExemptionEditContext,
   fetchExemptionPermits,
   removeApplicationFromExemption,
-  sendExemptionApprovalEmails,
   updateExemption,
   type ExemptionApplicationRow,
   type ExemptionBlanketOicTotals,
@@ -117,7 +126,6 @@ import {
   type ExemptionPermitRow,
 } from '@/service/provincial-exemption-detail-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
-import { formatBusinessIsoDate } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
 
 type ExemptionDetailTabKey =
@@ -141,6 +149,7 @@ const EXEMPTION_DETAIL_TAB_SLOTS: readonly ExemptionDetailTabKey[] = [
 
 const EXEMPTION_DETAIL_TAB_LABELS: Record<ExemptionDetailTabKey, string> = {
   owner: 'Applicant',
+  // Keep the old tab key for saved deep links; agent details now live in Applicant.
   agent: 'Agent',
   summary: 'Exemption details',
   applications: 'Applications',
@@ -176,6 +185,9 @@ type ExemptionEditForm = {
   regionNumbers: string[]
 }
 
+// Exemption details and Fees are edited one at a time, each with its own Save and Cancel.
+type ExemptionEditSection = 'summary' | 'fees'
+
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 
 const EMPTY_EDIT_CONTEXT: ExemptionEditContext = {
@@ -202,11 +214,124 @@ const toEditForm = (
   regionNumbers: context.regionNumbers,
 })
 
+const feeRateFieldError = (value: string): string => {
+  const normalized = value.trim()
+  if (!normalized) return 'Fee rate is required.'
+  const rate = Number(normalized)
+  return !Number.isFinite(rate) ||
+    rate <= 0 ||
+    rate > 999.99 ||
+    !/^\d{1,7}(\.\d{1,2})?$/.test(normalized)
+    ? 'Fee rate must be greater than 0, at most 999.99, and have at most two decimal places.'
+    : ''
+}
+
 const normalizeServerMessage = (message: string): string =>
   message
     .replace(/<\/?br\s*\/?\s*>/gi, ' ')
     .replace(/\s+/g, ' ')
     .trim()
+
+const APPROVAL_FAILED_MESSAGE = 'The exemption could not be approved.'
+
+// The create page hands over the number it saved so this page confirms that save once.
+type ExemptionCreationNavigationState = Record<string, unknown> & {
+  exemptionCreationNotice?: { exemptionNumber: string }
+}
+
+const EXEMPTION_SAVED_RESULT: ActionResult = {
+  kind: 'success',
+  title: 'The exemption was saved.',
+  message: '',
+}
+
+const responseServerMessage = (error: unknown): string => {
+  const data = isRecord(error) && isRecord(error.response) ? error.response.data : undefined
+  return isRecord(data) ? firstStringField(data, ['detail', 'message']) : ''
+}
+
+const approvalRequestFailureMessage = (error: unknown): string => {
+  const status = getResponseStatus(error)
+  if (status === 409 || status === 428) {
+    return 'This exemption changed after you opened it. Reload the page to see its current status before approving it.'
+  }
+  return (
+    sanitizeNotificationText(
+      normalizeServerMessage(responseServerMessage(error)),
+      APPROVAL_FAILED_MESSAGE,
+    ) || APPROVAL_FAILED_MESSAGE
+  )
+}
+
+type AddApplicationFailure =
+  | 'notFound'
+  | 'notApproved'
+  | 'differentClient'
+  | 'alreadyAssigned'
+  | 'alreadyOnThisExemption'
+  | 'advertised'
+  | 'forbidden'
+  | 'unconfirmed'
+  | 'other'
+
+// The add-application route is shared with the legacy RPC route, so its messages are mapped here.
+const addApplicationFailureKind = (message: string): AddApplicationFailure => {
+  if (/does not exist/i.test(message)) return 'notFound'
+  if (/status of approved/i.test(message)) return 'notApproved'
+  if (/client details do not match/i.test(message)) return 'differentClient'
+  if (/already assigned to (?:an )?exemption/i.test(message)) return 'alreadyAssigned'
+  if (/listing date has not passed|valid offers?\b/i.test(message)) return 'advertised'
+  return 'other'
+}
+
+const addApplicationFailureMessage = (
+  kind: AddApplicationFailure,
+  applicationNumber: string,
+  clientNumber: string,
+  assignedExemptionNumber: string,
+  serverMessage = '',
+): string => {
+  switch (kind) {
+    case 'notFound':
+      return `No application found with number ${applicationNumber}. Check the number and try again.`
+    case 'notApproved':
+      return `Application ${applicationNumber} is not approved. Only approved applications can be added.`
+    case 'differentClient':
+      if (!clientNumber) break
+      return `Application ${applicationNumber} belongs to a different client. This exemption only includes applications from client ${clientNumber}.`
+    case 'alreadyAssigned':
+      if (!assignedExemptionNumber) break
+      return `Application ${applicationNumber} is already on exemption ${assignedExemptionNumber}.`
+    case 'alreadyOnThisExemption':
+      return `Application ${applicationNumber} is already on this exemption.`
+    case 'advertised':
+      return `Application ${applicationNumber} can't be added while it's being advertised or has a valid offer.`
+    case 'forbidden':
+      // Regional access applies to the application as well as the exemption.
+      return `You do not have permission to add application ${applicationNumber} to this exemption.`
+    case 'unconfirmed':
+      return `Adding application ${applicationNumber} could not be confirmed. Check the Applications list before trying again.`
+    case 'other': {
+      const reason = sanitizeNotificationText(normalizeServerMessage(serverMessage), '')
+      if (reason) return `Application ${applicationNumber} can't be added. ${reason}`
+    }
+  }
+  return clientNumber
+    ? `Application ${applicationNumber} can't be added. Check that it's approved, belongs to client ${clientNumber} and isn't on another exemption.`
+    : `Application ${applicationNumber} can't be added. Check that it's approved and isn't on another exemption.`
+}
+
+// The link response does not name the exemption an application is already on.
+const findAssignedExemptionNumber = async (applicationNumber: string): Promise<string> => {
+  try {
+    return (
+      (await fetchProvincialApplicationDetail(applicationNumber))?.exemptionNumber?.trim() ?? ''
+    )
+  } catch (error) {
+    console.error(error)
+    return ''
+  }
+}
 
 const formatExemptionVolume = (value: number | string | null | undefined): string => {
   if (value == null || (typeof value === 'string' && !value.trim())) {
@@ -229,7 +354,7 @@ const applicantTypeLabel = (value: string): string => {
   }
 }
 
-type ExemptionClientTileProps = {
+type ExemptionClient = {
   title: string
   clientNumber: string
   applicantType: string
@@ -242,8 +367,7 @@ type ExemptionClientTileProps = {
   showAgentIndicator?: boolean
 }
 
-const ExemptionClientTile = ({
-  title,
+const exemptionClientFields = ({
   clientNumber,
   applicantType,
   locationCode,
@@ -253,47 +377,57 @@ const ExemptionClientTile = ({
   clientData,
   isLoading,
   showAgentIndicator = false,
-}: ExemptionClientTileProps) => {
+}: ExemptionClient): DetailField[] => {
   const locationName =
     locations.find((location) => location.locationCode === locationCode)?.locationName ?? ''
   const loadingValue = (value: string | null | undefined) =>
     isLoading ? 'Loading…' : displayValue(value)
 
-  return (
-    <DetailFieldTile
-      title={title}
-      fields={[
-        { label: 'Client number', value: displayValue(clientNumber) },
-        { label: 'Applicant type', value: loadingValue(applicantTypeLabel(applicantType)) },
-        {
-          label: 'Client location',
-          value: loadingValue(clientLocationLabel(locationCode, locationName)),
-        },
-        { label: 'Contact name', value: loadingValue(contactName) },
-        ...(showAgentIndicator
-          ? [
-              {
-                label: 'I am an agent',
-                value: loadingValue(isAgentApplicant(applicantType) ? 'Yes' : 'No'),
-              },
-            ]
-          : []),
-        {
-          label: 'Company name',
-          value: loadingValue(companyName || clientData?.companyName),
-        },
-        { label: 'Address', value: loadingValue(clientData?.address) },
-        { label: 'City', value: loadingValue(clientData?.city) },
-        { label: 'Province', value: loadingValue(clientData?.province) },
-        { label: 'Postal code', value: loadingValue(clientData?.postalCode) },
-        { label: 'Country', value: loadingValue(clientData?.country) },
-        { label: 'Phone', value: loadingValue(clientData?.phone) },
-        { label: 'Fax', value: loadingValue(clientData?.fax) },
-        { label: 'Email', value: loadingValue(clientData?.email) },
-      ]}
-    />
-  )
+  return [
+    { label: 'Client number', value: displayValue(clientNumber) },
+    { label: 'Applicant type', value: loadingValue(applicantTypeLabel(applicantType)) },
+    {
+      label: 'Client location',
+      value: loadingValue(clientLocationLabel(locationCode, locationName)),
+    },
+    { label: 'Contact name', value: loadingValue(contactName) },
+    ...(showAgentIndicator
+      ? [
+          {
+            label: 'I am an agent',
+            value: loadingValue(isAgentApplicant(applicantType) ? 'Yes' : 'No'),
+          },
+        ]
+      : []),
+    {
+      label: 'Company name',
+      value: loadingValue(companyName || clientData?.companyName),
+    },
+    { label: 'Address', value: loadingValue(clientData?.address) },
+    { label: 'City', value: loadingValue(clientData?.city) },
+    { label: 'Province', value: loadingValue(clientData?.province) },
+    { label: 'Postal code', value: loadingValue(clientData?.postalCode) },
+    { label: 'Country', value: loadingValue(clientData?.country) },
+    { label: 'Phone', value: loadingValue(clientData?.phone) },
+    { label: 'Fax', value: loadingValue(clientData?.fax) },
+    { label: 'Email', value: loadingValue(clientData?.email) },
+  ]
 }
+
+// The agent is a section of the applicant card, as on the application page, not a second card.
+const ExemptionClientTile = ({
+  agent,
+  ...client
+}: ExemptionClient & { agent?: ExemptionClient }) => (
+  <DetailFieldTile title={client.title} fields={exemptionClientFields(client)}>
+    {agent && (
+      <section className="detail-subsection" aria-label={agent.title}>
+        <h3 className="detail-tile-title">{agent.title}</h3>
+        <DetailFieldGrid fields={exemptionClientFields(agent)} />
+      </section>
+    )}
+  </DetailFieldTile>
+)
 
 const ProvincialExemptionDetailsPage = () => {
   const navigate = useNavigate()
@@ -342,18 +476,15 @@ const ProvincialExemptionDetailsPage = () => {
   const [optionsAvailability, setOptionsAvailability] = useState<
     'loading' | 'available' | 'unavailable'
   >('loading')
-  const [editing, setEditing] = useState(false)
+  const [editingSection, setEditingSection] = useState<ExemptionEditSection | null>(null)
+  const editing = editingSection !== null
   const [saving, setSaving] = useState(false)
   const [renamedExemptionNumber, setRenamedExemptionNumber] = useState<string | null>(null)
   const [approving, setApproving] = useState(false)
   const [approvalConfirmationOpen, setApprovalConfirmationOpen] = useState(false)
   const [approvalConfirmationTarget, setApprovalConfirmationTarget] = useState<string | null>(null)
-  const [approvalCertified, setApprovalCertified] = useState(false)
-  const [approvalDate, setApprovalDate] = useState('')
-  const [approvalEmailRecipients, setApprovalEmailRecipients] = useState<
-    ExemptionApprovalRecipient[]
-  >([])
-  const [sendingApprovalEmail, setSendingApprovalEmail] = useState(false)
+  const approvalTargetRef = useRef<string | null>(null)
+  const [approvalDialogBusy, setApprovalDialogBusy] = useState(false)
   const [permitCreationConfirmationOpen, setPermitCreationConfirmationOpen] = useState(false)
   const [permitCreationUnsavedChangesOpen, setPermitCreationUnsavedChangesOpen] = useState(false)
   const [savingPermitCreationChanges, setSavingPermitCreationChanges] = useState(false)
@@ -365,6 +496,10 @@ const ProvincialExemptionDetailsPage = () => {
   const [permitCreationRequiresReload, setPermitCreationRequiresReload] = useState(false)
   const [generatingReport, setGeneratingReport] = useState(false)
   const [applicationNumberToAdd, setApplicationNumberToAdd] = useState('')
+  const [addApplicationError, setAddApplicationError] = useState('')
+  const [isAddingApplication, setIsAddingApplication] = useState(false)
+  const addApplicationButtonRef = useRef<HTMLButtonElement>(null)
+  const addApplicationInputRef = useRef<HTMLInputElement>(null)
   const [applicationMutationNumber, setApplicationMutationNumber] = useState<string | null>(null)
   const [applicationPendingRemoval, setApplicationPendingRemoval] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -374,11 +509,15 @@ const ProvincialExemptionDetailsPage = () => {
   const [permitsErrorMessage, setPermitsErrorMessage] = useState('')
   const [blanketOicTotalsErrorMessage, setBlanketOicTotalsErrorMessage] = useState('')
   const [actionResult, setActionResult] = useState<ActionResult | null>(null)
+  const navigationState = location.state as ExemptionCreationNavigationState | null
+  const createdExemptionNumber = navigationState?.exemptionCreationNotice?.exemptionNumber ?? ''
+  // Read by the first load, which otherwise clears page results before showing the record.
+  const createdExemptionNumberRef = useRef(createdExemptionNumber)
   const actionErrorMessage = actionResult?.kind === 'error' ? actionResult.message : ''
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] =
     useState<ProvincialExemptionDocumentRow | null>(null)
-  const [isEditingDocuments, setIsEditingDocuments] = useState(false)
+  const [isAddingDocuments, setIsAddingDocuments] = useState(false)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
@@ -387,15 +526,26 @@ const ProvincialExemptionDetailsPage = () => {
     defaultTab: 'owner',
   })
   const beginDetailRequest = useLatestRequestGuard()
+  const beginDocumentOpenRequest = useLatestRequestGuard()
+  const pendingDocumentPreviewsRef = useRef(new Set<Window>())
   const currentDetail = detail && String(detail.exemptionNumber) === exemptionNumber ? detail : null
   const clientContextApplication = applications[0] ?? null
   const clientContextHasAgent = isAgentApplicant(clientContextApplication?.applicantTypeCode ?? '')
   const linkedApplicationNumber = clientContextApplication?.applicationNumber.trim() ?? ''
   const exemptionOwnerClientNumber = clientContextApplication?.ownerClientNumber.trim() ?? ''
+  const exemptionClientNumber = detail?.ownerClientNumber?.trim() || exemptionOwnerClientNumber
   const exemptionAgentClientNumber = clientContextApplication?.agentClientNumber.trim() ?? ''
   const ownerClientLocationCode = clientContextApplication?.ownerClientLocationCode.trim() ?? ''
   const agentClientLocationCode = clientContextApplication?.agentClientLocationCode.trim() ?? ''
   const isRefreshingDetail = loading && !!currentDetail
+  useEffect(() => {
+    beginDocumentOpenRequest()
+    const pendingPreviews = pendingDocumentPreviewsRef.current
+    return () => {
+      pendingPreviews.forEach((preview) => preview.close())
+      pendingPreviews.clear()
+    }
+  }, [beginDocumentOpenRequest, exemptionNumber])
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
@@ -443,6 +593,28 @@ const ProvincialExemptionDetailsPage = () => {
       },
     )
   }, [exemptionNumber, location.state, navigate, renamedExemptionNumber, saving, withCurrentSearch])
+
+  useEffect(() => {
+    if (!createdExemptionNumber) return
+
+    // Drop the one-time notice from history so a reload or Back does not confirm the save again.
+    const nextNavigationState = { ...(navigationState ?? {}) }
+    delete nextNavigationState.exemptionCreationNotice
+    navigate(
+      { pathname: location.pathname, search: location.search, hash: location.hash },
+      {
+        replace: true,
+        state: Object.keys(nextNavigationState).length > 0 ? nextNavigationState : null,
+      },
+    )
+  }, [
+    createdExemptionNumber,
+    location.hash,
+    location.pathname,
+    location.search,
+    navigate,
+    navigationState,
+  ])
 
   useEffect(() => {
     let isActive = true
@@ -532,12 +704,9 @@ const ProvincialExemptionDetailsPage = () => {
       const isRefreshingCurrentExemption =
         detailRef.current !== null && String(detailRef.current.exemptionNumber) === exemptionNumber
       if (!isRefreshingCurrentExemption) {
+        approvalTargetRef.current = null
         setApprovalConfirmationOpen(false)
         setApprovalConfirmationTarget(null)
-        setApprovalCertified(false)
-        setApprovalDate('')
-        setApprovalEmailRecipients([])
-        setSendingApprovalEmail(false)
         setPermitCreationConfirmationOpen(false)
         setPermitCreationUnsavedChangesOpen(false)
         setSavingPermitCreationChanges(false)
@@ -548,6 +717,8 @@ const ProvincialExemptionDetailsPage = () => {
         setCreatedMinisterialPermit(false)
         setPermitCreationRequiresReload(false)
         setApplicationNumberToAdd('')
+        setAddApplicationError('')
+        setIsAddingApplication(false)
         setApplicationMutationNumber(null)
       }
       if (!exemptionNumber) {
@@ -563,7 +734,7 @@ const ProvincialExemptionDetailsPage = () => {
         setEditContextLoaded(false)
         setEditContextRefreshing(false)
         setEditForm(null)
-        setIsEditingDocuments(false)
+        setIsAddingDocuments(false)
         setDocumentsErrorMessage('')
         setApplicationsErrorMessage('')
         setPermitsErrorMessage('')
@@ -579,10 +750,12 @@ const ProvincialExemptionDetailsPage = () => {
       setApplicationsErrorMessage('')
       setPermitsErrorMessage('')
       setBlanketOicTotalsErrorMessage('')
-      setActionResult(null)
+      const showCreationNotice = createdExemptionNumberRef.current === exemptionNumber
+      if (!showCreationNotice) createdExemptionNumberRef.current = ''
+      setActionResult(showCreationNotice ? EXEMPTION_SAVED_RESULT : null)
       if (!isRefreshingCurrentExemption) {
-        setEditing(false)
-        setIsEditingDocuments(false)
+        setEditingSection(null)
+        setIsAddingDocuments(false)
         setApplications([])
         setExemptionHolder('')
         setPermitRows([])
@@ -801,6 +974,13 @@ const ProvincialExemptionDetailsPage = () => {
     canPerform('approveExemption', exemptionOrgUnits) &&
     persistedStatusCode === 'NEW' &&
     !editing &&
+    !isExemptionDirty &&
+    !isAddingApplication &&
+    !isAddingDocuments &&
+    !saving &&
+    !applicationMutationNumber &&
+    !documentUploadBusy &&
+    !isRemovingDocumentId &&
     !exemptionEditLocked
   const canStartApplicationBackedPermitCreation =
     canPerformInAnyExemptionRegion('createPermit') &&
@@ -832,39 +1012,38 @@ const ProvincialExemptionDetailsPage = () => {
     applicationMutationNumber !== null ||
     isRemovingDocumentId !== null ||
     documentUploadBusy
-  const canLinkApplications =
+  // Only users who can remove linked applications get the Actions column.
+  const canManageApplicationLinks =
     isApplicationApprover &&
     withinApproverRegions &&
+    hasExemptionEditPermission &&
+    persistedTypeCode !== 'B' &&
+    persistedStatusCode !== 'CAN'
+  const canLinkApplications =
+    canManageApplicationLinks &&
     canSaveExemption &&
     !applicationsErrorMessage &&
     !editing &&
     !isExemptionFormDirty &&
-    !documentUploadDirty &&
-    persistedTypeCode !== 'B' &&
-    persistedStatusCode !== 'CAN'
+    !documentUploadDirty
   const applicationNumberToAddError =
     provincialApplicationNumberFieldError(applicationNumberToAdd) ?? ''
   const addApplicationDisabled =
     Boolean(applicationMutationNumber) ||
     !applicationNumberToAdd.trim() ||
     Boolean(applicationNumberToAddError)
-  const addApplicationDisabledDescription = applicationMutationNumber
-    ? 'Wait for the current application link update to finish.'
-    : applicationNumberToAddError
-      ? applicationNumberToAddError
-      : 'Enter an application number to add it.'
   const cancelledBlanketOic = persistedTypeCode === 'B' && persistedStatusCode === 'CAN'
   const cancelledExemption = persistedStatusCode === 'CAN'
   const approvalDateRequired =
     !cancelledExemption && (currentTypeCode === 'O' || currentTypeCode === 'B')
   const expiryDateRequired = !cancelledExemption
-  const canEditSummaryFields =
-    editing && canSaveExemption && !cancelledBlanketOic && !cancelledExemption
+  const canEditExemptionFields = canSaveExemption && !cancelledBlanketOic && !cancelledExemption
+  const canEditSummaryFields = editingSection === 'summary' && canEditExemptionFields
   const isExemptionNumberChanged =
     canEditSummaryFields &&
     currentTypeCode === 'O' &&
     editForm?.exemptionNumber.trim() !== currentDetail?.exemptionNumber
-  const canEditStatus = editing && canSaveExemption
+  const canEditStatus = editingSection === 'summary' && canSaveExemption
   const canEditApprovalDate =
     canEditSummaryFields &&
     (currentTypeCode === 'O' ||
@@ -883,6 +1062,31 @@ const ProvincialExemptionDetailsPage = () => {
     showClientTabs &&
     clientContextHasAgent &&
     Boolean(linkedApplicationNumber && exemptionAgentClientNumber)
+  const ownerClient: ExemptionClient = {
+    title: 'Applicant client details',
+    clientNumber: exemptionOwnerClientNumber,
+    applicantType: clientContextApplication?.applicantTypeCode ?? '',
+    locationCode: ownerClientLocationCode,
+    contactName: clientContextApplication?.ownerContactName ?? '',
+    companyName: clientContextApplication?.ownerCompanyName ?? '',
+    locations: ownerClientLocations,
+    clientData: ownerClientData,
+    isLoading: clientContextLoading,
+    showAgentIndicator: true,
+  }
+  const agentClient: ExemptionClient | undefined = showAgent
+    ? {
+        title: 'Agent client details',
+        clientNumber: exemptionAgentClientNumber,
+        applicantType: clientContextApplication?.applicantTypeCode ?? '',
+        locationCode: agentClientLocationCode,
+        contactName: clientContextApplication?.agentContactName ?? '',
+        companyName: clientContextApplication?.agentCompanyName ?? '',
+        locations: agentClientLocations,
+        clientData: agentClientData,
+        isLoading: clientContextLoading,
+      }
+    : undefined
   const feeManagementAvailable =
     currentTypeCode === 'B' ||
     currentTypeCode === 'O' ||
@@ -890,8 +1094,7 @@ const ProvincialExemptionDetailsPage = () => {
     editContext.rateOverrideEnabled
   const showFees = feeManagementAvailable || Boolean(applicationsErrorMessage)
   const exemptionDetailTabs: ExemptionDetailTabKey[] = [
-    ...(showOwner ? (['owner'] as const) : []),
-    ...(showAgent ? (['agent'] as const) : []),
+    ...(showOwner || showAgent ? (['owner'] as const) : []),
     'summary',
     ...(showApplications ? (['applications'] as const) : []),
     'documents',
@@ -900,18 +1103,27 @@ const ProvincialExemptionDetailsPage = () => {
   ]
   const activeExemptionTab = exemptionDetailTabs.includes(selectedExemptionTab)
     ? selectedExemptionTab
-    : 'summary'
+    : selectedExemptionTab === 'agent' && exemptionDetailTabs.includes('owner')
+      ? 'owner'
+      : 'summary'
   const selectedExemptionTabIndex = Math.max(0, exemptionDetailTabs.indexOf(activeExemptionTab))
   const canManageFeeRate = !applicationsErrorMessage && feeManagementAvailable && editContextLoaded
   const canEditFeeOverride =
     canManageFeeRate &&
-    canEditSummaryFields &&
+    canEditExemptionFields &&
     (currentTypeCode !== 'M' || persistedStatusCode === 'NEW')
   const selectedRegions = useMemo(
     () =>
       mapSelectedOptionsById(editForm?.regionNumbers ?? [], regionOptions, (id) => `Region ${id}`),
     [editForm?.regionNumbers, regionOptions],
   )
+  const exemptionRegionNames = exemptionOrgUnits
+    .map(
+      (regionNumber) =>
+        allRegionOptions.find((region) => region.id === regionNumber)?.text ??
+        `Region ${regionNumber}`,
+    )
+    .join(', ')
   const editableTypeOptions = useMemo(() => {
     if (persistedTypeCode === 'B' || persistedTypeCode === 'O') {
       return exemptionTypeOptions.filter((option) => option.value === persistedTypeCode)
@@ -939,7 +1151,10 @@ const ProvincialExemptionDetailsPage = () => {
       exemptionStatusOptions.length === 0 ||
       (currentTypeCode === 'B' && regionOptions.length === 0))
 
-  const formValidationMessage = useMemo(() => {
+  const feeRateValidationMessage = editForm?.enableRateOverride
+    ? feeRateFieldError(editForm.feeRate)
+    : ''
+  const summaryValidationMessage = useMemo(() => {
     if (!editForm) return 'Exemption values are unavailable.'
     if (!exemptionTypeOptions.some((option) => option.value === editForm.exemptionTypeCode)) {
       return 'Select a valid exemption type.'
@@ -1016,17 +1231,6 @@ const ProvincialExemptionDetailsPage = () => {
     ) {
       return 'Select valid regions for a Blanket Order in Council exemption.'
     }
-    if (editForm.enableRateOverride) {
-      const rate = Number(editForm.feeRate)
-      if (
-        !Number.isFinite(rate) ||
-        rate <= 0 ||
-        rate > 999.99 ||
-        !/^\d{1,7}(\.\d{1,2})?$/.test(editForm.feeRate.trim())
-      ) {
-        return 'Fee rate must be greater than 0, at most 999.99, and have at most two decimal places.'
-      }
-    }
     return ''
   }, [
     currentTypeCode,
@@ -1042,6 +1246,9 @@ const ProvincialExemptionDetailsPage = () => {
     applicationMutationNumber,
     isRemovingDocumentId,
   ])
+  // Each section saves only its own fields, so only those fields can block its Save.
+  const formValidationMessage =
+    editingSection === 'fees' ? feeRateValidationMessage : summaryValidationMessage
 
   const unsavedExemptionSaveUnavailableReason =
     (optionsAvailability !== 'available' || requiredExemptionOptionsMissing) && isExemptionFormDirty
@@ -1069,7 +1276,6 @@ const ProvincialExemptionDetailsPage = () => {
     persistedStatusCode !== 'EXP' &&
     editContextLoaded &&
     !exemptionEditLocked
-  const canEditExemptionDocuments = canUploadExemptionDocuments || canDeleteExemptionDocuments
 
   const refreshPermitData = useCallback(
     async (currentExemptionNumber: string, blanketOic: boolean) => {
@@ -1132,7 +1338,7 @@ const ProvincialExemptionDetailsPage = () => {
           )
           setEditContext(EMPTY_EDIT_CONTEXT)
           setEditForm(null)
-          setEditing(false)
+          setEditingSection(null)
         }
         throw error
       } finally {
@@ -1159,24 +1365,33 @@ const ProvincialExemptionDetailsPage = () => {
         return false
       setSaving(true)
       setActionResult(null)
+      // A Fees save changes only the fee fields; every other value is sent as loaded.
+      const submittedForm: ExemptionEditForm =
+        editingSection === 'fees'
+          ? {
+              ...toEditForm(detail, editContext),
+              enableRateOverride: editForm.enableRateOverride,
+              feeRate: editForm.feeRate,
+            }
+          : editForm
       try {
         const nextExemptionNumber =
           currentTypeCode === 'O' && canEditSummaryFields
-            ? editForm.exemptionNumber.trim()
+            ? submittedForm.exemptionNumber.trim()
             : detail.exemptionNumber
         const result = await updateExemption({
           exemptionNumber: nextExemptionNumber,
           previousExemptionNumber: detail.exemptionNumber,
-          approvedVolume: editForm.approvedVolume,
-          approvalDate: editForm.approvalDate,
-          expiryDate: editForm.expiryDate,
-          otherConditions: editForm.otherConditions,
-          exemptionTypeCode: editForm.exemptionTypeCode,
-          exemptionStatusCode: editForm.exemptionStatusCode,
+          approvedVolume: submittedForm.approvedVolume,
+          approvalDate: submittedForm.approvalDate,
+          expiryDate: submittedForm.expiryDate,
+          otherConditions: submittedForm.otherConditions,
+          exemptionTypeCode: submittedForm.exemptionTypeCode,
+          exemptionStatusCode: submittedForm.exemptionStatusCode,
           manageFeeRate: canManageFeeRate,
-          enableRateOverride: editForm.enableRateOverride,
-          feeRate: editForm.feeRate,
-          regionNumbers: editForm.regionNumbers,
+          enableRateOverride: submittedForm.enableRateOverride,
+          feeRate: submittedForm.feeRate,
+          regionNumbers: submittedForm.regionNumbers,
         })
         if (!result.success) {
           setActionResult({ kind: 'error', message: result.errors.join(' ') || result.message })
@@ -1185,21 +1400,21 @@ const ProvincialExemptionDetailsPage = () => {
         const committedDetail: ProvincialExemptionDetail = {
           ...detail,
           exemptionNumber: result.exemptionNumber.trim() || nextExemptionNumber,
-          exemptionTypeCode: editForm.exemptionTypeCode,
-          exemptionStatusCode: editForm.exemptionStatusCode,
-          approvalDate: editForm.approvalDate || null,
-          expiryDate: editForm.expiryDate || null,
-          approvedVolume: Number(editForm.approvedVolume),
-          otherConditions: editForm.otherConditions || null,
-          blanketOic: editForm.exemptionTypeCode.trim().toUpperCase() === 'B',
+          exemptionTypeCode: submittedForm.exemptionTypeCode,
+          exemptionStatusCode: submittedForm.exemptionStatusCode,
+          approvalDate: submittedForm.approvalDate || null,
+          expiryDate: submittedForm.expiryDate || null,
+          approvedVolume: Number(submittedForm.approvedVolume),
+          otherConditions: submittedForm.otherConditions || null,
+          blanketOic: submittedForm.exemptionTypeCode.trim().toUpperCase() === 'B',
         }
         const committedContext: ExemptionEditContext = {
           ...editContext,
-          rateOverrideEnabled: editForm.enableRateOverride,
-          fixedFeeRate: editForm.enableRateOverride ? editForm.feeRate : '',
-          regionNumbers: editForm.regionNumbers,
+          rateOverrideEnabled: submittedForm.enableRateOverride,
+          fixedFeeRate: submittedForm.enableRateOverride ? submittedForm.feeRate : '',
+          regionNumbers: submittedForm.regionNumbers,
         }
-        setEditing(false)
+        setEditingSection(null)
         if (committedDetail.exemptionNumber !== detail.exemptionNumber) {
           // The old identifier no longer exists. Let the new route reload all linked data.
           if (followRenamedRecord) setRenamedExemptionNumber(committedDetail.exemptionNumber)
@@ -1246,6 +1461,7 @@ const ProvincialExemptionDetailsPage = () => {
       requiredExemptionOptionsMissing,
       canEditSummaryFields,
       currentTypeCode,
+      editingSection,
     ],
   )
 
@@ -1253,14 +1469,23 @@ const ProvincialExemptionDetailsPage = () => {
     if (detail) {
       setEditForm(toEditForm(detail, editContext))
     }
-    setEditing(false)
-    setIsEditingDocuments(false)
+    setEditingSection(null)
+    setIsAddingDocuments(false)
     setActionResult(withoutActionError)
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
     setApplicationNumberToAdd('')
+    setAddApplicationError('')
   }, [detail, editContext])
+
+  const startEditingSection = useCallback(
+    (section: ExemptionEditSection) => {
+      if (currentDetail) setEditForm(toEditForm(currentDetail, editContext))
+      setEditingSection(section)
+    },
+    [currentDetail, editContext],
+  )
 
   const onSaveUnsavedExemptionChanges = useCallback(
     async (
@@ -1294,100 +1519,87 @@ const ProvincialExemptionDetailsPage = () => {
     ],
   )
 
-  const closeApprovalConfirmation = useCallback(() => {
-    if (approving) return
+  const closeApprovalConfirmation = useCallback((targetNumber: string) => {
+    if (approvalTargetRef.current !== targetNumber) return
+    approvalTargetRef.current = null
     setApprovalConfirmationOpen(false)
     setApprovalConfirmationTarget(null)
-    setApprovalCertified(false)
-    setApprovalDate('')
-  }, [approving])
+  }, [])
 
-  const closeApprovalEmail = useCallback(() => {
-    if (sendingApprovalEmail) return
-    setApprovalEmailRecipients([])
-    setActionResult({
-      kind: 'success',
-      message: 'Exemption approved. Approval notification was skipped.',
-    })
-  }, [sendingApprovalEmail])
-
-  const onSendApprovalEmail = useCallback(
-    async (recipients: ExemptionApprovalRecipient[]) => {
-      if (sendingApprovalEmail) return
-      setSendingApprovalEmail(true)
-      try {
-        const email = await sendExemptionApprovalEmails(recipients)
-        setActionResult({
-          kind: email.success ? 'success' : 'warning',
-          message: email.success
-            ? `Exemption approved. ${email.message || 'Approval email sent.'}`
-            : `Exemption approved. ${email.message || 'The approval email could not be sent.'}`,
-        })
-      } catch (error) {
-        console.error(error)
-        setActionResult({
-          kind: 'warning',
-          message: 'Exemption approved. The approval email could not be sent.',
-        })
-      } finally {
-        setSendingApprovalEmail(false)
-        setApprovalEmailRecipients([])
+  const onApproveExemption = useCallback(async (): Promise<ExemptionApprovalOutcome> => {
+    if (
+      !currentDetail ||
+      approvalConfirmationTarget !== currentDetail.exemptionNumber ||
+      approvalTargetRef.current !== currentDetail.exemptionNumber ||
+      approving
+    ) {
+      return {
+        approvedNumbers: [],
+        message: 'This exemption is no longer available for approval. Reload the page.',
+        warning: true,
       }
-    },
-    [sendingApprovalEmail],
-  )
-
-  const onApproveExemption = useCallback(async (): Promise<boolean> => {
-    if (!detail || approving || !approvalCertified) return false
+    }
     setApproving(true)
     setActionResult(null)
     try {
-      const approval = await approveExemptions([detail.exemptionNumber])
+      // Without an explicit version the request carries the version of the exemption on screen,
+      // so approving a view that another user has since changed is rejected as stale.
+      const approval = await approveExemptions([currentDetail.exemptionNumber])
       if (!approval.success || !approval.valid) {
-        setActionResult({
-          kind: 'error',
+        return {
+          approvedNumbers: [],
           message:
             normalizeServerMessage(approval.errorMessage) ||
             approval.errors.join(' ') ||
-            'The exemption could not be approved.',
-        })
-        return false
+            APPROVAL_FAILED_MESSAGE,
+          warning: true,
+        }
       }
-
-      const recipients = approval.sendGrid.map(
-        ([number, email]): ExemptionApprovalRecipient => [number, email],
-      )
-      setApprovalEmailRecipients(recipients)
-      setActionResult({
-        kind: recipients.length > 0 ? 'success' : 'warning',
-        message:
-          recipients.length > 0
-            ? 'Exemption approved. Review the applicant recipient before sending the notification.'
-            : 'Exemption approved. No applicant notification recipient was returned.',
-      })
+      const serverNote = normalizeServerMessage(approval.errorMessage)
+      const approvedOutcome = (note = ''): ExemptionApprovalOutcome => {
+        const notes = [serverNote, note].filter(Boolean)
+        return {
+          approvedNumbers: [currentDetail.exemptionNumber],
+          message: serverNote || 'Exemption approved.',
+          warning: notes.length > 0,
+          notes,
+        }
+      }
+      if (approvalTargetRef.current !== currentDetail.exemptionNumber) {
+        return approvedOutcome('The page changed; reopen this exemption to see its latest status.')
+      }
       try {
         await refreshEditableData(true)
       } catch (refreshError) {
         console.error(refreshError)
-        setActionResult((current) =>
-          current
-            ? {
-                ...current,
-                kind: 'warning',
-                message: `${current.message} Refresh the page to see the latest status.`,
-              }
-            : null,
-        )
+        return approvedOutcome('Refresh the page to see the latest status.')
       }
-      return true
+      return approvedOutcome()
     } catch (error) {
       console.error(error)
-      setActionResult({ kind: 'error', message: 'Unable to approve the exemption.' })
-      return false
+      if (isClientErrorResponse(error)) {
+        return { approvedNumbers: [], message: approvalRequestFailureMessage(error), warning: true }
+      }
+      // After a 5xx or lost response the approval may still have been saved, so show the
+      // current status.
+      if (approvalTargetRef.current === currentDetail.exemptionNumber) {
+        try {
+          await refreshEditableData(true)
+        } catch (refreshError) {
+          console.error(refreshError)
+        }
+      }
+      return {
+        approvedNumbers: [],
+        message:
+          'The approval status could not be confirmed. Check the exemption’s current status before retrying.',
+        warning: true,
+        unconfirmed: true,
+      }
     } finally {
       setApproving(false)
     }
-  }, [approvalCertified, approving, detail, refreshEditableData])
+  }, [approvalConfirmationTarget, approving, currentDetail, refreshEditableData])
 
   const closePermitCreationConfirmation = useCallback(() => {
     if (creatingPermit) return
@@ -1442,7 +1654,7 @@ const ProvincialExemptionDetailsPage = () => {
       setPermitCreationUnsavedChangesOpen(true)
       return
     }
-    setEditing(false)
+    setEditingSection(null)
     continuePermitCreation()
   }, [
     canStartApplicationBackedPermitCreation,
@@ -1587,18 +1799,44 @@ const ProvincialExemptionDetailsPage = () => {
       return
     const enteredNumber = applicationNumberToAdd.trim()
     const number = normalizeProvincialApplicationNumber(enteredNumber)
+    const showFailure = async (kind: AddApplicationFailure, serverMessage = '') => {
+      let assignedExemptionNumber = ''
+      // The server checks the approved status first, and an application on an exemption is
+      // Exempted rather than approved, so a "not approved" answer may mean it is already used.
+      if (kind === 'alreadyAssigned' || kind === 'notApproved') {
+        assignedExemptionNumber = applications.some(
+          (row) => row.applicationNumber.trim() === number,
+        )
+          ? detail.exemptionNumber
+          : await findAssignedExemptionNumber(number)
+        if (assignedExemptionNumber.toUpperCase() === detail.exemptionNumber.toUpperCase()) {
+          kind = 'alreadyOnThisExemption'
+        } else if (assignedExemptionNumber) {
+          kind = 'alreadyAssigned'
+        }
+      }
+      setAddApplicationError(
+        addApplicationFailureMessage(
+          kind,
+          enteredNumber,
+          exemptionClientNumber,
+          assignedExemptionNumber,
+          serverMessage,
+        ),
+      )
+    }
     setApplicationMutationNumber(enteredNumber)
+    setAddApplicationError('')
     setActionResult(null)
     try {
       const result = await addApplicationToExemption(detail.exemptionNumber, number)
       if (!result.success) {
-        setActionResult({
-          kind: 'error',
-          message: result.errors.join(' ') || 'Unable to link the application.',
-        })
+        const serverMessage = result.errors.join(' ')
+        await showFailure(addApplicationFailureKind(serverMessage), serverMessage)
         return
       }
       setApplicationNumberToAdd('')
+      setIsAddingApplication(false)
       try {
         await refreshEditableData(true)
         setActionResult({
@@ -1614,7 +1852,21 @@ const ProvincialExemptionDetailsPage = () => {
       }
     } catch (error) {
       console.error(error)
-      setActionResult({ kind: 'error', message: `Unable to link application ${number}.` })
+      if (!isClientErrorResponse(error)) {
+        // Without a client error the link may have been saved, so show the current list.
+        try {
+          await refreshEditableData(true)
+        } catch (refreshError) {
+          console.error(refreshError)
+        }
+        await showFailure('unconfirmed')
+        return
+      }
+      const status = getResponseStatus(error)
+      await showFailure(
+        status === 404 ? 'notFound' : status === 403 ? 'forbidden' : 'other',
+        responseServerMessage(error),
+      )
     } finally {
       setApplicationMutationNumber(null)
     }
@@ -1622,9 +1874,16 @@ const ProvincialExemptionDetailsPage = () => {
     applicationMutationNumber,
     applicationNumberToAdd,
     applicationNumberToAddError,
+    applications,
     detail,
+    exemptionClientNumber,
     refreshEditableData,
   ])
+
+  useEffect(() => {
+    // Carbon's invalid text isn't announced, so focus the field it describes.
+    if (addApplicationError && !applicationMutationNumber) addApplicationInputRef.current?.focus()
+  }, [addApplicationError, applicationMutationNumber])
 
   const onRemoveApplication = useCallback(
     async (applicationNumber: string) => {
@@ -1684,26 +1943,56 @@ const ProvincialExemptionDetailsPage = () => {
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
     setActionResult(withoutActionError)
-    setIsEditingDocuments(false)
+    setIsAddingDocuments(false)
   }, [])
 
   const onOpenDocument = useCallback(
-    async (row: ProvincialExemptionDocumentRow) => {
+    async (row: ProvincialExemptionDocumentRow, preview: boolean) => {
       if (!exemptionNumber) {
         return
       }
-
+      const isLatestRequest = beginDocumentOpenRequest()
+      let previewTarget: Window | null = null
+      const closePendingPreview = () => {
+        if (previewTarget && pendingDocumentPreviewsRef.current.delete(previewTarget)) {
+          previewTarget.close()
+        }
+      }
       setActionResult(null)
-
       try {
+        if (preview) {
+          // Reserve a tab during the click so the asynchronous document fetch can still preview it.
+          previewTarget = window.open('about:blank', '_blank')
+          if (previewTarget) {
+            pendingDocumentPreviewsRef.current.add(previewTarget)
+            previewTarget.opener = null
+          }
+        }
         const result = await openExemptionDocument(row.id, row.name, exemptionNumber)
-        triggerBrowserDownload(result.blob, result.filename || row.name)
+        if (!isLatestRequest()) {
+          closePendingPreview()
+          return
+        }
+        if (preview) {
+          openDocumentPreview(result.blob, result.filename || row.name, previewTarget)
+        } else {
+          triggerBrowserDownload(result.blob, result.filename || row.name)
+        }
       } catch (error) {
+        closePendingPreview()
+        if (!isLatestRequest()) return
         console.error(error)
-        setActionResult({ kind: 'error', message: 'Unable to open the selected document.' })
+        setActionResult({
+          kind: 'error',
+          message: preview
+            ? 'Unable to open the selected document.'
+            : 'Unable to download the selected document.',
+        })
+      } finally {
+        if (previewTarget) pendingDocumentPreviewsRef.current.delete(previewTarget)
       }
     },
-    [exemptionNumber],
+    [beginDocumentOpenRequest, exemptionNumber],
   )
 
   const onRemoveDocument = useCallback(
@@ -1773,7 +2062,7 @@ const ProvincialExemptionDetailsPage = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={`Exemption ${currentDetail?.exemptionNumber ?? exemptionNumber ?? ''}`.trim()}
-          subtitle="Check and manage this provincial exemption"
+          subtitle={`Author: ${displayValue(currentDetail?.author)}`}
           status={
             currentDetail ? (
               <StatusTag
@@ -1790,52 +2079,9 @@ const ProvincialExemptionDetailsPage = () => {
           actions={
             !loading &&
             currentDetail &&
-            ((!editing && canSaveExemption) ||
-              editing ||
-              canApproveExemption ||
+            (canApproveExemption ||
               (persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport'))) ? (
               <>
-                {!editing && canSaveExemption && (
-                  <Button
-                    kind="tertiary"
-                    size="sm"
-                    onClick={() => {
-                      selectExemptionTab('summary')
-                      setEditing(true)
-                    }}
-                  >
-                    Edit exemption
-                  </Button>
-                )}
-                {editing && (
-                  <>
-                    <Button
-                      kind="primary"
-                      size="sm"
-                      disabled={
-                        saving ||
-                        Boolean(formValidationMessage) ||
-                        requiredExemptionOptionsMissing ||
-                        optionsAvailability !== 'available'
-                      }
-                      renderIcon={saving ? PendingIcon : undefined}
-                      onClick={() => void onSaveExemption()}
-                    >
-                      {saving ? 'Saving…' : 'Save exemption'}
-                    </Button>
-                    <Button
-                      kind="tertiary"
-                      size="sm"
-                      disabled={saving}
-                      onClick={() => {
-                        setEditForm(toEditForm(currentDetail, editContext))
-                        setEditing(false)
-                      }}
-                    >
-                      Cancel edit
-                    </Button>
-                  </>
-                )}
                 {canApproveExemption && (
                   <Button
                     kind="primary"
@@ -1843,8 +2089,7 @@ const ProvincialExemptionDetailsPage = () => {
                     disabled={approving}
                     onClick={() => {
                       setActionResult(null)
-                      setApprovalCertified(false)
-                      setApprovalDate(formatBusinessIsoDate())
+                      approvalTargetRef.current = currentDetail.exemptionNumber
                       setApprovalConfirmationTarget(currentDetail.exemptionNumber)
                       setApprovalConfirmationOpen(true)
                     }}
@@ -1918,7 +2163,6 @@ const ProvincialExemptionDetailsPage = () => {
             />
           )}
           {!!actionResult &&
-            approvalEmailRecipients.length === 0 &&
             // An open confirmation shows its own failure instead of the page.
             (actionResult.kind !== 'error' ||
               (!approvalConfirmationOpen && !showPermitCreationConfirmation)) && (
@@ -1927,16 +2171,19 @@ const ProvincialExemptionDetailsPage = () => {
                 onClose={() => setActionResult(null)}
               />
             )}
-          {editing && !!formValidationMessage && (
-            <InlineNotification
-              className="detail-context-notification"
-              kind="warning"
-              title="Review exemption values"
-              subtitle={formValidationMessage}
-              lowContrast
-              hideCloseButton
-            />
-          )}
+          {editing &&
+            !!formValidationMessage &&
+            // The Fees section shows its fee rate error on the field itself.
+            editingSection !== 'fees' && (
+              <InlineNotification
+                className="detail-context-notification"
+                kind="warning"
+                title="Review exemption values"
+                subtitle={formValidationMessage}
+                lowContrast
+                hideCloseButton
+              />
+            )}
 
           <Column
             sm={4}
@@ -1968,7 +2215,7 @@ const ProvincialExemptionDetailsPage = () => {
                 ))}
               </TabList>
               <ContiguousTabPanels order={exemptionDetailTabs}>
-                {showOwner && (
+                {(showOwner || showAgent) && (
                   <TabPanel key="owner" className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
@@ -1979,47 +2226,10 @@ const ProvincialExemptionDetailsPage = () => {
                             headingLevel={3}
                             role="alert"
                           />
+                        ) : showOwner ? (
+                          <ExemptionClientTile {...ownerClient} agent={agentClient} />
                         ) : (
-                          <ExemptionClientTile
-                            title="Applicant client details"
-                            clientNumber={exemptionOwnerClientNumber}
-                            applicantType={clientContextApplication?.applicantTypeCode ?? ''}
-                            locationCode={ownerClientLocationCode}
-                            contactName={clientContextApplication?.ownerContactName ?? ''}
-                            companyName={clientContextApplication?.ownerCompanyName ?? ''}
-                            locations={ownerClientLocations}
-                            clientData={ownerClientData}
-                            isLoading={clientContextLoading}
-                            showAgentIndicator
-                          />
-                        )}
-                      </Column>
-                    </Grid>
-                  </TabPanel>
-                )}
-                {showAgent && (
-                  <TabPanel key="agent" className="application-detail-tab-panel">
-                    <Grid fullWidth className="application-detail-tab-grid">
-                      <Column sm={4} md={8} lg={16}>
-                        {clientContextErrorMessage ? (
-                          <EmptyState
-                            title="Client details unavailable"
-                            description={clientContextErrorMessage}
-                            headingLevel={3}
-                            role="alert"
-                          />
-                        ) : (
-                          <ExemptionClientTile
-                            title="Agent client details"
-                            clientNumber={exemptionAgentClientNumber}
-                            applicantType={clientContextApplication?.applicantTypeCode ?? ''}
-                            locationCode={agentClientLocationCode}
-                            contactName={clientContextApplication?.agentContactName ?? ''}
-                            companyName={clientContextApplication?.agentCompanyName ?? ''}
-                            locations={agentClientLocations}
-                            clientData={agentClientData}
-                            isLoading={clientContextLoading}
-                          />
+                          agentClient && <ExemptionClientTile {...agentClient} />
                         )}
                       </Column>
                     </Grid>
@@ -2027,11 +2237,11 @@ const ProvincialExemptionDetailsPage = () => {
                 )}
                 <TabPanel key="summary" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
-                    {editing && editForm ? (
+                    {editingSection === 'summary' && editForm ? (
                       <>
                         <Column sm={4} md={4} lg={8}>
                           <Tile>
-                            <h2 className="detail-tile-title">Edit exemption</h2>
+                            <h2 className="detail-tile-title">Exemption details</h2>
                             <div className="legacy-search-grid">
                               {currentTypeCode === 'O' && (
                                 <TextInput
@@ -2192,12 +2402,53 @@ const ProvincialExemptionDetailsPage = () => {
                             />
                           </Tile>
                         </Column>
+                        <Column sm={4} md={8} lg={16}>
+                          <div className="legacy-search-actions">
+                            <Button
+                              kind="tertiary"
+                              size="sm"
+                              disabled={saving}
+                              onClick={() => {
+                                setEditForm(toEditForm(currentDetail, editContext))
+                                setEditingSection(null)
+                              }}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              kind="primary"
+                              size="sm"
+                              disabled={
+                                saving ||
+                                Boolean(formValidationMessage) ||
+                                requiredExemptionOptionsMissing ||
+                                optionsAvailability !== 'available'
+                              }
+                              renderIcon={saving ? PendingIcon : undefined}
+                              onClick={() => void onSaveExemption()}
+                            >
+                              {saving ? 'Saving…' : 'Save changes'}
+                            </Button>
+                          </div>
+                        </Column>
                       </>
                     ) : (
                       <>
                         <Column sm={4} md={8} lg={16}>
                           <DetailFieldTile
-                            title="Exemption summary"
+                            title="Exemption details"
+                            headerAction={
+                              canSaveExemption && !editing ? (
+                                <Button
+                                  kind="tertiary"
+                                  size="sm"
+                                  renderIcon={Edit}
+                                  onClick={() => startEditingSection('summary')}
+                                >
+                                  Edit exemption details
+                                </Button>
+                              ) : undefined
+                            }
                             fields={[
                               {
                                 label: 'Exemption number',
@@ -2207,6 +2458,12 @@ const ProvincialExemptionDetailsPage = () => {
                                 label: 'Type',
                                 value: displayValue(
                                   detail.exemptionTypeDescription ?? detail.exemptionTypeCode,
+                                ),
+                              },
+                              {
+                                label: 'Status',
+                                value: displayValue(
+                                  detail.exemptionStatusDescription ?? detail.exemptionStatusCode,
                                 ),
                               },
                               { label: 'Author', value: displayValue(detail.author) },
@@ -2228,9 +2485,12 @@ const ProvincialExemptionDetailsPage = () => {
                                 : []),
                               {
                                 label: 'Approval date',
-                                value: displayValue(detail.approvalDate),
+                                value: detail.approvalDate
+                                  ? displayValue(detail.approvalDate)
+                                  : 'Not approved',
                               },
                               { label: 'Expiry date', value: displayValue(detail.expiryDate) },
+                              { label: 'Region', value: displayValue(exemptionRegionNames) },
                               {
                                 label: 'Approved volume (m³)',
                                 value: formatExemptionVolume(detail.approvedVolume),
@@ -2275,39 +2535,91 @@ const ProvincialExemptionDetailsPage = () => {
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
-                          <h2 className="detail-tile-title">Associated applications</h2>
+                          <div className="detail-section-card__header">
+                            <h2 className="detail-tile-title">Applications</h2>
+                            {canLinkApplications && (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                ref={addApplicationButtonRef}
+                                onClick={() => {
+                                  setAddApplicationError('')
+                                  setIsAddingApplication(true)
+                                }}
+                              >
+                                Add application
+                              </Button>
+                            )}
+                          </div>
+                          {!applicationsErrorMessage && (
+                            <p>
+                              Total requested volume (m³):{' '}
+                              {formatExemptionVolume(requestedApplicationVolume)}
+                            </p>
+                          )}
                           {canLinkApplications && (
-                            <div className="exemption-application-add-form">
+                            <DetailSidePanel
+                              open={isAddingApplication}
+                              title="Add application"
+                              contentSelector=".application-detail-tabs-column"
+                              initialFocusSelector="#exemptionApplicationNumberToAdd"
+                              launcherRef={addApplicationButtonRef}
+                              fallbackFocusSelector=".application-detail-tab-list"
+                              busy={Boolean(applicationMutationNumber)}
+                              actions={[
+                                {
+                                  label: 'Cancel',
+                                  kind: 'secondary',
+                                  disabled: Boolean(applicationMutationNumber),
+                                  onClick: () => {
+                                    setApplicationNumberToAdd('')
+                                    setAddApplicationError('')
+                                    setIsAddingApplication(false)
+                                  },
+                                },
+                                {
+                                  label: applicationMutationNumber ? 'Saving…' : 'Save application',
+                                  kind: 'primary',
+                                  disabled: addApplicationDisabled,
+                                  onClick: () => void onAddApplication(),
+                                },
+                              ]}
+                              onClose={() => {
+                                setApplicationNumberToAdd('')
+                                setAddApplicationError('')
+                                setIsAddingApplication(false)
+                              }}
+                            >
                               <TextInput
+                                ref={addApplicationInputRef}
                                 id="exemptionApplicationNumberToAdd"
                                 labelText={requiredLabel('Application number')}
                                 aria-required="true"
                                 value={applicationNumberToAdd}
-                                invalid={Boolean(applicationNumberToAddError)}
-                                invalidText={applicationNumberToAddError}
-                                onChange={(event) => setApplicationNumberToAdd(event.target.value)}
+                                helperText={
+                                  exemptionClientNumber
+                                    ? `Approved applications for client ${exemptionClientNumber} only.`
+                                    : 'Approved applications only.'
+                                }
+                                invalid={Boolean(
+                                  applicationNumberToAddError || addApplicationError,
+                                )}
+                                invalidText={applicationNumberToAddError || addApplicationError}
+                                // Carbon links its error with aria-errormessage only, which many
+                                // screen readers skip, so also describe the field with it.
+                                {...(applicationNumberToAddError || addApplicationError
+                                  ? {
+                                      'aria-describedby':
+                                        'exemptionApplicationNumberToAdd-error-msg',
+                                    }
+                                  : {})}
+                                disabled={Boolean(applicationMutationNumber)}
+                                onChange={(event) => {
+                                  setApplicationNumberToAdd(event.target.value)
+                                  setAddApplicationError('')
+                                }}
                               />
-                              <DisabledButtonTooltip
-                                disabled={addApplicationDisabled}
-                                description={addApplicationDisabledDescription}
-                              >
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  disabled={addApplicationDisabled}
-                                  renderIcon={
-                                    applicationMutationNumber === applicationNumberToAdd.trim()
-                                      ? PendingIcon
-                                      : undefined
-                                  }
-                                  onClick={() => void onAddApplication()}
-                                >
-                                  {applicationMutationNumber === applicationNumberToAdd.trim()
-                                    ? 'Adding…'
-                                    : 'Add application'}
-                                </Button>
-                              </DisabledButtonTooltip>
-                            </div>
+                            </DetailSidePanel>
                           )}
                           {applicationsErrorMessage ? (
                             <EmptyState
@@ -2321,10 +2633,12 @@ const ProvincialExemptionDetailsPage = () => {
                               <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
-                                    <TableHeader>Application</TableHeader>
+                                    <TableHeader>Application number</TableHeader>
                                     <TableHeader>Requested volume (m³)</TableHeader>
                                     <TableHeader>Scale volume (m³)</TableHeader>
-                                    <TableHeader>Actions</TableHeader>
+                                    {canManageApplicationLinks && (
+                                      <TableHeader>Actions</TableHeader>
+                                    )}
                                   </TableRow>
                                 </TableHead>
                                 <TableBody>
@@ -2339,73 +2653,69 @@ const ProvincialExemptionDetailsPage = () => {
                                       : `/provincial/application/${application.applicationNumber}`
                                     return (
                                       <TableRow key={application.applicationNumber}>
-                                        <TableCell>{application.applicationNumber}</TableCell>
+                                        <TableCell>
+                                          {canOpen ? (
+                                            <Link
+                                              to={withCurrentSearch(path)}
+                                              state={withDetailReturnTo(
+                                                location.state,
+                                                {
+                                                  label: 'Provincial exemption detail',
+                                                  to: locationPath(location),
+                                                },
+                                                detailReturnTo,
+                                              )}
+                                            >
+                                              {application.applicationNumber}
+                                            </Link>
+                                          ) : (
+                                            application.applicationNumber
+                                          )}
+                                        </TableCell>
                                         <TableCell>{application.requestedVolume || '-'}</TableCell>
                                         <TableCell>{application.scaleVolume || '-'}</TableCell>
-                                        <TableCell>
-                                          <div className="legacy-search-actions">
-                                            <DisabledButtonTooltip
-                                              disabled={!canOpen}
-                                              description="You do not have permission to open this application."
-                                            >
-                                              <Button
-                                                kind="ghost"
-                                                size="sm"
-                                                disabled={!canOpen}
-                                                onClick={() =>
-                                                  navigate(withCurrentSearch(path), {
-                                                    state: withDetailReturnTo(
-                                                      location.state,
-                                                      {
-                                                        label: 'Provincial exemption detail',
-                                                        to: locationPath(location),
-                                                      },
-                                                      detailReturnTo,
-                                                    ),
-                                                  })
-                                                }
-                                              >
-                                                Open
-                                              </Button>
-                                            </DisabledButtonTooltip>
-                                            {canLinkApplications && (
-                                              <DisabledButtonTooltip
-                                                disabled={
-                                                  application.locked ||
-                                                  Boolean(applicationMutationNumber)
-                                                }
-                                                description={
-                                                  application.locked
-                                                    ? 'This application is locked and cannot be removed.'
-                                                    : 'Wait for the current application link update to finish.'
-                                                }
-                                              >
-                                                <Button
-                                                  kind="danger--ghost"
-                                                  size="sm"
+                                        {canManageApplicationLinks && (
+                                          <TableCell>
+                                            <div className="legacy-search-actions">
+                                              {canLinkApplications && (
+                                                <DisabledButtonTooltip
                                                   disabled={
                                                     application.locked ||
                                                     Boolean(applicationMutationNumber)
                                                   }
-                                                  renderIcon={TrashCan}
-                                                  onClick={() => {
-                                                    setActionResult(null)
-                                                    setApplicationPendingRemoval(
-                                                      application.applicationNumber,
-                                                    )
-                                                  }}
+                                                  description={
+                                                    application.locked
+                                                      ? 'This application is locked and cannot be removed.'
+                                                      : 'Wait for the current application link update to finish.'
+                                                  }
                                                 >
-                                                  {applicationMutationNumber ===
-                                                  application.applicationNumber
-                                                    ? 'Removing…'
-                                                    : application.locked
-                                                      ? 'Locked'
-                                                      : 'Remove'}
-                                                </Button>
-                                              </DisabledButtonTooltip>
-                                            )}
-                                          </div>
-                                        </TableCell>
+                                                  <Button
+                                                    kind="danger--ghost"
+                                                    size="sm"
+                                                    disabled={
+                                                      application.locked ||
+                                                      Boolean(applicationMutationNumber)
+                                                    }
+                                                    renderIcon={TrashCan}
+                                                    onClick={() => {
+                                                      setActionResult(null)
+                                                      setApplicationPendingRemoval(
+                                                        application.applicationNumber,
+                                                      )
+                                                    }}
+                                                  >
+                                                    {applicationMutationNumber ===
+                                                    application.applicationNumber
+                                                      ? 'Removing…'
+                                                      : application.locked
+                                                        ? 'Locked'
+                                                        : 'Remove'}
+                                                  </Button>
+                                                </DisabledButtonTooltip>
+                                              )}
+                                            </div>
+                                          </TableCell>
+                                        )}
                                       </TableRow>
                                     )
                                   })}
@@ -2606,40 +2916,66 @@ const ProvincialExemptionDetailsPage = () => {
                   <TabPanel key="fees" className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
-                        <Tile>
-                          <h2 className="detail-tile-title">Fee rate override</h2>
-                          {applicationsErrorMessage ? (
-                            <EmptyState
-                              title="Fee eligibility unavailable"
-                              description="Associated applications could not be loaded, so fee eligibility cannot be determined."
-                              headingLevel={3}
-                            />
-                          ) : editing && editForm ? (
-                            <>
-                              <Checkbox
-                                id="exemptionFeeRateOverride"
-                                labelText="Enable fee rate override"
-                                checked={editForm.enableRateOverride}
-                                disabled={!canEditFeeOverride}
-                                onChange={(_, { checked }) =>
+                        {applicationsErrorMessage || !editContextLoaded ? (
+                          <Tile>
+                            <h2 className="detail-tile-title">Fees</h2>
+                            {applicationsErrorMessage ? (
+                              <EmptyState
+                                title="Fee eligibility unavailable"
+                                description="Associated applications could not be loaded, so fee eligibility cannot be determined."
+                                headingLevel={3}
+                              />
+                            ) : (
+                              <EmptyState
+                                title="Fee rate unavailable"
+                                description="Fee rate settings could not be loaded."
+                                headingLevel={3}
+                              />
+                            )}
+                          </Tile>
+                        ) : editingSection === 'fees' && editForm ? (
+                          <Tile>
+                            <h2 className="detail-tile-title">Fees</h2>
+                            <div className="legacy-search-grid">
+                              <RadioButtonGroup
+                                legendText="Override fee rate?"
+                                name="exemptionFeeRateOverride"
+                                valueSelected={editForm.enableRateOverride ? 'yes' : 'no'}
+                                orientation="horizontal"
+                                disabled={saving}
+                                onChange={(value) => {
+                                  const enabled = String(value) === 'yes'
                                   setEditForm((current) =>
                                     current
                                       ? {
                                           ...current,
-                                          enableRateOverride: Boolean(checked),
-                                          feeRate: checked ? current.feeRate : '',
+                                          enableRateOverride: enabled,
+                                          feeRate: enabled ? current.feeRate : '',
                                         }
                                       : current,
                                   )
-                                }
-                              />
+                                }}
+                              >
+                                <RadioButton
+                                  id="exemptionFeeRateOverride-no"
+                                  labelText="No"
+                                  value="no"
+                                />
+                                <RadioButton
+                                  id="exemptionFeeRateOverride-yes"
+                                  labelText="Yes"
+                                  value="yes"
+                                />
+                              </RadioButtonGroup>
                               {editForm.enableRateOverride && (
                                 <TextInput
                                   id="exemptionFeeRate"
                                   labelText={requiredLabel('Fee rate ($/m³)')}
                                   aria-required="true"
                                   value={editForm.feeRate}
-                                  disabled={!canEditFeeOverride}
+                                  invalid={Boolean(feeRateValidationMessage)}
+                                  invalidText={feeRateValidationMessage}
+                                  disabled={saving}
                                   onChange={(event) =>
                                     setEditForm((current) =>
                                       current
@@ -2649,23 +2985,66 @@ const ProvincialExemptionDetailsPage = () => {
                                   }
                                 />
                               )}
-                            </>
-                          ) : !editContextLoaded ? (
-                            <EmptyState
-                              title="Fee rate unavailable"
-                              description="Fee rate settings could not be loaded."
-                              headingLevel={3}
-                            />
-                          ) : editContext.rateOverrideEnabled ? (
-                            <p>{`$${editContext.fixedFeeRate || '0.00'} per m³`}</p>
-                          ) : (
-                            <EmptyState
-                              title="No fee rate override"
-                              description="No flat rate has been set for this exemption."
-                              headingLevel={3}
-                            />
-                          )}
-                        </Tile>
+                            </div>
+                            <div className="legacy-search-actions">
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                disabled={saving}
+                                onClick={() => {
+                                  setEditForm(toEditForm(currentDetail, editContext))
+                                  setEditingSection(null)
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={
+                                  saving ||
+                                  Boolean(formValidationMessage) ||
+                                  requiredExemptionOptionsMissing ||
+                                  optionsAvailability !== 'available'
+                                }
+                                renderIcon={saving ? PendingIcon : undefined}
+                                onClick={() => void onSaveExemption()}
+                              >
+                                {saving ? 'Saving…' : 'Save changes'}
+                              </Button>
+                            </div>
+                          </Tile>
+                        ) : (
+                          <DetailFieldTile
+                            title="Fees"
+                            headerAction={
+                              canEditFeeOverride && !editing ? (
+                                <Button
+                                  kind="tertiary"
+                                  size="sm"
+                                  renderIcon={Edit}
+                                  onClick={() => startEditingSection('fees')}
+                                >
+                                  Edit fee override
+                                </Button>
+                              ) : undefined
+                            }
+                            fields={[
+                              {
+                                label: 'Override fee rate?',
+                                value: editContext.rateOverrideEnabled ? 'Yes' : 'No',
+                              },
+                              ...(editContext.rateOverrideEnabled
+                                ? [
+                                    {
+                                      label: 'Fee rate ($/m³)',
+                                      value: displayValue(editContext.fixedFeeRate),
+                                    },
+                                  ]
+                                : []),
+                            ]}
+                          />
+                        )}
                       </Column>
                     </Grid>
                   </TabPanel>
@@ -2676,34 +3055,33 @@ const ProvincialExemptionDetailsPage = () => {
                       <Tile>
                         <div className="detail-section-card__header">
                           <h2 className="detail-tile-title">Documents</h2>
-                          {canEditExemptionDocuments &&
-                            (isEditingDocuments ? (
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                disabled={documentUploadBusy || isRemovingDocumentId !== null}
-                                onClick={onCancelDocumentEditing}
-                              >
-                                Cancel
-                              </Button>
-                            ) : (
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                renderIcon={Edit}
-                                onClick={() => setIsEditingDocuments(true)}
-                              >
-                                Edit documents
-                              </Button>
-                            ))}
+                          {canUploadExemptionDocuments && (
+                            <div className="legacy-search-actions">
+                              {!isAddingDocuments && (
+                                <Button
+                                  kind="tertiary"
+                                  size="sm"
+                                  disabled={documentUploadBusy}
+                                  onClick={() => {
+                                    setIsAddingDocuments(true)
+                                  }}
+                                >
+                                  Add documents
+                                </Button>
+                              )}
+                            </div>
+                          )}
                         </div>
-                        {isEditingDocuments && canUploadExemptionDocuments && (
+                        {isAddingDocuments && canUploadExemptionDocuments && (
                           <DetailDocumentUploadPanel
                             key={`exemption-document-upload-${exemptionNumber}-${documentUploadResetKey}`}
                             workflowType="exemption"
                             targetNumber={detail.exemptionNumber}
                             inputId="exemptionDocumentUpload"
                             disabled={!detail.exemptionNumber}
+                            presentation="side-panel"
+                            initiallyOpen
+                            onClose={onCancelDocumentEditing}
                             onDirtyChange={setDocumentUploadDirty}
                             onBusyChange={setDocumentUploadBusy}
                             onUploadComplete={refreshExemptionDocuments}
@@ -2747,11 +3125,18 @@ const ProvincialExemptionDetailsPage = () => {
                                         <Button
                                           kind="ghost"
                                           size="sm"
-                                          onClick={() => void onOpenDocument(row)}
+                                          onClick={() => void onOpenDocument(row, true)}
                                         >
                                           Open
                                         </Button>
-                                        {isEditingDocuments && (
+                                        <Button
+                                          kind="ghost"
+                                          size="sm"
+                                          onClick={() => void onOpenDocument(row, false)}
+                                        >
+                                          Download
+                                        </Button>
+                                        {canDeleteExemptionDocuments && (
                                           <Button
                                             kind="danger--ghost"
                                             size="sm"
@@ -2837,59 +3222,19 @@ const ProvincialExemptionDetailsPage = () => {
       )}
       {approvalConfirmationOpen &&
         approvalConfirmationTarget === currentDetail?.exemptionNumber && (
-          <ConfirmationModal
-            open
-            title="Approve exemption"
-            description={`You are about to approve exemption ${
-              currentDetail?.exemptionNumber ?? exemptionNumber
-            }.`}
-            confirmLabel="Approve exemption"
-            pendingLabel="Approving…"
-            confirmDisabled={approving || !approvalCertified}
-            onClose={closeApprovalConfirmation}
-            errorMessage={actionErrorMessage}
-            onError={() => undefined}
-            onConfirm={async () => {
-              if (approvalConfirmationTarget === currentDetail?.exemptionNumber) {
-                const approved = await onApproveExemption()
-                if (!approved) {
-                  throw new Error('Exemption approval failed.')
-                }
+          <ExemptionApprovalModal
+            exemptionNumbers={[currentDetail.exemptionNumber]}
+            onApprove={onApproveExemption}
+            onComplete={(report) => {
+              if (approvalTargetRef.current === currentDetail.exemptionNumber) {
+                // One exemption always produces one result.
+                setActionResult(exemptionApprovalResults(report)[0] ?? null)
               }
             }}
-          >
-            <p>
-              By checking the box below you certify that this exemption has been approved. This
-              exemption will be marked with an approval date of {approvalDate}.
-            </p>
-            <Checkbox
-              id="approveExemptionCertification"
-              labelText={requiredLabel('I certify that this exemption has been approved.')}
-              aria-required="true"
-              checked={approvalCertified}
-              disabled={approving}
-              onChange={(_, { checked }) => setApprovalCertified(Boolean(checked))}
-            />
-          </ConfirmationModal>
+            onClose={() => closeApprovalConfirmation(currentDetail.exemptionNumber)}
+            onBusyChange={setApprovalDialogBusy}
+          />
         )}
-      {approvalEmailRecipients.length > 0 && (
-        <ExemptionApprovalEmailModal
-          recipients={approvalEmailRecipients}
-          sending={sendingApprovalEmail}
-          feedback={
-            actionResult && (
-              <AppNotification
-                kind={actionResult.kind}
-                title={actionResultTitle(actionResult)}
-                subtitle={actionResult.message}
-              />
-            )
-          }
-          onRecipientsChange={setApprovalEmailRecipients}
-          onSend={(recipients) => void onSendApprovalEmail(recipients)}
-          onSkip={closeApprovalEmail}
-        />
-      )}
       {permitCreationUnsavedChangesOpen && (
         <Modal
           open
@@ -3025,7 +3370,7 @@ const ProvincialExemptionDetailsPage = () => {
         isBusy={
           saving ||
           approving ||
-          sendingApprovalEmail ||
+          approvalDialogBusy ||
           creatingPermit ||
           applicationMutationNumber !== null ||
           isRemovingDocumentId !== null ||

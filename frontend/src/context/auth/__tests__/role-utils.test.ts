@@ -3,6 +3,7 @@ import {
   hasProvincialStaffRole,
   hasProvincialSubmitterRole,
   hasRole,
+  isPureExemptionApprover,
   isPureReadOnlyRole,
 } from '@/context/auth/role-utils'
 
@@ -30,6 +31,20 @@ describe('auth role utilities', () => {
       false,
     )
     expect(isPureReadOnlyRole(['LEXIS_ADMIN', 'LEXIS_READ_ONLY'])).toBe(false)
+  })
+
+  it('treats Exemption Approver without a broader staff role as Ministerial-only', () => {
+    expect(isPureExemptionApprover(['LEXIS_EXEMPTION_APPROVER'])).toBe(true)
+    expect(isPureExemptionApprover(['EXEMPTION_APPROVER'])).toBe(true)
+    expect(isPureExemptionApprover(['LEXIS_EXEMPTION_APPROVER', 'LEXIS_READ_ONLY'])).toBe(false)
+    expect(
+      isPureExemptionApprover(['LEXIS_EXEMPTION_APPROVER', 'LEXIS_APPLICATION_APPROVER']),
+    ).toBe(false)
+    expect(isPureExemptionApprover(['LEXIS_EXEMPTION_APPROVER', 'LEXIS_ADMIN'])).toBe(false)
+    expect(
+      isPureExemptionApprover(['LEXIS_EXEMPTION_APPROVER', 'LEXIS_PROVINCIAL_SUBMITTER_00012345']),
+    ).toBe(false)
+    expect(isPureExemptionApprover(['LEXIS_READ_ONLY'])).toBe(false)
   })
 
   it('limits region preferences to provincial staff roles', () => {

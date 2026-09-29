@@ -1,10 +1,21 @@
 export type ActionResultKind = 'error' | 'success' | 'warning'
 
+/** One record in a multi-record outcome, shown as a list item that starts with its identifier. */
+export type ActionResultItem = {
+  id: string
+  /** Follows the identifier, including its leading separator (" to …" or ": …"). */
+  text: string
+  /** Links the identifier; omit it inside a dialog or for the page's own record. */
+  to?: string
+  state?: unknown
+}
+
 /** The latest action outcome owned by one page, form, or dialog. */
 export type ActionResult = {
   kind: ActionResultKind
   message: string
   title?: string
+  items?: ActionResultItem[]
 }
 
 const DEFAULT_ACTION_RESULT_TITLES: Record<ActionResultKind, string> = {

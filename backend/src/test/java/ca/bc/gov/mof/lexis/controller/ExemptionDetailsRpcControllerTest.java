@@ -1679,6 +1679,181 @@ class ExemptionDetailsRpcControllerTest {
     verify(service).sendExemptionApprovalEmails("EX-205:client@example.com");
   }
 
+  @Test
+  void approvalRecipientsShouldRequireApprovalRoleAndExemptionWriteAccess() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    assertThat(controller.getApprovalRecipients("EX-205", authentication).getStatusCode())
+        .isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(serviceProvider, service);
+
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+        .thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    org.mockito.Mockito.doThrow(new AccessDeniedException("outside approval region"))
+        .when(provincialAuthorizationService).requireExemptionWrite(authentication, "EX-205");
+
+    assertThatThrownBy(() -> controller.getApprovalRecipients("EX-205", authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    verify(service, never()).getApprovalRecipients(any());
+  }
+
+  @Test
+  void approvalRecipientsShouldCheckLinkedApplicationsAndReturnBothContacts() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+        .thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationNumbersForMutation("EX-205")).thenReturn(List.of(1000456L));
+    var row = new ExemptionDetailsRpcService.ApprovalRecipientPreview(
+        "EX-205", "owner@example.com", "agent@example.com", true, true, "");
+    when(service.getApprovalRecipients(List.of("EX-205"))).thenReturn(List.of(row));
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+
+    var response = controller.getApprovalRecipients("EX-205", authentication);
+
+    assertThat(response.getBody()).containsExactly(row);
+    verify(provincialAuthorizationService).requireApplication(authentication, 1000456L);
+  }
+
+  @Test
+  void structuredApprovalEmailsShouldReturnPerExemptionQueueOutcomes() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+        .thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    var rows = List.of(
+        new ExemptionDetailsRpcService.ApprovalRecipients("EX-205", "owner@example.com", "agent@example.com"),
+        new ExemptionDetailsRpcService.ApprovalRecipients("EX-206", "", "agent2@example.com"));
+    var outcomes = List.of(
+        new ExemptionDetailsRpcService.ApprovalEmailOutcome("EX-205", true, "Approval email queued."),
+        new ExemptionDetailsRpcService.ApprovalEmailOutcome("EX-206", false, "Approval email could not be queued."));
+    when(service.queueApprovalEmails(rows)).thenReturn(outcomes);
+
+    var response = controller.queueApprovalEmails(rows, authentication);
+
+    assertThat(response.getBody().outcomes()).containsExactlyElementsOf(outcomes);
+    verify(service).queueApprovalEmails(rows);
+  }
+
+  @Test
+  void approvalRecipientsShouldDenyMixedRegionBatchBeforeResolvingContacts() {
+    TestingAuthenticationToken authentication = approverAuthentication();
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    denyExemptionWrite(authentication, "EX-206");
+
+    assertThatThrownBy(() -> controller.getApprovalRecipients("EX-205,EX-206", authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    verify(provincialAuthorizationService).requireExemptionWrite(authentication, "EX-205");
+    verify(service, never()).getApprovalRecipients(any());
+  }
+
+  @Test
+  void structuredApprovalEmailsShouldRequireApprovalRole() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    var rows = List.of(
+        new ExemptionDetailsRpcService.ApprovalRecipients("EX-205", "owner@example.com", ""));
+
+    assertThat(controller.queueApprovalEmails(rows, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(serviceProvider, service);
+  }
+
+  @Test
+  void structuredApprovalEmailsShouldRejectMissingBlankOrDuplicateExemptionNumbers() {
+    TestingAuthenticationToken authentication = approverAuthentication();
+    var owner = "owner@example.com";
+
+    assertThat(controller.queueApprovalEmails(List.of(), authentication).getStatusCode())
+        .isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(controller.queueApprovalEmails(
+            List.of(new ExemptionDetailsRpcService.ApprovalRecipients(" ", owner, "")),
+            authentication)
+        .getStatusCode())
+        .isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(controller.queueApprovalEmails(
+            List.of(
+                new ExemptionDetailsRpcService.ApprovalRecipients("EX-205", owner, ""),
+                new ExemptionDetailsRpcService.ApprovalRecipients(" EX-205 ", owner, "")),
+            authentication)
+        .getStatusCode())
+        .isEqualTo(HttpStatus.BAD_REQUEST);
+    assertThat(controller.queueApprovalEmails(
+            List.of(
+                new ExemptionDetailsRpcService.ApprovalRecipients("EX-205", owner, ""),
+                new ExemptionDetailsRpcService.ApprovalRecipients("ex-205", owner, "")),
+            authentication)
+        .getStatusCode())
+        .isEqualTo(HttpStatus.BAD_REQUEST);
+    verify(service, never()).queueApprovalEmails(any());
+  }
+
+  @Test
+  void structuredApprovalEmailsShouldDenyMixedRegionBatchBeforeQueueing() {
+    TestingAuthenticationToken authentication = approverAuthentication();
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    denyExemptionWrite(authentication, "EX-206");
+    var rows = List.of(
+        new ExemptionDetailsRpcService.ApprovalRecipients("EX-205", "owner@example.com", ""),
+        new ExemptionDetailsRpcService.ApprovalRecipients("EX-206", "other@example.com", ""));
+
+    assertThatThrownBy(() -> controller.queueApprovalEmails(rows, authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    verify(service, never()).queueApprovalEmails(any());
+  }
+
+  @Test
+  void structuredApprovalEmailsShouldDenyInaccessibleLinkedApplicationBeforeQueueing() {
+    TestingAuthenticationToken authentication = approverAuthentication();
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    when(service.getApplicationNumbersForMutation("EX-205")).thenReturn(List.of(1000456L));
+    org.mockito.Mockito.doThrow(new AccessDeniedException("application outside scope"))
+        .when(provincialAuthorizationService).requireApplication(authentication, 1000456L);
+    var rows = List.of(
+        new ExemptionDetailsRpcService.ApprovalRecipients("EX-205", "owner@example.com", ""));
+
+    assertThatThrownBy(() -> controller.queueApprovalEmails(rows, authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    verify(provincialAuthorizationService).requireExemption(authentication, "EX-205");
+    verify(provincialAuthorizationService).requireExemptionWrite(authentication, "EX-205");
+    verify(service, never()).queueApprovalEmails(any());
+  }
+
+  private void denyExemptionWrite(
+      TestingAuthenticationToken authentication, String deniedExemptionNumber) {
+    org.mockito.Mockito.doAnswer(
+            invocation -> {
+              if (deniedExemptionNumber.equals(invocation.getArgument(1))) {
+                throw new AccessDeniedException("outside approval region");
+              }
+              return null;
+            })
+        .when(provincialAuthorizationService)
+        .requireExemptionWrite(org.mockito.ArgumentMatchers.eq(authentication), any());
+  }
+
+  private TestingAuthenticationToken approverAuthentication() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken("idir\\jsmith", "n/a");
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+        .thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    return authentication;
+  }
+
   private ExemptionDetailDto exemptionDetail(String status) {
     return new ExemptionDetailDto(
         "EX-205",

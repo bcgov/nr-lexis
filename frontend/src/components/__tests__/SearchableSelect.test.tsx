@@ -24,6 +24,30 @@ describe('SearchableSelect', () => {
     )
   })
 
+  it('shows a read-only value without offering other options', async () => {
+    const onChange = vi.fn()
+    render(
+      <SearchableSelect
+        id="locked-type"
+        labelText="Exemption type"
+        value="M"
+        options={[
+          { value: 'M', label: 'Ministerial' },
+          { value: 'B', label: 'Blanket Order in Council' },
+        ]}
+        readOnly
+        onChange={onChange}
+      />,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: 'Exemption type' })
+    expect(combobox).toHaveValue('Ministerial')
+    expect(combobox).toHaveAttribute('readonly')
+    await userEvent.click(combobox)
+    expect(screen.queryByRole('option', { name: 'Blanket Order in Council' })).toBeNull()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('shows every option for lists with fewer than ten items when a value is already selected', async () => {
     const options = Array.from({ length: 9 }, (_, index) => ({
       value: `OPT-${index + 1}`,

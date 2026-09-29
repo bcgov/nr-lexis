@@ -1,6 +1,6 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
@@ -13,7 +13,8 @@ import {
 import { fetchProvincialExemptionOptions } from '@/service/search-options-service'
 import {
   approveExemptions,
-  sendExemptionApprovalEmails,
+  fetchExemptionApprovalRecipients,
+  sendExemptionApprovalNotifications,
 } from '@/service/provincial-exemption-detail-service'
 import { fetchCurrentExemptionRecordVersion } from '@/service/record-version-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
@@ -37,7 +38,8 @@ vi.mock('@/service/search-options-service', () => ({
 
 vi.mock('@/service/provincial-exemption-detail-service', () => ({
   approveExemptions: vi.fn(),
-  sendExemptionApprovalEmails: vi.fn(),
+  fetchExemptionApprovalRecipients: vi.fn(),
+  sendExemptionApprovalNotifications: vi.fn(),
 }))
 
 vi.mock('@/service/record-version-service', () => ({
@@ -75,7 +77,7 @@ const mockedSearchProvincialExemptions = vi.mocked(searchProvincialExemptions)
 const mockedCountProvincialExemptions = vi.mocked(countProvincialExemptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
 const mockedApproveExemptions = vi.mocked(approveExemptions)
-const mockedSendExemptionApprovalEmails = vi.mocked(sendExemptionApprovalEmails)
+const mockedSendExemptionApprovalNotifications = vi.mocked(sendExemptionApprovalNotifications)
 const mockedFetchCurrentExemptionRecordVersion = vi.mocked(fetchCurrentExemptionRecordVersion)
 
 const exemptionSearchResponse = (
@@ -90,6 +92,26 @@ const exemptionSearchResponse = (
   },
 })
 
+const selectableExemption = (
+  exemptionNumber: string,
+): ProvincialExemptionSearchResponse['content'][number] => ({
+  exemptionNumber,
+  type: 'Ministerial',
+  typeCode: 'M',
+  status: 'New',
+  statusCode: 'NEW',
+  applicantClientNumber: 'TEST0001',
+  ownerClientNumber: 'TEST0002',
+  approvedVolume: 100,
+  balanceRemaining: 100,
+  listingDate: '2026-01-10',
+  expiryDate: '2026-12-31',
+  region: '11',
+  canApprove: true,
+  isLocked: false,
+  canViewExemption: true,
+})
+
 const renderPage = (
   path = '/provincial/exemption?region=11&page=1&pageSize=10&sortField=exemptionNumber&sortDirection=desc',
 ) => {
@@ -100,6 +122,28 @@ const renderPage = (
       </Routes>
     </MemoryRouter>,
   )
+}
+
+// Approval results list each exemption, and an item's text follows its linked number.
+const resultNotification = (title: string) =>
+  screen.getByText(title).closest('.app-inline-notification') as HTMLElement
+const resultItems = (title: string) =>
+  within(resultNotification(title))
+    .getAllByRole('listitem')
+    .map((item) => item.textContent)
+const UNCONFIRMED_ITEM =
+  ': The approval could not be confirmed and no email was sent. Check its current status before approving again.'
+
+const renderDataRouter = () => {
+  const router = createMemoryRouter(
+    [
+      { path: '/provincial/exemption', element: <ProvincialExemptionPage /> },
+      { path: '/elsewhere', element: <h1>Elsewhere</h1> },
+    ],
+    { initialEntries: ['/provincial/exemption?region=11'] },
+  )
+  render(<RouterProvider router={router} />)
+  return router
 }
 
 describe('Provincial Exemption Search Actions', () => {
@@ -166,10 +210,28 @@ describe('Provincial Exemption Search Actions', () => {
     mockedFetchCurrentExemptionRecordVersion.mockImplementation((exemptionNumber) =>
       Promise.resolve(`exemption-${exemptionNumber}-version`),
     )
-    mockedSendExemptionApprovalEmails.mockResolvedValue({
-      success: true,
-      message: 'Approval email sent.',
-    })
+    vi.mocked(fetchExemptionApprovalRecipients).mockImplementation(async (numbers) =>
+      numbers.map((exemptionNumber) => ({
+        exemptionNumber,
+        ownerEmail:
+          exemptionNumber === 'TEST-EX-001'
+            ? 'first@example.test'
+            : exemptionNumber === 'TEST-EX-002'
+              ? 'second@example.test'
+              : 'client@example.test',
+        agentEmail: '',
+        agentApplicable: false,
+        sendable: true,
+        message: '',
+      })),
+    )
+    mockedSendExemptionApprovalNotifications.mockImplementation(async (recipients) => ({
+      outcomes: recipients.map(({ exemptionNumber }) => ({
+        exemptionNumber,
+        queued: true,
+        message: 'Queued',
+      })),
+    }))
   })
 
   it('submits and restores None as literal NULL, while clearing restores All types', async () => {
@@ -258,42 +320,49 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByRole('button', { name: 'Approve selected exemptions' })).toBeEnabled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
-    const firstDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
-    expect(within(firstDialog).getByText('EX-1001')).toBeInTheDocument()
+    const firstDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
+    expect(
+      within(firstDialog).getByRole('heading', { name: 'Approve exemption EX-1001' }),
+    ).toBeInTheDocument()
     const firstCertification = within(firstDialog).getByRole('checkbox', {
-      name: 'I certify that this exemption has been approved.',
+      name: 'I certify that this exemption has been approved',
     })
-    const firstConfirm = within(firstDialog).getByRole('button', { name: 'Approve exemptions' })
+    const firstConfirm = within(firstDialog).getByRole('button', { name: /Approve and send email/ })
     expect(firstCertification).not.toBeChecked()
-    expect(firstConfirm).toBeDisabled()
+    await within(firstDialog).findByText('client@example.test')
+    expect(firstConfirm).toBeEnabled()
     expect(firstConfirm).toHaveClass('cds--btn--primary')
     expect(firstConfirm).not.toHaveClass('cds--btn--danger')
     expect(firstConfirm.parentElement).toHaveClass('lexis-confirmation-modal__actions')
     await userEvent.click(firstConfirm)
+    expect(within(firstDialog).getByText('Certification is required')).toBeVisible()
     expect(mockedApproveExemptions).not.toHaveBeenCalled()
 
     await userEvent.click(firstCertification)
-    expect(firstConfirm).toBeEnabled()
+    expect(within(firstDialog).queryByText('Certification is required')).not.toBeInTheDocument()
     await userEvent.click(within(firstDialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
       expect(
-        screen.queryByRole('dialog', { name: 'Approve selected exemptions' }),
+        screen.queryByRole('dialog', { name: /^Approve (exemption|[0-9])/ }),
       ).not.toBeInTheDocument(),
     )
 
     await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
-    const reopenedDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
+    const reopenedDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     const reopenedCertification = within(reopenedDialog).getByRole('checkbox', {
-      name: 'I certify that this exemption has been approved.',
+      name: 'I certify that this exemption has been approved',
     })
     const reopenedConfirm = within(reopenedDialog).getByRole('button', {
-      name: 'Approve exemptions',
+      name: /Approve and send email/,
     })
     expect(reopenedCertification).not.toBeChecked()
-    expect(reopenedConfirm).toBeDisabled()
+    expect(within(reopenedDialog).queryByText('Certification is required')).not.toBeInTheDocument()
     await userEvent.click(reopenedCertification)
+    await userEvent.click(within(reopenedDialog).getByRole('button', { name: 'Edit recipients' }))
+    const recipient = within(reopenedDialog).getByLabelText('Owner email')
+    await userEvent.clear(recipient)
+    await userEvent.type(recipient, 'updated@example.test')
     await userEvent.click(reopenedConfirm)
-
     await waitFor(() =>
       expect(mockedApproveExemptions).toHaveBeenCalledWith(
         ['EX-1001'],
@@ -301,33 +370,21 @@ describe('Provincial Exemption Search Actions', () => {
       ),
     )
     await waitFor(() =>
-      expect(
-        screen.queryByRole('dialog', { name: 'Approve selected exemptions' }),
-      ).not.toBeInTheDocument(),
-    )
-    const notificationDialog = await screen.findByRole('dialog', {
-      name: 'Send approval notification',
-    })
-    const recipient = within(notificationDialog).getByLabelText('Recipient for exemption EX-1001')
-    expect(recipient).toHaveValue('client@example.test')
-    await userEvent.clear(recipient)
-    await userEvent.type(recipient, 'updated@example.test')
-    await userEvent.click(within(notificationDialog).getByRole('button', { name: 'Send' }))
-    await waitFor(() =>
-      expect(mockedSendExemptionApprovalEmails).toHaveBeenCalledWith([
-        ['EX-1001', 'updated@example.test'],
+      expect(mockedSendExemptionApprovalNotifications).toHaveBeenCalledWith([
+        { exemptionNumber: 'EX-1001', ownerEmail: 'updated@example.test', agentEmail: '' },
       ]),
     )
+    expect(await screen.findByText('Exemption approved and now Active.')).toBeInTheDocument()
     expect(
-      await screen.findByText('Approved 1 exemption. Approval email sent.'),
+      screen.getByText('Approval email sent to the owner (updated@example.test).'),
     ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
-    const postApprovalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
+    const postApprovalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     expect(
       within(postApprovalDialog).getByRole('checkbox', {
-        name: 'I certify that this exemption has been approved.',
+        name: 'I certify that this exemption has been approved',
       }),
     ).not.toBeChecked()
     await userEvent.click(within(postApprovalDialog).getByRole('button', { name: 'Cancel' }))
@@ -411,42 +468,341 @@ describe('Provincial Exemption Search Actions', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
 
-    const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
+    const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     await userEvent.click(
       within(approvalDialog).getByRole('checkbox', {
-        name: 'I certify that this exemption has been approved.',
+        name: 'I certify that this exemption has been approved',
       }),
     )
     await userEvent.click(
-      within(approvalDialog).getByRole('button', { name: 'Approve exemptions' }),
+      await within(approvalDialog).findByRole('button', { name: 'Edit recipients' }),
     )
-
-    const notificationDialog = await screen.findByRole('dialog', {
-      name: 'Send approval notification',
-    })
-    const recipient = within(notificationDialog).getByLabelText('Recipient for exemption EX-1001')
+    const recipient = within(approvalDialog).getByLabelText('Owner email')
     await userEvent.clear(recipient)
     await userEvent.type(recipient, 'not-an-email')
-    expect(within(notificationDialog).getByRole('button', { name: 'Send' })).toBeDisabled()
-    expect(within(notificationDialog).getByText('Enter one valid email address.')).toBeVisible()
-    expect(mockedSendExemptionApprovalEmails).not.toHaveBeenCalled()
-
     await userEvent.click(
-      within(notificationDialog).getByRole('button', { name: 'Skip notification' }),
+      within(approvalDialog).getByRole('button', { name: 'Approve and send email' }),
     )
+    expect(within(approvalDialog).getByText('Enter one valid email address.')).toBeVisible()
+    expect(mockedApproveExemptions).not.toHaveBeenCalled()
+    await userEvent.click(
+      within(approvalDialog).getByRole('checkbox', { name: 'Send approval email' }),
+    )
+    await userEvent.click(within(approvalDialog).getByRole('button', { name: 'Approve exemption' }))
     await waitFor(() =>
-      expect(
-        screen.queryByRole('dialog', { name: 'Send approval notification' }),
-      ).not.toBeInTheDocument(),
+      expect(screen.queryByRole('dialog', { name: /^Approve exemption/ })).not.toBeInTheDocument(),
     )
     expect(mockedApproveExemptions).toHaveBeenCalledWith(['EX-1001'], 'exemption-EX-1001-version')
-    expect(mockedSendExemptionApprovalEmails).not.toHaveBeenCalled()
-    expect(screen.getByText('Approval completed with warnings')).toBeInTheDocument()
-    expect(
-      screen.getByText('Approved 1 exemption. Approval notification was skipped.'),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('Approval failed')).not.toBeInTheDocument()
+    expect(mockedSendExemptionApprovalNotifications).not.toHaveBeenCalled()
+    expect(screen.getByText('Exemption approved and now Active.')).toBeInTheDocument()
+    expect(screen.getByText('No approval email was sent.')).toBeInTheDocument()
   }, 20_000)
+
+  it('retains an approval refresh warning after successfully queuing its notification', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    renderPage()
+    await screen.findByText('EX-1001')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    const dialog = screen.getByRole('dialog', { name: 'Approve exemption EX-1001' })
+    await within(dialog).findByRole('button', { name: 'Edit recipients' })
+    mockedSearchProvincialExemptions.mockRejectedValueOnce(new Error('Refresh failed'))
+    await userEvent.click(
+      within(dialog).getByRole('checkbox', {
+        name: 'I certify that this exemption has been approved',
+      }),
+    )
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and send email' }))
+    expect(
+      await screen.findByText(
+        'Approval email sent to the owner (client@example.test). Refresh the page to see the latest status.',
+      ),
+    ).toBeVisible()
+    expect(resultNotification('Exemption approved and now Active.')).toHaveClass(
+      'cds--inline-notification--warning',
+    )
+    expect(mockedApproveExemptions).toHaveBeenCalledTimes(1)
+    expect(mockedSendExemptionApprovalNotifications).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['a lost approval response', Object.assign(new Error('Network Error'), { request: {} })],
+    // A gateway error can follow a committed approval.
+    ['a gateway error', { response: { status: 502, data: {} } }],
+  ])('reports %s as unconfirmed rather than failed', async (_, failure) => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedApproveExemptions.mockRejectedValueOnce(failure)
+
+    renderPage()
+    await screen.findByText('EX-1001')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
+    await userEvent.click(
+      within(approvalDialog).getByRole('checkbox', {
+        name: 'I certify that this exemption has been approved',
+      }),
+    )
+    await within(approvalDialog).findByText('client@example.test')
+    await userEvent.click(
+      within(approvalDialog).getByRole('button', { name: /Approve and send email/ }),
+    )
+
+    expect(await screen.findByText('1 approval could not be confirmed')).toBeInTheDocument()
+    expect(resultItems('1 approval could not be confirmed')).toEqual([`EX-1001${UNCONFIRMED_ITEM}`])
+    await userEvent.click(within(approvalDialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('1 approval could not be confirmed')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).toBeChecked()
+    expect(mockedSendExemptionApprovalNotifications).not.toHaveBeenCalled()
+  })
+
+  it('separates unconfirmed and rejected approvals when none succeeded', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([selectableExemption('EX-1001'), selectableExemption('EX-1002')]),
+    )
+    mockedApproveExemptions
+      .mockRejectedValueOnce(Object.assign(new Error('Network Error'), { request: {} }))
+      .mockResolvedValueOnce({
+        success: true,
+        valid: false,
+        sendGrid: [],
+        errorMessage: 'Rejected.',
+        errors: [],
+        warnings: [],
+      })
+
+    renderPage()
+    await screen.findByText('EX-1001')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    const dialog = screen.getByRole('dialog', { name: 'Approve 2 exemptions' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: /I certify/ }))
+    await within(dialog).findAllByText('client@example.test')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and send emails' }))
+
+    expect(await screen.findByText('1 exemption was not approved')).toBeInTheDocument()
+    expect(resultItems('1 exemption was not approved')).toEqual(['EX-1002: Rejected.'])
+    expect(resultItems('1 approval could not be confirmed')).toEqual([`EX-1001${UNCONFIRMED_ITEM}`])
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select EX-1002' })).toBeChecked()
+    expect(mockedSendExemptionApprovalNotifications).not.toHaveBeenCalled()
+  })
+
+  it('reports success, rejection, and unconfirmed approval distinctly in one batch', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([
+        selectableExemption('EX-1001'),
+        selectableExemption('EX-1002'),
+        selectableExemption('EX-1003'),
+      ]),
+    )
+    mockedApproveExemptions
+      .mockResolvedValueOnce({
+        success: true,
+        valid: true,
+        sendGrid: [],
+        errorMessage: '',
+        errors: [],
+        warnings: [],
+      })
+      .mockRejectedValueOnce(Object.assign(new Error('Network Error'), { request: {} }))
+      .mockResolvedValueOnce({
+        success: true,
+        valid: false,
+        sendGrid: [],
+        errorMessage: 'Rejected.',
+        errors: [],
+        warnings: [],
+      })
+
+    renderPage()
+    await screen.findByText('EX-1001')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    const dialog = screen.getByRole('dialog', { name: 'Approve 3 exemptions' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: /I certify/ }))
+    await within(dialog).findAllByText('client@example.test')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and send emails' }))
+
+    const approvedTitle = '1 exemption approved and now Active. Approval email sent:'
+    expect(await screen.findByText(approvedTitle)).toBeInTheDocument()
+    expect(resultNotification(approvedTitle)).toHaveClass('cds--actionable-notification--success')
+    expect(resultItems(approvedTitle)).toEqual(['EX-1001 to the owner (client@example.test).'])
+    expect(resultItems('1 approval could not be confirmed')).toEqual([`EX-1002${UNCONFIRMED_ITEM}`])
+    expect(resultNotification('1 exemption was not approved')).toHaveClass(
+      'cds--actionable-notification--error',
+    )
+    expect(resultItems('1 exemption was not approved')).toEqual(['EX-1003: Rejected.'])
+    expect(
+      within(resultNotification('1 exemption was not approved')).getByRole('link', {
+        name: 'EX-1003',
+      }),
+    ).toHaveAttribute('href', expect.stringContaining('/provincial/exemption/EX-1003'))
+    expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select EX-1002' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select EX-1003' })).toBeChecked()
+    expect(mockedSendExemptionApprovalNotifications).toHaveBeenCalledWith([
+      { exemptionNumber: 'EX-1001', ownerEmail: 'client@example.test', agentEmail: '' },
+    ])
+  })
+
+  it('holds navigation while an approval request is in flight', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    type ApprovalResult = Awaited<ReturnType<typeof approveExemptions>>
+    let resolveApproval: ((value: ApprovalResult) => void) | undefined
+    mockedApproveExemptions.mockImplementationOnce(
+      () =>
+        new Promise<ApprovalResult>((resolve) => {
+          resolveApproval = resolve
+        }),
+    )
+    const router = renderDataRouter()
+    await screen.findByText('EX-1001')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    const dialog = screen.getByRole('dialog', { name: 'Approve exemption EX-1001' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: /I certify/ }))
+    await within(dialog).findByText('client@example.test')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and send email' }))
+    await waitFor(() => expect(mockedApproveExemptions).toHaveBeenCalledTimes(1))
+    expect(within(dialog).getByRole('button', { name: 'Approving…' })).toBeDisabled()
+
+    await act(async () => {
+      await router.navigate('/elsewhere')
+    })
+    expect(router.state.location.pathname).toBe('/provincial/exemption')
+    expect(
+      await screen.findByText(/A change to these exemptions is still being completed/),
+    ).toBeVisible()
+
+    await act(async () => {
+      resolveApproval?.({
+        success: true,
+        valid: true,
+        sendGrid: [],
+        errorMessage: '',
+        errors: [],
+        warnings: [],
+      })
+    })
+    expect(await screen.findByText('Exemption approved and now Active.')).toBeVisible()
+    expect(router.state.location.pathname).toBe('/provincial/exemption')
+  })
+
+  it('holds navigation through notification sending and retry', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    type QueueResult = Awaited<ReturnType<typeof sendExemptionApprovalNotifications>>
+    let resolveFirstQueue: ((value: QueueResult) => void) | undefined
+    let resolveRetryQueue: ((value: QueueResult) => void) | undefined
+    mockedSendExemptionApprovalNotifications
+      .mockImplementationOnce(
+        () =>
+          new Promise<QueueResult>((resolve) => {
+            resolveFirstQueue = resolve
+          }),
+      )
+      .mockImplementationOnce(
+        () =>
+          new Promise<QueueResult>((resolve) => {
+            resolveRetryQueue = resolve
+          }),
+      )
+    const router = renderDataRouter()
+    await screen.findByText('EX-1001')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    const dialog = screen.getByRole('dialog', { name: 'Approve exemption EX-1001' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: /I certify/ }))
+    await within(dialog).findByText('client@example.test')
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and send email' }))
+    await waitFor(() => expect(mockedSendExemptionApprovalNotifications).toHaveBeenCalledTimes(1))
+    expect(within(dialog).getByRole('button', { name: 'Sending…' })).toBeDisabled()
+
+    await act(async () => {
+      await router.navigate('/elsewhere')
+    })
+    expect(router.state.location.pathname).toBe('/provincial/exemption')
+    expect(
+      await screen.findByText(/A change to these exemptions is still being completed/),
+    ).toBeVisible()
+    await act(async () => {
+      resolveFirstQueue?.({
+        outcomes: [{ exemptionNumber: 'EX-1001', queued: false, message: 'Unavailable.' }],
+      })
+    })
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/A change to these exemptions is still being completed/),
+      ).not.toBeInTheDocument(),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Retry notifications' }))
+    await waitFor(() => expect(mockedSendExemptionApprovalNotifications).toHaveBeenCalledTimes(2))
+
+    await act(async () => {
+      await router.navigate('/elsewhere')
+    })
+    expect(router.state.location.pathname).toBe('/provincial/exemption')
+    expect(
+      await screen.findByText(/A change to these exemptions is still being completed/),
+    ).toBeVisible()
+    await act(async () => {
+      resolveRetryQueue?.({
+        outcomes: [{ exemptionNumber: 'EX-1001', queued: true, message: 'Queued.' }],
+      })
+    })
+    expect(await screen.findByText('Exemption approved and now Active.')).toBeVisible()
+    expect(router.state.location.pathname).toBe('/provincial/exemption')
+    expect(mockedApproveExemptions).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      await router.navigate('/elsewhere')
+    })
+    expect(router.state.location.pathname).toBe('/elsewhere')
+    expect(screen.getByRole('heading', { name: 'Elsewhere' })).toBeInTheDocument()
+  })
+
+  it('keeps the server reason when an approval request is rejected', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedApproveExemptions.mockRejectedValueOnce(
+      Object.assign(new Error('Request failed with status code 409'), {
+        response: { status: 409, data: { message: 'The exemption changed. Reload it first.' } },
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('EX-1001')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
+    await userEvent.click(
+      within(approvalDialog).getByRole('checkbox', {
+        name: 'I certify that this exemption has been approved',
+      }),
+    )
+    await within(approvalDialog).findByText('client@example.test')
+    await userEvent.click(
+      within(approvalDialog).getByRole('button', { name: /Approve and send email/ }),
+    )
+
+    expect(await screen.findByText('1 exemption was not approved')).toBeInTheDocument()
+    expect(resultItems('1 exemption was not approved')).toEqual([
+      'EX-1001: The exemption changed. Reload it first.',
+    ])
+  })
 
   it('reports an exemption approval failure reason and keeps the failed row selected', async () => {
     mockedUseAuth.mockReturnValue(
@@ -467,34 +823,39 @@ describe('Provincial Exemption Search Actions', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select EX-1001' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
 
-    const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
+    const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     await userEvent.click(
       within(approvalDialog).getByRole('checkbox', {
-        name: 'I certify that this exemption has been approved.',
+        name: 'I certify that this exemption has been approved',
       }),
     )
     await userEvent.click(
-      within(approvalDialog).getByRole('button', { name: 'Approve exemptions' }),
+      within(approvalDialog).getByRole('button', { name: /Approve and send email/ }),
     )
 
+    expect(await screen.findByText('1 exemption was not approved')).toBeInTheDocument()
     expect(
-      await screen.findByText(
-        'No selected exemptions were approved; 1 failed. Failed exemptions: EX-1001 — Failed to approve invalid exemption EX-1001: Active ministerial exemptions require at least one application.',
+      screen.getByText(
+        'It stays in New status and no email was sent. Correct the details below, then approve again.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText('Approval failed')).toBeInTheDocument()
+    expect(resultItems('1 exemption was not approved')).toEqual([
+      'EX-1001: Failed to approve invalid exemption EX-1001: Active ministerial exemptions require at least one application.',
+    ])
     expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).toBeChecked()
     expect(
       screen.queryByRole('dialog', { name: 'Send approval notification' }),
     ).not.toBeInTheDocument()
-    expect(mockedSendExemptionApprovalEmails).not.toHaveBeenCalled()
+    expect(mockedSendExemptionApprovalNotifications).not.toHaveBeenCalled()
 
     await userEvent.click(within(approvalDialog).getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByText('Approval failed')).toBeInTheDocument()
+    expect(screen.getByText('1 exemption was not approved')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
-    const reopenedDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
-    expect(within(reopenedDialog).queryByText('Approval failed')).not.toBeInTheDocument()
-    expect(within(reopenedDialog).getByRole('checkbox')).not.toBeChecked()
+    const reopenedDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
+    expect(
+      within(reopenedDialog).queryByText('1 exemption was not approved'),
+    ).not.toBeInTheDocument()
+    expect(within(reopenedDialog).getByRole('checkbox', { name: /I certify/ })).not.toBeChecked()
     expect(mockedApproveExemptions).toHaveBeenCalledTimes(1)
   })
 
@@ -502,10 +863,6 @@ describe('Provincial Exemption Search Actions', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
     )
-    mockedSendExemptionApprovalEmails.mockResolvedValueOnce({
-      success: true,
-      message: 'Approval emails sent.',
-    })
     mockedSearchProvincialExemptions.mockResolvedValue(
       exemptionSearchResponse([
         {
@@ -566,14 +923,14 @@ describe('Provincial Exemption Search Actions', () => {
     await screen.findByText('TEST-EX-001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
-    const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
+    const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     await userEvent.click(
       within(approvalDialog).getByRole('checkbox', {
-        name: 'I certify that these exemptions have been approved.',
+        name: 'I certify that these exemptions have been approved',
       }),
     )
     await userEvent.click(
-      within(approvalDialog).getByRole('button', { name: 'Approve exemptions' }),
+      within(approvalDialog).getByRole('button', { name: /Approve and send email/ }),
     )
 
     await waitFor(() => expect(mockedApproveExemptions).toHaveBeenCalledTimes(2))
@@ -590,33 +947,18 @@ describe('Provincial Exemption Search Actions', () => {
       'exemption-TEST-EX-002-version',
     )
 
-    const notificationDialog = await screen.findByRole('dialog', {
-      name: 'Send notifications',
-    })
-    expect(
-      within(notificationDialog).getByLabelText('Recipient for exemption TEST-EX-001'),
-    ).toHaveValue('first@example.test')
-    expect(
-      within(notificationDialog).getByLabelText('Recipient for exemption TEST-EX-002'),
-    ).toHaveValue('second@example.test')
-    const skipNotifications = within(notificationDialog).getByRole('button', {
-      name: 'Skip notifications',
-    })
-    const sendAll = within(notificationDialog).getByRole('button', { name: 'Send all' })
-    expect(skipNotifications).toHaveClass('cds--btn--tertiary')
-    expect(sendAll).toHaveClass('cds--btn--primary')
-    expect(skipNotifications.parentElement).toHaveClass('lexis-confirmation-modal__actions')
-    expect(notificationDialog.querySelector('.cds--modal-footer')).not.toBeInTheDocument()
-    await userEvent.click(sendAll)
     await waitFor(() =>
-      expect(mockedSendExemptionApprovalEmails).toHaveBeenCalledWith([
-        ['TEST-EX-001', 'first@example.test'],
-        ['TEST-EX-002', 'second@example.test'],
+      expect(mockedSendExemptionApprovalNotifications).toHaveBeenCalledWith([
+        { exemptionNumber: 'TEST-EX-001', ownerEmail: 'first@example.test', agentEmail: '' },
+        { exemptionNumber: 'TEST-EX-002', ownerEmail: 'second@example.test', agentEmail: '' },
       ]),
     )
-    expect(
-      await screen.findByText('Approved 2 exemptions. Approval emails sent.'),
-    ).toBeInTheDocument()
+    const approvedTitle = '2 exemptions approved and now Active. Approval emails sent:'
+    expect(await screen.findByText(approvedTitle)).toBeInTheDocument()
+    expect(resultItems(approvedTitle)).toEqual([
+      'TEST-EX-001 to the owner (first@example.test).',
+      'TEST-EX-002 to the owner (second@example.test).',
+    ])
   })
 
   it('reports partial approval details, keeps failures selected, and emails only successes', async () => {
@@ -685,35 +1027,33 @@ describe('Provincial Exemption Search Actions', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
 
-    const approvalDialog = screen.getByRole('dialog', { name: 'Approve selected exemptions' })
+    const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     await userEvent.click(
       within(approvalDialog).getByRole('checkbox', {
-        name: 'I certify that these exemptions have been approved.',
+        name: 'I certify that these exemptions have been approved',
       }),
     )
     await userEvent.click(
-      within(approvalDialog).getByRole('button', { name: 'Approve exemptions' }),
+      within(approvalDialog).getByRole('button', { name: /Approve and send email/ }),
     )
 
-    expect(
-      await screen.findByText(
-        'Approved 1 exemption. Review the applicant recipients before sending notifications. 1 selected exemption failed to approve. Failed exemptions: TEST-EX-002 — Failed to approve invalid exemption TEST-EX-002: Active ministerial exemptions require at least one application.',
-      ),
-    ).toBeInTheDocument()
-    expect(screen.getByText('Approval completed with warnings')).toBeInTheDocument()
+    // Approvals and failures each get their own notification, as designed.
+    const approvedTitle = '1 exemption approved and now Active. Approval email sent:'
+    expect(await screen.findByText(approvedTitle)).toBeInTheDocument()
+    expect(resultNotification(approvedTitle)).toHaveClass('cds--actionable-notification--success')
+    expect(resultItems(approvedTitle)).toEqual(['TEST-EX-001 to the owner (first@example.test).'])
+    expect(resultNotification('1 exemption was not approved')).toHaveClass(
+      'cds--actionable-notification--error',
+    )
+    expect(resultItems('1 exemption was not approved')).toEqual([
+      'TEST-EX-002: Failed to approve invalid exemption TEST-EX-002: Active ministerial exemptions require at least one application.',
+    ])
     expect(screen.getByRole('checkbox', { name: 'Select TEST-EX-001' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Select TEST-EX-002' })).toBeChecked()
 
-    const notificationDialog = await screen.findByRole('dialog', {
-      name: 'Send approval notification',
-    })
-    expect(
-      within(notificationDialog).getByLabelText('Recipient for exemption TEST-EX-001'),
-    ).toHaveValue('first@example.test')
-    expect(
-      within(notificationDialog).queryByLabelText('Recipient for exemption TEST-EX-002'),
-    ).not.toBeInTheDocument()
-    expect(mockedSendExemptionApprovalEmails).not.toHaveBeenCalled()
+    expect(mockedSendExemptionApprovalNotifications).toHaveBeenCalledWith([
+      { exemptionNumber: 'TEST-EX-001', ownerEmail: 'first@example.test', agentEmail: '' },
+    ])
   })
 
   it('displays and prevents selection of an actively locked new exemption', async () => {
@@ -909,6 +1249,56 @@ describe('Provincial Exemption Search Actions', () => {
         ),
       ).toBe(true)
     })
+  })
+
+  it('locks the exemption type to Ministerial for an Exemption Approver', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_EXEMPTION_APPROVER'] }),
+        canPerform: () => true,
+      }),
+    )
+    mockedFetchProvincialExemptionOptions.mockResolvedValue({
+      exemptionTypes: [
+        { value: 'M', label: 'Ministerial' },
+        { value: 'B', label: 'Blanket Order in Council' },
+      ],
+      exemptionStatuses: [{ value: 'NEW', label: 'New' }],
+      regions: [{ value: '11', label: 'Cariboo' }],
+    })
+
+    // A shared or saved link can't widen the search beyond Ministerial.
+    renderPage('/provincial/exemption?exemptionTypeCode=B&page=1&pageSize=10')
+    await screen.findByText('EX-1001')
+
+    const exemptionType = screen.getByRole('combobox', { name: 'Exemption type' })
+    expect(exemptionType).toHaveValue('Ministerial')
+    expect(exemptionType).toHaveAttribute('readonly')
+    expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ exemptionTypeCode: 'M' }),
+      }),
+      expect.any(Object),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('Ministerial')
+  })
+
+  it('keeps the exemption type editable for an Exemption Approver who also has Read Only', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          roles: ['LEXIS_EXEMPTION_APPROVER', 'LEXIS_READ_ONLY'],
+        }),
+        canPerform: () => true,
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('EX-1001')
+
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).not.toHaveAttribute('readonly')
   })
 
   it('defaults approver filters without applying a region when no preference exists', async () => {

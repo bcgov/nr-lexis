@@ -16,6 +16,7 @@ type SearchableSelectProps = {
   allowCustomValue?: boolean
   required?: boolean
   disabled?: boolean
+  readOnly?: boolean
   invalid?: boolean
   invalidText?: ReactNode
   onBlur?: () => void
@@ -35,6 +36,7 @@ export default function SearchableSelect({
   allowCustomValue = false,
   required = false,
   disabled = false,
+  readOnly = false,
   invalid = false,
   invalidText,
   onBlur,
@@ -58,6 +60,7 @@ export default function SearchableSelect({
       allowCustomValue={allowCustomValue}
       aria-required={required || undefined}
       disabled={disabled}
+      readOnly={readOnly}
       invalid={invalid}
       invalidText={invalidText}
       onBlur={onBlur}

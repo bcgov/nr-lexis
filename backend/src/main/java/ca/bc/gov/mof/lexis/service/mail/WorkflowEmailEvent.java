@@ -71,12 +71,21 @@ public sealed interface WorkflowEmailEvent {
   record ExemptionApproval(
       String exemptionNumber,
       String applicationNumbers,
-      String recipient,
+      List<String> recipients,
       RegionalMailRoute senderRoute)
       implements WorkflowEmailEvent {
 
     public ExemptionApproval {
+      recipients = List.copyOf(recipients);
       senderRoute = senderRoute == null ? RegionalMailRoute.GENERAL : senderRoute;
+    }
+
+    public ExemptionApproval(
+        String exemptionNumber,
+        String applicationNumbers,
+        String recipient,
+        RegionalMailRoute senderRoute) {
+      this(exemptionNumber, applicationNumbers, List.of(recipient), senderRoute);
     }
 
     public ExemptionApproval(String exemptionNumber, String applicationNumbers, String recipient) {
@@ -93,9 +102,8 @@ public sealed interface WorkflowEmailEvent {
       return "exemption_approval";
     }
 
-    @Override
-    public List<String> recipients() {
-      return List.of(recipient);
+    public String recipient() {
+      return recipients.getFirst();
     }
 
     @Override
