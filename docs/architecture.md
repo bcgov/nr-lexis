@@ -338,10 +338,8 @@ environment variables and template parameters. Keep deployment secrets and varia
 repository level: an environment value replaces a same-named repository value only when it exists,
 so a missing TEST or PROD value would otherwise inherit the repository one. Each deployment job
 also fails before deploying unless `OC_NAMESPACE` ends in `-<environment>`. The OpenShift deployer
-action exposes its processed template, including Secret values, to later workflow steps, so each
-deployment job first masks the JSON-escaped form of every secret it passes to the template
-(`.github/scripts/mask-template-secrets.sh`). A new template secret must be added to that job's
-`Mask template secrets` step; `DeployTemplateSecretMaskingTest` enforces this.
+action (v4.2.2 or later) keeps rendered templates, which include Secret values, out of workflow
+logs; don't pin an older version or print rendered templates from other steps.
 
 Pull requests deploy an isolated DEV preview after their required builds and tests pass. A merge to
 `main` deploys the accepted images to the persistent TEST environment, runs the smoke suite, and then
