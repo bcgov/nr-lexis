@@ -122,6 +122,7 @@ describe('Provincial exemption client parity', () => {
         ? {
             clientNumber,
             companyName: 'Client lookup owner name',
+            clientAcronym: '',
             address:
               'ATTN ACCT DEPT JOHANN BOULTER SUITE 2300 1055 WEST GEORGIA STREET PO BOX 11101',
             city: 'VANCOUVER',
@@ -136,6 +137,7 @@ describe('Provincial exemption client parity', () => {
         : {
             clientNumber,
             companyName: 'Client lookup agent name',
+            clientAcronym: '',
             address:
               'C/O ACCOUNTS MANAGER PO BOX 49114 TOWER 4 BENTALL CENTRE 3500 1055 DUNSMUIR STREET',
             city: 'PORTLAND',
@@ -171,11 +173,18 @@ describe('Provincial exemption client parity', () => {
       'Documents',
       'Permits',
     ])
+    // Figma puts a Carbon icon on each exemption detail tab and card title.
+    screen
+      .getAllByRole('tab')
+      .forEach((tab) => expect(tab.querySelector('svg')).toBeInTheDocument())
 
     expect(screen.getByRole('tab', { name: 'Applicant' })).toHaveAttribute('aria-selected', 'true')
-    const ownerTile = (
-      await screen.findByRole('heading', { name: 'Applicant client details', level: 2 })
-    ).closest('.cds--tile')
+    const ownerHeading = await screen.findByRole('heading', {
+      name: 'Applicant client details',
+      level: 2,
+    })
+    expect(ownerHeading.querySelector('svg')).toBeInTheDocument()
+    const ownerTile = ownerHeading.closest('.cds--tile')
     expect(ownerTile).toBeTruthy()
     expect(
       within(ownerTile as HTMLElement).getByText('03 - WOODLANDS SERVICES'),

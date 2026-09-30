@@ -7,7 +7,17 @@ import {
   useRef,
   useState,
 } from 'react'
-import { Edit, TrashCan } from '@carbon/icons-react'
+import {
+  Certificate,
+  Currency,
+  DocumentAttachment,
+  Edit,
+  Enterprise,
+  Result,
+  Rule,
+  TrashCan,
+  type CarbonIconType,
+} from '@carbon/icons-react'
 import {
   Button,
   Column,
@@ -156,6 +166,17 @@ const EXEMPTION_DETAIL_TAB_LABELS: Record<ExemptionDetailTabKey, string> = {
   documents: 'Documents',
   permits: 'Permits',
   fees: 'Fees',
+}
+
+// Figma's Carbon icons for the exemption detail tabs.
+const EXEMPTION_DETAIL_TAB_ICONS: Record<ExemptionDetailTabKey, CarbonIconType | undefined> = {
+  owner: Enterprise,
+  agent: undefined,
+  summary: Rule,
+  applications: Result,
+  documents: DocumentAttachment,
+  permits: Certificate,
+  fees: Currency,
 }
 
 const ContiguousTabPanels = ({
@@ -419,7 +440,11 @@ const ExemptionClientTile = ({
   agent,
   ...client
 }: ExemptionClient & { agent?: ExemptionClient }) => (
-  <DetailFieldTile title={client.title} fields={exemptionClientFields(client)}>
+  <DetailFieldTile
+    title={client.title}
+    icon={<Enterprise size={24} aria-hidden="true" />}
+    fields={exemptionClientFields(client)}
+  >
     {agent && (
       <section className="detail-subsection" aria-label={agent.title}>
         <h3 className="detail-tile-title">{agent.title}</h3>
@@ -2211,7 +2236,9 @@ const ProvincialExemptionDetailsPage = () => {
                 className="application-tabs__list application-detail-tab-list"
               >
                 {exemptionDetailTabs.map((tab) => (
-                  <Tab key={tab}>{EXEMPTION_DETAIL_TAB_LABELS[tab]}</Tab>
+                  <Tab key={tab} renderIcon={EXEMPTION_DETAIL_TAB_ICONS[tab]}>
+                    {EXEMPTION_DETAIL_TAB_LABELS[tab]}
+                  </Tab>
                 ))}
               </TabList>
               <ContiguousTabPanels order={exemptionDetailTabs}>
@@ -2241,7 +2268,10 @@ const ProvincialExemptionDetailsPage = () => {
                       <>
                         <Column sm={4} md={4} lg={8}>
                           <Tile>
-                            <h2 className="detail-tile-title">Exemption details</h2>
+                            <h2 className="detail-tile-title">
+                              <Rule size={24} aria-hidden="true" />
+                              Exemption details
+                            </h2>
                             <div className="legacy-search-grid">
                               {currentTypeCode === 'O' && (
                                 <TextInput
@@ -2437,6 +2467,7 @@ const ProvincialExemptionDetailsPage = () => {
                         <Column sm={4} md={8} lg={16}>
                           <DetailFieldTile
                             title="Exemption details"
+                            icon={<Rule size={24} aria-hidden="true" />}
                             headerAction={
                               canSaveExemption && !editing ? (
                                 <Button
@@ -2536,7 +2567,10 @@ const ProvincialExemptionDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
                           <div className="detail-section-card__header">
-                            <h2 className="detail-tile-title">Applications</h2>
+                            <h2 className="detail-tile-title">
+                              <Result size={24} aria-hidden="true" />
+                              Applications
+                            </h2>
                             {canLinkApplications && (
                               <Button
                                 kind="tertiary"
@@ -2738,7 +2772,10 @@ const ProvincialExemptionDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">Related permits</h2>
+                        <h2 className="detail-tile-title">
+                          <Certificate size={24} aria-hidden="true" />
+                          Related permits
+                        </h2>
                         {editing && (
                           <p className="detail-read-only-note">
                             Permit records are read-only. Use the Exemption details or Fees tab to
@@ -2918,7 +2955,10 @@ const ProvincialExemptionDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         {applicationsErrorMessage || !editContextLoaded ? (
                           <Tile>
-                            <h2 className="detail-tile-title">Fees</h2>
+                            <h2 className="detail-tile-title">
+                              <Currency size={24} aria-hidden="true" />
+                              Fees
+                            </h2>
                             {applicationsErrorMessage ? (
                               <EmptyState
                                 title="Fee eligibility unavailable"
@@ -2935,7 +2975,10 @@ const ProvincialExemptionDetailsPage = () => {
                           </Tile>
                         ) : editingSection === 'fees' && editForm ? (
                           <Tile>
-                            <h2 className="detail-tile-title">Fees</h2>
+                            <h2 className="detail-tile-title">
+                              <Currency size={24} aria-hidden="true" />
+                              Fees
+                            </h2>
                             <div className="legacy-search-grid">
                               <RadioButtonGroup
                                 legendText="Override fee rate?"
@@ -3017,6 +3060,7 @@ const ProvincialExemptionDetailsPage = () => {
                         ) : (
                           <DetailFieldTile
                             title="Fees"
+                            icon={<Currency size={24} aria-hidden="true" />}
                             headerAction={
                               canEditFeeOverride && !editing ? (
                                 <Button
