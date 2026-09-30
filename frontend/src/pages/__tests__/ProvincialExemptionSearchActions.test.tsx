@@ -551,10 +551,10 @@ describe('Provincial Exemption Search Actions', () => {
       within(approvalDialog).getByRole('button', { name: /Approve and send email/ }),
     )
 
+    // The dialog closes and the page lists what was not approved, as designed.
     expect(await screen.findByText('1 approval could not be confirmed')).toBeInTheDocument()
+    expect(approvalDialog).not.toBeInTheDocument()
     expect(resultItems('1 approval could not be confirmed')).toEqual([`EX-1001${UNCONFIRMED_ITEM}`])
-    await userEvent.click(within(approvalDialog).getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByText('1 approval could not be confirmed')).toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).toBeChecked()
     expect(mockedSendExemptionApprovalNotifications).not.toHaveBeenCalled()
   })
@@ -591,7 +591,7 @@ describe('Provincial Exemption Search Actions', () => {
       'EX-1002: Rejected.',
       `EX-1001${UNCONFIRMED_ITEM}`,
     ])
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    expect(dialog).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Select EX-1002' })).toBeChecked()
     expect(mockedSendExemptionApprovalNotifications).not.toHaveBeenCalled()
@@ -851,8 +851,7 @@ describe('Provincial Exemption Search Actions', () => {
     ).not.toBeInTheDocument()
     expect(mockedSendExemptionApprovalNotifications).not.toHaveBeenCalled()
 
-    await userEvent.click(within(approvalDialog).getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByText('1 exemption was not approved')).toBeInTheDocument()
+    expect(approvalDialog).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
     const reopenedDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     expect(

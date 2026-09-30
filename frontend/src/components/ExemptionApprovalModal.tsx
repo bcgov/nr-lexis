@@ -3,9 +3,7 @@ import { Button, Checkbox, Loading, TextInput } from '@carbon/react'
 import { useEffect, useId, useRef, useState } from 'react'
 import Modal from '@/components/Modal'
 import { AppNotification } from '@/components/AppNotification'
-import { ActionResultNotification } from '@/components/ActionResultNotification'
 import {
-  exemptionApprovalResults,
   type ApprovalEmailResult,
   type ExemptionApprovalFailure,
   type ExemptionApprovalReport,
@@ -22,7 +20,6 @@ import { isClientErrorResponse } from '@/utils/http-error'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 import { firstStringField, isRecord } from '@/utils/record'
 import { requiredLabel } from '@/utils/required-label'
-import type { ActionResult } from '@/utils/action-result'
 import './ConfirmationModal/ConfirmationModal.css'
 import './ExemptionApprovalModal.css'
 
@@ -114,8 +111,6 @@ const ExemptionApprovalModal = ({
   const [error, setError] = useState('')
   const [approvalUnconfirmed, setApprovalUnconfirmed] = useState(false)
   const [approved, setApproved] = useState<ExemptionApprovalOutcome | null>(null)
-  // Exemptions that were not approved, listed the way the page lists them.
-  const [outcomeResults, setOutcomeResults] = useState<ActionResult[]>([])
   // The approval email outcome of each approved exemption, reported when the dialog finishes.
   const emailResultsRef = useRef(new Map<string, ApprovalEmailResult>())
   // Retry wording applies only once a notification send has finished without queueing them all.
@@ -210,7 +205,6 @@ const ExemptionApprovalModal = ({
     pendingRef.current = true
     setPending(true)
     setError('')
-    setOutcomeResults([])
     setApprovalUnconfirmed(false)
     let sendingNotifications = false
     let sentRows: RecipientRow[] = []
@@ -225,19 +219,17 @@ const ExemptionApprovalModal = ({
     }
     try {
       const outcome = approved ?? (await onApprove())
+      // A batch lists its unapproved exemptions on the page, as designed.
+      if (
+        !outcome.approvedNumbers.length &&
+        (outcome.failures?.length || outcome.unconfirmedNumbers?.length)
+      ) {
+        finish(outcome)
+        return
+      }
       if (!outcome.approvedNumbers.length) {
         setApprovalUnconfirmed(Boolean(outcome.unconfirmed))
         setError(outcome.message)
-        if (outcome.failures?.length || outcome.unconfirmedNumbers?.length) {
-          setOutcomeResults(
-            exemptionApprovalResults({
-              approved: [],
-              failures: outcome.failures ?? [],
-              unconfirmedNumbers: outcome.unconfirmedNumbers ?? [],
-              notes: [],
-            }),
-          )
-        }
         return
       }
       if (!sendEmail) {
@@ -496,23 +488,19 @@ const ExemptionApprovalModal = ({
           </>
         )}
       </div>
-      {outcomeResults.length > 0
-        ? outcomeResults.map((result) => (
-            <ActionResultNotification key={result.kind} result={result} />
-          ))
-        : error && (
-            <AppNotification
-              kind={approvalUnconfirmed && !retrying ? 'warning' : 'error'}
-              title={
-                retrying
-                  ? 'Notification incomplete'
-                  : approvalUnconfirmed
-                    ? 'Approval status unconfirmed'
-                    : 'Approval failed'
-              }
-              subtitle={error}
-            />
-          )}
+      {error && (
+        <AppNotification
+          kind={approvalUnconfirmed && !retrying ? 'warning' : 'error'}
+          title={
+            retrying
+              ? 'Notification incomplete'
+              : approvalUnconfirmed
+                ? 'Approval status unconfirmed'
+                : 'Approval failed'
+          }
+          subtitle={error}
+        />
+      )}
       <div className="lexis-confirmation-modal__actions">
         <Button id={`approval-cancel-${id}`} kind="tertiary" disabled={pending} onClick={close}>
           {retrying ? 'Close' : 'Cancel'}

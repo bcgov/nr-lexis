@@ -785,13 +785,6 @@ const ProvincialExemptionPage = () => {
       setSelectedRowsById(unresolvedRowsById)
 
       if (approvals.length === 0) {
-        // The dialog lists these; the page keeps them after the dialog closes.
-        setApprovalResults(
-          exemptionApprovalResults(
-            { approved: [], failures, unconfirmedNumbers, notes: [] },
-            exemptionResultLink,
-          ),
-        )
         return {
           approvedNumbers: [],
           message: 'No selected exemptions were approved.',
