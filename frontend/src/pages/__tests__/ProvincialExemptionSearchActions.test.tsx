@@ -132,7 +132,8 @@ const resultItems = (title: string) =>
     .getAllByRole('listitem')
     .map((item) => item.textContent)
 const UNCONFIRMED_ITEM =
-  ': The approval could not be confirmed and no email was sent. Check its current status before approving again.'
+  ': The approval could not be confirmed. Check its current status before approving again.'
+const UNRESOLVED_TITLE = '2 exemptions were not approved or could not be confirmed'
 
 const renderDataRouter = () => {
   const router = createMemoryRouter(
@@ -585,9 +586,11 @@ describe('Provincial Exemption Search Actions', () => {
     await within(dialog).findAllByText('client@example.test')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and send emails' }))
 
-    expect(await screen.findByText('1 exemption was not approved')).toBeInTheDocument()
-    expect(resultItems('1 exemption was not approved')).toEqual(['EX-1002: Rejected.'])
-    expect(resultItems('1 approval could not be confirmed')).toEqual([`EX-1001${UNCONFIRMED_ITEM}`])
+    expect(await screen.findByText(UNRESOLVED_TITLE)).toBeInTheDocument()
+    expect(resultItems(UNRESOLVED_TITLE)).toEqual([
+      'EX-1002: Rejected.',
+      `EX-1001${UNCONFIRMED_ITEM}`,
+    ])
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Select EX-1002' })).toBeChecked()
@@ -637,15 +640,15 @@ describe('Provincial Exemption Search Actions', () => {
     expect(await screen.findByText(approvedTitle)).toBeInTheDocument()
     expect(resultNotification(approvedTitle)).toHaveClass('cds--actionable-notification--success')
     expect(resultItems(approvedTitle)).toEqual(['EX-1001 to the owner (client@example.test).'])
-    expect(resultItems('1 approval could not be confirmed')).toEqual([`EX-1002${UNCONFIRMED_ITEM}`])
-    expect(resultNotification('1 exemption was not approved')).toHaveClass(
-      'cds--actionable-notification--error',
-    )
-    expect(resultItems('1 exemption was not approved')).toEqual(['EX-1003: Rejected.'])
+    // At most two notifications: the approvals, and everything that was not approved.
+    expect(screen.getAllByRole('status')).toHaveLength(2)
+    expect(resultNotification(UNRESOLVED_TITLE)).toHaveClass('cds--actionable-notification--error')
+    expect(resultItems(UNRESOLVED_TITLE)).toEqual([
+      'EX-1003: Rejected.',
+      `EX-1002${UNCONFIRMED_ITEM}`,
+    ])
     expect(
-      within(resultNotification('1 exemption was not approved')).getByRole('link', {
-        name: 'EX-1003',
-      }),
+      within(resultNotification(UNRESOLVED_TITLE)).getByRole('link', { name: 'EX-1003' }),
     ).toHaveAttribute('href', expect.stringContaining('/provincial/exemption/EX-1003'))
     expect(screen.getByRole('checkbox', { name: 'Select EX-1001' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Select EX-1002' })).toBeChecked()

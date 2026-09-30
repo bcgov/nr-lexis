@@ -1228,12 +1228,17 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
     await confirmSelectedApplicationApproval()
 
+    // Approvals and failures each get their own notification.
+    expect(await screen.findByText('Application approved')).toBeInTheDocument()
+    expect(screen.getByText('Approved 1 application.')).toBeInTheDocument()
+    const failed = screen
+      .getByText('1 application was not approved')
+      .closest('.app-inline-notification') as HTMLElement
     expect(
-      await screen.findByText(
-        'Approved 1 application; 1 application failed. Failed application: 2000002 — Application owner location does not exist.',
-      ),
-    ).toBeInTheDocument()
-    expect(screen.getByText('Application approval partially completed')).toBeInTheDocument()
+      within(failed)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['2000002: Application owner location does not exist.'])
     expect(screen.getByRole('checkbox', { name: 'Select 2000001' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Select 2000002' })).toBeChecked()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
@@ -1256,12 +1261,12 @@ describe('Provincial Review Action State Smoke', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Approve application' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
 
+    expect(await within(dialog).findByText('1 application was not approved')).toBeVisible()
     expect(
-      await screen.findByText(
-        'No selected application was approved; 1 application failed. Failed application: 1000456 — Application owner location does not exist.',
+      within(dialog).getByText(
+        'It keeps its current status. Correct the details below, then approve again. 1000456: Application owner location does not exist.',
       ),
     ).toBeVisible()
-    expect(screen.getByText('Application approval failed')).toBeInTheDocument()
     expect(dialog).toBeVisible()
     expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeEnabled()
     expect(screen.getByRole('checkbox', { name: 'Select 1000456' })).toBeChecked()
@@ -1269,7 +1274,7 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
     const reopened = await screen.findByRole('dialog', { name: 'Approve application' })
     expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
-    expect(within(reopened).queryByText('Application approval failed')).not.toBeInTheDocument()
+    expect(within(reopened).queryByText('1 application was not approved')).not.toBeInTheDocument()
   })
 
   it('sends selected region org unit numbers to the review search request', async () => {

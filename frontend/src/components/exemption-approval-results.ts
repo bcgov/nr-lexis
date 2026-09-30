@@ -58,8 +58,9 @@ const emailNotice = (email: ApprovalEmailResult): string => {
 const joined = (parts: string[]) => parts.filter(Boolean).join(' ')
 
 /**
- * Page notifications for an approval: approved exemptions, those that need attention, and those
- * that were not approved, each listed by exemption. A single exemption gets one notification.
+ * Page notifications for an approval: at most one for the approved exemptions and one for those
+ * that were not approved or could not be confirmed, each listed by exemption. A single exemption
+ * gets one notification.
  */
 export const exemptionApprovalResults = (
   { approved, failures, unconfirmedNumbers, notes }: ExemptionApprovalReport,
@@ -70,15 +71,14 @@ export const exemptionApprovalResults = (
     text,
     ...itemLink(exemptionNumber),
   })
+  const emailProblem = (email: ApprovalEmailResult) =>
+    email.status === 'notSent' || email.status === 'unknown'
 
   if (approved.length === 1 && failures.length === 0 && unconfirmedNumbers.length === 0) {
     const [{ email }] = approved
     return [
       {
-        kind:
-          notes.length || email.status === 'notSent' || email.status === 'unknown'
-            ? 'warning'
-            : 'success',
+        kind: notes.length || emailProblem(email) ? 'warning' : 'success',
         title: 'Exemption approved and now Active.',
         message: joined([emailNotice(email), ...notes]),
       },
@@ -87,56 +87,55 @@ export const exemptionApprovalResults = (
 
   const results: ActionResult[] = []
   if (approved.length) {
-    const sent = approved.filter(({ email }) => email.status === 'sent')
+    const allSent = approved.every(({ email }) => email.status === 'sent')
     const skipped = approved.every(({ email }) => email.status === 'skipped')
     results.push({
-      kind: notes.length ? 'warning' : 'success',
+      kind:
+        notes.length || approved.some(({ email }) => emailProblem(email)) ? 'warning' : 'success',
       title: joined([
         `${exemptionCount(approved.length)} approved and now Active.`,
-        sent.length ? `Approval ${sent.length === 1 ? 'email' : 'emails'} sent:` : '',
+        allSent ? `Approval ${approved.length === 1 ? 'email' : 'emails'} sent:` : '',
       ]),
       message: joined([skipped ? 'Approval emails were not sent.' : '', ...notes]),
-      items: (skipped ? approved : sent).map(({ exemptionNumber, email }) =>
-        item(exemptionNumber, email.status === 'sent' ? ` to ${recipients(email)}.` : ''),
+      items: approved.map(({ exemptionNumber, email }) =>
+        item(
+          exemptionNumber,
+          email.status === 'skipped'
+            ? ''
+            : allSent && email.status === 'sent'
+              ? ` to ${recipients(email)}.`
+              : `: ${emailNotice(email)}`,
+        ),
       ),
     })
   }
 
-  const emailAttention = approved.flatMap(({ exemptionNumber, email }) =>
-    email.status === 'notSent' || email.status === 'unknown'
-      ? [item(exemptionNumber, `: ${emailNotice(email)}`)]
-      : [],
-  )
-  const unconfirmedAttention = unconfirmedNumbers.map((exemptionNumber) =>
-    item(
-      exemptionNumber,
-      ': The approval could not be confirmed and no email was sent. Check its current status before approving again.',
-    ),
-  )
-  const attention = [...emailAttention, ...unconfirmedAttention]
-  if (attention.length) {
-    const count = attention.length
+  const unresolved = failures.length + unconfirmedNumbers.length
+  if (unresolved) {
+    const single = unresolved === 1
     results.push({
-      kind: 'warning',
-      title: !emailAttention.length
-        ? `${count} ${count === 1 ? 'approval' : 'approvals'} could not be confirmed`
-        : !unconfirmedAttention.length
-          ? `${count} approval ${count === 1 ? 'email needs' : 'emails need'} attention`
-          : `${exemptionCount(count)} need attention`,
-      message: '',
-      items: attention,
-    })
-  }
-
-  if (failures.length) {
-    const single = failures.length === 1
-    results.push({
-      kind: 'error',
-      title: `${exemptionCount(failures.length)} ${single ? 'was' : 'were'} not approved`,
-      message: `${single ? 'It stays' : 'They stay'} in New status and no ${single ? 'email was' : 'emails were'} sent. Correct the details below, then approve again.`,
-      items: failures.map(({ exemptionNumber, message }) =>
-        item(exemptionNumber, `: ${reason(message, APPROVAL_FAILED_REASON)}`),
-      ),
+      kind: failures.length ? 'error' : 'warning',
+      title: !unconfirmedNumbers.length
+        ? `${exemptionCount(unresolved)} ${single ? 'was' : 'were'} not approved`
+        : !failures.length
+          ? `${unresolved} ${single ? 'approval' : 'approvals'} could not be confirmed`
+          : `${exemptionCount(unresolved)} were not approved or could not be confirmed`,
+      message: !unconfirmedNumbers.length
+        ? `${single ? 'It stays' : 'They stay'} in New status and no ${single ? 'email was' : 'emails were'} sent. Correct the details below, then approve again.`
+        : !failures.length
+          ? `No approval ${single ? 'email was' : 'emails were'} sent.`
+          : 'No approval emails were sent for these. Correct the details below, then approve again.',
+      items: [
+        ...failures.map(({ exemptionNumber, message }) =>
+          item(exemptionNumber, `: ${reason(message, APPROVAL_FAILED_REASON)}`),
+        ),
+        ...unconfirmedNumbers.map((exemptionNumber) =>
+          item(
+            exemptionNumber,
+            ': The approval could not be confirmed. Check its current status before approving again.',
+          ),
+        ),
+      ],
     })
   }
   return results

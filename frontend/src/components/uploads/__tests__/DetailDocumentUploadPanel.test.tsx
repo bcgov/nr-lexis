@@ -415,13 +415,15 @@ describe('DetailDocumentUploadPanel', () => {
     expect(
       await screen.findByText(/1 file failed\. Review the queue for details\./),
     ).toBeInTheDocument()
-    expect(screen.getByText('Upload needs attention')).toBeInTheDocument()
+    // The uploaded and failed files each get one notification.
+    expect(screen.getByText('Upload submitted')).toBeInTheDocument()
+    expect(screen.getByText('Upload error')).toBeInTheDocument()
     expect(screen.getByText(/The document list could not refresh\./)).toBeInTheDocument()
     expect(
       screen
         .getByRole('dialog', { name: 'Add documents' })
         .querySelectorAll('.app-notification-container'),
-    ).toHaveLength(1)
+    ).toHaveLength(2)
     expect(screen.getByRole('dialog', { name: 'Add documents' })).toBeInTheDocument()
     expect(onUploadSuccess).not.toHaveBeenCalled()
     expect(onClose).not.toHaveBeenCalled()
@@ -778,7 +780,8 @@ describe('DetailDocumentUploadPanel', () => {
       expect(refreshDocuments).toHaveBeenCalledTimes(1)
     })
 
-    expect(await screen.findByText('Upload needs attention')).toBeInTheDocument()
+    expect(await screen.findByText('Upload error')).toBeInTheDocument()
+    expect(screen.getByText('Upload submitted')).toBeInTheDocument()
     expect(screen.getByText(/The document list could not refresh\./)).toBeInTheDocument()
   })
 

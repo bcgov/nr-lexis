@@ -20,6 +20,8 @@ import {
 import { Information } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
+import { ActionResultNotifications } from '@/components/ActionResultNotification'
+import { actionResultText, type ActionResult } from '@/utils/action-result'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import Modal from '@/components/Modal'
 import EmptyState from '@/components/EmptyState'
@@ -110,12 +112,6 @@ import { requiredLabel } from '@/utils/required-label'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 
 import './ProvincialReview.scss'
-
-type ReviewActionStatus = {
-  kind: 'success' | 'warning' | 'error'
-  title?: string
-  message: string
-}
 
 type ApplicationApprovalResult = {
   applicationNumber: string
@@ -290,7 +286,9 @@ const ProvincialReviewPage = () => {
   const [loadingRejectEmail, setLoadingRejectEmail] = useState(false)
   const [submittingReject, setSubmittingReject] = useState(false)
   const rejectEmailRequestRef = useRef(0)
-  const [reviewActionStatus, setReviewActionStatus] = useState<ReviewActionStatus | null>(null)
+  // At most one success and one failure: a batch approval can do both.
+  const [reviewActionResults, setReviewActionResults] = useState<ActionResult[]>([])
+  const reviewActionStatus = reviewActionResults[0] ?? null
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canApproveApplications = canPerform('/applicationsReview')
   const canOpenApplicationDetails =
@@ -339,7 +337,7 @@ const ProvincialReviewPage = () => {
   const hasSearchQuery = searchParams.toString().length > 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
-    setReviewActionStatus(null)
+    setReviewActionResults([])
   }, [])
   const updateFilter = useCallback(
     <K extends keyof ApplicationReviewSearchFilters>(
@@ -666,7 +664,7 @@ const ProvincialReviewPage = () => {
   }
 
   const toggleRowSelection = (applicationNumber: string, checked: boolean) => {
-    setReviewActionStatus(null)
+    setReviewActionResults([])
     setSelectedRowsById((current) => {
       const next = { ...current }
       if (checked) {
@@ -679,7 +677,7 @@ const ProvincialReviewPage = () => {
   }
 
   const toggleSelectAllRowsOnPage = (checked: boolean) => {
-    setReviewActionStatus(null)
+    setReviewActionResults([])
     setSelectedRowsById((current) => {
       const next = { ...current }
       selectableRows.forEach((row) => {
@@ -706,7 +704,7 @@ const ProvincialReviewPage = () => {
 
   const loadRejectEmail = useCallback(async (applicationNumber: string) => {
     const requestId = ++rejectEmailRequestRef.current
-    setReviewActionStatus(null)
+    setReviewActionResults([])
     setRejectValidationMessage('')
     setLoadingRejectEmail(true)
 
@@ -747,22 +745,26 @@ const ProvincialReviewPage = () => {
   const onOpenRejectPanel = useCallback(
     (applicationNumber: string) => {
       if (!canApproveApplications) {
-        setReviewActionStatus({
-          kind: 'error',
-          message: 'Your account is not authorized to disapprove applications.',
-        })
+        setReviewActionResults([
+          {
+            kind: 'error',
+            message: 'Your account is not authorized to disapprove applications.',
+          },
+        ])
         return
       }
       if (optionsUnavailable || !rejectStatusAvailable) {
-        setReviewActionStatus({
-          kind: 'error',
-          message: 'Application status options are unavailable.',
-        })
+        setReviewActionResults([
+          {
+            kind: 'error',
+            message: 'Application status options are unavailable.',
+          },
+        ])
         return
       }
 
       rejectEmailRequestRef.current += 1
-      setReviewActionStatus(null)
+      setReviewActionResults([])
       setRejectApplicationNumber(applicationNumber)
       setRejectStatusCode(REJECT_STATUS_CODE)
       setRejectEmailAddress('')
@@ -808,7 +810,7 @@ const ProvincialReviewPage = () => {
     }
 
     setSubmittingReject(true)
-    setReviewActionStatus(null)
+    setReviewActionResults([])
     setRejectValidationMessage('')
 
     try {
@@ -819,33 +821,42 @@ const ProvincialReviewPage = () => {
         recordVersion,
       )
       if (!updateResult.valid || !updateResult.updated) {
-        setReviewActionStatus({
-          kind: 'error',
-          message: updateResult.message || 'Unable to reject application.',
-        })
+        setReviewActionResults([
+          {
+            kind: 'error',
+            message: updateResult.message || 'Unable to reject application.',
+          },
+        ])
         return
       }
 
       if (!sendStatusEmail) {
-        setReviewActionStatus({
-          kind: 'success',
-          message: `Updated application ${rejectApplicationNumber}.`,
-        })
+        setReviewActionResults([
+          {
+            kind: 'success',
+            message: `Updated application ${rejectApplicationNumber}.`,
+          },
+        ])
       } else {
         const emailResult = await sendApplicationReviewStatusEmail(rejectApplicationNumber, payload)
         if (!emailResult.success) {
-          setReviewActionStatus({
-            kind: 'error',
-            message:
-              emailResult.message === EMAIL_NOT_CONFIGURED_MESSAGE
-                ? 'Application status updated, but status email is not configured yet.'
-                : emailResult.message || 'Application status updated, but email could not be sent.',
-          })
+          setReviewActionResults([
+            {
+              kind: 'error',
+              message:
+                emailResult.message === EMAIL_NOT_CONFIGURED_MESSAGE
+                  ? 'Application status updated, but status email is not configured yet.'
+                  : emailResult.message ||
+                    'Application status updated, but email could not be sent.',
+            },
+          ])
         } else {
-          setReviewActionStatus({
-            kind: 'success',
-            message: `Updated application ${rejectApplicationNumber} and email sent.`,
-          })
+          setReviewActionResults([
+            {
+              kind: 'success',
+              message: `Updated application ${rejectApplicationNumber} and email sent.`,
+            },
+          ])
         }
       }
 
@@ -863,18 +874,33 @@ const ProvincialReviewPage = () => {
       )
     } catch (error) {
       console.error(error)
-      setReviewActionStatus({
-        kind: 'error',
-        message: 'Unable to update application.',
-      })
+      setReviewActionResults([
+        {
+          kind: 'error',
+          message: 'Unable to update application.',
+        },
+      ])
     } finally {
       setSubmittingReject(false)
     }
   }
 
+  const applicationResultLink = (applicationNumber: string) =>
+    canOpenApplicationDetails
+      ? {
+          to: withCurrentSearch(`/provincial/application/${applicationNumber}`),
+          state: {
+            returnTo: {
+              label: 'Provincial application review',
+              to: withCurrentSearch('/provincial/review'),
+            },
+          },
+        }
+      : {}
+
   const approveApplications = async (applicationNumbers: string[]): Promise<boolean> => {
     setSubmittingApproval(true)
-    setReviewActionStatus(null)
+    setReviewActionResults([])
 
     try {
       const approvalResults: ApplicationApprovalResult[] = []
@@ -901,32 +927,32 @@ const ProvincialReviewPage = () => {
       const failedResults = approvalResults.filter((result) => !result.success)
       const failureCount = failedResults.length
 
-      if (failureCount === 0) {
-        setReviewActionStatus({
-          kind: 'success',
-          title: successCount === 1 ? 'Application approved' : 'Applications approved',
-          message: `Approved ${applicationCountLabel(successCount)}.`,
-        })
-      } else {
-        const failureDetails = failedResults
-          .map((result) => `${result.applicationNumber} — ${result.message}`)
-          .join('; ')
-        const failedApplicationLabel = applicationCountLabel(failureCount)
-        const failedApplicationsTitle =
-          failureCount === 1 ? 'Failed application' : 'Failed applications'
-        setReviewActionStatus({
-          kind: successCount > 0 ? 'warning' : 'error',
-          title:
-            successCount > 0
-              ? 'Application approval partially completed'
-              : 'Application approval failed',
-          message: `${
-            successCount > 0
-              ? `Approved ${applicationCountLabel(successCount)}; ${failedApplicationLabel} failed.`
-              : `No selected ${failureCount === 1 ? 'application was' : 'applications were'} approved; ${failedApplicationLabel} failed.`
-          } ${failedApplicationsTitle}: ${failureDetails}`,
-        })
-      }
+      // Approvals and failures each get one notification, so neither half is lost.
+      setReviewActionResults([
+        ...(successCount > 0
+          ? [
+              {
+                kind: 'success' as const,
+                title: successCount === 1 ? 'Application approved' : 'Applications approved',
+                message: `Approved ${applicationCountLabel(successCount)}.`,
+              },
+            ]
+          : []),
+        ...(failureCount > 0
+          ? [
+              {
+                kind: 'error' as const,
+                title: `${applicationCountLabel(failureCount)} ${failureCount === 1 ? 'was' : 'were'} not approved`,
+                message: `${failureCount === 1 ? 'It keeps its' : 'They keep their'} current status. Correct the details below, then approve again.`,
+                items: failedResults.map(({ applicationNumber, message }) => ({
+                  id: applicationNumber,
+                  text: `: ${/[.!?]$/.test(message) ? message : `${message}.`}`,
+                  ...applicationResultLink(applicationNumber),
+                })),
+              },
+            ]
+          : []),
+      ])
 
       setSelectedRowsById(
         Object.fromEntries(failedResults.map((result) => [result.applicationNumber, true])),
@@ -949,23 +975,27 @@ const ProvincialReviewPage = () => {
 
   const onApproveSelectedClick = async () => {
     if (!canApproveApplications) {
-      setReviewActionStatus({
-        kind: 'error',
-        message: 'Your account is not authorized to approve applications.',
-      })
+      setReviewActionResults([
+        {
+          kind: 'error',
+          message: 'Your account is not authorized to approve applications.',
+        },
+      ])
       return
     }
 
     const selectedNumbers = selectedReviewableRows.map((row) => row.applicationNumber)
     if (selectedNumbers.length === 0) {
-      setReviewActionStatus({
-        kind: 'error',
-        message: 'Select at least one NEW or PND application before approving.',
-      })
+      setReviewActionResults([
+        {
+          kind: 'error',
+          message: 'Select at least one NEW or PND application before approving.',
+        },
+      ])
       return
     }
 
-    setReviewActionStatus(null)
+    setReviewActionResults([])
     setApprovalConfirmationNumbers(selectedNumbers)
   }
 
@@ -981,18 +1011,22 @@ const ProvincialReviewPage = () => {
 
   const onApproveApplicationClick = async (applicationNumber: string, sourceStatus: string) => {
     if (!canApproveApplications) {
-      setReviewActionStatus({
-        kind: 'error',
-        message: 'Your account is not authorized to approve applications.',
-      })
+      setReviewActionResults([
+        {
+          kind: 'error',
+          message: 'Your account is not authorized to approve applications.',
+        },
+      ])
       return
     }
 
     if (!isReviewableSourceStatus(sourceStatus)) {
-      setReviewActionStatus({
-        kind: 'error',
-        message: 'Only NEW or PND applications can be approved.',
-      })
+      setReviewActionResults([
+        {
+          kind: 'error',
+          message: 'Only NEW or PND applications can be approved.',
+        },
+      ])
       return
     }
 
@@ -1010,23 +1044,18 @@ const ProvincialReviewPage = () => {
 
       {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
 
-      {!!reviewActionStatus &&
-        approvalConfirmationNumbers.length === 0 &&
-        !rejectApplicationNumber && (
-          <AppNotification
-            kind={reviewActionStatus.kind}
-            title={
-              reviewActionStatus.title ??
-              (reviewActionStatus.kind === 'success'
-                ? 'Action complete'
-                : reviewActionStatus.kind === 'warning'
-                  ? 'Approval partially completed'
-                  : 'Action failed')
-            }
-            subtitle={reviewActionStatus.message}
-            onCloseButtonClick={() => setReviewActionStatus(null)}
-          />
-        )}
+      {approvalConfirmationNumbers.length === 0 && !rejectApplicationNumber && (
+        <ActionResultNotifications
+          results={reviewActionResults.map((result) => ({
+            ...result,
+            title:
+              result.title ?? (result.kind === 'success' ? 'Action complete' : 'Action failed'),
+          }))}
+          onClose={({ kind }) =>
+            setReviewActionResults((current) => current.filter((result) => result.kind !== kind))
+          }
+        />
+      )}
 
       <Column sm={4} md={8} lg={16}>
         <section className="legacy-search-section legacy-search-section--filters">
@@ -1131,7 +1160,7 @@ const ProvincialReviewPage = () => {
         errorTitle={approvalConfirmationNumbers.length > 0 ? reviewActionStatus?.title : undefined}
         errorMessage={
           approvalConfirmationNumbers.length > 0 && reviewActionStatus?.kind === 'error'
-            ? reviewActionStatus.message
+            ? actionResultText(reviewActionStatus)
             : undefined
         }
         onError={() => undefined}
@@ -1254,7 +1283,7 @@ const ProvincialReviewPage = () => {
             kind="error"
             title={reviewActionStatus.title ?? 'Action failed'}
             subtitle={reviewActionStatus.message}
-            onCloseButtonClick={() => setReviewActionStatus(null)}
+            onCloseButtonClick={() => setReviewActionResults([])}
           />
         )}
         <div className="review-reject-modal__actions">

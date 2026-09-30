@@ -98,26 +98,54 @@ describe('exemptionApprovalResults', () => {
     ])
   })
 
-  it('lists approvals whose email or status needs attention in a warning', () => {
+  it('keeps email problems with the approvals and unconfirmed approvals with the failures', () => {
     const results = exemptionApprovalResults(
       report({
         approved: [
-          { exemptionNumber: 'TEST-1', email: { status: 'notSent', reason: 'Mail server busy' } },
-          { exemptionNumber: 'TEST-2', email: { status: 'unknown' } },
+          {
+            exemptionNumber: 'TEST-1',
+            email: { status: 'sent', ownerEmail: 'owner@example.test', agentEmail: '' },
+          },
+          { exemptionNumber: 'TEST-2', email: { status: 'notSent', reason: 'Mail server busy' } },
+          { exemptionNumber: 'TEST-3', email: { status: 'unknown' } },
         ],
-        unconfirmedNumbers: ['TEST-3'],
+        failures: [{ exemptionNumber: 'TEST-4', message: 'Rejected.' }],
+        unconfirmedNumbers: ['TEST-5'],
       }),
     )
 
     expect(results.map(({ kind, title }) => [kind, title])).toEqual([
-      ['success', '2 exemptions approved and now Active.'],
-      ['warning', '3 exemptions need attention'],
+      ['warning', '3 exemptions approved and now Active.'],
+      ['error', '2 exemptions were not approved or could not be confirmed'],
     ])
-    expect(results[0].items).toEqual([])
+    expect(results[0].items?.map(({ id, text }) => `${id}${text}`)).toEqual([
+      'TEST-1: Approval email sent to the owner (owner@example.test).',
+      'TEST-2: The approval email was not sent. Mail server busy.',
+      'TEST-3: The approval email status could not be confirmed. Check whether it was sent before sending it again.',
+    ])
     expect(results[1].items?.map(({ id, text }) => `${id}${text}`)).toEqual([
-      'TEST-1: The approval email was not sent. Mail server busy.',
-      'TEST-2: The approval email status could not be confirmed. Check whether it was sent before sending it again.',
-      'TEST-3: The approval could not be confirmed and no email was sent. Check its current status before approving again.',
+      'TEST-4: Rejected.',
+      'TEST-5: The approval could not be confirmed. Check its current status before approving again.',
+    ])
+  })
+
+  it('reports only unconfirmed approvals as a warning', () => {
+    expect(exemptionApprovalResults(report({ unconfirmedNumbers: ['TEST-1', 'TEST-2'] }))).toEqual([
+      {
+        kind: 'warning',
+        title: '2 approvals could not be confirmed',
+        message: 'No approval emails were sent.',
+        items: [
+          {
+            id: 'TEST-1',
+            text: ': The approval could not be confirmed. Check its current status before approving again.',
+          },
+          {
+            id: 'TEST-2',
+            text: ': The approval could not be confirmed. Check its current status before approving again.',
+          },
+        ],
+      },
     ])
   })
 

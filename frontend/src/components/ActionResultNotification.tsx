@@ -43,3 +43,30 @@ export function ActionResultNotification({
     </AppNotification>
   )
 }
+
+type ActionResultNotificationsProps = {
+  results: ActionResult[]
+  /** Dismisses one result; the other outcome of the same action stays. */
+  onClose: (result: ActionResult) => void
+  className?: string
+}
+
+/** A multi-record action's outcomes: at most one success and one failure notification. */
+export function ActionResultNotifications({
+  results,
+  onClose,
+  className,
+}: ActionResultNotificationsProps) {
+  return (
+    <>
+      {results.map((result) => (
+        <ActionResultNotification
+          key={result.kind}
+          result={result}
+          className={className}
+          onClose={() => onClose(result)}
+        />
+      ))}
+    </>
+  )
+}
