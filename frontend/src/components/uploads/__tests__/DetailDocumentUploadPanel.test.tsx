@@ -379,7 +379,7 @@ describe('DetailDocumentUploadPanel', () => {
     expect(screen.getByRole('dialog', { name: 'Add documents' })).toBeInTheDocument()
 
     await act(async () => resolveRefresh())
-    expect(onUploadSuccess).toHaveBeenCalledExactlyOnceWith('Document uploaded.')
+    expect(onUploadSuccess).toHaveBeenCalledExactlyOnceWith('Document uploaded.', 1)
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     // The host owns the handed-off result, so the panel must not show a second banner.

@@ -55,7 +55,7 @@ type DetailDocumentUploadPanelProps = {
    * Receives a fully refreshed upload result before this panel closes. The host then shows
    * it with its other action results, so this panel does not keep its own success banner.
    */
-  onUploadSuccess?: (message: string) => void
+  onUploadSuccess?: (message: string, savedCount: number) => void
   presentation?: 'modal' | 'side-panel'
   initiallyOpen?: boolean
   /** Host page hooks that let an application side panel open as a drawer beside the page. */
@@ -694,7 +694,7 @@ const DetailDocumentUploadPanel = ({
       if (uploadCompleted) {
         resetUploadAfterSuccess()
         setIsUploadModalOpen(false)
-        onUploadSuccess?.(completedUploadMessage)
+        onUploadSuccess?.(completedUploadMessage, successCount)
         onClose?.()
       }
     }

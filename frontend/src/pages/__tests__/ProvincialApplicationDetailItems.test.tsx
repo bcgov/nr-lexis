@@ -2288,7 +2288,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Created application 321.')).toBeInTheDocument()
+    expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
     await selectApplicationDetailTab('Scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Create package' }))
     const packageNumber = await screen.findByLabelText('Package Number')
@@ -2361,7 +2361,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       })
     })
     expect(await screen.findByText('Package PKG-NEW created.')).toBeInTheDocument()
-    expect(screen.queryByText('Created application 321.')).not.toBeInTheDocument()
+    expect(screen.queryByText('The application was saved.')).not.toBeInTheDocument()
     // Item results stay beside the item controls rather than the page header.
     expect(
       screen.getByText('Package PKG-NEW created.').closest('#application-items'),

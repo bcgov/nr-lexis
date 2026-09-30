@@ -161,6 +161,16 @@ const APPLICATION_WRITE_ACTIONS = [
 ]
 
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
+// Figma shows a client as "NAME · number"; the number stands alone until the name loads.
+const clientDisplayName = (companyName: string | undefined, clientNumber: string): string => {
+  const name = companyName?.trim() ?? ''
+  const number = clientNumber.trim()
+  return name && number ? `${name} · ${number}` : name || number
+}
+
+// Figma confirms every Applicant, Application and Scale save, including the first, with this title.
+const APPLICATION_SAVED_TITLE = 'The application was saved.'
+
 const REVIEW_STATUS_SUCCESS_TITLES: Record<string, string> = {
   REJ: 'Application rejected.',
   WDN: 'Application withdrawn.',
@@ -271,7 +281,8 @@ type ClientDataSummaryProps = {
   clientData: ApplicationClientData | null
   isLoading: boolean
   detailFields?: Array<[string, string]>
-  trailingDetailFields?: Array<[string, string]>
+  // Editors confirm a client lookup by name; saved views show the name in their Client field.
+  showCompanyName?: boolean
 }
 
 function ClientDataSummary({
@@ -280,7 +291,7 @@ function ClientDataSummary({
   clientData,
   isLoading,
   detailFields,
-  trailingDetailFields,
+  showCompanyName = false,
 }: ClientDataSummaryProps) {
   const clientLookupMessage = clientData?.notfound ?? ''
   const clientLookupMessageKey = `${clientData?.clientNumber ?? ''}:${clientLookupMessage}`
@@ -288,13 +299,8 @@ function ClientDataSummary({
     string | null
   >(null)
   const persistedDetailFields = detailFields ?? []
-  const persistedTrailingDetailFields = trailingDetailFields ?? []
 
-  if (
-    !clientData &&
-    persistedDetailFields.length === 0 &&
-    persistedTrailingDetailFields.length === 0
-  ) {
+  if (!clientData && persistedDetailFields.length === 0) {
     return isLoading ? <InlineLoading description={`Loading ${title.toLowerCase()}...`} /> : null
   }
 
@@ -315,18 +321,19 @@ function ClientDataSummary({
           ...persistedDetailFields,
           ...(clientData
             ? [
-                ['Company name', displayValue(clientData.companyName)],
+                ...(showCompanyName
+                  ? [['Company name', displayValue(clientData.companyName)] as [string, string]]
+                  : []),
                 ['Address', displayValue(clientData.address)],
                 ['City', displayValue(clientData.city)],
                 ['Province', displayValue(clientData.province)],
-                ['Postal code', displayValue(clientData.postalCode)],
                 ['Country', displayValue(clientData.country)],
-                ['Phone', displayValue(clientData.phone)],
-                ['Fax', displayValue(clientData.fax)],
-                ['Email', displayValue(clientData.email)],
+                ['Postal code', displayValue(clientData.postalCode)],
+                ['Phone number', displayValue(clientData.phone)],
+                ['Fax number', displayValue(clientData.fax)],
+                ['Email address', displayValue(clientData.email)],
               ]
             : []),
-          ...persistedTrailingDetailFields,
         ].map(([label, value]) => (
           <div key={label} className="detail-field-item">
             <dt className="detail-field-label">{label}</dt>
@@ -729,8 +736,8 @@ const ProvincialApplicationDetailsPage = () => {
     createdApplicationNumber
       ? {
           kind: 'success',
-          title: 'Action complete',
-          message: `Created application ${createdApplicationNumber}.`,
+          title: APPLICATION_SAVED_TITLE,
+          message: '',
           createdFor: createdApplicationNumber,
         }
       : null,
@@ -2765,10 +2772,7 @@ const ProvincialApplicationDetailsPage = () => {
         setIsEditingRemarks(false)
         setRemarkBody('')
         setEditingRemarkId(null)
-        setActionResult({
-          kind: 'success',
-          message: editingRemarkId ? 'Application remark updated.' : 'Application remark saved.',
-        })
+        setActionResult({ kind: 'success', title: 'Remark saved.', message: '' })
         return true
       } catch {
         setActionResult({ kind: 'error', message: 'Unable to save application remark.' })
@@ -3172,10 +3176,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
         setShowSummaryValidationErrors(false)
         setSummaryVolumeWarningAccepted(false)
-        setActionResult({
-          kind: 'success',
-          message: result.message || 'Application summary saved.',
-        })
+        setActionResult({ kind: 'success', title: APPLICATION_SAVED_TITLE, message: '' })
         return true
       } catch {
         setActionResult({ kind: 'error', message: 'Unable to save application summary.' })
@@ -3224,16 +3225,16 @@ const ProvincialApplicationDetailsPage = () => {
       }
       if (saved && source === 'owner') {
         setIsEditingOwnerDetails(false)
-        setActionResult({ kind: 'success', message: 'Applicant client details saved.' })
+        setActionResult({ kind: 'success', title: APPLICATION_SAVED_TITLE, message: '' })
       }
       if (saved && source === 'agent') {
         setIsEditingOwnerDetails(false)
-        setActionResult({ kind: 'success', message: 'Applicant details saved.' })
+        setActionResult({ kind: 'success', title: APPLICATION_SAVED_TITLE, message: '' })
       }
       // Item saves also come from the Application editor when only the product type changed.
       if (saved && source === 'items' && isEditingApplicationItems) {
         setIsEditingApplicationItems(false)
-        setActionResult({ kind: 'success', message: 'Application item details saved.' })
+        setActionResult({ kind: 'success', title: APPLICATION_SAVED_TITLE, message: '' })
       } else if (saved && source === 'items') {
         setIsEditingSummary(false)
       }
@@ -3410,7 +3411,7 @@ const ProvincialApplicationDetailsPage = () => {
       setIsRetryingApprovalRemark(false)
       setActionResult({
         kind: 'success',
-        title: isRetryingApprovalRemark ? 'Application remark saved.' : 'Application approved.',
+        title: isRetryingApprovalRemark ? 'Remark saved.' : 'Application approved.',
         message: '',
       })
       return 'saved'
@@ -3715,6 +3716,10 @@ const ProvincialApplicationDetailsPage = () => {
     canAccessExemptionRoutes &&
     (!detail?.industryUser || industryViewableExemptionNumber === linkedExemptionNumber)
   const ownerApplicantTypeLabel = applicantTypeLabel(ownerApplicantTypeCode)
+  // Figma heads the owner's details "Owner". A Ministerial applicant keeps its type visible
+  // there, and an agent applicant's agent gets its own section below.
+  const ownerSectionTitle =
+    ownerApplicantTypeCode.trim().toUpperCase() === 'M' ? ownerApplicantTypeLabel : 'Owner'
   const ownerClientLocationCode = summaryForm?.ownerClientLocationCode?.trim() ?? ''
   const ownerClientLocationName = ownerClientLocations.find(
     (location) => location.locationCode === ownerClientLocationCode,
@@ -3768,13 +3773,15 @@ const ProvincialApplicationDetailsPage = () => {
     applicationEndUseOptions.find((option) => option.code === savedEndUseCode)?.description ??
     savedEndUseCode
   const ownerClientDetailFields: Array<[string, string]> = [
-    ['Client number', summaryForm?.ownerClientNumber ?? String(detail?.ownerClientNumber ?? '')],
-    ['Applicant type', ownerApplicantTypeLabel],
-    ['Client location', ownerClientLocationDisplay],
     ['Contact name', summaryForm?.ownerContactName ?? ''],
-  ]
-  const ownerClientTrailingDetailFields: Array<[string, string]> = [
-    ['I am an agent', summaryForm?.applicantTypeCode === 'A' ? 'Yes' : 'No'],
+    [
+      'Client',
+      clientDisplayName(
+        ownerClientData?.companyName,
+        summaryForm?.ownerClientNumber ?? String(detail?.ownerClientNumber ?? ''),
+      ),
+    ],
+    ['Client location', ownerClientLocationDisplay],
   ]
   const ownerClientSummaryContent = (
     <ClientDataSummary
@@ -3783,14 +3790,18 @@ const ProvincialApplicationDetailsPage = () => {
       clientData={ownerClientData}
       isLoading={isLoadingOwnerClientData}
       detailFields={ownerClientDetailFields}
-      trailingDetailFields={ownerClientTrailingDetailFields}
     />
   )
   const agentClientDetailFields: Array<[string, string]> = [
-    ['Agent number', summaryForm?.agentClientNumber ?? String(detail?.agentClientNumber ?? '')],
-    ['Applicant type', 'Agent'],
-    ['Contact location', agentClientLocationDisplay],
     ['Contact name', summaryForm?.agentContactName ?? ''],
+    [
+      'Agent client',
+      clientDisplayName(
+        agentClientData?.companyName,
+        summaryForm?.agentClientNumber ?? String(detail?.agentClientNumber ?? ''),
+      ),
+    ],
+    ['Agent location', agentClientLocationDisplay],
   ]
   const agentClientSummaryContent = summaryAgentClientNumber ? (
     <ClientDataSummary
@@ -4606,10 +4617,11 @@ const ProvincialApplicationDetailsPage = () => {
                               showTitle={false}
                               clientData={ownerClientData}
                               isLoading={isLoadingOwnerClientData}
+                              showCompanyName
                             />
                             <Checkbox
                               id="applicationOwnerAgentUsedEdit"
-                              labelText="I am an agent"
+                              labelText="I'm an agent"
                               checked={summaryForm.applicantTypeCode === 'A'}
                               disabled={isSavingSummary || !canChangeApplicantType}
                               onChange={(_, { checked }) =>
@@ -4717,6 +4729,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   showTitle={false}
                                   clientData={agentClientData}
                                   isLoading={isLoadingAgentClientData}
+                                  showCompanyName
                                 />
                               </section>
                             )}
@@ -4752,7 +4765,10 @@ const ProvincialApplicationDetailsPage = () => {
                           </>
                         ) : (
                           <>
-                            {ownerClientSummaryContent}
+                            <section aria-label={ownerSectionTitle}>
+                              <h3 className="detail-tile-title">{ownerSectionTitle}</h3>
+                              {ownerClientSummaryContent}
+                            </section>
                             {isSummaryAgentApplicant && (
                               <section aria-label="Agent information">
                                 <h3 className="detail-tile-title">Agent information</h3>
@@ -5231,11 +5247,11 @@ const ProvincialApplicationDetailsPage = () => {
                               onDirtyChange={setDocumentUploadDirty}
                               onBusyChange={setDocumentUploadBusy}
                               onUploadComplete={refreshApplicationDocuments}
-                              onUploadSuccess={(message) =>
+                              onUploadSuccess={(_, savedCount) =>
                                 setActionResult({
                                   kind: 'success',
-                                  title: 'Document uploaded',
-                                  message,
+                                  title: savedCount > 1 ? 'Documents saved.' : 'Document saved.',
+                                  message: '',
                                 })
                               }
                             />
@@ -5466,9 +5482,7 @@ const ProvincialApplicationDetailsPage = () => {
                             >
                               <TextArea
                                 id="applicationRemarkBody"
-                                labelText={requiredLabel(
-                                  editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark',
-                                )}
+                                labelText={requiredLabel('Remark')}
                                 aria-required="true"
                                 rows={6}
                                 enableCounter
