@@ -1,9 +1,10 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Button, TextArea, TextInput } from '@carbon/react'
-import { Add, ArrowRight } from '@carbon/icons-react'
+import { Add, ArrowRight, Close } from '@carbon/icons-react'
 import { ActionResultNotification } from '../ActionResultNotification'
 import Modal from '@/components/Modal'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import DetailSidePanel from '@/components/DetailSidePanel'
 import { combineActionMessages } from '@/utils/action-result'
 import { requiredLabel } from '@/utils/required-label'
 import {
@@ -15,6 +16,7 @@ import {
   extractUploadErrorDetails,
   GENERIC_UPLOAD_FAILURE_MESSAGE,
   uploadQueueFileKey,
+  uploadQueueStatusLabel,
   validateDocumentUploadFile,
   validateDocumentUploadDescription,
 } from './uploadQueueHelpers'
@@ -56,6 +58,12 @@ type DetailDocumentUploadPanelProps = {
   onUploadSuccess?: (message: string) => void
   presentation?: 'modal' | 'side-panel'
   initiallyOpen?: boolean
+  /** Host page hooks that let an application side panel open as a drawer beside the page. */
+  drawer?: {
+    contentSelector: string
+    fallbackFocusSelector: string
+    launcherRef?: RefObject<HTMLElement | null>
+  }
   /** Called after a user-requested close or a fully successful upload. */
   onClose?: () => void
 }
@@ -119,10 +127,12 @@ const DetailDocumentUploadPanel = ({
   onUploadSuccess,
   presentation = 'modal',
   initiallyOpen = false,
+  drawer,
   onClose,
 }: DetailDocumentUploadPanelProps) => {
   const copy = UPLOAD_COPY[workflowType]
   const isSidePanel = presentation === 'side-panel' && workflowType !== 'invoice'
+  const isDirectApplicationPanel = isSidePanel && workflowType === 'application' && !!drawer
   const disabledReason =
     disabledReasonProp ?? 'Your session does not include the required upload permission.'
   const [salesInvoiceNumber, setSalesInvoiceNumber] = useState('')
@@ -140,6 +150,7 @@ const DetailDocumentUploadPanel = ({
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [isUploadModalOpen, setIsUploadModalOpen] = useState(initiallyOpen && !disabled)
   const [isDiscardConfirmationOpen, setIsDiscardConfirmationOpen] = useState(false)
+  const discardFocusReturnRef = useRef<HTMLElement | null>(null)
   const [uploadStep, setUploadStep] = useState<DetailDocumentUploadStep>('upload')
   const validationRequestsRef = useRef(new Map<string, ValidationRequest>())
   const nextValidationTokenRef = useRef(0)
@@ -241,7 +252,7 @@ const DetailDocumentUploadPanel = ({
   )
   const uploadInvalidText =
     invalidUploadCount > 0
-      ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from review.`
+      ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from ${isDirectApplicationPanel ? 'saving' : 'review'}.`
       : showFileValidationError && uploadQueue.length === 0
         ? 'Choose at least one file to upload.'
         : undefined
@@ -407,7 +418,8 @@ const DetailDocumentUploadPanel = ({
   }
 
   const addFilesToQueue = (files: FileList | null): void => {
-    if (!files || files.length === 0) {
+    // A successful save clears the queue, so files added mid-save would be lost.
+    if (!files || files.length === 0 || isSubmitting) {
       return
     }
     if (workflowType === 'invoice' && files.length > 1) {
@@ -592,6 +604,8 @@ const DetailDocumentUploadPanel = ({
   }
 
   const onSubmitUpload = async (): Promise<void> => {
+    if (isSubmitting) return
+    if (isDirectApplicationPanel) setShowFileValidationError(uploadQueue.length === 0)
     setErrorMessage('')
     setSuccessMessage('')
 
@@ -617,14 +631,18 @@ const DetailDocumentUploadPanel = ({
     }
 
     if (pendingValidationCount > 0) {
-      setErrorMessage('Wait for file validation to finish before reviewing the upload.')
+      setErrorMessage(
+        isDirectApplicationPanel
+          ? 'Wait for file validation to finish before saving documents.'
+          : 'Wait for file validation to finish before reviewing the upload.',
+      )
       return
     }
 
     if (readyUploadItems.length === 0) {
       setErrorMessage(
         invalidUploadCount > 0
-          ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before review.`
+          ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before ${isDirectApplicationPanel ? 'saving documents' : 'review'}.`
           : 'Choose at least one file to upload.',
       )
       return
@@ -744,6 +762,8 @@ const DetailDocumentUploadPanel = ({
     setIsUploadModalOpen(true)
   }
 
+  const modalInitialFocusId = `${inputId}UploadModalContent`
+
   const discardUploadAndClose = (): void => {
     resetUpload()
     setIsDiscardConfirmationOpen(false)
@@ -752,10 +772,16 @@ const DetailDocumentUploadPanel = ({
   }
 
   const closeUploadModal = (): void => {
-    if (isSubmitting) {
+    if (isSubmitting || isDiscardConfirmationOpen) {
       return
     }
     if (isSidePanel && isDirty) {
+      // Keep editing returns to the control that asked to close.
+      const activeElement = document.activeElement
+      discardFocusReturnRef.current =
+        activeElement instanceof HTMLElement && activeElement !== document.body
+          ? activeElement
+          : document.getElementById(modalInitialFocusId)
       setIsDiscardConfirmationOpen(true)
       return
     }
@@ -764,7 +790,6 @@ const DetailDocumentUploadPanel = ({
 
   const documentNoun = workflowType === 'invoice' ? 'invoice' : 'document'
   const modalHeading = isSidePanel ? 'Add documents' : `Add ${documentNoun}`
-  const modalInitialFocusId = `${inputId}UploadModalContent`
   const uploadFeedback = combineActionMessages(successMessage, errorMessage, UPLOAD_RESULT_TITLES)
   const dismissUploadFeedback = () => {
     setErrorMessage('')
@@ -790,12 +815,14 @@ const DetailDocumentUploadPanel = ({
         <ActionResultNotification result={uploadFeedback} onClose={dismissUploadFeedback} />
       )}
 
-      {uploadStep === 'upload' && (
+      {(isDirectApplicationPanel || uploadStep === 'upload') && (
         <div id={modalInitialFocusId} tabIndex={-1} className="detail-document-upload-modal__form">
           <p className="detail-document-upload-modal__subtitle">
-            {workflowType === 'invoice'
-              ? 'Fields marked with an asterisk (*) are required.'
-              : 'All fields are required unless marked optional.'}
+            {isDirectApplicationPanel
+              ? requiredLabel('Required fields')
+              : workflowType === 'invoice'
+                ? 'Fields marked with an asterisk (*) are required.'
+                : 'All fields are required unless marked optional.'}
           </p>
           {workflowType === 'invoice' && (
             <div className="legacy-search-grid detail-document-upload__invoice-fields">
@@ -842,18 +869,19 @@ const DetailDocumentUploadPanel = ({
             </div>
           )}
           <MultiFileDropZone
-            title="File"
+            title={isDirectApplicationPanel ? 'Files' : 'File'}
             description={DOCUMENT_UPLOAD_GUIDANCE}
             multiple={workflowType !== 'invoice'}
+            showMultipleFileGuidance={!isDirectApplicationPanel}
             inputId={`${inputId}File`}
             inputKey={fileInputKey}
             inputLabel="Document File"
             required
-            showRequiredIndicator={workflowType === 'invoice'}
+            showRequiredIndicator={workflowType === 'invoice' || isDirectApplicationPanel}
             accept={DOCUMENT_UPLOAD_ACCEPT}
             invalidText={uploadInvalidText}
-            disabled={disabled}
-            disabledDescription={disabledReason}
+            disabled={disabled || isSubmitting}
+            disabledDescription={isSubmitting ? 'Upload is submitting.' : disabledReason}
             renderAsPanel={false}
             variant="fspts"
             onFilesSelected={addFilesToQueue}
@@ -861,7 +889,59 @@ const DetailDocumentUploadPanel = ({
         </div>
       )}
 
-      {uploadQueue.length > 0 && (
+      {isDirectApplicationPanel && uploadQueue.length > 0 && (
+        <ul className="detail-document-upload-queue" aria-label="Selected files">
+          {uploadQueue.map((item) => {
+            const description = item.fileDescription ?? ''
+            const descriptionError = validateDocumentUploadDescription(description)
+            const needsAttention = item.status === 'invalid' || item.status === 'failed'
+            return (
+              <li key={item.id} className="detail-document-upload-queue__item">
+                <div className="admin-upload-file-chip">
+                  <span className="admin-upload-file-chip__name">{item.file.name}</span>
+                  <span
+                    className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
+                  >
+                    {uploadQueueStatusLabel(item.status)}
+                  </span>
+                  {item.status !== 'complete' && (
+                    <button
+                      type="button"
+                      className="admin-upload-file-chip__remove"
+                      aria-label={`Remove ${item.file.name}`}
+                      disabled={isSubmitting}
+                      onClick={() => removeQueuedFile(item.id)}
+                    >
+                      <Close size={16} aria-hidden="true" />
+                    </button>
+                  )}
+                </div>
+                {needsAttention && item.message && (
+                  <p className="admin-upload-application-file-list__message" role="alert">
+                    {item.message}
+                  </p>
+                )}
+                {item.status !== 'invalid' && (
+                  <TextInput
+                    id={`${inputId}Description-${encodeURIComponent(item.id)}`}
+                    labelText="Description"
+                    aria-label={`Document description for ${item.file.name} (optional)`}
+                    helperText="Say what the document is, if the file name doesn't make it clear."
+                    value={description}
+                    maxLength={250}
+                    invalid={!!descriptionError}
+                    invalidText={descriptionError}
+                    disabled={disabled || isSubmitting || item.status === 'complete'}
+                    onChange={(event) => updateFileDescription(item.id, event.target.value)}
+                  />
+                )}
+              </li>
+            )
+          })}
+        </ul>
+      )}
+
+      {!isDirectApplicationPanel && uploadQueue.length > 0 && (
         <UploadQueuePreview
           items={uploadQueue}
           targetSummary={currentTargetSummary}
@@ -919,37 +999,39 @@ const DetailDocumentUploadPanel = ({
         />
       )}
 
-      <div className="detail-document-upload-modal__actions">
-        <Button kind="tertiary" disabled={isSubmitting} onClick={closeUploadModal}>
-          Cancel
-        </Button>
-        {uploadStep === 'review' && (
-          <Button kind="ghost" disabled={isSubmitting} onClick={() => setUploadStep('upload')}>
-            Back
+      {!isDirectApplicationPanel && (
+        <div className="detail-document-upload-modal__actions">
+          <Button kind="tertiary" disabled={isSubmitting} onClick={closeUploadModal}>
+            Cancel
           </Button>
-        )}
-        <Button
-          kind="primary"
-          disabled={isSubmitting || (uploadStep === 'review' ? !canSubmit : disabled)}
-          renderIcon={ArrowRight}
-          onClick={() => {
-            if (uploadStep === 'review') {
-              void onSubmitUpload()
-              return
-            }
+          {uploadStep === 'review' && (
+            <Button kind="ghost" disabled={isSubmitting} onClick={() => setUploadStep('upload')}>
+              Back
+            </Button>
+          )}
+          <Button
+            kind="primary"
+            disabled={isSubmitting || (uploadStep === 'review' ? !canSubmit : disabled)}
+            renderIcon={ArrowRight}
+            onClick={() => {
+              if (uploadStep === 'review') {
+                void onSubmitUpload()
+                return
+              }
 
-            onReviewUpload()
-          }}
-        >
-          {isSubmitting
-            ? 'Submitting upload…'
-            : uploadStep === 'review'
-              ? isSidePanel
-                ? 'Save documents'
-                : 'Submit upload'
-              : 'Review upload'}
-        </Button>
-      </div>
+              onReviewUpload()
+            }}
+          >
+            {isSubmitting
+              ? 'Submitting upload…'
+              : uploadStep === 'review'
+                ? isSidePanel
+                  ? 'Save documents'
+                  : 'Submit upload'
+                : 'Review upload'}
+          </Button>
+        </div>
+      )}
     </>
   )
 
@@ -986,25 +1068,57 @@ const DetailDocumentUploadPanel = ({
           {uploadContent}
         </section>
       )}
-      {isUploadModalOpen && !isDiscardConfirmationOpen && workflowType !== 'invoice' && (
-        <Modal
-          open
-          passiveModal
-          size="sm"
-          modalHeading={modalHeading}
-          aria-label={modalHeading}
-          className={
-            isSidePanel
-              ? 'detail-document-upload-modal detail-document-upload-modal--side-panel'
-              : 'detail-document-upload-modal'
-          }
-          selectorPrimaryFocus={`#${modalInitialFocusId}`}
-          onRequestClose={closeUploadModal}
-          preventCloseOnClickOutside
+      {isDirectApplicationPanel && drawer && (
+        <DetailSidePanel
+          open={isUploadModalOpen}
+          title={modalHeading}
+          className="detail-document-upload-panel"
+          contentSelector={drawer.contentSelector}
+          initialFocusSelector={`#${modalInitialFocusId}`}
+          launcherRef={drawer.launcherRef ?? uploadTriggerRef}
+          fallbackFocusSelector={drawer.fallbackFocusSelector}
+          busy={isSubmitting}
+          onClose={closeUploadModal}
+          actions={[
+            {
+              label: 'Cancel',
+              kind: 'secondary',
+              disabled: isSubmitting,
+              onClick: closeUploadModal,
+            },
+            {
+              label: isSubmitting ? 'Saving documents…' : 'Save documents',
+              kind: 'primary',
+              disabled: disabled || isSubmitting || pendingValidationCount > 0,
+              onClick: () => void onSubmitUpload(),
+            },
+          ]}
         >
           {uploadContent}
-        </Modal>
+        </DetailSidePanel>
       )}
+      {isUploadModalOpen &&
+        !isDiscardConfirmationOpen &&
+        workflowType !== 'invoice' &&
+        !isDirectApplicationPanel && (
+          <Modal
+            open
+            passiveModal
+            size="sm"
+            modalHeading={modalHeading}
+            aria-label={modalHeading}
+            className={
+              isSidePanel
+                ? 'detail-document-upload-modal detail-document-upload-modal--side-panel'
+                : 'detail-document-upload-modal'
+            }
+            selectorPrimaryFocus={`#${modalInitialFocusId}`}
+            onRequestClose={closeUploadModal}
+            preventCloseOnClickOutside
+          >
+            {uploadContent}
+          </Modal>
+        )}
       {isDiscardConfirmationOpen && (
         <ConfirmationModal
           open
@@ -1013,6 +1127,7 @@ const DetailDocumentUploadPanel = ({
           confirmLabel="Discard changes"
           cancelLabel="Keep editing"
           danger
+          launcherButtonRef={discardFocusReturnRef}
           onConfirm={discardUploadAndClose}
           onClose={() => setIsDiscardConfirmationOpen(false)}
         />

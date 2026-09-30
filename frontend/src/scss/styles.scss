@@ -8,6 +8,9 @@
 );
 @use '@carbon/react/scss/type' as carbon-type;
 @use '@carbon/react';
+// Load IBM SidePanel styles here, after Carbon. A component-level @use recompiles Carbon's grid
+// into a lazy chunk that loads after this file and overrides the page grid padding below.
+@use '@carbon/ibm-products/scss/components/SidePanel';
 
 .required-label__marker {
   color: var(--cds-text-error, #da1e28);
@@ -1110,6 +1113,18 @@ div.cds--inline-notification--low-contrast::before {
 }
 
 $notification-types: 'error', 'info', 'success', 'warning';
+
+.application-scale-form__location {
+  grid-column: 1 / -1;
+}
+
+.application-product-scale-details {
+  margin-block-start: 1.5rem;
+
+  > p {
+    margin-block: 0.75rem 1rem;
+  }
+}
 
 @each $notification-type in $notification-types {
   div.cds--inline-notification--#{$notification-type},
@@ -4813,11 +4828,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin: 0;
 }
 
-:is(.detail-document-upload-modal, .detail-document-upload-inline) .admin-upload-drop-zone-field {
+:is(.detail-document-upload-modal, .detail-document-upload-inline, .detail-document-upload-panel)
+  .admin-upload-drop-zone-field {
   margin-block-start: 0;
 }
 
-:is(.detail-document-upload-modal, .detail-document-upload-inline) .admin-upload-drop-zone--fspts {
+:is(.detail-document-upload-modal, .detail-document-upload-inline, .detail-document-upload-panel)
+  .admin-upload-drop-zone--fspts {
   inline-size: 100%;
   max-inline-size: 100%;
 }

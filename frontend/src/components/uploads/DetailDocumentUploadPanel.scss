@@ -1,3 +1,30 @@
+// Application side panel: one row per queued file with its description, as in Figma.
+.detail-document-upload-queue {
+  display: grid;
+  gap: 1.5rem;
+  margin: 1.5rem 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.detail-document-upload-queue__item {
+  display: grid;
+  gap: 1rem;
+  min-inline-size: 0;
+
+  .admin-upload-file-chip {
+    max-inline-size: 100%;
+    margin: 0;
+    background: var(--cds-field);
+    border-color: transparent;
+  }
+
+  .admin-upload-application-file-list__message {
+    margin-block-start: -0.5rem;
+    color: var(--cds-text-error);
+  }
+}
+
 .detail-document-upload-modal--side-panel.cds--modal {
   align-items: stretch;
   justify-content: flex-end;

@@ -26,7 +26,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Add, Edit, Launch, TrashCan } from '@carbon/icons-react'
+import { Add, Download, Edit, Launch, TrashCan } from '@carbon/icons-react'
 import { AddDocument, Contract, Handshake } from '@carbon/pictograms-react'
 import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
@@ -51,7 +51,7 @@ import {
   applicationListDateOptions,
   NO_LIST_DATE_VALUE,
 } from '@/pages/shared/application-list-date-options'
-import { formatBusinessIsoDate } from '@/utils/date'
+import { formatBusinessDateTime, formatBusinessIsoDate } from '@/utils/date'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { formatDocumentSource } from '@/service/document-service-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -143,6 +143,7 @@ import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { triggerBrowserDownload } from '@/utils/download'
+import { openDocumentPreview } from '@/utils/document-preview'
 import { requiredLabel } from '@/utils/required-label'
 import {
   isValidEmail,
@@ -414,8 +415,11 @@ type ApplicationSummaryFormState = {
 }
 
 type ApplicationSummaryField = keyof ApplicationSummaryFormState & string
-type SummarySaveSource = 'summary' | 'owner' | 'agent' | 'items'
-const SUMMARY_SAVE_FIELDS: Record<SummarySaveSource, ApplicationSummaryField[]> = {
+type SummarySaveSource = 'summary' | 'summary-items' | 'owner' | 'agent' | 'items'
+const SUMMARY_SAVE_FIELDS: Record<
+  Exclude<SummarySaveSource, 'summary-items'>,
+  ApplicationSummaryField[]
+> = {
   summary: [
     'orgUnitNumber',
     'exemptionReasonCode',
@@ -652,22 +656,15 @@ const reviewEmailCandidate = (
   return ownerEmail
 }
 
+// Remark numbers come from a sequence, so the highest is the newest.
+const newestRemarksFirst = (
+  remarks: ProvincialApplicationDetail['remarks'] | undefined,
+): ProvincialApplicationDetail['remarks'] =>
+  [...(remarks ?? [])].sort((left, right) => (right.remarkId ?? 0) - (left.remarkId ?? 0))
+
 const latestPersistedRemark = (
   remarks: ProvincialApplicationDetail['remarks'] | undefined,
-): string => {
-  const latest = [...(remarks ?? [])]
-    .filter((remark) => remark.remark.trim())
-    .sort((left, right) => {
-      const leftTime = left.date ? Date.parse(left.date) : 0
-      const rightTime = right.date ? Date.parse(right.date) : 0
-      if (leftTime !== rightTime) {
-        return rightTime - leftTime
-      }
-      return (right.remarkId ?? 0) - (left.remarkId ?? 0)
-    })[0]
-
-  return latest?.remark ?? ''
-}
+): string => newestRemarksFirst(remarks).find((remark) => remark.remark.trim())?.remark ?? ''
 
 const latestPersistedReviewRemark = (
   detail: ProvincialApplicationDetail | null | undefined,
@@ -771,6 +768,7 @@ const ProvincialApplicationDetailsPage = () => {
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const remarkLauncherRef = useRef<HTMLButtonElement | null>(null)
+  const documentUploadLauncherRef = useRef<HTMLButtonElement | null>(null)
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
   const [summaryBaselineForm, setSummaryBaselineForm] =
     useState<ApplicationSummaryFormState | null>(null)
@@ -879,6 +877,18 @@ const ProvincialApplicationDetailsPage = () => {
     initialTab: requestedApplicationTab === 'items' ? 'items' : undefined,
   })
   const beginDetailRequest = useLatestRequestGuard()
+  const beginDocumentOpenRequest = useLatestRequestGuard()
+  const isCurrentDocumentRouteRef = useRef<() => boolean>(() => false)
+  const pendingDocumentPreviewsRef = useRef(new Set<Window>())
+  useEffect(() => {
+    isCurrentDocumentRouteRef.current = beginDocumentOpenRequest()
+    const pendingPreviews = pendingDocumentPreviewsRef.current
+    return () => {
+      beginDocumentOpenRequest()
+      pendingPreviews.forEach((target) => target.close())
+      pendingPreviews.clear()
+    }
+  }, [applicationNumber, beginDocumentOpenRequest])
   const currentApplicationNumberRef = useRef(applicationNumber)
   currentApplicationNumberRef.current = applicationNumber
   const currentDetailRef = useRef<ProvincialApplicationDetail | null>(null)
@@ -1381,24 +1391,34 @@ const ProvincialApplicationDetailsPage = () => {
     summaryBaselineForm?.exportScheduleId ?? '',
     detail?.listingDate,
   )
+  const summaryFieldsChangedFor = (fields: ApplicationSummaryField[]): boolean =>
+    !!summaryForm &&
+    !!summaryBaselineForm &&
+    fields.some((field) => !formValuesEqual(summaryForm[field], summaryBaselineForm[field]))
+  const summaryScaleFieldsChanged = summaryFieldsChangedFor(SUMMARY_SAVE_FIELDS.items)
+  // A product-only change keeps the Scale save rules, so a submitter's list date does not block it.
+  const applicationSummarySaveSource: SummarySaveSource = !summaryScaleFieldsChanged
+    ? 'summary'
+    : summaryFieldsChangedFor(SUMMARY_SAVE_FIELDS.summary)
+      ? 'summary-items'
+      : 'items'
   const missingSummaryOptionLabelsForSource = useCallback(
     (source: SummarySaveSource): string[] => {
-      if (source === 'summary') {
-        return [
-          summaryRegionOptions.length === 0 ? 'region' : null,
-          summaryExemptionReasonOptions.length === 0 ? 'exemption reason' : null,
-        ].filter((label): label is string => label !== null)
-      }
-      if (source === 'items') {
-        return [
-          summaryProductTypeOptions.length === 0 ? 'product type' : null,
-          productTypeRequiresGrowthType(summaryForm?.productTypeCode ?? '') &&
-          summaryGrowthTypeOptions.length === 0
-            ? 'age class'
-            : null,
-        ].filter((label): label is string => label !== null)
-      }
-      return []
+      return [
+        ...(source === 'summary' || source === 'summary-items'
+          ? [
+              summaryRegionOptions.length === 0 ? 'region' : null,
+              summaryExemptionReasonOptions.length === 0 ? 'exemption reason' : null,
+            ]
+          : []),
+        ...(source === 'items' || source === 'summary-items'
+          ? [summaryProductTypeOptions.length === 0 ? 'product type' : null]
+          : []),
+        ...((source === 'items' || source === 'summary-items') &&
+        productTypeRequiresGrowthType(summaryForm?.productTypeCode ?? '')
+          ? [summaryGrowthTypeOptions.length === 0 ? 'age class' : null]
+          : []),
+      ].filter((label): label is string => label !== null)
     },
     [
       summaryExemptionReasonOptions.length,
@@ -1410,7 +1430,7 @@ const ProvincialApplicationDetailsPage = () => {
   )
   const summaryOptionsUnavailableForSource = useCallback(
     (source: SummarySaveSource): boolean =>
-      (source === 'summary' || source === 'items') &&
+      (source === 'summary' || source === 'summary-items' || source === 'items') &&
       (summaryOptionsAvailability !== 'available' ||
         missingSummaryOptionLabelsForSource(source).length > 0),
     [missingSummaryOptionLabelsForSource, summaryOptionsAvailability],
@@ -1460,6 +1480,7 @@ const ProvincialApplicationDetailsPage = () => {
               remark,
               user: result.remarkUser ?? null,
               date: result.remarkDate ? result.remarkDate.slice(0, 10) : null,
+              timestamp: result.remarkDate ?? null,
             }
           : null
 
@@ -1661,15 +1682,21 @@ const ProvincialApplicationDetailsPage = () => {
       const fields =
         source === 'agent'
           ? [...SUMMARY_SAVE_FIELDS.owner, ...SUMMARY_SAVE_FIELDS.agent]
-          : SUMMARY_SAVE_FIELDS[source]
+          : source === 'summary-items'
+            ? [...SUMMARY_SAVE_FIELDS.summary, ...SUMMARY_SAVE_FIELDS.items]
+            : SUMMARY_SAVE_FIELDS[source]
       return fields
         .map((field) => summaryFieldErrors[field])
         .filter((error): error is string => !!error)
     },
     [summaryFieldErrors],
   )
+  // A product-only change saves as items, so summary field errors no longer apply.
   const visibleSummaryFieldError = (field: ApplicationSummaryField): string | undefined =>
-    showSummaryValidationErrors ? summaryFieldErrors[field] : undefined
+    showSummaryValidationErrors &&
+    !(applicationSummarySaveSource === 'items' && SUMMARY_SAVE_FIELDS.summary.includes(field))
+      ? summaryFieldErrors[field]
+      : undefined
   const summarySpeciesCodesError = visibleSummaryFieldError('speciesCodes')
   const applicationSpeciesMultiSelectOptions = useMemo(() => {
     const options = applicationSpeciesOptions.map((option) => ({
@@ -2548,18 +2575,46 @@ const ProvincialApplicationDetailsPage = () => {
   }, [applicationNumber])
 
   const onOpenDocument = useCallback(
-    async (row: ProvincialApplicationDocumentRow) => {
-      if (!applicationNumber) {
-        return
+    async (row: ProvincialApplicationDocumentRow, preview = false) => {
+      if (!applicationNumber) return
+      const isCurrentRoute = isCurrentDocumentRouteRef.current
+      let previewTarget: Window | null = null
+      const closePendingPreview = () => {
+        if (previewTarget && pendingDocumentPreviewsRef.current.delete(previewTarget)) {
+          previewTarget.close()
+        }
       }
-
       setActionResult(null)
-
       try {
+        if (preview) {
+          // Reserve the tab during the click, before the authenticated document request.
+          previewTarget = window.open('about:blank', '_blank')
+          if (previewTarget) {
+            pendingDocumentPreviewsRef.current.add(previewTarget)
+            previewTarget.opener = null
+          }
+        }
         const result = await openApplicationDocument(row.id, row.name, applicationNumber)
-        triggerBrowserDownload(result.blob, result.filename || row.name)
+        if (!isCurrentRoute()) {
+          closePendingPreview()
+          return
+        }
+        if (preview) {
+          openDocumentPreview(result.blob, result.filename || row.name, previewTarget)
+        } else {
+          triggerBrowserDownload(result.blob, result.filename || row.name)
+        }
       } catch {
-        setActionResult({ kind: 'error', message: 'Unable to open the selected document.' })
+        closePendingPreview()
+        if (!isCurrentRoute()) return
+        setActionResult({
+          kind: 'error',
+          message: preview
+            ? 'Unable to open the selected document.'
+            : 'Unable to download the selected document.',
+        })
+      } finally {
+        if (previewTarget) pendingDocumentPreviewsRef.current.delete(previewTarget)
       }
     },
     [applicationNumber],
@@ -2630,6 +2685,7 @@ const ProvincialApplicationDetailsPage = () => {
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
     setIsEditingDocuments(false)
+    requestAnimationFrame(() => documentUploadLauncherRef.current?.focus())
   }, [])
 
   const onSaveRemark = useCallback(
@@ -2661,27 +2717,34 @@ const ProvincialApplicationDetailsPage = () => {
           return false
         }
 
-        const savedRemarkId = Number(result.remarkId)
-        const savedRemark = {
-          remarkId: Number.isFinite(savedRemarkId) ? savedRemarkId : null,
-          title: result.title || normalizedRemark,
-          remark: result.remark || normalizedRemark,
-          user: result.user || null,
-          date: null,
-        }
-        setDetail((current) =>
-          current
-            ? {
-                ...current,
-                remarks: [
-                  savedRemark,
-                  ...current.remarks.filter(
-                    (remark) => !savedRemark.remarkId || remark.remarkId !== savedRemark.remarkId,
-                  ),
-                ],
-              }
-            : current,
-        )
+        const parsedRemarkId = Number(result.remarkId)
+        const savedRemarkId = Number.isFinite(parsedRemarkId) ? parsedRemarkId : null
+        setDetail((current) => {
+          if (!current) {
+            return current
+          }
+          const existingRemark = savedRemarkId
+            ? current.remarks.find((remark) => remark.remarkId === savedRemarkId)
+            : undefined
+          const savedRemark = {
+            remarkId: savedRemarkId,
+            title: result.title || normalizedRemark,
+            remark: result.remark || normalizedRemark,
+            user: result.user || null,
+            // Edits keep their stored entry time; a new remark gets one from the detail reload.
+            date: existingRemark?.date ?? null,
+            timestamp: existingRemark?.timestamp ?? null,
+          }
+          return {
+            ...current,
+            remarks: [
+              savedRemark,
+              ...current.remarks.filter(
+                (remark) => !savedRemarkId || remark.remarkId !== savedRemarkId,
+              ),
+            ],
+          }
+        })
         if (refreshAfterSave) {
           const preservedSummaryForm = summaryForm
           const preservedSummaryBaselineForm = summaryBaselineForm
@@ -2866,6 +2929,17 @@ const ProvincialApplicationDetailsPage = () => {
         applicationStatusCode: summaryBaselineForm.applicationStatusCode,
         orgUnitNumber: summaryBaselineForm.orgUnitNumber,
         jurisdictionCode: summaryBaselineForm.jurisdictionCode,
+        productTypeCode: summaryBaselineForm.productTypeCode,
+        ...(SUMMARY_SAVE_FIELDS.items.some(
+          (field) => !formValuesEqual(current[field], summaryBaselineForm[field]),
+        ) && {
+          productLocation: summaryBaselineForm.productLocation,
+          growthTypeCode: summaryBaselineForm.growthTypeCode,
+          averageLogVolume: summaryBaselineForm.averageLogVolume,
+          applicationVolume: summaryBaselineForm.applicationVolume,
+          speciesCodes: summaryBaselineForm.speciesCodes,
+          endUseCode: summaryBaselineForm.endUseCode,
+        }),
       }
     })
     setIsEditingSummary(false)
@@ -2940,7 +3014,7 @@ const ProvincialApplicationDetailsPage = () => {
         return false
       }
       if (
-        source === 'items' &&
+        (source === 'items' || source === 'summary-items') &&
         (applicationItemsEditing || applicationItemsDirty || applicationItemsBusy)
       ) {
         setActionResult({
@@ -3014,7 +3088,7 @@ const ProvincialApplicationDetailsPage = () => {
         })
 
         if (
-          source === 'items' &&
+          (source === 'items' || source === 'summary-items') &&
           ['H', 'T'].includes(summaryRequestForm.productTypeCode.trim().toUpperCase()) &&
           !summaryVolumeWarningAccepted
         ) {
@@ -3051,14 +3125,14 @@ const ProvincialApplicationDetailsPage = () => {
             agentClientLocationCode: summaryRequestForm.agentClientLocationCode,
             agentContactName: summaryRequestForm.agentContactName,
           }),
-          ...(source === 'summary' && {
+          ...((source === 'summary' || source === 'summary-items') && {
             applicationDate: summaryRequestForm.applicationDate,
             termDays: summaryRequestForm.termDays.trim(),
             exemptionReasonCode: summaryRequestForm.exemptionReasonCode,
             exportScheduleId: summaryRequestForm.exportScheduleId,
             orgUnitNumber: summaryRequestForm.orgUnitNumber,
           }),
-          ...(source === 'items' && {
+          ...((source === 'items' || source === 'summary-items') && {
             applicationVolume: summaryRequestForm.applicationVolume,
             averageLogVolume: summaryRequestForm.averageLogVolume,
             productLocation: summaryRequestForm.productLocation,
@@ -3145,7 +3219,7 @@ const ProvincialApplicationDetailsPage = () => {
   const completeSummarySave = useCallback(
     async (source: SummarySaveSource, accuracyAcknowledged = false): Promise<boolean> => {
       const saved = await onSaveSummary(source, true, accuracyAcknowledged)
-      if (saved && source === 'summary') {
+      if (saved && (source === 'summary' || source === 'summary-items')) {
         setIsEditingSummary(false)
       }
       if (saved && source === 'owner') {
@@ -3156,13 +3230,16 @@ const ProvincialApplicationDetailsPage = () => {
         setIsEditingOwnerDetails(false)
         setActionResult({ kind: 'success', message: 'Applicant details saved.' })
       }
-      if (saved && source === 'items') {
+      // Item saves also come from the Application editor when only the product type changed.
+      if (saved && source === 'items' && isEditingApplicationItems) {
         setIsEditingApplicationItems(false)
         setActionResult({ kind: 'success', message: 'Application item details saved.' })
+      } else if (saved && source === 'items') {
+        setIsEditingSummary(false)
       }
       return saved
     },
-    [onSaveSummary],
+    [isEditingApplicationItems, onSaveSummary],
   )
 
   const onCancelReviewEditing = useCallback(() => {
@@ -3527,7 +3604,7 @@ const ProvincialApplicationDetailsPage = () => {
       ? isSummaryAgentApplicant
         ? 'agent'
         : 'owner'
-      : 'summary'
+      : applicationSummarySaveSource
   const activeMissingSummaryOptionLabels =
     missingSummaryOptionLabelsForSource(activeSummarySaveSource)
   const activeRequiredSummaryOptionsMissing =
@@ -3677,14 +3754,19 @@ const ProvincialApplicationDetailsPage = () => {
     optionDescription(regionOptions, summaryForm?.orgUnitNumber) ||
     detail?.orgUnitName ||
     String(detail?.orgUnitNumber ?? '')
-  const summaryGrowthTypeDescription = optionDescription(
-    growthTypeOptions,
-    summaryForm?.growthTypeCode,
+  // Read-only Scale details show saved values while the Application editor holds a product change.
+  const savedScaleForm = summaryBaselineForm ?? summaryForm
+  const savedProductTypeCode = savedScaleForm?.productTypeCode ?? detail?.productTypeCode ?? ''
+  const savedProductTypeHasGrowthDetails = productTypeRequiresGrowthType(savedProductTypeCode)
+  const savedProductTypeHasLogDetails = productTypeRequiresLogDetails(savedProductTypeCode)
+  const savedGrowthTypeDescription = optionDescription(
+    optionsWithCurrentValue(summaryGrowthTypeOptions, savedScaleForm?.growthTypeCode ?? ''),
+    savedScaleForm?.growthTypeCode,
   )
-  const summaryEndUseCode = summaryForm?.endUseCode.trim() ?? ''
-  const summaryEndUseDescription =
-    applicationEndUseOptions.find((option) => option.code === summaryEndUseCode)?.description ??
-    summaryEndUseCode
+  const savedEndUseCode = savedScaleForm?.endUseCode.trim() ?? ''
+  const savedEndUseDescription =
+    applicationEndUseOptions.find((option) => option.code === savedEndUseCode)?.description ??
+    savedEndUseCode
   const ownerClientDetailFields: Array<[string, string]> = [
     ['Client number', summaryForm?.ownerClientNumber ?? String(detail?.ownerClientNumber ?? '')],
     ['Applicant type', ownerApplicantTypeLabel],
@@ -3863,12 +3945,124 @@ const ProvincialApplicationDetailsPage = () => {
   // Figma places each tab's add action in its empty state, and above the list once rows exist.
   const showsEmptyApplicationDocuments =
     documentLookupAvailability === 'available' && !hasApplicationDocuments
+  const applicationScaleForm = summaryForm && (
+    <div className="legacy-search-grid application-scale-form">
+      {summaryProductTypeHasLogDetails && (
+        <TextArea
+          className="application-scale-form__location"
+          id="applicationSummaryProductLocation"
+          labelText={requiredLabel('Location of logs')}
+          aria-required="true"
+          enableCounter
+          maxCount={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
+          maxLength={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
+          value={summaryForm.productLocation}
+          invalid={Boolean(visibleSummaryFieldError('productLocation'))}
+          invalidText={visibleSummaryFieldError('productLocation')}
+          onChange={(event) => onSummaryFormChange('productLocation', event.target.value)}
+        />
+      )}
+      {summaryProductTypeHasGrowthDetails && (
+        <SearchableSelect
+          id="applicationSummaryGrowthType"
+          labelText={requiredLabel('Age class')}
+          required
+          value={summaryForm.growthTypeCode}
+          invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
+          invalidText={visibleSummaryFieldError('growthTypeCode')}
+          disabled={
+            summaryOptionsAvailability !== 'available' || summaryGrowthTypeOptions.length === 0
+          }
+          placeholder="Select age class"
+          options={optionsWithCurrentValue(growthTypeOptions, summaryForm.growthTypeCode)}
+          onChange={(value) => onSummaryFormChange('growthTypeCode', value.toUpperCase())}
+        />
+      )}
+      {summaryProductTypeHasLogDetails && (
+        <TextInput
+          id="applicationSummaryAverageLogVolume"
+          labelText={requiredLabel('Average log volume (m³)')}
+          aria-required="true"
+          type="number"
+          min={0}
+          max={99.9}
+          step="0.1"
+          value={summaryForm.averageLogVolume}
+          invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
+          invalidText={visibleSummaryFieldError('averageLogVolume')}
+          onChange={(event) => onSummaryFormChange('averageLogVolume', event.target.value)}
+        />
+      )}
+      <TextInput
+        id="applicationSummaryVolume"
+        labelText={requiredLabel('Application volume (m³)')}
+        aria-required="true"
+        type="number"
+        min={0}
+        step="0.1"
+        value={summaryForm.applicationVolume}
+        invalid={Boolean(visibleSummaryFieldError('applicationVolume'))}
+        invalidText={visibleSummaryFieldError('applicationVolume')}
+        onChange={(event) => onSummaryFormChange('applicationVolume', event.target.value)}
+      />
+      <FilterableMultiSelect
+        id="applicationSummarySpecies"
+        titleText={requiredLabel('Species list')}
+        items={applicationSpeciesMultiSelectOptions}
+        itemToString={(item) => item?.text ?? ''}
+        selectedItems={selectedApplicationSpeciesOptions}
+        placeholder="Select species"
+        inputProps={{ 'aria-required': true }}
+        disabled={applicationSpeciesMultiSelectOptions.length === 0}
+        invalid={Boolean(summarySpeciesCodesError)}
+        invalidText={summarySpeciesCodesError}
+        onChange={({ selectedItems }) => {
+          setSummaryForm((current) =>
+            current
+              ? {
+                  ...current,
+                  speciesCodes: selectedItems.map((item) => item.id),
+                }
+              : current,
+          )
+          setSummaryVolumeWarningAccepted(false)
+          setActionResult(withoutVolumeWarning)
+        }}
+      />
+      {summarySpeciesCodesError && applicationSpeciesMultiSelectOptions.length === 0 && (
+        <p className="legacy-search-error" role="alert">
+          {summarySpeciesCodesError}
+        </p>
+      )}
+      {summaryProductTypeHasGrowthDetails && (
+        <SearchableSelect
+          id="applicationSummaryEndUse"
+          labelText="End use"
+          value={summaryForm.endUseCode}
+          disabled={
+            summaryForm.speciesCodes.length === 0 || applicationEndUseSelectOptions.length === 0
+          }
+          placeholder={endUsePlaceholder}
+          options={applicationEndUseSelectOptions}
+          onChange={(value) => onSummaryFormChange('endUseCode', value)}
+        />
+      )}
+      {productTypeSupportsPackages(summaryProductTypeCode) && (
+        <dl className="detail-field-item">
+          <dt className="detail-field-label">Application total pieces</dt>
+          <dd className="detail-field-value">{applicationTotalPieces.toLocaleString()}</dd>
+        </dl>
+      )}
+    </div>
+  )
+
   const addApplicationDocumentsButton =
     canAddApplicationDocuments && !isEditingDocuments ? (
       <Button
         kind="tertiary"
         size="sm"
         renderIcon={Add}
+        ref={documentUploadLauncherRef}
         onClick={() => setIsEditingDocuments(true)}
       >
         Add documents
@@ -3971,6 +4165,7 @@ const ProvincialApplicationDetailsPage = () => {
                   undefined
                 }
                 helperText="Saved to the Remarks tab."
+                enableCounter
                 maxCount={APPLICATION_REMARK_MAX_LENGTH}
                 maxLength={APPLICATION_REMARK_MAX_LENGTH}
                 invalid={isReviewRemarkInvalid}
@@ -4079,7 +4274,9 @@ const ProvincialApplicationDetailsPage = () => {
                     reviewStatusCode,
                 ),
               ],
-              ['Remarks', displayValue(reviewStatusRemarkBaseline)],
+              ...(reviewStatusRemarkBaseline.trim()
+                ? [['Remarks', reviewStatusRemarkBaseline]]
+                : []),
               ...(sentReviewEmail?.applicationNumber === String(detail.applicationNumber)
                 ? [['Client email address', sentReviewEmail.address]]
                 : []),
@@ -4269,7 +4466,7 @@ const ProvincialApplicationDetailsPage = () => {
                         id="application-owner-details"
                         className="application-detail-section application-detail-clients"
                       >
-                        <div className="detail-section-card__header detail-section-card__header--actions-only">
+                        <div className="detail-section-card__header">
                           <h2 className="detail-tile-title">Applicant details</h2>
                           {canEditSummary &&
                             summaryForm &&
@@ -4643,6 +4840,27 @@ const ProvincialApplicationDetailsPage = () => {
                                 )}
                                 onChange={(value) => onSummaryFormChange('orgUnitNumber', value)}
                               />
+
+                              <SearchableSelect
+                                id="applicationSummaryProductType"
+                                labelText={requiredLabel('Product type')}
+                                required
+                                value={summaryForm.productTypeCode}
+                                invalid={Boolean(visibleSummaryFieldError('productTypeCode'))}
+                                invalidText={visibleSummaryFieldError('productTypeCode')}
+                                disabled={
+                                  summaryOptionsAvailability !== 'available' ||
+                                  summaryProductTypeOptions.length === 0
+                                }
+                                placeholder="Select product type"
+                                options={optionsWithCurrentValue(
+                                  productTypeOptions,
+                                  summaryForm.productTypeCode,
+                                )}
+                                onChange={(value) =>
+                                  onSummaryFormChange('productTypeCode', value.toUpperCase())
+                                }
+                              />
                               <SearchableSelect
                                 id="applicationSummaryExemptionReason"
                                 labelText={requiredLabel('Exemption reason')}
@@ -4733,20 +4951,20 @@ const ProvincialApplicationDetailsPage = () => {
                                 readOnly
                               />
                             </div>
-                            <div className="legacy-search-actions">
-                              <Button
-                                kind="primary"
-                                size="sm"
-                                disabled={
-                                  isSavingSummary ||
-                                  summaryOptionsUnavailableForSource('summary') ||
-                                  isSummaryClientLookupPendingForSource('summary')
-                                }
-                                renderIcon={isSavingSummary ? PendingIcon : undefined}
-                                onClick={() => onRequestSaveSummary('summary')}
+                            {summaryScaleFieldsChanged && (
+                              <section
+                                className="application-product-scale-details"
+                                aria-label="Scale details for changed product type"
                               >
-                                {isSavingSummary ? 'Saving…' : 'Save Summary'}
-                              </Button>
+                                <h3 className="detail-tile-title">Scale details</h3>
+                                <p>
+                                  Review the scale details for the selected product type before
+                                  saving.
+                                </p>
+                                {applicationScaleForm}
+                              </section>
+                            )}
+                            <div className="legacy-search-actions">
                               <Button
                                 kind="tertiary"
                                 size="sm"
@@ -4755,12 +4973,28 @@ const ProvincialApplicationDetailsPage = () => {
                               >
                                 Cancel
                               </Button>
+                              <Button
+                                kind="primary"
+                                size="sm"
+                                disabled={
+                                  isSavingSummary ||
+                                  summaryOptionsUnavailableForSource(
+                                    applicationSummarySaveSource,
+                                  ) ||
+                                  isSummaryClientLookupPendingForSource('summary')
+                                }
+                                renderIcon={isSavingSummary ? PendingIcon : undefined}
+                                onClick={() => onRequestSaveSummary(applicationSummarySaveSource)}
+                              >
+                                {isSavingSummary ? 'Saving…' : 'Save changes'}
+                              </Button>
                             </div>
                           </>
                         ) : (
                           <dl className="detail-field-grid">
                             {[
                               ['Region', displayValue(summaryRegionDescription)],
+                              ['Product type', displayValue(summaryProductTypeDescription)],
                               ['List date', displayValue(detail.listingDate)],
                               ['Jurisdiction', displayValue(summaryJurisdictionLabel)],
                               ['Exemption reason', displayValue(summaryExemptionReasonDescription)],
@@ -4814,150 +5048,16 @@ const ProvincialApplicationDetailsPage = () => {
                         </div>
                         {isEditingApplicationItems && canEditSummary && summaryForm ? (
                           <>
-                            <div className="legacy-search-grid">
-                              <SearchableSelect
-                                id="applicationSummaryProductType"
-                                labelText={requiredLabel('Product type')}
-                                required
-                                value={summaryForm.productTypeCode}
-                                invalid={Boolean(visibleSummaryFieldError('productTypeCode'))}
-                                invalidText={visibleSummaryFieldError('productTypeCode')}
-                                disabled={
-                                  summaryOptionsAvailability !== 'available' ||
-                                  summaryProductTypeOptions.length === 0
-                                }
-                                placeholder="Select product type"
-                                options={optionsWithCurrentValue(
-                                  productTypeOptions,
-                                  summaryForm.productTypeCode,
-                                )}
-                                onChange={(value) =>
-                                  onSummaryFormChange('productTypeCode', value.toUpperCase())
-                                }
-                              />
-                              {summaryProductTypeHasLogDetails && (
-                                <TextArea
-                                  id="applicationSummaryProductLocation"
-                                  labelText={requiredLabel('Location of logs')}
-                                  aria-required="true"
-                                  enableCounter
-                                  maxCount={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
-                                  maxLength={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
-                                  value={summaryForm.productLocation}
-                                  invalid={Boolean(visibleSummaryFieldError('productLocation'))}
-                                  invalidText={visibleSummaryFieldError('productLocation')}
-                                  onChange={(event) =>
-                                    onSummaryFormChange('productLocation', event.target.value)
-                                  }
-                                />
-                              )}
-                              {summaryProductTypeHasGrowthDetails && (
-                                <SearchableSelect
-                                  id="applicationSummaryGrowthType"
-                                  labelText={requiredLabel('Age class')}
-                                  required
-                                  value={summaryForm.growthTypeCode}
-                                  invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
-                                  invalidText={visibleSummaryFieldError('growthTypeCode')}
-                                  disabled={
-                                    summaryOptionsAvailability !== 'available' ||
-                                    summaryGrowthTypeOptions.length === 0
-                                  }
-                                  placeholder="Select age class"
-                                  options={optionsWithCurrentValue(
-                                    growthTypeOptions,
-                                    summaryForm.growthTypeCode,
-                                  )}
-                                  onChange={(value) =>
-                                    onSummaryFormChange('growthTypeCode', value.toUpperCase())
-                                  }
-                                />
-                              )}
-                              {summaryProductTypeHasLogDetails && (
-                                <TextInput
-                                  id="applicationSummaryAverageLogVolume"
-                                  labelText={requiredLabel('Average log volume (m³)')}
-                                  aria-required="true"
-                                  type="number"
-                                  min={0}
-                                  max={99.9}
-                                  step="0.1"
-                                  value={summaryForm.averageLogVolume}
-                                  invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
-                                  invalidText={visibleSummaryFieldError('averageLogVolume')}
-                                  onChange={(event) =>
-                                    onSummaryFormChange('averageLogVolume', event.target.value)
-                                  }
-                                />
-                              )}
-                              <TextInput
-                                id="applicationSummaryVolume"
-                                labelText={requiredLabel('Application volume (m³)')}
-                                aria-required="true"
-                                type="number"
-                                min={0}
-                                step="0.1"
-                                value={summaryForm.applicationVolume}
-                                invalid={Boolean(visibleSummaryFieldError('applicationVolume'))}
-                                invalidText={visibleSummaryFieldError('applicationVolume')}
-                                onChange={(event) =>
-                                  onSummaryFormChange('applicationVolume', event.target.value)
-                                }
-                              />
-                              <FilterableMultiSelect
-                                id="applicationSummarySpecies"
-                                titleText={requiredLabel('Species list')}
-                                items={applicationSpeciesMultiSelectOptions}
-                                itemToString={(item) => item?.text ?? ''}
-                                selectedItems={selectedApplicationSpeciesOptions}
-                                placeholder="Select species"
-                                inputProps={{ 'aria-required': true }}
-                                disabled={applicationSpeciesMultiSelectOptions.length === 0}
-                                invalid={Boolean(summarySpeciesCodesError)}
-                                invalidText={summarySpeciesCodesError}
-                                onChange={({ selectedItems }) => {
-                                  setSummaryForm((current) =>
-                                    current
-                                      ? {
-                                          ...current,
-                                          speciesCodes: selectedItems.map((item) => item.id),
-                                        }
-                                      : current,
-                                  )
-                                  setSummaryVolumeWarningAccepted(false)
-                                  setActionResult(withoutVolumeWarning)
-                                }}
-                              />
-                              {summarySpeciesCodesError &&
-                                applicationSpeciesMultiSelectOptions.length === 0 && (
-                                  <p className="legacy-search-error" role="alert">
-                                    {summarySpeciesCodesError}
-                                  </p>
-                                )}
-                              {summaryProductTypeHasGrowthDetails && (
-                                <SearchableSelect
-                                  id="applicationSummaryEndUse"
-                                  labelText="End use"
-                                  value={summaryForm.endUseCode}
-                                  disabled={
-                                    summaryForm.speciesCodes.length === 0 ||
-                                    applicationEndUseSelectOptions.length === 0
-                                  }
-                                  placeholder={endUsePlaceholder}
-                                  options={applicationEndUseSelectOptions}
-                                  onChange={(value) => onSummaryFormChange('endUseCode', value)}
-                                />
-                              )}
-                              {applicationProductSupportsPackages && (
-                                <dl className="detail-field-item">
-                                  <dt className="detail-field-label">Application total pieces</dt>
-                                  <dd className="detail-field-value">
-                                    {applicationTotalPieces.toLocaleString()}
-                                  </dd>
-                                </dl>
-                              )}
-                            </div>
+                            {applicationScaleForm}
                             <div className="legacy-search-actions">
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                disabled={isSavingSummary}
+                                onClick={onCancelApplicationItemDetails}
+                              >
+                                Cancel
+                              </Button>
                               <Button
                                 kind="primary"
                                 size="sm"
@@ -4974,41 +5074,40 @@ const ProvincialApplicationDetailsPage = () => {
                               >
                                 {isSavingSummary ? 'Saving…' : 'Save changes'}
                               </Button>
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                disabled={isSavingSummary}
-                                onClick={onCancelApplicationItemDetails}
-                              >
-                                Cancel
-                              </Button>
                             </div>
                           </>
                         ) : (
                           <dl className="detail-field-grid">
                             {[
-                              ['Product type', displayValue(summaryProductTypeDescription)],
-                              ...(summaryProductTypeHasLogDetails
-                                ? [['Location of logs', displayValue(summaryForm?.productLocation)]]
+                              ...(savedProductTypeHasLogDetails
+                                ? [
+                                    [
+                                      'Location of logs',
+                                      displayValue(savedScaleForm?.productLocation),
+                                    ],
+                                  ]
                                 : []),
-                              ...(summaryProductTypeHasGrowthDetails
-                                ? [['Age class', displayValue(summaryGrowthTypeDescription)]]
+                              ...(savedProductTypeHasGrowthDetails
+                                ? [['Age class', displayValue(savedGrowthTypeDescription)]]
                                 : []),
-                              ...(summaryProductTypeHasLogDetails
+                              ...(savedProductTypeHasLogDetails
                                 ? [
                                     [
                                       'Average log volume (m³)',
-                                      displayValue(summaryForm?.averageLogVolume),
+                                      displayValue(savedScaleForm?.averageLogVolume),
                                     ],
                                   ]
                                 : []),
                               [
                                 'Application volume (m³)',
-                                displayValue(summaryForm?.applicationVolume),
+                                displayValue(savedScaleForm?.applicationVolume),
                               ],
-                              ['Species list', displayValue(summaryForm?.speciesCodes.join(', '))],
-                              ...(summaryProductTypeHasGrowthDetails
-                                ? [['End use', displayValue(summaryEndUseDescription)]]
+                              [
+                                'Species list',
+                                displayValue(savedScaleForm?.speciesCodes.join(', ')),
+                              ],
+                              ...(savedProductTypeHasGrowthDetails
+                                ? [['End use', displayValue(savedEndUseDescription)]]
                                 : []),
                               ...(applicationProductSupportsPackages
                                 ? [
@@ -5122,6 +5221,11 @@ const ProvincialApplicationDetailsPage = () => {
                               inputId="applicationDocumentUpload"
                               disabled={!detail.applicationNumber}
                               presentation="side-panel"
+                              drawer={{
+                                contentSelector: '.provincial-application-detail',
+                                fallbackFocusSelector: '#application-documents button',
+                                launcherRef: documentUploadLauncherRef,
+                              }}
                               initiallyOpen
                               onClose={onCancelDocumentEditing}
                               onDirtyChange={setDocumentUploadDirty}
@@ -5205,9 +5309,17 @@ const ProvincialApplicationDetailsPage = () => {
                                             kind="ghost"
                                             size="sm"
                                             renderIcon={Launch}
-                                            onClick={() => void onOpenDocument(row)}
+                                            onClick={() => void onOpenDocument(row, true)}
                                           >
                                             Open
+                                          </Button>
+                                          <Button
+                                            kind="ghost"
+                                            size="sm"
+                                            renderIcon={Download}
+                                            onClick={() => void onOpenDocument(row)}
+                                          >
+                                            Download
                                           </Button>
                                           {canDeleteDocuments && (
                                             <Button
@@ -5274,18 +5386,22 @@ const ProvincialApplicationDetailsPage = () => {
                                 <Table size="md" useZebraStyles>
                                   <TableHead>
                                     <TableRow>
-                                      <TableHeader>Date</TableHeader>
+                                      <TableHeader>Date and time</TableHeader>
                                       <TableHeader>User</TableHeader>
                                       <TableHeader>Remark</TableHeader>
                                       {canManageRemarks && <TableHeader>Actions</TableHeader>}
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
-                                    {detail.remarks.map((item) => (
+                                    {newestRemarksFirst(detail.remarks).map((item) => (
                                       <TableRow
                                         key={item.remarkId ?? `${item.title}-${item.remark}`}
                                       >
-                                        <TableCell>{displayValue(item.date)}</TableCell>
+                                        <TableCell>
+                                          {item.timestamp
+                                            ? formatBusinessDateTime(item.timestamp)
+                                            : displayValue(item.date)}
+                                        </TableCell>
                                         <TableCell>{displayValue(item.user)}</TableCell>
                                         <TableCell>{item.remark}</TableCell>
                                         {canManageRemarks && (
@@ -5413,10 +5529,8 @@ const ProvincialApplicationDetailsPage = () => {
             open
             confirmed={summaryAccuracyConfirmed}
             busy={isSavingSummary}
-            confirmLabel={pendingSummarySaveSource === 'summary' ? 'Save summary' : 'Save changes'}
-            pendingLabel={
-              pendingSummarySaveSource === 'summary' ? 'Saving summary…' : 'Saving changes…'
-            }
+            confirmLabel="Save changes"
+            pendingLabel={'Saving changes…'}
             onConfirmedChange={setSummaryAccuracyConfirmed}
             onConfirm={onConfirmSummaryAccuracy}
             onClose={closeSummaryAccuracyConfirmation}

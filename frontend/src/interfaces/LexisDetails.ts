@@ -39,6 +39,7 @@ export type ProvincialApplicationDetail = {
     remark: string
     user?: string | null
     date?: string | null
+    timestamp?: string | null
   }[]
   offers: {
     offerNumber: string

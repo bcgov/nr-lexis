@@ -738,7 +738,8 @@ public class ApplicationDetailsRpcController {
 
     ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request =
         toApplicationSummaryUpdateRequest(parameters, saveSource);
-    if (saveSource == ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY
+    if ((saveSource == ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY
+            || saveSource == ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY_ITEMS)
         && request.exportScheduleId() == null
         && requiresListDate(authentication)) {
       return listDateRequired(request.applicationNumber());
@@ -1625,6 +1626,8 @@ public class ApplicationDetailsRpcController {
               Long saved =
                   request.saveSource()
                               == ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY
+                          || request.saveSource()
+                              == ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY_ITEMS
                           || requested != null
                       ? requested
                       : snapshot.exportScheduleId();

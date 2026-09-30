@@ -12,6 +12,11 @@ vi.mock('@/service/admin-upload-service', () => ({
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 
+const applicationDrawer = {
+  contentSelector: '.test-page-content',
+  fallbackFocusSelector: '#test-documents button',
+}
+
 const openUploadForm = async (label = 'Add document'): Promise<void> => {
   await userEvent.click(screen.getByRole('button', { name: label }))
 }
@@ -99,6 +104,179 @@ describe('DetailDocumentUploadPanel', () => {
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('saves application documents directly from the side panel with per-file descriptions', async () => {
+    const onClose = vi.fn()
+    const onUploadComplete = vi.fn()
+    mockedSubmitAdminUpload.mockResolvedValue({ message: 'Document uploaded.' })
+    const file = new File(['document'], 'application.pdf', { type: 'application/pdf' })
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        presentation="side-panel"
+        drawer={applicationDrawer}
+        initiallyOpen
+        onClose={onClose}
+        onUploadComplete={onUploadComplete}
+      />,
+    )
+
+    const panel = screen.getByRole('complementary', { name: 'Add documents' })
+    expect(panel).toHaveClass('detail-document-upload-panel')
+    expect(within(panel).queryByRole('button', { name: 'Review upload' })).not.toBeInTheDocument()
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save documents' }))
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose at least one file to upload.')
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    expect(within(panel).getByText('Required fields')).toBeVisible()
+    expect(within(panel).getByText('Files')).toBeVisible()
+    expect(within(panel).getByRole('list', { name: 'Selected files' })).toBeVisible()
+    expect(within(panel).queryByRole('table')).not.toBeInTheDocument()
+    expect(within(panel).queryByText(/Continue to review/)).not.toBeInTheDocument()
+    expect(
+      within(panel).getByText("Say what the document is, if the file name doesn't make it clear."),
+    ).toBeVisible()
+    await waitFor(() =>
+      expect(within(panel).getByRole('button', { name: 'Remove application.pdf' })).toBeEnabled(),
+    )
+    await userEvent.type(screen.getByLabelText(/Document description for application.pdf/), 'Test')
+    await waitFor(() =>
+      expect(within(panel).getByRole('button', { name: 'Save documents' })).toBeEnabled(),
+    )
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save documents' }))
+
+    await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1))
+    expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+      'application',
+      expect.objectContaining({ applicationNumber: '321', file, fileDescription: 'Test' }),
+    )
+    expect(onUploadComplete).toHaveBeenCalledTimes(1)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('retries only a failed application file from the direct side panel', async () => {
+    mockedSubmitAdminUpload
+      .mockResolvedValueOnce({ message: 'First document uploaded.' })
+      .mockRejectedValueOnce(new Error('Second document failed.'))
+      .mockResolvedValueOnce({ message: 'Second document uploaded.' })
+    const first = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+    const second = new File(['second'], 'second.pdf', { type: 'application/pdf' })
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        presentation="side-panel"
+        drawer={applicationDrawer}
+        initiallyOpen
+      />,
+    )
+
+    await userEvent.upload(screen.getByLabelText('Document File'), [first, second])
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save documents' })).toBeEnabled(),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
+    expect(await screen.findByText(/1 file failed\. Review the queue for details\./)).toBeVisible()
+    expect(screen.getByLabelText(/Document description for first.pdf/)).toBeDisabled()
+    expect(screen.getByLabelText(/Document description for second.pdf/)).toBeEnabled()
+    await userEvent.type(screen.getByLabelText(/Document description for second.pdf/), 'Retry')
+    await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
+
+    await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(3))
+    expect(mockedSubmitAdminUpload).toHaveBeenNthCalledWith(
+      3,
+      'application',
+      expect.objectContaining({ file: second, fileDescription: 'Retry' }),
+    )
+    expect(
+      mockedSubmitAdminUpload.mock.calls.filter(([, request]) => request.file === first),
+    ).toHaveLength(1)
+  })
+
+  it('locks application file selection while documents are saving', async () => {
+    let resolveUpload!: (value: Awaited<ReturnType<typeof submitAdminUpload>>) => void
+    mockedSubmitAdminUpload.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveUpload = resolve
+      }),
+    )
+    const onClose = vi.fn()
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        presentation="side-panel"
+        drawer={applicationDrawer}
+        initiallyOpen
+        onClose={onClose}
+      />,
+    )
+
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['first'], 'test-2026-09-29-first.pdf', { type: 'application/pdf' }),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save documents' })).toBeEnabled(),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
+
+    const fileInput = screen.getByLabelText('Document File')
+    await waitFor(() => expect(fileInput).toBeDisabled())
+    expect(screen.getByText('Upload is submitting.')).toBeVisible()
+
+    await act(async () => {
+      resolveUpload({ message: 'Document uploaded.' })
+    })
+    await waitFor(() => expect(onClose).toHaveBeenCalledTimes(1))
+    expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
+  })
+
+  it('keeps an application document draft until side-panel discard is confirmed', async () => {
+    const onClose = vi.fn()
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        presentation="side-panel"
+        drawer={applicationDrawer}
+        initiallyOpen
+        onClose={onClose}
+      />,
+    )
+
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      new File(['draft'], 'draft.pdf', { type: 'application/pdf' }),
+    )
+    await userEvent.type(screen.getByLabelText(/Document description for draft.pdf/), 'Keep draft')
+    const panel = screen.getByRole('complementary', { name: 'Add documents' })
+    const cancel = within(panel).getByRole('button', { name: 'Cancel' })
+    await userEvent.click(cancel)
+    expect(panel).toBeInTheDocument()
+    expect(screen.getByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument()
+    expect(onClose).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+    await waitFor(() => expect(cancel).toHaveFocus())
+    expect(screen.getByLabelText(/Document description for draft.pdf/)).toHaveValue('Keep draft')
+
+    await userEvent.click(cancel)
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Keep editing' })).toHaveFocus())
+    await userEvent.keyboard('{Escape}')
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    await waitFor(() => expect(cancel).toHaveFocus())
+    expect(onClose).not.toHaveBeenCalled()
+
+    await userEvent.click(cancel)
+    await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+    expect(onClose).toHaveBeenCalledTimes(1)
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
   it('preserves side-panel files and descriptions until discard is confirmed, ignoring late validation', async () => {

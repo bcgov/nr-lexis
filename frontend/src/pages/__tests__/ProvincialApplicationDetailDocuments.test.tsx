@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import type { fetchApplicationDocuments } from '@/service/provincial-application-documents-service'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   setupApplicationDetailTests,
   NavigateButton,
@@ -20,14 +20,20 @@ import {
   selectApplicationDocumentsForEditing,
 } from './ProvincialApplicationDetailActions.support'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
+import { openDocumentPreview } from '@/utils/document-preview'
+import { triggerBrowserDownload } from '@/utils/download'
+
+vi.mock('@/utils/document-preview', () => ({ openDocumentPreview: vi.fn() }))
+vi.mock('@/utils/download', () => ({ triggerBrowserDownload: vi.fn() }))
 
 const openDocumentUploadModal = async (): Promise<void> => {
   await userEvent.click(await screen.findByRole('button', { name: 'Add documents' }))
-  await screen.findByRole('dialog', { name: 'Add documents' })
+  await screen.findByRole('complementary', { name: 'Add documents' })
 }
 
 describe.sequential('Provincial Application Detail Actions - documents', () => {
   beforeEach(setupApplicationDetailTests)
+  afterEach(() => vi.restoreAllMocks())
 
   it('keeps permit-based document upload notices on the Documents tab', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
@@ -122,7 +128,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Upload Application Document' })).toBeNull()
     expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Add documents' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: 'Add documents' })).not.toBeInTheDocument()
   })
 
   it('shows the application document modal to a scoped Provincial Submitter', async () => {
@@ -326,9 +332,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await userEvent.type(screen.getByLabelText(/Document description/), 'Uploaded')
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Save documents' })).toBeEnabled()
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
 
     await waitFor(() => {
@@ -396,9 +401,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     await userEvent.type(screen.getByLabelText(/Document description/), 'Uploaded')
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Save documents' })).toBeEnabled()
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
 
     expect(await screen.findByText('uploaded-doc.pdf')).toBeInTheDocument()
@@ -463,8 +467,9 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       screen.getByLabelText(/Document description for second.pdf/),
       'Second document',
     )
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled())
-    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save documents' })).toBeEnabled(),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
 
     await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2))
@@ -486,7 +491,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
 
     expect(await screen.findByText(/1 file failed/)).toBeInTheDocument()
     expect(screen.getAllByText('second.pdf').length).toBeGreaterThan(0)
-    expect(screen.getByRole('dialog', { name: 'Add documents' })).toBeInTheDocument()
+    expect(screen.getByRole('complementary', { name: 'Add documents' })).toBeInTheDocument()
   })
 
   it('includes queued document uploads in application dirty-state protection', async () => {
@@ -511,12 +516,14 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       screen.getByLabelText('Document File'),
       new File(['queued'], 'queued-doc.pdf', { type: 'application/pdf' }),
     )
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Remove' })).toBeEnabled())
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Remove queued-doc.pdf' })).toBeEnabled(),
+    )
     const queuedUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(queuedUnload)
     expect(queuedUnload.defaultPrevented).toBe(true)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove queued-doc.pdf' }))
     const clearedUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(clearedUnload)
     expect(clearedUnload.defaultPrevented).toBe(false)
@@ -534,7 +541,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       ],
       source: 'api',
     })
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue({} as Window)
+    const previewTarget = { close: vi.fn(), opener: window } as unknown as Window
+    const openSpy = vi.spyOn(window, 'open').mockReturnValue(previewTarget)
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -559,7 +567,85 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     await waitFor(() => {
       expect(mockedOpenApplicationDocument).toHaveBeenCalledWith('100', 'app-doc.pdf', '321')
     })
-    expect(openSpy).not.toHaveBeenCalled()
+    expect(openSpy).toHaveBeenCalledWith('about:blank', '_blank')
+    expect(previewTarget.opener).toBeNull()
+    expect(openDocumentPreview).toHaveBeenCalledWith(expect.any(Blob), 'app-doc.pdf', previewTarget)
+    expect(triggerBrowserDownload).not.toHaveBeenCalled()
+
+    await userEvent.click(
+      within(documentRow as HTMLElement).getByRole('button', { name: 'Download' }),
+    )
+    await waitFor(() =>
+      expect(triggerBrowserDownload).toHaveBeenCalledWith(expect.any(Blob), 'app-doc.pdf'),
+    )
+    expect(openSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it('closes a reserved preview when navigation makes its document response stale', async () => {
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [{ id: '100', name: 'app-doc.pdf', description: '', type: 'Attachment' }],
+      source: 'api',
+    })
+    let resolveDocument:
+      | ((result: Awaited<ReturnType<typeof mockedOpenApplicationDocument>>) => void)
+      | undefined
+    mockedOpenApplicationDocument.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveDocument = resolve
+        }),
+    )
+    const previewTarget = { close: vi.fn(), opener: window } as unknown as Window
+    vi.spyOn(window, 'open').mockReturnValue(previewTarget)
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={
+              <>
+                <NavigateButton to="/provincial/application/654" />
+                <ProvincialApplicationDetailsPage />
+              </>
+            }
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await selectApplicationDetailTab('Documents')
+    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Navigate application' }))
+    await waitFor(() => expect(previewTarget.close).toHaveBeenCalledTimes(1))
+    await act(async () => {
+      resolveDocument?.({ source: 'api', blob: new Blob(['late']), filename: 'app-doc.pdf' })
+    })
+    expect(openDocumentPreview).not.toHaveBeenCalled()
+    expect(triggerBrowserDownload).not.toHaveBeenCalled()
+  })
+
+  it('closes a reserved preview and reports a failed authenticated document read', async () => {
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [{ id: '100', name: 'app-doc.pdf', description: '', type: 'Attachment' }],
+      source: 'api',
+    })
+    mockedOpenApplicationDocument.mockRejectedValueOnce(new Error('Document unavailable'))
+    const previewTarget = { close: vi.fn(), opener: window } as unknown as Window
+    vi.spyOn(window, 'open').mockReturnValue(previewTarget)
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await selectApplicationDetailTab('Documents')
+    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    expect(await screen.findByText('Unable to open the selected document.')).toBeInTheDocument()
+    expect(previewTarget.close).toHaveBeenCalledTimes(1)
+    expect(openDocumentPreview).not.toHaveBeenCalled()
   })
 
   it('removes application documents and refreshes rows', async () => {

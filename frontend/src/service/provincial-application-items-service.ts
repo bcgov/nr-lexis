@@ -152,7 +152,7 @@ type ApplicationSummaryFields = {
 // Only Blanket OIC workflows set the Order in Council indicator; summary saves never send it.
 type ApplicationSummaryMutation = Pick<ApplicationSummaryFields, 'applicationNumber'> &
   Partial<Omit<ApplicationSummaryFields, 'applicationNumber' | 'oicIndicator'>> & {
-    saveSource?: 'owner' | 'agent' | 'owner-agent' | 'summary' | 'items'
+    saveSource?: 'owner' | 'agent' | 'owner-agent' | 'summary' | 'summary-items' | 'items'
   }
 
 type ApplicationRemarkMutationResult = {

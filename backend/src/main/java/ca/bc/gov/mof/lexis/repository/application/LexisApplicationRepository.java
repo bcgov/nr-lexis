@@ -19,6 +19,9 @@ import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.sql.Timestamp;
+import java.time.Instant;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -703,7 +706,17 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         remark,
         remark,
         getString(rs, "ENTRY_USERID"),
-        getLocalDate(rs, "ENTRY_TIMESTAMP"));
+        getLocalDate(rs, "ENTRY_TIMESTAMP"),
+        remarkTimestamp(rs));
+  }
+
+  private Instant remarkTimestamp(ResultSet rs) {
+    try {
+      Timestamp value = rs.getTimestamp("ENTRY_TIMESTAMP");
+      return value == null ? null : value.toInstant();
+    } catch (SQLException ex) {
+      return null;
+    }
   }
 
   private List<LexisApplicationDetailDto.LexisOfferDto> loadOffersByApplication(Long applicationNumber) {

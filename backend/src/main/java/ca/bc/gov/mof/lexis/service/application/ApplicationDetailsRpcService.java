@@ -14,6 +14,7 @@ public interface ApplicationDetailsRpcService {
   enum ApplicationSummarySaveSource {
     FULL,
     SUMMARY,
+    SUMMARY_ITEMS,
     OWNER,
     AGENT,
     OWNER_AGENT,
@@ -25,6 +26,7 @@ public interface ApplicationDetailsRpcService {
       }
       return switch (value.trim().toLowerCase(Locale.ROOT)) {
         case "summary" -> Optional.of(SUMMARY);
+        case "summary-items" -> Optional.of(SUMMARY_ITEMS);
         case "owner" -> Optional.of(OWNER);
         case "agent" -> Optional.of(AGENT);
         case "owner-agent" -> Optional.of(OWNER_AGENT);
@@ -34,7 +36,7 @@ public interface ApplicationDetailsRpcService {
     }
 
     public boolean updatesSummaryFields() {
-      return this == FULL || this == SUMMARY;
+      return this == FULL || this == SUMMARY || this == SUMMARY_ITEMS;
     }
 
     public boolean updatesOwnerFields() {
@@ -50,7 +52,7 @@ public interface ApplicationDetailsRpcService {
     }
 
     public boolean updatesItemFields() {
-      return this == FULL || this == ITEMS;
+      return this == FULL || this == ITEMS || this == SUMMARY_ITEMS;
     }
   }
 
