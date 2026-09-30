@@ -150,7 +150,7 @@ describe('Provincial exemption client parity', () => {
     )
   })
 
-  it('restores legacy Owner and Agent tabs from the linked application context', async () => {
+  it('shows eligible applicant and agent details together on Applicant', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/26-8758']}>
         <Routes>
@@ -166,7 +166,6 @@ describe('Provincial exemption client parity', () => {
     await screen.findByRole('tab', { name: 'Documents' })
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Applicant',
-      'Agent',
       'Exemption details',
       'Applications',
       'Documents',
@@ -192,11 +191,12 @@ describe('Provincial exemption client parity', () => {
     ).toBeInTheDocument()
     expect(within(ownerTile as HTMLElement).getByText('Yes')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Agent' }))
     const agentTile = (
-      await screen.findByRole('heading', { name: 'Agent client details', level: 2 })
-    ).closest('.cds--tile')
+      await screen.findByRole('heading', { name: 'Agent client details', level: 3 })
+    ).closest('section')
     expect(agentTile).toBeTruthy()
+    // The agent is a section of the applicant card, not a second full-height card.
+    expect(agentTile?.closest('.cds--tile')).toBe(ownerTile)
     expect(within(agentTile as HTMLElement).getByText('12 - EXPORT BILLING')).toBeInTheDocument()
     expect(within(agentTile as HTMLElement).getByText('EXPORT PERSON')).toBeInTheDocument()
     expect(
@@ -241,7 +241,8 @@ describe('Provincial exemption client parity', () => {
         'Applicant and agent details could not be retrieved from the linked application.',
       ),
     ).not.toHaveLength(0)
-    expect(screen.getByRole('tab', { name: 'Agent' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
 
     consoleError.mockRestore()
   })
@@ -291,7 +292,7 @@ describe('Provincial exemption client parity', () => {
     ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
-    expect(screen.getByRole('heading', { name: 'Exemption summary', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Exemption details', level: 2 })).toBeInTheDocument()
     expect(screen.queryByText('Agent client number')).not.toBeInTheDocument()
 
     await waitFor(() => {
@@ -327,7 +328,7 @@ describe('Provincial exemption client parity', () => {
     expect(screen.queryByRole('tab', { name: 'Applicant' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     const summaryTile = (
-      await screen.findByRole('heading', { name: 'Exemption summary', level: 2 })
+      await screen.findByRole('heading', { name: 'Exemption details', level: 2 })
     ).closest('.cds--tile')
     expect(summaryTile).toBeTruthy()
     const exemptionHolderLabel = within(summaryTile as HTMLElement).getByText('Exemption holder')

@@ -85,6 +85,55 @@ type ExemptionEmailResult = {
   message: string
 }
 
+export type ExemptionApprovalContacts = {
+  exemptionNumber: string
+  ownerEmail: string
+  agentEmail: string
+}
+
+/**
+ * One exemption's approval email preview. The agent contact applies only when the applicant is an
+ * agent. When `sendable` is false no approval email can be queued and `message` says why; a
+ * sendable row may still carry a `message` asking for manual entry.
+ */
+export type ExemptionApprovalRecipientPreview = ExemptionApprovalContacts & {
+  agentApplicable: boolean
+  sendable: boolean
+  message: string
+}
+
+const previewText = (value: unknown): string => (typeof value === 'string' ? value : '')
+
+export const fetchExemptionApprovalRecipients = async (
+  exemptionNumbers: string[],
+): Promise<ExemptionApprovalRecipientPreview[]> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .get<unknown>('/lexis/rpc/exemption-details/approval-recipients', {
+      params: { exemptionNumbers: exemptionNumbers.join(',') },
+    })
+  if (!Array.isArray(response.data) || !response.data.every(isRecord)) {
+    throw new Error('Approval recipients response was not a list.')
+  }
+  return response.data.map((row) => ({
+    exemptionNumber: previewText(row.exemptionNumber),
+    ownerEmail: previewText(row.ownerEmail),
+    agentEmail: previewText(row.agentEmail),
+    agentApplicable: row.agentApplicable === true,
+    sendable: row.sendable === true,
+    message: previewText(row.message),
+  }))
+}
+
+export const sendExemptionApprovalNotifications = async (
+  recipients: ExemptionApprovalContacts[],
+): Promise<{ outcomes: { exemptionNumber: string; queued: boolean; message: string }[] }> => {
+  const response = await apiService.getAxiosInstance().post<{
+    outcomes: { exemptionNumber: string; queued: boolean; message: string }[]
+  }>('/lexis/rpc/exemption-details/approval-emails/structured', recipients)
+  return response.data
+}
+
 type UpdateExemptionRequest = {
   exemptionNumber: string
   previousExemptionNumber?: string

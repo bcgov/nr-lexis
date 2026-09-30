@@ -94,6 +94,10 @@ public interface ExemptionDetailsRpcService {
 
   ExemptionApprovalEmailResult sendExemptionApprovalEmails(String sendGrid);
 
+  List<ApprovalRecipientPreview> getApprovalRecipients(List<String> exemptionNumbers);
+
+  List<ApprovalEmailOutcome> queueApprovalEmails(List<ApprovalRecipients> recipients);
+
   record ExemptionApplicationsResponse(
       List<ApplicationItem> applications, boolean containsUnmanu, String ownerNumber) {}
 
@@ -198,6 +202,24 @@ public interface ExemptionDetailsRpcService {
       List<String> errors) {}
 
   record ExemptionApprovalEmailResult(boolean success, String message) {}
+
+  record ApprovalRecipients(String exemptionNumber, String ownerEmail, String agentEmail) {}
+
+  /**
+   * Recipient preview for one exemption. {@code agentApplicable} is true only when the first
+   * linked application's applicant is an agent. {@code sendable} is false when no approval email
+   * can be queued for the exemption; {@code message} then explains why, or notes a contact lookup
+   * that needs manual entry.
+   */
+  record ApprovalRecipientPreview(
+      String exemptionNumber,
+      String ownerEmail,
+      String agentEmail,
+      boolean agentApplicable,
+      boolean sendable,
+      String message) {}
+
+  record ApprovalEmailOutcome(String exemptionNumber, boolean queued, String message) {}
 
   record CreateExemptionRequest(
       String exemptionNumber,

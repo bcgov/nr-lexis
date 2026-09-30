@@ -3,12 +3,14 @@ import {
   addApplicationToExemption,
   approveExemptions,
   fetchExemptionApplications,
+  fetchExemptionApprovalRecipients,
   fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionRegionContext,
   fetchExemptionPermits,
   removeApplicationFromExemption,
   sendExemptionApprovalEmails,
+  sendExemptionApprovalNotifications,
   updateExemption,
 } from '@/service/provincial-exemption-detail-service'
 
@@ -442,5 +444,77 @@ describe('provincial exemption detail service', () => {
     const [path, body] = postMock.mock.calls[0]
     expect(path).toBe('/lexis/rpc/exemption-details/approval-emails')
     expect(body.get('sendGrid')).toBe('EX-777:owner@example.com,EX-778:other@example.com')
+  })
+
+  it('fetches each exemption approval preview for the requested exemptions', async () => {
+    const previews = [
+      {
+        exemptionNumber: 'EX-777',
+        ownerEmail: 'owner@example.com',
+        agentEmail: '',
+        agentApplicable: false,
+        sendable: true,
+        message: '',
+      },
+      {
+        exemptionNumber: 'EX-778',
+        ownerEmail: '',
+        agentEmail: '',
+        agentApplicable: false,
+        sendable: false,
+        message: 'No linked application.',
+      },
+    ]
+    getMock.mockResolvedValue({ data: previews })
+
+    await expect(fetchExemptionApprovalRecipients(['EX-777', 'EX-778'])).resolves.toEqual(previews)
+    expect(getMock).toHaveBeenCalledWith('/lexis/rpc/exemption-details/approval-recipients', {
+      params: { exemptionNumbers: 'EX-777,EX-778' },
+    })
+    expect(postMock).not.toHaveBeenCalled()
+  })
+
+  it('treats a missing preview availability as not sendable and rejects non-list previews', async () => {
+    getMock.mockResolvedValueOnce({
+      data: [{ exemptionNumber: 'EX-777', ownerEmail: 'owner@example.com', agentEmail: null }],
+    })
+    await expect(fetchExemptionApprovalRecipients(['EX-777'])).resolves.toEqual([
+      {
+        exemptionNumber: 'EX-777',
+        ownerEmail: 'owner@example.com',
+        agentEmail: '',
+        agentApplicable: false,
+        sendable: false,
+        message: '',
+      },
+    ])
+
+    getMock.mockResolvedValueOnce({ data: '' })
+    await expect(fetchExemptionApprovalRecipients(['EX-777'])).rejects.toThrow()
+  })
+
+  it('posts structured owner and agent overrides and returns each queue outcome', async () => {
+    const contacts = [
+      { exemptionNumber: 'EX-777', ownerEmail: 'edited@example.com', agentEmail: '' },
+      { exemptionNumber: 'EX-778', ownerEmail: '', agentEmail: 'agent@example.com' },
+    ]
+    const result = {
+      outcomes: [
+        { exemptionNumber: 'EX-777', queued: true, message: 'Approval email queued.' },
+        {
+          exemptionNumber: 'EX-778',
+          queued: false,
+          message: 'Approval email could not be queued.',
+        },
+      ],
+    }
+    postMock.mockResolvedValue({ data: result })
+
+    await expect(sendExemptionApprovalNotifications(contacts)).resolves.toEqual(result)
+    expect(postMock).toHaveBeenCalledWith(
+      '/lexis/rpc/exemption-details/approval-emails/structured',
+      contacts,
+    )
+    expect(getMock).not.toHaveBeenCalled()
   })
 })

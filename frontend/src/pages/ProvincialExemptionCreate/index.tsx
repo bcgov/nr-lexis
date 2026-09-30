@@ -2,11 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
   Button,
-  Checkbox,
   Column,
   DismissibleTag,
   Grid,
   InlineNotification,
+  RadioButton,
+  RadioButtonGroup,
   Tab,
   TabList,
   TabPanel,
@@ -92,7 +93,7 @@ type ExemptionCreatePrefillState = {
   applicationSource?: ExemptionApplicationSource
 }
 
-type ExemptionCreateTab = 'owner' | 'agent' | 'summary' | 'applications' | 'documents' | 'permits'
+type ExemptionCreateTab = 'owner' | 'summary' | 'applications' | 'documents' | 'permits' | 'fees'
 
 type OwnerContextRequestKey = {
   applicationNumber: string
@@ -111,21 +112,21 @@ type OwnerContext = {
 }
 
 const EXEMPTION_CREATE_TABS: readonly ExemptionCreateTab[] = [
-  'owner',
-  'agent',
   'summary',
+  'owner',
   'applications',
   'documents',
   'permits',
+  'fees',
 ]
 
 const EXEMPTION_CREATE_TAB_LABELS: Record<ExemptionCreateTab, string> = {
   owner: 'Applicant',
-  agent: 'Agent',
   summary: 'Exemption details',
   applications: 'Applications',
   documents: 'Documents',
   permits: 'Permits',
+  fees: 'Fees',
 }
 
 const INITIAL_FORM: ProvincialExemptionCreateForm = {
@@ -354,7 +355,7 @@ const ProvincialExemptionCreatePage = () => {
   const draftBaselineRef = useRef(form)
   const selectedApplicationNumbersBaselineRef = useRef(selectedApplicationNumbers)
   const [formEdited, setFormEdited] = useState(false)
-  const [createdRecordPath, setCreatedRecordPath] = useState<string | null>(null)
+  const [createdExemptionNumber, setCreatedExemptionNumber] = useState<string | null>(null)
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
   const [exemptionStatuses, setExemptionStatuses] = useState<SearchOption[]>([])
   const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
@@ -375,7 +376,7 @@ const ProvincialExemptionCreatePage = () => {
   )
   const [previewError, setPreviewError] = useState<string | null>(null)
   const [confirmedApplicationNumbers, setConfirmedApplicationNumbers] = useState<string[]>([])
-  const [selectedExemptionTab, setSelectedExemptionTab] = useState<ExemptionCreateTab>('owner')
+  const [selectedExemptionTab, setSelectedExemptionTab] = useState<ExemptionCreateTab>('summary')
   const [ownerContext, setOwnerContext] = useState<OwnerContext | null>(null)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialExemptionCreateField>>(
     {},
@@ -454,17 +455,19 @@ const ProvincialExemptionCreatePage = () => {
   const visibleExemptionTabs = useMemo(
     () =>
       EXEMPTION_CREATE_TABS.filter((tab) =>
-        tab !== 'owner' && tab !== 'agent'
-          ? true
-          : showClientInfo && (tab !== 'agent' || hasAgentTab),
+        tab === 'owner'
+          ? showClientInfo
+          : tab === 'applications'
+            ? !blanketOic
+            : tab === 'fees'
+              ? oicLike
+              : true,
       ),
-    [hasAgentTab, showClientInfo],
+    [blanketOic, oicLike, showClientInfo],
   )
   const activeExemptionTab = visibleExemptionTabs.includes(selectedExemptionTab)
     ? selectedExemptionTab
-    : showClientInfo
-      ? 'owner'
-      : 'summary'
+    : 'summary'
   const selectedExemptionTabIndex = Math.max(0, visibleExemptionTabs.indexOf(activeExemptionTab))
   const author = displayAuditIdentity(capabilities?.principal)
   // M, O, and B creation uses a system-selected initial status, so it is a payload invariant,
@@ -485,10 +488,13 @@ const ProvincialExemptionCreatePage = () => {
     [form.regionNumbers, regionOptions],
   )
   useEffect(() => {
-    if (createdRecordPath) {
-      navigate(createdRecordPath)
+    if (createdExemptionNumber) {
+      // The detail page shows the saved confirmation once for the record this page created.
+      navigate(`/provincial/exemption/${encodeURIComponent(createdExemptionNumber)}`, {
+        state: { exemptionCreationNotice: { exemptionNumber: createdExemptionNumber } },
+      })
     }
-  }, [createdRecordPath, navigate])
+  }, [createdExemptionNumber, navigate])
 
   useEffect(() => {
     const loadOptions = async () => {
@@ -902,12 +908,20 @@ const ProvincialExemptionCreatePage = () => {
       return false
     }
     if (hasValidationError) {
-      setSelectedExemptionTab('summary')
+      // The fee rate is the only validated field outside Exemption details.
+      const { feeRate: feeRateValidationError, ...summaryFieldErrors } = fieldErrors
+      const firstSummaryError = Object.values(summaryFieldErrors).find(
+        (error): error is string => !!error,
+      )
+      setSelectedExemptionTab(!firstSummaryError && feeRateValidationError ? 'fees' : 'summary')
       setShowAllValidationErrors(true)
       setStatus({
         kind: 'error',
         title: 'Validation error',
-        message: firstSubmitValidationError ?? 'Please fix validation errors before saving.',
+        message:
+          firstSummaryError ??
+          firstSubmitValidationError ??
+          'Please fix validation errors before saving.',
         placement: 'inline',
       })
       return false
@@ -929,7 +943,7 @@ const ProvincialExemptionCreatePage = () => {
         setFormEdited(false)
         if (result.createdId) {
           if (navigateToCreatedRecord) {
-            setCreatedRecordPath(`/provincial/exemption/${encodeURIComponent(result.createdId)}`)
+            setCreatedExemptionNumber(result.createdId)
           }
           return true
         }
@@ -1003,7 +1017,51 @@ const ProvincialExemptionCreatePage = () => {
   return (
     <Grid fullWidth className="default-grid create-page-grid provincial-exemption-create-page">
       <Column sm={4} md={8} lg={16}>
-        <PageHeader title="Create exemption" subtitle={pageSubtitle} />
+        <PageHeader
+          title="Create new exemption"
+          subtitle={pageSubtitle}
+          actions={
+            <>
+              <Button
+                type="button"
+                kind="tertiary"
+                size="md"
+                onClick={() =>
+                  navigate(isFederalApplicationPrefill ? '/federal' : '/provincial/exemption')
+                }
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                kind="primary"
+                size="md"
+                onClick={() => void onSave(true)}
+                disabled={
+                  !optionsLoaded ||
+                  optionsUnavailable ||
+                  requiredOptionsUnavailable ||
+                  isSubmitting ||
+                  !canUseApplicationPrefill ||
+                  (selectedApplicationNumbers.length > 0 && !hasCurrentPreview)
+                }
+                renderIcon={isSubmitting ? PendingIcon : undefined}
+              >
+                {isSubmitting ? 'Saving…' : 'Save exemption'}
+              </Button>
+            </>
+          }
+        />
+      </Column>
+
+      <Column sm={4} md={8} lg={16}>
+        <InlineNotification
+          kind="info"
+          title="Documents and permits"
+          subtitle="Documents and Permits can be added after you save the exemption."
+          lowContrast
+          hideCloseButton
+        />
       </Column>
 
       {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
@@ -1099,120 +1157,6 @@ const ProvincialExemptionCreatePage = () => {
           </TabList>
           <TabPanels>
             {[
-              showClientInfo && (
-                <TabPanel key="owner" className="application-detail-tab-panel">
-                  <Tile
-                    className="create-form-tile application-detail-section"
-                    role="region"
-                    aria-label="Applicant"
-                  >
-                    <div className="legacy-search-grid create-form-grid">
-                      <TextInput
-                        id="ownerClientNumber"
-                        labelText="Client number"
-                        value={ownerClientNumber}
-                        readOnly
-                        helperText={
-                          ownerContextState === 'loading'
-                            ? 'Loading from the selected application…'
-                            : 'Derived from the selected application.'
-                        }
-                      />
-                      <TextInput
-                        id="ownerApplicantType"
-                        labelText="Applicant type"
-                        value={
-                          applicationOwnerSnapshot
-                            ? applicantTypeDescription(ownerApplicantType)
-                            : ''
-                        }
-                        readOnly
-                      />
-                      <TextInput
-                        id="ownerClientLocation"
-                        labelText="Client location"
-                        value={ownerClientLocationDisplay}
-                        readOnly
-                      />
-                      <TextInput
-                        id="ownerContactName"
-                        labelText="Contact name"
-                        value={ownerContactName}
-                        readOnly
-                      />
-                      <TextInput
-                        id="ownerAgentIndicator"
-                        labelText="I'm an agent"
-                        value={applicationOwnerSnapshot ? (hasAgentTab ? 'Yes' : 'No') : ''}
-                        readOnly
-                      />
-                    </div>
-                    {!applicationOwnerSnapshot && ownerContextState === 'idle' && (
-                      <p className="detail-empty-message">
-                        Applicant details are derived from the first selected application. A
-                        standalone Ministerial exemption has no linked applicant details.
-                      </p>
-                    )}
-                    {ownerContextState === 'loading' && (
-                      <p className="detail-empty-message">Loading applicant details…</p>
-                    )}
-                    {!!ownerContextError && (
-                      <InlineNotification
-                        className="detail-context-notification"
-                        kind="warning"
-                        title="Applicant details unavailable"
-                        subtitle={ownerContextError}
-                        lowContrast
-                        hideCloseButton
-                      />
-                    )}
-                    <ExemptionCreateClientSummary
-                      title="Applicant client details"
-                      clientData={ownerClientData}
-                    />
-                  </Tile>
-                </TabPanel>
-              ),
-              hasAgentTab && (
-                <TabPanel key="agent" className="application-detail-tab-panel">
-                  <Tile
-                    className="create-form-tile application-detail-section"
-                    role="region"
-                    aria-label="Agent"
-                  >
-                    <div className="legacy-search-grid create-form-grid">
-                      <TextInput
-                        id="agentClientNumber"
-                        labelText="Agent number"
-                        value={agentClientNumber}
-                        readOnly
-                      />
-                      <TextInput
-                        id="agentApplicantType"
-                        labelText="Applicant type"
-                        value="Agent"
-                        readOnly
-                      />
-                      <TextInput
-                        id="agentClientLocation"
-                        labelText="Contact location"
-                        value={agentClientLocationDisplay}
-                        readOnly
-                      />
-                      <TextInput
-                        id="agentContactName"
-                        labelText="Contact name"
-                        value={agentContactName}
-                        readOnly
-                      />
-                    </div>
-                    <ExemptionCreateClientSummary
-                      title="Agent client details"
-                      clientData={agentClientData}
-                    />
-                  </Tile>
-                </TabPanel>
-              ),
               <TabPanel key="summary" className="application-detail-tab-panel">
                 <Tile
                   className="create-form-tile application-detail-section"
@@ -1222,18 +1166,27 @@ const ProvincialExemptionCreatePage = () => {
                   <fieldset className="legacy-form-fieldset create-form-section">
                     <legend>Exemption details</legend>
                     <div className="legacy-search-grid create-form-grid">
-                      <SearchableSelect
-                        id="exemptionTypeCode"
-                        labelText={requiredLabel('Exemption type')}
+                      <RadioButtonGroup
+                        className="provincial-exemption-type-group"
+                        legendText={requiredLabel('Exemption type')}
+                        name="exemptionTypeCode"
+                        valueSelected={form.exemptionTypeCode}
                         required
-                        value={form.exemptionTypeCode}
+                        orientation="horizontal"
                         invalid={!!fieldError('exemptionTypeCode')}
                         invalidText={fieldError('exemptionTypeCode')}
-                        placeholder="Select type"
-                        options={availableExemptionTypes}
                         disabled={!optionsLoaded || optionsUnavailable}
-                        onChange={onExemptionTypeChange}
-                      />
+                        onChange={(value) => onExemptionTypeChange(String(value))}
+                      >
+                        {availableExemptionTypes.map((option) => (
+                          <RadioButton
+                            key={option.value}
+                            id={`exemptionTypeCode-${option.value}`}
+                            value={option.value}
+                            labelText={option.label}
+                          />
+                        ))}
+                      </RadioButtonGroup>
                       {oicLike && (
                         <TextInput
                           id="exemptionNumber"
@@ -1323,48 +1276,11 @@ const ProvincialExemptionCreatePage = () => {
                               return
                             }
                             markFormEdited()
-                            setForm((current) => ({
-                              ...current,
-                              regionNumbers,
-                            }))
+                            setForm((current) => ({ ...current, regionNumbers }))
                           }}
                         />
                       )}
                     </div>
-                    {oicLike && (
-                      <div className="legacy-search-actions create-form-option-row">
-                        <Checkbox
-                          id="enableExemptionRateOverride"
-                          labelText="Enable fee rate override"
-                          checked={form.enableRateOverride}
-                          onChange={(_, { checked }) => {
-                            if (Boolean(checked) === form.enableRateOverride) {
-                              return
-                            }
-                            markFormEdited()
-                            setForm((current) => ({
-                              ...current,
-                              enableRateOverride: Boolean(checked),
-                              feeRate: checked ? current.feeRate : '',
-                            }))
-                          }}
-                        />
-                        {form.enableRateOverride && (
-                          <TextInput
-                            id="exemptionFeeRate"
-                            labelText={requiredLabel('Fee rate ($/m³)')}
-                            aria-required="true"
-                            value={form.feeRate}
-                            invalid={!!fieldError('feeRate')}
-                            invalidText={fieldError('feeRate')}
-                            onChange={(event) => {
-                              markFormEdited()
-                              setForm((current) => ({ ...current, feeRate: event.target.value }))
-                            }}
-                          />
-                        )}
-                      </div>
-                    )}
                     <div className="legacy-search-actions create-form-comments">
                       <TextArea
                         id="otherConditions"
@@ -1387,74 +1303,181 @@ const ProvincialExemptionCreatePage = () => {
                   </fieldset>
                 </Tile>
               </TabPanel>,
-              <TabPanel key="applications" className="application-detail-tab-panel">
-                <Tile
-                  className="create-form-tile application-detail-section"
-                  role="region"
-                  aria-label="Applications"
-                >
-                  {blanketOic ? (
-                    <p className="detail-empty-message">
-                      Blanket OIC exemptions do not use linked applications.
-                    </p>
-                  ) : isFederalApplicationPrefill ? (
-                    <TextArea
-                      className="selected-application-numbers"
-                      id="selectedApplicationNumbers"
-                      labelText="Selected application numbers"
-                      value={selectedApplicationNumbers.join('\n')}
-                      rows={Math.min(Math.max(selectedApplicationNumbers.length, 2), 6)}
-                      readOnly
-                    />
-                  ) : (
-                    <div className="exemption-create-application-field">
-                      <div className="exemption-create-application-picker">
-                        <ApplicationNumberSelect
-                          id="applicationNumber"
-                          labelText="Application number (optional)"
-                          value={form.applicationNumber}
-                          invalid={!!fieldError('applicationNumber')}
-                          invalidText={fieldError('applicationNumber')}
-                          onChange={(value) => {
-                            markFormEdited()
-                            setForm((current) => ({ ...current, applicationNumber: value }))
-                          }}
-                        />
-                        <Button
-                          type="button"
-                          kind="tertiary"
-                          size="sm"
-                          disabled={!form.applicationNumber.trim()}
-                          onClick={onAddApplication}
-                        >
-                          Add application
-                        </Button>
-                      </div>
-                      {selectedApplicationNumbers.length > 0 && (
-                        <div className="exemption-create-application-selection">
-                          <p>Selected applications</p>
-                          <ul
-                            className="exemption-create-application-list"
-                            aria-label="Selected applications"
-                          >
-                            {selectedApplicationNumbers.map((applicationNumber) => (
-                              <li key={applicationNumber}>
-                                <DismissibleTag
-                                  type="blue"
-                                  text={applicationNumber}
-                                  title={`Remove application ${applicationNumber}`}
-                                  dismissTooltipLabel={`Remove application ${applicationNumber}`}
-                                  onClose={() => onRemoveApplication(applicationNumber)}
-                                />
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
+              showClientInfo && (
+                <TabPanel key="owner" className="application-detail-tab-panel">
+                  <Tile
+                    className="create-form-tile application-detail-section"
+                    role="region"
+                    aria-label="Applicant"
+                  >
+                    <div className="legacy-search-grid create-form-grid">
+                      <TextInput
+                        id="ownerClientNumber"
+                        labelText="Client number"
+                        value={ownerClientNumber}
+                        readOnly
+                        helperText={
+                          ownerContextState === 'loading'
+                            ? 'Loading from the selected application…'
+                            : 'Derived from the selected application.'
+                        }
+                      />
+                      <TextInput
+                        id="ownerApplicantType"
+                        labelText="Applicant type"
+                        value={
+                          applicationOwnerSnapshot
+                            ? applicantTypeDescription(ownerApplicantType)
+                            : ''
+                        }
+                        readOnly
+                      />
+                      <TextInput
+                        id="ownerClientLocation"
+                        labelText="Client location"
+                        value={ownerClientLocationDisplay}
+                        readOnly
+                      />
+                      <TextInput
+                        id="ownerContactName"
+                        labelText="Contact name"
+                        value={ownerContactName}
+                        readOnly
+                      />
+                      <TextInput
+                        id="ownerAgentIndicator"
+                        labelText="I'm an agent"
+                        value={applicationOwnerSnapshot ? (hasAgentTab ? 'Yes' : 'No') : ''}
+                        readOnly
+                      />
                     </div>
-                  )}
-                </Tile>
-              </TabPanel>,
+                    {!applicationOwnerSnapshot && ownerContextState === 'idle' && (
+                      <p className="detail-empty-message">
+                        Applicant details are derived from the first selected application. A
+                        standalone Ministerial exemption has no linked applicant details.
+                      </p>
+                    )}
+                    {ownerContextState === 'loading' && (
+                      <p className="detail-empty-message">Loading applicant details…</p>
+                    )}
+                    {!!ownerContextError && (
+                      <InlineNotification
+                        className="detail-context-notification"
+                        kind="warning"
+                        title="Applicant details unavailable"
+                        subtitle={ownerContextError}
+                        lowContrast
+                        hideCloseButton
+                      />
+                    )}
+                    <ExemptionCreateClientSummary
+                      title="Applicant client details"
+                      clientData={ownerClientData}
+                    />
+                    {hasAgentTab && (
+                      <section className="detail-subsection" aria-label="Agent information">
+                        <h3 className="detail-tile-title">Agent information</h3>
+                        <div className="legacy-search-grid create-form-grid">
+                          <TextInput
+                            id="agentClientNumber"
+                            labelText="Agent number"
+                            value={agentClientNumber}
+                            readOnly
+                          />
+                          <TextInput
+                            id="agentApplicantType"
+                            labelText="Applicant type"
+                            value="Agent"
+                            readOnly
+                          />
+                          <TextInput
+                            id="agentClientLocation"
+                            labelText="Contact location"
+                            value={agentClientLocationDisplay}
+                            readOnly
+                          />
+                          <TextInput
+                            id="agentContactName"
+                            labelText="Contact name"
+                            value={agentContactName}
+                            readOnly
+                          />
+                        </div>
+                        <ExemptionCreateClientSummary
+                          title="Agent client details"
+                          clientData={agentClientData}
+                        />
+                      </section>
+                    )}
+                  </Tile>
+                </TabPanel>
+              ),
+              !blanketOic && (
+                <TabPanel key="applications" className="application-detail-tab-panel">
+                  <Tile
+                    className="create-form-tile application-detail-section"
+                    role="region"
+                    aria-label="Applications"
+                  >
+                    {isFederalApplicationPrefill ? (
+                      <TextArea
+                        className="selected-application-numbers"
+                        id="selectedApplicationNumbers"
+                        labelText="Selected application numbers"
+                        value={selectedApplicationNumbers.join('\n')}
+                        rows={Math.min(Math.max(selectedApplicationNumbers.length, 2), 6)}
+                        readOnly
+                      />
+                    ) : (
+                      <div className="exemption-create-application-field">
+                        <div className="exemption-create-application-picker">
+                          <ApplicationNumberSelect
+                            id="applicationNumber"
+                            labelText="Application number (optional)"
+                            value={form.applicationNumber}
+                            invalid={!!fieldError('applicationNumber')}
+                            invalidText={fieldError('applicationNumber')}
+                            onChange={(value) => {
+                              markFormEdited()
+                              setForm((current) => ({ ...current, applicationNumber: value }))
+                            }}
+                          />
+                          <Button
+                            type="button"
+                            kind="tertiary"
+                            size="sm"
+                            disabled={!form.applicationNumber.trim()}
+                            onClick={onAddApplication}
+                          >
+                            Add application
+                          </Button>
+                        </div>
+                        {selectedApplicationNumbers.length > 0 && (
+                          <div className="exemption-create-application-selection">
+                            <p>Selected applications</p>
+                            <ul
+                              className="exemption-create-application-list"
+                              aria-label="Selected applications"
+                            >
+                              {selectedApplicationNumbers.map((applicationNumber) => (
+                                <li key={applicationNumber}>
+                                  <DismissibleTag
+                                    type="blue"
+                                    text={applicationNumber}
+                                    title={`Remove application ${applicationNumber}`}
+                                    dismissTooltipLabel={`Remove application ${applicationNumber}`}
+                                    onClose={() => onRemoveApplication(applicationNumber)}
+                                  />
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </Tile>
+                </TabPanel>
+              ),
               <TabPanel key="documents" className="application-detail-tab-panel">
                 <Tile
                   className="create-form-tile application-detail-section"
@@ -1484,6 +1507,60 @@ const ProvincialExemptionCreatePage = () => {
                   </p>
                 </Tile>
               </TabPanel>,
+              oicLike && (
+                <TabPanel key="fees" className="application-detail-tab-panel">
+                  <Tile
+                    className="create-form-tile application-detail-section"
+                    role="region"
+                    aria-label="Fees"
+                  >
+                    <fieldset className="legacy-form-fieldset create-form-section">
+                      <legend>Fees</legend>
+                      <RadioButtonGroup
+                        legendText="Override fee rate?"
+                        name="enableExemptionRateOverride"
+                        valueSelected={form.enableRateOverride ? 'yes' : 'no'}
+                        orientation="horizontal"
+                        onChange={(value) => {
+                          const enabled = String(value) === 'yes'
+                          if (enabled === form.enableRateOverride) return
+                          markFormEdited()
+                          setForm((current) => ({
+                            ...current,
+                            enableRateOverride: enabled,
+                            feeRate: enabled ? current.feeRate : '',
+                          }))
+                        }}
+                      >
+                        <RadioButton
+                          id="enableExemptionRateOverride-no"
+                          labelText="No"
+                          value="no"
+                        />
+                        <RadioButton
+                          id="enableExemptionRateOverride-yes"
+                          labelText="Yes"
+                          value="yes"
+                        />
+                      </RadioButtonGroup>
+                      {form.enableRateOverride && (
+                        <TextInput
+                          id="exemptionFeeRate"
+                          labelText={requiredLabel('Fee rate ($/m³)')}
+                          aria-required="true"
+                          value={form.feeRate}
+                          invalid={!!fieldError('feeRate')}
+                          invalidText={fieldError('feeRate')}
+                          onChange={(event) => {
+                            markFormEdited()
+                            setForm((current) => ({ ...current, feeRate: event.target.value }))
+                          }}
+                        />
+                      )}
+                    </fieldset>
+                  </Tile>
+                </TabPanel>
+              ),
             ].filter(Boolean)}
           </TabPanels>
         </Tabs>
@@ -1507,39 +1584,6 @@ const ProvincialExemptionCreatePage = () => {
               <dd className="detail-field-value">{author}</dd>
             </div>
           </dl>
-          <div
-            className="legacy-search-actions create-form-actions"
-            role="group"
-            aria-label="Exemption form actions"
-          >
-            <Button
-              type="button"
-              kind="tertiary"
-              size="md"
-              onClick={() =>
-                navigate(isFederalApplicationPrefill ? '/federal' : '/provincial/exemption')
-              }
-            >
-              Cancel
-            </Button>
-            <Button
-              type="button"
-              kind="primary"
-              size="md"
-              onClick={() => void onSave(true)}
-              disabled={
-                !optionsLoaded ||
-                optionsUnavailable ||
-                requiredOptionsUnavailable ||
-                isSubmitting ||
-                !canUseApplicationPrefill ||
-                (selectedApplicationNumbers.length > 0 && !hasCurrentPreview)
-              }
-              renderIcon={isSubmitting ? PendingIcon : undefined}
-            >
-              {isSubmitting ? 'Saving…' : 'Save'}
-            </Button>
-          </div>
         </div>
       </Column>
       <UnsavedChangesGuard

@@ -253,7 +253,7 @@ class RegionalAuthorizationRegressionTest {
     if (approvalAllowed) {
       when(repository.updateExemption(any())).thenReturn(true);
     }
-    var persistence = new OracleExemptionDetailsRpcService(repository, null, null,
+    var persistence = new OracleExemptionDetailsRpcService(repository, null, null, null,
         new ExemptionActivationEligibilityValidator(repository));
     when(exemptionRpc.updateExemption(any(), anyString(), anyBoolean()))
         .thenAnswer(invocation -> persistence.updateExemption(

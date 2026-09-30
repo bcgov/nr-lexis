@@ -1,11 +1,13 @@
 package ca.bc.gov.mof.lexis.service.exemption;
 
+import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
 import static ca.bc.gov.mof.lexis.util.TextUtils.defaultSystemUser;
 import static ca.bc.gov.mof.lexis.util.TextUtils.normalizeClientNumber;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
+import ca.bc.gov.mof.lexis.service.client.AuthoritativeClientEmailResolver;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
@@ -25,8 +27,8 @@ import java.util.Optional;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Predicate;
-import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.context.annotation.Profile;
+import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.NoTransactionException;
 import org.springframework.transaction.annotation.Transactional;
@@ -52,7 +54,17 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final String EXEMPTION_TYPE_MINISTERIAL = "M";
   private static final String APPLICATION_STATUS_APPROVED = "APP";
   private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
+  private static final String APPLICANT_TYPE_AGENT = "A";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
+  private static final String APPROVAL_EMAIL_NO_APPLICATION_MESSAGE =
+      "An approval email can't be sent because this exemption has no linked application.";
+  private static final String APPROVAL_EMAIL_APPLICATION_UNAVAILABLE_MESSAGE =
+      "An approval email can't be sent because the linked application could not be loaded.";
+  private static final String APPROVAL_EMAIL_NO_SENDER_MESSAGE =
+      "An approval email can't be sent because the linked application's region has no approval"
+          + " email sender.";
+  private static final String APPROVAL_CONTACTS_UNAVAILABLE_MESSAGE =
+      "Client email addresses could not be loaded. Enter an address to send the approval email.";
   private static final String EXEMPTION_NUMBER_ASSIGNED_MESSAGE =
       "* - this exemption number has already been assigned";
   private static final String SAVE_SUCCESS_MESSAGE = "The exemption was saved successfully.";
@@ -66,16 +78,19 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
   private final ExemptionDetailsRpcRepository repository;
   private final ApplicationNotificationRecipientResolver notificationRecipientResolver;
+  private final AuthoritativeClientEmailResolver clientEmailResolver;
   private final EmailNotificationService notificationService;
   private final ExemptionActivationEligibilityValidator activationEligibilityValidator;
 
   public OracleExemptionDetailsRpcService(
       ExemptionDetailsRpcRepository repository,
       ApplicationNotificationRecipientResolver notificationRecipientResolver,
+      AuthoritativeClientEmailResolver clientEmailResolver,
       EmailNotificationService notificationService,
       ExemptionActivationEligibilityValidator activationEligibilityValidator) {
     this.repository = repository;
     this.notificationRecipientResolver = notificationRecipientResolver;
+    this.clientEmailResolver = clientEmailResolver;
     this.notificationService = notificationService;
     this.activationEligibilityValidator = activationEligibilityValidator;
   }
@@ -767,6 +782,169 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return new ExemptionApprovalEmailResult(false, "Approval emails could not be sent.");
   }
 
+  @Override
+  // INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_APPROVAL_CONTACTS): Preview the owner contact, and the
+  // agent contact when the applicant is an agent; edits in the structured notification request
+  // never update client records. Each exemption reports its own availability so one record
+  // cannot block the others in a batch.
+  public List<ApprovalRecipientPreview> getApprovalRecipients(List<String> exemptionNumbers) {
+    return exemptionNumbers.stream().distinct().map(this::approvalRecipientsFor).toList();
+  }
+
+  private ApprovalRecipientPreview approvalRecipientsFor(String exemptionNumber) {
+    String number = trimToNull(exemptionNumber);
+    ExemptionDetailsRpcRepository.ExemptionRecord exemption =
+        number == null ? null : repository.findExemptionRecord(number).orElse(null);
+    if (exemption == null) {
+      return unavailableApprovalEmail(number, "Exemption was not found.");
+    }
+    if (!EXEMPTION_STATUS_NEW.equalsIgnoreCase(exemption.exemptionStatusCode())) {
+      return unavailableApprovalEmail(number, "Only NEW exemptions can be approved.");
+    }
+    ApprovalEmailSource source = approvalEmailSource(number);
+    if (source.unavailableReason() != null) {
+      return unavailableApprovalEmail(number, source.unavailableReason());
+    }
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord application = source.firstApplication();
+    boolean agentApplicable =
+        APPLICANT_TYPE_AGENT.equalsIgnoreCase(trimToNull(application.exportApplicantTypeCode()));
+    // Each contact resolves on its own so one failed lookup keeps the other address.
+    String ownerEmail =
+        previewContactEmail(
+            number, application.ownerClientNumber(), application.ownerClientLocationCode());
+    String agentEmail =
+        agentApplicable
+            ? previewContactEmail(
+                number, application.agentClientNumber(), application.agentClientLocationCode())
+            : "";
+    return new ApprovalRecipientPreview(
+        number,
+        ownerEmail == null ? "" : ownerEmail,
+        agentEmail == null ? "" : agentEmail,
+        agentApplicable,
+        true,
+        ownerEmail == null || agentEmail == null ? APPROVAL_CONTACTS_UNAVAILABLE_MESSAGE : "");
+  }
+
+  /** The client's email on file, blank when it has none, or null when the lookup failed. */
+  private String previewContactEmail(
+      String exemptionNumber, String clientNumber, String clientLocationCode) {
+    try {
+      return clientEmailResolver.resolve(clientNumber, clientLocationCode).orElse("");
+    } catch (RuntimeException ex) {
+      LOGGER.warn(
+          "event=lexis_exemption_email operation=preview outcome=contacts_unavailable"
+              + " exemptionRef={} failureType={}",
+          fingerprint(exemptionNumber),
+          exceptionType(ex));
+      return null;
+    }
+  }
+
+  private static ApprovalRecipientPreview unavailableApprovalEmail(
+      String exemptionNumber, String reason) {
+    return new ApprovalRecipientPreview(
+        exemptionNumber == null ? "" : exemptionNumber, "", "", false, false, reason);
+  }
+
+  /** The linked applications and sender route an approval email needs, or why it can't be sent. */
+  private ApprovalEmailSource approvalEmailSource(String exemptionNumber) {
+    List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> applications =
+        repository.findApplicationSummariesByExemptionNumber(exemptionNumber);
+    if (applications.isEmpty()) {
+      return new ApprovalEmailSource(
+          applications, null, null, APPROVAL_EMAIL_NO_APPLICATION_MESSAGE);
+    }
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord firstApplication =
+        repository.findApplicationLinkRecord(applications.getFirst().applicationNumber())
+            .orElse(null);
+    if (firstApplication == null) {
+      return new ApprovalEmailSource(
+          applications, null, null, APPROVAL_EMAIL_APPLICATION_UNAVAILABLE_MESSAGE);
+    }
+    RegionalMailRoute senderRoute =
+        RegionalMailRoute.forOrgUnit(firstApplication.orgUnitNo()).orElse(null);
+    return new ApprovalEmailSource(
+        applications,
+        firstApplication,
+        senderRoute,
+        senderRoute == null ? APPROVAL_EMAIL_NO_SENDER_MESSAGE : null);
+  }
+
+  private record ApprovalEmailSource(
+      List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> applications,
+      ExemptionDetailsRpcRepository.ApplicationLinkRecord firstApplication,
+      RegionalMailRoute senderRoute,
+      String unavailableReason) {}
+
+  @Override
+  public List<ApprovalEmailOutcome> queueApprovalEmails(List<ApprovalRecipients> recipients) {
+    return recipients.stream().map(this::queueApprovalEmail).toList();
+  }
+
+  private ApprovalEmailOutcome queueApprovalEmail(ApprovalRecipients row) {
+    String number = row == null ? null : trimToNull(row.exemptionNumber());
+    if (number == null) {
+      return new ApprovalEmailOutcome("", false, "Exemption number is required.");
+    }
+    List<String> addresses = new ArrayList<>();
+    for (String address :
+        List.of(
+            row.ownerEmail() == null ? "" : row.ownerEmail(),
+            row.agentEmail() == null ? "" : row.agentEmail())) {
+      String trimmed = trimToNull(address);
+      if (trimmed == null) {
+        continue;
+      }
+      Optional<String> validated = MailRecipientValidator.normalize(trimmed);
+      if (validated.isEmpty()
+          || !trimmed.equals(validated.get())
+          || trimmed.chars().anyMatch(Character::isWhitespace)) {
+        return new ApprovalEmailOutcome(number, false, "A recipient email address is invalid.");
+      }
+      if (addresses.stream().noneMatch(existing -> existing.equalsIgnoreCase(validated.get()))) {
+        addresses.add(validated.get());
+      }
+    }
+    if (addresses.isEmpty()) {
+      return new ApprovalEmailOutcome(
+          number, false, "At least one recipient email address is required.");
+    }
+    try {
+      ExemptionDetailsRpcRepository.ExemptionRecord exemption =
+          repository.findExemptionRecord(number).orElse(null);
+      // Like the legacy approval email, any approved (active) exemption type may be notified.
+      if (exemption == null
+          || !EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(exemption.exemptionStatusCode())) {
+        return new ApprovalEmailOutcome(number, false, "Exemption is not active.");
+      }
+      ApprovalEmailSource source = approvalEmailSource(number);
+      if (source.unavailableReason() != null) {
+        return new ApprovalEmailOutcome(number, false, source.unavailableReason());
+      }
+      RegionalMailRoute senderRoute = source.senderRoute();
+      if (!stageExemptionApprovalEmail(number, addresses.getFirst())) {
+        return new ApprovalEmailOutcome(number, false, "Approval email could not be queued.");
+      }
+      String applicationNumbers =
+          source.applications().stream()
+              .map(application -> Long.toString(application.applicationNumber()))
+              .reduce((left, right) -> left + "\n" + right)
+              .orElse("");
+      notificationService.publish(
+          new WorkflowEmailEvent.ExemptionApproval(
+              number, applicationNumbers, addresses, senderRoute));
+      return new ApprovalEmailOutcome(number, true, "Approval email queued.");
+    } catch (RuntimeException ex) {
+      LOGGER.warn(
+          "event=lexis_exemption_email operation=queue outcome=failed exemptionRef={}"
+              + " failureType={}",
+          fingerprint(number),
+          exceptionType(ex));
+      return new ApprovalEmailOutcome(number, false, "Approval email could not be queued.");
+    }
+  }
+
   private boolean sendApprovalEmail(String exemptionNumber, String toEmailAddress) {
     String normalizedNumber = trimToNull(exemptionNumber);
     boolean active =
@@ -1122,7 +1300,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     }
 
     if (repository.updateExemption(updateRecord)) {
-      sendGrid.put(exemptionNumber, resolveClientEmail(exemptionNumber).orElse(""));
+      sendGrid.put(exemptionNumber, resolveApprovalGridEmail(exemptionNumber));
       return;
     }
 
@@ -1130,11 +1308,34 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   }
 
   private Optional<String> resolveClientEmail(String exemptionNumber) {
-    return repository.findApplicationSummariesByExemptionNumber(exemptionNumber).stream()
-        .findFirst()
-        .flatMap(row -> repository.findApplicationLinkRecord(row.applicationNumber()))
+    return firstLinkedApplication(exemptionNumber)
         .flatMap(this::resolveApplicationClientEmail)
         .map(value -> trimToNull(value));
+  }
+
+  private String resolveApprovalGridEmail(String exemptionNumber) {
+    return firstLinkedApplication(exemptionNumber)
+        .map(
+            application -> {
+              try {
+                return resolveApplicationClientEmail(application).orElse("");
+              } catch (RuntimeException ex) {
+                LOGGER.warn(
+                    "event=lexis_exemption_email operation=approval outcome=contacts_unavailable"
+                        + " exemptionRef={} failureType={}",
+                    fingerprint(exemptionNumber),
+                    exceptionType(ex));
+                return "";
+              }
+            })
+        .orElse("");
+  }
+
+  private Optional<ExemptionDetailsRpcRepository.ApplicationLinkRecord> firstLinkedApplication(
+      String exemptionNumber) {
+    return repository.findApplicationSummariesByExemptionNumber(exemptionNumber).stream()
+        .findFirst()
+        .flatMap(row -> repository.findApplicationLinkRecord(row.applicationNumber()));
   }
 
   private Optional<String> resolveApplicationClientEmail(

@@ -304,7 +304,9 @@ describe('Detail Quick Action Smoke', () => {
       </MemoryRouter>,
     )
 
-    const summary = (await screen.findByText('Exemption summary')).closest('.cds--tile')
+    const summary = (
+      await screen.findByRole('heading', { name: 'Exemption details', level: 2 })
+    ).closest('.cds--tile')
     expect(summary).toBeTruthy()
     for (const [label, value] of [
       ['Approved volume (m³)', '99.0'],

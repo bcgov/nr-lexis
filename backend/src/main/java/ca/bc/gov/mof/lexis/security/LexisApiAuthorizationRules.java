@@ -543,6 +543,10 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/rpc/exemption-details/check-exemption-number"),
           action(
               HttpMethod.GET,
+              ACTION_APPROVE_EXEMPTION,
+              "/api/lexis/rpc/exemption-details/approval-recipients"),
+          action(
+              HttpMethod.GET,
               ACTION_EXEMPTION_DETAILS,
               "/api/lexis/rpc/exemption-details/**",
               "/api/lexis/exemptionDetailsRPC"),
@@ -551,7 +555,8 @@ final class LexisApiAuthorizationRules {
               ACTION_APPROVE_EXEMPTION,
               "/api/lexis/rpc/exemption-details/approve-exemptions",
               "/api/lexis/rpc/exemption-details/approval-email",
-              "/api/lexis/rpc/exemption-details/approval-emails"),
+              "/api/lexis/rpc/exemption-details/approval-emails",
+              "/api/lexis/rpc/exemption-details/approval-emails/structured"),
           action(
               HttpMethod.POST,
               ACTION_SAVE_EXEMPTION,

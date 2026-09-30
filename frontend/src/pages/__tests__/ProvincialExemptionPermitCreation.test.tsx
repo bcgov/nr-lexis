@@ -1287,7 +1287,7 @@ describe('permit creation from an exemption', () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'saveExemption'])
     renderPage(activeMinisterialExemption)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
     await userEvent.type(screen.getByLabelText('Conditions'), ' updated')
     await openPermitsTab()
     await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
@@ -1298,7 +1298,8 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
 
     expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
     expect(updateExemption).not.toHaveBeenCalled()
     expect(createPermitFromExemption).not.toHaveBeenCalled()
   })
@@ -1308,6 +1309,7 @@ describe('permit creation from an exemption', () => {
     renderPage(activeMinisterialExemption)
 
     await userEvent.click(await screen.findByRole('tab', { name: 'Applications' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Add application' }))
     await userEvent.type(screen.getByLabelText('Application number'), '1000457')
     await openPermitsTab()
     await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
@@ -1338,7 +1340,7 @@ describe('permit creation from an exemption', () => {
       })
       const router = renderPage(activeBlanketOicExemption)
 
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
       await userEvent.type(screen.getByLabelText('Conditions'), ' updated')
       await openPermitsTab()
       await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
@@ -1377,10 +1379,8 @@ describe('permit creation from an exemption', () => {
     })
     renderPage(activeMinisterialExemption)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
-    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
     await userEvent.type(screen.getByLabelText('Conditions'), ' updated')
     await openPermitsTab()
     await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
@@ -1417,10 +1417,8 @@ describe('permit creation from an exemption', () => {
       .mockRejectedValueOnce(new Error('editable data refresh unavailable'))
     renderPage(activeMinisterialExemption)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
-    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
     await userEvent.type(screen.getByLabelText('Conditions'), ' updated')
     await openPermitsTab()
     await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
@@ -1467,10 +1465,8 @@ describe('permit creation from an exemption', () => {
     })
     renderPage(activeMinisterialExemption)
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption' }))
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
-    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
     await userEvent.type(screen.getByLabelText('Conditions'), ' updated')
     await openPermitsTab()
     await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))

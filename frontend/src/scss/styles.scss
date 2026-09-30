@@ -1933,6 +1933,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr));
 }
 
+.create-form-grid .provincial-exemption-type-group {
+  grid-column: 1 / -1;
+}
+
 .create-form-grid > *,
 .create-form-grid .cds--form-item,
 .create-form-grid .cds--date-picker,
@@ -2496,6 +2500,17 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .app-inline-notification .cds--inline-notification__subtitle {
   overflow-wrap: anywhere;
+}
+
+// A result that lists records shows its message and then the list below the title.
+.app-inline-notification .cds--actionable-notification__subtitle,
+.action-result-notification__items {
+  flex-basis: 100%;
+}
+
+.action-result-notification__items {
+  list-style: disc;
+  padding-inline-start: 1.25rem;
 }
 
 // Carbon's scroll-edge fade must not obscure dialog feedback.
@@ -5143,6 +5158,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .detail-section-card__header--actions-only:empty,
 .application-items-panel__header--actions-only:empty {
   display: none;
+}
+
+// A titled group inside a card, such as the agent below the applicant.
+.detail-subsection {
+  margin-block-start: 1.5rem;
+  padding-block-start: 1.5rem;
+  border-block-start: 1px solid var(--csp-border-subtle-01);
 }
 
 .application-remark-modal__actions {

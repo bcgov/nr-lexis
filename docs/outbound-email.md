@@ -22,7 +22,7 @@ regional recipient.
 | Workflow | From | To | Cc |
 | --- | --- | --- | --- |
 | Application Review — rejected or withdrawn | Regional positional mailbox | Editable applicant recipient | — |
-| Exemption approval | Regional positional mailbox for the first linked application | Editable applicant recipient | — |
+| Exemption approval | Regional positional mailbox for the first linked application | Editable owner recipient, plus the agent when the applicant is an agent (one message) | — |
 | Permit approval and payment pending | Regional positional mailbox | Editable applicant recipient | — |
 | Permit review | Provincial/system mailbox | Regional positional mailbox, then the optional validated permit-review address as a second `To` recipient | — |
 | Purchase offer — new, updated, or withdrawn | Provincial/system mailbox | Applicant recipient | Regional positional mailbox |

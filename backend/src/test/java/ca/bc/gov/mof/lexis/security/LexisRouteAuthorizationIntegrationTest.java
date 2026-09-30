@@ -516,6 +516,22 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void approvalRecipientRoutesShouldRequireApprovalAction() {
+    expected(
+            HttpMethod.GET,
+            "/api/lexis/rpc/exemption-details/approval-recipients",
+            null,
+            "approveExemption")
+        .assertResolved();
+    expected(
+            HttpMethod.POST,
+            "/api/lexis/rpc/exemption-details/approval-emails/structured",
+            null,
+            "approveExemption")
+        .assertResolved();
+  }
+
+  @Test
   void applicationsSearchShouldRejectAnonymousRequests() throws Exception {
     mockMvc.perform(get("/api/lexis/applications/search")).andExpect(status().isUnauthorized());
   }

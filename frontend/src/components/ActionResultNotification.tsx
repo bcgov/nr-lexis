@@ -1,9 +1,11 @@
+import { Link } from 'react-router-dom'
 import { AppNotification } from './AppNotification'
 import { actionResultTitle, type ActionResult } from '@/utils/action-result'
 
 type ActionResultNotificationProps = {
   result: ActionResult
-  onClose: () => void
+  /** Omit for feedback that stays until the next attempt, such as an error inside a dialog. */
+  onClose?: () => void
   className?: string
 }
 
@@ -21,6 +23,50 @@ export function ActionResultNotification({
       className={className}
       lowContrast
       onCloseButtonClick={onClose}
-    />
+    >
+      {result.items?.length ? (
+        <ul className="action-result-notification__items">
+          {result.items.map((item) => (
+            <li key={item.id}>
+              {item.to ? (
+                <Link className="cds--link" to={item.to} state={item.state}>
+                  {item.id}
+                </Link>
+              ) : (
+                item.id
+              )}
+              {item.text}
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </AppNotification>
+  )
+}
+
+type ActionResultNotificationsProps = {
+  results: ActionResult[]
+  /** Dismisses one result; the other outcome of the same action stays. */
+  onClose: (result: ActionResult) => void
+  className?: string
+}
+
+/** A multi-record action's outcomes: at most one success and one failure notification. */
+export function ActionResultNotifications({
+  results,
+  onClose,
+  className,
+}: ActionResultNotificationsProps) {
+  return (
+    <>
+      {results.map((result) => (
+        <ActionResultNotification
+          key={result.kind}
+          result={result}
+          className={className}
+          onClose={() => onClose(result)}
+        />
+      ))}
+    </>
   )
 }

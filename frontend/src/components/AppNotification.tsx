@@ -1,5 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { InlineNotification, type InlineNotificationProps } from '@carbon/react'
+import {
+  ActionableNotification,
+  FeatureFlags,
+  InlineNotification,
+  type InlineNotificationProps,
+} from '@carbon/react'
 import {
   genericActionFailureMessage,
   sanitizeNotificationText,
@@ -24,6 +29,7 @@ export function AppNotification({
   lowContrast = true,
   role = 'status',
   revealKey,
+  children,
   ...notificationProps
 }: AppNotificationProps) {
   const notificationRef = useRef<HTMLDivElement>(null)
@@ -66,22 +72,53 @@ export function AppNotification({
 
   return (
     <div className="app-notification-container" ref={notificationRef}>
-      <InlineNotification
-        {...notificationProps}
-        className={['app-inline-notification', className].filter(Boolean).join(' ')}
-        hideCloseButton={!onCloseButtonClick}
-        kind={kind}
-        lowContrast={lowContrast}
-        onClose={() => false}
-        onCloseButtonClick={onCloseButtonClick}
-        role={role}
-        subtitle={
-          typeof subtitle === 'string'
-            ? sanitizeNotificationText(subtitle, genericActionFailureMessage)
-            : subtitle
-        }
-        title={typeof title === 'string' ? sanitizeNotificationText(title, 'Notification') : title}
-      />
+      {children ? (
+        // Carbon's inline notification rejects interactive content such as record links, so
+        // details use its actionable variant, kept as a status region without focus handling.
+        <FeatureFlags enableFocusWrapWithoutSentinels>
+          <ActionableNotification
+            inline
+            hasFocus={false}
+            closeOnEscape={false}
+            className={['app-inline-notification', className].filter(Boolean).join(' ')}
+            hideCloseButton={!onCloseButtonClick}
+            kind={kind}
+            lowContrast={lowContrast}
+            onClose={() => false}
+            onCloseButtonClick={onCloseButtonClick}
+            role={role}
+            subtitle={
+              typeof subtitle === 'string'
+                ? sanitizeNotificationText(subtitle, genericActionFailureMessage)
+                : subtitle
+            }
+            title={
+              typeof title === 'string' ? sanitizeNotificationText(title, 'Notification') : title
+            }
+          >
+            {children}
+          </ActionableNotification>
+        </FeatureFlags>
+      ) : (
+        <InlineNotification
+          {...notificationProps}
+          className={['app-inline-notification', className].filter(Boolean).join(' ')}
+          hideCloseButton={!onCloseButtonClick}
+          kind={kind}
+          lowContrast={lowContrast}
+          onClose={() => false}
+          onCloseButtonClick={onCloseButtonClick}
+          role={role}
+          subtitle={
+            typeof subtitle === 'string'
+              ? sanitizeNotificationText(subtitle, genericActionFailureMessage)
+              : subtitle
+          }
+          title={
+            typeof title === 'string' ? sanitizeNotificationText(title, 'Notification') : title
+          }
+        />
+      )}
     </div>
   )
 }

@@ -10,7 +10,7 @@ import {
   InformationFilled,
 } from '@carbon/icons-react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { ActionResultNotification } from '../../components/ActionResultNotification'
+import { ActionResultNotifications } from '../../components/ActionResultNotification'
 import PageHeader from '@/components/PageHeader'
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
 import { shouldFilterSearchableDropdownItem } from '../../components/dropdown-filtering'
@@ -64,7 +64,7 @@ import {
 } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
-import { combineActionMessages } from '@/utils/action-result'
+import { actionMessageResults, type ActionResult } from '@/utils/action-result'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -1419,14 +1419,12 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       ? APPLICATION_SUBMISSION_UPLOAD_STEPS
       : DOCUMENT_UPLOAD_STEPS
   const activeCompletedSteps = activeUploadStep === 'review' ? ['upload'] : []
-  const uploadActionResult = combineActionMessages(successMessage, errorMessage, {
+  const uploadActionResults = actionMessageResults(successMessage, errorMessage, {
     error: 'Upload error',
     success: successTitle,
-    warning:
-      selectedWorkflowType === 'applicationSubmission'
-        ? 'Some submissions need attention'
-        : 'Some uploads need attention',
   })
+  const dismissUploadResult = ({ kind }: ActionResult) =>
+    kind === 'error' ? setErrorMessage('') : setSuccessMessage('')
   const showGlobalUploadFeedback =
     selectedWorkflowType !== 'applicationSubmission' ||
     activeUploadStep !== 'upload' ||
@@ -1699,8 +1697,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content">
         <div className="admin-upload-workflow">
-          {uploadActionResult && showGlobalUploadFeedback && (
-            <ActionResultNotification result={uploadActionResult} onClose={clearUploadFeedback} />
+          {showGlobalUploadFeedback && (
+            <ActionResultNotifications
+              results={uploadActionResults}
+              onClose={dismissUploadResult}
+            />
           )}
 
           {activeUploadStep === 'upload' ? (

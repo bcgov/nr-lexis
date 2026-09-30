@@ -228,6 +228,10 @@ const selectExemptionCreateTab = async (name: string) => {
   await userEvent.click(await screen.findByRole('tab', { name }))
 }
 
+const chooseExemptionType = async (name: string) => {
+  await userEvent.click(await screen.findByRole('radio', { name }))
+}
+
 describe('Create Page Core Flows', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -1990,7 +1994,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(screen.getByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Exemption details' })).toBeInTheDocument()
@@ -2013,28 +2017,25 @@ describe('Create Page Core Flows', () => {
     expect(exemptionDetails.querySelector('.legacy-search-grid')).toHaveClass('create-form-grid')
     expect(screen.getByLabelText('Approved volume (m³)')).toBeInTheDocument()
     expect(screen.queryByLabelText('Approved volumeume (m³)')).not.toBeInTheDocument()
-    const exemptionFormActions = screen.getByRole('group', { name: 'Exemption form actions' })
+    const exemptionFormActions = screen.getByRole('group', { name: 'Page actions' })
     expect(
       within(exemptionFormActions)
         .getAllByRole('button')
         .map((button) => button.textContent),
-    ).toEqual(['Cancel', 'Save'])
+    ).toEqual(['Cancel', 'Save exemption'])
     expect(within(exemptionFormActions).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
       'type',
       'button',
     )
-    expect(within(exemptionFormActions).getByRole('button', { name: 'Save' })).toHaveAttribute(
-      'type',
-      'button',
-    )
+    expect(
+      within(exemptionFormActions).getByRole('button', { name: 'Save exemption' }),
+    ).toHaveAttribute('type', 'button')
     expect(screen.queryByRole('group', { name: 'New exemption state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /exemption number/i })).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByLabelText('Approved volume (m³)')).toHaveValue('250.5'))
     expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenCalledWith(['321', '654'])
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('Ministerial'),
-    )
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Ministerial' })).toBeChecked())
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('New'),
     )
@@ -2044,10 +2045,7 @@ describe('Create Page Core Flows', () => {
       'true',
     )
     expect(screen.getByLabelText('Expiry date (YYYY-MM-DD)')).toHaveValue('2026-06-30')
-    await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption type' }),
-      'Section 1',
-    )
+    await chooseExemptionType('Section 1')
     expect(screen.getByText('Exemption status')).toHaveClass('required-label')
     expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveAttribute(
       'aria-required',
@@ -2064,7 +2062,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('button', { name: 'Save Draft' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Back to Search' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
-    const submitButton = screen.getByRole('button', { name: 'Save' })
+    const submitButton = screen.getByRole('button', { name: 'Save exemption' })
     expect(submitButton).toBeEnabled()
     await userEvent.click(submitButton)
 
@@ -2082,10 +2080,12 @@ describe('Create Page Core Flows', () => {
       regionNumbers: [],
       otherConditions: '',
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-777')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-777', {
+      state: { exemptionCreationNotice: { exemptionNumber: 'EX-777' } },
+    })
   }, 20_000)
 
-  it('shows the legacy Agent tab only when the selected application is agent-backed', async () => {
+  it('shows agent details within Applicant when the selected application is agent-backed', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce(
       applicationSummarySnapshot({
         applicantTypeCode: 'A',
@@ -2103,22 +2103,27 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Agent' })).toBeInTheDocument())
+    await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Applicant' })).toBeInTheDocument())
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
-      'Applicant',
-      'Agent',
       'Exemption details',
+      'Applicant',
       'Applications',
       'Documents',
       'Permits',
     ])
 
-    await selectExemptionCreateTab('Agent')
+    await selectExemptionCreateTab('Applicant')
+    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Agent information' })).toBeInTheDocument()
     await waitFor(() =>
       expect(screen.getByRole('textbox', { name: 'Agent number' })).toHaveValue('00002176'),
     )
-    expect(screen.getByRole('textbox', { name: 'Contact name' })).toHaveValue('Agent Contact')
+    expect(
+      within(screen.getByRole('region', { name: 'Agent information' })).getByRole('textbox', {
+        name: 'Contact name',
+      }),
+    ).toHaveValue('Agent Contact')
     await selectExemptionCreateTab('Applicant')
     expect(screen.getByRole('textbox', { name: "I'm an agent" })).toHaveValue('Yes')
   })
@@ -2150,8 +2155,9 @@ describe('Create Page Core Flows', () => {
         </MemoryRouter>,
       )
 
-      await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+      await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
       await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321'))
+      await selectExemptionCreateTab('Applicant')
       expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
       expect(screen.getByText('Loading applicant details…')).toBeInTheDocument()
 
@@ -2216,10 +2222,12 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled())
+    await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
+    )
     await selectExemptionCreateTab('Permits')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     await waitFor(() =>
       expect(screen.getByRole('tab', { name: 'Exemption details' })).toHaveAttribute(
@@ -2250,7 +2258,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
     await selectExemptionCreateTab('Applications')
 
     const selectedApplications = screen.getByRole('list', { name: 'Selected applications' })
@@ -2314,7 +2322,7 @@ describe('Create Page Core Flows', () => {
       expect(mockedFetchProvincialExemptionCreatePreview).toHaveBeenLastCalledWith(['2001', '321']),
     )
 
-    const saveButton = screen.getByRole('button', { name: 'Save' })
+    const saveButton = screen.getByRole('button', { name: 'Save exemption' })
     await waitFor(() => expect(saveButton).toBeEnabled())
     await userEvent.click(saveButton)
 
@@ -2332,7 +2340,9 @@ describe('Create Page Core Flows', () => {
       regionNumbers: [],
       otherConditions: '',
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-901')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-901', {
+      state: { exemptionCreationNotice: { exemptionNumber: 'EX-901' } },
+    })
   }, 20_000)
 
   it('canonicalizes a padded application number before exemption preview', async () => {
@@ -2373,9 +2383,7 @@ describe('Create Page Core Flows', () => {
       await screen.findByRole('combobox', { name: 'Application number (optional)' }),
     ).toBeInTheDocument()
     await selectExemptionCreateTab('Exemption details')
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('Ministerial'),
-    )
+    await waitFor(() => expect(screen.getByRole('radio', { name: 'Ministerial' })).toBeChecked())
     const statusSelect = screen.getByRole('combobox', { name: 'Exemption status' })
     expect(statusSelect).toHaveValue('New')
     expect(statusSelect).toBeDisabled()
@@ -2383,7 +2391,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByText('Exemption status')).not.toHaveClass('required-label')
     expect(screen.getByLabelText('Approval date (YYYY-MM-DD)')).toBeDisabled()
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.5')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
       applicationNumber: '',
@@ -2399,7 +2407,9 @@ describe('Create Page Core Flows', () => {
       regionNumbers: [],
       otherConditions: '',
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-900')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-900', {
+      state: { exemptionCreationNotice: { exemptionNumber: 'EX-900' } },
+    })
   })
 
   it('enforces active status and custom number when selecting OIC', async () => {
@@ -2412,10 +2422,7 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectExemptionCreateTab('Exemption details')
-    await chooseComboBoxOption(
-      await screen.findByRole('combobox', { name: 'Exemption type' }),
-      'Order in Council',
-    )
+    await chooseExemptionType('Order in Council')
 
     expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('Active')
     expect(screen.getByRole('combobox', { name: 'Exemption status' })).toBeDisabled()
@@ -2426,6 +2433,7 @@ describe('Create Page Core Flows', () => {
       'Applications',
       'Documents',
       'Permits',
+      'Fees',
     ])
     expect(screen.queryByRole('tab', { name: 'Applicant' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
@@ -2433,8 +2441,10 @@ describe('Create Page Core Flows', () => {
     expect(
       screen.getByRole('combobox', { name: 'Application number (optional)' }),
     ).toBeInTheDocument()
-    await selectExemptionCreateTab('Exemption details')
-    expect(screen.getByLabelText('Enable fee rate override')).toBeInTheDocument()
+    await selectExemptionCreateTab('Fees')
+    expect(
+      within(screen.getByRole('region', { name: 'Fees' })).getByRole('radio', { name: 'No' }),
+    ).toBeChecked()
   })
 
   it('rejects exemption text that Oracle cannot store', async () => {
@@ -2447,16 +2457,13 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectExemptionCreateTab('Exemption details')
-    await chooseComboBoxOption(
-      await screen.findByRole('combobox', { name: 'Exemption type' }),
-      'Order in Council',
-    )
+    await chooseExemptionType('Order in Council')
     await userEvent.type(screen.getByLabelText('Exemption number'), 'OIC-é')
     const conditions = screen.getByLabelText('Conditions')
     expect(conditions).toHaveAttribute('maxlength', '250')
     expect(document.querySelector('.cds--text-area__label-counter')).toHaveTextContent('0/250')
     await userEvent.type(conditions, 'Résumé')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
       (
@@ -2487,15 +2494,13 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectExemptionCreateTab('Exemption details')
-    await chooseComboBoxOption(
-      await screen.findByRole('combobox', { name: 'Exemption type' }),
-      'Blanket OIC',
-    )
+    await chooseExemptionType('Blanket OIC')
     expect(
       screen.queryByRole('combobox', { name: 'Application number (optional)' }),
     ).not.toBeInTheDocument()
     expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('Active')
     expect(screen.getByLabelText('Approved volume (m³)')).toHaveValue('9999999.9')
+    expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Exemption number'), 'BOIC-1')
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
@@ -2506,9 +2511,13 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(
       await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
     )
-    await userEvent.click(screen.getByLabelText('Enable fee rate override'))
+    await selectExemptionCreateTab('Fees')
+    const fees = screen.getByRole('region', { name: 'Fees' })
+    expect(within(fees).getByRole('radio', { name: 'No' })).toBeChecked()
+    expect(screen.queryByLabelText('Fee rate ($/m³)')).not.toBeInTheDocument()
+    await userEvent.click(within(fees).getByRole('radio', { name: 'Yes' }))
     await userEvent.type(screen.getByLabelText('Fee rate ($/m³)'), '999.99')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
       applicationNumber: '',
@@ -2524,7 +2533,42 @@ describe('Create Page Core Flows', () => {
       regionNumbers: ['1903'],
       otherConditions: '',
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/BOIC-1')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/BOIC-1', {
+      state: { exemptionCreationNotice: { exemptionNumber: 'BOIC-1' } },
+    })
+  })
+
+  it('opens Fees when a missing fee rate is the only validation error', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectExemptionCreateTab('Exemption details')
+    await chooseExemptionType('Blanket OIC')
+    await userEvent.type(screen.getByLabelText('Exemption number'), 'BOIC-1')
+    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
+    await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
+    const regionComboBox = screen.getByRole('combobox', { name: /^Regions/ })
+    await userEvent.click(regionComboBox)
+    fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
+    await userEvent.click(
+      await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
+    )
+    await selectExemptionCreateTab('Fees')
+    await userEvent.click(
+      within(screen.getByRole('region', { name: 'Fees' })).getByRole('radio', { name: 'Yes' }),
+    )
+    await selectExemptionCreateTab('Exemption details')
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+
+    expect(screen.getByRole('tab', { name: 'Fees' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Fee rate ($/m³)')).toBeVisible()
+    expect(screen.getAllByText('Fee rate is required.').length).toBeGreaterThan(0)
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
   it('clears a pending application number when switching to Blanket OIC', async () => {
@@ -2544,15 +2588,12 @@ describe('Create Page Core Flows', () => {
     expect(applicationNumber).toHaveDisplayValue(/^321(?:$| - )/)
 
     await selectExemptionCreateTab('Exemption details')
-    await chooseComboBoxOption(
-      await screen.findByRole('combobox', { name: 'Exemption type' }),
-      'Blanket OIC',
-    )
+    await chooseExemptionType('Blanket OIC')
 
     expect(
       screen.queryByRole('combobox', { name: 'Application number (optional)' }),
     ).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
     expect(
       screen.queryByText('Add or clear the pending application number before saving.'),
     ).not.toBeInTheDocument()
@@ -2570,18 +2611,17 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectExemptionCreateTab('Exemption details')
-    const typeSelect = await screen.findByRole('combobox', { name: 'Exemption type' })
     const volumeInput = screen.getByLabelText('Approved volume (m³)')
     await userEvent.type(volumeInput, '125.5')
-    await chooseComboBoxOption(typeSelect, 'Blanket OIC')
+    await chooseExemptionType('Blanket OIC')
     expect(volumeInput).toHaveValue('125.5')
-    await chooseComboBoxOption(typeSelect, 'Ministerial')
+    await chooseExemptionType('Ministerial')
     expect(volumeInput).toHaveValue('125.5')
 
     await userEvent.clear(volumeInput)
-    await chooseComboBoxOption(typeSelect, 'Blanket OIC')
+    await chooseExemptionType('Blanket OIC')
     expect(volumeInput).toHaveValue('9999999.9')
-    await chooseComboBoxOption(typeSelect, 'Order in Council')
+    await chooseExemptionType('Order in Council')
     expect(volumeInput).toHaveValue('')
   })
 
@@ -2595,10 +2635,7 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectExemptionCreateTab('Exemption details')
-    await chooseComboBoxOption(
-      await screen.findByRole('combobox', { name: 'Exemption type' }),
-      'Order in Council',
-    )
+    await chooseExemptionType('Order in Council')
     const exemptionNumber = screen.getByLabelText('Exemption number')
     fireEvent.change(exemptionNumber, { target: { value: 'OIC-12345' } })
     fireEvent.blur(exemptionNumber)
@@ -2608,7 +2645,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.5')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
       await screen.findAllByText('Exemption number must be 8 characters or fewer.'),
@@ -2667,7 +2704,7 @@ describe('Create Page Core Flows', () => {
     const closeButton = notification?.querySelector<HTMLButtonElement>('button')
     expect(closeButton).toBeTruthy()
     await userEvent.click(closeButton as HTMLButtonElement)
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
   })
 
   it('fails application creation closed when authoritative options cannot be loaded', async () => {
@@ -2706,7 +2743,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
     await selectExemptionCreateTab('Applications')
     expect(
       screen.getByText('Enter exemption details for the selected federal applications.'),
@@ -2717,17 +2754,14 @@ describe('Create Page Core Flows', () => {
     await selectExemptionCreateTab('Exemption details')
     await waitFor(() => expect(screen.getByLabelText('Approved volume (m³)')).toHaveValue('250.5'))
 
-    await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption type' }),
-      'Section 1',
-    )
+    await chooseExemptionType('Section 1')
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-02-01')
     await userEvent.clear(screen.getByLabelText('Expiry date (YYYY-MM-DD)'))
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2026-12-31')
     await userEvent.clear(screen.getByLabelText('Approved volume (m³)'))
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '500')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
       applicationNumber: '301',
@@ -2743,7 +2777,9 @@ describe('Create Page Core Flows', () => {
       regionNumbers: [],
       otherConditions: '',
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-FED-777')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-FED-777', {
+      state: { exemptionCreationNotice: { exemptionNumber: 'EX-FED-777' } },
+    })
   })
 
   it('blocks a direct federal prefill when federal application access is absent', async () => {
@@ -2768,7 +2804,7 @@ describe('Create Page Core Flows', () => {
         'Your session cannot create an exemption from the selected federal applications.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
@@ -2797,7 +2833,7 @@ describe('Create Page Core Flows', () => {
         screen.queryByText('Application 321 must have a status of approved.'),
       ).not.toBeInTheDocument(),
     )
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
 
     await selectExemptionCreateTab('Applications')
@@ -2817,7 +2853,7 @@ describe('Create Page Core Flows', () => {
     expect(
       await screen.findByText('Application 654 must have a status of approved.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
@@ -2853,11 +2889,8 @@ describe('Create Page Core Flows', () => {
       )
 
       await selectExemptionCreateTab('Exemption details')
-      const typeSelect = await screen.findByRole('combobox', { name: 'Exemption type' })
-      await userEvent.click(typeSelect)
-
-      expect(await screen.findByRole('option', { name: 'Section 1' })).toBeInTheDocument()
-      expect(screen.queryByRole('option', { name: 'Blanket OIC' })).not.toBeInTheDocument()
+      expect(await screen.findByRole('radio', { name: 'Section 1' })).toBeInTheDocument()
+      expect(screen.queryByRole('radio', { name: 'Blanket OIC' })).not.toBeInTheDocument()
     },
   )
 
@@ -2880,10 +2913,7 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectExemptionCreateTab('Exemption details')
-    const typeSelect = await screen.findByRole('combobox', { name: 'Exemption type' })
-    await userEvent.click(typeSelect)
-
-    expect(await screen.findByRole('option', { name: 'Blanket OIC' })).toBeInTheDocument()
+    expect(await screen.findByRole('radio', { name: 'Blanket OIC' })).toBeInTheDocument()
   })
 
   it('blocks provincial exemption submit when status is missing', async () => {
@@ -2899,16 +2929,13 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
     await selectExemptionCreateTab('Exemption details')
-    await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption type' }),
-      'Section 1',
-    )
+    await chooseExemptionType('Section 1')
     await clearComboBox(screen.getByRole('combobox', { name: 'Exemption status' }))
     await userEvent.clear(screen.getByLabelText(/Approved Volume/i))
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '500')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(screen.getAllByText('Exemption status is required.').length).toBeGreaterThan(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
@@ -2927,16 +2954,13 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create exemption' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
     await selectExemptionCreateTab('Exemption details')
-    await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Exemption type' }),
-      'Section 1',
-    )
+    await chooseExemptionType('Section 1')
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
     await userEvent.clear(screen.getByLabelText(/Approved Volume/i))
     await userEvent.type(screen.getByLabelText(/Approved Volume/i), '121212122')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
       await screen.findAllByText('Approved volume must be 9999999.99 or less.'),
@@ -2956,20 +2980,17 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectExemptionCreateTab('Exemption details')
-    await chooseComboBoxOption(
-      await screen.findByRole('combobox', { name: 'Exemption type' }),
-      'Section 1',
-    )
+    await chooseExemptionType('Section 1')
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
     const expiryDate = screen.getByLabelText('Expiry date (YYYY-MM-DD)')
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '500')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(screen.getAllByText('Expiry date is required.').length).toBeGreaterThan(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
 
     await userEvent.type(expiryDate, '2026-07-01')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
       screen.getAllByText('Expiry date must be after the approval date.').length,
@@ -2978,7 +2999,7 @@ describe('Create Page Core Flows', () => {
 
     await userEvent.clear(expiryDate)
     await userEvent.type(expiryDate, '2026-07-02')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     await waitFor(() =>
       expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith(
@@ -3001,12 +3022,9 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectExemptionCreateTab('Exemption details')
-    await chooseComboBoxOption(
-      await screen.findByRole('combobox', { name: 'Exemption type' }),
-      'Section 1',
-    )
+    await chooseExemptionType('Section 1')
     await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '250.999')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
       screen.getAllByText('Approved volume must have no more than two decimal places.').length,
@@ -3027,14 +3045,16 @@ describe('Create Page Core Flows', () => {
 
     await selectExemptionCreateTab('Exemption details')
     await userEvent.type(await screen.findByLabelText('Approved volume (m³)'), '9999999.99')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     await waitFor(() => {
       expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith(
         expect.objectContaining({ approvedVolume: '9999999.99' }),
       )
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-901')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-901', {
+      state: { exemptionCreationNotice: { exemptionNumber: 'EX-901' } },
+    })
   })
 
   it('submits provincial offer form and navigates to details', async () => {

@@ -1,11 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
 import { Button, TextArea, TextInput } from '@carbon/react'
 import { Add, ArrowRight, Close } from '@carbon/icons-react'
-import { ActionResultNotification } from '../ActionResultNotification'
+import { ActionResultNotifications } from '../ActionResultNotification'
 import Modal from '@/components/Modal'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import DetailSidePanel from '@/components/DetailSidePanel'
-import { combineActionMessages } from '@/utils/action-result'
+import { actionMessageResults, type ActionResult } from '@/utils/action-result'
 import { requiredLabel } from '@/utils/required-label'
 import {
   buildUploadResultMessage,
@@ -111,7 +111,6 @@ const DOCUMENT_LIST_REFRESH_FAILED_MESSAGE =
 const UPLOAD_RESULT_TITLES = {
   error: 'Upload error',
   success: 'Upload submitted',
-  warning: 'Upload needs attention',
 }
 
 const DetailDocumentUploadPanel = ({
@@ -790,11 +789,9 @@ const DetailDocumentUploadPanel = ({
 
   const documentNoun = workflowType === 'invoice' ? 'invoice' : 'document'
   const modalHeading = isSidePanel ? 'Add documents' : `Add ${documentNoun}`
-  const uploadFeedback = combineActionMessages(successMessage, errorMessage, UPLOAD_RESULT_TITLES)
-  const dismissUploadFeedback = () => {
-    setErrorMessage('')
-    setSuccessMessage('')
-  }
+  const uploadFeedback = actionMessageResults(successMessage, errorMessage, UPLOAD_RESULT_TITLES)
+  const dismissUploadFeedback = ({ kind }: ActionResult) =>
+    kind === 'error' ? setErrorMessage('') : setSuccessMessage('')
 
   const inlineInvoiceFormRef = useRef<HTMLElement>(null)
   const uploadTriggerRef = useRef<HTMLButtonElement>(null)
@@ -811,9 +808,7 @@ const DetailDocumentUploadPanel = ({
 
   const uploadContent = (
     <>
-      {uploadFeedback && (
-        <ActionResultNotification result={uploadFeedback} onClose={dismissUploadFeedback} />
-      )}
+      <ActionResultNotifications results={uploadFeedback} onClose={dismissUploadFeedback} />
 
       {(isDirectApplicationPanel || uploadStep === 'upload') && (
         <div id={modalInitialFocusId} tabIndex={-1} className="detail-document-upload-modal__form">
@@ -1037,8 +1032,8 @@ const DetailDocumentUploadPanel = ({
 
   return (
     <div className="detail-document-upload" id={inputId}>
-      {!isUploadModalOpen && uploadFeedback && (
-        <ActionResultNotification result={uploadFeedback} onClose={dismissUploadFeedback} />
+      {!isUploadModalOpen && (
+        <ActionResultNotifications results={uploadFeedback} onClose={dismissUploadFeedback} />
       )}
       {!initiallyOpen && (!isUploadModalOpen || workflowType !== 'invoice') && (
         <div className="detail-document-upload__trigger">
