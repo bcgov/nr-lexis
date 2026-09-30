@@ -125,3 +125,6 @@ The application uses [Carbon Design System](https://carbondesignsystem.com/) com
 
 - `@carbon/react` - React components
 - `@carbon/icons-react` - Icon library
+- `@carbon/pictograms-react` - Pictograms for empty states
+
+Use Carbon icons and pictograms for all UI glyphs. Don't hand-draw SVG or CSS icons.

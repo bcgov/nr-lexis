@@ -205,7 +205,7 @@ for (const mode of ['add', 'edit'] as const) {
         await refreshStarted
         try {
           await expect(dialog).toBeVisible()
-          await expect(field).toHaveAccessibleName(mode === 'add' ? /New Remark/ : /Edit Remark 88/)
+          await expect(field).toHaveAccessibleName(/Remark/)
           await expect(field).toHaveValue('Updated synthetic remark')
           await expect(field).toBeDisabled()
           await expect(dialog.getByRole('button', { name: 'Saving…', exact: true })).toBeDisabled()
@@ -277,7 +277,7 @@ for (const { code, heading, recovery } of [
     await page.getByRole('tab', { name: 'Remarks', exact: true }).click()
     await page.getByRole('button', { name: 'Add remark', exact: true }).click()
     const form = page.getByRole('dialog', { name: 'Add remark', includeHidden: true })
-    await form.getByRole('textbox', { name: /New Remark/ }).fill('Unsaved synthetic remark')
+    await form.getByRole('textbox', { name: /Remark/ }).fill('Unsaved synthetic remark')
     await form.getByRole('button', { name: 'Save Remark', exact: true }).click()
 
     const conflict = page.getByRole('dialog', { name: heading })

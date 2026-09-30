@@ -146,8 +146,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Action complete')).toBeInTheDocument()
-    expect(screen.getByText('Created application 321.')).toBeInTheDocument()
+    expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
+    expect(screen.queryByText('Action complete')).not.toBeInTheDocument()
   })
 
   it('shows each summary field once while editing and restores display values on cancel', async () => {
@@ -333,7 +333,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
   })
 
-  it('keeps the owner agent indicator after the client details in view and edit modes', async () => {
+  it('heads the owner details in view and keeps the agent checkbox after them in edit mode', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -345,29 +345,19 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    const ownerDetails = await screen.findByRole('region', { name: 'Applicant client details' })
-    const ownerEmail = (await within(ownerDetails).findByText('owner@example.test')).closest(
-      '.detail-field-item',
-    )
-    const ownerAgentIndicator = within(ownerDetails)
-      .getByText('I am an agent')
-      .closest('.detail-field-item')
-
-    expect(ownerEmail).toBeTruthy()
-    expect(ownerAgentIndicator).toBeTruthy()
-    expect(
-      Boolean(
-        (ownerEmail as Node).compareDocumentPosition(ownerAgentIndicator as Node) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-      ),
-    ).toBe(true)
+    // Figma's saved Applicant card heads the owner's details and shows no agent indicator field.
+    const ownerSection = await screen.findByRole('region', { name: 'Owner' })
+    expect(within(ownerSection).getByRole('heading', { level: 3, name: 'Owner' })).toBeVisible()
+    expect(await within(ownerSection).findByText('owner@example.test')).toBeInTheDocument()
+    expect(within(ownerSection).queryByText('I am an agent')).not.toBeInTheDocument()
+    expect(within(ownerSection).queryByText('Applicant type')).not.toBeInTheDocument()
 
     const ownerTile = getOwnerClientDetailsTile()
     await userEvent.click(within(ownerTile).getByRole('button', { name: 'Edit applicant details' }))
     const editOwnerEmail = (await within(ownerTile).findByText('owner@example.test')).closest(
       '.detail-field-item',
     )
-    const editOwnerAgentIndicator = within(ownerTile).getByLabelText('I am an agent')
+    const editOwnerAgentIndicator = within(ownerTile).getByLabelText("I'm an agent")
 
     expect(editOwnerEmail).toBeTruthy()
     expect(
@@ -489,7 +479,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await screen.findByRole('heading', { level: 2, name: 'Applicant details' })
     const ownerTile = getOwnerClientDetailsTile()
     const ownerControls = within(ownerTile)
-    expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
+    expect(await ownerControls.findByText('Owner Forestry Ltd. · 00011122')).toBeInTheDocument()
     await waitFor(() =>
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
         '00011122',
@@ -540,7 +530,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await screen.findByRole('heading', { level: 2, name: 'Applicant details' })
     const ownerControls = within(getOwnerClientDetailsTile())
-    expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
+    expect(await ownerControls.findByText('Owner Forestry Ltd. · 00011122')).toBeInTheDocument()
     await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
 
     mockedFetchApplicationClientLocations.mockRejectedValueOnce(
@@ -652,7 +642,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(applicantType).toHaveValue('Ministerial')
     expect(ownerControls.queryByDisplayValue('M - Ministerial')).not.toBeInTheDocument()
     expect(ownerControls.queryByDisplayValue('O - Owner')).not.toBeInTheDocument()
-    expect(ownerControls.getByLabelText('I am an agent')).not.toBeChecked()
+    expect(ownerControls.getByLabelText("I'm an agent")).not.toBeChecked()
 
     await chooseComboBoxOption(
       ownerControls.getByRole('combobox', { name: 'Client location' }),
@@ -689,7 +679,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       }),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Applicant client details saved.').closest('.cds--inline-notification'),
+      screen.getByText('The application was saved.').closest('.cds--inline-notification'),
     ).toHaveClass('cds--inline-notification--success')
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
   })
@@ -848,9 +838,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     expect(ownerControls.queryByLabelText('Client number')).not.toBeInTheDocument()
-    const clientNumberField = ownerControls.getByText('Client number').closest('.detail-field-item')
-    expect(clientNumberField).toBeTruthy()
-    expect(within(clientNumberField as HTMLElement).getByText('00011122')).toBeInTheDocument()
+    const clientField = ownerControls.getByText('Client').closest('.detail-field-item')
+    expect(clientField).toBeTruthy()
+    expect(within(clientField as HTMLElement).getByText(/00011122$/)).toBeInTheDocument()
   })
 
   it('clears discarded client enrichment when the saved client refresh fails after cancel', async () => {
@@ -867,7 +857,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await screen.findByRole('heading', { level: 1, name: 'Application 321' })
     const ownerControls = within(getOwnerClientDetailsTile())
-    expect(await ownerControls.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
+    expect(await ownerControls.findByText('Owner Forestry Ltd. · 00011122')).toBeInTheDocument()
 
     const callsBeforeEdit = mockedFetchApplicationClientData.mock.calls.length
     await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
@@ -904,9 +894,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       ),
     ).toBeInTheDocument()
     expect(ownerControls.queryByText('Discarded Client Ltd.')).not.toBeInTheDocument()
-    const clientNumberField = ownerControls.getByText('Client number').closest('.detail-field-item')
-    expect(clientNumberField).toBeTruthy()
-    expect(within(clientNumberField as HTMLElement).getByText('00011122')).toBeInTheDocument()
+    const clientField = ownerControls.getByText('Client').closest('.detail-field-item')
+    expect(clientField).toBeTruthy()
+    expect(within(clientField as HTMLElement).getByText(/00011122$/)).toBeInTheDocument()
   })
 
   it('edits agent details using the legacy editable fields', async () => {
@@ -982,7 +972,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         name: 'Edit applicant details',
       }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Applicant details saved.')).toBeInTheDocument()
+    expect(screen.getByText('The application was saved.')).toBeInTheDocument()
   })
 
   it('cancels agent edits without changing the persisted summary', async () => {
@@ -1016,9 +1006,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     agentControls = within(getAgentDetailsTile())
     expect(agentControls.queryByLabelText('Agent number')).not.toBeInTheDocument()
-    const agentNumberField = agentControls.getByText('Agent number').closest('.detail-field-item')
-    expect(agentNumberField).toBeTruthy()
-    expect(within(agentNumberField as HTMLElement).getByText('00033344')).toBeInTheDocument()
+    const agentClientField = agentControls.getByText('Agent client').closest('.detail-field-item')
+    expect(agentClientField).toBeTruthy()
+    expect(within(agentClientField as HTMLElement).getByText(/00033344$/)).toBeInTheDocument()
   })
 
   it('loads complete application context without enabling edits for read-only viewers', async () => {
@@ -1421,7 +1411,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(await screen.findByText('locked-doc.pdf')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     await selectApplicationDetailTab('Remarks')
-    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save remark' })).not.toBeInTheDocument()
   })
 
@@ -1474,14 +1464,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         selector: '.lexis-status-tag',
       }),
     ).toBeInTheDocument()
-    expect(screen.getAllByText('00099988').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/00099988$/).length).toBeGreaterThan(0)
 
     await act(async () => {
       resolveFirstDetail?.(applicationDetail)
     })
 
     expect(screen.getByText('Second status', { selector: '.lexis-status-tag' })).toBeInTheDocument()
-    expect(screen.getAllByText('00099988').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/00099988$/).length).toBeGreaterThan(0)
     expect(screen.queryByText('00011122')).not.toBeInTheDocument()
     expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(1)
     expect(mockedFetchApplicationDocuments).toHaveBeenCalledWith('654')
@@ -1584,11 +1574,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       })
     })
     await selectApplicationDetailTab('Applicant')
-    expect(await screen.findByText('Owner Forestry Ltd.')).toBeInTheDocument()
+    expect(await screen.findByText('Owner Forestry Ltd. · 00011122')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
 
     await selectApplicationDetailTab('Applicant')
-    expect(screen.getByText('Agent Export Services')).toBeInTheDocument()
+    expect(screen.getByText('Agent Export Services · 00033344')).toBeInTheDocument()
     expect(within(getAgentDetailsTile()).getByText('agent@example.test')).toBeInTheDocument()
 
     await selectApplicationDetailTab('Application')
@@ -1607,7 +1597,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
-    expect(await screen.findByText('The application was saved successfully.')).toBeInTheDocument()
+    expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
   }, 30000)
 
@@ -1952,7 +1942,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
     await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
-    expect(await screen.findByText('The application was saved successfully.')).toBeVisible()
+    expect(await screen.findByText('The application was saved.')).toBeVisible()
     await waitFor(() =>
       expect(
         screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
@@ -1961,7 +1951,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await selectApplicationSummaryTile()
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(screen.getByRole('dialog', { name: 'Confirm application accuracy' })).toBeVisible()
-    expect(screen.queryByText('The application was saved successfully.')).not.toBeInTheDocument()
+    expect(screen.queryByText('The application was saved.')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
   })
 
@@ -3077,7 +3067,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       target: { value: '31' },
     })
     await selectApplicationRemarksForEditing()
-    fireEvent.change(await screen.findByLabelText('New Remark'), {
+    fireEvent.change(await screen.findByLabelText('Remark'), {
       target: { value: 'Sequential remark' },
     })
     const reviewTile = within(await selectApplicationReviewTile())

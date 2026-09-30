@@ -90,13 +90,13 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     await selectApplicationDetailTab('Remarks')
     expect(await screen.findByRole('button', { name: 'Add remark' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Remark')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Add remark' }))
-    const addRemarkInput = await screen.findByLabelText('New Remark')
+    const addRemarkInput = await screen.findByLabelText('Remark')
     expect(addRemarkInput).toHaveAttribute('maxlength', '250')
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Remark')).not.toBeInTheDocument()
 
     const reviewTile = await selectApplicationReviewTile(false)
     const review = within(reviewTile)
@@ -254,10 +254,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
         await screen.findByText('Older note')
         await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])
       }
-      fireEvent.change(
-        await screen.findByLabelText(mode === 'add' ? 'New Remark' : 'Edit Remark 87'),
-        { target: { value: savedText } },
-      )
+      fireEvent.change(await screen.findByLabelText('Remark'), { target: { value: savedText } })
       await userEvent.click(
         screen.getByRole('button', { name: mode === 'add' ? 'Save remark' : 'Update remark' }),
       )
@@ -320,9 +317,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       const addButton = await screen.findByRole('button', { name: 'Add remark' })
       const editButton = screen.getByRole('button', { name: 'Edit' })
       await userEvent.click(mode === 'add' ? addButton : editButton)
-      const remarkInput = await screen.findByLabelText(
-        mode === 'add' ? 'New Remark' : 'Edit Remark 88',
-      )
+      const remarkInput = await screen.findByLabelText('Remark')
       expect(document.querySelector('.c4p--side-panel--slide-in')).toBeInTheDocument()
       fireEvent.change(remarkInput, { target: { value: savedRemark.remark } })
 
@@ -346,10 +341,8 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       expect(remarkInput).toHaveValue(savedRemark.remark)
 
       await act(async () => resolveSave(savedRemark))
-      await screen.findByText(
-        mode === 'edit' ? 'Application remark updated.' : 'Application remark saved.',
-      )
-      expect(screen.queryByLabelText(/^(New Remark|Edit Remark 88)$/)).not.toBeInTheDocument()
+      await screen.findByText('Remark saved.')
+      expect(screen.queryByLabelText(/^Remark$/)).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Add remark' })).toBeEnabled()
       expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
     },
@@ -426,7 +419,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       target: { value: '181' },
     })
     await selectApplicationRemarksForEditing()
-    const newRemark = await screen.findByLabelText('New Remark')
+    const newRemark = await screen.findByLabelText('Remark')
     fireEvent.change(newRemark, {
       target: { value: 'Preserve remark draft' },
     })
@@ -494,8 +487,8 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     await selectApplicationRemarksForEditing()
-    expect(await screen.findByLabelText('New Remark')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('New Remark'), {
+    expect(await screen.findByLabelText('Remark')).toBeInTheDocument()
+    fireEvent.change(screen.getByLabelText('Remark'), {
       target: { value: 'New application note' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
@@ -507,7 +500,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
-    expect(await screen.findByText('Application remark saved.')).toBeInTheDocument()
+    expect(await screen.findByText('Remark saved.')).toBeInTheDocument()
     expect(screen.getAllByText('New application note').length).toBeGreaterThan(0)
   })
 
@@ -539,7 +532,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     await selectApplicationRemarksForEditing()
-    fireEvent.change(screen.getByLabelText('New Remark'), {
+    fireEvent.change(screen.getByLabelText('Remark'), {
       target: { value: 'Refresh permit eligibility' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
@@ -589,7 +582,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     await selectApplicationRemarksForEditing()
-    const remarkInput = await screen.findByLabelText('New Remark')
+    const remarkInput = await screen.findByLabelText('Remark')
     fireEvent.change(remarkInput, { target: { value: 'éè' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
 
@@ -654,7 +647,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     await selectApplicationRemarksForEditing()
-    fireEvent.change(await screen.findByLabelText('New Remark'), {
+    fireEvent.change(await screen.findByLabelText('Remark'), {
       target: { value: 'Operational note' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
@@ -682,7 +675,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     expect(await screen.findByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save remark' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
@@ -726,7 +719,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(within(remarkRow as HTMLElement).getByText('2026-01-04')).toBeInTheDocument()
     expect(within(remarkRow as HTMLElement).getByText('idir\\reviewer')).toBeInTheDocument()
     await userEvent.click(within(remarkRow as HTMLElement).getByRole('button', { name: 'Edit' }))
-    const remarkInput = await screen.findByLabelText('Edit Remark 88')
+    const remarkInput = await screen.findByLabelText('Remark')
     fireEvent.change(remarkInput, {
       target: { value: 'Updated application note' },
     })
@@ -740,7 +733,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       })
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
-    expect(await screen.findByText('Application remark updated.')).toBeInTheDocument()
+    expect(await screen.findByText('Remark saved.')).toBeInTheDocument()
     expect(screen.getAllByText('Updated application note').length).toBeGreaterThan(0)
   })
 
@@ -757,7 +750,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     await selectApplicationRemarksForEditing()
-    fireEvent.change(await screen.findByLabelText('New Remark'), {
+    fireEvent.change(await screen.findByLabelText('Remark'), {
       target: { value: 'Keep this unsaved remark' },
     })
     await selectApplicationSummaryTile()
@@ -768,7 +761,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     await waitFor(() => expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1))
 
     await selectApplicationDetailTab('Remarks')
-    expect(screen.getByLabelText('New Remark')).toHaveValue('Keep this unsaved remark')
+    expect(screen.getByLabelText('Remark')).toHaveValue('Keep this unsaved remark')
   })
 
   it('replaces the creation banner when approving an application', async () => {
@@ -799,7 +792,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByText('Created application 321.')).toBeInTheDocument()
+    expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
     const reviewTile = await selectApplicationReviewTile()
     expect(await screen.findByRole('heading', { name: /application review/i })).toBeInTheDocument()
     await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Approved' }))
@@ -810,7 +803,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
     expect(await screen.findByText('Application approved.')).toBeInTheDocument()
-    expect(screen.queryByText('Created application 321.')).not.toBeInTheDocument()
+    expect(screen.queryByText('The application was saved.')).not.toBeInTheDocument()
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
 
     const actionBanner = screen.getByText('Application approved.').closest('[role="status"]')
@@ -818,7 +811,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     await userEvent.click(
       within(actionBanner as HTMLElement).getByRole('button', { name: 'close notification' }),
     )
-    expect(screen.queryByText('Created application 321.')).not.toBeInTheDocument()
+    expect(screen.queryByText('The application was saved.')).not.toBeInTheDocument()
   })
 
   it('preserves unrelated drafts and their baseline when approving with a remark', async () => {
@@ -851,7 +844,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       target: { value: '181' },
     })
     await selectApplicationRemarksForEditing()
-    fireEvent.change(await screen.findByLabelText('New Remark'), {
+    fireEvent.change(await screen.findByLabelText('Remark'), {
       target: { value: 'Unrelated remark draft' },
     })
     const review = within(await selectApplicationReviewTile())
@@ -867,7 +860,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     await selectApplicationDetailTab('Remarks')
-    expect(screen.getByLabelText('New Remark')).toHaveValue('Unrelated remark draft')
+    expect(screen.getByLabelText('Remark')).toHaveValue('Unrelated remark draft')
     expect(screen.getByRole('cell', { name: 'Approval note' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
@@ -930,7 +923,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       await userEvent.click(
         await screen.findByRole('button', { name: mode === 'add' ? 'Add remark' : 'Edit' }),
       )
-      const remarkLabel = mode === 'add' ? 'New Remark' : 'Edit Remark 88'
+      const remarkLabel = 'Remark'
       fireEvent.change(await screen.findByLabelText(remarkLabel), {
         target: { value: 'Unrelated remark draft' },
       })
@@ -957,9 +950,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       await userEvent.click(
         screen.getByRole('button', { name: mode === 'add' ? 'Save remark' : 'Update remark' }),
       )
-      await screen.findByText(
-        mode === 'add' ? 'Application remark saved.' : 'Application remark updated.',
-      )
+      await screen.findByText('Remark saved.')
       expect(mockedSaveApplicationRemark).toHaveBeenNthCalledWith(2, {
         applicationNumber: '321',
         remarkBody: 'Unrelated remark draft',
@@ -1200,12 +1191,11 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     ).not.toBeInTheDocument()
     expect(screen.queryByText('Notification email')).not.toBeInTheDocument()
 
-    const applicantTypeField = screen
-      .getAllByText('Applicant type')
-      .find((element) => element.tagName === 'DT')
-      ?.closest('.detail-field-item')
-    expect(applicantTypeField).toBeTruthy()
-    expect(within(applicantTypeField as HTMLElement).getByText('Owner')).toBeInTheDocument()
+    // Figma heads the owner's details instead of listing an Applicant type field.
+    expect(
+      within(ownerDetailsTile as HTMLElement).getByRole('heading', { level: 3, name: 'Owner' }),
+    ).toBeVisible()
+    expect(within(ownerDetailsTile as HTMLElement).queryByText('Applicant type')).toBeNull()
 
     const clientLocationField = screen
       .getAllByText('Client location')
@@ -1249,14 +1239,13 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       await screen.findByRole('heading', { name: 'Applicant details', level: 2 })
     ).closest('.cds--tile')
     expect(ownerDetailsTile).toBeTruthy()
-    const applicantTypeField = within(ownerDetailsTile as HTMLElement)
-      .getByText('Ministerial')
-      .closest('.detail-field-item')
-    expect(applicantTypeField).toBeTruthy()
+    // A Ministerial applicant keeps its type visible as the owner section heading.
     expect(
-      within(applicantTypeField as HTMLElement).getByText('Applicant type'),
-    ).toBeInTheDocument()
-    expect(within(applicantTypeField as HTMLElement).getByText('Ministerial')).toBeInTheDocument()
+      within(ownerDetailsTile as HTMLElement).getByRole('heading', {
+        level: 3,
+        name: 'Ministerial',
+      }),
+    ).toBeVisible()
   })
 
   it('defaults owner application review mail to the owner client-location email', async () => {
@@ -1719,7 +1708,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     await selectApplicationRemarksForEditing()
-    expect(await screen.findByLabelText('New Remark')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Remark')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
 
     expect(screen.getByText('Remark is required.')).toBeInTheDocument()
