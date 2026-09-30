@@ -898,7 +898,7 @@ const ProvincialReviewPage = () => {
         }
       : {}
 
-  const approveApplications = async (applicationNumbers: string[]): Promise<boolean> => {
+  const approveApplications = async (applicationNumbers: string[]): Promise<void> => {
     setSubmittingApproval(true)
     setReviewActionResults([])
 
@@ -967,7 +967,6 @@ const ProvincialReviewPage = () => {
         },
         { force: true },
       )
-      return successCount > 0
     } finally {
       setSubmittingApproval(false)
     }
@@ -1001,11 +1000,9 @@ const ProvincialReviewPage = () => {
 
   const onConfirmApproveSelected = async () => {
     const selectedNumbers = approvalConfirmationNumbers
+    // The dialog closes and the page lists every outcome, including a batch that approves nothing.
     if (selectedNumbers.length > 0) {
-      const approved = await approveApplications(selectedNumbers)
-      if (!approved) {
-        throw new Error('No selected applications were approved.')
-      }
+      await approveApplications(selectedNumbers)
     }
   }
 

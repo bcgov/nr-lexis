@@ -1244,7 +1244,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
 
-  it('keeps approval confirmation open and re-enables retry when every approval fails', async () => {
+  it('closes approval confirmation and lists the failures on the page when every approval fails', async () => {
     mockedApproveApplicationReview.mockResolvedValueOnce({
       updated: false,
       valid: false,
@@ -1261,16 +1261,23 @@ describe('Provincial Review Action State Smoke', () => {
     const dialog = await screen.findByRole('dialog', { name: 'Approve application' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
 
-    expect(await within(dialog).findByText('1 application was not approved')).toBeVisible()
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Approve application' })).not.toBeInTheDocument(),
+    )
+    const failed = screen
+      .getByText('1 application was not approved')
+      .closest('.app-inline-notification') as HTMLElement
     expect(
-      within(dialog).getByText(
-        'It keeps its current status. Correct the details below, then approve again. 1000456: Application owner location does not exist.',
+      within(failed).getByText(
+        'It keeps its current status. Correct the details below, then approve again.',
       ),
     ).toBeVisible()
-    expect(dialog).toBeVisible()
-    expect(within(dialog).getByRole('button', { name: 'Approve' })).toBeEnabled()
+    expect(
+      within(failed)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['1000456: Application owner location does not exist.'])
     expect(screen.getByRole('checkbox', { name: 'Select 1000456' })).toBeChecked()
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
     const reopened = await screen.findByRole('dialog', { name: 'Approve application' })
     expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
