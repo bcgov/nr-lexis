@@ -1709,7 +1709,7 @@ const ProvincialApplicationCreatePage = () => {
                 <div className="detail-section-card__header">
                   <h2 className="detail-tile-title">Applicant details</h2>
                 </div>
-                <p className="application-create-required">* Required fields</p>
+                <p className="application-create-required">{requiredLabel('Required fields')}</p>
                 <div className="legacy-search-grid create-form-grid application-create-client-grid">
                   {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
                     <SearchableSelect
@@ -2027,7 +2027,7 @@ const ProvincialApplicationCreatePage = () => {
                 <div className="detail-section-card__header">
                   <h2 className="detail-tile-title">Application details</h2>
                 </div>
-                <p className="application-create-required">* Required fields</p>
+                <p className="application-create-required">{requiredLabel('Required fields')}</p>
                 <div className="legacy-search-grid create-form-grid">
                   <SearchableSelect
                     id="region"
@@ -2182,7 +2182,7 @@ const ProvincialApplicationCreatePage = () => {
                   <div className="detail-section-card__header">
                     <h2 className="detail-tile-title">Scale details</h2>
                   </div>
-                  <p className="application-create-required">* Required fields</p>
+                  <p className="application-create-required">{requiredLabel('Required fields')}</p>
                   <div className="legacy-search-grid create-form-grid">
                     {productTypeRequiresLogDetails(form.productTypeCode) && (
                       <TextArea

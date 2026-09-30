@@ -3584,38 +3584,9 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 0;
 }
 
-.admin-upload-progress__dot {
-  display: inline-flex;
+.admin-upload-progress__icon {
   flex: 0 0 auto;
-  align-items: center;
-  justify-content: center;
-  inline-size: 1rem;
-  block-size: 1rem;
-  border: 1.5px solid var(--fds-border-strong, var(--cds-border-strong));
-  border-radius: 50%;
-}
-
-.admin-upload-progress__step.is-current .admin-upload-progress__dot,
-.admin-upload-progress__step.is-complete .admin-upload-progress__dot {
-  background: var(--fds-interactive, var(--cds-border-interactive));
-  border-color: var(--fds-interactive, var(--cds-border-interactive));
-}
-
-.admin-upload-progress__step.is-current .admin-upload-progress__dot::after {
-  content: '';
-  inline-size: 0.375rem;
-  block-size: 0.375rem;
-  background: var(--fds-layer-01, var(--cds-layer));
-  border-radius: 50%;
-}
-
-.admin-upload-progress__step.is-complete .admin-upload-progress__dot::after {
-  content: '';
-  inline-size: 0.55rem;
-  block-size: 0.3rem;
-  border-block-end: 2px solid var(--fds-layer-01, var(--cds-layer));
-  border-inline-start: 2px solid var(--fds-layer-01, var(--cds-layer));
-  transform: rotate(-45deg) translate(0.05rem, -0.05rem);
+  fill: var(--fds-interactive, var(--cds-border-interactive));
 }
 
 .admin-upload-progress__label {

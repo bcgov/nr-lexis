@@ -1,3 +1,5 @@
+import { CheckmarkOutline, CircleDash, Incomplete } from '@carbon/icons-react'
+
 type UploadWorkflowStep = {
   id: string
   label: string
@@ -28,6 +30,8 @@ function UploadWorkflowProgress({
           : isComplete
             ? 'is-complete'
             : 'is-incomplete'
+        // Same step icons as Carbon's ProgressIndicator.
+        const StepIcon = isCurrent ? Incomplete : isComplete ? CheckmarkOutline : CircleDash
 
         return (
           <div
@@ -37,7 +41,7 @@ function UploadWorkflowProgress({
             {...(isCurrent ? { 'aria-current': 'step' as const } : {})}
           >
             <span className="admin-upload-progress__step-inner">
-              <span className="admin-upload-progress__dot" aria-hidden="true" />
+              <StepIcon className="admin-upload-progress__icon" size={16} aria-hidden="true" />
               <span className="admin-upload-progress__label">
                 {index + 1}. {step.label}
               </span>
