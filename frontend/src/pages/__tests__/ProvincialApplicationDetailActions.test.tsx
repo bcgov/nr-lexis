@@ -21,7 +21,6 @@ import {
   getSummaryComboBox,
   mockApplicationDetailAuth,
   mockedCheckApplicationVolumeUsage,
-  mockedFetchApplicationClientContacts,
   mockedFetchApplicationClientData,
   mockedFetchApplicationClientLocations,
   mockedFetchApplicationDocuments,
@@ -33,7 +32,6 @@ import {
   mockedSaveApplicationRemark,
   mockedUpdateApplicationReviewStatus,
   mockedUpdateApplicationSummary,
-  newExemptionDetail,
   selectApplicationDetailTab,
   selectApplicationItemDetailsTile,
   selectApplicationRemarksForEditing,
@@ -163,7 +161,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const summary = within(await selectApplicationSummaryTile())
-    const fields = ['Region', 'List date', 'Jurisdiction']
+    const fields = ['Region', 'List date', 'Exemption term (days)']
     for (const field of fields) {
       expect(summary.getAllByText(field, { exact: true })).toHaveLength(1)
     }
@@ -189,7 +187,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const summary = within(await selectApplicationSummaryTile(false))
-    expect(summary.getByText('Jurisdiction', { exact: true })).toBeInTheDocument()
+    expect(summary.getByText('Exemption term (days)', { exact: true })).toBeInTheDocument()
     expect(summary.queryByText('Order in Council indicator')).not.toBeInTheDocument()
 
     await userEvent.click(summary.getByRole('button', { name: 'Edit application details' }))
@@ -257,6 +255,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       'Offers',
       'Review',
     ])
+    // Figma puts a Carbon icon on every application detail tab.
+    tabs.forEach((tab) => expect(tab.querySelector('svg')).toBeInTheDocument())
     expect(tabs[0]).toHaveAttribute('aria-selected', 'true')
   })
 
@@ -353,19 +353,79 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(within(ownerSection).queryByText('Applicant type')).not.toBeInTheDocument()
 
     const ownerTile = getOwnerClientDetailsTile()
+    expect(
+      within(ownerTile)
+        .getByRole('heading', { level: 2, name: 'Applicant details' })
+        .querySelector('svg'),
+    ).toBeInTheDocument()
     await userEvent.click(within(ownerTile).getByRole('button', { name: 'Edit applicant details' }))
+    expect(within(ownerTile).getByText('Required fields')).toBeInTheDocument()
     const editOwnerEmail = (await within(ownerTile).findByText('owner@example.test')).closest(
       '.detail-field-item',
     )
     const editOwnerAgentIndicator = within(ownerTile).getByLabelText("I'm an agent")
+    // Figma separates the owner's details from the agent checkbox with a divider.
+    const divider = ownerTile.querySelector('hr.application-applicant-divider')
 
     expect(editOwnerEmail).toBeTruthy()
+    expect(divider).toBeTruthy()
     expect(
       Boolean(
-        (editOwnerEmail as Node).compareDocumentPosition(editOwnerAgentIndicator) &
+        (editOwnerEmail as Node).compareDocumentPosition(divider as Node) &
         Node.DOCUMENT_POSITION_FOLLOWING,
       ),
     ).toBe(true)
+    expect(
+      Boolean(
+        (divider as Node).compareDocumentPosition(editOwnerAgentIndicator) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+      ),
+    ).toBe(true)
+  })
+
+  it('shows client acronyms, the usual empty value and a divider before the agent', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      ownerContactName: '',
+    })
+    mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
+      clientNumber,
+      companyName: clientNumber === '00033344' ? 'Agent Export Services' : 'Owner Forestry Ltd.',
+      clientAcronym: clientNumber === '00033344' ? '' : 'OWNFOR',
+      address: '',
+      city: '',
+      province: '',
+      postalCode: '',
+      country: '',
+      phone: '',
+      fax: '',
+      email: '',
+      notfound: '',
+    }))
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const ownerSection = await screen.findByRole('region', { name: 'Owner' })
+    expect(
+      await within(ownerSection).findByText('Owner Forestry Ltd. (OWNFOR) · 00011122'),
+    ).toBeInTheDocument()
+    const ownerContact = within(ownerSection).getByText('Contact name').nextElementSibling
+    expect(ownerContact).toHaveTextContent('Not provided')
+
+    const agentSection = screen.getByRole('region', { name: 'Agent information' })
+    expect(
+      await within(agentSection).findByText('Agent Export Services · 00033344'),
+    ).toBeInTheDocument()
+    expect(agentSection.previousElementSibling).toHaveClass('application-applicant-divider')
   })
 
   it('keeps saved client values visible when enrichment fails', async () => {
@@ -413,11 +473,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await selectApplicationDetailTab('Application')
     expect(
-      await screen.findByRole('heading', {
-        level: 3,
-        name: 'No permits found',
-      }),
+      await screen.findByRole('heading', { level: 2, name: 'Application details' }),
     ).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No permits found' })).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Scale')
     // The reviewed Figma places each first-record action inside its empty state.
@@ -650,12 +708,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     await waitFor(() =>
       expect(
-        ownerControls.getByRole('combobox', {
+        ownerControls.getByRole('textbox', {
           name: 'Contact name',
         }),
       ).toBeEnabled(),
     )
-    const ownerContactName = ownerControls.getByRole('combobox', { name: 'Contact name' })
+    const ownerContactName = ownerControls.getByRole('textbox', { name: 'Contact name' })
     fireEvent.change(ownerContactName, { target: { value: 'Advertising Owner' } })
     await waitFor(() => expect(ownerContactName).toHaveValue('Advertising Owner'))
 
@@ -740,12 +798,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       '01 - Agent Main Location',
     )
     await waitFor(() =>
-      expect(agentControls.getByRole('combobox', { name: 'Contact name' })).toBeEnabled(),
+      expect(agentControls.getByRole('textbox', { name: 'Contact name' })).toBeEnabled(),
     )
-    await chooseComboBoxOption(
-      agentControls.getByRole('combobox', { name: 'Contact name' }),
-      'Agent Contact',
-    )
+    fireEvent.change(agentControls.getByRole('textbox', { name: 'Contact name' }), {
+      target: { value: 'Agent Contact' },
+    })
     await userEvent.click(resetOwnerControls.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>
@@ -765,6 +822,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
       clientNumber,
       companyName: 'Owner Forestry Ltd.',
+      clientAcronym: '',
       address: '22 Owner Road',
       city: 'Victoria',
       province: 'BC',
@@ -868,6 +926,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     mockedFetchApplicationClientData.mockResolvedValueOnce({
       clientNumber: '00099988',
       companyName: 'Discarded Client Ltd.',
+      clientAcronym: '',
       address: '99 Discarded Road',
       city: 'Victoria',
       province: 'BC',
@@ -942,15 +1001,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     await waitFor(() =>
       expect(
-        agentControls.getByRole('combobox', {
+        agentControls.getByRole('textbox', {
           name: 'Contact name',
         }),
       ).toBeEnabled(),
     )
-    await chooseComboBoxOption(
-      agentControls.getByRole('combobox', { name: 'Contact name' }),
-      'Agent Alternate Contact',
-    )
+    fireEvent.change(agentControls.getByRole('textbox', { name: 'Contact name' }), {
+      target: { value: 'Agent Alternate Contact' },
+    })
 
     await userEvent.click(
       within(getOwnerClientDetailsTile()).getByRole('button', { name: 'Save changes' }),
@@ -1207,59 +1265,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
   })
 
-  it('links to the contextual exemption and preserves current query parameters', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321?packageFilter=PKG-1']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-          <Route path="/provincial/exemption/:exemptionNumber" element={<LocationProbe />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const summaryTile = await selectApplicationSummaryTile()
-    const exemptionLink = within(summaryTile).getByRole('link', {
-      name: 'EX-555',
-    })
-    await userEvent.click(exemptionLink)
-
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/provincial/exemption/EX-555?packageFilter=PKG-1')
-    expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
-  })
-
-  it('renders the exemption number as plain text without exemption route capabilities', async () => {
-    mockApplicationDetailAuth(
-      (action: string) => action !== '/exemptionSearch' && action !== '/exemptionDetails',
-    )
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const summaryTile = await selectApplicationSummaryTile()
-    expect(within(summaryTile).getByText('EX-555')).toBeInTheDocument()
-    expect(within(summaryTile).queryByRole('link', { name: 'EX-555' })).not.toBeInTheDocument()
-    expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
-  })
-
-  it('keeps an industry-linked NEW exemption as plain text', async () => {
+  it('shows only the Figma Application fields, in its rows, without the linked exemption or permits', async () => {
     mockApplicationDetailAuth(() => true, ['LEXIS_PROVINCIAL_SUBMITTER_00011122'])
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       industryUser: true,
     })
-    mockedFetchProvincialExemptionDetail.mockResolvedValue(newExemptionDetail)
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -1272,43 +1283,25 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    const summaryTile = await selectApplicationSummaryTile()
-    await waitFor(() => {
-      expect(mockedFetchProvincialExemptionDetail).toHaveBeenCalledWith('EX-555')
-    })
-    expect(within(summaryTile).getByText('EX-555')).toBeInTheDocument()
-    expect(within(summaryTile).queryByRole('link', { name: 'EX-555' })).not.toBeInTheDocument()
-  })
-
-  it('links an industry application after non-NEW exemption access is verified', async () => {
-    mockApplicationDetailAuth(() => true, ['LEXIS_PROVINCIAL_SUBMITTER_00011122'])
-    mockedFetchProvincialApplicationDetail.mockResolvedValue({
-      ...applicationDetail,
-      industryUser: true,
-    })
-    mockedFetchProvincialExemptionDetail.mockResolvedValue({
-      ...newExemptionDetail,
-      exemptionStatusCode: 'ACT',
-      exemptionStatusDescription: 'Active',
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const summaryTile = await selectApplicationSummaryTile()
-    expect(await within(summaryTile).findByRole('link', { name: 'EX-555' })).toHaveAttribute(
-      'href',
-      '/provincial/exemption/EX-555',
-    )
-    expect(mockedFetchProvincialExemptionDetail).toHaveBeenCalledWith('EX-555')
+    const summaryTile = await selectApplicationSummaryTile(false)
+    const rows = summaryTile.querySelectorAll('dl')
+    expect(
+      Array.from(rows, (row) => Array.from(row.querySelectorAll('dt'), (term) => term.textContent)),
+    ).toEqual([
+      ['Region', 'Product type', 'Exemption reason'],
+      ['Application date', 'List date'],
+      ['Exemption term (days)'],
+    ])
+    expect(
+      within(summaryTile)
+        .getByRole('heading', { name: 'Application details' })
+        .querySelector('svg'),
+    ).toBeInTheDocument()
+    expect(within(summaryTile).queryByText('Exemption number')).not.toBeInTheDocument()
+    expect(within(summaryTile).queryByText('Jurisdiction')).not.toBeInTheDocument()
+    expect(screen.queryByText('EX-555')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Permits' })).not.toBeInTheDocument()
+    expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
   })
 
   it('hides expired application mutation actions even when server edit flags are true', async () => {
@@ -1529,8 +1522,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await selectApplicationSummaryTile()
     const summaryControls = within(await waitFor(() => getApplicationSummaryTile()))
     expect(summaryControls.queryByLabelText('Application status')).not.toBeInTheDocument()
-    expect(summaryControls.getByLabelText('Jurisdiction')).toHaveAttribute('readonly')
-    expect(summaryControls.getByLabelText('Jurisdiction')).toHaveValue('F - Federal')
+    expect(summaryControls.getByText('Required fields')).toBeInTheDocument()
+    expect(summaryControls.queryByLabelText('Jurisdiction')).not.toBeInTheDocument()
     expect(summaryControls.queryByLabelText('Applicant type')).not.toBeInTheDocument()
     const legacyOrderedControls = [
       getSummaryComboBox(summaryControls, 'Region'),
@@ -1554,18 +1547,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled()
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner', '321')
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033344', 'agent', '321')
-      expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
-        '00011122',
-        '02',
-        'owner',
-        '321',
-      )
-      expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
-        '00033344',
-        '01',
-        'agent',
-        '321',
-      )
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '02', {
         applicationNumber: '321',
       })
@@ -1637,13 +1618,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       )
       const contactName =
         saveSource === 'owner'
-          ? controls.getAllByRole('combobox', { name: 'Contact name' })[0]
-          : within(getAgentDetailsTile()).getByRole('combobox', { name: 'Contact name' })
+          ? controls.getAllByRole('textbox', { name: 'Contact name' })[0]
+          : within(getAgentDetailsTile()).getByRole('textbox', { name: 'Contact name' })
       await waitFor(() => expect(contactName).toBeEnabled())
-      await chooseComboBoxOption(
-        contactName,
-        saveSource === 'owner' ? 'Owner Alternate Contact' : 'Agent Alternate Contact',
-      )
+      fireEvent.change(contactName, {
+        target: {
+          value: saveSource === 'owner' ? 'Owner Alternate Contact' : 'Agent Alternate Contact',
+        },
+      })
       await userEvent.click(controls.getByRole('button', { name: 'Save changes' }))
 
       await waitFor(() =>
@@ -1903,7 +1885,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryControls = within(await selectApplicationSummaryTile())
     expect(summaryControls.queryByLabelText('Application status')).not.toBeInTheDocument()
-    expect(summaryControls.getByLabelText('Jurisdiction')).toHaveAttribute('readonly')
+    expect(summaryControls.queryByLabelText('Jurisdiction')).not.toBeInTheDocument()
     expect(summaryControls.queryByLabelText('Applicant type')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -2000,8 +1982,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
-    const itemDetails = within(await selectApplicationItemDetailsTile())
+    const itemDetailsTile = await selectApplicationItemDetailsTile()
+    const itemDetails = within(itemDetailsTile)
     const productLocationInput = await itemDetails.findByLabelText('Location of logs')
+    expect(itemDetails.getByText('Required fields')).toBeInTheDocument()
+    expect(
+      itemDetails.getByRole('heading', { level: 2, name: 'Scale details' }).querySelector('svg'),
+    ).toBeInTheDocument()
 
     await waitFor(() => {
       expect(productLocationInput).toHaveValue('BC')
@@ -3093,9 +3080,34 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
   })
 
-  it('allows manual summary contact entry when lookup has no contacts', async () => {
-    mockedFetchApplicationClientContacts.mockResolvedValue([])
+  it('shows the saved contact name in view and edit mode without substituting a lookup contact', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      ownerContactName: 'Saved Custom Contact',
+    })
 
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const ownerSection = await screen.findByRole('region', { name: 'Owner' })
+    expect(await within(ownerSection).findByText('Saved Custom Contact')).toBeInTheDocument()
+
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    expect(ownerControls.getAllByRole('textbox', { name: 'Contact name' })[0]).toHaveValue(
+      'Saved Custom Contact',
+    )
+  })
+
+  it('saves a typed summary contact name, as Figma uses free text', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -3145,23 +3157,15 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         applicationNumber: '321',
       })
       expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner', '321')
-      expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
-        '00011122',
-        '00',
-        'owner',
-        '321',
-      )
     })
     mockedFetchApplicationClientData.mockClear()
     mockedFetchApplicationClientLocations.mockClear()
-    mockedFetchApplicationClientContacts.mockClear()
 
     const ownerClientNumberInput = ownerControls.getByLabelText('Client number')
     fireEvent.change(ownerClientNumberInput, { target: { value: '00044444' } })
 
     expect(mockedFetchApplicationClientData).not.toHaveBeenCalled()
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
-    expect(mockedFetchApplicationClientContacts).not.toHaveBeenCalled()
 
     await waitFor(
       () => {
@@ -3170,12 +3174,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         })
         expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
           '00044444',
-          'owner',
-          '321',
-        )
-        expect(mockedFetchApplicationClientContacts).toHaveBeenCalledWith(
-          '00044444',
-          '00',
           'owner',
           '321',
         )
@@ -3188,6 +3186,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
       clientNumber,
       companyName: clientNumber === '00033344' ? 'Agent without email' : 'Owner Forestry Ltd.',
+      clientAcronym: '',
       address: '',
       city: '',
       province: '',

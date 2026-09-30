@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.repository.client;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
+import java.sql.ResultSet;
 import java.util.List;
 import java.util.Optional;
 import java.util.regex.Pattern;
@@ -13,8 +14,31 @@ import org.springframework.stereotype.Repository;
 @Profile("oracle")
 public class ClientLookupRepository extends OracleRepositorySupport {
 
+  // Replaces LEXIS_GROUP_5.FIND_CLIENT_LOCATION: the same location and client join, plus the
+  // client acronym shown with the client name.
   private static final String FIND_CLIENT_LOCATION =
-      LEXIS_GROUP_5_PACKAGE + "FIND_CLIENT_LOCATION(?,?,?)";
+      """
+      SELECT L.CLIENT_NUMBER,
+             L.CLIENT_LOCN_CODE,
+             L.CLIENT_LOCN_NAME,
+             FC.CLIENT_NAME AS COMPANY_NAME,
+             L.ADDRESS_1,
+             L.ADDRESS_2,
+             L.ADDRESS_3,
+             L.CITY,
+             L.PROVINCE,
+             L.POSTAL_CODE,
+             L.COUNTRY,
+             L.BUSINESS_PHONE,
+             L.FAX_NUMBER,
+             L.EMAIL_ADDRESS,
+             CA.CLIENT_ACRONYM
+      FROM THE.CLIENT_LOCATION L
+      LEFT JOIN THE.V_CLIENT_PUBLIC FC ON FC.CLIENT_NUMBER = L.CLIENT_NUMBER
+      LEFT JOIN THE.CLIENT_ACRONYM CA ON CA.CLIENT_NUMBER = L.CLIENT_NUMBER
+      WHERE L.CLIENT_NUMBER = ?
+        AND L.CLIENT_LOCN_CODE = ?
+      """;
   private static final String FIND_CLIENT_LOCATIONS =
       LEXIS_GROUP_5_PACKAGE + "FIND_CLIENT_LOCATIONS(?,?)";
   private static final String FIND_CONTACTS_BY_LOCATION =
@@ -103,29 +127,13 @@ public class ClientLookupRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleFailClosed(
-        FIND_CLIENT_LOCATION,
-        cs -> {
-          cs.setString(1, normalizedClientNumber);
-          cs.setString(2, normalizedLocationCode);
-        },
-        3,
-        rs ->
-            new ClientLocationRow(
-                getString(rs, "CLIENT_NUMBER"),
-                getString(rs, "CLIENT_LOCN_CODE"),
-                getString(rs, "CLIENT_LOCN_NAME"),
-                getString(rs, "COMPANY_NAME"),
-                getString(rs, "ADDRESS_1"),
-                getString(rs, "ADDRESS_2"),
-                getString(rs, "ADDRESS_3"),
-                getString(rs, "CITY"),
-                getString(rs, "PROVINCE"),
-                getString(rs, "POSTAL_CODE"),
-                getString(rs, "COUNTRY"),
-                getString(rs, "BUSINESS_PHONE"),
-                getString(rs, "FAX_NUMBER"),
-                getString(rs, "EMAIL_ADDRESS")));
+    return queryDirectFailClosed(
+            FIND_CLIENT_LOCATION,
+            this::mapClientLocation,
+            normalizedClientNumber,
+            normalizedLocationCode)
+        .stream()
+        .findFirst();
   }
 
   public Optional<ClientLocationRow> findLocationByClientNumberCodeRequired(
@@ -136,29 +144,13 @@ public class ClientLookupRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
 
-    return queryCursorSingleRequired(
-        FIND_CLIENT_LOCATION,
-        cs -> {
-          cs.setString(1, normalizedClientNumber);
-          cs.setString(2, normalizedLocationCode);
-        },
-        3,
-        rs ->
-            new ClientLocationRow(
-                getString(rs, "CLIENT_NUMBER"),
-                getString(rs, "CLIENT_LOCN_CODE"),
-                getString(rs, "CLIENT_LOCN_NAME"),
-                getString(rs, "COMPANY_NAME"),
-                getString(rs, "ADDRESS_1"),
-                getString(rs, "ADDRESS_2"),
-                getString(rs, "ADDRESS_3"),
-                getString(rs, "CITY"),
-                getString(rs, "PROVINCE"),
-                getString(rs, "POSTAL_CODE"),
-                getString(rs, "COUNTRY"),
-                getString(rs, "BUSINESS_PHONE"),
-                getString(rs, "FAX_NUMBER"),
-                getString(rs, "EMAIL_ADDRESS")));
+    return queryDirectRequired(
+            FIND_CLIENT_LOCATION,
+            this::mapClientLocation,
+            normalizedClientNumber,
+            normalizedLocationCode)
+        .stream()
+        .findFirst();
   }
 
   public List<ClientLocationRow> findLocationsByClientNumber(String clientNumber) {
@@ -186,7 +178,27 @@ public class ClientLookupRepository extends OracleRepositorySupport {
                 getString(rs, "COUNTRY"),
                 getString(rs, "BUSINESS_PHONE"),
                 getString(rs, "FAX_NUMBER"),
-                getString(rs, "EMAIL_ADDRESS")));
+                getString(rs, "EMAIL_ADDRESS"),
+                null));
+  }
+
+  private ClientLocationRow mapClientLocation(ResultSet rs) {
+    return new ClientLocationRow(
+        getString(rs, "CLIENT_NUMBER"),
+        getString(rs, "CLIENT_LOCN_CODE"),
+        getString(rs, "CLIENT_LOCN_NAME"),
+        getString(rs, "COMPANY_NAME"),
+        getString(rs, "ADDRESS_1"),
+        getString(rs, "ADDRESS_2"),
+        getString(rs, "ADDRESS_3"),
+        getString(rs, "CITY"),
+        getString(rs, "PROVINCE"),
+        getString(rs, "POSTAL_CODE"),
+        getString(rs, "COUNTRY"),
+        getString(rs, "BUSINESS_PHONE"),
+        getString(rs, "FAX_NUMBER"),
+        getString(rs, "EMAIL_ADDRESS"),
+        getString(rs, "CLIENT_ACRONYM"));
   }
 
   public List<ClientContactRow> findContactsByClientNumberCode(
@@ -269,7 +281,8 @@ public class ClientLookupRepository extends OracleRepositorySupport {
       String country,
       String businessPhone,
       String faxNumber,
-      String emailAddress) {}
+      String emailAddress,
+      String clientAcronym) {}
 
   public record ClientContactRow(String contactName, String contactId) {}
 

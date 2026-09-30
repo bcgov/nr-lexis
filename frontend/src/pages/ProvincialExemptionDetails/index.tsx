@@ -2569,7 +2569,7 @@ const ProvincialExemptionDetailsPage = () => {
                               actions={[
                                 {
                                   label: 'Cancel',
-                                  kind: 'secondary',
+                                  kind: 'tertiary',
                                   disabled: Boolean(applicationMutationNumber),
                                   onClick: () => {
                                     setApplicationNumberToAdd('')

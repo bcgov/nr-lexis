@@ -117,18 +117,20 @@ public class OracleClientLookupService implements ClientLookupService {
     return suggestionsByClientNumber.values().stream().limit(MAX_CLIENT_SUGGESTIONS).toList();
   }
 
+  // Empty client fields stay empty so pages show their usual empty value.
   private ClientData toClientData(ClientLocationRow row) {
     return new ClientData(
-        replaceEmptyField(row.clientNumber()),
-        replaceEmptyField(row.companyName()),
-        replaceEmptyField(buildAddress(row)),
-        replaceEmptyField(row.city()),
-        replaceEmptyField(row.province()),
-        replaceEmptyField(row.postalCode()),
-        replaceEmptyField(row.country()),
-        replaceEmptyField(row.businessPhone()),
-        replaceEmptyField(row.faxNumber()),
-        replaceEmptyField(row.emailAddress()));
+        trimToNull(row.clientNumber()),
+        trimToNull(row.companyName()),
+        trimToNull(buildAddress(row)),
+        trimToNull(row.city()),
+        trimToNull(row.province()),
+        trimToNull(row.postalCode()),
+        trimToNull(row.country()),
+        trimToNull(row.businessPhone()),
+        trimToNull(row.faxNumber()),
+        trimToNull(row.emailAddress()),
+        trimToNull(row.clientAcronym()));
   }
 
   private ClientLocation toClientLocation(ClientLocationRow row) {

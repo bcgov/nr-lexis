@@ -1904,7 +1904,7 @@ function ProvincialApplicationItemsPanel({
                 actions={[
                   {
                     label: 'Cancel',
-                    kind: 'secondary',
+                    kind: 'tertiary',
                     disabled: isSavingPackage,
                     onClick: requestDrawerClose,
                   },
@@ -2206,7 +2206,7 @@ function ProvincialApplicationItemsPanel({
             actions={[
               {
                 label: 'Cancel',
-                kind: 'secondary',
+                kind: 'tertiary',
                 disabled: isSavingPackage,
                 onClick: requestDrawerClose,
               },
@@ -2476,7 +2476,7 @@ function ProvincialApplicationItemsPanel({
                 actions={[
                   {
                     label: 'Cancel',
-                    kind: 'secondary',
+                    kind: 'tertiary',
                     disabled: isSavingScale,
                     onClick: requestDrawerClose,
                   },

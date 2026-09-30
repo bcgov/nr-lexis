@@ -17,3 +17,19 @@
     max-inline-size: 100%;
   }
 }
+
+// Figma drawer footer: medium buttons that share a padded row.
+.detail-side-panel .c4p--side-panel__actions-container.c4p--action-set {
+  gap: 0.5rem;
+  padding: 1rem;
+  background-color: var(--cds-layer-02);
+}
+
+.detail-side-panel
+  .c4p--side-panel__actions-container
+  .c4p--action-set__action-button.c4p--action-set__action-button {
+  flex: 1 1 0;
+  block-size: 2.5rem;
+  min-block-size: 2.5rem;
+  padding-block: calc(0.675rem - 3px);
+}

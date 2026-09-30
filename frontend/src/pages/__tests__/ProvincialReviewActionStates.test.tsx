@@ -243,6 +243,7 @@ describe('Provincial Review Action State Smoke', () => {
     mockedFetchApplicationClientData.mockResolvedValue({
       clientNumber: '00012345',
       companyName: 'Client Ltd.',
+      clientAcronym: '',
       address: '',
       city: '',
       province: '',
@@ -647,6 +648,7 @@ describe('Provincial Review Action State Smoke', () => {
     mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
       clientNumber,
       companyName: clientNumber === '00099999' ? 'Second Client Ltd.' : 'First Client Ltd.',
+      clientAcronym: '',
       address: '',
       city: '',
       province: '',
@@ -780,6 +782,7 @@ describe('Provincial Review Action State Smoke', () => {
       .mockResolvedValueOnce({
         clientNumber: '00012345',
         companyName: 'Owner Ltd.',
+        clientAcronym: '',
         address: '',
         city: '',
         province: '',
@@ -793,6 +796,7 @@ describe('Provincial Review Action State Smoke', () => {
       .mockResolvedValueOnce({
         clientNumber: '00054321',
         companyName: 'Agent Ltd.',
+        clientAcronym: '',
         address: '',
         city: '',
         province: '',
@@ -846,6 +850,7 @@ describe('Provincial Review Action State Smoke', () => {
       .mockResolvedValueOnce({
         clientNumber: '00012345',
         companyName: 'Owner Ltd.',
+        clientAcronym: '',
         address: '',
         city: '',
         province: '',
@@ -859,6 +864,7 @@ describe('Provincial Review Action State Smoke', () => {
       .mockResolvedValueOnce({
         clientNumber: '00054321',
         companyName: 'Agent without email',
+        clientAcronym: '',
         address: '',
         city: '',
         province: '',
@@ -926,6 +932,7 @@ describe('Provincial Review Action State Smoke', () => {
     mockedFetchApplicationClientData.mockResolvedValueOnce({
       clientNumber: '00012345',
       companyName: 'Client Ltd.',
+      clientAcronym: '',
       address: '',
       city: '',
       province: '',

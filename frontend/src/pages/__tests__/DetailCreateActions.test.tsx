@@ -34,7 +34,6 @@ vi.mock('@/service/lexis-detail-service', () => ({
 
 vi.mock('@/service/application-client-lookup-service', () => ({
   fetchApplicationClientData: vi.fn().mockResolvedValue(null),
-  fetchApplicationClientContacts: vi.fn().mockResolvedValue([]),
   fetchApplicationClientLocations: vi.fn().mockResolvedValue([]),
   fetchExemptionClientData: vi.fn().mockResolvedValue(null),
   fetchExemptionClientLocations: vi.fn().mockResolvedValue([]),

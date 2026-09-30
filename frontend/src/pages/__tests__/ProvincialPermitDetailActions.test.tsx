@@ -693,6 +693,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           return {
             clientNumber,
             companyName: 'Owner Co',
+            clientAcronym: '',
             address: '1 Owner St',
             city: 'Victoria',
             province: 'BC',
@@ -708,6 +709,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         return {
           clientNumber,
           companyName: 'Agent Co',
+          clientAcronym: '',
           address: '2 Agent St',
           city: 'Nanaimo',
           province: 'BC',
@@ -735,6 +737,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       clientNumber: clientNumber === '67890' ? '00067890' : clientNumber,
       companyName:
         clientLocationCode === '01' || clientLocationCode === '02' ? 'Agent Co' : 'Owner Co',
+      clientAcronym: '',
       address:
         clientLocationCode === '01' || clientLocationCode === '02' ? '2 Agent St' : '1 Owner St',
       city: clientLocationCode === '01' || clientLocationCode === '02' ? 'Nanaimo' : 'Victoria',

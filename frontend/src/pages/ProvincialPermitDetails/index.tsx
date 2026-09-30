@@ -8314,7 +8314,7 @@ const ProvincialPermitDetailsPage = () => {
           actions={[
             {
               label: editingBoicPackageNumber ? 'Cancel edit' : 'Cancel',
-              kind: 'secondary',
+              kind: 'tertiary',
               disabled: isSavingBoicPackage,
               onClick: resetBlanketOicPackageForm,
             },

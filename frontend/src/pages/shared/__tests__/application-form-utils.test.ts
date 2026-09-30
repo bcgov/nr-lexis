@@ -5,11 +5,9 @@ import {
   clientLocationLabel,
   codeOptionLabel,
   isAgentApplicant,
-  isSelectableClientContact,
   isSelectableClientLocation,
   productTypeRequiresGrowthType,
   productTypeRequiresLogDetails,
-  resolveClientContactName,
   resolveClientLocationCode,
   toApplicationCodeOption,
   toSearchOption,
@@ -38,20 +36,6 @@ describe('application-form-utils', () => {
     expect(resolveClientLocationCode(locations, '01')).toBe('01')
     expect(resolveClientLocationCode(locations, '99')).toBe('02')
     expect(resolveClientLocationCode([{ ...locations[0] }], '')).toBe('')
-  })
-
-  it('resolves selectable contacts while preserving unknown typed names', () => {
-    const contacts = [
-      { contactId: '0', contactName: 'Placeholder' },
-      { contactId: '12', contactName: 'Alex Tester' },
-    ]
-
-    expect(
-      contacts.filter(isSelectableClientContact).map((contact) => contact.contactName),
-    ).toEqual(['Alex Tester'])
-    expect(resolveClientContactName(contacts, 'Alex Tester')).toBe('Alex Tester')
-    expect(resolveClientContactName(contacts, 'Typed Name')).toBe('Alex Tester')
-    expect(resolveClientContactName([{ ...contacts[0] }], 'Typed Name')).toBe('Typed Name')
   })
 
   it.each([

@@ -39,7 +39,6 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 @Profile("oracle")
 public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpcService {
 
-  private static final String DESCRIPTION_NOT_ON_FILE = "Not on file";
   private static final String APPLICATION_STATUS_NEW = "NEW";
   private static final String APPLICATION_STATUS_APPROVED = "APP";
   private static final String APPLICATION_STATUS_EXPIRED = "EXP";
@@ -156,7 +155,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return new DocumentItem(
         row.id(),
         row.fileName(),
-        normalizeDescription(row.description()),
+        trimToNull(row.description()),
         resolveAttachmentTypeDescription(row.attachmentTypeCode(), attachmentTypeByCode),
         source,
         sourceApplicationNumber,
@@ -2502,10 +2501,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return resolved;
   }
 
-  private String normalizeDescription(String description) {
-    String normalized = trimToNull(description);
-    return normalized == null ? DESCRIPTION_NOT_ON_FILE : normalized;
-  }
 
   private String normalizeCreateApplicationStatus(String applicationStatusCode) {
     return normalizeCode(applicationStatusCode);

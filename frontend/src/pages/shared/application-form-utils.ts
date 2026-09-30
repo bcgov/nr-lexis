@@ -1,7 +1,4 @@
-import type {
-  ApplicationClientContact,
-  ApplicationClientLocation,
-} from '@/service/application-client-lookup-service'
+import type { ApplicationClientLocation } from '@/service/application-client-lookup-service'
 import type { ApplicationCodeOption } from '@/service/provincial-application-items-service'
 import type { SearchOption } from '@/service/search-options-service'
 import {
@@ -27,9 +24,6 @@ export const clientLookupNumbersMatch = (left: string, right: string): boolean =
 
 export const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
   location.locationCode !== '0'
-
-export const isSelectableClientContact = (contact: ApplicationClientContact): boolean =>
-  contact.contactId !== '0'
 
 export const clientLocationLabel = (locationCode: string, locationName: string): string => {
   const code = locationCode.trim()
@@ -66,24 +60,6 @@ export const resolveClientLocationCode = (
   }
 
   return locations.find(isSelectableClientLocation)?.locationCode ?? ''
-}
-
-export const resolveClientContactName = (
-  contacts: ApplicationClientContact[],
-  currentName: string,
-): string => {
-  const normalizedCurrentName = currentName.trim()
-  if (
-    normalizedCurrentName &&
-    contacts.some(
-      (contact) =>
-        isSelectableClientContact(contact) && contact.contactName === normalizedCurrentName,
-    )
-  ) {
-    return normalizedCurrentName
-  }
-
-  return contacts.find(isSelectableClientContact)?.contactName ?? normalizedCurrentName
 }
 
 export const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>

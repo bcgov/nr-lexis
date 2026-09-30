@@ -18,7 +18,6 @@ import type {
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   setupApplicationDetailTests,
-  LocationProbe,
   applicationDetail,
   applicationSummarySnapshot,
   chooseComboBoxOption,
@@ -123,40 +122,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
 
     await waitFor(() => expect(mockedFetchApplicationDocuments).toHaveBeenCalledWith('321'))
-  })
-
-  it('renders application permits and opens permit details', async () => {
-    mockedFetchApplicationPermits.mockResolvedValue([
-      { permitNumber: '900100', permitStatusDescription: 'Active' },
-      { permitNumber: '900101', permitStatusDescription: 'Complete' },
-    ])
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321?packageFilter=PKG-1']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-          <Route path="/provincial/permit/:permitNumber" element={<LocationProbe />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await waitFor(() => {
-      expect(mockedFetchApplicationPermits).toHaveBeenCalledWith('321')
-    })
-    await selectApplicationDetailTab('Application')
-    const permitRow = (await screen.findByText('900101')).closest('tr')
-    expect(permitRow).toBeTruthy()
-    const permitStatus = within(permitRow as HTMLElement).getByText('Complete')
-    expect(permitStatus).toHaveClass('lexis-status-tag')
-    expect(permitStatus).toHaveAttribute('data-status-variant', 'positive')
-
-    await userEvent.click(within(permitRow as HTMLElement).getByRole('button', { name: 'Open' }))
-
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/provincial/permit/900101?packageFilter=PKG-1')
   })
 
   it('opens a scale deep link on the Items tab and selects its package for an owner application', async () => {

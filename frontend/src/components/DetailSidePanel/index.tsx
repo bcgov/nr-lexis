@@ -110,7 +110,8 @@ export default function DetailSidePanel({
         preventCloseOnClickOutside
         hideCloseButton
         animateTitle={false}
-        actions={actions}
+        // Figma's drawer footer uses standard buttons; the SCSS sets their medium size and spacing.
+        actions={actions?.map((action) => ({ ...action, isExpressive: false }))}
         onRequestClose={requestClose}
       >
         {children}

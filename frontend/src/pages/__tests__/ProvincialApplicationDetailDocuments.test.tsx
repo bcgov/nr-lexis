@@ -53,20 +53,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Application')
-    expect(
-      await screen.findByRole('heading', {
-        level: 3,
-        name: 'Permits unavailable',
-      }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('Permit information could not be retrieved for this application.'),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('heading', { level: 3, name: 'No permits found' }),
-    ).not.toBeInTheDocument()
-
+    await waitFor(() => expect(mockedFetchApplicationPermits).toHaveBeenCalledWith('321'))
     await selectApplicationDetailTab('Applicant')
     expect(
       screen.queryByText(
@@ -229,6 +216,35 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     ).toBeTruthy()
     await userEvent.click(uploadTrigger)
     expect(screen.getByLabelText('Document File')).toBeVisible()
+    // Figma's drawer footer pairs a tertiary Cancel with the primary action at the standard size.
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    expect(cancel).toHaveClass('cds--btn--tertiary')
+    expect(cancel).not.toHaveClass('cds--btn--expressive')
+    expect(screen.getByRole('button', { name: 'Save documents' })).not.toHaveClass(
+      'cds--btn--expressive',
+    )
+  })
+
+  it('shows the usual table empty value for a document saved without a description', async () => {
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [{ id: '901', name: 'no-description.pdf', description: '', type: 'Attachment' }],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    const row = (await screen.findByText('no-description.pdf')).closest('tr') as HTMLElement
+    expect(within(row).getAllByRole('cell')[1]).toHaveTextContent('—')
   })
 
   it('allows application uploads for expired applications to match legacy', async () => {

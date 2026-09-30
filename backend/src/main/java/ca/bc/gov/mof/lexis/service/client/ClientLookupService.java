@@ -28,7 +28,8 @@ public interface ClientLookupService {
       String country,
       String phone,
       String fax,
-      String email) {}
+      String email,
+      String clientAcronym) {}
 
   record ClientLocation(String locationName, String locationCode, boolean selected) {}
 

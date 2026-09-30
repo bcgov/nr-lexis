@@ -1077,7 +1077,7 @@ const DetailDocumentUploadPanel = ({
           actions={[
             {
               label: 'Cancel',
-              kind: 'secondary',
+              kind: 'tertiary',
               disabled: isSubmitting,
               onClick: closeUploadModal,
             },

@@ -546,7 +546,8 @@ class OfferDetailsRpcControllerTest {
                     "CA",
                     "250-555-0100",
                     null,
-                    "buyer@example.test")));
+                    "buyer@example.test",
+                    null)));
     when(provincialAuthorizationService.canCreateForClient(
             authentication, "00077881", null))
         .thenReturn(true);

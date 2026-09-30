@@ -18,7 +18,6 @@ import {
 } from '@/service/search-options-service'
 import {
   fetchApplicationClientData,
-  fetchApplicationClientContacts,
   fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
 import {
@@ -65,7 +64,6 @@ vi.mock('@/service/create-submit-service', () => ({
 
 vi.mock('@/service/application-client-lookup-service', () => ({
   fetchApplicationClientData: vi.fn(),
-  fetchApplicationClientContacts: vi.fn(),
   fetchApplicationClientLocations: vi.fn(),
 }))
 
@@ -143,7 +141,6 @@ const mockedFetchProvincialExemptionCreatePreview = vi.mocked(fetchProvincialExe
 const mockedSubmitProvincialExemptionCreate = vi.mocked(submitProvincialExemptionCreate)
 const mockedSubmitProvincialOfferCreate = vi.mocked(submitProvincialOfferCreate)
 const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
-const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemainingSpecies)
 const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
@@ -295,18 +292,6 @@ describe('Create Page Core Flows', () => {
       { locationCode: '00', locationName: '00', selected: false },
       { locationCode: '01', locationName: '01 - MAIN LOCATION', selected: false },
     ])
-    mockedFetchApplicationClientContacts.mockImplementation(
-      async (_clientNumber, _clientLocationCode, applicantType) =>
-        applicantType === 'agent'
-          ? [
-              { contactName: 'Agent Contact', contactId: '-1' },
-              { contactName: 'Agent Alternate Contact', contactId: '22' },
-            ]
-          : [
-              { contactName: 'Owner Contact', contactId: '-1' },
-              { contactName: 'Owner Alternate Contact', contactId: '11' },
-            ],
-    )
     mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => {
       const confirmedClientNumber = /^\d{1,8}$/.test(clientNumber)
         ? clientNumber.padStart(8, '0')
@@ -315,6 +300,7 @@ describe('Create Page Core Flows', () => {
       return {
         clientNumber: confirmedClientNumber,
         companyName: isAgent ? 'Agent Export Services' : 'Owner Forestry Ltd.',
+        clientAcronym: '',
         address: isAgent ? '456 Export Road' : '123 Timber Road',
         city: isAgent ? 'Nanaimo' : 'Victoria',
         province: 'BC',
@@ -1295,7 +1281,7 @@ describe('Create Page Core Flows', () => {
   )
 
   // Initializing the owner and agent lookup state is interaction-heavy under coverage.
-  it('clears stale agent location and contact when the client selection is cleared', async () => {
+  it('clears the stale agent location but keeps the typed contact name when the client is cleared', async () => {
     render(
       <MemoryRouter
         initialEntries={[
@@ -1316,7 +1302,7 @@ describe('Create Page Core Flows', () => {
     const agentNumber = within(agentSection).getByRole('textbox', { name: 'Agent client' })
     await waitFor(() => expect(agentNumber).toHaveValue('00002176'))
     await waitFor(() =>
-      expect(within(agentSection).getByRole('combobox', { name: 'Contact name' })).toHaveValue(
+      expect(within(agentSection).getByRole('textbox', { name: 'Contact name' })).toHaveValue(
         'Agent Contact',
       ),
     )
@@ -1330,8 +1316,8 @@ describe('Create Page Core Flows', () => {
       expect(contactLocation).toHaveValue('')
       expect(contactLocation).toBeDisabled()
       const contactName = within(agentSection).getByRole('textbox', { name: 'Contact name' })
-      expect(contactName).toHaveValue('')
-      expect(contactName).toBeDisabled()
+      expect(contactName).toHaveValue('Agent Contact')
+      expect(contactName).toBeEnabled()
     })
     expect(screen.queryByRole('region', { name: 'Agent client details' })).not.toBeInTheDocument()
 
@@ -1375,7 +1361,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const ownerName = await screen.findByRole('combobox', { name: 'Contact name' })
+    const ownerName = await screen.findByRole('textbox', { name: 'Contact name' })
     await waitFor(() => expect(ownerName).toHaveValue('Owner Contact'))
     fireEvent.change(ownerName, { target: { value: 'Café' } })
 
@@ -1402,7 +1388,7 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
     await selectApplicationCreateTab('Applicant')
-    fireEvent.change(screen.getByRole('combobox', { name: 'Contact name' }), {
+    fireEvent.change(screen.getByRole('textbox', { name: 'Contact name' }), {
       target: { value: 'O'.repeat(120) },
     })
     await selectApplicationCreateTab('Scale')
@@ -1717,7 +1703,6 @@ describe('Create Page Core Flows', () => {
 
   it('allows manual owner contact entry when lookup has no contacts', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('903'))
-    mockedFetchApplicationClientContacts.mockResolvedValue([])
 
     render(
       <MemoryRouter
@@ -1745,7 +1730,7 @@ describe('Create Page Core Flows', () => {
     )
   })
 
-  it('allows a custom owner name when the lookup returns contacts', async () => {
+  it('takes the owner contact name as free text without filling it from the client', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
 
     render(
@@ -1764,8 +1749,12 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectApplicationCreateTab('Applicant')
-    const ownerNameInput = await screen.findByRole('combobox', { name: 'Contact name' })
-    await waitFor(() => expect(ownerNameInput).toHaveValue('Owner Contact'))
+    const ownerNameInput = await screen.findByRole('textbox', { name: 'Contact name' })
+    expect(
+      await screen.findByRole('region', { name: 'Applicant client details' }),
+    ).toBeInTheDocument()
+    expect(ownerNameInput).toHaveValue('')
+    expect(ownerNameInput).toBeEnabled()
     fireEvent.change(ownerNameInput, { target: { value: 'Advertising Owner' } })
     await waitFor(() => expect(ownerNameInput).toHaveValue('Advertising Owner'))
     await userEvent.click(screen.getByRole('button', { name: 'Save application' }))

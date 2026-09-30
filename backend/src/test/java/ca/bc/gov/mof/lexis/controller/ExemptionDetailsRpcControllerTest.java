@@ -1488,7 +1488,8 @@ class ExemptionDetailsRpcControllerTest {
                     "CA",
                     "250-555-0100",
                     "250-555-0199",
-                    "user@example.com")));
+                    "user@example.com",
+                    null)));
 
     ResponseEntity<ExemptionDetailsRpcController.ExemptionClientDataResponseDto> response =
         controller.getClientDataLegacy("77881", "00");

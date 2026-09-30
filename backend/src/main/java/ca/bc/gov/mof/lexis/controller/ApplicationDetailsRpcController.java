@@ -864,7 +864,8 @@ public class ApplicationDetailsRpcController {
             () ->
                 ResponseEntity.ok(
                     new ApplicationClientDataResponseDto(
-                        null, null, null, null, null, null, null, null, null, null, "true")));
+                        null, null, null, null, null, null, null, null, null, null, null,
+                        "true")));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_CLIENT_DATA)
@@ -2273,6 +2274,7 @@ public class ApplicationDetailsRpcController {
     return new ApplicationClientDataResponseDto(
         data.clientNumber(),
         data.companyName(),
+        data.clientAcronym(),
         data.address(),
         data.city(),
         data.province(),
@@ -2583,6 +2585,7 @@ public class ApplicationDetailsRpcController {
   public record ApplicationClientDataResponseDto(
       String clientNumber,
       String companyName,
+      String clientAcronym,
       String address,
       String city,
       String province,

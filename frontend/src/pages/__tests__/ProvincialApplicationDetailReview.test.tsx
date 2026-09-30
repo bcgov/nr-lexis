@@ -1416,6 +1416,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     mockedFetchApplicationClientData.mockResolvedValue({
       clientNumber: '00033344',
       companyName: 'Agent Export Services',
+      clientAcronym: '',
       address: '44 Agent Road',
       city: 'Nanaimo',
       province: 'BC',
@@ -1493,6 +1494,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     mockedFetchApplicationClientData.mockResolvedValue({
       clientNumber: '00033344',
       companyName: 'Applicant without email',
+      clientAcronym: '',
       address: '',
       city: '',
       province: '',

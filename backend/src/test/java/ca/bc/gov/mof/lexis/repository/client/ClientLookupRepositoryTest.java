@@ -4,7 +4,9 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -42,7 +44,8 @@ class ClientLookupRepositoryTest {
             null,
             null,
             null,
-            "applicant@example.com");
+            "applicant@example.com",
+            null);
     StubRequiredClientLookupRepository repository =
         new StubRequiredClientLookupRepository(Optional.of(location));
 
@@ -59,11 +62,8 @@ class ClientLookupRepositoryTest {
     ClientLookupRepository repository =
         new StubRequiredClientLookupRepository(Optional.empty()) {
           @Override
-          protected <T> Optional<T> queryCursorSingleRequired(
-              String procedureSignature,
-              SqlConsumer<CallableStatement> binder,
-              int cursorOutIndex,
-              SqlRowMapper<T> rowMapper) {
+          protected <T> List<T> queryDirectRequired(
+              String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
             throw new DataAccessResourceFailureException(
                 "Oracle client lookup unavailable");
           }
@@ -80,6 +80,55 @@ class ClientLookupRepositoryTest {
 
     assertThatThrownBy(() -> repository.findLocationByClientNumberCode("00077881", "00"))
         .isInstanceOf(DataAccessResourceFailureException.class);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void clientDetailShouldReadLocationClientAndAcronymInOneBoundQuery() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString("CLIENT_NUMBER")).thenReturn("00001086");
+    when(resultSet.getString("CLIENT_LOCN_CODE")).thenReturn("00");
+    when(resultSet.getString("COMPANY_NAME")).thenReturn(" TOLKO INDUSTRIES ");
+    when(resultSet.getString("EMAIL_ADDRESS")).thenReturn("applicant@example.com");
+    when(resultSet.getString("CLIENT_ACRONYM")).thenReturn(" TOLKOL ");
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("00001086"), eq("00")))
+        .thenAnswer(
+            invocation ->
+                List.of(invocation.getArgument(1, RowMapper.class).mapRow(resultSet, 0)));
+    ClientLookupRepository repository = new ClientLookupRepository(jdbcTemplate);
+
+    ClientLocationRow expected =
+        new ClientLocationRow(
+            "00001086",
+            "00",
+            null,
+            "TOLKO INDUSTRIES",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "applicant@example.com",
+            "TOLKOL");
+    assertThat(repository.findLocationByClientNumberCode(" 00001086 ", " 00 ")).contains(expected);
+    assertThat(repository.findLocationByClientNumberCodeRequired("00001086", "00"))
+        .contains(expected);
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate, times(2))
+        .query(sql.capture(), any(RowMapper.class), eq("00001086"), eq("00"));
+    assertThat(sql.getValue())
+        .doesNotContain("FIND_CLIENT_LOCATION")
+        .contains("FROM THE.CLIENT_LOCATION L")
+        .contains("LEFT JOIN THE.V_CLIENT_PUBLIC FC ON FC.CLIENT_NUMBER = L.CLIENT_NUMBER")
+        .contains("LEFT JOIN THE.CLIENT_ACRONYM CA ON CA.CLIENT_NUMBER = L.CLIENT_NUMBER")
+        .contains("WHERE L.CLIENT_NUMBER = ?")
+        .contains("AND L.CLIENT_LOCN_CODE = ?");
   }
 
   @Test
@@ -261,6 +310,12 @@ class ClientLookupRepositoryTest {
         SqlRowMapper<T> rowMapper) {
       throw new DataAccessResourceFailureException("Oracle client lookup unavailable");
     }
+
+    @Override
+    protected <T> List<T> queryDirectFailClosed(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      throw new DataAccessResourceFailureException("Oracle client lookup unavailable");
+    }
   }
 
   private static class StubRequiredClientLookupRepository extends ClientLookupRepository {
@@ -274,12 +329,9 @@ class ClientLookupRepositoryTest {
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> Optional<T> queryCursorSingleRequired(
-        String procedureSignature,
-        SqlConsumer<CallableStatement> binder,
-        int cursorOutIndex,
-        SqlRowMapper<T> rowMapper) {
-      return (Optional<T>) result;
+    protected <T> List<T> queryDirectRequired(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      return result.map(row -> List.of((T) row)).orElseGet(List::of);
     }
   }
 }

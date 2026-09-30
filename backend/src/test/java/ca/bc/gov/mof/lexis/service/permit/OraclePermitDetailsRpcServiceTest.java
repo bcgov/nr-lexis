@@ -198,7 +198,7 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(
             Optional.of(
                 new ClientData(
-                    "00077881", "Client", null, null, null, null, null, null, null, null)));
+                    "00077881", "Client", null, null, null, null, null, null, null, null, null)));
     lenient()
         .when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(

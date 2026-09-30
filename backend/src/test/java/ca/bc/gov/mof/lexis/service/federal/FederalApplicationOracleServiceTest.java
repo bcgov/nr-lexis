@@ -343,7 +343,8 @@ class FederalApplicationOracleServiceTest {
                     "Canada",
                     "250-555-0101",
                     "250-555-0102",
-                    "owner@example.test")));
+                    "owner@example.test",
+                    null)));
     when(clientLookupService.getClientDataRequired("00055667", "02"))
         .thenReturn(
             Optional.of(
@@ -357,7 +358,8 @@ class FederalApplicationOracleServiceTest {
                     "Canada",
                     "250-555-0201",
                     "250-555-0202",
-                    "agent@example.test")));
+                    "agent@example.test",
+                    null)));
 
     FederalApplicationDetailDto result =
         service.findByApplicationNumber(1000456L).orElseThrow();

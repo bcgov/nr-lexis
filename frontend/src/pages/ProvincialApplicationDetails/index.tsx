@@ -26,9 +26,23 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Add, Download, Edit, Launch, TrashCan } from '@carbon/icons-react'
-import { AddDocument, Contract, Handshake } from '@carbon/pictograms-react'
-import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import {
+  Add,
+  Box,
+  Chat,
+  ContainerRegistry,
+  DataDefinition,
+  DocumentAttachment,
+  Download,
+  Edit,
+  Enterprise,
+  Launch,
+  Stamp,
+  Task,
+  TrashCan,
+} from '@carbon/icons-react'
+import { AddDocument, Handshake } from '@carbon/pictograms-react'
+import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailLoadError from '@/components/DetailLoadError'
@@ -64,7 +78,6 @@ import {
 } from '@/pages/shared/detail-navigation'
 import {
   fetchProvincialApplicationDetail,
-  fetchProvincialExemptionDetail,
   releaseApplicationEditLock,
 } from '@/service/lexis-detail-service'
 import {
@@ -95,10 +108,8 @@ import {
 } from '@/service/application-review-search-service'
 import {
   fetchApplicationClientData,
-  fetchApplicationClientContacts,
   fetchApplicationClientLocations,
   type ApplicationClientData,
-  type ApplicationClientContact,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
 import {
@@ -118,11 +129,9 @@ import {
   clientLookupNumbersMatch,
   clientLocationLabel,
   isAgentApplicant,
-  isSelectableClientContact,
   isSelectableClientLocation,
   productTypeRequiresGrowthType,
   productTypeRequiresLogDetails,
-  resolveClientContactName,
   resolveClientLocationCode,
   toApplicationCodeOption,
   toSearchOption,
@@ -146,6 +155,7 @@ import { triggerBrowserDownload } from '@/utils/download'
 import { openDocumentPreview } from '@/utils/document-preview'
 import { requiredLabel } from '@/utils/required-label'
 import {
+  displayTableValue,
   isValidEmail,
   normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
@@ -161,11 +171,16 @@ const APPLICATION_WRITE_ACTIONS = [
 ]
 
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
-// Figma shows a client as "NAME · number"; the number stands alone until the name loads.
-const clientDisplayName = (companyName: string | undefined, clientNumber: string): string => {
-  const name = companyName?.trim() ?? ''
+// Figma shows a client as "NAME (ACRONYM) · number"; the number stands alone until the name loads.
+const clientDisplayName = (
+  clientData: ApplicationClientData | null,
+  clientNumber: string,
+): string => {
+  const name = clientData?.companyName.trim() ?? ''
+  const acronym = clientData?.clientAcronym.trim() ?? ''
   const number = clientNumber.trim()
-  return name && number ? `${name} · ${number}` : name || number
+  const label = name && acronym ? `${name} (${acronym})` : name
+  return label && number ? `${label} · ${number}` : label || number
 }
 
 // Figma confirms every Applicant, Application and Scale save, including the first, with this title.
@@ -249,14 +264,6 @@ const APPLICANT_TYPE_OPTIONS: SearchOption[] = [
   { value: 'M', label: 'Ministerial' },
   { value: 'A', label: 'Agent' },
 ]
-const JURISDICTION_OPTIONS: SearchOption[] = [
-  { value: 'P', label: 'Provincial' },
-  { value: 'F', label: 'Federal' },
-]
-
-const optionLabel = (option: SearchOption): string =>
-  option.label === option.value ? option.label : `${option.value} - ${option.label}`
-
 const optionDescription = (options: SearchOption[], value: string | null | undefined): string => {
   const normalizedValue = value?.trim() ?? ''
   return options.find((option) => option.value === normalizedValue)?.label ?? normalizedValue
@@ -451,8 +458,6 @@ type ApplicationClientLookupFailure =
   | 'agent-data'
   | 'owner-locations'
   | 'agent-locations'
-  | 'owner-contacts'
-  | 'agent-contacts'
 
 const MAX_APPLICATION_TERM_DAYS = 99_999
 const APPLICATION_CONTACT_NAME_MAX_LENGTH = 120
@@ -698,9 +703,6 @@ const ProvincialApplicationDetailsPage = () => {
   const createdApplicationNumber =
     navigationState?.applicationCreationNotice?.applicationNumber.trim()
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
-  const [industryViewableExemptionNumber, setIndustryViewableExemptionNumber] = useState<
-    string | null
-  >(null)
   const [documentRows, setDocumentRows] = useState<ProvincialApplicationDocumentRow[]>([])
   const [permitRows, setPermitRows] = useState<ApplicationPermitRow[]>([])
   const [documentLookupAvailability, setDocumentLookupAvailability] =
@@ -797,14 +799,10 @@ const ProvincialApplicationDetailsPage = () => {
   const [showSummaryValidationErrors, setShowSummaryValidationErrors] = useState(false)
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
-  const [ownerClientContacts, setOwnerClientContacts] = useState<ApplicationClientContact[]>([])
-  const [agentClientContacts, setAgentClientContacts] = useState<ApplicationClientContact[]>([])
   const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
   const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
   const [isLoadingOwnerClientLocations, setIsLoadingOwnerClientLocations] = useState(false)
   const [isLoadingAgentClientLocations, setIsLoadingAgentClientLocations] = useState(false)
-  const [isLoadingOwnerClientContacts, setIsLoadingOwnerClientContacts] = useState(false)
-  const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
   const [isLoadingOwnerClientData, setIsLoadingOwnerClientData] = useState(false)
   const [isLoadingAgentClientData, setIsLoadingAgentClientData] = useState(false)
   const [
@@ -906,7 +904,6 @@ const ProvincialApplicationDetailsPage = () => {
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
   )
-  const canAccessExemptionRoutes = canPerform('/exemptionSearch') && canPerform('/exemptionDetails')
   const focusPackageInItems = useCallback(
     (packageNumber: string) => {
       selectApplicationTab('items')
@@ -956,7 +953,6 @@ const ProvincialApplicationDetailsPage = () => {
         seededReviewFieldsApplicationRef.current = null
         setErrorMessage('Application number is missing from the route.')
         setDetail(null)
-        setIndustryViewableExemptionNumber(null)
         setDocumentRows([])
         setPermitRows([])
         setDocumentLookupAvailability('unavailable')
@@ -1003,7 +999,6 @@ const ProvincialApplicationDetailsPage = () => {
         setIsEditingReview(false)
         setIsRetryingApprovalRemark(false)
         setReviewStatusEmailOverride(null)
-        setIndustryViewableExemptionNumber(null)
         setDocumentRows([])
         setPermitRows([])
         setDocumentLookupAvailability('loading')
@@ -1044,25 +1039,6 @@ const ProvincialApplicationDetailsPage = () => {
           setDocumentLookupAvailability('unavailable')
           setPermitLookupAvailability('unavailable')
           return
-        }
-
-        const linkedExemptionNumber = response.exemptionNumber?.trim() ?? ''
-        if (response.industryUser && linkedExemptionNumber && canAccessExemptionRoutes) {
-          const verifyIndustryExemptionAccess = async () => {
-            try {
-              const exemption = await fetchProvincialExemptionDetail(linkedExemptionNumber)
-              if (
-                isLatestRequest() &&
-                exemption &&
-                exemption.exemptionStatusCode?.trim().toUpperCase() !== 'NEW'
-              ) {
-                setIndustryViewableExemptionNumber(linkedExemptionNumber)
-              }
-            } catch {
-              // Keep the exemption number as plain text when access or status cannot be verified.
-            }
-          }
-          void verifyIndustryExemptionAccess()
         }
 
         const [summarySnapshotResult, applicationSpeciesResult] = await Promise.allSettled([
@@ -1154,7 +1130,6 @@ const ProvincialApplicationDetailsPage = () => {
           setErrorMessage('Unable to retrieve provincial application detail.')
           if (!retainingCurrentDetail) {
             setDetail(null)
-            setIndustryViewableExemptionNumber(null)
             setSummaryForm(null)
             setSummaryBaselineForm(null)
             setShowSummaryValidationErrors(false)
@@ -1171,7 +1146,7 @@ const ProvincialApplicationDetailsPage = () => {
         }
       }
     },
-    [applicationNumber, beginDetailRequest, canAccessExemptionRoutes],
+    [applicationNumber, beginDetailRequest],
   )
 
   useEffect(() => {
@@ -1321,12 +1296,8 @@ const ProvincialApplicationDetailsPage = () => {
     : ''
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
-  const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
-  const hasSelectableAgentClientContacts = agentClientContacts.some(isSelectableClientContact)
-  const isOwnerClientLookupPending =
-    isLoadingOwnerClientLocations || isLoadingOwnerClientContacts || isLoadingOwnerClientData
-  const isAgentClientLookupPending =
-    isLoadingAgentClientLocations || isLoadingAgentClientContacts || isLoadingAgentClientData
+  const isOwnerClientLookupPending = isLoadingOwnerClientLocations || isLoadingOwnerClientData
+  const isAgentClientLookupPending = isLoadingAgentClientLocations || isLoadingAgentClientData
   const isSummaryClientLookupPendingForSource = useCallback(
     (source: SummarySaveSource): boolean => {
       if (source === 'owner') return isOwnerClientLookupPending
@@ -1351,20 +1322,6 @@ const ProvincialApplicationDetailsPage = () => {
       : hasSelectableAgentClientLocations
         ? 'Select agent client location'
         : 'No locations on file'
-  const ownerContactPlaceholder = !summaryOwnerClientLocationCode
-    ? 'Select applicant location first'
-    : isLoadingOwnerClientContacts
-      ? 'Loading contacts'
-      : hasSelectableOwnerClientContacts
-        ? 'Select applicant contact'
-        : 'No contacts on file'
-  const agentContactPlaceholder = !summaryAgentClientLocationCode
-    ? 'Select agent location first'
-    : isLoadingAgentClientContacts
-      ? 'Loading contacts'
-      : hasSelectableAgentClientContacts
-        ? 'Select agent contact'
-        : 'No contacts on file'
   const exemptionReasonOptions = optionsWithCurrentValue(
     summaryExemptionReasonOptions,
     summaryForm?.exemptionReasonCode ?? '',
@@ -2143,224 +2100,6 @@ const ProvincialApplicationDetailsPage = () => {
   ])
 
   useEffect(() => {
-    if (!canEditSummary || !hasSummaryForm) {
-      let isActive = true
-      void Promise.resolve().then(() => {
-        if (!isActive) {
-          return
-        }
-        setOwnerClientContacts([])
-        setIsLoadingOwnerClientContacts(false)
-        updateClientLookupFailure('owner-contacts', false)
-      })
-      return () => {
-        isActive = false
-      }
-    }
-
-    if (!summaryOwnerClientNumberForLookup || !summaryOwnerClientLocationCode) {
-      let isActive = true
-      void Promise.resolve().then(() => {
-        if (!isActive) {
-          return
-        }
-        setOwnerClientContacts([])
-        setIsLoadingOwnerClientContacts(false)
-        updateClientLookupFailure('owner-contacts', false)
-      })
-      return () => {
-        isActive = false
-      }
-    }
-
-    let isActive = true
-    void Promise.resolve().then(() => {
-      if (isActive) {
-        setIsLoadingOwnerClientContacts(true)
-      }
-    })
-
-    void fetchApplicationClientContacts(
-      summaryOwnerClientNumberForLookup,
-      summaryOwnerClientLocationCode,
-      'owner',
-      applicationNumber ?? '',
-    )
-      .then((contacts) => {
-        const currentForm = currentSummaryFormRef.current
-        if (
-          !isActive ||
-          !clientLookupNumbersMatch(
-            currentForm?.ownerClientNumber ?? '',
-            summaryOwnerClientNumberForLookup,
-          ) ||
-          (currentForm?.ownerClientLocationCode ?? '').trim() !== summaryOwnerClientLocationCode
-        ) {
-          return
-        }
-
-        setOwnerClientContacts(contacts)
-        updateClientLookupFailure('owner-contacts', false)
-        setSummaryForm((current) => {
-          if (
-            !current ||
-            !clientLookupNumbersMatch(
-              current.ownerClientNumber,
-              summaryOwnerClientNumberForLookup,
-            ) ||
-            current.ownerClientLocationCode.trim() !== summaryOwnerClientLocationCode
-          ) {
-            return current
-          }
-
-          const nextOwnerContactName = resolveClientContactName(contacts, current.ownerContactName)
-          return current.ownerContactName === nextOwnerContactName
-            ? current
-            : { ...current, ownerContactName: nextOwnerContactName }
-        })
-      })
-      .catch(() => {
-        const currentForm = currentSummaryFormRef.current
-        if (
-          isActive &&
-          clientLookupNumbersMatch(
-            currentForm?.ownerClientNumber ?? '',
-            summaryOwnerClientNumberForLookup,
-          ) &&
-          (currentForm?.ownerClientLocationCode ?? '').trim() === summaryOwnerClientLocationCode
-        ) {
-          setOwnerClientContacts([])
-          updateClientLookupFailure('owner-contacts', true)
-        }
-      })
-      .finally(() => {
-        if (isActive) {
-          setIsLoadingOwnerClientContacts(false)
-        }
-      })
-
-    return () => {
-      isActive = false
-    }
-  }, [
-    applicationNumber,
-    canEditSummary,
-    hasSummaryForm,
-    summaryOwnerClientLocationCode,
-    summaryOwnerClientNumberForLookup,
-    updateClientLookupFailure,
-  ])
-
-  useEffect(() => {
-    if (!canEditSummary || !hasSummaryForm) {
-      let isActive = true
-      void Promise.resolve().then(() => {
-        if (!isActive) {
-          return
-        }
-        setAgentClientContacts([])
-        setIsLoadingAgentClientContacts(false)
-        updateClientLookupFailure('agent-contacts', false)
-      })
-      return () => {
-        isActive = false
-      }
-    }
-
-    if (!summaryAgentClientNumberForLookup || !summaryAgentClientLocationCode) {
-      let isActive = true
-      void Promise.resolve().then(() => {
-        if (!isActive) {
-          return
-        }
-        setAgentClientContacts([])
-        setIsLoadingAgentClientContacts(false)
-        updateClientLookupFailure('agent-contacts', false)
-      })
-      return () => {
-        isActive = false
-      }
-    }
-
-    let isActive = true
-    void Promise.resolve().then(() => {
-      if (isActive) {
-        setIsLoadingAgentClientContacts(true)
-      }
-    })
-
-    void fetchApplicationClientContacts(
-      summaryAgentClientNumberForLookup,
-      summaryAgentClientLocationCode,
-      'agent',
-      applicationNumber ?? '',
-    )
-      .then((contacts) => {
-        const currentForm = currentSummaryFormRef.current
-        if (
-          !isActive ||
-          !clientLookupNumbersMatch(
-            currentForm?.agentClientNumber ?? '',
-            summaryAgentClientNumberForLookup,
-          ) ||
-          (currentForm?.agentClientLocationCode ?? '').trim() !== summaryAgentClientLocationCode
-        ) {
-          return
-        }
-
-        setAgentClientContacts(contacts)
-        updateClientLookupFailure('agent-contacts', false)
-        setSummaryForm((current) => {
-          if (
-            !current ||
-            !clientLookupNumbersMatch(
-              current.agentClientNumber,
-              summaryAgentClientNumberForLookup,
-            ) ||
-            current.agentClientLocationCode.trim() !== summaryAgentClientLocationCode
-          ) {
-            return current
-          }
-
-          const nextAgentContactName = resolveClientContactName(contacts, current.agentContactName)
-          return current.agentContactName === nextAgentContactName
-            ? current
-            : { ...current, agentContactName: nextAgentContactName }
-        })
-      })
-      .catch(() => {
-        const currentForm = currentSummaryFormRef.current
-        if (
-          isActive &&
-          clientLookupNumbersMatch(
-            currentForm?.agentClientNumber ?? '',
-            summaryAgentClientNumberForLookup,
-          ) &&
-          (currentForm?.agentClientLocationCode ?? '').trim() === summaryAgentClientLocationCode
-        ) {
-          setAgentClientContacts([])
-          updateClientLookupFailure('agent-contacts', true)
-        }
-      })
-      .finally(() => {
-        if (isActive) {
-          setIsLoadingAgentClientContacts(false)
-        }
-      })
-
-    return () => {
-      isActive = false
-    }
-  }, [
-    applicationNumber,
-    canEditSummary,
-    hasSummaryForm,
-    summaryAgentClientLocationCode,
-    summaryAgentClientNumberForLookup,
-    updateClientLookupFailure,
-  ])
-
-  useEffect(() => {
     if (!needsApplicationOptions || !hasSummaryForm) {
       let isActive = true
       void Promise.resolve().then(() => {
@@ -2801,17 +2540,13 @@ const ProvincialApplicationDetailsPage = () => {
     (key: keyof ApplicationSummaryFormState, value: string) => {
       if (key === 'ownerClientNumber') {
         setOwnerClientLocations([])
-        setOwnerClientContacts([])
         setOwnerClientData(null)
       } else if (key === 'ownerClientLocationCode') {
-        setOwnerClientContacts([])
         setOwnerClientData(null)
       } else if (key === 'agentClientNumber') {
         setAgentClientLocations([])
-        setAgentClientContacts([])
         setAgentClientData(null)
       } else if (key === 'agentClientLocationCode') {
-        setAgentClientContacts([])
         setAgentClientData(null)
       }
 
@@ -2825,15 +2560,6 @@ const ProvincialApplicationDetailsPage = () => {
             ...current,
             ownerClientNumber: value,
             ownerClientLocationCode: '',
-            ownerContactName: '',
-          }
-        }
-        if (key === 'ownerClientLocationCode') {
-          return {
-            ...current,
-            ownerClientLocationCode: value,
-            ownerContactName:
-              current.ownerClientLocationCode === value ? current.ownerContactName : '',
           }
         }
         if (key === 'agentClientNumber') {
@@ -2841,15 +2567,6 @@ const ProvincialApplicationDetailsPage = () => {
             ...current,
             agentClientNumber: value,
             agentClientLocationCode: '',
-            agentContactName: '',
-          }
-        }
-        if (key === 'agentClientLocationCode') {
-          return {
-            ...current,
-            agentClientLocationCode: value,
-            agentContactName:
-              current.agentClientLocationCode === value ? current.agentContactName : '',
           }
         }
         if (key === 'productTypeCode') {
@@ -3710,11 +3427,6 @@ const ProvincialApplicationDetailsPage = () => {
   ])
 
   const ownerApplicantTypeCode = summaryForm?.applicantTypeCode ?? ''
-  const linkedExemptionNumber = detail?.exemptionNumber?.trim() ?? ''
-  const canOpenLinkedExemption =
-    Boolean(linkedExemptionNumber) &&
-    canAccessExemptionRoutes &&
-    (!detail?.industryUser || industryViewableExemptionNumber === linkedExemptionNumber)
   const ownerApplicantTypeLabel = applicantTypeLabel(ownerApplicantTypeCode)
   // Figma heads the owner's details "Owner". A Ministerial applicant keeps its type visible
   // there, and an agent applicant's agent gets its own section below.
@@ -3736,14 +3448,6 @@ const ProvincialApplicationDetailsPage = () => {
     agentClientLocationCode,
     agentClientLocationName ?? '',
   )
-  const summaryJurisdictionCode = summaryForm?.jurisdictionCode ?? ''
-  const summaryJurisdictionOption = optionsWithCurrentValue(
-    JURISDICTION_OPTIONS,
-    summaryJurisdictionCode,
-  ).find((option) => option.value === summaryJurisdictionCode)
-  const summaryJurisdictionLabel = summaryJurisdictionOption
-    ? optionLabel(summaryJurisdictionOption)
-    : summaryJurisdictionCode
   const summaryExemptionReasonDescription = optionDescription(
     exemptionReasonOptions,
     summaryForm?.exemptionReasonCode,
@@ -3773,15 +3477,17 @@ const ProvincialApplicationDetailsPage = () => {
     applicationEndUseOptions.find((option) => option.code === savedEndUseCode)?.description ??
     savedEndUseCode
   const ownerClientDetailFields: Array<[string, string]> = [
-    ['Contact name', summaryForm?.ownerContactName ?? ''],
+    ['Contact name', displayValue(summaryForm?.ownerContactName)],
     [
       'Client',
-      clientDisplayName(
-        ownerClientData?.companyName,
-        summaryForm?.ownerClientNumber ?? String(detail?.ownerClientNumber ?? ''),
+      displayValue(
+        clientDisplayName(
+          ownerClientData,
+          summaryForm?.ownerClientNumber ?? String(detail?.ownerClientNumber ?? ''),
+        ),
       ),
     ],
-    ['Client location', ownerClientLocationDisplay],
+    ['Client location', displayValue(ownerClientLocationDisplay)],
   ]
   const ownerClientSummaryContent = (
     <ClientDataSummary
@@ -3793,15 +3499,17 @@ const ProvincialApplicationDetailsPage = () => {
     />
   )
   const agentClientDetailFields: Array<[string, string]> = [
-    ['Contact name', summaryForm?.agentContactName ?? ''],
+    ['Contact name', displayValue(summaryForm?.agentContactName)],
     [
       'Agent client',
-      clientDisplayName(
-        agentClientData?.companyName,
-        summaryForm?.agentClientNumber ?? String(detail?.agentClientNumber ?? ''),
+      displayValue(
+        clientDisplayName(
+          agentClientData,
+          summaryForm?.agentClientNumber ?? String(detail?.agentClientNumber ?? ''),
+        ),
       ),
     ],
-    ['Agent location', agentClientLocationDisplay],
+    ['Agent location', displayValue(agentClientLocationDisplay)],
   ]
   const agentClientSummaryContent = summaryAgentClientNumber ? (
     <ClientDataSummary
@@ -3818,72 +3526,6 @@ const ProvincialApplicationDetailsPage = () => {
       headingLevel={3}
     />
   )
-
-  const applicationPermitsContent = detail ? (
-    <Tile id="application-permits" className="application-detail-section">
-      <h2 className="detail-tile-title">Permits</h2>
-      {permitLookupAvailability === 'unavailable' ? (
-        <EmptyState
-          title="Permits unavailable"
-          description="Permit information could not be retrieved for this application."
-          headingLevel={3}
-          role="alert"
-        />
-      ) : permitLookupAvailability === 'loading' ? (
-        <InlineLoading description="Loading application permits…" />
-      ) : permitRows.length > 0 ? (
-        <TableFrame ariaLabel="Application permits">
-          <Table size="md" useZebraStyles>
-            <TableHead>
-              <TableRow>
-                <TableHeader>Permit</TableHeader>
-                <TableHeader>Status</TableHeader>
-                <TableHeader>Actions</TableHeader>
-              </TableRow>
-            </TableHead>
-            <TableBody>
-              {permitRows.map((item) => (
-                <TableRow key={item.permitNumber}>
-                  <TableCell>{item.permitNumber}</TableCell>
-                  <TableCell>
-                    <StatusTag status={item.permitStatusDescription} fallbackLabel="Unknown" />
-                  </TableCell>
-                  <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      disabled={!canPerform('/permitDetails')}
-                      onClick={() =>
-                        navigate(withCurrentSearch(`/provincial/permit/${item.permitNumber}`), {
-                          state: withDetailReturnTo(
-                            navigationState,
-                            {
-                              label: 'Provincial application detail',
-                              to: locationPath(location),
-                            },
-                            detailReturnTo,
-                          ),
-                        })
-                      }
-                    >
-                      Open
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
-        </TableFrame>
-      ) : (
-        <EmptyState
-          title="No permits found"
-          description="No permits are linked to this provincial application."
-          icon={<Contract width={48} height={48} />}
-          headingLevel={3}
-        />
-      )}
-    </Tile>
-  ) : null
 
   const applicationOffersContent = detail ? (
     <Tile id="application-offers" className="application-detail-section">
@@ -4121,7 +3763,10 @@ const ProvincialApplicationDetailsPage = () => {
         className="application-detail-section application-detail-review"
       >
         <div className="detail-section-card__header">
-          <h2 className="detail-tile-title">Application review</h2>
+          <h2 className="detail-tile-title">
+            <Stamp size={24} aria-hidden="true" />
+            Application review
+          </h2>
           {canEditApplicationReview &&
             !isEditingReview &&
             !isReviewNotStarted &&
@@ -4305,7 +3950,10 @@ const ProvincialApplicationDetailsPage = () => {
         id="application-review"
         className="application-detail-section application-detail-review"
       >
-        <h2 className="detail-tile-title">Application review</h2>
+        <h2 className="detail-tile-title">
+          <Stamp size={24} aria-hidden="true" />
+          Application review
+        </h2>
         <EmptyState
           title="Review unavailable"
           description="Review actions are not available for this application."
@@ -4461,13 +4109,13 @@ const ProvincialApplicationDetailsPage = () => {
                 contained
                 className="application-tabs__list application-detail-tab-list"
               >
-                <Tab>Applicant</Tab>
-                <Tab>Application</Tab>
-                <Tab>Scale</Tab>
-                <Tab>Documents</Tab>
-                {canViewRemarks && <Tab>Remarks</Tab>}
-                <Tab>Offers</Tab>
-                {canViewReview && <Tab>Review</Tab>}
+                <Tab renderIcon={Enterprise}>Applicant</Tab>
+                <Tab renderIcon={Task}>Application</Tab>
+                <Tab renderIcon={Box}>Scale</Tab>
+                <Tab renderIcon={DocumentAttachment}>Documents</Tab>
+                {canViewRemarks && <Tab renderIcon={Chat}>Remarks</Tab>}
+                <Tab renderIcon={DataDefinition}>Offers</Tab>
+                {canViewReview && <Tab renderIcon={Stamp}>Review</Tab>}
               </TabList>
               <TabPanels>
                 <TabPanel className="application-detail-tab-panel">
@@ -4478,7 +4126,10 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-clients"
                       >
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">Applicant details</h2>
+                          <h2 className="detail-tile-title">
+                            <Enterprise size={24} aria-hidden="true" />
+                            Applicant details
+                          </h2>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4499,6 +4150,9 @@ const ProvincialApplicationDetailsPage = () => {
                         </div>
                         {isEditingOwnerDetails && summaryForm ? (
                           <>
+                            <p className="application-detail-required">
+                              {requiredLabel('Required fields')}
+                            </p>
                             <div className="legacy-search-grid application-client-edit-grid">
                               <ForestClientComboBox
                                 id="applicationOwnerClientNumberEdit"
@@ -4569,48 +4223,19 @@ const ProvincialApplicationDetailsPage = () => {
                                   onSummaryFormChange('ownerClientLocationCode', value)
                                 }
                               />
-                              {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
-                                <SearchableSelect
-                                  id="applicationOwnerContactNameEdit"
-                                  labelText={requiredLabel('Contact name')}
-                                  required
-                                  value={summaryForm.ownerContactName}
-                                  invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
-                                  invalidText={visibleSummaryFieldError('ownerContactName')}
-                                  disabled={
-                                    isSavingSummary ||
-                                    !summaryForm.ownerClientLocationCode.trim() ||
-                                    isLoadingOwnerClientContacts
-                                  }
-                                  placeholder={ownerContactPlaceholder}
-                                  options={ownerClientContacts
-                                    .filter(isSelectableClientContact)
-                                    .map((contact) => ({
-                                      value: contact.contactName,
-                                      label: contact.contactName,
-                                    }))}
-                                  allowCustomValue
-                                  onChange={(value) =>
-                                    onSummaryFormChange('ownerContactName', value)
-                                  }
-                                />
-                              ) : (
-                                <TextInput
-                                  id="applicationOwnerContactNameEdit"
-                                  labelText={requiredLabel('Contact name')}
-                                  aria-required="true"
-                                  value={summaryForm.ownerContactName}
-                                  invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
-                                  invalidText={visibleSummaryFieldError('ownerContactName')}
-                                  disabled={
-                                    isSavingSummary || !summaryForm.ownerClientLocationCode.trim()
-                                  }
-                                  placeholder="Enter contact name"
-                                  onChange={(event) =>
-                                    onSummaryFormChange('ownerContactName', event.target.value)
-                                  }
-                                />
-                              )}
+                              <TextInput
+                                id="applicationOwnerContactNameEdit"
+                                labelText={requiredLabel('Contact name')}
+                                aria-required="true"
+                                value={summaryForm.ownerContactName}
+                                invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
+                                invalidText={visibleSummaryFieldError('ownerContactName')}
+                                disabled={isSavingSummary}
+                                placeholder="Enter contact name"
+                                onChange={(event) =>
+                                  onSummaryFormChange('ownerContactName', event.target.value)
+                                }
+                              />
                             </div>
                             <ClientDataSummary
                               title="Applicant client details"
@@ -4619,6 +4244,7 @@ const ProvincialApplicationDetailsPage = () => {
                               isLoading={isLoadingOwnerClientData}
                               showCompanyName
                             />
+                            <hr className="application-applicant-divider" />
                             <Checkbox
                               id="applicationOwnerAgentUsedEdit"
                               labelText="I'm an agent"
@@ -4676,53 +4302,19 @@ const ProvincialApplicationDetailsPage = () => {
                                       onSummaryFormChange('agentClientLocationCode', value)
                                     }
                                   />
-                                  {hasSelectableAgentClientContacts ||
-                                  isLoadingAgentClientContacts ? (
-                                    <SearchableSelect
-                                      id="applicationAgentContactNameEdit"
-                                      labelText={requiredLabel('Contact name')}
-                                      required
-                                      value={summaryForm.agentContactName}
-                                      invalid={Boolean(
-                                        visibleSummaryFieldError('agentContactName'),
-                                      )}
-                                      invalidText={visibleSummaryFieldError('agentContactName')}
-                                      disabled={
-                                        isSavingSummary ||
-                                        !summaryForm.agentClientLocationCode.trim() ||
-                                        isLoadingAgentClientContacts
-                                      }
-                                      placeholder={agentContactPlaceholder}
-                                      options={agentClientContacts
-                                        .filter(isSelectableClientContact)
-                                        .map((contact) => ({
-                                          value: contact.contactName,
-                                          label: contact.contactName,
-                                        }))}
-                                      onChange={(value) =>
-                                        onSummaryFormChange('agentContactName', value)
-                                      }
-                                    />
-                                  ) : (
-                                    <TextInput
-                                      id="applicationAgentContactNameEdit"
-                                      labelText={requiredLabel('Contact name')}
-                                      aria-required="true"
-                                      value={summaryForm.agentContactName}
-                                      invalid={Boolean(
-                                        visibleSummaryFieldError('agentContactName'),
-                                      )}
-                                      invalidText={visibleSummaryFieldError('agentContactName')}
-                                      disabled={
-                                        isSavingSummary ||
-                                        !summaryForm.agentClientLocationCode.trim()
-                                      }
-                                      placeholder="Enter contact name"
-                                      onChange={(event) =>
-                                        onSummaryFormChange('agentContactName', event.target.value)
-                                      }
-                                    />
-                                  )}
+                                  <TextInput
+                                    id="applicationAgentContactNameEdit"
+                                    labelText={requiredLabel('Contact name')}
+                                    aria-required="true"
+                                    value={summaryForm.agentContactName}
+                                    invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
+                                    invalidText={visibleSummaryFieldError('agentContactName')}
+                                    disabled={isSavingSummary}
+                                    placeholder="Enter contact name"
+                                    onChange={(event) =>
+                                      onSummaryFormChange('agentContactName', event.target.value)
+                                    }
+                                  />
                                 </div>
                                 <ClientDataSummary
                                   title="Agent information"
@@ -4770,10 +4362,13 @@ const ProvincialApplicationDetailsPage = () => {
                               {ownerClientSummaryContent}
                             </section>
                             {isSummaryAgentApplicant && (
-                              <section aria-label="Agent information">
-                                <h3 className="detail-tile-title">Agent information</h3>
-                                {agentClientSummaryContent}
-                              </section>
+                              <>
+                                <hr className="application-applicant-divider" />
+                                <section aria-label="Agent information">
+                                  <h3 className="detail-tile-title">Agent information</h3>
+                                  {agentClientSummaryContent}
+                                </section>
+                              </>
                             )}
                           </>
                         )}
@@ -4789,7 +4384,10 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-summary"
                       >
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">Application details</h2>
+                          <h2 className="detail-tile-title">
+                            <Task size={24} aria-hidden="true" />
+                            Application details
+                          </h2>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4808,35 +4406,11 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                             )}
                         </div>
-                        <dl className="detail-field-grid">
-                          <div className="detail-field-item">
-                            <dt className="detail-field-label">Exemption number</dt>
-                            <dd className="detail-field-value">
-                              {canOpenLinkedExemption ? (
-                                <Link
-                                  className="cds--link"
-                                  to={withCurrentSearch(
-                                    `/provincial/exemption/${linkedExemptionNumber}`,
-                                  )}
-                                  state={withDetailReturnTo(
-                                    navigationState,
-                                    {
-                                      label: 'Provincial application detail',
-                                      to: locationPath(location),
-                                    },
-                                    detailReturnTo,
-                                  )}
-                                >
-                                  {linkedExemptionNumber}
-                                </Link>
-                              ) : (
-                                displayValue(detail.exemptionNumber)
-                              )}
-                            </dd>
-                          </div>
-                        </dl>
                         {isEditingSummary && canEditSummary && summaryForm ? (
                           <>
+                            <p className="application-detail-required">
+                              {requiredLabel('Required fields')}
+                            </p>
                             <div className="legacy-search-grid">
                               <SearchableSelect
                                 id="applicationSummaryRegion"
@@ -4960,12 +4534,6 @@ const ProvincialApplicationDetailsPage = () => {
                                   onSummaryFormChange('termDays', event.target.value)
                                 }
                               />
-                              <TextInput
-                                id="applicationSummaryJurisdiction"
-                                labelText="Jurisdiction"
-                                value={summaryJurisdictionLabel}
-                                readOnly
-                              />
                             </div>
                             {summaryScaleFieldsChanged && (
                               <section
@@ -5007,28 +4575,33 @@ const ProvincialApplicationDetailsPage = () => {
                             </div>
                           </>
                         ) : (
-                          <dl className="detail-field-grid">
-                            {[
+                          // Figma groups the saved Application details into these rows.
+                          [
+                            [
                               ['Region', displayValue(summaryRegionDescription)],
                               ['Product type', displayValue(summaryProductTypeDescription)],
-                              ['List date', displayValue(detail.listingDate)],
-                              ['Jurisdiction', displayValue(summaryJurisdictionLabel)],
                               ['Exemption reason', displayValue(summaryExemptionReasonDescription)],
+                            ],
+                            [
                               ['Application date', displayValue(detail.applicationDate)],
-                              ['Exemption term (days)', displayValue(detail.termDays)],
-                            ].map(([label, value]) => (
-                              <div key={label} className="detail-field-item">
-                                <dt className="detail-field-label">{label}</dt>
-                                <dd className="detail-field-value">{value}</dd>
-                              </div>
-                            ))}
-                          </dl>
+                              ['List date', displayValue(detail.listingDate)],
+                            ],
+                            [['Exemption term (days)', displayValue(detail.termDays)]],
+                          ].map((row) => (
+                            <dl
+                              key={row[0][0]}
+                              className="detail-field-grid application-summary-fields"
+                            >
+                              {row.map(([label, value]) => (
+                                <div key={label} className="detail-field-item">
+                                  <dt className="detail-field-label">{label}</dt>
+                                  <dd className="detail-field-value">{value}</dd>
+                                </div>
+                              ))}
+                            </dl>
+                          ))
                         )}
                       </Tile>
-                    </Column>
-
-                    <Column sm={4} md={8} lg={16}>
-                      {applicationPermitsContent}
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -5040,7 +4613,10 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-summary"
                       >
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">Scale details</h2>
+                          <h2 className="detail-tile-title">
+                            <ContainerRegistry size={24} aria-hidden="true" />
+                            Scale details
+                          </h2>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -5064,6 +4640,9 @@ const ProvincialApplicationDetailsPage = () => {
                         </div>
                         {isEditingApplicationItems && canEditSummary && summaryForm ? (
                           <>
+                            <p className="application-detail-required">
+                              {requiredLabel('Required fields')}
+                            </p>
                             {applicationScaleForm}
                             <div className="legacy-search-actions">
                               <Button
@@ -5149,7 +4728,10 @@ const ProvincialApplicationDetailsPage = () => {
                           id="application-packages"
                           className="application-detail-section application-detail-packages"
                         >
-                          <h2 className="detail-tile-title">Packages</h2>
+                          <h2 className="detail-tile-title">
+                            <Box size={24} aria-hidden="true" />
+                            Packages
+                          </h2>
                           <TableFrame ariaLabel="Application packages">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -5316,7 +4898,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   {documentRows.map((row) => (
                                     <TableRow key={row.id}>
                                       <TableCell>{row.name || '-'}</TableCell>
-                                      <TableCell>{row.description || '-'}</TableCell>
+                                      <TableCell>{displayTableValue(row.description)}</TableCell>
                                       <TableCell>{row.type || '-'}</TableCell>
                                       <TableCell>{formatDocumentSource(row.source)}</TableCell>
                                       <TableCell>
@@ -5463,7 +5045,7 @@ const ProvincialApplicationDetailsPage = () => {
                               actions={[
                                 {
                                   label: 'Cancel',
-                                  kind: 'secondary',
+                                  kind: 'tertiary',
                                   disabled: isSavingRemark,
                                   onClick: onCancelRemarkEditing,
                                 },
