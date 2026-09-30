@@ -358,6 +358,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     await waitFor(() => {
       expect(screen.getAllByText('uploaded-doc.pdf').length).toBeGreaterThanOrEqual(1)
     })
+    // Figma confirms an upload with the title alone, not the server's persistence message.
+    expect(await screen.findByText('Document saved.')).toBeInTheDocument()
     expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
   })
 
