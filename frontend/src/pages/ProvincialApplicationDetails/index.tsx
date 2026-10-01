@@ -210,7 +210,7 @@ type ApplicationActionResult = ActionResult & {
   /** Keeps the creation notice through this application's own reloads. */
   createdFor?: string
   /** Section results render beside their controls instead of the page header. */
-  source?: 'items' | 'documents'
+  source?: 'items' | 'documents' | 'remarks'
   /** Prompts a second save; any change to the summary draft makes it stale. */
   volumeWarning?: boolean
 }
@@ -764,6 +764,7 @@ const ProvincialApplicationDetailsPage = () => {
   }, [])
   const itemsActionResult = actionResult?.source === 'items' ? actionResult : null
   const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
+  const remarkActionResult = actionResult?.source === 'remarks' ? actionResult : null
   const pageActionResult = actionResult?.source ? null : actionResult
   const actionErrorMessage = pageActionResult?.kind === 'error' ? pageActionResult.message : ''
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -2518,7 +2519,7 @@ const ProvincialApplicationDetailsPage = () => {
         setIsEditingRemarks(false)
         setRemarkBody('')
         setEditingRemarkId(null)
-        setActionResult({ kind: 'success', title: 'Remark saved.', message: '' })
+        setActionResult({ kind: 'success', title: 'Remark saved.', message: '', source: 'remarks' })
         return true
       } catch {
         setActionResult({ kind: 'error', message: 'Unable to save application remark.' })
@@ -3733,7 +3734,8 @@ const ProvincialApplicationDetailsPage = () => {
   const addApplicationRemarkButton = canManageRemarks ? (
     <Button
       kind="tertiary"
-      size="sm"
+      size="md"
+      className="detail-remarks-add-button"
       renderIcon={Add}
       disabled={isEditingRemarks || isSavingRemark}
       onClick={(event) => {
@@ -4975,10 +4977,17 @@ const ProvincialApplicationDetailsPage = () => {
                   <TabPanel className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
-                        <Tile
+                        <section
                           id="application-remarks"
-                          className="application-detail-section application-detail-remarks"
+                          className="application-detail-section application-detail-remarks detail-remarks-section"
+                          aria-label="Remarks"
                         >
+                          {remarkActionResult && (
+                            <ActionResultNotification
+                              result={remarkActionResult}
+                              onClose={() => setActionResult(null)}
+                            />
+                          )}
                           {hasApplicationRemarks && (
                             <div className="detail-section-card__header detail-section-card__header--actions-only">
                               {addApplicationRemarkButton}
@@ -5107,7 +5116,7 @@ const ProvincialApplicationDetailsPage = () => {
                               )}
                             </DetailSidePanel>
                           )}
-                        </Tile>
+                        </section>
                       </Column>
                     </Grid>
                   </TabPanel>

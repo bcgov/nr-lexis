@@ -4782,8 +4782,9 @@ $notification-types: 'error', 'info', 'success', 'warning';
   justify-content: flex-end;
 }
 
-// Figma's Documents tabs: Add documents sits 16px above the table, with no card around them.
-.detail-documents-section .detail-section-card__header {
+// Figma's Documents and Remarks tabs place the add button 16px above the table.
+.detail-documents-section .detail-section-card__header,
+.detail-remarks-section .detail-section-card__header {
   margin-block-end: 1rem;
 }
 
@@ -4791,20 +4792,28 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin: 0;
 }
 
-// Use the signed-off Figma dimensions only on the application and exemption Documents tabs.
-.detail-documents-section .detail-documents-add-button {
+// Use the signed-off Figma dimensions on the Documents and Remarks tabs.
+.detail-documents-section .detail-documents-add-button,
+.detail-remarks-section .detail-remarks-add-button {
   inline-size: 12.25rem;
   max-inline-size: 100%;
   min-block-size: 2.75rem;
 }
 
-.detail-documents-section .lexis-empty-state__title {
+.detail-documents-section .lexis-empty-state__title,
+.detail-remarks-section .lexis-empty-state__title {
   font-size: 1rem;
   line-height: 1.5rem;
 }
 
 .detail-documents-section .lexis-empty-state__description {
   max-inline-size: 25.75rem;
+  color: var(--cds-text-primary);
+  line-height: 1.375rem;
+}
+
+.detail-remarks-section .lexis-empty-state__description {
+  max-inline-size: 37.375rem;
   color: var(--cds-text-primary);
   line-height: 1.375rem;
 }

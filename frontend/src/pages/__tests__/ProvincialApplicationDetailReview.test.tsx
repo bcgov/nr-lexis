@@ -341,7 +341,9 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       expect(remarkInput).toHaveValue(savedRemark.remark)
 
       await act(async () => resolveSave(savedRemark))
-      await screen.findByText('Remark saved.')
+      expect(
+        await within(screen.getByRole('tabpanel', { name: 'Remarks' })).findByText('Remark saved.'),
+      ).toBeVisible()
       expect(screen.queryByLabelText(/^Remark$/)).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Add remark' })).toBeEnabled()
       expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
