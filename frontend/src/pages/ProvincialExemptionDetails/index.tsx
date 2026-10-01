@@ -147,6 +147,8 @@ import {
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { requiredLabel } from '@/utils/required-label'
 
+type ExemptionActionResult = ActionResult & { source?: 'documents' }
+
 type ExemptionDetailTabKey =
   | 'owner'
   | 'agent'
@@ -543,7 +545,9 @@ const ProvincialExemptionDetailsPage = () => {
   const [applicationsErrorMessage, setApplicationsErrorMessage] = useState('')
   const [permitsErrorMessage, setPermitsErrorMessage] = useState('')
   const [blanketOicTotalsErrorMessage, setBlanketOicTotalsErrorMessage] = useState('')
-  const [actionResult, setActionResult] = useState<ActionResult | null>(null)
+  const [actionResult, setActionResult] = useState<ExemptionActionResult | null>(null)
+  const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
+  const pageActionResult = actionResult?.source === 'documents' ? null : actionResult
   const navigationState = location.state as ExemptionCreationNavigationState | null
   const createdExemptionNumber = navigationState?.exemptionCreationNotice?.exemptionNumber ?? ''
   // Read by the first load, which otherwise clears page results before showing the record.
@@ -2069,7 +2073,12 @@ const ProvincialExemptionDetailsPage = () => {
           if (isLatestRequest()) {
             setDocumentRows(documentsResult.rows)
             setDocumentsErrorMessage('')
-            setActionResult({ kind: 'success', title: 'Document deleted.', message: '' })
+            setActionResult({
+              kind: 'success',
+              title: 'Document deleted.',
+              message: '',
+              source: 'documents',
+            })
           }
         } catch (refreshError) {
           if (isLatestRequest()) {
@@ -2209,12 +2218,12 @@ const ProvincialExemptionDetailsPage = () => {
               hideCloseButton
             />
           )}
-          {!!actionResult &&
+          {!!pageActionResult &&
             // An open confirmation shows its own failure instead of the page.
-            (actionResult.kind !== 'error' ||
+            (pageActionResult.kind !== 'error' ||
               (!approvalConfirmationOpen && !showPermitCreationConfirmation)) && (
               <ActionResultNotification
-                result={actionResult}
+                result={pageActionResult}
                 onClose={() => setActionResult(null)}
               />
             )}
@@ -3124,6 +3133,12 @@ const ProvincialExemptionDetailsPage = () => {
                         className="application-detail-section detail-documents-section"
                         aria-label="Documents"
                       >
+                        {documentActionResult && (
+                          <ActionResultNotification
+                            result={documentActionResult}
+                            onClose={() => setActionResult(null)}
+                          />
+                        )}
                         <div className="detail-section-card__header detail-section-card__header--actions-only">
                           {documentRows.length > 0 && addExemptionDocumentsButton}
                           {isAddingDocuments && canUploadExemptionDocuments && (
@@ -3149,6 +3164,7 @@ const ProvincialExemptionDetailsPage = () => {
                                   kind: 'success',
                                   title: savedDocumentsTitle(savedCount),
                                   message: '',
+                                  source: 'documents',
                                 })
                               }
                             />

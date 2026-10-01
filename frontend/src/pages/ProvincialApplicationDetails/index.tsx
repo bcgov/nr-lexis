@@ -209,8 +209,8 @@ type LookupAvailability = 'loading' | 'available' | 'unavailable'
 type ApplicationActionResult = ActionResult & {
   /** Keeps the creation notice through this application's own reloads. */
   createdFor?: string
-  /** Item results render beside the item controls instead of the page header. */
-  source?: 'items'
+  /** Section results render beside their controls instead of the page header. */
+  source?: 'items' | 'documents'
   /** Prompts a second save; any change to the summary draft makes it stale. */
   volumeWarning?: boolean
 }
@@ -763,7 +763,8 @@ const ProvincialApplicationDetailsPage = () => {
     })
   }, [])
   const itemsActionResult = actionResult?.source === 'items' ? actionResult : null
-  const pageActionResult = actionResult?.source === 'items' ? null : actionResult
+  const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
+  const pageActionResult = actionResult?.source ? null : actionResult
   const actionErrorMessage = pageActionResult?.kind === 'error' ? pageActionResult.message : ''
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
   const [documentPendingDeletion, setDocumentPendingDeletion] =
@@ -2398,7 +2399,12 @@ const ProvincialApplicationDetailsPage = () => {
             setDocumentRows(documentsResult.rows)
             setDocumentLookupAvailability('available')
             setDocumentsErrorMessage('')
-            setActionResult({ kind: 'success', title: 'Document deleted.', message: '' })
+            setActionResult({
+              kind: 'success',
+              title: 'Document deleted.',
+              message: '',
+              source: 'documents',
+            })
           }
         } catch (refreshError) {
           if (isCurrentDocumentRequest()) {
@@ -4812,6 +4818,12 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-documents detail-documents-section"
                         aria-label="Documents"
                       >
+                        {documentActionResult && (
+                          <ActionResultNotification
+                            result={documentActionResult}
+                            onClose={() => setActionResult(null)}
+                          />
+                        )}
                         <div className="detail-section-card__header detail-section-card__header--actions-only">
                           {!showsEmptyApplicationDocuments && addApplicationDocumentsButton}
                           {isEditingDocuments && canAddApplicationDocuments && (
@@ -4837,6 +4849,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   kind: 'success',
                                   title: savedDocumentsTitle(savedCount),
                                   message: '',
+                                  source: 'documents',
                                 })
                               }
                             />

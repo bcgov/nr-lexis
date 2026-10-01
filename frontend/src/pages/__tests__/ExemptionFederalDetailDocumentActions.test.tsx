@@ -1365,6 +1365,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
     expect(await screen.findByText('Document deleted.')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('tabpanel', { name: 'Documents' })).getByText('Document deleted.'),
+    ).toBeInTheDocument()
 
     await selectDetailTab('Exemption details')
     await selectDetailTab('Documents')
@@ -1596,6 +1599,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
       )
     })
     expect(await screen.findByText('Document saved.')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('tabpanel', { name: 'Documents' })).getByText('Document saved.'),
+    ).toBeInTheDocument()
     expect(screen.queryByText('Exemption upload persisted.')).not.toBeInTheDocument()
     expect(screen.queryByRole('complementary', { name: 'Add documents' })).not.toBeInTheDocument()
     expect(await screen.findByText('permission.pdf')).toBeInTheDocument()

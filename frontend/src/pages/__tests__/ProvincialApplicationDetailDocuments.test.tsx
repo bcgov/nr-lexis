@@ -390,6 +390,9 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     })
     // Figma confirms an upload with the title alone, not the server's persistence message.
     expect(await screen.findByText('Document saved.')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('tabpanel', { name: 'Documents' })).getByText('Document saved.'),
+    ).toBeInTheDocument()
     expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
   })
 
@@ -733,6 +736,9 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       expect(screen.queryByText('app-doc.pdf')).not.toBeInTheDocument()
     })
     expect(screen.getByText('Document deleted.')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('tabpanel', { name: 'Documents' })).getByText('Document deleted.'),
+    ).toBeInTheDocument()
   })
 
   it('keeps a failed document deletion open for retry', async () => {
