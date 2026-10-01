@@ -3714,7 +3714,8 @@ const ProvincialApplicationDetailsPage = () => {
     canAddApplicationDocuments && !isEditingDocuments ? (
       <Button
         kind="tertiary"
-        size="sm"
+        size="md"
+        className="detail-documents-add-button"
         renderIcon={Add}
         ref={documentUploadLauncherRef}
         onClick={() => setIsEditingDocuments(true)}

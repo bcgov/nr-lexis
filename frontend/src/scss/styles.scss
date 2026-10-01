@@ -4791,6 +4791,24 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin: 0;
 }
 
+// Use the signed-off Figma dimensions only on the application and exemption Documents tabs.
+.detail-documents-section .detail-documents-add-button {
+  inline-size: 12.25rem;
+  max-inline-size: 100%;
+  min-block-size: 2.75rem;
+}
+
+.detail-documents-section .lexis-empty-state__title {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.detail-documents-section .lexis-empty-state__description {
+  max-inline-size: 25.75rem;
+  color: var(--cds-text-primary);
+  line-height: 1.375rem;
+}
+
 .provincial-blanket-oic-permit-create-page .legacy-search-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
 }

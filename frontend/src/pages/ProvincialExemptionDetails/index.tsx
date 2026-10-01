@@ -1315,7 +1315,8 @@ const ProvincialExemptionDetailsPage = () => {
     canUploadExemptionDocuments && !isAddingDocuments ? (
       <Button
         kind="tertiary"
-        size="sm"
+        size="md"
+        className="detail-documents-add-button"
         renderIcon={Add}
         ref={documentUploadLauncherRef}
         disabled={documentUploadBusy}
