@@ -1724,6 +1724,67 @@ class ExemptionDetailsRpcControllerTest {
   }
 
   @Test
+  void approvalRecipientsShouldKeepTheStoredExemptionNumberCase() {
+    TestingAuthenticationToken authentication = approverAuthentication();
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    lenient().doThrow(new AccessDeniedException("Exemption was not found."))
+        .when(provincialAuthorizationService)
+        .requireExemption(authentication, "TEST8Q4B");
+    var preview = new ExemptionDetailsRpcService.ApprovalRecipientPreview(
+        "test8q4b", "owner@example.com", "", false, true, "");
+    when(service.getApprovalRecipients(List.of("test8q4b"))).thenReturn(List.of(preview));
+
+    var response = controller.getApprovalRecipients(" test8q4b ", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).containsExactly(preview);
+    verify(provincialAuthorizationService).requireExemption(authentication, "test8q4b");
+    verify(provincialAuthorizationService).requireExemptionWrite(authentication, "test8q4b");
+    verify(service).getApplicationNumbersForMutation("test8q4b");
+  }
+
+  @Test
+  void approvalShouldKeepTheStoredExemptionNumberCase() {
+    TestingAuthenticationToken authentication = approverAuthentication();
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    when(principalService.resolvePrincipalName(authentication)).thenReturn("IDIR\\JSMITH");
+    lenient().doThrow(new AccessDeniedException("Exemption was not found."))
+        .when(provincialAuthorizationService)
+        .requireExemption(authentication, "TEST8Q4B");
+    when(service.approveExemptions("test8q4b", "IDIR\\JSMITH", true))
+        .thenReturn(new ExemptionDetailsRpcService.ExemptionApprovalResult(
+            true, true, List.of(), "", "", List.of(), List.of()));
+
+    var response = controller.approveExemptions("test8q4b", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(provincialAuthorizationService).requireExemption(authentication, "test8q4b");
+    verify(provincialAuthorizationService).requireExemptionWrite(authentication, "test8q4b");
+    verify(service, atLeastOnce()).getApplicationNumbersForMutation("test8q4b");
+  }
+
+  @Test
+  void structuredApprovalEmailsShouldKeepTheStoredExemptionNumberCase() {
+    TestingAuthenticationToken authentication = approverAuthentication();
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    lenient().doThrow(new AccessDeniedException("Exemption was not found."))
+        .when(provincialAuthorizationService)
+        .requireExemption(authentication, "TEST8Q4B");
+    var recipients = List.of(new ExemptionDetailsRpcService.ApprovalRecipients(
+        "test8q4b", "owner@example.com", ""));
+    var outcome = new ExemptionDetailsRpcService.ApprovalEmailOutcome("test8q4b", true, "Queued.");
+    when(service.queueApprovalEmails(recipients)).thenReturn(List.of(outcome));
+
+    var response = controller.queueApprovalEmails(recipients, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().outcomes()).containsExactly(outcome);
+    verify(provincialAuthorizationService).requireExemption(authentication, "test8q4b");
+    verify(provincialAuthorizationService).requireExemptionWrite(authentication, "test8q4b");
+    verify(service).getApplicationNumbersForMutation("test8q4b");
+  }
+
+  @Test
   void structuredApprovalEmailsShouldReturnPerExemptionQueueOutcomes() {
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\jsmith", "n/a");

@@ -1039,9 +1039,10 @@ public class ExemptionDetailsRpcController {
     }
     List<String> numbers =
         recipients.stream()
-            .map(row -> row.exemptionNumber().trim().toUpperCase(Locale.ROOT))
+            .map(row -> row.exemptionNumber().trim())
             .toList();
-    if (numbers.stream().distinct().count() != numbers.size()) {
+    if (numbers.stream().map(number -> number.toUpperCase(Locale.ROOT)).distinct().count()
+        != numbers.size()) {
       return ResponseEntity.badRequest().build();
     }
     numbers.forEach(
@@ -1452,10 +1453,16 @@ public class ExemptionDetailsRpcController {
       return List.of();
     }
 
+    // Record lookups keep the stored case; only lock keys use case-insensitive ordering.
+    List<String> lockKeys = normalizedExemptionNumbers.stream()
+        .map(number -> number.toUpperCase(Locale.ROOT))
+        .distinct()
+        .sorted()
+        .toList();
     String currentUser = userId(authentication);
     List<String> acquiredForMutation = new ArrayList<>();
     try {
-      for (String exemptionNumber : normalizedExemptionNumbers) {
+      for (String exemptionNumber : lockKeys) {
         ApplicationEditLockDto previous =
             editLockService.snapshotExemption(exemptionNumber, currentUser, false);
         ApplicationEditLockDto acquired =
@@ -1516,7 +1523,6 @@ public class ExemptionDetailsRpcController {
     return Arrays.stream(exemptionNumbers.split(","))
         .map(String::trim)
         .filter(value -> !value.isEmpty())
-        .map(value -> value.toUpperCase(Locale.ROOT))
         .distinct()
         .sorted()
         .toList();
@@ -1531,7 +1537,6 @@ public class ExemptionDetailsRpcController {
         .flatMap(value -> Arrays.stream(value.split(",")))
         .map(String::trim)
         .filter(value -> !value.isEmpty())
-        .map(value -> value.toUpperCase(Locale.ROOT))
         .distinct()
         .sorted()
         .toList();
