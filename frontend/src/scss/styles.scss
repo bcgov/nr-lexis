@@ -4809,6 +4809,39 @@ $notification-types: 'error', 'info', 'success', 'warning';
   line-height: 1.375rem;
 }
 
+.detail-documents-section .detail-document-upload-modal__subtitle {
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  letter-spacing: 0.01rem;
+  line-height: 1.25rem;
+}
+
+.detail-documents-section .admin-upload-field-label {
+  margin-block-end: 0.5rem;
+  font-weight: 700;
+}
+
+.detail-documents-section .admin-upload-field-helper {
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  letter-spacing: 0.01rem;
+  line-height: 1.125rem;
+}
+
+.detail-documents-section .admin-upload-drop-zone__copy p:first-child {
+  margin-block-start: 0;
+  font-size: 0.875rem;
+  letter-spacing: 0.01rem;
+  line-height: 1.125rem;
+}
+
+.detail-documents-section
+  .admin-upload-drop-zone:not(.is-disabled)
+  .admin-upload-drop-zone__copy
+  p:first-child {
+  color: var(--cds-link-primary);
+}
+
 .provincial-blanket-oic-permit-create-page .legacy-search-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
 }
