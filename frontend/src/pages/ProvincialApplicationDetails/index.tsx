@@ -42,7 +42,6 @@ import {
   TrashCan,
 } from '@carbon/icons-react'
 import { AddDocument } from '@carbon/pictograms-react'
-import noResultsPictogram from '@/assets/no-results-found.svg'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
@@ -3537,7 +3536,6 @@ const ProvincialApplicationDetailsPage = () => {
         <EmptyState
           title="No offers found"
           description="No offers are linked to this application."
-          icon={<img src={noResultsPictogram} alt="" width={48} height={48} />}
           headingLevel={3}
         />
       )}
