@@ -67,7 +67,11 @@ import {
 } from '@/pages/shared/application-list-date-options'
 import { formatBusinessDateTime, formatBusinessIsoDate } from '@/utils/date'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
-import { formatDocumentSource } from '@/service/document-service-utils'
+import {
+  DOCUMENTS_EMPTY_DESCRIPTION,
+  formatDocumentSource,
+  savedDocumentsTitle,
+} from '@/service/document-service-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
@@ -2394,10 +2398,7 @@ const ProvincialApplicationDetailsPage = () => {
             setDocumentRows(documentsResult.rows)
             setDocumentLookupAvailability('available')
             setDocumentsErrorMessage('')
-            setActionResult({
-              kind: 'success',
-              message: `${row.name || 'Document'} was deleted.`,
-            })
+            setActionResult({ kind: 'success', title: 'Document deleted.', message: '' })
           }
         } catch (refreshError) {
           if (isCurrentDocumentRequest()) {
@@ -4804,12 +4805,13 @@ const ProvincialApplicationDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <Tile
+                      {/* Figma shows the documents table on the page, with no card or title. */}
+                      <section
                         id="application-documents"
-                        className="application-detail-section application-detail-documents"
+                        className="application-detail-section application-detail-documents detail-documents-section"
+                        aria-label="Documents"
                       >
-                        <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">Documents</h2>
+                        <div className="detail-section-card__header detail-section-card__header--actions-only">
                           {!showsEmptyApplicationDocuments && addApplicationDocumentsButton}
                           {isEditingDocuments && canAddApplicationDocuments && (
                             <DetailDocumentUploadPanel
@@ -4832,7 +4834,7 @@ const ProvincialApplicationDetailsPage = () => {
                               onUploadSuccess={(_, savedCount) =>
                                 setActionResult({
                                   kind: 'success',
-                                  title: savedCount > 1 ? 'Documents saved.' : 'Document saved.',
+                                  title: savedDocumentsTitle(savedCount),
                                   message: '',
                                 })
                               }
@@ -4872,7 +4874,7 @@ const ProvincialApplicationDetailsPage = () => {
                         {showsEmptyApplicationDocuments && (
                           <EmptyState
                             title="No documents for this application"
-                            description="Documents stay with this record through the application, exemption, and permit stages."
+                            description={DOCUMENTS_EMPTY_DESCRIPTION}
                             icon={<AddDocument width={48} height={48} />}
                             action={addApplicationDocumentsButton}
                             headingLevel={3}
@@ -4890,7 +4892,6 @@ const ProvincialApplicationDetailsPage = () => {
                                     <TableHeader>File name</TableHeader>
                                     <TableHeader>Description</TableHeader>
                                     <TableHeader>Type</TableHeader>
-                                    <TableHeader>Source</TableHeader>
                                     <TableHeader>Actions</TableHeader>
                                   </TableRow>
                                 </TableHead>
@@ -4899,7 +4900,6 @@ const ProvincialApplicationDetailsPage = () => {
                                     <TableRow key={row.id}>
                                       <TableCell>{row.name || '-'}</TableCell>
                                       <TableCell>{displayTableValue(row.description)}</TableCell>
-                                      <TableCell>{row.type || '-'}</TableCell>
                                       <TableCell>{formatDocumentSource(row.source)}</TableCell>
                                       <TableCell>
                                         <div className="legacy-search-actions">
@@ -4953,7 +4953,7 @@ const ProvincialApplicationDetailsPage = () => {
                             </TableFrame>
                           </section>
                         )}
-                      </Tile>
+                      </section>
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -5138,11 +5138,11 @@ const ProvincialApplicationDetailsPage = () => {
         <ConfirmationModal
           open
           danger
-          title="Delete document"
+          title="Are you sure you want to delete this document?"
           description={
             <>
-              Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
-              This cannot be undone.
+              <strong>{documentPendingDeletion.name || 'This document'}</strong> will be deleted.
+              This action cannot be undone.
             </>
           }
           confirmLabel="Delete"

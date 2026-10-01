@@ -489,7 +489,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByRole('heading', { name: 'Summary of scale' })).not.toBeInTheDocument()
 
     await selectApplicationDetailTab('Documents')
-    expect(screen.getByRole('heading', { name: 'Documents', level: 2 })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Documents', level: 2 })).not.toBeInTheDocument()
     expect(
       await screen.findByRole('heading', {
         level: 3,

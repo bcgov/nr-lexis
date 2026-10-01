@@ -58,7 +58,7 @@ type DetailDocumentUploadPanelProps = {
   onUploadSuccess?: (message: string, savedCount: number) => void
   presentation?: 'modal' | 'side-panel'
   initiallyOpen?: boolean
-  /** Host page hooks that let an application side panel open as a drawer beside the page. */
+  /** Host page hooks that open the side panel as a drawer beside the page. */
   drawer?: {
     contentSelector: string
     fallbackFocusSelector: string
@@ -131,7 +131,7 @@ const DetailDocumentUploadPanel = ({
 }: DetailDocumentUploadPanelProps) => {
   const copy = UPLOAD_COPY[workflowType]
   const isSidePanel = presentation === 'side-panel' && workflowType !== 'invoice'
-  const isDirectApplicationPanel = isSidePanel && workflowType === 'application' && !!drawer
+  const isDrawerPanel = isSidePanel && !!drawer
   const disabledReason =
     disabledReasonProp ?? 'Your session does not include the required upload permission.'
   const [salesInvoiceNumber, setSalesInvoiceNumber] = useState('')
@@ -251,7 +251,7 @@ const DetailDocumentUploadPanel = ({
   )
   const uploadInvalidText =
     invalidUploadCount > 0
-      ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from ${isDirectApplicationPanel ? 'saving' : 'review'}.`
+      ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from ${isDrawerPanel ? 'saving' : 'review'}.`
       : showFileValidationError && uploadQueue.length === 0
         ? 'Choose at least one file to upload.'
         : undefined
@@ -604,7 +604,7 @@ const DetailDocumentUploadPanel = ({
 
   const onSubmitUpload = async (): Promise<void> => {
     if (isSubmitting) return
-    if (isDirectApplicationPanel) setShowFileValidationError(uploadQueue.length === 0)
+    if (isDrawerPanel) setShowFileValidationError(uploadQueue.length === 0)
     setErrorMessage('')
     setSuccessMessage('')
 
@@ -631,7 +631,7 @@ const DetailDocumentUploadPanel = ({
 
     if (pendingValidationCount > 0) {
       setErrorMessage(
-        isDirectApplicationPanel
+        isDrawerPanel
           ? 'Wait for file validation to finish before saving documents.'
           : 'Wait for file validation to finish before reviewing the upload.',
       )
@@ -641,7 +641,7 @@ const DetailDocumentUploadPanel = ({
     if (readyUploadItems.length === 0) {
       setErrorMessage(
         invalidUploadCount > 0
-          ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before ${isDirectApplicationPanel ? 'saving documents' : 'review'}.`
+          ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before ${isDrawerPanel ? 'saving documents' : 'review'}.`
           : 'Choose at least one file to upload.',
       )
       return
@@ -810,10 +810,10 @@ const DetailDocumentUploadPanel = ({
     <>
       <ActionResultNotifications results={uploadFeedback} onClose={dismissUploadFeedback} />
 
-      {(isDirectApplicationPanel || uploadStep === 'upload') && (
+      {(isDrawerPanel || uploadStep === 'upload') && (
         <div id={modalInitialFocusId} tabIndex={-1} className="detail-document-upload-modal__form">
           <p className="detail-document-upload-modal__subtitle">
-            {isDirectApplicationPanel
+            {isDrawerPanel
               ? requiredLabel('Required fields')
               : workflowType === 'invoice'
                 ? 'Fields marked with an asterisk (*) are required.'
@@ -864,15 +864,15 @@ const DetailDocumentUploadPanel = ({
             </div>
           )}
           <MultiFileDropZone
-            title={isDirectApplicationPanel ? 'Files' : 'File'}
+            title={isDrawerPanel ? 'Files' : 'File'}
             description={DOCUMENT_UPLOAD_GUIDANCE}
             multiple={workflowType !== 'invoice'}
-            showMultipleFileGuidance={!isDirectApplicationPanel}
+            showMultipleFileGuidance={!isDrawerPanel}
             inputId={`${inputId}File`}
             inputKey={fileInputKey}
             inputLabel="Document File"
             required
-            showRequiredIndicator={workflowType === 'invoice' || isDirectApplicationPanel}
+            showRequiredIndicator={workflowType === 'invoice' || isDrawerPanel}
             accept={DOCUMENT_UPLOAD_ACCEPT}
             invalidText={uploadInvalidText}
             disabled={disabled || isSubmitting}
@@ -884,7 +884,7 @@ const DetailDocumentUploadPanel = ({
         </div>
       )}
 
-      {isDirectApplicationPanel && uploadQueue.length > 0 && (
+      {isDrawerPanel && uploadQueue.length > 0 && (
         <ul className="detail-document-upload-queue" aria-label="Selected files">
           {uploadQueue.map((item) => {
             const description = item.fileDescription ?? ''
@@ -936,7 +936,7 @@ const DetailDocumentUploadPanel = ({
         </ul>
       )}
 
-      {!isDirectApplicationPanel && uploadQueue.length > 0 && (
+      {!isDrawerPanel && uploadQueue.length > 0 && (
         <UploadQueuePreview
           items={uploadQueue}
           targetSummary={currentTargetSummary}
@@ -994,7 +994,7 @@ const DetailDocumentUploadPanel = ({
         />
       )}
 
-      {!isDirectApplicationPanel && (
+      {!isDrawerPanel && (
         <div className="detail-document-upload-modal__actions">
           <Button kind="tertiary" disabled={isSubmitting} onClick={closeUploadModal}>
             Cancel
@@ -1063,7 +1063,7 @@ const DetailDocumentUploadPanel = ({
           {uploadContent}
         </section>
       )}
-      {isDirectApplicationPanel && drawer && (
+      {isDrawerPanel && drawer && (
         <DetailSidePanel
           open={isUploadModalOpen}
           title={modalHeading}
@@ -1095,7 +1095,7 @@ const DetailDocumentUploadPanel = ({
       {isUploadModalOpen &&
         !isDiscardConfirmationOpen &&
         workflowType !== 'invoice' &&
-        !isDirectApplicationPanel && (
+        !isDrawerPanel && (
           <Modal
             open
             passiveModal

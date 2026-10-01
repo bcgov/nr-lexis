@@ -4782,7 +4782,12 @@ $notification-types: 'error', 'info', 'success', 'warning';
   justify-content: flex-end;
 }
 
-.application-detail-documents .detail-section-card__header .detail-document-upload {
+// Figma's Documents tabs: Add documents sits 16px above the table, with no card around them.
+.detail-documents-section .detail-section-card__header {
+  margin-block-end: 1rem;
+}
+
+.detail-documents-section .detail-section-card__header .detail-document-upload {
   margin: 0;
 }
 

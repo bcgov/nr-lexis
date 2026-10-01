@@ -58,6 +58,13 @@ export const formatDocumentSource = (source: string | undefined): string => {
   return normalized ? normalized.charAt(0).toUpperCase() + normalized.slice(1).toLowerCase() : '-'
 }
 
+// Figma copy shared by the application and exemption Documents tabs.
+export const DOCUMENTS_EMPTY_DESCRIPTION =
+  'Documents stay with the record as it moves through the application, exemption and permit stages.'
+
+export const savedDocumentsTitle = (savedCount: number): string =>
+  savedCount > 1 ? `${savedCount} documents saved.` : 'Document saved.'
+
 export const parseRemoveDocumentSuccess = (payload: unknown): boolean => {
   if (typeof payload === 'boolean') {
     return payload

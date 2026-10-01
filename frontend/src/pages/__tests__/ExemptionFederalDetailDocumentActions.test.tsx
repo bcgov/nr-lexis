@@ -55,7 +55,7 @@ const openDocumentUploadModal = async (): Promise<void> => {
   const addDocumentsButton = screen.queryByRole('button', { name: 'Add documents' })
   if (addDocumentsButton) {
     await userEvent.click(addDocumentsButton)
-    await screen.findByRole('dialog', { name: 'Add documents' })
+    await screen.findByRole('complementary', { name: 'Add documents' })
     return
   }
   const editButton = screen.queryByRole('button', { name: 'Edit documents' })
@@ -489,7 +489,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
     expect(
-      await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
+      await screen.findByRole('heading', { name: 'No documents for this exemption', level: 3 }),
     ).toBeInTheDocument()
   })
 
@@ -655,7 +655,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       )
 
       await selectDetailTab('Documents')
-      expect(await screen.findByText('No documents found')).toBeInTheDocument()
+      expect(await screen.findByText('No documents for this exemption')).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
     },
   )
@@ -716,7 +716,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Documents')
     expect(
-      await screen.findByRole('heading', { name: 'No documents found', level: 3 }),
+      await screen.findByRole('heading', { name: 'No documents for this exemption', level: 3 }),
     ).toBeInTheDocument()
 
     expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
@@ -1188,7 +1188,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       await screen.findByRole('heading', { name: 'Documents unavailable', level: 3 }),
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole('heading', { name: 'No documents found', level: 3 }),
+      screen.queryByRole('heading', { name: 'No documents for this exemption', level: 3 }),
     ).not.toBeInTheDocument()
 
     expect(
@@ -1320,9 +1320,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
       name: 'Delete',
     })
     await userEvent.click(deleteButton)
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this document?',
+    })
     expect(confirmation).toHaveTextContent(
-      'Permanently delete exemption-doc.pdf? This cannot be undone.',
+      'exemption-doc.pdf will be deleted. This action cannot be undone.',
     )
     expect(mockedRemoveExemptionDocument).not.toHaveBeenCalled()
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
@@ -1358,13 +1360,15 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.click(
       within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
     )
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this document?',
+    })
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
-    expect(await screen.findByText('exemption-doc.pdf was deleted.')).toBeInTheDocument()
+    expect(await screen.findByText('Document deleted.')).toBeInTheDocument()
 
     await selectDetailTab('Exemption details')
     await selectDetailTab('Documents')
-    expect(screen.getByText('exemption-doc.pdf was deleted.')).toBeInTheDocument()
+    expect(screen.getByText('Document deleted.')).toBeInTheDocument()
   })
 
   it('keeps linked application documents read-only on the exemption aggregate', async () => {
@@ -1528,6 +1532,114 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(
       within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
     ).not.toBeInTheDocument()
+  })
+
+  it('adds exemption documents in the Figma drawer and saves them without a review step', async () => {
+    mockedFetchExemptionDocuments
+      .mockResolvedValueOnce({ rows: [], source: 'api' })
+      .mockResolvedValue({
+        rows: [
+          {
+            id: '704',
+            name: 'permission.pdf',
+            description: 'Letter of permission',
+            type: 'Attachment',
+            source: 'exemption',
+          },
+        ],
+        source: 'api',
+      })
+    mockedValidateAdminUpload.mockResolvedValue({ status: 'validated' })
+    mockedSubmitAdminUpload.mockResolvedValue({ message: 'Exemption upload persisted.' })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+    expect(
+      await screen.findByRole('heading', { name: 'No documents for this exemption', level: 3 }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Documents stay with the record as it moves through the application, exemption and permit stages.',
+      ),
+    ).toBeInTheDocument()
+
+    await openDocumentUploadModal()
+    const panel = screen.getByRole('complementary', { name: 'Add documents' })
+    expect(within(panel).getByRole('button', { name: 'Close' })).toBeInTheDocument()
+    const file = new File(['test'], 'permission.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.type(screen.getByLabelText(/Document description/), 'Letter of permission')
+    expect(screen.queryByRole('button', { name: 'Review upload' })).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'Save documents' })).toBeEnabled()
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
+        'exemption',
+        expect.objectContaining({
+          exemptionNumber: 'EX-777',
+          file,
+          fileDescription: 'Letter of permission',
+        }),
+      )
+    })
+    expect(await screen.findByText('Document saved.')).toBeInTheDocument()
+    expect(screen.queryByText('Exemption upload persisted.')).not.toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: 'Add documents' })).not.toBeInTheDocument()
+    expect(await screen.findByText('permission.pdf')).toBeInTheDocument()
+  })
+
+  it('lists exemption documents in the Figma table, typed by where each was added', async () => {
+    mockedFetchExemptionDocuments.mockResolvedValue({
+      rows: [
+        {
+          id: '705',
+          name: 'from-application.pdf',
+          description: '',
+          type: 'Inspection Files',
+          source: 'application',
+          deletable: false,
+        },
+      ],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Documents')
+    const row = (await screen.findByText('from-application.pdf')).closest('tr') as HTMLElement
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent?.trim())).toEqual(
+      ['File name', 'Description', 'Type', 'Actions'],
+    )
+    expect(within(row).getAllByRole('cell')[1]).toHaveTextContent('—')
+    expect(within(row).getAllByRole('cell')[2]).toHaveTextContent('Application')
+    expect(within(row).queryByText('Inspection Files')).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Documents' })).not.toBeInTheDocument()
+    const addDocuments = screen.getByRole('button', { name: 'Add documents' })
+    expect(
+      addDocuments.compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 
   it('renders federal application details with the legacy tab structure', async () => {

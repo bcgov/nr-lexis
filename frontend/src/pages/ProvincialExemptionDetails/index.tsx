@@ -8,16 +8,20 @@ import {
   useState,
 } from 'react'
 import {
+  Add,
   Certificate,
   Currency,
   DocumentAttachment,
+  Download,
   Edit,
   Enterprise,
+  Launch,
   Result,
   Rule,
   TrashCan,
   type CarbonIconType,
 } from '@carbon/icons-react'
+import { AddDocument } from '@carbon/pictograms-react'
 import {
   Button,
   Column,
@@ -68,7 +72,11 @@ import { ActionResultNotification } from '../../components/ActionResultNotificat
 import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
-import { formatDocumentSource } from '@/service/document-service-utils'
+import {
+  DOCUMENTS_EMPTY_DESCRIPTION,
+  formatDocumentSource,
+  savedDocumentsTitle,
+} from '@/service/document-service-utils'
 import { DetailFieldGrid, DetailFieldTile, type DetailField } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
@@ -100,6 +108,7 @@ import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { getResponseStatus, isClientErrorResponse } from '@/utils/http-error'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 import { firstStringField, isRecord } from '@/utils/record'
+import { displayTableValue } from '@/utils/text'
 import { triggerBrowserDownload } from '@/utils/download'
 import { openDocumentPreview } from '@/utils/document-preview'
 import IsoDatePicker from '../../components/IsoDatePicker'
@@ -524,6 +533,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [addApplicationError, setAddApplicationError] = useState('')
   const [isAddingApplication, setIsAddingApplication] = useState(false)
   const addApplicationButtonRef = useRef<HTMLButtonElement>(null)
+  const documentUploadLauncherRef = useRef<HTMLButtonElement>(null)
   const addApplicationInputRef = useRef<HTMLInputElement>(null)
   const [applicationMutationNumber, setApplicationMutationNumber] = useState<string | null>(null)
   const [applicationPendingRemoval, setApplicationPendingRemoval] = useState<string | null>(null)
@@ -1301,6 +1311,19 @@ const ProvincialExemptionDetailsPage = () => {
     persistedStatusCode !== 'EXP' &&
     editContextLoaded &&
     !exemptionEditLocked
+  const addExemptionDocumentsButton =
+    canUploadExemptionDocuments && !isAddingDocuments ? (
+      <Button
+        kind="tertiary"
+        size="sm"
+        renderIcon={Add}
+        ref={documentUploadLauncherRef}
+        disabled={documentUploadBusy}
+        onClick={() => setIsAddingDocuments(true)}
+      >
+        Add documents
+      </Button>
+    ) : null
 
   const refreshPermitData = useCallback(
     async (currentExemptionNumber: string, blanketOic: boolean) => {
@@ -1969,6 +1992,7 @@ const ProvincialExemptionDetailsPage = () => {
     setDocumentUploadResetKey((current) => current + 1)
     setActionResult(withoutActionError)
     setIsAddingDocuments(false)
+    requestAnimationFrame(() => documentUploadLauncherRef.current?.focus())
   }, [])
 
   const onOpenDocument = useCallback(
@@ -2044,10 +2068,7 @@ const ProvincialExemptionDetailsPage = () => {
           if (isLatestRequest()) {
             setDocumentRows(documentsResult.rows)
             setDocumentsErrorMessage('')
-            setActionResult({
-              kind: 'success',
-              message: `${row.name || 'Document'} was deleted.`,
-            })
+            setActionResult({ kind: 'success', title: 'Document deleted.', message: '' })
           }
         } catch (refreshError) {
           if (isLatestRequest()) {
@@ -3096,48 +3117,42 @@ const ProvincialExemptionDetailsPage = () => {
                 <TabPanel key="documents" className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">Documents</h2>
-                          {canUploadExemptionDocuments && (
-                            <div className="legacy-search-actions">
-                              {!isAddingDocuments && (
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  disabled={documentUploadBusy}
-                                  onClick={() => {
-                                    setIsAddingDocuments(true)
-                                  }}
-                                >
-                                  Add documents
-                                </Button>
-                              )}
-                            </div>
+                      {/* Figma shows the documents table on the page, with no card or title. */}
+                      <section
+                        id="exemption-documents"
+                        className="application-detail-section detail-documents-section"
+                        aria-label="Documents"
+                      >
+                        <div className="detail-section-card__header detail-section-card__header--actions-only">
+                          {documentRows.length > 0 && addExemptionDocumentsButton}
+                          {isAddingDocuments && canUploadExemptionDocuments && (
+                            <DetailDocumentUploadPanel
+                              key={`exemption-document-upload-${exemptionNumber}-${documentUploadResetKey}`}
+                              workflowType="exemption"
+                              targetNumber={detail.exemptionNumber}
+                              inputId="exemptionDocumentUpload"
+                              disabled={!detail.exemptionNumber}
+                              presentation="side-panel"
+                              drawer={{
+                                contentSelector: '.application-detail-tabs-column',
+                                fallbackFocusSelector: '#exemption-documents button',
+                                launcherRef: documentUploadLauncherRef,
+                              }}
+                              initiallyOpen
+                              onClose={onCancelDocumentEditing}
+                              onDirtyChange={setDocumentUploadDirty}
+                              onBusyChange={setDocumentUploadBusy}
+                              onUploadComplete={refreshExemptionDocuments}
+                              onUploadSuccess={(_, savedCount) =>
+                                setActionResult({
+                                  kind: 'success',
+                                  title: savedDocumentsTitle(savedCount),
+                                  message: '',
+                                })
+                              }
+                            />
                           )}
                         </div>
-                        {isAddingDocuments && canUploadExemptionDocuments && (
-                          <DetailDocumentUploadPanel
-                            key={`exemption-document-upload-${exemptionNumber}-${documentUploadResetKey}`}
-                            workflowType="exemption"
-                            targetNumber={detail.exemptionNumber}
-                            inputId="exemptionDocumentUpload"
-                            disabled={!detail.exemptionNumber}
-                            presentation="side-panel"
-                            initiallyOpen
-                            onClose={onCancelDocumentEditing}
-                            onDirtyChange={setDocumentUploadDirty}
-                            onBusyChange={setDocumentUploadBusy}
-                            onUploadComplete={refreshExemptionDocuments}
-                            onUploadSuccess={(message) =>
-                              setActionResult({
-                                kind: 'success',
-                                title: 'Document uploaded',
-                                message,
-                              })
-                            }
-                          />
-                        )}
                         {documentsErrorMessage ? (
                           <EmptyState
                             title="Documents unavailable"
@@ -3153,7 +3168,6 @@ const ProvincialExemptionDetailsPage = () => {
                                   <TableHeader>File name</TableHeader>
                                   <TableHeader>Description</TableHeader>
                                   <TableHeader>Type</TableHeader>
-                                  <TableHeader>Source</TableHeader>
                                   <TableHeader>Actions</TableHeader>
                                 </TableRow>
                               </TableHead>
@@ -3161,14 +3175,14 @@ const ProvincialExemptionDetailsPage = () => {
                                 {documentRows.map((row) => (
                                   <TableRow key={row.id}>
                                     <TableCell>{row.name || '-'}</TableCell>
-                                    <TableCell>{row.description || '-'}</TableCell>
-                                    <TableCell>{row.type || '-'}</TableCell>
+                                    <TableCell>{displayTableValue(row.description)}</TableCell>
                                     <TableCell>{formatDocumentSource(row.source)}</TableCell>
                                     <TableCell>
                                       <div className="legacy-search-actions">
                                         <Button
                                           kind="ghost"
                                           size="sm"
+                                          renderIcon={Launch}
                                           onClick={() => void onOpenDocument(row, true)}
                                         >
                                           Open
@@ -3176,6 +3190,7 @@ const ProvincialExemptionDetailsPage = () => {
                                         <Button
                                           kind="ghost"
                                           size="sm"
+                                          renderIcon={Download}
                                           onClick={() => void onOpenDocument(row, false)}
                                         >
                                           Download
@@ -3214,12 +3229,14 @@ const ProvincialExemptionDetailsPage = () => {
                           </TableFrame>
                         ) : (
                           <EmptyState
-                            title="No documents found"
-                            description="No documents have been uploaded for this exemption."
+                            title="No documents for this exemption"
+                            description={DOCUMENTS_EMPTY_DESCRIPTION}
+                            icon={<AddDocument width={48} height={48} />}
+                            action={addExemptionDocumentsButton}
                             headingLevel={3}
                           />
                         )}
-                      </Tile>
+                      </section>
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -3250,11 +3267,11 @@ const ProvincialExemptionDetailsPage = () => {
         <ConfirmationModal
           open
           danger
-          title="Delete document"
+          title="Are you sure you want to delete this document?"
           description={
             <>
-              Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
-              This cannot be undone.
+              <strong>{documentPendingDeletion.name || 'This document'}</strong> will be deleted.
+              This action cannot be undone.
             </>
           }
           confirmLabel="Delete"

@@ -260,7 +260,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return new DocumentItem(
         row.id(),
         row.fileName(),
-        normalizeDescription(row.description()),
+        trimToNull(row.description()),
         Objects.requireNonNullElse(
             trimToNull(context.attachmentTypeDescription()),
             Objects.requireNonNullElse(attachmentTypeCode, "")),
@@ -989,11 +989,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             recipient,
             senderRoute));
     return true;
-  }
-
-  private String normalizeDescription(String description) {
-    String normalized = trimToNull(description);
-    return normalized == null ? "Not on file" : normalized;
   }
 
   private String formatLegacyDate(LocalDate date) {

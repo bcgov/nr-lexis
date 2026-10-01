@@ -108,7 +108,6 @@ export default function DetailSidePanel({
         selectorPrimaryFocus={initialFocusSelector}
         includeOverlay={!slideIn}
         preventCloseOnClickOutside
-        hideCloseButton
         animateTitle={false}
         // Figma's drawer footer uses standard buttons; the SCSS sets their medium size and spacing.
         actions={actions?.map((action) => ({ ...action, isExpressive: false }))}
