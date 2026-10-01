@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
 import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
@@ -24,6 +25,9 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 
 class ClientLookupRepositoryTest {
 
@@ -126,9 +130,91 @@ class ClientLookupRepositoryTest {
         .doesNotContain("FIND_CLIENT_LOCATION")
         .contains("FROM THE.CLIENT_LOCATION L")
         .contains("LEFT JOIN THE.V_CLIENT_PUBLIC FC ON FC.CLIENT_NUMBER = L.CLIENT_NUMBER")
-        .contains("LEFT JOIN THE.CLIENT_ACRONYM CA ON CA.CLIENT_NUMBER = L.CLIENT_NUMBER")
+        .contains("SELECT MIN(CA.CLIENT_ACRONYM)")
+        .contains("WHERE CA.CLIENT_NUMBER = L.CLIENT_NUMBER")
+        .doesNotContain("LEFT JOIN THE.CLIENT_ACRONYM")
         .contains("WHERE L.CLIENT_NUMBER = ?")
         .contains("AND L.CLIENT_LOCN_CODE = ?");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void clientDetailShouldReturnOneLocationWithDeterministicAcronym() {
+    EmbeddedDatabase database =
+        new EmbeddedDatabaseBuilder()
+            .generateUniqueName(true)
+            .setType(EmbeddedDatabaseType.H2)
+            .build();
+    try {
+      JdbcTemplate jdbcTemplate = spy(new JdbcTemplate(database));
+      jdbcTemplate.execute("CREATE SCHEMA THE");
+      jdbcTemplate.execute(
+          """
+          CREATE TABLE THE.CLIENT_LOCATION (
+            CLIENT_NUMBER VARCHAR(8), CLIENT_LOCN_CODE VARCHAR(2),
+            CLIENT_LOCN_NAME VARCHAR(80), ADDRESS_1 VARCHAR(80), ADDRESS_2 VARCHAR(80),
+            ADDRESS_3 VARCHAR(80), CITY VARCHAR(80), PROVINCE VARCHAR(80),
+            POSTAL_CODE VARCHAR(20), COUNTRY VARCHAR(80), BUSINESS_PHONE VARCHAR(20),
+            FAX_NUMBER VARCHAR(20), EMAIL_ADDRESS VARCHAR(100),
+            PRIMARY KEY (CLIENT_NUMBER, CLIENT_LOCN_CODE)
+          )
+          """);
+      jdbcTemplate.execute(
+          """
+          CREATE TABLE THE.V_CLIENT_PUBLIC (
+            CLIENT_NUMBER VARCHAR(8) PRIMARY KEY, CLIENT_NAME VARCHAR(100)
+          )
+          """);
+      jdbcTemplate.execute(
+          """
+          CREATE TABLE THE.CLIENT_ACRONYM (
+            CLIENT_NUMBER VARCHAR(8), CLIENT_ACRONYM VARCHAR(20)
+          )
+          """);
+      jdbcTemplate.execute(
+          """
+          INSERT INTO THE.CLIENT_LOCATION (CLIENT_NUMBER, CLIENT_LOCN_CODE, CLIENT_LOCN_NAME)
+          VALUES ('00001086', '00', 'Primary'), ('00001086', '01', 'Secondary'),
+                 ('00001087', '00', 'Without acronym')
+          """);
+      jdbcTemplate.execute(
+          """
+          INSERT INTO THE.V_CLIENT_PUBLIC VALUES
+          ('00001086', 'Example Forestry'), ('00001087', 'Other Forestry')
+          """);
+      jdbcTemplate.execute(
+          """
+          INSERT INTO THE.CLIENT_ACRONYM VALUES
+          ('00001086', 'ZETA'), ('00001086', 'ALPHA'), ('00001086', 'BETA'),
+          ('00001088', 'AAAA')
+          """);
+      ClientLookupRepository repository = new ClientLookupRepository(jdbcTemplate);
+
+      Optional<ClientLocationRow> location =
+          repository.findLocationByClientNumberCode("00001086", "00");
+      Optional<ClientLocationRow> requiredLocation =
+          repository.findLocationByClientNumberCodeRequired("00001086", "00");
+
+      ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+      verify(jdbcTemplate, times(2))
+          .query(sql.capture(), any(RowMapper.class), eq("00001086"), eq("00"));
+      assertThat(jdbcTemplate.queryForList(sql.getValue(), "00001086", "00")).hasSize(1);
+      assertThat(location)
+          .hasValueSatisfying(
+              row -> {
+                assertThat(row.clientLocationCode()).isEqualTo("00");
+                assertThat(row.clientLocationName()).isEqualTo("Primary");
+                assertThat(row.companyName()).isEqualTo("Example Forestry");
+                assertThat(row.clientAcronym()).isEqualTo("ALPHA");
+              });
+      assertThat(requiredLocation).isEqualTo(location);
+      assertThat(repository.findLocationByClientNumberCode("00001087", "00"))
+          .hasValueSatisfying(row -> assertThat(row.clientAcronym()).isNull());
+      assertThat(repository.findLocationByClientNumberCodeRequired("00001087", "00"))
+          .hasValueSatisfying(row -> assertThat(row.clientAcronym()).isNull());
+    } finally {
+      database.shutdown();
+    }
   }
 
   @Test
