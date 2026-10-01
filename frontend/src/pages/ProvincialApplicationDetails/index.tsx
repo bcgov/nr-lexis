@@ -3649,7 +3649,7 @@ const ProvincialApplicationDetailsPage = () => {
       )}
       {productTypeSupportsPackages(summaryProductTypeCode) && (
         <dl className="detail-field-item">
-          <dt className="detail-field-label">Application total pieces</dt>
+          <dt className="detail-field-label">Total pieces</dt>
           <dd className="detail-field-value">{applicationTotalPieces.toLocaleString()}</dd>
         </dl>
       )}

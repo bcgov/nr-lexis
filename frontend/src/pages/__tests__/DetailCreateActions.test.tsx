@@ -2,6 +2,7 @@ import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   createMemoryRouter,
+  Link,
   MemoryRouter,
   Route,
   RouterProvider,
@@ -184,7 +185,7 @@ describe('Detail Quick Action Smoke', () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: defaultCanPerform }))
   })
 
-  it('creates an offer from an eligible application with application and package prefill', async () => {
+  it('lists eligible application offers without creation controls in the signed-off table', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       packages: [
@@ -196,20 +197,15 @@ describe('Detail Quick Action Smoke', () => {
     renderApplicationDetail()
 
     await openOffersTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Create offer' }))
-
-    const target = await screen.findByTestId('location')
-    const [, query = ''] = target.textContent?.split('?') ?? []
-    const params = new URLSearchParams(query)
-    expect(target).toHaveTextContent('/provincial/offers/create?')
-    expect(params.get('applicationNumber')).toBe('321')
-    expect(params.get('packageNumber')).toBe('PKG-1')
-    expect(params.get('packageNumbers')).toBe('PKG-1,PKG-2')
-    expect(params.get('offeringClientNumber')).toBeNull()
-    expect(params.get('companyName')).toBeNull()
-    expect(params.get('contactName')).toBeNull()
-    expect(params.get('region')).toBeNull()
-    expect(params.get('pickupLocation')).toBeNull()
+    const offers = within(screen.getByRole('region', { name: 'Application offers' }))
+    expect(offers.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Company name',
+      'Date and time received',
+    ])
+    expect(offers.getByText('Example Lumber')).toBeInTheDocument()
+    expect(offers.getByText('Jan 4, 2026')).toBeInTheDocument()
+    expect(offers.queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create offer' })).not.toBeInTheDocument()
   })
 
   it('hides Create offer without the createOffer action', async () => {
@@ -257,7 +253,7 @@ describe('Detail Quick Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Create offer' })).not.toBeInTheDocument()
   })
 
-  it('routes Create offer through the unsaved-changes guard', async () => {
+  it('guards navigation to offer creation while a remark draft is unsaved', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) =>
@@ -271,7 +267,12 @@ describe('Detail Quick Action Smoke', () => {
       [
         {
           path: '/provincial/application/:applicationNumber',
-          element: <ProvincialApplicationDetailsPage />,
+          element: (
+            <>
+              <Link to="/provincial/offers/create">Create/Edit Offer</Link>
+              <ProvincialApplicationDetailsPage />
+            </>
+          ),
         },
         { path: '/provincial/offers/create', element: <LocationProbe /> },
       ],
@@ -283,10 +284,19 @@ describe('Detail Quick Action Smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Add remark' }))
     await userEvent.type(screen.getByLabelText('Remark'), 'Unsaved draft')
     await openOffersTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Create offer' }))
+    await userEvent.click(screen.getByRole('link', { name: 'Create/Edit Offer' }))
 
     expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/provincial/application/321')
+    await userEvent.click(screen.getByRole('button', { name: 'Stay' }))
+    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Remark')).toHaveValue('Unsaved draft')
+    expect(router.state.location.pathname).toBe('/provincial/application/321')
+
+    await userEvent.click(screen.getByRole('link', { name: 'Create/Edit Offer' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard and leave' }))
+    expect(await screen.findByTestId('location')).toHaveTextContent('/provincial/offers/create')
   })
 
   it('does not expose the retired Create Permit action on exemption detail', async () => {

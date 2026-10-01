@@ -409,7 +409,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const applicationItemDetailsTile = await selectApplicationItemDetailsTile(false)
     const applicationItemDetails = within(applicationItemDetailsTile)
     const applicationTotalPieces = () => {
-      const label = applicationItemDetails.getByText('Application total pieces')
+      const label = applicationItemDetails.getByText('Total pieces')
       return label.parentElement?.querySelector('dd')
     }
     expect(applicationTotalPieces()).toHaveTextContent('8')
@@ -417,7 +417,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       Array.from(applicationItemDetailsTile.querySelectorAll('.detail-field-label'))
         .map((field) => field.textContent)
         .slice(-3),
-    ).toEqual(['Species list', 'End use', 'Application total pieces'])
+    ).toEqual(['Species list', 'End use', 'Total pieces'])
 
     const packagesSection = (await screen.findByRole('heading', { name: 'Packages' })).closest(
       '.cds--tile',
@@ -455,7 +455,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       applicationItemDetails.getByRole('button', { name: 'Edit scale details' }),
     )
     await waitFor(() => {
-      expect(applicationItemDetails.getAllByText('Application total pieces')).toHaveLength(1)
+      expect(applicationItemDetails.getAllByText('Total pieces')).toHaveLength(1)
       expect(applicationTotalPieces()).toHaveTextContent('8')
     })
   })
