@@ -12,7 +12,6 @@ import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   setupApplicationDetailTests,
-  LocationProbe,
   NavigateButton,
   applicationDetail,
   applicationSummarySnapshot,
@@ -1188,84 +1187,54 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(await screen.findByRole('region', { name: 'Application offers' })).toBeInTheDocument()
     expect(await screen.findByText('Example Lumber')).toBeInTheDocument()
-    expect(screen.getByText('2026-04-05')).toBeInTheDocument()
-    expect(screen.getByText('OFF-77')).toBeInTheDocument()
+    expect(screen.getByText('Apr 5, 2026')).toBeInTheDocument()
+    expect(screen.queryByText('OFF-77')).not.toBeInTheDocument()
 
     expect(screen.queryByLabelText('Filter offers')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('group', { name: 'Application offers toolbar' }),
     ).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Open' })).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument()
   })
 
-  it('preserves the originating application context when opening an offer', async () => {
+  it('shows the two signed-off offer columns and the stored B.C. receipt time', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       offers: [
         {
           offerNumber: 'OFF-77',
           companyName: 'Example Lumber',
-          receivedDate: '2026-04-05',
+          receivedDate: '2026-06-22',
+          receivedTimestamp: '2026-06-22T22:37:24Z',
           validOffer: true,
           withdrawalDate: null,
         },
       ],
     })
 
-    const router = createMemoryRouter(
-      [
-        {
-          path: '/provincial/application/:applicationNumber',
-          element: <ProvincialApplicationDetailsPage />,
-        },
-        {
-          path: '/provincial/offers/:offerNumber',
-          element: <LocationProbe />,
-        },
-      ],
-      {
-        initialEntries: [
-          {
-            pathname: '/provincial/application/321',
-            search: '?from=applications',
-            state: {
-              lexisDetailTab: 'offers',
-              returnTo: {
-                label: 'My Applications',
-                to: '/provincial/summary?tab=applications',
-              },
-            },
-          },
-        ],
-      },
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
     )
 
-    render(<RouterProvider router={router} />)
-
-    const offers = await screen.findByRole('region', { name: 'Application offers' })
-    await userEvent.click(within(offers).getByRole('button', { name: 'Open' }))
-
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/provincial/offers/OFF-77')
-      expect(router.state.location.search).toBe('?from=applications')
-      expect(router.state.location.state).toEqual({
-        lexisDetailTab: 'offers',
-        returnTo: {
-          label: 'Provincial application detail',
-          to: '/provincial/application/321?from=applications',
-          state: {
-            lexisDetailTab: 'offers',
-            returnTo: {
-              label: 'My Applications',
-              to: '/provincial/summary?tab=applications',
-            },
-          },
-        },
-      })
-    })
+    await selectApplicationDetailTab('Offers')
+    const offers = within(await screen.findByRole('region', { name: 'Application offers' }))
+    expect(offers.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Company name',
+      'Date and time received',
+    ])
+    expect(offers.getByText('Example Lumber')).toBeInTheDocument()
+    expect(offers.getByText('Jun 22, 2026 · 03:37:24 PM')).toBeInTheDocument()
+    expect(offers.queryByRole('button')).not.toBeInTheDocument()
   })
 
-  it('shows only the Figma Application fields, in its rows, without the linked exemption or permits', async () => {
+  it('groups the signed-off Application and Scale fields without linked exemption or permits', async () => {
     mockApplicationDetailAuth(() => true, ['LEXIS_PROVINCIAL_SUBMITTER_00011122'])
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -1302,6 +1271,23 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByText('EX-555')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Permits' })).not.toBeInTheDocument()
     expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
+    expect(within(summaryTile).getByText('Jan 1, 2026')).toBeInTheDocument()
+    expect(within(summaryTile).getByText('Jan 3, 2026')).toBeInTheDocument()
+
+    await selectApplicationDetailTab('Scale')
+    const scaleTile = screen.getByRole('heading', { name: 'Scale details' }).closest('.cds--tile')
+    expect(scaleTile).toBeTruthy()
+    expect(
+      Array.from((scaleTile as HTMLElement).querySelectorAll('dl'), (row) =>
+        Array.from(row.querySelectorAll('dt'), (term) => term.textContent),
+      ),
+    ).toEqual([
+      ['Location of logs'],
+      ['Age class'],
+      ['Average log volume (m³)', 'Application volume (m³)'],
+      ['Species list', 'End use'],
+      ['Total pieces'],
+    ])
   })
 
   it('hides expired application mutation actions even when server edit flags are true', async () => {

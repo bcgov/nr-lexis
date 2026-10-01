@@ -45,6 +45,7 @@ export type ProvincialApplicationDetail = {
     offerNumber: string
     companyName: string | null
     receivedDate: string | null
+    receivedTimestamp?: string | null
     validOffer: boolean
     withdrawalDate: string | null
   }[]

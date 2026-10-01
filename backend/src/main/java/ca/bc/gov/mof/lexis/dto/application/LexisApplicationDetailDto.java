@@ -246,5 +246,19 @@ public record LexisApplicationDetailDto(
   }
 
   public record LexisOfferDto(
-      String offerNumber, String companyName, LocalDate receivedDate, boolean validOffer, LocalDate withdrawalDate) {}
+      String offerNumber,
+      String companyName,
+      LocalDate receivedDate,
+      boolean validOffer,
+      LocalDate withdrawalDate,
+      Instant receivedTimestamp) {
+    public LexisOfferDto(
+        String offerNumber,
+        String companyName,
+        LocalDate receivedDate,
+        boolean validOffer,
+        LocalDate withdrawalDate) {
+      this(offerNumber, companyName, receivedDate, validOffer, withdrawalDate, null);
+    }
+  }
 }

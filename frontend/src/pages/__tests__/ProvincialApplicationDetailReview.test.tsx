@@ -100,11 +100,14 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     const reviewTile = await selectApplicationReviewTile(false)
     const review = within(reviewTile)
+    expect(review.queryByRole('heading', { name: 'Application review' })).not.toBeInTheDocument()
     expect(review.getByRole('button', { name: 'Update status' })).toBeInTheDocument()
     expect(review.queryByRole('group', { name: /Application status/ })).not.toBeInTheDocument()
 
     await userEvent.click(review.getByRole('button', { name: 'Update status' }))
     expect(await review.findByRole('group', { name: /Application status/ })).toBeInTheDocument()
+    expect(review.getByText('Required fields')).toBeInTheDocument()
+    expect(review.queryByRole('radio', { name: 'Expired' })).not.toBeInTheDocument()
     await userEvent.click(review.getByRole('button', { name: 'Cancel' }))
     expect(review.queryByRole('group', { name: /Application status/ })).not.toBeInTheDocument()
   })
@@ -191,11 +194,11 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       .filter((row) => row.textContent?.includes('note'))
     expect(rows).toHaveLength(3)
     expect(rows[0]).toHaveTextContent('Date-only note')
-    expect(rows[0]).toHaveTextContent('2026-09-24')
+    expect(rows[0]).toHaveTextContent('Sep 24, 2026')
     expect(rows[1]).toHaveTextContent('Later note')
-    expect(rows[1]).toHaveTextContent('2026-09-24 10:30:00')
+    expect(rows[1]).toHaveTextContent('Sep 24, 2026 · 10:30:00 AM')
     expect(rows[2]).toHaveTextContent('Earlier note')
-    expect(rows[2]).toHaveTextContent('2026-09-24 09:00:00')
+    expect(rows[2]).toHaveTextContent('Sep 24, 2026 · 09:00:00 AM')
   })
 
   it.each(['add', 'edit'] as const)(
@@ -274,7 +277,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
         expect(rows).toHaveLength(2)
         expect(rows[0]).toHaveTextContent('Recent note')
         expect(rows[1]).toHaveTextContent(savedText)
-        expect(rows[1]).toHaveTextContent('2026-09-23 10:00:00')
+        expect(rows[1]).toHaveTextContent('Sep 23, 2026 · 10:00:00 AM')
       }
 
       await act(async () => resolveReload(remarksDetail))
@@ -718,7 +721,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       within(remarksTable).queryByRole('columnheader', { name: 'Title' }),
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Filter remarks' })).not.toBeInTheDocument()
-    expect(within(remarkRow as HTMLElement).getByText('2026-01-04')).toBeInTheDocument()
+    expect(within(remarkRow as HTMLElement).getByText('Jan 4, 2026')).toBeInTheDocument()
     expect(within(remarkRow as HTMLElement).getByText('idir\\reviewer')).toBeInTheDocument()
     await userEvent.click(within(remarkRow as HTMLElement).getByRole('button', { name: 'Edit' }))
     const remarkInput = await screen.findByLabelText('Remark')
@@ -804,7 +807,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       expect(mockedApproveApplicationReview).toHaveBeenCalledWith('321')
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     })
-    expect(await screen.findByText('Application approved.')).toBeInTheDocument()
+    expect(await within(reviewTile).findByText('Application approved.')).toBeVisible()
     expect(screen.queryByText('The application was saved.')).not.toBeInTheDocument()
     expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
 
@@ -1343,7 +1346,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       })
     })
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-    expect(await screen.findByText('Application rejected.')).toBeInTheDocument()
+    expect(await within(reviewTile).findByText('Application rejected.')).toBeVisible()
     expect(screen.getByText('No email was sent to the client.')).toBeInTheDocument()
     expect(within(reviewTile).queryByText('Client email address')).not.toBeInTheDocument()
   })
@@ -1390,7 +1393,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
         clientEmailAddress: 'agent@example.test',
       }),
     )
-    expect(await screen.findByText('Application withdrawn.')).toBeInTheDocument()
+    expect(await reviewControls.findByText('Application withdrawn.')).toBeVisible()
     expect(screen.getByText('Email sent to agent@example.test.')).toBeInTheDocument()
     const savedEmail = within(await selectApplicationReviewTile(false))
       .getByText('Client email address')
@@ -1662,7 +1665,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
   })
 
-  it.each(['Rejected', 'Withdrawn', 'Expired'])(
+  it.each(['Rejected', 'Withdrawn'])(
     'requires a status change remark before setting application status to %s',
     async (statusLabel) => {
       render(

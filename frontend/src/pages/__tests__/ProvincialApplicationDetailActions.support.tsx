@@ -307,12 +307,7 @@ const NavigateButton = ({ to }: { to: string }) => {
 }
 
 const getApplicationReviewTile = (): HTMLElement => {
-  const reviewTitle = screen.getByRole('heading', {
-    name: /application review/i,
-  })
-  const reviewTile = reviewTitle.closest('.cds--tile')
-  expect(reviewTile).toBeTruthy()
-  return reviewTile as HTMLElement
+  return screen.getByRole('region', { name: 'Application review' })
 }
 
 const getApplicationSummaryTile = (): HTMLElement => {

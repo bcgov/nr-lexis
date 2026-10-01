@@ -707,6 +707,37 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
+  void mapOfferRowShouldPreserveTheStoredReceiptTime() throws Exception {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+    ResultSet rs = org.mockito.Mockito.mock(ResultSet.class);
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-06-22 15:37:24");
+    when(rs.getLong("EXPORT_PURCHASE_OFFER_NUMBER")).thenReturn(77L);
+    when(rs.wasNull()).thenReturn(false);
+    when(rs.getString("COMPANY_NAME")).thenReturn("Example Lumber");
+    when(rs.getTimestamp("ENTRY_TIMESTAMP")).thenReturn(entryTimestamp);
+
+    LexisApplicationDetailDto.LexisOfferDto offer = repository.mapOfferRow(rs);
+
+    assertThat(offer.offerNumber()).isEqualTo("77");
+    assertThat(offer.companyName()).isEqualTo("Example Lumber");
+    assertThat(offer.receivedDate()).isEqualTo(LocalDate.of(2026, 6, 22));
+    assertThat(offer.receivedTimestamp()).isEqualTo(entryTimestamp.toInstant());
+  }
+
+  @Test
+  void mapOfferRowShouldKeepTheDateWhenReceiptTimeCannotBeRead() throws Exception {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+    ResultSet rs = org.mockito.Mockito.mock(ResultSet.class);
+    when(rs.getTimestamp("ENTRY_TIMESTAMP")).thenThrow(new SQLException("timestamp unavailable"));
+    when(rs.getDate("ENTRY_TIMESTAMP")).thenReturn(java.sql.Date.valueOf("2026-06-22"));
+
+    LexisApplicationDetailDto.LexisOfferDto offer = repository.mapOfferRow(rs);
+
+    assertThat(offer.receivedDate()).isEqualTo(LocalDate.of(2026, 6, 22));
+    assertThat(offer.receivedTimestamp()).isNull();
+  }
+
+  @Test
   void mapRemarkRowShouldKeepNullableDirectColumnsNullable() throws Exception {
     TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
     ResultSet rs = org.mockito.Mockito.mock(ResultSet.class);

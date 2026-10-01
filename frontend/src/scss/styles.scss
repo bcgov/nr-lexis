@@ -4798,10 +4798,14 @@ $notification-types: 'error', 'info', 'success', 'warning';
   inline-size: 12.25rem;
   max-inline-size: 100%;
   min-block-size: 2.75rem;
+  font-size: 1rem;
+  line-height: 1.375rem;
 }
 
 .detail-documents-section .lexis-empty-state__title,
-.detail-remarks-section .lexis-empty-state__title {
+.detail-remarks-section .lexis-empty-state__title,
+.detail-offers-section .lexis-empty-state__title,
+.application-detail-review .lexis-empty-state__title {
   font-size: 1rem;
   line-height: 1.5rem;
 }
@@ -4815,6 +4819,203 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .detail-remarks-section .lexis-empty-state__description {
   max-inline-size: 37.375rem;
   color: var(--cds-text-primary);
+  line-height: 1.375rem;
+}
+
+.detail-offers-section .lexis-empty-state__description,
+.application-detail-review .lexis-empty-state__description {
+  color: var(--cds-text-primary);
+  line-height: 1.375rem;
+}
+
+.application-detail-review .lexis-empty-state__description {
+  max-inline-size: 30.5rem;
+}
+
+.detail-review-update-button {
+  inline-size: 11.25rem;
+  max-inline-size: 100%;
+  min-block-size: 2.75rem;
+  font-size: 1rem;
+  line-height: 1.375rem;
+}
+
+.provincial-application-detail .detail-section-card .detail-tile-title {
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.75rem;
+}
+
+.provincial-application-detail
+  .detail-section-card
+  :is(.application-summary-fields, .application-scale-fields) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem 3.5rem;
+}
+
+.provincial-application-detail
+  :is(.application-summary-fields, .application-scale-fields)
+  .detail-field-label {
+  margin-block-end: 0.5rem;
+}
+
+.provincial-application-detail .application-detail-summary .detail-field-grid + .detail-field-grid,
+.provincial-application-detail .application-scale-fields + .application-scale-fields {
+  margin-block-start: 2rem;
+}
+
+.provincial-application-detail .application-items-section h3 {
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.75rem;
+}
+
+.provincial-application-detail .application-items-section-header {
+  min-block-size: 2.75rem;
+  margin-block-end: 2rem;
+}
+
+.provincial-application-detail .application-items-empty-package .lexis-empty-state {
+  min-block-size: 0;
+  padding: 0;
+}
+
+.provincial-application-detail .application-items-empty-package .lexis-empty-state__pictogram {
+  margin-block-end: 1rem;
+}
+
+.provincial-application-detail .application-items-empty-package .lexis-empty-state__title {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.provincial-application-detail .application-items-empty-package .lexis-empty-state__description {
+  color: var(--cds-text-primary);
+  line-height: 1.375rem;
+}
+
+.provincial-application-detail .application-items-empty-package .lexis-empty-state__action {
+  margin-block-start: 2rem;
+}
+
+.provincial-application-detail .application-items-empty-package .cds--btn {
+  inline-size: 12.25rem;
+  max-inline-size: 100%;
+  min-block-size: 2.75rem;
+  font-size: 1rem;
+  line-height: 1.375rem;
+}
+
+.provincial-application-detail .detail-section-card .detail-section-card__header {
+  min-block-size: 2.75rem;
+  margin-block-end: 2rem;
+}
+
+.provincial-application-detail .detail-section-card__header .cds--btn,
+.provincial-application-detail .application-items-panel__header .cds--btn {
+  min-block-size: 2.75rem;
+  font-size: 1rem;
+  line-height: 1.375rem;
+}
+
+@media (min-width: 672px) {
+  .detail-page-grid.provincial-application-detail
+    .application-detail-tabs-column
+    > .application-detail-tab-panel.cds--tab-content,
+  .detail-page-grid
+    .application-detail-tabs-column
+    > .application-detail-tab-panel.cds--tab-content.detail-documents-tab-panel {
+    padding: 2.5rem;
+  }
+
+  .detail-page-grid
+    .application-detail-tabs-column
+    > .application-detail-tab-panel.cds--tab-content.application-detail-tab-panel--empty {
+    padding: 0;
+  }
+
+  .detail-documents-section .lexis-empty-state,
+  .detail-remarks-section .lexis-empty-state,
+  .detail-offers-section .lexis-empty-state,
+  .application-detail-review--empty .lexis-empty-state {
+    min-block-size: 33.125rem;
+    padding: 5rem;
+  }
+
+  .detail-documents-section .lexis-empty-state__pictogram,
+  .detail-remarks-section .lexis-empty-state__pictogram,
+  .detail-offers-section .lexis-empty-state__pictogram,
+  .application-detail-review--empty .lexis-empty-state__pictogram {
+    margin-block-end: 1rem;
+  }
+
+  .detail-documents-section .lexis-empty-state__action,
+  .detail-remarks-section .lexis-empty-state__action,
+  .application-detail-review--empty .lexis-empty-state__action {
+    margin-block-start: 2rem;
+  }
+
+  .application-detail-tab-panel--empty
+    :is(.detail-documents-section, .detail-remarks-section, .application-detail-review)
+    > .app-notification-container {
+    margin: 2.5rem 2.5rem 0;
+  }
+
+  .provincial-application-detail .application-detail-tab-grid {
+    row-gap: 2rem;
+  }
+
+  .provincial-application-detail .application-detail-tab-panel .cds--tile.detail-section-card,
+  .provincial-application-detail .application-items-card {
+    padding: 2rem;
+    border: 1px solid var(--cds-border-subtle-00);
+    box-shadow: none;
+  }
+}
+
+.application-detail-tab-panel .cds--tile.application-detail-review {
+  padding: 2rem;
+  border: 1px solid var(--cds-border-subtle-00);
+  box-shadow: none;
+}
+
+.application-detail-tab-panel .cds--tile.application-detail-review--empty {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.application-detail-review .detail-section-card__header {
+  min-block-size: 2.75rem;
+  margin-block-end: 2rem;
+}
+
+.application-detail-tab-panel .application-detail-review .detail-tile-title {
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.75rem;
+}
+
+.application-detail-review__form {
+  display: grid;
+  gap: 2rem;
+}
+
+.application-detail-review__form .application-detail-required,
+.application-detail-review__form .legacy-search-actions {
+  margin: 0;
+}
+
+.application-detail-review__form .application-detail-required {
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.application-detail-review__form .cds--btn {
+  min-block-size: 2.75rem;
+  font-size: 1rem;
   line-height: 1.375rem;
 }
 

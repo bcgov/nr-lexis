@@ -3124,7 +3124,14 @@ const ProvincialExemptionDetailsPage = () => {
                     </Grid>
                   </TabPanel>
                 )}
-                <TabPanel key="documents" className="application-detail-tab-panel">
+                <TabPanel
+                  key="documents"
+                  className={`application-detail-tab-panel detail-documents-tab-panel${
+                    !documentsErrorMessage && documentRows.length === 0
+                      ? ' application-detail-tab-panel--empty'
+                      : ''
+                  }`}
+                >
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       {/* Figma shows the documents table on the page, with no card or title. */}

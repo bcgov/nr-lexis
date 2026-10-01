@@ -41,7 +41,8 @@ import {
   Task,
   TrashCan,
 } from '@carbon/icons-react'
-import { AddDocument, Handshake } from '@carbon/pictograms-react'
+import { AddDocument } from '@carbon/pictograms-react'
+import noResultsPictogram from '@/assets/no-results-found.svg'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
@@ -65,7 +66,11 @@ import {
   applicationListDateOptions,
   NO_LIST_DATE_VALUE,
 } from '@/pages/shared/application-list-date-options'
-import { formatBusinessDateTime, formatBusinessIsoDate } from '@/utils/date'
+import {
+  formatBusinessDateTimeLabel,
+  formatBusinessIsoDate,
+  formatIsoDateLabel,
+} from '@/utils/date'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import {
   DOCUMENTS_EMPTY_DESCRIPTION,
@@ -74,12 +79,7 @@ import {
 } from '@/service/document-service-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { displayValue } from '@/pages/shared/detail-page-utils'
-import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
-import {
-  locationPath,
-  readDetailReturnTo,
-  withDetailReturnTo,
-} from '@/pages/shared/detail-navigation'
+import { readDetailReturnTo } from '@/pages/shared/detail-navigation'
 import {
   fetchProvincialApplicationDetail,
   releaseApplicationEditLock,
@@ -210,7 +210,7 @@ type ApplicationActionResult = ActionResult & {
   /** Keeps the creation notice through this application's own reloads. */
   createdFor?: string
   /** Section results render beside their controls instead of the page header. */
-  source?: 'items' | 'documents' | 'remarks'
+  source?: 'items' | 'documents' | 'remarks' | 'review'
   /** Prompts a second save; any change to the summary draft makes it stale. */
   volumeWarning?: boolean
 }
@@ -765,6 +765,7 @@ const ProvincialApplicationDetailsPage = () => {
   const itemsActionResult = actionResult?.source === 'items' ? actionResult : null
   const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
   const remarkActionResult = actionResult?.source === 'remarks' ? actionResult : null
+  const reviewActionResult = actionResult?.source === 'review' ? actionResult : null
   const pageActionResult = actionResult?.source ? null : actionResult
   const actionErrorMessage = pageActionResult?.kind === 'error' ? pageActionResult.message : ''
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -906,10 +907,6 @@ const ProvincialApplicationDetailsPage = () => {
   currentDetailRef.current = detail
   const currentSummaryFormRef = useRef<ApplicationSummaryFormState | null>(null)
   currentSummaryFormRef.current = summaryForm
-  const withCurrentSearch = useCallback(
-    (path: string): string => appendSearchParamsToPath(path, searchParams),
-    [searchParams],
-  )
   const focusPackageInItems = useCallback(
     (packageNumber: string) => {
       selectApplicationTab('items')
@@ -1216,23 +1213,6 @@ const ProvincialApplicationDetailsPage = () => {
   const isProvincialSubmitter = hasProvincialSubmitterRole(capabilities?.roles)
   const requiresApplicationAccuracyAcknowledgement =
     detail?.industryUser === true || isProvincialSubmitter
-  const offerPackageNumbers = useMemo(
-    () =>
-      (detail?.packages ?? [])
-        .map((item) => item.packageNumber)
-        .filter((packageNumber) => packageNumber.trim().length > 0),
-    [detail?.packages],
-  )
-  const canCreateApplicationOffer = Boolean(
-    detail &&
-    !isApplicationExpired &&
-    canPerform('/offersSearch') &&
-    canPerform('createOffer', applicationOrgUnit) &&
-    detail.canCreateOffers &&
-    !detail.industryUser &&
-    !isProvincialSubmitter &&
-    offerPackageNumbers.length > 0,
-  )
   const canChangeApplicantType = canPerform('/changeApplicantType', applicationOrgUnit)
   const canReviewApplication = canPerform('/applicationsReview', applicationOrgUnit)
   // Clients cannot change the list date once the application is approved.
@@ -2287,19 +2267,6 @@ const ProvincialApplicationDetailsPage = () => {
     void loadReviewOptions()
   }, [canReviewApplication])
 
-  const onCreateOffer = useCallback(() => {
-    if (!detail || !canCreateApplicationOffer) {
-      return
-    }
-
-    const params = new URLSearchParams()
-    params.set('applicationNumber', String(detail.applicationNumber))
-    params.set('packageNumber', offerPackageNumbers[0])
-    params.set('packageNumbers', offerPackageNumbers.join(','))
-
-    navigate(`/provincial/offers/create?${params.toString()}`)
-  }, [canCreateApplicationOffer, detail, navigate, offerPackageNumbers])
-
   const refreshApplicationDocuments = useCallback(async () => {
     if (!applicationNumber) {
       return
@@ -3138,6 +3105,7 @@ const ProvincialApplicationDetailsPage = () => {
         kind: 'success',
         title: isRetryingApprovalRemark ? 'Remark saved.' : 'Application approved.',
         message: '',
+        source: 'review',
       })
       return 'saved'
     } catch {
@@ -3222,6 +3190,7 @@ const ProvincialApplicationDetailsPage = () => {
         setActionResult({
           kind: 'success',
           title: REVIEW_STATUS_SUCCESS_TITLES[statusCode] ?? 'Application status updated.',
+          source: 'review',
           message: sendEmail
             ? `Email sent to ${clientEmailAddress}.`
             : EMAIL_SUPPORTED_STATUS_CODES.has(statusCode)
@@ -3536,56 +3505,28 @@ const ProvincialApplicationDetailsPage = () => {
   )
 
   const applicationOffersContent = detail ? (
-    <Tile id="application-offers" className="application-detail-section">
-      <div className="detail-section-card__header detail-section-card__header--actions-only">
-        {canCreateApplicationOffer && (
-          <Button kind="tertiary" size="sm" renderIcon={Add} onClick={onCreateOffer}>
-            Create offer
-          </Button>
-        )}
-      </div>
+    <section
+      id="application-offers"
+      className="application-detail-section detail-offers-section"
+      aria-label="Offers"
+    >
       {detail.offers.length > 0 ? (
         <TableFrame ariaLabel="Application offers">
           <Table size="md" useZebraStyles>
             <TableHead>
               <TableRow>
-                <TableHeader>Offer</TableHeader>
-                <TableHeader>Company</TableHeader>
-                <TableHeader>Date received</TableHeader>
-                <TableHeader>Valid</TableHeader>
-                <TableHeader>Withdrawal date</TableHeader>
-                <TableHeader>Actions</TableHeader>
+                <TableHeader>Company name</TableHeader>
+                <TableHeader>Date and time received</TableHeader>
               </TableRow>
             </TableHead>
             <TableBody>
               {detail.offers.map((item) => (
                 <TableRow key={item.offerNumber}>
-                  <TableCell>{item.offerNumber}</TableCell>
                   <TableCell>{item.companyName ?? '-'}</TableCell>
-                  <TableCell>{item.receivedDate ?? '-'}</TableCell>
-                  <TableCell>{item.validOffer ? 'Yes' : 'No'}</TableCell>
-                  <TableCell>{item.withdrawalDate ?? '-'}</TableCell>
                   <TableCell>
-                    <Button
-                      kind="ghost"
-                      size="sm"
-                      renderIcon={Launch}
-                      disabled={!canPerform('/offersSearch') || !canPerform('/offerDetails')}
-                      onClick={() =>
-                        navigate(withCurrentSearch(`/provincial/offers/${item.offerNumber}`), {
-                          state: withDetailReturnTo(
-                            navigationState,
-                            {
-                              label: 'Provincial application detail',
-                              to: locationPath(location),
-                            },
-                            detailReturnTo,
-                          ),
-                        })
-                      }
-                    >
-                      Open
-                    </Button>
+                    {item.receivedTimestamp
+                      ? formatBusinessDateTimeLabel(item.receivedTimestamp)
+                      : displayValue(formatIsoDateLabel(item.receivedDate))}
                   </TableCell>
                 </TableRow>
               ))}
@@ -3596,11 +3537,11 @@ const ProvincialApplicationDetailsPage = () => {
         <EmptyState
           title="No offers found"
           description="No offers are linked to this application."
-          icon={<Handshake width={48} height={48} />}
+          icon={<img src={noResultsPictogram} alt="" width={48} height={48} />}
           headingLevel={3}
         />
       )}
-    </Tile>
+    </section>
   ) : null
 
   // Figma places each tab's add action in its empty state, and above the list once rows exist.
@@ -3761,7 +3702,13 @@ const ProvincialApplicationDetailsPage = () => {
     normalizeReviewStatus(detail?.applicationStatusCode ?? '') === 'NEW' &&
     !reviewStatusRemarkBaseline
   const updateReviewStatusButton = (
-    <Button kind="tertiary" size="sm" renderIcon={Edit} onClick={openReviewEditor}>
+    <Button
+      kind="tertiary"
+      size="md"
+      className="detail-review-update-button"
+      renderIcon={Edit}
+      onClick={openReviewEditor}
+    >
       Update status
     </Button>
   )
@@ -3770,20 +3717,33 @@ const ProvincialApplicationDetailsPage = () => {
     canReviewApplication ? (
       <Tile
         id="application-review"
-        className="application-detail-section application-detail-review"
+        className={`application-detail-section application-detail-review${
+          isReviewNotStarted && !isEditingReview ? ' application-detail-review--empty' : ''
+        }`}
+        role="region"
+        aria-label="Application review"
       >
-        <div className="detail-section-card__header">
-          <h2 className="detail-tile-title">
-            <Stamp size={24} aria-hidden="true" />
-            Application review
-          </h2>
-          {canEditApplicationReview &&
-            !isEditingReview &&
-            !isReviewNotStarted &&
-            updateReviewStatusButton}
-        </div>
+        {(!isReviewNotStarted || isEditingReview) && (
+          <div className="detail-section-card__header">
+            <h2 className="detail-tile-title">
+              <Stamp size={24} aria-hidden="true" />
+              Application review
+            </h2>
+            {canEditApplicationReview &&
+              !isEditingReview &&
+              !isReviewNotStarted &&
+              updateReviewStatusButton}
+          </div>
+        )}
+        {reviewActionResult && (
+          <ActionResultNotification
+            result={reviewActionResult}
+            onClose={() => setActionResult(null)}
+          />
+        )}
         {isEditingReview ? (
-          <>
+          <div className="application-detail-review__form">
+            <p className="application-detail-required">{requiredLabel('Required fields')}</p>
             <RadioButtonGroup
               legendText={requiredLabel('Application status')}
               name="applicationDetailReviewStatus"
@@ -3806,7 +3766,7 @@ const ProvincialApplicationDetailsPage = () => {
                 ...(canApproveApplicationReview || isRetryingApprovalRemark
                   ? [{ value: 'APP', label: 'Approved' }]
                   : []),
-                ...reviewStatusOptions.filter((option) => option.value !== 'APP'),
+                ...reviewStatusOptions.filter((option) => ['REJ', 'WDN'].includes(option.value)),
               ].map((option) => (
                 <RadioButton
                   key={option.value}
@@ -3831,6 +3791,7 @@ const ProvincialApplicationDetailsPage = () => {
                   undefined
                 }
                 helperText="Saved to the Remarks tab."
+                rows={5}
                 enableCounter
                 maxCount={APPLICATION_REMARK_MAX_LENGTH}
                 maxLength={APPLICATION_REMARK_MAX_LENGTH}
@@ -3887,7 +3848,7 @@ const ProvincialApplicationDetailsPage = () => {
             <div className="legacy-search-actions">
               <Button
                 kind="tertiary"
-                size="sm"
+                size="md"
                 disabled={isSubmittingReviewAction}
                 onClick={onCancelReviewEditing}
               >
@@ -3895,7 +3856,7 @@ const ProvincialApplicationDetailsPage = () => {
               </Button>
               <Button
                 kind="primary"
-                size="sm"
+                size="md"
                 disabled={
                   isSubmittingReviewAction ||
                   (isRetryingApprovalRemark
@@ -3920,7 +3881,7 @@ const ProvincialApplicationDetailsPage = () => {
                     }`}
               </Button>
             </div>
-          </>
+          </div>
         ) : isReviewNotStarted ? (
           <EmptyState
             title="Not reviewed yet"
@@ -3959,6 +3920,8 @@ const ProvincialApplicationDetailsPage = () => {
       <Tile
         id="application-review"
         className="application-detail-section application-detail-review"
+        role="region"
+        aria-label="Application review"
       >
         <h2 className="detail-tile-title">
           <Stamp size={24} aria-hidden="true" />
@@ -4147,7 +4110,7 @@ const ProvincialApplicationDetailsPage = () => {
                             !isEditingApplicationItems && (
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 renderIcon={Edit}
                                 onClick={() => {
                                   setActionResult(withoutDraftResult)
@@ -4405,7 +4368,7 @@ const ProvincialApplicationDetailsPage = () => {
                             !isEditingApplicationItems && (
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 renderIcon={Edit}
                                 onClick={() => {
                                   setActionResult(withoutDraftResult)
@@ -4593,8 +4556,11 @@ const ProvincialApplicationDetailsPage = () => {
                               ['Exemption reason', displayValue(summaryExemptionReasonDescription)],
                             ],
                             [
-                              ['Application date', displayValue(detail.applicationDate)],
-                              ['List date', displayValue(detail.listingDate)],
+                              [
+                                'Application date',
+                                displayValue(formatIsoDateLabel(detail.applicationDate)),
+                              ],
+                              ['List date', displayValue(formatIsoDateLabel(detail.listingDate))],
                             ],
                             [['Exemption term (days)', displayValue(detail.termDays)]],
                           ].map((row) => (
@@ -4637,7 +4603,7 @@ const ProvincialApplicationDetailsPage = () => {
                             !isEditingApplicationItems && (
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 renderIcon={Edit}
                                 onClick={() => {
                                   setActionResult(withoutDraftResult)
@@ -4682,19 +4648,19 @@ const ProvincialApplicationDetailsPage = () => {
                             </div>
                           </>
                         ) : (
-                          <dl className="detail-field-grid">
-                            {[
-                              ...(savedProductTypeHasLogDetails
-                                ? [
-                                    [
-                                      'Location of logs',
-                                      displayValue(savedScaleForm?.productLocation),
-                                    ],
-                                  ]
-                                : []),
-                              ...(savedProductTypeHasGrowthDetails
-                                ? [['Age class', displayValue(savedGrowthTypeDescription)]]
-                                : []),
+                          [
+                            savedProductTypeHasLogDetails
+                              ? [
+                                  [
+                                    'Location of logs',
+                                    displayValue(savedScaleForm?.productLocation),
+                                  ],
+                                ]
+                              : [],
+                            savedProductTypeHasGrowthDetails
+                              ? [['Age class', displayValue(savedGrowthTypeDescription)]]
+                              : [],
+                            [
                               ...(savedProductTypeHasLogDetails
                                 ? [
                                     [
@@ -4707,6 +4673,8 @@ const ProvincialApplicationDetailsPage = () => {
                                 'Application volume (m³)',
                                 displayValue(savedScaleForm?.applicationVolume),
                               ],
+                            ],
+                            [
                               [
                                 'Species list',
                                 displayValue(savedScaleForm?.speciesCodes.join(', ')),
@@ -4714,21 +4682,25 @@ const ProvincialApplicationDetailsPage = () => {
                               ...(savedProductTypeHasGrowthDetails
                                 ? [['End use', displayValue(savedEndUseDescription)]]
                                 : []),
-                              ...(applicationProductSupportsPackages
-                                ? [
-                                    [
-                                      'Application total pieces',
-                                      applicationTotalPieces.toLocaleString(),
-                                    ],
-                                  ]
-                                : []),
-                            ].map(([label, value]) => (
-                              <div key={label} className="detail-field-item">
-                                <dt className="detail-field-label">{label}</dt>
-                                <dd className="detail-field-value">{value}</dd>
-                              </div>
-                            ))}
-                          </dl>
+                            ],
+                            applicationProductSupportsPackages
+                              ? [['Total pieces', applicationTotalPieces.toLocaleString()]]
+                              : [],
+                          ]
+                            .filter((row) => row.length > 0)
+                            .map((row) => (
+                              <dl
+                                key={row[0][0]}
+                                className="detail-field-grid application-scale-fields"
+                              >
+                                {row.map(([label, value]) => (
+                                  <div key={label} className="detail-field-item">
+                                    <dt className="detail-field-label">{label}</dt>
+                                    <dd className="detail-field-value">{value}</dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            ))
                         )}
                       </Tile>
                     </Column>
@@ -4811,7 +4783,11 @@ const ProvincialApplicationDetailsPage = () => {
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel
+                  className={`application-detail-tab-panel detail-documents-tab-panel${
+                    showsEmptyApplicationDocuments ? ' application-detail-tab-panel--empty' : ''
+                  }`}
+                >
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       {/* Figma shows the documents table on the page, with no card or title. */}
@@ -4974,7 +4950,11 @@ const ProvincialApplicationDetailsPage = () => {
                   </Grid>
                 </TabPanel>
                 {canViewRemarks && (
-                  <TabPanel className="application-detail-tab-panel">
+                  <TabPanel
+                    className={`application-detail-tab-panel${
+                      !hasApplicationRemarks ? ' application-detail-tab-panel--empty' : ''
+                    }`}
+                  >
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
                         <section
@@ -5020,8 +5000,8 @@ const ProvincialApplicationDetailsPage = () => {
                                       >
                                         <TableCell>
                                           {item.timestamp
-                                            ? formatBusinessDateTime(item.timestamp)
-                                            : displayValue(item.date)}
+                                            ? formatBusinessDateTimeLabel(item.timestamp)
+                                            : displayValue(formatIsoDateLabel(item.date))}
                                         </TableCell>
                                         <TableCell>{displayValue(item.user)}</TableCell>
                                         <TableCell>{item.remark}</TableCell>
@@ -5121,7 +5101,11 @@ const ProvincialApplicationDetailsPage = () => {
                     </Grid>
                   </TabPanel>
                 )}
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel
+                  className={`application-detail-tab-panel${
+                    detail.offers.length === 0 ? ' application-detail-tab-panel--empty' : ''
+                  }`}
+                >
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       {applicationOffersContent}
@@ -5129,7 +5113,13 @@ const ProvincialApplicationDetailsPage = () => {
                   </Grid>
                 </TabPanel>
                 {canViewReview && (
-                  <TabPanel className="application-detail-tab-panel">
+                  <TabPanel
+                    className={`application-detail-tab-panel${
+                      isReviewNotStarted && !isEditingReview
+                        ? ' application-detail-tab-panel--empty'
+                        : ''
+                    }`}
+                  >
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
                         {applicationReviewContent}
