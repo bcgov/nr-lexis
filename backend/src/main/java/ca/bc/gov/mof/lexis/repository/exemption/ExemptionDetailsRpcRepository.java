@@ -732,7 +732,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         getLocalDate(rs, "RECEIVED_DATE"),
         getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
         getDouble(rs, "AVERAGE_LOG_VOLUME"),
-        getString(rs, "PRODUCT_LOCATION"),
+        // T/S applications store a single-space sentinel to satisfy Oracle's NOT NULL constraint.
+        getRawString(rs, "PRODUCT_LOCATION"),
         getString(rs, "ENTRY_USERID"),
         getTimestamp(rs, "ENTRY_TIMESTAMP"),
         getLong(rs, "EXPORT_SCHEDULE_ID"),
@@ -765,7 +766,7 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
     setDateOrNull(cs, index++, app.receivedDate());
     setDoubleOrNull(cs, index++, app.exemptionApplicationVolume());
     setDoubleOrNull(cs, index++, app.averageLogVolume());
-    setStringOrNull(cs, index++, app.productLocation());
+    setProductLocation(cs, index++, app.productLocation());
     cs.setString(index++, auditUserOrDefault(app.entryUserId()));
     setTimestampOrNull(cs, index++, app.entryTimestamp());
     cs.setString(index++, auditUserOrDefault(record.updateUserId()));
@@ -970,6 +971,15 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       cs.setNull(index, Types.VARCHAR);
     } else {
       cs.setString(index, normalized);
+    }
+  }
+
+  private void setProductLocation(CallableStatement cs, int index, String value) throws SQLException {
+    // Linking changes the relationship/status, not the application's stored location text.
+    if (value == null) {
+      cs.setNull(index, Types.VARCHAR);
+    } else {
+      cs.setString(index, value);
     }
   }
 

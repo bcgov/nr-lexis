@@ -6,10 +6,12 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.api.Assertions.entry;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -19,11 +21,15 @@ import java.sql.CallableStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
 import java.sql.Timestamp;
+import java.sql.Types;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.CallableStatementCallback;
@@ -432,6 +438,62 @@ class ExemptionDetailsRpcRepositoryTest {
             });
 
     verify(cursor, never()).getDouble("APPLICATION_VOLUME");
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = {" ", "  Harvested site  "})
+  @SuppressWarnings({"rawtypes", "unchecked"})
+  void applicationLinkRoundTripShouldPreserveStoredProductLocation(String productLocation)
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    CallableStatement readStatement = mock(CallableStatement.class);
+    CallableStatement writeStatement = mock(CallableStatement.class);
+    ResultSet cursor = applicationLinkCursor(900101L, 10.0d);
+    when(cursor.getString("PRODUCT_LOCATION")).thenReturn(productLocation);
+    when(readStatement.getObject(2)).thenReturn(cursor);
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_NUMBER(?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(readStatement));
+    when(
+            jdbcTemplate.execute(
+                eq("{ call LEXIS_GROUP_14.UPDATE_EXEMPTION_APPLICATION(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) }"),
+                any(CallableStatementCallback.class)))
+        .thenAnswer(
+            invocation ->
+                ((CallableStatementCallback) invocation.getArgument(1))
+                    .doInCallableStatement(writeStatement));
+    ExemptionDetailsRpcRepository repository = new ExemptionDetailsRpcRepository(jdbcTemplate);
+
+    var application = repository.findApplicationLinkRecord(900101L).orElseThrow();
+    assertThat(application.productLocation()).isEqualTo(productLocation);
+    assertThat(
+            repository.updateApplicationExemption(
+                new ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord(
+                    application, "EX-TEST", "EXE", "idir\\reviewer")))
+        .isTrue();
+    assertThat(
+            repository.updateApplicationExemption(
+                new ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord(
+                    application, null, "APP", "idir\\reviewer")))
+        .isTrue();
+
+    if (productLocation == null) {
+      verify(writeStatement, times(2)).setNull(8, Types.VARCHAR);
+      verify(writeStatement, never()).setString(eq(8), any());
+    } else {
+      verify(writeStatement, times(2)).setString(8, productLocation);
+      verify(writeStatement, never()).setNull(eq(8), anyInt());
+    }
+    verify(writeStatement).setString(18, "EX-TEST");
+    verify(writeStatement).setNull(18, Types.VARCHAR);
+    verify(writeStatement).setString(20, "EXE");
+    verify(writeStatement).setString(20, "APP");
   }
 
   @Test
