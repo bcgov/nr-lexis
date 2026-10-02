@@ -5,7 +5,7 @@
   .provincial-exemption-search-grid > .forest-client-combobox:has(#ownerClientNumber) {
     grid-column: 1 / span 2;
   }
-  .cds--data-table {
+  .legacy-search-table-frame .cds--data-table {
     inline-size: 100%;
     min-inline-size: 0;
     table-layout: fixed;
@@ -17,9 +17,44 @@
     overflow-wrap: anywhere;
     padding-inline: 0.75rem;
   }
+  // Override the shared search-table nowrap rule on Carbon's actual sortable label.
+  .legacy-search-table-frame .cds--data-table thead {
+    th,
+    .cds--table-header-label {
+      white-space: normal;
+    }
+    th.cds--table-sort__header {
+      padding-inline: 0;
+    }
+    .cds--table-sort {
+      min-inline-size: 0;
+      padding-inline: 0.75rem;
+    }
+    .cds--table-sort__flex {
+      min-inline-size: 0;
+    }
+    .cds--table-header-label {
+      flex: 1 1 0;
+      min-inline-size: 0;
+      line-height: 1.25rem;
+    }
+    .cds--table-sort__icon,
+    .cds--table-sort__icon-unsorted {
+      flex-shrink: 0;
+      margin-inline: 0.25rem 0;
+    }
+  }
   .exemption-search-table--selectable th:first-child,
   .exemption-search-table--selectable td:first-child {
     inline-size: 3rem;
+  }
+  .cds--data-table:not(.exemption-search-table--selectable) th:first-child,
+  .cds--data-table.exemption-search-table--selectable th:nth-child(2) {
+    inline-size: 11%;
+  }
+  .cds--data-table:not(.exemption-search-table--selectable) th:is(:nth-child(6), :nth-child(7)),
+  .cds--data-table.exemption-search-table--selectable th:is(:nth-child(7), :nth-child(8)) {
+    inline-size: 13%;
   }
   .exemption-search-results-notifications:focus {
     outline: 2px solid var(--cds-focus);
@@ -32,7 +67,7 @@
     .provincial-exemption-search-grid > .forest-client-combobox:has(#ownerClientNumber) {
       grid-column: auto;
     }
-    .cds--data-table {
+    .legacy-search-table-frame .cds--data-table {
       min-inline-size: 60rem;
     }
   }

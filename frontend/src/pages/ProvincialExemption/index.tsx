@@ -4,6 +4,7 @@ import {
   Button,
   Checkbox,
   Column,
+  DismissibleTag,
   Grid,
   Pagination,
   Table,
@@ -38,7 +39,7 @@ import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
-import StatusTag from '@/components/StatusTag'
+import StatusTag, { getStatusTagVariant } from '@/components/StatusTag'
 import type {
   ProvincialExemptionSearchFilters,
   ProvincialExemptionSearchItem,
@@ -113,6 +114,14 @@ import { formatIsoDateLabel } from '@/utils/date'
 import './ProvincialExemption.scss'
 
 const APPROVAL_REQUEST_FAILED_MESSAGE = 'The approval request could not be completed.'
+
+const searchOptionLabel = (code: string, options: SearchOption[]): string => {
+  const normalized = code.trim().toUpperCase()
+  return (
+    options.find((option) => option.value.trim().toUpperCase() === normalized)?.label.trim() ||
+    code.trim()
+  )
+}
 
 const normalizeApprovalMessage = (message: string): string =>
   message
@@ -987,6 +996,20 @@ const ProvincialExemptionPage = () => {
                   </>
                 )}
               </div>
+              {canFilterByClient && filters.applicantClientNumber && (
+                <div>
+                  <DismissibleTag
+                    text={`Applicant client: ${filters.applicantClientNumber}`}
+                    title="Remove applicant client filter"
+                    dismissTooltipLabel="Remove applicant client filter"
+                    onClose={() => updateFilter('applicantClientNumber', '')}
+                  />
+                  <p className="cds--form__helper-text">
+                    Matches the agent, or the owner when no agent is recorded. Select Search to
+                    apply changes.
+                  </p>
+                </div>
+              )}
               <div className="legacy-search-actions">
                 <Button
                   type="button"
@@ -1168,9 +1191,19 @@ const ProvincialExemptionPage = () => {
                             row.exemptionNumber
                           )}
                         </TableCell>
-                        <TableCell>{displayTableValue(row.type)}</TableCell>
                         <TableCell>
-                          <StatusTag status={row.status} />
+                          {displayTableValue(
+                            searchOptionLabel(row.typeCode || row.type, exemptionTypeOptions),
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <StatusTag
+                            status={searchOptionLabel(
+                              row.statusCode || row.status,
+                              exemptionStatusOptions,
+                            )}
+                            variant={getStatusTagVariant(row.statusCode || row.status)}
+                          />
                         </TableCell>
                         <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
                         <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>

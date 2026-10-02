@@ -236,6 +236,147 @@ describe('Provincial Exemption Search Actions', () => {
     }))
   })
 
+  it.each(['url', 'session'])(
+    'shows and removes a restored Applicant filter from %s without changing its meaning',
+    async (source) => {
+      mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+      const storageKey = 'lexis.search-state.v1.provincial-exemptions'
+      const restoredSearch = 'applicantClientNumber=00162575'
+      if (source === 'session') sessionStorage.setItem(storageKey, restoredSearch)
+      renderPage(
+        source === 'url' ? `/provincial/exemption?${restoredSearch}` : '/provincial/exemption',
+      )
+
+      await screen.findByText('EX-1001')
+      expect(screen.getByText('Applicant client: 00162575')).toBeVisible()
+      expect(
+        screen.getByText(/Matches the agent, or the owner when no agent is recorded/),
+      ).toBeVisible()
+      expect(screen.getByLabelText('Owner client')).toHaveValue('')
+      expect(screen.getByLabelText('Agent client')).toHaveValue('')
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            applicantClientNumber: '00162575',
+            agentClientNumber: '',
+          }),
+        }),
+        expect.any(Object),
+      )
+
+      await userEvent.click(screen.getByRole('button', { name: 'Select Agent client' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+      await waitFor(() =>
+        expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            filters: expect.objectContaining({
+              applicantClientNumber: '00162575',
+              agentClientNumber: '00012345',
+            }),
+          }),
+          expect.any(Object),
+        ),
+      )
+
+      await userEvent.click(screen.getByRole('button', { name: 'Remove applicant client filter' }))
+      expect(screen.queryByText('Applicant client: 00162575')).not.toBeInTheDocument()
+      expect(screen.getByLabelText('Agent client')).toHaveValue('00012345')
+      await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+      await waitFor(() =>
+        expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            filters: expect.objectContaining({
+              applicantClientNumber: '',
+              agentClientNumber: '00012345',
+            }),
+          }),
+          expect.any(Object),
+        ),
+      )
+      expect(
+        new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').has('applicantClientNumber'),
+      ).toBe(false)
+      expect(
+        new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').get('agentClientNumber'),
+      ).toBe('00012345')
+    },
+  )
+
+  it('uses option descriptions for raw row codes while retaining code-based eligibility, colours and requests', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedFetchProvincialExemptionOptions.mockResolvedValue({
+      exemptionTypes: [
+        { value: 'M', label: 'Ministerial' },
+        { value: 'O', label: 'OIC' },
+        { value: 'B', label: 'BOIC' },
+      ],
+      exemptionStatuses: [
+        { value: 'NEW', label: 'New' },
+        { value: 'ACT', label: 'Active' },
+        { value: 'EXP', label: 'Expired' },
+      ],
+      regions: [{ value: '11', label: 'Cariboo' }],
+    })
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([
+        {
+          ...selectableExemption('RAW-NEW'),
+          type: 'M',
+          typeCode: 'M',
+          status: 'NEW',
+          statusCode: 'NEW',
+        },
+        {
+          ...selectableExemption('RAW-ACT'),
+          type: 'O',
+          typeCode: 'O',
+          status: 'ACT',
+          statusCode: 'ACT',
+        },
+        {
+          ...selectableExemption('RAW-EXP'),
+          type: 'B',
+          typeCode: 'B',
+          status: 'EXP',
+          statusCode: 'EXP',
+        },
+        {
+          ...selectableExemption('RAW-UNKNOWN'),
+          type: 'ZZ',
+          typeCode: 'ZZ',
+          status: 'OTHER',
+          statusCode: 'OTHER',
+        },
+      ]),
+    )
+    renderPage()
+    for (const [number, type, status, variant] of [
+      ['RAW-NEW', 'Ministerial', 'New', 'informative'],
+      ['RAW-ACT', 'OIC', 'Active', 'positive'],
+      ['RAW-EXP', 'BOIC', 'Expired', 'expired'],
+      ['RAW-UNKNOWN', 'ZZ', 'OTHER', 'neutral'],
+    ]) {
+      const row = (await screen.findByRole('link', { name: number })).closest('tr') as HTMLElement
+      expect(await within(row).findByText(type)).toBeInTheDocument()
+      expect(within(row).getByText(status)).toHaveAttribute('data-status-variant', variant)
+      if (number === 'RAW-NEW') expect(within(row).getByRole('checkbox')).toBeEnabled()
+      else expect(within(row).queryByRole('checkbox')).not.toBeInTheDocument()
+    }
+    await userEvent.click(screen.getByRole('combobox', { name: 'Exemption type' }))
+    await userEvent.click(screen.getByRole('option', { name: 'Ministerial' }))
+    await userEvent.click(screen.getByRole('combobox', { name: 'Exemption status' }))
+    await userEvent.click(screen.getByRole('option', { name: 'Active' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() =>
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ exemptionTypeCode: 'M', exemptionStatusCode: 'ACT' }),
+        }),
+        expect.any(Object),
+      ),
+    )
+  })
+
   it('submits and restores None as literal NULL, while clearing restores All types', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     const page = renderPage()
