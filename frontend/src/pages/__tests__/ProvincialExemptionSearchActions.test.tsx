@@ -300,6 +300,8 @@ describe('Provincial Exemption Search Actions', () => {
         new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').get('agentClientNumber'),
       ).toBe('00012345')
     },
+    // Restoring and applying multiple full-page searches exceeds 5s in CI coverage runs.
+    20_000,
   )
 
   it('uses option descriptions for raw row codes while retaining code-based eligibility, colours and requests', async () => {
