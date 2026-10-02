@@ -1663,14 +1663,18 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
 
     await chooseComboBoxOption(packageSelector, 'PKG-1')
-    await waitFor(() => {
-      expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toHaveValue(
-        'LU - Lumber',
-      )
-      expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toBeEnabled()
-      expect(savePackage).toBeEnabled()
-      expect(addScale).toBeDisabled()
-    })
+    // Package reload and Carbon's selected-label effect can exceed 1s under CI coverage.
+    await waitFor(
+      () => {
+        expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toHaveValue(
+          'LU - Lumber',
+        )
+        expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toBeEnabled()
+        expect(savePackage).toBeEnabled()
+        expect(addScale).toBeDisabled()
+      },
+      { timeout: 5_000 },
+    )
   })
 
   it('keeps a ready selected package available while create package end uses load', async () => {
