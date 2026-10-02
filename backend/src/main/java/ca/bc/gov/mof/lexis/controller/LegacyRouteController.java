@@ -341,7 +341,8 @@ public class LegacyRouteController {
         page,
         size,
         null,
-        authentication);
+        authentication,
+        null);
   }
 
   @GetMapping({"/exemptionDetails", "/exemptionDetails.do"})

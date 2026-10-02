@@ -17,6 +17,7 @@ export type ApplicationClientData = {
   clientNumber: string
   companyName: string
   clientAcronym: string
+  locationName?: string
   address: string
   city: string
   province: string
@@ -54,6 +55,7 @@ const parseClientData = (input: unknown): ApplicationClientData | null => {
     clientNumber,
     companyName: stringField(input, 'companyName'),
     clientAcronym: stringField(input, 'clientAcronym'),
+    locationName: stringField(input, 'locationName'),
     address: stringField(input, 'address'),
     city: stringField(input, 'city'),
     province: stringField(input, 'province'),

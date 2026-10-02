@@ -4964,6 +4964,20 @@ $notification-types: 'error', 'info', 'success', 'warning';
     margin: 2.5rem 2.5rem 0;
   }
 
+  .application-detail-tab-panel--empty .detail-documents-section > .detail-context-notification {
+    inline-size: calc(100% - 5rem);
+    margin-inline: 2.5rem;
+  }
+
+  #permit-detail-content .permit-detail-empty-section .lexis-empty-state {
+    min-block-size: 33.125rem;
+    padding: 5rem;
+  }
+
+  #permit-detail-content .permit-detail-empty-section .lexis-empty-state__action {
+    margin-block-start: 2rem;
+  }
+
   .provincial-application-detail .application-detail-tab-grid {
     row-gap: 2rem;
   }
@@ -5697,6 +5711,41 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .application-client-edit-grid + .application-client-summary {
   margin-block-start: 1.5rem;
+}
+
+.provincial-application-detail .application-client-edit-grid {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+.provincial-application-detail .application-client-edit-grid > :first-child {
+  grid-column: 1 / -1;
+  max-inline-size: 24rem;
+}
+
+.provincial-application-detail .application-applicant-type-edit {
+  max-inline-size: 24rem;
+  margin-block-start: 1.5rem;
+}
+
+#permit-detail-content .permit-client-subheading {
+  margin-block: 0 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.375rem;
+}
+
+#permit-detail-content .permit-applicant-card .permit-client-tile {
+  padding: 0;
+}
+
+.permit-scale-panel .legacy-search-grid > :last-child {
+  grid-column: 1 / -1;
+}
+
+@media (max-width: 671px) {
+  .provincial-application-detail .application-client-edit-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .application-detail-tab-panel .cds--form-item + .lexis-table-frame,

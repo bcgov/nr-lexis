@@ -1489,7 +1489,8 @@ class ExemptionDetailsRpcControllerTest {
                     "250-555-0100",
                     "250-555-0199",
                     "user@example.com",
-                    null)));
+                    "ACME",
+                    "Main")));
 
     ResponseEntity<ExemptionDetailsRpcController.ExemptionClientDataResponseDto> response =
         controller.getClientDataLegacy("77881", "00");
@@ -1498,6 +1499,8 @@ class ExemptionDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().clientNumber()).isEqualTo("00077881");
     assertThat(response.getBody().companyName()).isEqualTo("Acme Forestry");
+    assertThat(response.getBody().clientAcronym()).isEqualTo("ACME");
+    assertThat(response.getBody().locationName()).isEqualTo("Main");
     assertThat(response.getBody().notfound()).isNull();
   }
 

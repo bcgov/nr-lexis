@@ -14,6 +14,14 @@ import {
 } from '@/pages/shared/application-form-utils'
 
 describe('application-form-utils', () => {
+  it('uses authorized client data when a location option has no description', () => {
+    expect(clientLocationLabel('00', '00', 'Main office')).toBe('00 - Main office')
+    expect(clientLocationLabel('01', '', 'Export office')).toBe('01 - Export office')
+    expect(clientLocationLabel('01', '01 - Current office', 'Old office')).toBe(
+      '01 - Current office',
+    )
+  })
+
   it.each([
     ['123', '00000123', true],
     [' 00000123 ', '123', true],

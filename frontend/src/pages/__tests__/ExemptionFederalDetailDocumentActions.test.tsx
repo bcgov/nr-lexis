@@ -463,9 +463,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
       .closest('.cds--tile')
     expect(exemptionSummaryTile).toBeTruthy()
     expect(
-      within(exemptionSummaryTile as HTMLElement).getByText('Exemption number'),
+      within(exemptionSummaryTile as HTMLElement).getByText('Exemption type'),
     ).toBeInTheDocument()
-    expect(within(exemptionSummaryTile as HTMLElement).getByText('EX-777')).toBeInTheDocument()
+    expect(exemptionHeading).toHaveTextContent('EX-777')
     expect(
       within(exemptionSummaryTile as HTMLElement).queryByText('Application number'),
     ).not.toBeInTheDocument()
@@ -473,14 +473,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
       within(exemptionSummaryTile as HTMLElement).queryByText('Application status'),
     ).not.toBeInTheDocument()
     expect(
-      within(exemptionSummaryTile as HTMLElement).getByText('Approved volume (m³)'),
+      within(exemptionSummaryTile as HTMLElement).getByText('Approval volume (m³)'),
     ).toBeInTheDocument()
-    expect(
-      within(exemptionSummaryTile as HTMLElement).getByText('Remaining volume (m³)'),
-    ).toBeInTheDocument()
-    expect(
-      within(exemptionSummaryTile as HTMLElement).getByText('Blanket Order in Council'),
-    ).toBeInTheDocument()
+    await selectDetailTab('Permits')
+    expect(screen.getByText('Balance remaining (m³)')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Upload Exemption Document' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open Approved Exemption Report' })).toBeNull()
@@ -711,7 +707,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Permits')
     expect(
-      await screen.findByRole('heading', { name: 'No permits found', level: 3 }),
+      await screen.findByRole('heading', { name: 'No permits for this exemption', level: 3 }),
     ).toBeInTheDocument()
 
     await selectDetailTab('Documents')
@@ -1035,7 +1031,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
     expect(await screen.findByRole('columnheader', { name: 'Volume (m³)' })).toBeInTheDocument()
     expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Issued date' })).toBeInTheDocument()
+    expect(screen.getByRole('columnheader', { name: 'Issue date' })).toBeInTheDocument()
     expect(screen.getByText('900101 (Pending)')).toBeInTheDocument()
     expect(screen.getByText('25.5')).toBeInTheDocument()
     expect(screen.getByText('12-Jul-2026')).toBeInTheDocument()
@@ -1044,7 +1040,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByText('10-Jul-2026')).not.toBeInTheDocument()
   })
 
-  it('explains why a visible permit cannot be opened', async () => {
+  it('keeps a visible permit as text when route permission is unavailable', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action !== '/permitSearch',
@@ -1063,16 +1059,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Permits')
-    const openPermit = await screen.findByRole('button', { name: 'Open' })
-    const tooltipTrigger = openPermit.closest('.disabled-button-tooltip') as HTMLElement
-    expect(openPermit).toBeDisabled()
-    expect(tooltipTrigger).toHaveAttribute('aria-disabled', 'true')
-
-    await userEvent.hover(tooltipTrigger)
-
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'You do not have permission to open this permit.',
-    )
+    expect(await screen.findByText('P1 (Pending)')).toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'P1 (Pending)' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument()
   })
 
   it('shows Blanket OIC requested and completed permit volume totals', async () => {
@@ -1184,6 +1173,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByLabelText('Exemption highlights')).not.toBeInTheDocument()
 
     await selectDetailTab('Documents')
+    const launcher = screen.getByRole('button', { name: 'Add documents' })
+    expect(launcher).toBeEnabled()
+    await userEvent.click(launcher)
+    expect(await screen.findByRole('complementary', { name: 'Add documents' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(
       await screen.findByRole('heading', { name: 'Documents unavailable', level: 3 }),
     ).toBeInTheDocument()

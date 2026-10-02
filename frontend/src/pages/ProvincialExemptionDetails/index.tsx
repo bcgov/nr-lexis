@@ -41,7 +41,6 @@ import {
   TableHeader,
   TableRow,
   Tabs,
-  Tag,
   TextArea,
   TextInput,
   Tile,
@@ -77,7 +76,7 @@ import {
   formatDocumentSource,
   savedDocumentsTitle,
 } from '@/service/document-service-utils'
-import { DetailFieldGrid, DetailFieldTile, type DetailField } from '../shared/DetailSections'
+import { DetailFieldGrid, type DetailField } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
 import {
@@ -146,8 +145,12 @@ import {
 } from '@/service/provincial-exemption-detail-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { requiredLabel } from '@/utils/required-label'
+import { formatIsoDateLabel } from '@/utils/date'
+import './ProvincialExemptionDetails.scss'
 
-type ExemptionActionResult = ActionResult & { source?: 'documents' }
+type ExemptionActionResult = ActionResult & {
+  source?: 'documents' | 'summary' | 'applications' | 'fees' | 'approval'
+}
 
 type ExemptionDetailTabKey =
   | 'owner'
@@ -396,7 +399,6 @@ type ExemptionClient = {
   locations: ApplicationClientLocation[]
   clientData: ApplicationClientData | null
   isLoading: boolean
-  showAgentIndicator?: boolean
 }
 
 const exemptionClientFields = ({
@@ -408,61 +410,68 @@ const exemptionClientFields = ({
   locations,
   clientData,
   isLoading,
-  showAgentIndicator = false,
 }: ExemptionClient): DetailField[] => {
   const locationName =
     locations.find((location) => location.locationCode === locationCode)?.locationName ?? ''
   const loadingValue = (value: string | null | undefined) =>
     isLoading ? 'Loading…' : displayValue(value)
 
+  const company = companyName || clientData?.companyName || ''
+  const acronym = clientData?.clientAcronym?.trim()
+  const identity = [company && `${company}${acronym ? ` (${acronym})` : ''}`, clientNumber]
+    .filter(Boolean)
+    .join(' · ')
   return [
-    { label: 'Client number', value: displayValue(clientNumber) },
+    { label: 'Contact name', value: loadingValue(contactName) },
     { label: 'Applicant type', value: loadingValue(applicantTypeLabel(applicantType)) },
+    { label: 'Client', value: loadingValue(identity) },
     {
       label: 'Client location',
-      value: loadingValue(clientLocationLabel(locationCode, locationName)),
-    },
-    { label: 'Contact name', value: loadingValue(contactName) },
-    ...(showAgentIndicator
-      ? [
-          {
-            label: 'I am an agent',
-            value: loadingValue(isAgentApplicant(applicantType) ? 'Yes' : 'No'),
-          },
-        ]
-      : []),
-    {
-      label: 'Company name',
-      value: loadingValue(companyName || clientData?.companyName),
+      value: loadingValue(
+        clientLocationLabel(locationCode, locationName, clientData?.locationName ?? ''),
+      ),
     },
     { label: 'Address', value: loadingValue(clientData?.address) },
     { label: 'City', value: loadingValue(clientData?.city) },
     { label: 'Province', value: loadingValue(clientData?.province) },
-    { label: 'Postal code', value: loadingValue(clientData?.postalCode) },
     { label: 'Country', value: loadingValue(clientData?.country) },
-    { label: 'Phone', value: loadingValue(clientData?.phone) },
-    { label: 'Fax', value: loadingValue(clientData?.fax) },
-    { label: 'Email', value: loadingValue(clientData?.email) },
+    { label: 'Postal code', value: loadingValue(clientData?.postalCode) },
+    { label: 'Phone number', value: loadingValue(clientData?.phone) },
+    { label: 'Fax number', value: loadingValue(clientData?.fax) },
+    { label: 'Email address', value: loadingValue(clientData?.email) },
   ]
 }
 
 // The agent is a section of the applicant card, as on the application page, not a second card.
+const ExemptionClientFields = (client: ExemptionClient) => {
+  const fields = exemptionClientFields(client)
+  return (
+    <div className="exemption-field-groups">
+      <DetailFieldGrid fields={fields.slice(0, 2)} />
+      <DetailFieldGrid fields={fields.slice(2, 4)} />
+      <DetailFieldGrid fields={fields.slice(4, 9)} />
+      <DetailFieldGrid fields={fields.slice(9)} />
+    </div>
+  )
+}
+
 const ExemptionClientTile = ({
   agent,
   ...client
 }: ExemptionClient & { agent?: ExemptionClient }) => (
-  <DetailFieldTile
-    title={client.title}
-    icon={<Enterprise size={24} aria-hidden="true" />}
-    fields={exemptionClientFields(client)}
-  >
+  <Tile className="detail-section-card exemption-client-card">
+    <h2 className="detail-tile-title">
+      <Enterprise size={24} aria-hidden="true" />
+      {client.title}
+    </h2>
+    <ExemptionClientFields {...client} />
     {agent && (
       <section className="detail-subsection" aria-label={agent.title}>
         <h3 className="detail-tile-title">{agent.title}</h3>
-        <DetailFieldGrid fields={exemptionClientFields(agent)} />
+        <ExemptionClientFields {...agent} />
       </section>
     )}
-  </DetailFieldTile>
+  </Tile>
 )
 
 const ProvincialExemptionDetailsPage = () => {
@@ -547,7 +556,14 @@ const ProvincialExemptionDetailsPage = () => {
   const [blanketOicTotalsErrorMessage, setBlanketOicTotalsErrorMessage] = useState('')
   const [actionResult, setActionResult] = useState<ExemptionActionResult | null>(null)
   const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
-  const pageActionResult = actionResult?.source === 'documents' ? null : actionResult
+  const pageActionResult =
+    actionResult?.source && actionResult.source !== 'approval' ? null : actionResult
+  const approvalResultRef = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    if (actionResult?.source !== 'approval') return
+    const frame = requestAnimationFrame(() => approvalResultRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [actionResult])
   const navigationState = location.state as ExemptionCreationNavigationState | null
   const createdExemptionNumber = navigationState?.exemptionCreationNotice?.exemptionNumber ?? ''
   // Read by the first load, which otherwise clears page results before showing the record.
@@ -1102,7 +1118,7 @@ const ProvincialExemptionDetailsPage = () => {
     clientContextHasAgent &&
     Boolean(linkedApplicationNumber && exemptionAgentClientNumber)
   const ownerClient: ExemptionClient = {
-    title: 'Applicant client details',
+    title: 'Applicant details',
     clientNumber: exemptionOwnerClientNumber,
     applicantType: clientContextApplication?.applicantTypeCode ?? '',
     locationCode: ownerClientLocationCode,
@@ -1111,7 +1127,6 @@ const ProvincialExemptionDetailsPage = () => {
     locations: ownerClientLocations,
     clientData: ownerClientData,
     isLoading: clientContextLoading,
-    showAgentIndicator: true,
   }
   const agentClient: ExemptionClient | undefined = showAgent
     ? {
@@ -1323,7 +1338,6 @@ const ProvincialExemptionDetailsPage = () => {
         className="detail-documents-add-button"
         renderIcon={Add}
         ref={documentUploadLauncherRef}
-        disabled={documentUploadBusy}
         onClick={() => setIsAddingDocuments(true)}
       >
         Add documents
@@ -1416,6 +1430,7 @@ const ProvincialExemptionDetailsPage = () => {
         optionsAvailability !== 'available'
       )
         return false
+      const resultSource = editingSection === 'fees' ? 'fees' : 'summary'
       setSaving(true)
       setActionResult(null)
       // A Fees save changes only the fee fields; every other value is sent as loaded.
@@ -1447,7 +1462,11 @@ const ProvincialExemptionDetailsPage = () => {
           regionNumbers: submittedForm.regionNumbers,
         })
         if (!result.success) {
-          setActionResult({ kind: 'error', message: result.errors.join(' ') || result.message })
+          setActionResult({
+            source: resultSource,
+            kind: 'error',
+            message: result.errors.join(' ') || result.message,
+          })
           return false
         }
         const committedDetail: ProvincialExemptionDetail = {
@@ -1471,7 +1490,12 @@ const ProvincialExemptionDetailsPage = () => {
         if (committedDetail.exemptionNumber !== detail.exemptionNumber) {
           // The old identifier no longer exists. Let the new route reload all linked data.
           if (followRenamedRecord) setRenamedExemptionNumber(committedDetail.exemptionNumber)
-          setActionResult({ kind: 'success', message: result.message })
+          setActionResult({
+            source: resultSource,
+            kind: 'success',
+            title: resultSource === 'fees' ? 'Fees saved.' : 'Exemption details saved.',
+            message: '',
+          })
           return true
         }
         setDetail(committedDetail)
@@ -1479,13 +1503,19 @@ const ProvincialExemptionDetailsPage = () => {
         setEditForm(toEditForm(committedDetail, committedContext))
         try {
           await refreshEditableData()
-          setActionResult({ kind: 'success', message: result.message })
+          setActionResult({
+            source: resultSource,
+            kind: 'success',
+            title: resultSource === 'fees' ? 'Fees saved.' : 'Exemption details saved.',
+            message: '',
+          })
         } catch (refreshError) {
           console.error(refreshError)
           setApplicationsErrorMessage(
             'Application links changed, but the current links could not be refreshed. Reload the page.',
           )
           setActionResult({
+            source: resultSource,
             kind: 'warning',
             message: `${result.message || 'The exemption was saved.'} Current data could not be refreshed; reload before making another change.`,
           })
@@ -1495,7 +1525,11 @@ const ProvincialExemptionDetailsPage = () => {
         return true
       } catch (error) {
         console.error(error)
-        setActionResult({ kind: 'error', message: 'Unable to save the exemption.' })
+        setActionResult({
+          source: resultSource,
+          kind: 'error',
+          message: 'Unable to save the exemption.',
+        })
         return false
       } finally {
         setSaving(false)
@@ -1893,12 +1927,14 @@ const ProvincialExemptionDetailsPage = () => {
       try {
         await refreshEditableData(true)
         setActionResult({
+          source: 'applications',
           kind: 'success',
           message: `Application ${number} linked to the exemption.`,
         })
       } catch (refreshError) {
         console.error(refreshError)
         setActionResult({
+          source: 'applications',
           kind: 'warning',
           message: `Application ${number} was linked, but the page could not refresh. Reload before changing application links again.`,
         })
@@ -1956,6 +1992,7 @@ const ProvincialExemptionDetailsPage = () => {
         try {
           await refreshEditableData(true)
           setActionResult({
+            source: 'applications',
             kind: 'success',
             message: `Application ${applicationNumber} removed from the exemption.`,
           })
@@ -1965,6 +2002,7 @@ const ProvincialExemptionDetailsPage = () => {
             'Application links changed, but the current links could not be refreshed. Reload the page.',
           )
           setActionResult({
+            source: 'applications',
             kind: 'warning',
             message: `Application ${applicationNumber} was removed, but the page could not refresh. Reload before changing application links again.`,
           })
@@ -2106,8 +2144,33 @@ const ProvincialExemptionDetailsPage = () => {
     [beginDetailRequest, exemptionNumber],
   )
 
+  const applyForPermitButton =
+    canStartApplicationBackedPermitCreation || canStartBlanketOicPermitCreation ? (
+      <Button
+        kind="tertiary"
+        size="md"
+        renderIcon={Add}
+        disabled={permitCreationActionBusy}
+        onClick={onRequestPermitCreation}
+      >
+        {creatingPermit ? 'Creating permit…' : 'Apply for new permit'}
+      </Button>
+    ) : undefined
+  const completedBlanketVolume = Number(blanketOicTotals?.completedVolume)
+  const blanketBalanceRemaining =
+    currentDetail?.approvedVolume != null &&
+    blanketOicTotals?.completedVolume.trim() &&
+    Number.isFinite(completedBlanketVolume)
+      ? currentDetail.approvedVolume - completedBlanketVolume
+      : null
+
+  const sectionResult = (source: ExemptionActionResult['source']) =>
+    actionResult && actionResult.source === source ? (
+      <ActionResultNotification result={actionResult} onClose={() => setActionResult(null)} />
+    ) : null
+
   return (
-    <Grid fullWidth className="default-grid detail-page-grid">
+    <Grid fullWidth className="default-grid detail-page-grid provincial-exemption-detail">
       <Column sm={4} md={8} lg={16}>
         <DetailBreadcrumb
           label="Provincial exemption search"
@@ -2222,10 +2285,12 @@ const ProvincialExemptionDetailsPage = () => {
             // An open confirmation shows its own failure instead of the page.
             (pageActionResult.kind !== 'error' ||
               (!approvalConfirmationOpen && !showPermitCreationConfirmation)) && (
-              <ActionResultNotification
-                result={pageActionResult}
-                onClose={() => setActionResult(null)}
-              />
+              <div ref={approvalResultRef} tabIndex={-1} className="exemption-page-result">
+                <ActionResultNotification
+                  result={pageActionResult}
+                  onClose={() => setActionResult(null)}
+                />
+              </div>
             )}
           {editing &&
             !!formValidationMessage &&
@@ -2303,6 +2368,7 @@ const ProvincialExemptionDetailsPage = () => {
                               <Rule size={24} aria-hidden="true" />
                               Exemption details
                             </h2>
+                            {sectionResult('summary')}
                             <div className="legacy-search-grid">
                               {currentTypeCode === 'O' && (
                                 <TextInput
@@ -2403,7 +2469,7 @@ const ProvincialExemptionDetailsPage = () => {
                               />
                               <TextInput
                                 id="exemptionDetailApprovedVolume"
-                                labelText={requiredLabel('Approved volume (m³)')}
+                                labelText={requiredLabel('Approval volume (m³)')}
                                 aria-required="true"
                                 value={editForm.approvedVolume}
                                 disabled={!canEditApprovedVolume}
@@ -2494,101 +2560,91 @@ const ProvincialExemptionDetailsPage = () => {
                         </Column>
                       </>
                     ) : (
-                      <>
-                        <Column sm={4} md={8} lg={16}>
-                          <DetailFieldTile
-                            title="Exemption details"
-                            icon={<Rule size={24} aria-hidden="true" />}
-                            headerAction={
-                              canSaveExemption && !editing ? (
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  renderIcon={Edit}
-                                  onClick={() => startEditingSection('summary')}
-                                >
-                                  Edit exemption details
-                                </Button>
-                              ) : undefined
-                            }
-                            fields={[
-                              {
-                                label: 'Exemption number',
-                                value: displayValue(detail.exemptionNumber),
-                              },
-                              {
-                                label: 'Type',
-                                value: displayValue(
-                                  detail.exemptionTypeDescription ?? detail.exemptionTypeCode,
-                                ),
-                              },
-                              {
-                                label: 'Status',
-                                value: displayValue(
-                                  detail.exemptionStatusDescription ?? detail.exemptionStatusCode,
-                                ),
-                              },
-                              { label: 'Author', value: displayValue(detail.author) },
-                              {
-                                label: 'Exemption holder',
-                                value: displayValue(
-                                  exemptionHolder.trim() ||
-                                    detail.ownerClientNumber?.trim() ||
-                                    exemptionOwnerClientNumber,
-                                ),
-                              },
-                              ...(showAgent
-                                ? [
-                                    {
-                                      label: 'Agent client number',
-                                      value: displayValue(detail.agentClientNumber),
-                                    },
-                                  ]
-                                : []),
-                              {
-                                label: 'Approval date',
-                                value: detail.approvalDate
-                                  ? displayValue(detail.approvalDate)
-                                  : 'Not approved',
-                              },
-                              { label: 'Expiry date', value: displayValue(detail.expiryDate) },
-                              { label: 'Region', value: displayValue(exemptionRegionNames) },
-                              {
-                                label: 'Approved volume (m³)',
-                                value: formatExemptionVolume(detail.approvedVolume),
-                              },
-                              {
-                                label: 'Used volume (m³)',
-                                value: formatExemptionVolume(detail.usedVolume),
-                              },
-                              {
-                                label: 'Remaining volume (m³)',
-                                value: formatExemptionVolume(detail.remainingVolume),
-                              },
-                              {
-                                label: 'Blanket Order in Council',
-                                value: (
-                                  <Tag type={detail.blanketOic ? 'green' : 'gray'}>
-                                    {detail.blanketOic ? 'Yes' : 'No'}
-                                  </Tag>
-                                ),
-                              },
-                            ]}
-                          />
-                        </Column>
-
-                        <Column sm={4} md={8} lg={16}>
-                          <DetailFieldTile
-                            title="Conditions"
-                            fields={[
-                              {
-                                label: 'Conditions',
-                                value: displayValue(detail.otherConditions),
-                              },
-                            ]}
-                          />
-                        </Column>
-                      </>
+                      <Column sm={4} md={8} lg={16}>
+                        <Tile className="detail-section-card exemption-summary-card">
+                          <div className="detail-section-card__header">
+                            <h2 className="detail-tile-title">
+                              <Rule size={24} aria-hidden="true" />
+                              Exemption details
+                            </h2>
+                            {canSaveExemption && !editing && (
+                              <Button
+                                kind="tertiary"
+                                size="sm"
+                                renderIcon={Edit}
+                                onClick={() => startEditingSection('summary')}
+                              >
+                                Edit exemption details
+                              </Button>
+                            )}
+                          </div>
+                          {sectionResult('summary')}
+                          <div className="exemption-field-groups">
+                            <DetailFieldGrid
+                              fields={[
+                                {
+                                  label: 'Status',
+                                  value: displayValue(
+                                    detail.exemptionStatusDescription ?? detail.exemptionStatusCode,
+                                  ),
+                                },
+                              ]}
+                            />
+                            <DetailFieldGrid
+                              fields={[
+                                {
+                                  label: 'Exemption type',
+                                  value: displayValue(
+                                    detail.exemptionTypeDescription ?? detail.exemptionTypeCode,
+                                  ),
+                                },
+                                {
+                                  label: 'Exemption holder',
+                                  value: detail.blanketOic
+                                    ? 'Blanket OIC'
+                                    : displayValue(
+                                        exemptionHolder.trim() ||
+                                          detail.ownerClientNumber?.trim() ||
+                                          exemptionOwnerClientNumber,
+                                      ),
+                                },
+                              ]}
+                            />
+                            <DetailFieldGrid
+                              fields={[
+                                {
+                                  label: 'Approval date',
+                                  value: detail.approvalDate
+                                    ? formatIsoDateLabel(detail.approvalDate)
+                                    : 'Not approved',
+                                },
+                                {
+                                  label: 'Expiry date',
+                                  value: displayValue(formatIsoDateLabel(detail.expiryDate)),
+                                },
+                              ]}
+                            />
+                            <DetailFieldGrid
+                              fields={[
+                                {
+                                  label: 'Approval volume (m³)',
+                                  value: formatExemptionVolume(detail.approvedVolume),
+                                },
+                              ]}
+                            />
+                            {!!exemptionRegionNames && (
+                              <DetailFieldGrid
+                                fields={[{ label: 'Region', value: exemptionRegionNames }]}
+                              />
+                            )}
+                            {!!detail.otherConditions && (
+                              <DetailFieldGrid
+                                fields={[{ label: 'Conditions', value: detail.otherConditions }]}
+                              />
+                            )}
+                          </div>
+                        </Tile>
+                      </Column>
                     )}
                   </Grid>
                 </TabPanel>
@@ -2606,6 +2662,7 @@ const ProvincialExemptionDetailsPage = () => {
                               <Button
                                 kind="tertiary"
                                 size="sm"
+                                renderIcon={Add}
                                 ref={addApplicationButtonRef}
                                 onClick={() => {
                                   setAddApplicationError('')
@@ -2616,6 +2673,7 @@ const ProvincialExemptionDetailsPage = () => {
                               </Button>
                             )}
                           </div>
+                          {sectionResult('applications')}
                           {!applicationsErrorMessage && (
                             <p>
                               Total requested volume (m³):{' '}
@@ -2698,9 +2756,8 @@ const ProvincialExemptionDetailsPage = () => {
                               <Table size="md" useZebraStyles>
                                 <TableHead>
                                   <TableRow>
-                                    <TableHeader>Application number</TableHeader>
-                                    <TableHeader>Requested volume (m³)</TableHeader>
-                                    <TableHeader>Scale volume (m³)</TableHeader>
+                                    <TableHeader>Application</TableHeader>
+                                    <TableHeader>Application volume (m³)</TableHeader>
                                     {canManageApplicationLinks && (
                                       <TableHeader>Actions</TableHeader>
                                     )}
@@ -2737,8 +2794,9 @@ const ProvincialExemptionDetailsPage = () => {
                                             application.applicationNumber
                                           )}
                                         </TableCell>
-                                        <TableCell>{application.requestedVolume || '-'}</TableCell>
-                                        <TableCell>{application.scaleVolume || '-'}</TableCell>
+                                        <TableCell>
+                                          {formatExemptionVolume(application.requestedVolume)}
+                                        </TableCell>
                                         {canManageApplicationLinks && (
                                           <TableCell>
                                             <div className="legacy-search-actions">
@@ -2803,28 +2861,19 @@ const ProvincialExemptionDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
-                        <h2 className="detail-tile-title">
-                          <Certificate size={24} aria-hidden="true" />
-                          Related permits
-                        </h2>
+                        <div className="detail-section-card__header">
+                          <h2 className="detail-tile-title">
+                            <Certificate size={24} aria-hidden="true" />
+                            Permits
+                          </h2>
+                          {(visiblePermitRows.length > 0 || Boolean(permitsErrorMessage)) &&
+                            applyForPermitButton}
+                        </div>
                         {editing && (
                           <p className="detail-read-only-note">
                             Permit records are read-only. Use the Exemption details or Fees tab to
                             edit exemption values.
                           </p>
-                        )}
-                        {(canStartApplicationBackedPermitCreation ||
-                          canStartBlanketOicPermitCreation) && (
-                          <div className="legacy-search-actions">
-                            <Button
-                              kind="tertiary"
-                              size="sm"
-                              disabled={permitCreationActionBusy}
-                              onClick={onRequestPermitCreation}
-                            >
-                              {creatingPermit ? 'Creating permit…' : 'Apply for new permit'}
-                            </Button>
-                          </div>
                         )}
                         {detail.blanketOic && blanketOicTotalsErrorMessage && (
                           <InlineNotification
@@ -2842,15 +2891,27 @@ const ProvincialExemptionDetailsPage = () => {
                             aria-label="Blanket OIC permit volume totals"
                           >
                             <div className="detail-field-item">
+                              <dt className="detail-field-label">Approved volume (m³)</dt>
+                              <dd className="detail-field-value">
+                                {formatExemptionVolume(detail.approvedVolume)}
+                              </dd>
+                            </div>
+                            <div className="detail-field-item">
                               <dt className="detail-field-label">Requested permit volume (m³)</dt>
                               <dd className="detail-field-value">
-                                {displayValue(blanketOicTotals.requestedVolume)}
+                                {formatExemptionVolume(blanketOicTotals.requestedVolume)}
                               </dd>
                             </div>
                             <div className="detail-field-item">
                               <dt className="detail-field-label">Completed permit volume (m³)</dt>
                               <dd className="detail-field-value">
-                                {displayValue(blanketOicTotals.completedVolume)}
+                                {formatExemptionVolume(blanketOicTotals.completedVolume)}
+                              </dd>
+                            </div>
+                            <div className="detail-field-item">
+                              <dt className="detail-field-label">Balance remaining (m³)</dt>
+                              <dd className="detail-field-value">
+                                {formatExemptionVolume(blanketBalanceRemaining)}
                               </dd>
                             </div>
                           </dl>
@@ -2901,78 +2962,74 @@ const ProvincialExemptionDetailsPage = () => {
                                   <TableHeader>Permit</TableHeader>
                                   <TableHeader>Volume (m³)</TableHeader>
                                   <TableHeader>Status</TableHeader>
-                                  <TableHeader>Issued date</TableHeader>
-                                  <TableHeader>Actions</TableHeader>
+                                  <TableHeader>Issue date</TableHeader>
                                 </TableRow>
                               </TableHead>
                               <TableBody>
-                                {visiblePermitRows.map((row) => (
-                                  <TableRow key={row.permitNumber}>
-                                    <TableCell>
-                                      {row.permitStatus.trim().toUpperCase() === 'ACTIVE'
-                                        ? `${row.permitNumber} (Pending)`
-                                        : row.permitNumber}
-                                    </TableCell>
-                                    <TableCell>{displayValue(row.permitVolume)}</TableCell>
-                                    <TableCell>
-                                      <StatusTag
-                                        status={row.permitStatus}
-                                        fallbackLabel="Not provided"
-                                      />
-                                    </TableCell>
-                                    <TableCell>{displayValue(row.permitIssueDate)}</TableCell>
-                                    <TableCell>
-                                      <DisabledButtonTooltip
-                                        disabled={
-                                          !canPerform('/permitSearch') ||
-                                          !canPerform('/permitDetails')
-                                        }
-                                        description="You do not have permission to open this permit."
-                                      >
-                                        <Button
-                                          kind="ghost"
-                                          size="sm"
-                                          disabled={
-                                            !canPerform('/permitSearch') ||
-                                            !canPerform('/permitDetails')
-                                          }
-                                          onClick={() =>
-                                            navigate(
-                                              withCurrentSearch(
-                                                `/provincial/permit/${row.permitNumber}`,
-                                              ),
+                                {visiblePermitRows.map((row) => {
+                                  const label =
+                                    row.permitStatus.trim().toUpperCase() === 'ACTIVE'
+                                      ? `${row.permitNumber} (Pending)`
+                                      : row.permitNumber
+                                  return (
+                                    <TableRow key={row.permitNumber}>
+                                      <TableCell>
+                                        {canPerform('/permitSearch') &&
+                                        canPerform('/permitDetails') ? (
+                                          <Link
+                                            className="cds--link"
+                                            to={withCurrentSearch(
+                                              `/provincial/permit/${row.permitNumber}`,
+                                            )}
+                                            state={withDetailReturnTo(
+                                              location.state,
                                               {
-                                                state: withDetailReturnTo(
-                                                  location.state,
-                                                  {
-                                                    label: 'Provincial exemption detail',
-                                                    to: locationPath(location),
-                                                  },
-                                                  detailReturnTo,
-                                                ),
+                                                label: 'Provincial exemption detail',
+                                                to: locationPath(location),
                                               },
-                                            )
-                                          }
-                                        >
-                                          Open
-                                        </Button>
-                                      </DisabledButtonTooltip>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
+                                              detailReturnTo,
+                                            )}
+                                          >
+                                            {label}
+                                          </Link>
+                                        ) : (
+                                          label
+                                        )}
+                                      </TableCell>
+                                      <TableCell>
+                                        {formatExemptionVolume(row.permitVolume)}
+                                      </TableCell>
+                                      <TableCell>
+                                        <StatusTag
+                                          status={row.permitStatus}
+                                          fallbackLabel="Not provided"
+                                        />
+                                      </TableCell>
+                                      <TableCell>
+                                        {displayValue(formatIsoDateLabel(row.permitIssueDate))}
+                                      </TableCell>
+                                    </TableRow>
+                                  )
+                                })}
                               </TableBody>
                             </Table>
                           </TableFrame>
                         ) : (
                           <EmptyState
                             title={
-                              permitRows.length > 0 ? 'No permits available' : 'No permits found'
+                              permitRows.length > 0
+                                ? 'No permits available'
+                                : 'No permits for this exemption'
                             }
                             description={
                               permitRows.length > 0
                                 ? 'No associated permits are available to your account.'
-                                : 'No permits are associated with this exemption.'
+                                : persistedStatusCode === 'NEW'
+                                  ? 'Permits can be requested once the exemption is approved.'
+                                  : 'Permits requested against this exemption will appear here.'
                             }
+                            icon={<Certificate size={48} aria-hidden="true" />}
+                            action={applyForPermitButton}
                             headingLevel={3}
                           />
                         )}
@@ -3010,6 +3067,7 @@ const ProvincialExemptionDetailsPage = () => {
                               <Currency size={24} aria-hidden="true" />
                               Fees
                             </h2>
+                            {sectionResult('fees')}
                             <div className="legacy-search-grid">
                               <RadioButtonGroup
                                 legendText="Override fee rate?"
@@ -3089,11 +3147,13 @@ const ProvincialExemptionDetailsPage = () => {
                             </div>
                           </Tile>
                         ) : (
-                          <DetailFieldTile
-                            title="Fees"
-                            icon={<Currency size={24} aria-hidden="true" />}
-                            headerAction={
-                              canEditFeeOverride && !editing ? (
+                          <Tile>
+                            <div className="detail-section-card__header">
+                              <h2 className="detail-tile-title">
+                                <Currency size={24} aria-hidden="true" />
+                                Fees
+                              </h2>
+                              {canEditFeeOverride && !editing && (
                                 <Button
                                   kind="tertiary"
                                   size="sm"
@@ -3102,23 +3162,26 @@ const ProvincialExemptionDetailsPage = () => {
                                 >
                                   Edit fee override
                                 </Button>
-                              ) : undefined
-                            }
-                            fields={[
-                              {
-                                label: 'Override fee rate?',
-                                value: editContext.rateOverrideEnabled ? 'Yes' : 'No',
-                              },
-                              ...(editContext.rateOverrideEnabled
-                                ? [
-                                    {
-                                      label: 'Fee rate ($/m³)',
-                                      value: displayValue(editContext.fixedFeeRate),
-                                    },
-                                  ]
-                                : []),
-                            ]}
-                          />
+                              )}
+                            </div>
+                            {sectionResult('fees')}
+                            <DetailFieldGrid
+                              fields={[
+                                {
+                                  label: 'Override fee rate?',
+                                  value: editContext.rateOverrideEnabled ? 'Yes' : 'No',
+                                },
+                                ...(editContext.rateOverrideEnabled
+                                  ? [
+                                      {
+                                        label: 'Fee rate ($/m³)',
+                                        value: displayValue(editContext.fixedFeeRate),
+                                      },
+                                    ]
+                                  : []),
+                              ]}
+                            />
+                          </Tile>
                         )}
                       </Column>
                     </Grid>
@@ -3147,7 +3210,8 @@ const ProvincialExemptionDetailsPage = () => {
                           />
                         )}
                         <div className="detail-section-card__header detail-section-card__header--actions-only">
-                          {documentRows.length > 0 && addExemptionDocumentsButton}
+                          {(documentRows.length > 0 || Boolean(documentsErrorMessage)) &&
+                            addExemptionDocumentsButton}
                           {isAddingDocuments && canUploadExemptionDocuments && (
                             <DetailDocumentUploadPanel
                               key={`exemption-document-upload-${exemptionNumber}-${documentUploadResetKey}`}
@@ -3273,7 +3337,7 @@ const ProvincialExemptionDetailsPage = () => {
         <ConfirmationModal
           open
           danger
-          title="Remove associated application?"
+          title="Are you sure you want to remove this application?"
           description={
             <>
               <strong>{applicationPendingRemoval}</strong> will be removed from exemption{' '}
@@ -3313,7 +3377,8 @@ const ProvincialExemptionDetailsPage = () => {
             onComplete={(report) => {
               if (approvalTargetRef.current === currentDetail.exemptionNumber) {
                 // One exemption always produces one result.
-                setActionResult(exemptionApprovalResults(report)[0] ?? null)
+                const result = exemptionApprovalResults(report)[0]
+                setActionResult(result ? { ...result, source: 'approval' } : null)
               }
             }}
             onClose={() => closeApprovalConfirmation(currentDetail.exemptionNumber)}

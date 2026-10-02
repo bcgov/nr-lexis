@@ -14,7 +14,7 @@ import {
   type ExemptionApprovalContacts,
   type ExemptionApprovalRecipientPreview,
 } from '@/service/provincial-exemption-detail-service'
-import { formatBusinessIsoDate } from '@/utils/date'
+import { formatBusinessIsoDate, formatIsoDateLabel } from '@/utils/date'
 import { isValidEmail } from '@/utils/text'
 import { isClientErrorResponse } from '@/utils/http-error'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
@@ -97,6 +97,8 @@ const ExemptionApprovalModal = ({
   onClose,
   onBusyChange,
 }: Props) => {
+  const modalRef = useRef<HTMLDivElement>(null)
+  const [touchedEmails, setTouchedEmails] = useState<Record<string, boolean>>({})
   const [numbers] = useState(exemptionNumbers)
   const [approvalDate] = useState(formatBusinessIsoDate)
   const [recipients, setRecipients] = useState<RecipientRow[]>([])
@@ -193,6 +195,23 @@ const ExemptionApprovalModal = ({
     if (approved) finish(approved)
     else onClose()
   }
+  const focusFirstError = () => {
+    const row = rowsNeedingInput[0]
+    const field = row && contactFields(row).find((field) => !validAddress(row[field]))
+    const inputId =
+      !approved && !certified
+        ? `approval-certified-${id}`
+        : row
+          ? `approval-${id}-${row.exemptionNumber}-${field ?? 'ownerEmail'}`
+          : ''
+    requestAnimationFrame(() => {
+      const input = document.getElementById(inputId)
+      if (input && modalRef.current?.contains(input)) {
+        input.focus()
+        input.scrollIntoView?.({ block: 'nearest' })
+      }
+    })
+  }
   const confirm = async () => {
     if (pendingRef.current || queueStatusUnknown || (sendEmail && (loading || loadError))) return
     if ((!approved && !certified) || (sendEmail && rowsNeedingInput.length)) {
@@ -200,6 +219,7 @@ const ExemptionApprovalModal = ({
       setEditing((current) => [
         ...new Set([...current, ...rowsNeedingInput.map((row) => row.exemptionNumber)]),
       ])
+      focusFirstError()
       return
     }
     pendingRef.current = true
@@ -323,19 +343,45 @@ const ExemptionApprovalModal = ({
   const showEmailErrorUnderCheckbox =
     submitAttempted && sendEmail && !plural && !retrying && rowsNeedingInput.some(missingAddress)
 
+  const primaryLabel = pending
+    ? approved
+      ? 'Sending…'
+      : 'Approving…'
+    : retrying
+      ? queueStatusUnknown
+        ? 'Queue status unknown'
+        : 'Retry notifications'
+      : sendEmail
+        ? plural
+          ? 'Approve and send emails'
+          : 'Approve and send email'
+        : plural
+          ? 'Approve exemptions'
+          : 'Approve exemption'
+
   return (
     <Modal
       open
-      passiveModal
+      ref={modalRef}
+      hasScrollingContent
+      primaryButtonText={primaryLabel}
+      primaryButtonDisabled={
+        pending || queueStatusUnknown || (sendEmail && (loading || Boolean(loadError)))
+      }
+      onRequestSubmit={() => void confirm()}
+      secondaryButtonText={retrying ? 'Close' : 'Cancel'}
+      onSecondarySubmit={close}
+      loadingStatus={pending ? 'active' : 'inactive'}
+      loadingDescription={primaryLabel}
       size="md"
       modalHeading={title}
       aria-label={title}
       className="lexis-confirmation-modal exemption-approval-modal"
       preventCloseOnClickOutside
-      selectorPrimaryFocus={`#approval-cancel-${id}`}
+      selectorPrimaryFocus={`#approval-intro-${id}`}
       onRequestClose={close}
     >
-      <div className="lexis-confirmation-modal__body">
+      <div id={`approval-intro-${id}`} tabIndex={-1} className="lexis-confirmation-modal__body">
         {!retrying && (
           <>
             {plural && (
@@ -346,7 +392,8 @@ const ExemptionApprovalModal = ({
             <p>
               By checking the box below you certify that{' '}
               {plural ? 'these exemptions have' : 'this exemption has'} been approved.{' '}
-              {plural ? 'They' : 'It'} will be marked with an approval date of {approvalDate}.
+              {plural ? 'They' : 'It'} will be marked with an approval date of{' '}
+              {formatIsoDateLabel(approvalDate)}.
             </p>
             <div>
               <p>{requiredLabel('Certification')}</p>
@@ -356,7 +403,7 @@ const ExemptionApprovalModal = ({
                 disabled={pending}
                 labelText={`I certify that ${plural ? 'these exemptions have' : 'this exemption has'} been approved`}
                 invalid={submitAttempted && !certified}
-                invalidText="Certification is required"
+                invalidText={`Confirm that you certify ${plural ? 'these exemptions have' : 'this exemption has'} been approved.`}
                 onChange={(_, { checked }) => setCertified(Boolean(checked))}
               />
             </div>
@@ -373,8 +420,8 @@ const ExemptionApprovalModal = ({
                 <p className="exemption-approval-modal__error" role="alert">
                   <WarningFilled aria-hidden="true" />
                   <span>
-                    Enter at least one email, or clear “Send approval email” to notify the applicant
-                    another way.
+                    Enter an email address, or clear “Send approval email to the applicant” to
+                    notify the applicant another way.
                   </span>
                 </p>
               )}
@@ -449,9 +496,19 @@ const ExemptionApprovalModal = ({
                                     : 'No email on file. The email you enter applies to this approval only.'
                                 }
                                 disabled={pending || queueStatusUnknown}
-                                invalid={!validAddress(row[field])}
-                                invalidText="Enter one valid email address."
-                                onChange={(event) => update(field, event.currentTarget.value)}
+                                invalid={
+                                  (submitAttempted ||
+                                    touchedEmails[`${row.exemptionNumber}-${field}`]) &&
+                                  !validAddress(row[field])
+                                }
+                                invalidText="Enter an email address in the correct format, like name@example.com."
+                                onChange={(event) => {
+                                  setTouchedEmails((current) => ({
+                                    ...current,
+                                    [`${row.exemptionNumber}-${field}`]: true,
+                                  }))
+                                  update(field, event.currentTarget.value)
+                                }}
                               />
                             )
                           })
@@ -501,32 +558,6 @@ const ExemptionApprovalModal = ({
           subtitle={error}
         />
       )}
-      <div className="lexis-confirmation-modal__actions">
-        <Button id={`approval-cancel-${id}`} kind="tertiary" disabled={pending} onClick={close}>
-          {retrying ? 'Close' : 'Cancel'}
-        </Button>
-        <Button
-          kind="primary"
-          disabled={pending || queueStatusUnknown || (sendEmail && (loading || Boolean(loadError)))}
-          onClick={() => void confirm()}
-        >
-          {pending
-            ? approved
-              ? 'Sending…'
-              : 'Approving…'
-            : retrying
-              ? queueStatusUnknown
-                ? 'Queue status unknown'
-                : 'Retry notifications'
-              : sendEmail
-                ? plural
-                  ? 'Approve and send emails'
-                  : 'Approve and send email'
-                : plural
-                  ? 'Approve exemptions'
-                  : 'Approve exemption'}
-        </Button>
-      </div>
     </Modal>
   )
 }

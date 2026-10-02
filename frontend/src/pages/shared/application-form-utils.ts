@@ -25,9 +25,15 @@ export const clientLookupNumbersMatch = (left: string, right: string): boolean =
 export const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
   location.locationCode !== '0'
 
-export const clientLocationLabel = (locationCode: string, locationName: string): string => {
+export const clientLocationLabel = (
+  locationCode: string,
+  locationName: string,
+  resolvedLocationName = '',
+): string => {
   const code = locationCode.trim()
-  const name = locationName.trim()
+  const optionName = locationName.trim()
+  const name =
+    !optionName || optionName === code ? resolvedLocationName.trim() || optionName : optionName
   if (!code) {
     return name
   }

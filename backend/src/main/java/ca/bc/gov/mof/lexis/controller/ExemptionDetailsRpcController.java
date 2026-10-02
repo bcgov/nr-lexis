@@ -1082,12 +1082,14 @@ public class ExemptionDetailsRpcController {
                         data.phone(),
                         data.fax(),
                         data.email(),
-                        null)))
+                        null,
+                        data.clientAcronym(),
+                        data.locationName())))
         .orElseGet(
             () ->
                 ResponseEntity.ok(
                     new ExemptionClientDataResponseDto(
-                        null, null, null, null, null, null, null, null, null, null, "true")));
+                        null, null, null, null, null, null, null, null, null, null, "true", null, null)));
   }
 
   @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_GET_CLIENT_DATA)
@@ -1790,7 +1792,9 @@ public class ExemptionDetailsRpcController {
       String phone,
       String fax,
       String email,
-      String notfound) {}
+      String notfound,
+      String clientAcronym,
+      String locationName) {}
 
   public record ExemptionClientLocationResponseDto(
       String locationName, String locationCode, boolean selected) {}

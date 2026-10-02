@@ -8,6 +8,8 @@ import {
   Pagination,
   Table,
   TableBody,
+  TableBatchActions,
+  TableBatchAction,
   TableCell,
   TableHead,
   TableHeader,
@@ -16,7 +18,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Add } from '@carbon/icons-react'
+import { Add, Checkmark } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
@@ -107,6 +109,8 @@ import { isClientErrorResponse } from '@/utils/http-error'
 import { firstStringField, isRecord } from '@/utils/record'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { displayTableValue } from '@/utils/text'
+import { formatIsoDateLabel } from '@/utils/date'
+import './ProvincialExemption.scss'
 
 const APPROVAL_REQUEST_FAILED_MESSAGE = 'The approval request could not be completed.'
 
@@ -158,6 +162,7 @@ const INITIAL_FILTERS: ProvincialExemptionSearchFilters = {
   exemptionStatusCode: '',
   applicantClientNumber: '',
   ownerClientNumber: '',
+  agentClientNumber: '',
 }
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialExemptionSearchResponse>()
@@ -169,11 +174,11 @@ const SORT_COLUMNS: {
   { id: 'exemptionNumber', label: 'Exemption' },
   { id: 'type', label: 'Type' },
   { id: 'status', label: 'Status' },
-  { id: 'applicantClientNumber', label: 'Applicant client number' },
-  { id: 'ownerClientNumber', label: 'Owner client number' },
-  { id: 'approvedVolume', label: 'Approved volume (m³)' },
+  { id: 'ownerClientNumber', label: 'Owner client' },
+  { id: 'applicantClientNumber', label: 'Agent client' },
+  { id: 'approvedVolume', label: 'Approval volume (m³)' },
   { id: 'balanceRemaining', label: 'Balance remaining (m³)' },
-  { id: 'listingDate', label: 'Listing date' },
+  { id: 'listingDate', label: 'List date' },
   { id: 'expiryDate', label: 'Expiry date' },
   { id: 'region', label: 'Region' },
 ]
@@ -214,6 +219,7 @@ const buildSearchParams = (
     ['exemptionStatusCode', filters.exemptionStatusCode],
     ['applicantClientNumber', filters.applicantClientNumber],
     ['ownerClientNumber', filters.ownerClientNumber],
+    ['agentClientNumber', filters.agentClientNumber ?? ''],
     ['sortField', sortField],
     ['sortDirection', sortDirection],
     ['page', page],
@@ -244,10 +250,19 @@ const ProvincialExemptionPage = () => {
   >({})
   // A batch can approve some exemptions and not others, so each outcome has its own notification.
   const [approvalResults, setApprovalResults] = useState<ActionResult[]>([])
+  const approvalResultsRef = useRef<HTMLDivElement>(null)
   const approvalRowsRef = useRef<Record<string, ProvincialExemptionSearchItem>>({})
   const [approvalConfirmationOpen, setApprovalConfirmationOpen] = useState(false)
   const [approving, setApproving] = useState(false)
   const [approvalDialogBusy, setApprovalDialogBusy] = useState(false)
+  useEffect(() => {
+    if (approvalConfirmationOpen || !approvalResults.length) return
+    const frame = requestAnimationFrame(() => {
+      approvalResultsRef.current?.focus()
+      approvalResultsRef.current?.scrollIntoView?.({ block: 'nearest' })
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [approvalConfirmationOpen, approvalResults])
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canApproveExemption = canPerform('approveExemption')
@@ -281,6 +296,7 @@ const ProvincialExemptionPage = () => {
       exemptionStatusCode: searchParams.get('exemptionStatusCode') ?? '',
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
+      agentClientNumber: searchParams.get('agentClientNumber') ?? '',
     }
 
     return {
@@ -312,7 +328,6 @@ const ProvincialExemptionPage = () => {
   const hasSearchQuery = searchParams.toString().length > 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
-    setApprovalResults([])
   }, [])
   const updateFilter = useCallback(
     <K extends keyof ProvincialExemptionSearchFilters>(
@@ -643,7 +658,6 @@ const ProvincialExemptionPage = () => {
   }, [selectableRows, selectedRowsById])
 
   const toggleRowSelection = (row: ProvincialExemptionSearchItem, checked: boolean) => {
-    setApprovalResults([])
     setSelectedRowsById((current) => {
       const next = { ...current }
       if (checked) {
@@ -656,7 +670,6 @@ const ProvincialExemptionPage = () => {
   }
 
   const toggleSelectAllRowsOnPage = (checked: boolean) => {
-    setApprovalResults([])
     setSelectedRowsById((current) => {
       const next = { ...current }
       selectableRows.forEach((row) => {
@@ -771,18 +784,7 @@ const ProvincialExemptionPage = () => {
         }
       }
 
-      const unresolvedNumbers = new Set([
-        ...failures.map(({ exemptionNumber }) => exemptionNumber),
-        ...unconfirmedNumbers,
-      ])
-      const unresolvedRowsById = Object.fromEntries(
-        selectedNumbers.flatMap((exemptionNumber) => {
-          if (!unresolvedNumbers.has(exemptionNumber)) return []
-          const row = selectedRows[exemptionNumber]
-          return row ? ([[exemptionNumber, row]] as const) : []
-        }),
-      )
-      setSelectedRowsById(unresolvedRowsById)
+      setSelectedRowsById({})
 
       if (approvals.length === 0) {
         return {
@@ -849,7 +851,7 @@ const ProvincialExemptionPage = () => {
     <Grid fullWidth className="default-grid fullbleed-table-page provincial-exemption-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
-          title="Provincial exemption search"
+          title="Exemption search"
           subtitle="Find, review, and manage provincial exemptions."
           actions={
             canCreateExemption ? (
@@ -933,7 +935,7 @@ const ProvincialExemptionPage = () => {
                 />
                 <IsoDatePicker
                   id="listFromDate"
-                  labelText="Listing from date"
+                  labelText="List date from"
                   value={filters.listFromDate}
                   invalid={!isValidIsoDate(filters.listFromDate)}
                   invalidText="Date must be YYYY-MM-DD"
@@ -941,7 +943,7 @@ const ProvincialExemptionPage = () => {
                 />
                 <IsoDatePicker
                   id="listToDate"
-                  labelText="Listing to date"
+                  labelText="List date to"
                   value={filters.listToDate}
                   invalid={!isValidIsoDate(filters.listToDate)}
                   invalidText="Date must be YYYY-MM-DD"
@@ -969,18 +971,18 @@ const ProvincialExemptionPage = () => {
                 {canFilterByClient && (
                   <>
                     <ForestClientComboBox
-                      id="applicantClientNumber"
-                      labelText="Applicant client number"
-                      value={filters.applicantClientNumber}
-                      resetKey={clientSearchResetKey}
-                      onChange={(value) => updateFilter('applicantClientNumber', value)}
-                    />
-                    <ForestClientComboBox
                       id="ownerClientNumber"
-                      labelText="Owner client number"
+                      labelText="Owner client"
                       value={filters.ownerClientNumber}
                       resetKey={clientSearchResetKey}
                       onChange={(value) => updateFilter('ownerClientNumber', value)}
+                    />
+                    <ForestClientComboBox
+                      id="agentClientNumber"
+                      labelText="Agent client"
+                      value={filters.agentClientNumber ?? ''}
+                      resetKey={clientSearchResetKey}
+                      onChange={(value) => updateFilter('agentClientNumber', value)}
                     />
                   </>
                 )}
@@ -997,17 +999,23 @@ const ProvincialExemptionPage = () => {
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
               </div>
-              {!approvalConfirmationOpen &&
-                approvalResults.map((result) => (
-                  <ActionResultNotification
-                    key={result.kind}
-                    className="legacy-inline-notification"
-                    result={result}
-                    onClose={() =>
-                      setApprovalResults((current) => current.filter((item) => item !== result))
-                    }
-                  />
-                ))}
+              <div
+                ref={approvalResultsRef}
+                tabIndex={-1}
+                className="exemption-search-results-notifications"
+              >
+                {!approvalConfirmationOpen &&
+                  approvalResults.map((result) => (
+                    <ActionResultNotification
+                      key={result.kind}
+                      className="legacy-inline-notification"
+                      result={result}
+                      onClose={() =>
+                        setApprovalResults((current) => current.filter((item) => item !== result))
+                      }
+                    />
+                  ))}
+              </div>
             </form>
           </Tile>
         </section>
@@ -1039,25 +1047,20 @@ const ProvincialExemptionPage = () => {
               results.page.number * results.page.size + results.content.length,
             )}
             actions={
-              canApproveExemption ? (
-                <DisabledButtonTooltip
-                  disabled={selectedRowsCount === 0 || approving}
-                  description={
-                    approving
-                      ? 'Wait for the approval request to finish.'
-                      : 'Select at least one exemption to approve.'
-                  }
+              canApproveExemption && selectedRowsCount > 0 ? (
+                <TableBatchActions
+                  totalSelected={selectedRowsCount}
+                  shouldShowBatchActions
+                  onCancel={clearSelection}
                 >
-                  <Button
-                    type="button"
-                    kind="tertiary"
-                    size="md"
+                  <TableBatchAction
+                    renderIcon={Checkmark}
                     onClick={onApproveSelectedClick}
-                    disabled={selectedRowsCount === 0 || approving}
+                    disabled={approving}
                   >
                     {approving ? 'Approving…' : 'Approve selected exemptions'}
-                  </Button>
-                </DisabledButtonTooltip>
+                  </TableBatchAction>
+                </TableBatchActions>
               ) : undefined
             }
           >
@@ -1068,7 +1071,11 @@ const ProvincialExemptionPage = () => {
                 description={errorMessage}
               />
             ) : results.content.length > 0 ? (
-              <Table size="md" useZebraStyles>
+              <Table
+                size="md"
+                useZebraStyles
+                className={canApproveExemption ? 'exemption-search-table--selectable' : undefined}
+              >
                 <TableHead>
                   <TableRow>
                     {canApproveExemption && (
@@ -1122,16 +1129,22 @@ const ProvincialExemptionPage = () => {
                                 disabled={!canSelectRow}
                                 description={disabledApprovalSelectionDescription(row)}
                               >
-                                <Checkbox
-                                  id={`selectRow-${row.exemptionNumber}`}
-                                  hideLabel
-                                  labelText={`Select ${row.exemptionNumber}`}
-                                  checked={Boolean(selectedRowsById[row.exemptionNumber])}
-                                  disabled={!canSelectRow}
-                                  onChange={(_, payload) =>
-                                    toggleRowSelection(row, Boolean(payload.checked))
-                                  }
-                                />
+                                {canSelectRow ? (
+                                  <Checkbox
+                                    id={`selectRow-${row.exemptionNumber}`}
+                                    hideLabel
+                                    labelText={`Select exemption ${row.exemptionNumber}`}
+                                    checked={Boolean(selectedRowsById[row.exemptionNumber])}
+                                    disabled={!canSelectRow}
+                                    onChange={(_, payload) =>
+                                      toggleRowSelection(row, Boolean(payload.checked))
+                                    }
+                                  />
+                                ) : (
+                                  <span className="sr-only">
+                                    {disabledApprovalSelectionDescription(row)}
+                                  </span>
+                                )}
                               </DisabledButtonTooltip>
                               {row.isLocked && <Tag type="gray">Locked</Tag>}
                             </div>
@@ -1159,15 +1172,15 @@ const ProvincialExemptionPage = () => {
                         <TableCell>
                           <StatusTag status={row.status} />
                         </TableCell>
-                        <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
                         <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
-                        <TableCell>{displayTableValue(row.approvedVolume)}</TableCell>
-                        <TableCell>{displayTableValue(row.balanceRemaining)}</TableCell>
+                        <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
+                        <TableCell>{row.approvedVolume.toFixed(1)}</TableCell>
+                        <TableCell>{row.balanceRemaining.toFixed(1)}</TableCell>
                         <TableCell className="legacy-search-table-date">
-                          {displayTableValue(row.listingDate)}
+                          {displayTableValue(formatIsoDateLabel(row.listingDate))}
                         </TableCell>
                         <TableCell className="legacy-search-table-date">
-                          {displayTableValue(row.expiryDate)}
+                          {displayTableValue(formatIsoDateLabel(row.expiryDate))}
                         </TableCell>
                         <TableCell>{displayTableValue(row.region)}</TableCell>
                       </TableRow>
@@ -1182,19 +1195,34 @@ const ProvincialExemptionPage = () => {
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
-              <Pagination
-                page={results.page.number + 1}
-                pageSize={results.page.size}
-                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-                totalItems={results.page.totalElements}
-                pagesUnknown={totalStatus !== 'exact'}
-                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
-                onChange={({ page, pageSize: nextPageSize }) => {
-                  setSearchParams(
-                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
-                  )
-                }}
-              />
+              <>
+                <p className="legacy-search-result-count">
+                  {formatDeferredSearchTotalLabel(
+                    results.page.totalElements,
+                    totalStatus,
+                    results.page.number * results.page.size + results.content.length,
+                  )}
+                </p>
+                <Pagination
+                  page={results.page.number + 1}
+                  pageSize={results.page.size}
+                  pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                  totalItems={results.page.totalElements}
+                  pagesUnknown={totalStatus !== 'exact'}
+                  isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
+                  onChange={({ page, pageSize: nextPageSize }) => {
+                    setSearchParams(
+                      buildSearchParams(
+                        appliedFilters,
+                        sortField,
+                        sortDirection,
+                        page,
+                        nextPageSize,
+                      ),
+                    )
+                  }}
+                />
+              </>
             )}
           </SearchResultsTableFrame>
         </section>

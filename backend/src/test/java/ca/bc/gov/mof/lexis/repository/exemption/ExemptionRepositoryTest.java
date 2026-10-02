@@ -42,6 +42,22 @@ import org.springframework.jdbc.core.RowMapper;
 class ExemptionRepositoryTest {
 
   @Test
+  void agentFilterShouldMatchOnlyAgentAndKeepListAndCountAligned() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+    ExemptionSearchCriteria criteria = new ExemptionSearchCriteria(
+        null, null, null, null, null, null, null,
+        null, null, null, null, List.of(), false, false, false,
+        null, 0, 25, null, "00012345");
+
+    repository.search(criteria);
+
+    assertThat(repository.whereSql()).contains("EEA.AGENT_CLIENT_NUMBER LIKE");
+    assertThat(repository.whereSql()).doesNotContain("EEA.OWNER_CLIENT_NUMBER LIKE");
+    assertThat(repository.countWhereSql).contains("EEA.AGENT_CLIENT_NUMBER LIKE");
+    assertThat(repository.bindValues()).containsExactly("00012345");
+  }
+
+  @Test
   void exemptionStatusOptionsShouldIncludeExpired() {
     ExemptionRepository repository =
         new ExemptionRepository(null) {

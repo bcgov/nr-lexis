@@ -317,14 +317,18 @@ describe('Detail Quick Action Smoke', () => {
       await screen.findByRole('heading', { name: 'Exemption details', level: 2 })
     ).closest('.cds--tile')
     expect(summary).toBeTruthy()
+    const approvedVolume = within(summary as HTMLElement)
+      .getByText('Approval volume (m³)')
+      .closest('.detail-field-item')
+    expect(within(approvedVolume as HTMLElement).getByText('99.0')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Permits' }))
+    const permitTotals = screen.getByRole('tabpanel', { name: 'Permits' })
     for (const [label, value] of [
       ['Approved volume (m³)', '99.0'],
-      ['Used volume (m³)', '5.0'],
-      ['Remaining volume (m³)', '94.0'],
+      ['Sum of application scales (m³)', '5.0'],
+      ['Balance remaining (m³)', '94.0'],
     ]) {
-      const field = within(summary as HTMLElement)
-        .getByText(label)
-        .closest('.detail-field-item')
+      const field = within(permitTotals).getByText(label).closest('.detail-field-item')
       expect(field).toBeTruthy()
       expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
     }

@@ -130,7 +130,8 @@ public class OracleClientLookupService implements ClientLookupService {
         trimToNull(row.businessPhone()),
         trimToNull(row.faxNumber()),
         trimToNull(row.emailAddress()),
-        trimToNull(row.clientAcronym()));
+        trimToNull(row.clientAcronym()),
+        trimToNull(row.clientLocationName()));
   }
 
   private ClientLocation toClientLocation(ClientLocationRow row) {

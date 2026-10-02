@@ -427,6 +427,27 @@ describe('search-service contracts', () => {
     )
   })
 
+  it('sends separate exemption agent and owner criteria consistently for results and counts', async () => {
+    getCachedResponseMock.mockResolvedValue({ data: { results: [], total: 0, page: 0, size: 10 } })
+    const request = {
+      ...exemptionRequest,
+      filters: {
+        ...exemptionRequest.filters,
+        applicantClientNumber: '00010000',
+        ownerClientNumber: '00020000',
+        agentClientNumber: '00030000',
+      },
+    }
+    await searchProvincialExemptions(request)
+    await countProvincialExemptions(request)
+    for (const callIndex of [0, 1]) {
+      const params = readParams(callIndex)
+      expect(params.get('applicantClientNumber')).toBe('00010000')
+      expect(params.get('ownerClientNumber')).toBe('00020000')
+      expect(params.get('agentClientNumber')).toBe('00030000')
+    }
+  })
+
   it('sends supported descending exemption sort fields to the backend', async () => {
     getCachedResponseMock.mockResolvedValue({
       data: { results: [], total: 0, page: 0, size: 10 },

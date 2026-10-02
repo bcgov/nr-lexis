@@ -19,6 +19,7 @@ import {
   mockedFetchApplicationClientData,
   mockedFetchApplicationClientLocations,
   mockedFetchApplicationPermits,
+  mockedFetchApplicationReviewOptions,
   mockedFetchApplicationSummarySnapshot,
   mockedFetchProvincialApplicationDetail,
   mockedSaveApplicationRemark,
@@ -1547,7 +1548,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
 
-  it('updates application review status and can send status email from detail', async () => {
+  it('retains the saved status and closes the editor when status email is unavailable', async () => {
     const detailAfterStatusUpdate: ProvincialApplicationDetail = {
       ...reviewableApplicationDetail,
       applicationStatusCode: 'REJ',
@@ -1626,13 +1627,127 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
         'Application status email is not configured yet. The application status was updated, but no email was sent.',
       ),
     ).toBeInTheDocument()
-    expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
-      'edited.client@example.test',
-    )
-    expect(within(reviewTile).getByLabelText('Remarks')).toHaveValue('Needs correction')
+    expect(within(reviewTile).queryByLabelText(/client email address/i)).not.toBeInTheDocument()
+    expect(within(reviewTile).queryByRole('textbox', { name: 'Remarks' })).not.toBeInTheDocument()
+    expect(
+      within(reviewTile).queryByRole('button', { name: 'Update status' }),
+    ).not.toBeInTheDocument()
     expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0)
     expect(screen.getAllByText('Needs correction').length).toBeGreaterThan(0)
   })
+
+  it('applies the committed rejection before email completes and reports an unconfirmed send separately', async () => {
+    let rejectEmail!: (reason: Error) => void
+    mockedSendApplicationReviewStatusEmail.mockImplementationOnce(
+      () =>
+        new Promise((_, reject) => {
+          rejectEmail = reject
+        }),
+    )
+    mockedUpdateApplicationReviewStatus.mockResolvedValueOnce({
+      valid: true,
+      updated: true,
+      statusCode: 'REJ',
+      remark: 'Needs correction',
+      remarkId: 99,
+      clientEmail: 'agent@example.test',
+      message: 'Application status updated.',
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const reviewTile = await selectApplicationReviewTile()
+    const review = within(reviewTile)
+    await userEvent.click(review.getByRole('radio', { name: 'Rejected' }))
+    fireEvent.change(review.getByLabelText('Remarks'), { target: { value: 'Needs correction' } })
+    await userEvent.click(
+      review.getByRole('checkbox', {
+        name: 'Send email notification to the client, including the remark',
+      }),
+    )
+    await waitFor(() =>
+      expect(review.getByLabelText('Client email address')).toHaveValue('agent@example.test'),
+    )
+    await userEvent.click(review.getByRole('button', { name: 'Reject application and send email' }))
+    await waitFor(() => expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledTimes(1))
+    expect(review.getByText('Rejected')).toBeInTheDocument()
+    expect(review.getByText('Needs correction')).toBeInTheDocument()
+    expect(review.queryByRole('textbox', { name: 'Remarks' })).not.toBeInTheDocument()
+
+    await act(async () => rejectEmail(new Error('Network response lost')))
+    expect(
+      await review.findByText(
+        'The application status was updated, but the email result could not be confirmed. Check delivery before sending another email.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Unable to update application status.')).not.toBeInTheDocument()
+    expect(review.queryByText('Client email address')).not.toBeInTheDocument()
+    expect(review.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+    expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(1)
+    expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([
+    ['NEW', 'Rejected', 'REJ'],
+    ['APP', 'Withdrawn', 'WDN'],
+  ])(
+    'keeps case-insensitive review options selectable from %s',
+    async (sourceStatus, label, statusCode) => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...reviewableApplicationDetail,
+        applicationStatusCode: sourceStatus,
+      })
+      mockedFetchApplicationReviewOptions.mockResolvedValue({
+        productTypes: [],
+        regions: [],
+        reviewStatuses: [
+          { value: ' rej ', label: 'Rejected' },
+          { value: 'wDn', label: 'Withdrawn' },
+          { value: ' exp ', label: 'Expired' },
+        ],
+      })
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+      const review = within(await selectApplicationReviewTile())
+      expect(review.getByRole('radio', { name: 'Rejected' })).toHaveAttribute('value', 'REJ')
+      expect(review.getByRole('radio', { name: 'Withdrawn' })).toHaveAttribute('value', 'WDN')
+      expect(review.queryByRole('radio', { name: 'Expired' })).not.toBeInTheDocument()
+      if (sourceStatus === 'NEW') {
+        expect(review.getByRole('radio', { name: 'Approved' })).toBeChecked()
+      } else {
+        expect(review.queryByRole('radio', { name: 'Approved' })).not.toBeInTheDocument()
+      }
+      await userEvent.click(review.getByRole('radio', { name: label }))
+      fireEvent.change(review.getByLabelText('Remarks'), { target: { value: 'Review reason' } })
+      await userEvent.click(
+        review.getByRole('button', {
+          name: statusCode === 'REJ' ? 'Reject application' : 'Withdraw application',
+        }),
+      )
+      await waitFor(() =>
+        expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
+          '321',
+          expect.objectContaining({ statusCode, remark: 'Review reason' }),
+        ),
+      )
+    },
+  )
 
   it('validates application review status before updating from detail', async () => {
     // Approval is preselected when available, so use a status that opens without a choice.

@@ -1,0 +1,39 @@
+.provincial-exemption-search-page {
+  .provincial-exemption-search-grid > .forest-client-combobox {
+    grid-column: span 2;
+  }
+  .provincial-exemption-search-grid > .forest-client-combobox:has(#ownerClientNumber) {
+    grid-column: 1 / span 2;
+  }
+  .cds--data-table {
+    inline-size: 100%;
+    min-inline-size: 0;
+    table-layout: fixed;
+  }
+  .cds--data-table th,
+  .cds--data-table td {
+    min-inline-size: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    padding-inline: 0.75rem;
+  }
+  .exemption-search-table--selectable th:first-child,
+  .exemption-search-table--selectable td:first-child {
+    inline-size: 3rem;
+  }
+  .exemption-search-results-notifications:focus {
+    outline: 2px solid var(--cds-focus);
+    outline-offset: 2px;
+  }
+  @media (max-width: 671px) {
+    .provincial-exemption-search-grid > .forest-client-combobox {
+      grid-column: auto;
+    }
+    .provincial-exemption-search-grid > .forest-client-combobox:has(#ownerClientNumber) {
+      grid-column: auto;
+    }
+    .cds--data-table {
+      min-inline-size: 60rem;
+    }
+  }
+}

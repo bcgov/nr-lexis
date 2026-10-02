@@ -122,7 +122,8 @@ describe('Provincial exemption client parity', () => {
         ? {
             clientNumber,
             companyName: 'Client lookup owner name',
-            clientAcronym: '',
+            clientAcronym: 'NSK',
+            locationName: 'AUTHORITATIVE OWNER LOCATION',
             address:
               'ATTN ACCT DEPT JOHANN BOULTER SUITE 2300 1055 WEST GEORGIA STREET PO BOX 11101',
             city: 'VANCOUVER',
@@ -138,6 +139,7 @@ describe('Provincial exemption client parity', () => {
             clientNumber,
             companyName: 'Client lookup agent name',
             clientAcronym: '',
+            locationName: 'AUTHORITATIVE AGENT LOCATION',
             address:
               'C/O ACCOUNTS MANAGER PO BOX 49114 TOWER 4 BENTALL CENTRE 3500 1055 DUNSMUIR STREET',
             city: 'PORTLAND',
@@ -180,7 +182,7 @@ describe('Provincial exemption client parity', () => {
 
     expect(screen.getByRole('tab', { name: 'Applicant' })).toHaveAttribute('aria-selected', 'true')
     const ownerHeading = await screen.findByRole('heading', {
-      name: 'Applicant client details',
+      name: 'Applicant details',
       level: 2,
     })
     expect(ownerHeading.querySelector('svg')).toBeInTheDocument()
@@ -191,14 +193,14 @@ describe('Provincial exemption client parity', () => {
     ).toBeInTheDocument()
     expect(within(ownerTile as HTMLElement).getByText('BOB TURMEL')).toBeInTheDocument()
     expect(
-      within(ownerTile as HTMLElement).getByText('NORSKE SKOG CANADA LIMITED'),
+      within(ownerTile as HTMLElement).getByText('NORSKE SKOG CANADA LIMITED (NSK) · 00001074'),
     ).toBeInTheDocument()
     expect(
       within(ownerTile as HTMLElement).getByText(
         'ATTN ACCT DEPT JOHANN BOULTER SUITE 2300 1055 WEST GEORGIA STREET PO BOX 11101',
       ),
     ).toBeInTheDocument()
-    expect(within(ownerTile as HTMLElement).getByText('Yes')).toBeInTheDocument()
+    expect(within(ownerTile as HTMLElement).getAllByText('Agent')).not.toHaveLength(0)
 
     const agentTile = (
       await screen.findByRole('heading', { name: 'Agent client details', level: 3 })
@@ -209,7 +211,7 @@ describe('Provincial exemption client parity', () => {
     expect(within(agentTile as HTMLElement).getByText('12 - EXPORT BILLING')).toBeInTheDocument()
     expect(within(agentTile as HTMLElement).getByText('EXPORT PERSON')).toBeInTheDocument()
     expect(
-      within(agentTile as HTMLElement).getByText('INTERNATIONAL FOREST PRODUCTS'),
+      within(agentTile as HTMLElement).getByText(/INTERNATIONAL FOREST PRODUCTS.*00002176/),
     ).toBeInTheDocument()
     expect(
       within(agentTile as HTMLElement).getByText(
@@ -224,6 +226,30 @@ describe('Provincial exemption client parity', () => {
       expect(fetchExemptionClientLocations).toHaveBeenCalledWith('00002176')
     })
   })
+
+  it.each([false, true])(
+    'uses the selected client-data location name when options contain only codes: %s',
+    async (codeOnly) => {
+      vi.mocked(fetchExemptionClientLocations).mockImplementation(async (clientNumber) => {
+        const locationCode = clientNumber === '00001074' ? '03' : '12'
+        return codeOnly ? [{ locationCode, locationName: locationCode, selected: true }] : []
+      })
+      render(
+        <MemoryRouter initialEntries={['/provincial/exemption/26-8758']}>
+          <Routes>
+            <Route
+              path="/provincial/exemption/:exemptionNumber"
+              element={<ProvincialExemptionDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+      expect(await screen.findByText('03 - AUTHORITATIVE OWNER LOCATION')).toBeInTheDocument()
+      expect(await screen.findByText('12 - AUTHORITATIVE AGENT LOCATION')).toBeInTheDocument()
+      expect(fetchExemptionClientData).toHaveBeenCalledWith('00001074', '03')
+      expect(fetchExemptionClientData).toHaveBeenCalledWith('00002176', '12')
+    },
+  )
 
   it('shows an unavailable state when client lookups fail', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
@@ -296,9 +322,7 @@ describe('Provincial exemption client parity', () => {
       'true',
     )
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
-    expect(
-      screen.getByRole('heading', { name: 'Applicant client details', level: 2 }),
-    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Applicant details', level: 2 })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     expect(screen.getByRole('heading', { name: 'Exemption details', level: 2 })).toBeInTheDocument()

@@ -1,3 +1,12 @@
+import {
+  Certificate,
+  Currency,
+  DocumentAttachment,
+  Enterprise,
+  Result,
+  Rule,
+  Save,
+} from '@carbon/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
 import {
@@ -127,6 +136,15 @@ const EXEMPTION_CREATE_TAB_LABELS: Record<ExemptionCreateTab, string> = {
   documents: 'Documents',
   permits: 'Permits',
   fees: 'Fees',
+}
+
+const EXEMPTION_CREATE_TAB_ICONS = {
+  owner: Enterprise,
+  summary: Rule,
+  applications: Result,
+  documents: DocumentAttachment,
+  permits: Certificate,
+  fees: Currency,
 }
 
 const INITIAL_FORM: ProvincialExemptionCreateForm = {
@@ -542,6 +560,8 @@ const ProvincialExemptionCreatePage = () => {
           ...current,
           exemptionNumber: '',
           exemptionTypeCode: preview.exemptionTypeCode,
+          approvalDate:
+            preview.exemptionTypeCode.trim().toUpperCase() === 'M' ? '' : current.approvalDate,
           exemptionStatusCode: preview.exemptionStatusCode,
           expiryDate: preview.expiryDate,
           approvedVolume: preview.approvedVolume,
@@ -842,6 +862,7 @@ const ProvincialExemptionCreatePage = () => {
         exemptionNumber: OIC_TYPES.has(typeCode) ? current.exemptionNumber : '',
         exemptionTypeCode: value,
         exemptionStatusCode: nextStatus || current.exemptionStatusCode,
+        approvalDate: typeCode === 'M' ? '' : current.approvalDate,
         approvedVolume,
         enableRateOverride: OIC_TYPES.has(typeCode) ? current.enableRateOverride : false,
         feeRate: OIC_TYPES.has(typeCode) ? current.feeRate : '',
@@ -1000,6 +1021,7 @@ const ProvincialExemptionCreatePage = () => {
   const ownerClientLocationDisplay = clientLocationLabel(
     ownerClientLocationCode,
     ownerClientLocationName ?? '',
+    ownerClientData?.locationName ?? '',
   )
   const ownerApplicantType = applicationOwnerSnapshot?.applicantTypeCode.trim() ?? ''
   const ownerContactName = applicationOwnerSnapshot?.ownerContactName.trim() ?? ''
@@ -1011,6 +1033,7 @@ const ProvincialExemptionCreatePage = () => {
   const agentClientLocationDisplay = clientLocationLabel(
     agentClientLocationCode,
     agentClientLocationName ?? '',
+    agentClientData?.locationName ?? '',
   )
   const agentContactName = applicationOwnerSnapshot?.agentContactName.trim() ?? ''
 
@@ -1045,7 +1068,7 @@ const ProvincialExemptionCreatePage = () => {
                   !canUseApplicationPrefill ||
                   (selectedApplicationNumbers.length > 0 && !hasCurrentPreview)
                 }
-                renderIcon={isSubmitting ? PendingIcon : undefined}
+                renderIcon={isSubmitting ? PendingIcon : Save}
               >
                 {isSubmitting ? 'Saving…' : 'Save exemption'}
               </Button>
@@ -1152,7 +1175,9 @@ const ProvincialExemptionCreatePage = () => {
             className="application-tabs__list application-detail-tab-list"
           >
             {visibleExemptionTabs.map((tab) => (
-              <Tab key={tab}>{EXEMPTION_CREATE_TAB_LABELS[tab]}</Tab>
+              <Tab key={tab} renderIcon={EXEMPTION_CREATE_TAB_ICONS[tab]}>
+                {EXEMPTION_CREATE_TAB_LABELS[tab]}
+              </Tab>
             ))}
           </TabList>
           <TabPanels>
@@ -1164,7 +1189,10 @@ const ProvincialExemptionCreatePage = () => {
                   aria-label="Exemption details"
                 >
                   <fieldset className="legacy-form-fieldset create-form-section">
-                    <legend>Exemption details</legend>
+                    <legend className="detail-tile-title">
+                      <Rule size={24} aria-hidden="true" />
+                      Exemption details
+                    </legend>
                     <div className="legacy-search-grid create-form-grid">
                       <RadioButtonGroup
                         className="provincial-exemption-type-group"
@@ -1250,7 +1278,7 @@ const ProvincialExemptionCreatePage = () => {
                       />
                       <TextInput
                         id="approvedVolume"
-                        labelText={requiredLabel('Approved volume (m³)')}
+                        labelText={requiredLabel('Approval volume (m³)')}
                         aria-required="true"
                         value={form.approvedVolume}
                         invalid={!!fieldError('approvedVolume')}
@@ -1515,7 +1543,10 @@ const ProvincialExemptionCreatePage = () => {
                     aria-label="Fees"
                   >
                     <fieldset className="legacy-form-fieldset create-form-section">
-                      <legend>Fees</legend>
+                      <legend className="detail-tile-title">
+                        <Currency size={24} aria-hidden="true" />
+                        Fees
+                      </legend>
                       <RadioButtonGroup
                         legendText="Override fee rate?"
                         name="enableExemptionRateOverride"

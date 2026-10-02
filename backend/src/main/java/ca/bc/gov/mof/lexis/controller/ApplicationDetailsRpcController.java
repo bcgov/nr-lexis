@@ -865,7 +865,7 @@ public class ApplicationDetailsRpcController {
                 ResponseEntity.ok(
                     new ApplicationClientDataResponseDto(
                         null, null, null, null, null, null, null, null, null, null, null,
-                        "true")));
+                        "true", null)));
   }
 
   @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_CLIENT_DATA)
@@ -2283,7 +2283,8 @@ public class ApplicationDetailsRpcController {
         data.phone(),
         data.fax(),
         data.email(),
-        notfound);
+        notfound,
+        data.locationName());
   }
 
   private ApplicationClientContactResponseDto toClientContactResponse(
@@ -2594,7 +2595,8 @@ public class ApplicationDetailsRpcController {
       String phone,
       String fax,
       String email,
-      String notfound) {}
+      String notfound,
+      String locationName) {}
 
   public record ApplicationClientLocationResponseDto(
       String locationName, String locationCode, boolean selected) {}

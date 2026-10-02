@@ -116,7 +116,8 @@ public class ExemptionController {
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
       @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal,
-      Authentication authentication) {
+      Authentication authentication,
+      @RequestParam(name = "agentClientNumber", required = false) String agentClientNumber) {
     ExemptionService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption service unavailable - returning no content for search");
@@ -167,7 +168,8 @@ public class ExemptionController {
             sortField,
             page,
             size,
-            nonMinisterialRegions);
+            nonMinisterialRegions,
+            scopedClientNumber == null ? agentClientNumber : null);
 
     ExemptionSearchResponseDto response;
     if (knownTotal != null) {
@@ -200,7 +202,8 @@ public class ExemptionController {
       @RequestParam(name = "applicantClientNumber", required = false) String applicantClientNumber,
       @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
-      Authentication authentication) {
+      Authentication authentication,
+      @RequestParam(name = "agentClientNumber", required = false) String agentClientNumber) {
     ExemptionService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Exemption service unavailable - returning no content for count");
@@ -251,7 +254,8 @@ public class ExemptionController {
             null,
             0,
             1,
-            nonMinisterialRegions);
+            nonMinisterialRegions,
+            scopedClientNumber == null ? agentClientNumber : null);
     return ResponseEntity.ok(new SearchCountResponseDto(service.count(criteria)));
   }
 
@@ -356,7 +360,8 @@ public class ExemptionController {
       String sortField,
       Integer page,
       Integer size,
-      OrgUnitConstraint nonMinisterialRegions) {
+      OrgUnitConstraint nonMinisterialRegions,
+      String agentClientNumber) {
     return new ExemptionSearchCriteria(
         applicationNumber,
         packageNumber,
@@ -379,7 +384,8 @@ public class ExemptionController {
         // Ministerial exemptions follow the search regions; the rest also need a Blanket OIC region.
         nonMinisterialRegions.restricted() && !nonMinisterialRegions.denied()
             ? nonMinisterialRegions.orgUnitNumbers()
-            : null);
+            : null,
+        agentClientNumber);
   }
 
   private ExemptionSearchResponseDto withSearchLocks(ExemptionSearchResponseDto response) {

@@ -402,7 +402,7 @@ describe('create page unsaved changes', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
     )
-    await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '10')
+    await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '10')
 
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
@@ -425,7 +425,7 @@ describe('create page unsaved changes', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
     )
-    await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '10')
+    await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '10')
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await screen.findByRole('dialog', { name: 'Unsaved changes' })
 

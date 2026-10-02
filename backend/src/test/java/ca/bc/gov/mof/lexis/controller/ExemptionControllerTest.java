@@ -83,6 +83,26 @@ class ExemptionControllerTest {
   }
 
   @Test
+  void staffAgentFilterShouldReachSearchAndCountAsAnIndependentCriterion() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(new ExemptionSearchResponseDto(List.of(), 0, 0, 25));
+
+    controller.search(null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, List.of(), null, 0, 25, null,
+        authentication, "00012345");
+    controller.count(null, null, null, null, null, null, null, null, null,
+        null, null, null, null, null, null, List.of(), authentication, "00012345");
+
+    ArgumentCaptor<ExemptionSearchCriteria> searchCaptor = ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
+    ArgumentCaptor<ExemptionSearchCriteria> countCaptor = ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
+    verify(service).search(searchCaptor.capture());
+    verify(service).count(countCaptor.capture());
+    assertThat(searchCaptor.getValue().agentClientNumber()).isEqualTo("00012345");
+    assertThat(countCaptor.getValue().agentClientNumber()).isEqualTo("00012345");
+  }
+
+  @Test
   void optionsShouldReturnNoContentWhenServiceMissing() {
     when(serviceProvider.getIfAvailable()).thenReturn(null);
 
@@ -169,7 +189,7 @@ class ExemptionControllerTest {
             0,
             25,
             null,
-            null);
+            null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
     verify(serviceProvider).getIfAvailable();
@@ -224,7 +244,7 @@ class ExemptionControllerTest {
             0,
             25,
             null,
-            null);
+            null, null);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
@@ -277,13 +297,14 @@ class ExemptionControllerTest {
         0,
         25,
         null,
-        authentication);
+        authentication, "00099999");
 
     ArgumentCaptor<ExemptionSearchCriteria> criteriaCaptor =
         ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
     verify(service).search(criteriaCaptor.capture());
 
     ExemptionSearchCriteria criteria = criteriaCaptor.getValue();
+    assertThat(criteria.agentClientNumber()).isNull();
     assertThat(criteria.applicantClientNumber()).isEqualTo("00077881");
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.includeBlanketOic()).isTrue();
@@ -307,7 +328,7 @@ class ExemptionControllerTest {
         "00099999",
         "00088888",
         List.of(),
-        authentication);
+        authentication, "00099999");
     verify(service).count(criteriaCaptor.capture());
     ExemptionSearchCriteria countCriteria = criteriaCaptor.getValue();
     assertThat(countCriteria.applicantClientNumber()).isEqualTo("00077881");
@@ -348,7 +369,7 @@ class ExemptionControllerTest {
         0,
         25,
         null,
-        authentication);
+        authentication, null);
 
     ArgumentCaptor<ExemptionSearchCriteria> criteriaCaptor =
         ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
@@ -387,7 +408,7 @@ class ExemptionControllerTest {
         null,
         null,
         List.of(76L),
-        authentication);
+        authentication, null);
 
     ArgumentCaptor<ExemptionSearchCriteria> criteriaCaptor =
         ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
@@ -427,7 +448,7 @@ class ExemptionControllerTest {
         0,
         25,
         null,
-        authentication);
+        authentication, null);
 
     ArgumentCaptor<ExemptionSearchCriteria> criteriaCaptor =
         ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
@@ -599,7 +620,7 @@ class ExemptionControllerTest {
         0,
         25,
         null,
-        authentication);
+        authentication, null);
   }
 
   private static ExemptionSearchResultDto searchRow(boolean locked) {

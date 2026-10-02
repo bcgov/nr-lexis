@@ -230,17 +230,15 @@ describe('Provincial exemption edit context', () => {
     expect(summaryCard).toBeTruthy()
     expect(within(summaryCard as HTMLElement).getByText('Status')).toBeInTheDocument()
     expect(within(summaryCard as HTMLElement).getByText('Region')).toBeInTheDocument()
-    expect(within(summaryCard as HTMLElement).getByText('Author')).toBeInTheDocument()
-    expect(
-      within(summaryCard as HTMLElement).getByText('idir\\exemption-author'),
-    ).toBeInTheDocument()
+    expect(within(summaryCard as HTMLElement).getByText('Blanket OIC')).toBeInTheDocument()
+
     const exemptionHolderLabel = within(summaryCard as HTMLElement).getByText('Exemption holder')
     expect(
       within(exemptionHolderLabel.closest('.detail-field-item') as HTMLElement).getByText(
         'Blanket OIC',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 2, name: 'Conditions' })).toBeInTheDocument()
+    expect(within(summaryCard as HTMLElement).getByText('Conditions')).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole('tab', { name: 'Fees' }))
@@ -298,7 +296,7 @@ describe('Provincial exemption edit context', () => {
       ),
     )
     expect(
-      (await screen.findByText('The exemption was updated successfully.')).closest(
+      (await screen.findByText(/^(Exemption details|Fees) saved\.$/)).closest(
         '.cds--inline-notification',
       ),
     ).toHaveClass('cds--inline-notification--success')
@@ -553,7 +551,7 @@ describe('Provincial exemption edit context', () => {
     await userEvent.type(conditions, 'Second edit')
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    const success = await screen.findByText('The exemption was updated successfully.')
+    const success = await screen.findByText(/^(Exemption details|Fees) saved\.$/)
     expect(success).toBeInTheDocument()
     expect(screen.queryByText('The first save failed.')).not.toBeInTheDocument()
     expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
@@ -564,7 +562,7 @@ describe('Provincial exemption edit context', () => {
       }),
     )
     rerender(page)
-    expect(screen.queryByText('The exemption was updated successfully.')).not.toBeInTheDocument()
+    expect(screen.queryByText(/^(Exemption details|Fees) saved\.$/)).not.toBeInTheDocument()
     expect(screen.queryByText('The first save failed.')).not.toBeInTheDocument()
   })
 
@@ -1113,7 +1111,7 @@ describe('Provincial exemption edit context', () => {
     )
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
-    const approvedVolume = screen.getByLabelText('Approved volume (m³)')
+    const approvedVolume = screen.getByLabelText('Approval volume (m³)')
     await userEvent.clear(approvedVolume)
     await userEvent.type(approvedVolume, '9999999.99')
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -1151,7 +1149,7 @@ describe('Provincial exemption edit context', () => {
     )
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
-    const approvedVolume = screen.getByLabelText('Approved volume (m³)')
+    const approvedVolume = screen.getByLabelText('Approval volume (m³)')
     await userEvent.clear(approvedVolume)
     await userEvent.type(approvedVolume, '250.999')
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
@@ -1395,7 +1393,7 @@ describe('Provincial exemption edit context', () => {
       resolveRefreshedEditContext(editContext)
     })
 
-    expect(await screen.findByText('The exemption was updated successfully.')).toBeInTheDocument()
+    expect(await screen.findByText(/^(Exemption details|Fees) saved\.$/)).toBeInTheDocument()
     expect(
       screen.queryByText(
         'Exemption edit settings could not be loaded. Editing is unavailable until the data can be retrieved.',
@@ -1585,7 +1583,9 @@ describe('Provincial exemption edit context', () => {
         screen.queryByRole('dialog', { name: 'Approve exemption EX-205' }),
       ).not.toBeInTheDocument(),
     )
-    expect((await screen.findAllByText('EX-206')).length).toBeGreaterThan(0)
+    expect(
+      await screen.findByRole('heading', { name: 'Exemption EX-206', level: 1 }),
+    ).toBeInTheDocument()
     expect(vi.mocked(approveExemptions)).not.toHaveBeenCalled()
   })
 
@@ -1812,13 +1812,17 @@ describe('Provincial exemption edit context', () => {
     expect(firstConfirm).toBeEnabled()
     expect(firstConfirm).toHaveClass('cds--btn--primary')
     expect(firstConfirm).not.toHaveClass('cds--btn--danger')
-    expect(firstConfirm.parentElement).toHaveClass('lexis-confirmation-modal__actions')
+    expect(firstConfirm.parentElement).toHaveClass('cds--modal-footer')
     await userEvent.click(firstConfirm)
-    expect(within(firstDialog).getByText('Certification is required')).toBeVisible()
+    expect(
+      within(firstDialog).getByText('Confirm that you certify this exemption has been approved.'),
+    ).toBeVisible()
     expect(vi.mocked(approveExemptions)).not.toHaveBeenCalled()
 
     await userEvent.click(firstCertification)
-    expect(within(firstDialog).queryByText('Certification is required')).not.toBeInTheDocument()
+    expect(
+      within(firstDialog).queryByText('Confirm that you certify this exemption has been approved.'),
+    ).not.toBeInTheDocument()
     await userEvent.click(within(firstDialog).getByRole('button', { name: 'Cancel' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve exemption' }))
 
@@ -1833,7 +1837,11 @@ describe('Provincial exemption edit context', () => {
       name: 'Approve exemption',
     })
     expect(reopenedCertification).not.toBeChecked()
-    expect(within(reopenedDialog).queryByText('Certification is required')).not.toBeInTheDocument()
+    expect(
+      within(reopenedDialog).queryByText(
+        'Confirm that you certify this exemption has been approved.',
+      ),
+    ).not.toBeInTheDocument()
     await userEvent.click(reopenedCertification)
     await userEvent.click(reopenedConfirm)
 
@@ -1847,7 +1855,9 @@ describe('Provincial exemption edit context', () => {
       ).not.toBeInTheDocument(),
     )
     expect(screen.getByText('Exemption approved and now Active.')).toBeInTheDocument()
-    expect(screen.getByText('No approval email was sent.')).toBeInTheDocument()
+    expect(
+      screen.getByText('No approval email was sent. Notify the applicant another way.'),
+    ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Approve exemption' }))
     const postApprovalDialog = screen.getByRole('dialog', { name: 'Approve exemption EX-205' })
@@ -2254,7 +2264,7 @@ describe('Provincial exemption edit context', () => {
       if (type === 'O') {
         expect(screen.getByRole('textbox', { name: /Exemption number/ })).toBeDisabled()
       }
-      expect(screen.getByLabelText('Approved volume (m³)')).toBeDisabled()
+      expect(screen.getByLabelText('Approval volume (m³)')).toBeDisabled()
       expect(screen.getByLabelText('Approval date')).toBeDisabled()
       expect(screen.getByLabelText('Expiry date')).toBeDisabled()
       expect(screen.getByLabelText('Approval date')).not.toHaveAttribute('aria-invalid', 'true')

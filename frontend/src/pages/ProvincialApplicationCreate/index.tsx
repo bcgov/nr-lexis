@@ -18,6 +18,16 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import {
+  Box,
+  Chat,
+  ContainerRegistry,
+  DataDefinition,
+  DocumentAttachment,
+  Enterprise,
+  Stamp,
+  Task,
+} from '@carbon/icons-react'
 import SearchableSelect from '../../components/SearchableSelect'
 import { AppNotification } from '../../components/AppNotification'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
@@ -143,6 +153,16 @@ const APPLICATION_CREATE_TAB_LABELS: Record<ApplicationCreateTab, string> = {
   remarks: 'Remarks',
   offers: 'Offers',
   review: 'Review',
+}
+
+const APPLICATION_CREATE_TAB_ICONS = {
+  owner: Enterprise,
+  application: Task,
+  items: Box,
+  documents: DocumentAttachment,
+  remarks: Chat,
+  offers: DataDefinition,
+  review: Stamp,
 }
 
 const CLIENT_NUMBER_PATTERN = /^\d{1,8}$/
@@ -1616,6 +1636,7 @@ const ProvincialApplicationCreatePage = () => {
                   key={tab}
                   aria-label={APPLICATION_CREATE_TAB_LABELS[tab]}
                   aria-description={errorCount ? `${errorCount} fields need attention` : undefined}
+                  renderIcon={errorCount > 0 ? undefined : APPLICATION_CREATE_TAB_ICONS[tab]}
                 >
                   {APPLICATION_CREATE_TAB_LABELS[tab]}
                   {errorCount > 0 && (
@@ -1635,9 +1656,15 @@ const ProvincialApplicationCreatePage = () => {
                 aria-label="Applicant"
               >
                 <div className="detail-section-card__header">
-                  <h2 className="detail-tile-title">Applicant details</h2>
+                  <h2 className="detail-tile-title">
+                    <Enterprise size={24} aria-hidden="true" />
+                    Applicant details
+                  </h2>
                 </div>
                 <p className="application-create-required">{requiredLabel('Required fields')}</p>
+                <h3 className="detail-tile-title">
+                  {form.applicantTypeCode === 'M' ? 'Ministerial' : 'Owner'}
+                </h3>
                 <div className="legacy-search-grid create-form-grid application-create-client-grid">
                   <TextInput
                     id="ownerContactName"
@@ -1884,7 +1911,10 @@ const ProvincialApplicationCreatePage = () => {
                 aria-label="Application"
               >
                 <div className="detail-section-card__header">
-                  <h2 className="detail-tile-title">Application details</h2>
+                  <h2 className="detail-tile-title">
+                    <Task size={24} aria-hidden="true" />
+                    Application details
+                  </h2>
                 </div>
                 <p className="application-create-required">{requiredLabel('Required fields')}</p>
                 <div className="legacy-search-grid create-form-grid">
@@ -2039,7 +2069,10 @@ const ProvincialApplicationCreatePage = () => {
                   aria-label="Scale"
                 >
                   <div className="detail-section-card__header">
-                    <h2 className="detail-tile-title">Scale details</h2>
+                    <h2 className="detail-tile-title">
+                      <ContainerRegistry size={24} aria-hidden="true" />
+                      Scale details
+                    </h2>
                   </div>
                   <p className="application-create-required">{requiredLabel('Required fields')}</p>
                   <div className="legacy-search-grid create-form-grid">
@@ -2146,7 +2179,8 @@ const ProvincialApplicationCreatePage = () => {
                     />
                     <SearchableSelect
                       id="applicationEndUse"
-                      labelText="End use"
+                      labelText={requiredLabel('End use')}
+                      required
                       value={form.endUseCode}
                       disabled={
                         form.speciesCodes.length === 0 ||

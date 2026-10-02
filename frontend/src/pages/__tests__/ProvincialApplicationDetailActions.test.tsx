@@ -383,6 +383,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
   })
 
   it('shows client acronyms, the usual empty value and a divider before the agent', async () => {
+    mockedFetchApplicationClientLocations.mockImplementation(
+      async (_clientNumber, applicantType) => {
+        const code = applicantType === 'agent' ? '01' : '00'
+        return [{ locationCode: code, locationName: code, selected: true }]
+      },
+    )
     mockedFetchApplicationSummarySnapshot.mockResolvedValue({
       ...applicationSummarySnapshot,
       ownerContactName: '',
@@ -391,6 +397,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       clientNumber,
       companyName: clientNumber === '00033344' ? 'Agent Export Services' : 'Owner Forestry Ltd.',
       clientAcronym: clientNumber === '00033344' ? '' : 'OWNFOR',
+      locationName: clientNumber === '00033344' ? 'Export office' : 'Main office',
       address: '',
       city: '',
       province: '',
@@ -419,12 +426,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
     const ownerContact = within(ownerSection).getByText('Contact name').nextElementSibling
     expect(ownerContact).toHaveTextContent('Not provided')
+    expect(within(ownerSection).getByText('00 - Main office')).toBeInTheDocument()
 
     const agentSection = screen.getByRole('region', { name: 'Agent information' })
     expect(
       await within(agentSection).findByText('Agent Export Services · 00033344'),
     ).toBeInTheDocument()
     expect(agentSection.previousElementSibling).toHaveClass('application-applicant-divider')
+    expect(within(agentSection).getByText('01 - Export office')).toBeInTheDocument()
   })
 
   it('keeps saved client values visible when enrichment fails', async () => {
@@ -549,11 +558,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     mockedFetchApplicationClientLocations.mockRejectedValueOnce(
       new Error('changed client endpoint unavailable'),
     )
-    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+    fireEvent.change(ownerControls.getByLabelText('Client'), {
       target: { value: '00099988' },
     })
 
-    expect(ownerControls.getByLabelText('Client number')).toHaveValue('00099988')
+    expect(ownerControls.getByLabelText('Client')).toHaveValue('00099988')
     expect(ownerControls.queryByText('Owner Forestry Ltd.')).not.toBeInTheDocument()
     expect(ownerControls.getByRole('combobox', { name: 'Client location' })).toHaveValue('')
 
@@ -593,7 +602,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     mockedFetchApplicationClientLocations.mockRejectedValueOnce(
       new Error('changed client endpoint unavailable'),
     )
-    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+    fireEvent.change(ownerControls.getByLabelText('Client'), {
       target: { value: '00099988' },
     })
 
@@ -601,7 +610,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       'Client details could not be retrieved. Existing selections were preserved. Please try again.'
     expect(await screen.findByText(lookupErrorMessage)).toBeInTheDocument()
 
-    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+    fireEvent.change(ownerControls.getByLabelText('Client'), {
       target: { value: '00099989' },
     })
 
@@ -689,7 +698,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       }),
     )
 
-    expect(ownerControls.getByLabelText('Client number')).toHaveValue('00011122')
+    expect(ownerControls.getByLabelText('Client')).toHaveValue('00011122')
     const applicantType = ownerControls
       .getAllByLabelText('Applicant type')
       .find((element) => element.getAttribute('role') === 'combobox')
@@ -774,7 +783,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await chooseComboBoxOption(applicantType, 'Agent')
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     let agentControls = within(getAgentDetailsTile())
-    expect(agentControls.getByLabelText('Agent number')).toHaveValue('00011122')
+    expect(agentControls.getByLabelText('Agent client')).toHaveValue('00011122')
     await userEvent.click(ownerControls.getByRole('button', { name: 'Cancel' }))
 
     await waitFor(() =>
@@ -790,10 +799,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     agentControls = within(getAgentDetailsTile())
 
     await waitFor(() =>
-      expect(agentControls.getByRole('combobox', { name: 'Contact location' })).toBeEnabled(),
+      expect(agentControls.getByRole('combobox', { name: 'Agent location' })).toBeEnabled(),
     )
     await chooseComboBoxOption(
-      agentControls.getByRole('combobox', { name: 'Contact location' }),
+      agentControls.getByRole('combobox', { name: 'Agent location' }),
       '01 - Agent Main Location',
     )
     await waitFor(() =>
@@ -847,7 +856,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await screen.findByRole('heading', { level: 1, name: 'Application 321' })
     const ownerControls = within(getOwnerClientDetailsTile())
     await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
-    const ownerClientNumber = ownerControls.getByLabelText('Client number')
+    const ownerClientNumber = ownerControls.getByLabelText('Client')
     fireEvent.change(ownerClientNumber, { target: { value: '00002176' } })
 
     await waitFor(() => expect(ownerClientNumber).toHaveValue('00002176'))
@@ -888,13 +897,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         name: 'Edit applicant details',
       }),
     )
-    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+    fireEvent.change(ownerControls.getByLabelText('Client'), {
       target: { value: '00099988' },
     })
     await userEvent.click(ownerControls.getByRole('button', { name: 'Cancel' }))
 
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
-    expect(ownerControls.queryByLabelText('Client number')).not.toBeInTheDocument()
+    expect(ownerControls.queryByLabelText('Client')).not.toBeInTheDocument()
     const clientField = ownerControls.getByText('Client').closest('.detail-field-item')
     expect(clientField).toBeTruthy()
     expect(within(clientField as HTMLElement).getByText(/00011122$/)).toBeInTheDocument()
@@ -936,10 +945,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       email: 'discarded@example.test',
       notfound: '',
     })
-    fireEvent.change(ownerControls.getByLabelText('Client number'), {
+    fireEvent.change(ownerControls.getByLabelText('Client'), {
       target: { value: '00099988' },
     })
-    expect(await ownerControls.findByText('Discarded Client Ltd.')).toBeInTheDocument()
+    expect(await ownerControls.findByText('99 Discarded Road')).toBeInTheDocument()
 
     mockedFetchApplicationClientData.mockRejectedValueOnce(
       new Error('saved client refresh unavailable'),
@@ -989,13 +998,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     agentControls = within(getAgentDetailsTile())
 
-    expect(agentControls.getByLabelText('Agent number')).toHaveValue('00033344')
+    expect(agentControls.getByLabelText('Agent client')).toHaveValue('00033344')
     expect(
       within(getOwnerClientDetailsTile()).getByRole('combobox', { name: 'Applicant type' }),
     ).toHaveValue('Agent')
 
     await chooseComboBoxOption(
-      agentControls.getByRole('combobox', { name: 'Contact location' }),
+      agentControls.getByRole('combobox', { name: 'Agent location' }),
       '02 - Agent Alternate Location',
     )
     await waitFor(() =>
@@ -1053,7 +1062,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       }),
     )
     agentControls = within(getAgentDetailsTile())
-    fireEvent.change(agentControls.getByLabelText('Agent number'), {
+    fireEvent.change(agentControls.getByLabelText('Agent client'), {
       target: { value: '00099988' },
     })
     await userEvent.click(
@@ -1062,7 +1071,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     agentControls = within(getAgentDetailsTile())
-    expect(agentControls.queryByLabelText('Agent number')).not.toBeInTheDocument()
+    expect(agentControls.queryByLabelText('Agent client')).not.toBeInTheDocument()
     const agentClientField = agentControls.getByText('Agent client').closest('.detail-field-item')
     expect(agentClientField).toBeTruthy()
     expect(within(agentClientField as HTMLElement).getByText(/00033344$/)).toBeInTheDocument()
@@ -2135,7 +2144,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const itemDetails = within(await selectApplicationItemDetailsTile())
     const species = itemDetails.getByRole('combobox', { name: /^Species list/ })
     expect(species).toHaveAttribute('aria-required', 'true')
-    await userEvent.click(itemDetails.getByRole('button', { name: 'Clear all selected items' }))
+    await userEvent.click(species)
+    await userEvent.click(await itemDetails.findByRole('option', { name: /FI/ }))
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     expect(await itemDetails.findByText('At least one species is required.')).toBeVisible()
@@ -3147,7 +3157,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     mockedFetchApplicationClientData.mockClear()
     mockedFetchApplicationClientLocations.mockClear()
 
-    const ownerClientNumberInput = ownerControls.getByLabelText('Client number')
+    const ownerClientNumberInput = ownerControls.getByLabelText('Client')
     fireEvent.change(ownerClientNumberInput, { target: { value: '00044444' } })
 
     expect(mockedFetchApplicationClientData).not.toHaveBeenCalled()

@@ -169,6 +169,7 @@ public class ExemptionOracleService implements ExemptionService {
     String exemptionStatus = trimToNull(input.exemptionStatus());
     String applicantClientNumber = trimToNull(input.applicantClientNumber());
     String ownerClientNumber = trimToNull(input.ownerClientNumber());
+    String agentClientNumber = trimToNull(input.agentClientNumber());
     List<Long> regionNumbers = positiveDistinctLongs(input.regionNumbers());
     int page = Math.max(0, input.page());
     int size = Math.max(1, input.size());
@@ -177,7 +178,7 @@ public class ExemptionOracleService implements ExemptionService {
     if (exemptionType == null
         && !input.includeBlanketOic()
         && !input.broadClientMatch()
-        && (applicantClientNumber != null || ownerClientNumber != null)) {
+        && (applicantClientNumber != null || ownerClientNumber != null || agentClientNumber != null)) {
       exemptionType = EXEMPTION_TYPE_MINISTERIAL;
     }
 
@@ -200,7 +201,8 @@ public class ExemptionOracleService implements ExemptionService {
         trimToNull(input.sortField()),
         page,
         size,
-        input.nonMinisterialRegionNumbers());
+        input.nonMinisterialRegionNumbers(),
+        agentClientNumber);
   }
 
 }

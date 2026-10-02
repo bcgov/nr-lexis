@@ -77,6 +77,7 @@ const buildBackendParams = (request: ProvincialExemptionSearchRequest): URLSearc
       ['exemptionStatusCode', filters.exemptionStatusCode],
       ['applicantClientNumber', filters.applicantClientNumber],
       ['ownerClientNumber', filters.ownerClientNumber],
+      ['agentClientNumber', filters.agentClientNumber ?? ''],
     ],
     [['region', filters.region]],
   )

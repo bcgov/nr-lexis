@@ -50,6 +50,7 @@ class OracleClientLookupServiceTest {
 
     assertThat(response).isPresent();
     assertThat(response.get().clientNumber()).isEqualTo("00077881");
+    assertThat(response.get().locationName()).isEqualTo("Main");
     assertThat(response.get().companyName()).isEqualTo("Acme Forestry");
     assertThat(response.get().address()).isEqualTo("123 Main St");
     assertThat(response.get().clientAcronym()).isEqualTo("ACME");

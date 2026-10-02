@@ -3126,7 +3126,7 @@ const ProvincialApplicationDetailsPage = () => {
   ])
 
   const onUpdateReviewStatus = useCallback(
-    async (sendEmail: boolean): Promise<boolean> => {
+    async (sendEmail: boolean): Promise<'saved' | 'partial' | 'failed'> => {
       if (
         !detail ||
         !canEditApplicationReview ||
@@ -3134,13 +3134,13 @@ const ProvincialApplicationDetailsPage = () => {
         reviewOptionsAvailability !== 'available' ||
         reviewStatusOptions.length === 0
       ) {
-        return false
+        return 'failed'
       }
 
       const payloadResult = buildReviewStatusPayload(sendEmail)
       if (!payloadResult.valid || !payloadResult.payload) {
         setReviewValidationMessage(payloadResult.message)
-        return false
+        return 'failed'
       }
 
       setActionResult(null)
@@ -3156,31 +3156,48 @@ const ProvincialApplicationDetailsPage = () => {
             kind: 'error',
             message: updateResult.message || 'Unable to update application status.',
           })
-          return false
+          return 'failed'
         }
 
+        // The status and remark are committed before the separate email request.
+        applyReviewStatusResult(updateResult, payloadResult.payload.remark)
+        setIsEditingReview(false)
+        setReviewStatusEmailOverride(null)
+        setSentReviewEmail(null)
+        const { statusCode, clientEmailAddress } = payloadResult.payload
+        const savedStatusTitle =
+          REVIEW_STATUS_SUCCESS_TITLES[statusCode] ?? 'Application status updated.'
         if (sendEmail) {
-          const emailResult = await sendApplicationReviewStatusEmail(
-            String(detail.applicationNumber),
-            payloadResult.payload,
-          )
-          if (!emailResult.success) {
-            applyReviewStatusResult(updateResult, payloadResult.payload.remark)
-            setSentReviewEmail(null)
+          try {
+            const emailResult = await sendApplicationReviewStatusEmail(
+              String(detail.applicationNumber),
+              payloadResult.payload,
+            )
+            if (!emailResult.success) {
+              setActionResult({
+                kind: 'warning',
+                title: savedStatusTitle,
+                source: 'review',
+                message:
+                  emailResult.message ===
+                  'Application status email is not configured yet. No email was sent.'
+                    ? 'Application status email is not configured yet. The application status was updated, but no email was sent.'
+                    : `The application status was updated, but the email could not be sent.${emailResult.message ? ` ${emailResult.message}` : ''}`,
+              })
+              return 'partial'
+            }
+          } catch {
             setActionResult({
-              kind: 'error',
+              kind: 'warning',
+              title: savedStatusTitle,
+              source: 'review',
               message:
-                emailResult.message ===
-                'Application status email is not configured yet. No email was sent.'
-                  ? 'Application status email is not configured yet. The application status was updated, but no email was sent.'
-                  : emailResult.message || 'Application status updated; email could not be sent.',
+                'The application status was updated, but the email result could not be confirmed. Check delivery before sending another email.',
             })
-            return false
+            return 'partial'
           }
         }
 
-        applyReviewStatusResult(updateResult, payloadResult.payload.remark)
-        const { statusCode, clientEmailAddress } = payloadResult.payload
         setSentReviewEmail(
           sendEmail
             ? { applicationNumber: String(detail.applicationNumber), address: clientEmailAddress }
@@ -3188,7 +3205,7 @@ const ProvincialApplicationDetailsPage = () => {
         )
         setActionResult({
           kind: 'success',
-          title: REVIEW_STATUS_SUCCESS_TITLES[statusCode] ?? 'Application status updated.',
+          title: savedStatusTitle,
           source: 'review',
           message: sendEmail
             ? `Email sent to ${clientEmailAddress}.`
@@ -3196,10 +3213,10 @@ const ProvincialApplicationDetailsPage = () => {
               ? 'No email was sent to the client.'
               : '',
         })
-        return true
+        return 'saved'
       } catch {
         setActionResult({ kind: 'error', message: 'Unable to update application status.' })
-        return false
+        return 'failed'
       } finally {
         setIsSubmittingReviewAction(false)
       }
@@ -3221,16 +3238,6 @@ const ProvincialApplicationDetailsPage = () => {
       setIsEditingReview(false)
     }
   }, [onApproveApplication])
-
-  const onUpdateReviewStatusFromEdit = useCallback(
-    async (sendEmail: boolean) => {
-      if (await onUpdateReviewStatus(sendEmail)) {
-        setReviewStatusEmailOverride(null)
-        setIsEditingReview(false)
-      }
-    },
-    [onUpdateReviewStatus],
-  )
 
   const refreshApplicationDetailPreservingDrafts = useCallback(async (): Promise<void> => {
     const targetApplicationNumber = applicationNumber
@@ -3343,7 +3350,7 @@ const ProvincialApplicationDetailsPage = () => {
       const reviewSaved = await (normalizedReviewStatusCode === 'APP'
         ? onApproveApplication()
         : onUpdateReviewStatus(sendReviewEmail && canSendReviewStatusEmail))
-      if (reviewSaved !== true && reviewSaved !== 'saved') return false
+      if (reviewSaved !== 'saved') return false
     }
     return true
   }, [
@@ -3415,6 +3422,7 @@ const ProvincialApplicationDetailsPage = () => {
   const ownerClientLocationDisplay = clientLocationLabel(
     ownerClientLocationCode,
     ownerClientLocationName ?? '',
+    ownerClientData?.locationName ?? '',
   )
   const agentClientLocationCode = summaryForm?.agentClientLocationCode?.trim() ?? ''
   const agentClientLocationName = agentClientLocations.find(
@@ -3423,6 +3431,7 @@ const ProvincialApplicationDetailsPage = () => {
   const agentClientLocationDisplay = clientLocationLabel(
     agentClientLocationCode,
     agentClientLocationName ?? '',
+    agentClientData?.locationName ?? '',
   )
   const summaryExemptionReasonDescription = optionDescription(
     exemptionReasonOptions,
@@ -3637,7 +3646,8 @@ const ProvincialApplicationDetailsPage = () => {
       {summaryProductTypeHasGrowthDetails && (
         <SearchableSelect
           id="applicationSummaryEndUse"
-          labelText="End use"
+          labelText={requiredLabel('End use')}
+          required
           value={summaryForm.endUseCode}
           disabled={
             summaryForm.speciesCodes.length === 0 || applicationEndUseSelectOptions.length === 0
@@ -3764,7 +3774,9 @@ const ProvincialApplicationDetailsPage = () => {
                 ...(canApproveApplicationReview || isRetryingApprovalRemark
                   ? [{ value: 'APP', label: 'Approved' }]
                   : []),
-                ...reviewStatusOptions.filter((option) => ['REJ', 'WDN'].includes(option.value)),
+                ...reviewStatusOptions
+                  .map((option) => ({ ...option, value: normalizeReviewStatus(option.value) }))
+                  .filter((option) => ['REJ', 'WDN'].includes(option.value)),
               ].map((option) => (
                 <RadioButton
                   key={option.value}
@@ -3868,7 +3880,7 @@ const ProvincialApplicationDetailsPage = () => {
                   if (normalizedReviewStatusCode === 'APP') {
                     void onApproveApplicationFromEdit()
                   } else {
-                    void onUpdateReviewStatusFromEdit(sendReviewEmail && canSendReviewStatusEmail)
+                    void onUpdateReviewStatus(sendReviewEmail && canSendReviewStatusEmail)
                   }
                 }}
               >
@@ -4124,12 +4136,26 @@ const ProvincialApplicationDetailsPage = () => {
                             <p className="application-detail-required">
                               {requiredLabel('Required fields')}
                             </p>
+                            <h3 className="detail-tile-title">{ownerSectionTitle}</h3>
                             <div className="legacy-search-grid application-client-edit-grid">
+                              <TextInput
+                                id="applicationOwnerContactNameEdit"
+                                labelText={requiredLabel('Contact name')}
+                                aria-required="true"
+                                value={summaryForm.ownerContactName}
+                                invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
+                                invalidText={visibleSummaryFieldError('ownerContactName')}
+                                disabled={isSavingSummary}
+                                placeholder="Enter contact name"
+                                onChange={(event) =>
+                                  onSummaryFormChange('ownerContactName', event.target.value)
+                                }
+                              />
                               <ForestClientComboBox
                                 id="applicationOwnerClientNumberEdit"
-                                labelText={requiredLabel('Client number')}
+                                labelText={requiredLabel('Client')}
                                 value={summaryForm.ownerClientNumber}
-                                selectedClientName={ownerClientData?.companyName}
+                                selectedClientName={clientDisplayName(ownerClientData, '')}
                                 counterpartyClientNumber={summaryForm.agentClientNumber}
                                 required
                                 invalid={Boolean(visibleSummaryFieldError('ownerClientNumber'))}
@@ -4139,33 +4165,6 @@ const ProvincialApplicationDetailsPage = () => {
                                   onSummaryFormChange('ownerClientNumber', ownerClientNumber)
                                 }
                               />
-                              {canChangeApplicantType ? (
-                                <SearchableSelect
-                                  id="applicationOwnerApplicantTypeEdit"
-                                  labelText={requiredLabel('Applicant type')}
-                                  required
-                                  value={summaryForm.applicantTypeCode}
-                                  placeholder="Select applicant type"
-                                  options={optionsWithCurrentValue(
-                                    APPLICANT_TYPE_OPTIONS,
-                                    summaryForm.applicantTypeCode,
-                                  )}
-                                  invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
-                                  invalidText={visibleSummaryFieldError('applicantTypeCode')}
-                                  disabled={isSavingSummary}
-                                  onChange={(value) =>
-                                    onOwnerApplicantTypeChange(value.toUpperCase())
-                                  }
-                                />
-                              ) : (
-                                <TextInput
-                                  id="applicationOwnerApplicantTypeEdit"
-                                  labelText={requiredLabel('Applicant type')}
-                                  aria-required="true"
-                                  value={ownerApplicantTypeLabel}
-                                  readOnly
-                                />
-                              )}
                               <SearchableSelect
                                 id="applicationOwnerClientLocationEdit"
                                 labelText={requiredLabel('Client location')}
@@ -4194,27 +4193,42 @@ const ProvincialApplicationDetailsPage = () => {
                                   onSummaryFormChange('ownerClientLocationCode', value)
                                 }
                               />
-                              <TextInput
-                                id="applicationOwnerContactNameEdit"
-                                labelText={requiredLabel('Contact name')}
-                                aria-required="true"
-                                value={summaryForm.ownerContactName}
-                                invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
-                                invalidText={visibleSummaryFieldError('ownerContactName')}
-                                disabled={isSavingSummary}
-                                placeholder="Enter contact name"
-                                onChange={(event) =>
-                                  onSummaryFormChange('ownerContactName', event.target.value)
-                                }
-                              />
                             </div>
                             <ClientDataSummary
                               title="Applicant client details"
                               showTitle={false}
                               clientData={ownerClientData}
                               isLoading={isLoadingOwnerClientData}
-                              showCompanyName
                             />
+                            <div className="application-applicant-type-edit">
+                              {canChangeApplicantType ? (
+                                <SearchableSelect
+                                  id="applicationOwnerApplicantTypeEdit"
+                                  labelText={requiredLabel('Applicant type')}
+                                  required
+                                  value={summaryForm.applicantTypeCode}
+                                  placeholder="Select applicant type"
+                                  options={optionsWithCurrentValue(
+                                    APPLICANT_TYPE_OPTIONS,
+                                    summaryForm.applicantTypeCode,
+                                  )}
+                                  invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
+                                  invalidText={visibleSummaryFieldError('applicantTypeCode')}
+                                  disabled={isSavingSummary}
+                                  onChange={(value) =>
+                                    onOwnerApplicantTypeChange(value.toUpperCase())
+                                  }
+                                />
+                              ) : (
+                                <TextInput
+                                  id="applicationOwnerApplicantTypeEdit"
+                                  labelText={requiredLabel('Applicant type')}
+                                  aria-required="true"
+                                  value={ownerApplicantTypeLabel}
+                                  readOnly
+                                />
+                              )}
+                            </div>
                             <hr className="application-applicant-divider" />
                             <Checkbox
                               id="applicationOwnerAgentUsedEdit"
@@ -4229,11 +4243,24 @@ const ProvincialApplicationDetailsPage = () => {
                               <section aria-label="Agent information">
                                 <h3 className="detail-tile-title">Agent information</h3>
                                 <div className="legacy-search-grid application-client-edit-grid">
+                                  <TextInput
+                                    id="applicationAgentContactNameEdit"
+                                    labelText={requiredLabel('Contact name')}
+                                    aria-required="true"
+                                    value={summaryForm.agentContactName}
+                                    invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
+                                    invalidText={visibleSummaryFieldError('agentContactName')}
+                                    disabled={isSavingSummary}
+                                    placeholder="Enter contact name"
+                                    onChange={(event) =>
+                                      onSummaryFormChange('agentContactName', event.target.value)
+                                    }
+                                  />
                                   <ForestClientComboBox
                                     id="applicationAgentClientNumberEdit"
-                                    labelText={requiredLabel('Agent number')}
+                                    labelText={requiredLabel('Agent client')}
                                     value={summaryForm.agentClientNumber}
-                                    selectedClientName={agentClientData?.companyName}
+                                    selectedClientName={clientDisplayName(agentClientData, '')}
                                     counterpartyClientNumber={summaryForm.ownerClientNumber}
                                     required
                                     invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
@@ -4245,7 +4272,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   />
                                   <SearchableSelect
                                     id="applicationAgentClientLocationEdit"
-                                    labelText={requiredLabel('Contact location')}
+                                    labelText={requiredLabel('Agent location')}
                                     required
                                     value={summaryForm.agentClientLocationCode}
                                     invalid={Boolean(
@@ -4273,26 +4300,12 @@ const ProvincialApplicationDetailsPage = () => {
                                       onSummaryFormChange('agentClientLocationCode', value)
                                     }
                                   />
-                                  <TextInput
-                                    id="applicationAgentContactNameEdit"
-                                    labelText={requiredLabel('Contact name')}
-                                    aria-required="true"
-                                    value={summaryForm.agentContactName}
-                                    invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
-                                    invalidText={visibleSummaryFieldError('agentContactName')}
-                                    disabled={isSavingSummary}
-                                    placeholder="Enter contact name"
-                                    onChange={(event) =>
-                                      onSummaryFormChange('agentContactName', event.target.value)
-                                    }
-                                  />
                                 </div>
                                 <ClientDataSummary
                                   title="Agent information"
                                   showTitle={false}
                                   clientData={agentClientData}
                                   isLoading={isLoadingAgentClientData}
-                                  showCompanyName
                                 />
                               </section>
                             )}
