@@ -303,6 +303,6 @@ class ApplicationApprovalEligibilityServiceTest {
   private ClientLocationRow clientLocation() {
     return new ClientLocationRow(
         "00011111", "01", "Main", "Owner", null, null, null, null, null, null,
-        null, null, null, null);
+        null, null, null, null, null);
   }
 }

@@ -124,40 +124,47 @@ public final class PermitOperationMutex {
     Objects.requireNonNull(permitNumbers, "permitNumbers");
     Objects.requireNonNull(operation, "operation");
 
+    List<String> oracleExemptionNumbers = new ArrayList<>(exemptionNumbers);
     NavigableSet<OperationKey> keys = new TreeSet<>();
-    addExemptionKeys(keys, exemptionNumbers);
+    addExemptionKeys(keys, oracleExemptionNumbers);
     addKeys(keys, applicationNumbers, OperationType.APPLICATION, "application");
     addKeys(keys, offerNumbers, OperationType.OFFER, "offer");
     addKeys(keys, permitNumbers, OperationType.PERMIT, "permit");
     if (keys.isEmpty()) {
       throw new IllegalArgumentException("At least one aggregate key is required.");
     }
-    return executeKeys(List.copyOf(keys), mutationMode, operation);
+    return executeKeys(
+        List.copyOf(keys),
+        oracleExemptionNumbers.stream().map(String::trim).toList(),
+        mutationMode,
+        operation);
   }
 
   private <T> T executeKeys(List<OperationKey> keys, Supplier<T> operation) {
-    return executeKeys(keys, MutationMode.INTERACTIVE, operation);
+    return executeKeys(keys, List.of(), MutationMode.INTERACTIVE, operation);
   }
 
   private <T> T executeKeys(
       List<OperationKey> keys,
+      List<String> exemptionNumbers,
       MutationMode mutationMode,
       Supplier<T> operation) {
     Objects.requireNonNull(operation, "operation");
-    return executeInOrder(keys, 0, mutationMode, operation);
+    return executeInOrder(keys, exemptionNumbers, 0, mutationMode, operation);
   }
 
   private <T> T executeInOrder(
       List<OperationKey> keys,
+      List<String> exemptionNumbers,
       int index,
       MutationMode mutationMode,
       Supplier<T> operation) {
     if (index >= keys.size()) {
-      return executeWithOracleRowLocks(keys, mutationMode, operation);
+      return executeWithOracleRowLocks(keys, exemptionNumbers, mutationMode, operation);
     }
     return executeKey(
         keys.get(index),
-        () -> executeInOrder(keys, index + 1, mutationMode, operation));
+        () -> executeInOrder(keys, exemptionNumbers, index + 1, mutationMode, operation));
   }
 
   private <T> T executeKey(OperationKey key, Supplier<T> operation) {
@@ -271,16 +278,12 @@ public final class PermitOperationMutex {
 
   private <T> T executeWithOracleRowLocks(
       Collection<OperationKey> keys,
+      Collection<String> exemptionNumbers,
       MutationMode mutationMode,
       Supplier<T> operation) {
     if (oracleRowLocks == null) {
       return operation.get();
     }
-    List<String> exemptionNumbers =
-        keys.stream()
-            .filter(key -> key.type == OperationType.EXEMPTION)
-            .map(OperationKey::textValue)
-            .toList();
     List<Long> applicationNumbers =
         keys.stream()
             .filter(key -> key.type == OperationType.APPLICATION)

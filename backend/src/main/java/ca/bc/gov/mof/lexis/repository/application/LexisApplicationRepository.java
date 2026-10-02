@@ -707,10 +707,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         remark,
         getString(rs, "ENTRY_USERID"),
         getLocalDate(rs, "ENTRY_TIMESTAMP"),
-        remarkTimestamp(rs));
+        entryTimestamp(rs));
   }
 
-  private Instant remarkTimestamp(ResultSet rs) {
+  private Instant entryTimestamp(ResultSet rs) {
     try {
       Timestamp value = rs.getTimestamp("ENTRY_TIMESTAMP");
       return value == null ? null : value.toInstant();
@@ -730,14 +730,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
 
   private List<LexisApplicationDetailDto.LexisOfferDto> loadOffersByApplication(
       Long applicationNumber, boolean failClosed) {
-    SqlRowMapper<LexisApplicationDetailDto.LexisOfferDto> rowMapper =
-        rs ->
-            new LexisApplicationDetailDto.LexisOfferDto(
-                offerNumberAsString(rs),
-                getString(rs, "COMPANY_NAME"),
-                getLocalDate(rs, "ENTRY_TIMESTAMP"),
-                INDICATOR_YES.equalsIgnoreCase(getString(rs, "VALID_OFFER_INDICATOR")),
-                getLocalDate(rs, "OFFER_WITHDRAWAL_DATE"));
+    SqlRowMapper<LexisApplicationDetailDto.LexisOfferDto> rowMapper = this::mapOfferRow;
     if (failClosed) {
       return queryCursorProcedureFailClosed(
           FIND_PURCHASE_OFFERS_BY_APPLICATION,
@@ -750,6 +743,16 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         cs -> cs.setString(1, applicationNumber.toString()),
         2,
         rowMapper);
+  }
+
+  LexisApplicationDetailDto.LexisOfferDto mapOfferRow(ResultSet rs) {
+    return new LexisApplicationDetailDto.LexisOfferDto(
+        offerNumberAsString(rs),
+        getString(rs, "COMPANY_NAME"),
+        getLocalDate(rs, "ENTRY_TIMESTAMP"),
+        INDICATOR_YES.equalsIgnoreCase(getString(rs, "VALID_OFFER_INDICATOR")),
+        getLocalDate(rs, "OFFER_WITHDRAWAL_DATE"),
+        entryTimestamp(rs));
   }
 
   private boolean canCreateOffers(Long applicationNumber) {

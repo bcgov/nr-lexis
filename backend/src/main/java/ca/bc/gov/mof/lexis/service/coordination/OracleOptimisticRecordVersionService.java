@@ -24,7 +24,7 @@ public class OracleOptimisticRecordVersionService {
     Optional<RootRecordSnapshot> snapshot =
         switch (recordType) {
           case APPLICATION -> repository.findApplicationVersion(Long.valueOf(normalizedId));
-          case EXEMPTION -> repository.findExemptionVersion(normalizedId);
+          case EXEMPTION -> repository.findExemptionVersion(recordId.trim());
           case PERMIT -> repository.findPermitVersion(Long.valueOf(normalizedId));
           case OFFER -> repository.findOfferVersion(Long.valueOf(normalizedId));
         };

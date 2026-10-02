@@ -3,10 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { expect, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
-import type {
-  ProvincialApplicationDetail,
-  ProvincialExemptionDetail,
-} from '@/interfaces/LexisDetails'
+import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import {
   approveApplicationReview,
   sendApplicationReviewStatusEmail,
@@ -14,7 +11,6 @@ import {
 } from '@/service/application-review-search-service'
 import {
   fetchApplicationClientData,
-  fetchApplicationClientContacts,
   fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
 import {
@@ -76,7 +72,6 @@ vi.mock('@/service/application-review-search-service', () => ({
 
 vi.mock('@/service/application-client-lookup-service', () => ({
   fetchApplicationClientData: vi.fn(),
-  fetchApplicationClientContacts: vi.fn(),
   fetchApplicationClientLocations: vi.fn(),
 }))
 
@@ -174,7 +169,6 @@ const mockedApproveApplicationReview = vi.mocked(approveApplicationReview)
 const mockedSendApplicationReviewStatusEmail = vi.mocked(sendApplicationReviewStatusEmail)
 const mockedUpdateApplicationReviewStatus = vi.mocked(updateApplicationReviewStatus)
 const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
-const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchProvincialApplicationDetail = vi.mocked(fetchProvincialApplicationDetail)
 const mockedFetchProvincialExemptionDetail = vi.mocked(fetchProvincialExemptionDetail)
@@ -298,27 +292,6 @@ const applicationSummarySnapshot: ApplicationSummarySnapshot = {
   speciesCodes: ['FI'],
 }
 
-const newExemptionDetail: ProvincialExemptionDetail = {
-  exemptionNumber: 'EX-555',
-  exemptionTypeCode: 'M',
-  exemptionTypeDescription: 'Ministerial',
-  exemptionStatusCode: 'NEW',
-  exemptionStatusDescription: 'New',
-  ownerClientNumber: '00011122',
-  agentClientNumber: null,
-  applicationNumber: 321,
-  applicationStatus: 'APP',
-  approvalDate: null,
-  expiryDate: '2026-12-31',
-  approvedVolume: 100,
-  usedVolume: 0,
-  remainingVolume: 100,
-  otherConditions: null,
-  blanketOic: false,
-  permitNumbers: [],
-  remarks: [],
-}
-
 const LocationProbe = () => {
   const location = useLocation()
   return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
@@ -334,12 +307,7 @@ const NavigateButton = ({ to }: { to: string }) => {
 }
 
 const getApplicationReviewTile = (): HTMLElement => {
-  const reviewTitle = screen.getByRole('heading', {
-    name: /application review/i,
-  })
-  const reviewTile = reviewTitle.closest('.cds--tile')
-  expect(reviewTile).toBeTruthy()
-  return reviewTile as HTMLElement
+  return screen.getByRole('region', { name: 'Application review' })
 }
 
 const getApplicationSummaryTile = (): HTMLElement => {
@@ -558,26 +526,12 @@ export const setupApplicationDetailTests = (): void => {
       },
     ])
   })
-  mockedFetchApplicationClientContacts.mockImplementation(
-    (_clientNumber, _clientLocationCode, applicantType) => {
-      if (applicantType === 'agent') {
-        return Promise.resolve([
-          { contactName: 'Agent Contact', contactId: '-1' },
-          { contactName: 'Agent Alternate Contact', contactId: '22' },
-        ])
-      }
-
-      return Promise.resolve([
-        { contactName: 'Owner Contact', contactId: '-1' },
-        { contactName: 'Owner Alternate Contact', contactId: '11' },
-      ])
-    },
-  )
   mockedFetchApplicationClientData.mockImplementation((clientNumber) => {
     if (clientNumber === '00033344') {
       return Promise.resolve({
         clientNumber,
         companyName: 'Agent Export Services',
+        clientAcronym: '',
         address: '44 Agent Road',
         city: 'Nanaimo',
         province: 'BC',
@@ -593,6 +547,7 @@ export const setupApplicationDetailTests = (): void => {
     return Promise.resolve({
       clientNumber,
       companyName: 'Owner Forestry Ltd.',
+      clientAcronym: '',
       address: '22 Owner Road',
       city: 'Victoria',
       province: 'BC',
@@ -736,7 +691,6 @@ export {
   mockedCheckApplicationVolumeUsage,
   mockedDeleteApplicationPackage,
   mockedDeleteApplicationScale,
-  mockedFetchApplicationClientContacts,
   mockedFetchApplicationClientData,
   mockedFetchApplicationClientLocations,
   mockedFetchApplicationDocuments,
@@ -748,6 +702,7 @@ export {
   mockedFetchApplicationPackageStatusCodes,
   mockedFetchApplicationPermits,
   mockedFetchApplicationRemainingSpecies,
+  mockedFetchApplicationReviewOptions,
   mockedFetchApplicationScaleDetails,
   mockedFetchApplicationSpecies,
   mockedFetchApplicationSummarySnapshot,
@@ -764,7 +719,6 @@ export {
   mockedUpdateApplicationReviewStatus,
   mockedUpdateApplicationSummary,
   mockedValidateAdminUpload,
-  newExemptionDetail,
   selectApplicationDetailTab,
   selectApplicationDocumentsForEditing,
   selectApplicationItemsForEditing,

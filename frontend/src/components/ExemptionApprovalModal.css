@@ -38,9 +38,9 @@
 }
 .exemption-approval-modal__recipient-summary {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-columns: minmax(0, 1fr) 9rem;
   gap: 1rem;
-  align-items: baseline;
+  align-items: start;
 }
 .exemption-approval-modal__recipient dl {
   display: grid;

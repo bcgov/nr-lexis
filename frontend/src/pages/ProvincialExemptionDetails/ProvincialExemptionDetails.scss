@@ -1,0 +1,23 @@
+.provincial-exemption-detail {
+  .exemption-field-groups {
+    display: grid;
+    gap: 1.75rem;
+    margin-block-start: 1.5rem;
+    .detail-field-grid {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1.5rem 2rem;
+      margin: 0;
+    }
+    .detail-field-item {
+      min-inline-size: 7rem;
+    }
+  }
+  .exemption-page-result {
+    inline-size: 100%;
+  }
+  .exemption-page-result:focus {
+    outline: 2px solid var(--cds-focus);
+    outline-offset: 2px;
+  }
+}

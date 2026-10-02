@@ -4782,8 +4782,292 @@ $notification-types: 'error', 'info', 'success', 'warning';
   justify-content: flex-end;
 }
 
-.application-detail-documents .detail-section-card__header .detail-document-upload {
+// Figma's Documents and Remarks tabs place the add button 16px above the table.
+.detail-documents-section .detail-section-card__header,
+.detail-remarks-section .detail-section-card__header {
+  margin-block-end: 1rem;
+}
+
+.detail-documents-section .detail-section-card__header .detail-document-upload {
   margin: 0;
+}
+
+// Use the signed-off Figma dimensions on the Documents and Remarks tabs.
+.detail-documents-section .detail-documents-add-button,
+.detail-remarks-section .detail-remarks-add-button {
+  inline-size: 12.25rem;
+  max-inline-size: 100%;
+  min-block-size: 2.75rem;
+  font-size: 1rem;
+  line-height: 1.375rem;
+}
+
+.detail-documents-section .lexis-empty-state__title,
+.detail-remarks-section .lexis-empty-state__title,
+.detail-offers-section .lexis-empty-state__title,
+.application-detail-review .lexis-empty-state__title {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.detail-documents-section .lexis-empty-state__description {
+  max-inline-size: 25.75rem;
+  color: var(--cds-text-primary);
+  line-height: 1.375rem;
+}
+
+.detail-remarks-section .lexis-empty-state__description {
+  max-inline-size: 37.375rem;
+  color: var(--cds-text-primary);
+  line-height: 1.375rem;
+}
+
+.detail-offers-section .lexis-empty-state__description,
+.application-detail-review .lexis-empty-state__description {
+  color: var(--cds-text-primary);
+  line-height: 1.375rem;
+}
+
+.application-detail-review .lexis-empty-state__description {
+  max-inline-size: 30.5rem;
+}
+
+.detail-review-update-button {
+  inline-size: 11.25rem;
+  max-inline-size: 100%;
+  min-block-size: 2.75rem;
+  font-size: 1rem;
+  line-height: 1.375rem;
+}
+
+.provincial-application-detail .detail-section-card__header .detail-tile-title {
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.75rem;
+}
+
+.provincial-application-detail
+  .application-detail-summary
+  :is(.application-summary-fields, .application-scale-fields) {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 2rem 3.5rem;
+}
+
+.provincial-application-detail
+  :is(.application-summary-fields, .application-scale-fields)
+  .detail-field-label {
+  margin-block-end: 0.5rem;
+}
+
+.provincial-application-detail .application-detail-summary .detail-field-grid + .detail-field-grid,
+.provincial-application-detail .application-scale-fields + .application-scale-fields {
+  margin-block-start: 2rem;
+}
+
+.provincial-application-detail .application-items-section h3 {
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.75rem;
+}
+
+.provincial-application-detail .application-items-section-header {
+  min-block-size: 2.75rem;
+  margin-block-end: 2rem;
+}
+
+.provincial-application-detail .application-items-empty-package .lexis-empty-state {
+  min-block-size: 0;
+  padding: 0;
+}
+
+.provincial-application-detail .application-items-empty-package .lexis-empty-state__pictogram {
+  margin-block-end: 1rem;
+}
+
+.provincial-application-detail .application-items-empty-package .lexis-empty-state__title {
+  font-size: 1rem;
+  line-height: 1.5rem;
+}
+
+.provincial-application-detail .application-items-empty-package .lexis-empty-state__description {
+  color: var(--cds-text-primary);
+  line-height: 1.375rem;
+}
+
+.provincial-application-detail .application-items-empty-package .lexis-empty-state__action {
+  margin-block-start: 2rem;
+}
+
+.provincial-application-detail .application-items-empty-package .cds--btn {
+  inline-size: 12.25rem;
+  max-inline-size: 100%;
+  min-block-size: 2.75rem;
+  font-size: 1rem;
+  line-height: 1.375rem;
+}
+
+.provincial-application-detail
+  :is(.application-detail-clients, .application-detail-summary)
+  .detail-section-card__header {
+  min-block-size: 2.75rem;
+  margin-block-end: 2rem;
+}
+
+.provincial-application-detail .detail-section-card__header .cds--btn,
+.provincial-application-detail .application-items-panel__header .cds--btn {
+  min-block-size: 2.75rem;
+  font-size: 1rem;
+  line-height: 1.375rem;
+}
+
+@media (min-width: 672px) {
+  .detail-page-grid.provincial-application-detail
+    .application-detail-tabs-column
+    > .application-detail-tab-panel.cds--tab-content,
+  .detail-page-grid
+    .application-detail-tabs-column
+    > .application-detail-tab-panel.cds--tab-content.detail-documents-tab-panel {
+    padding: 2.5rem;
+  }
+
+  .detail-page-grid
+    .application-detail-tabs-column
+    > .application-detail-tab-panel.cds--tab-content.application-detail-tab-panel--empty {
+    padding: 0;
+  }
+
+  .detail-documents-section .lexis-empty-state,
+  .detail-remarks-section .lexis-empty-state,
+  .detail-offers-section .lexis-empty-state,
+  .application-detail-review--empty .lexis-empty-state {
+    min-block-size: 33.125rem;
+    padding: 5rem;
+  }
+
+  .detail-documents-section .lexis-empty-state__pictogram,
+  .detail-remarks-section .lexis-empty-state__pictogram,
+  .detail-offers-section .lexis-empty-state__pictogram,
+  .application-detail-review--empty .lexis-empty-state__pictogram {
+    margin-block-end: 1rem;
+  }
+
+  .detail-documents-section .lexis-empty-state__action,
+  .detail-remarks-section .lexis-empty-state__action,
+  .application-detail-review--empty .lexis-empty-state__action {
+    margin-block-start: 2rem;
+  }
+
+  .application-detail-tab-panel--empty
+    :is(.detail-documents-section, .detail-remarks-section, .application-detail-review)
+    > .app-notification-container {
+    margin: 2.5rem 2.5rem 0;
+  }
+
+  .application-detail-tab-panel--empty .detail-documents-section > .detail-context-notification {
+    inline-size: calc(100% - 5rem);
+    margin-inline: 2.5rem;
+  }
+
+  #permit-detail-content .permit-detail-empty-section .lexis-empty-state {
+    min-block-size: 33.125rem;
+    padding: 5rem;
+  }
+
+  #permit-detail-content .permit-detail-empty-section .lexis-empty-state__action {
+    margin-block-start: 2rem;
+  }
+
+  .provincial-application-detail .application-detail-tab-grid {
+    row-gap: 2rem;
+  }
+
+  .provincial-application-detail
+    .application-detail-tab-panel
+    .cds--tile:is(.application-detail-clients, .application-detail-summary),
+  .provincial-application-detail .application-items-card {
+    padding: 2rem;
+    border: 1px solid var(--cds-border-subtle-00);
+    box-shadow: none;
+  }
+}
+
+.application-detail-tab-panel .cds--tile.application-detail-review {
+  padding: 2rem;
+  border: 1px solid var(--cds-border-subtle-00);
+  box-shadow: none;
+}
+
+.application-detail-tab-panel .cds--tile.application-detail-review--empty {
+  padding: 0;
+  background: transparent;
+  border: 0;
+}
+
+.application-detail-review .detail-section-card__header {
+  min-block-size: 2.75rem;
+  margin-block-end: 2rem;
+}
+
+.application-detail-tab-panel .application-detail-review .detail-tile-title {
+  font-size: 1.25rem;
+  font-weight: 400;
+  line-height: 1.75rem;
+}
+
+.application-detail-review__form {
+  display: grid;
+  gap: 2rem;
+}
+
+.application-detail-review__form .application-detail-required,
+.application-detail-review__form .legacy-search-actions {
+  margin: 0;
+}
+
+.application-detail-review__form .application-detail-required {
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  line-height: 1.25rem;
+}
+
+.application-detail-review__form .cds--btn {
+  min-block-size: 2.75rem;
+  font-size: 1rem;
+  line-height: 1.375rem;
+}
+
+.detail-documents-section .detail-document-upload-modal__subtitle {
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  letter-spacing: 0.01rem;
+  line-height: 1.25rem;
+}
+
+.detail-documents-section .admin-upload-field-label {
+  margin-block-end: 0.5rem;
+  font-weight: 700;
+}
+
+.detail-documents-section .admin-upload-field-helper {
+  color: var(--cds-text-primary);
+  font-size: 0.875rem;
+  letter-spacing: 0.01rem;
+  line-height: 1.125rem;
+}
+
+.detail-documents-section .admin-upload-drop-zone__copy p:first-child {
+  margin-block-start: 0;
+  font-size: 0.875rem;
+  letter-spacing: 0.01rem;
+  line-height: 1.125rem;
+}
+
+.detail-documents-section
+  .admin-upload-drop-zone:not(.is-disabled)
+  .admin-upload-drop-zone__copy
+  p:first-child {
+  color: var(--cds-link-primary);
 }
 
 .provincial-blanket-oic-permit-create-page .legacy-search-grid {
@@ -5150,6 +5434,28 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin: 0;
 }
 
+.application-detail-tab-panel .detail-tile-title {
+  align-items: center;
+  display: flex;
+  gap: 0.5rem;
+
+  > svg {
+    flex-shrink: 0;
+    fill: var(--cds-icon-secondary);
+  }
+}
+
+.application-detail-required {
+  margin-block-end: 1rem;
+}
+
+.application-applicant-divider {
+  inline-size: 100%;
+  margin: 1.5rem 0;
+  border: 0;
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+}
+
 .detail-section-card__header--actions-only,
 .application-items-panel__header--actions-only {
   justify-content: flex-end;
@@ -5198,21 +5504,24 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .detail-section-card .detail-field-grid,
-.application-detail-clients .detail-field-grid {
+.application-detail-clients .detail-field-grid,
+.application-summary-fields.detail-field-grid {
   grid-template-columns: 1fr;
   gap: 1rem 1.5rem;
 }
 
 @media (min-width: 672px) {
   .detail-section-card .detail-field-grid,
-  .application-detail-clients .detail-field-grid {
+  .application-detail-clients .detail-field-grid,
+  .application-summary-fields.detail-field-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
 @media (min-width: 1312px) {
   .detail-section-card .detail-field-grid,
-  .application-detail-clients .detail-field-grid {
+  .application-detail-clients .detail-field-grid,
+  .application-summary-fields.detail-field-grid {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
 }
@@ -5402,6 +5711,51 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .application-client-edit-grid + .application-client-summary {
   margin-block-start: 1.5rem;
+}
+
+.provincial-application-detail .application-client-edit-grid {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
+}
+
+.provincial-application-detail .application-client-edit-grid > :first-child {
+  grid-column: 1 / -1;
+  max-inline-size: 24rem;
+}
+
+.provincial-application-detail .application-applicant-type-edit {
+  max-inline-size: 24rem;
+  margin-block-start: 1.5rem;
+}
+
+#permit-detail-content .permit-client-subheading {
+  margin-block: 0 1.5rem;
+  font-size: 1rem;
+  font-weight: 600;
+  line-height: 1.375rem;
+}
+
+#permit-detail-content .permit-applicant-card .permit-client-tile {
+  padding: 0;
+}
+
+.permit-scale-panel .legacy-search-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.permit-scale-panel .legacy-search-grid > :last-child {
+  grid-column: 1 / -1;
+}
+
+@media (min-width: 672px) {
+  .permit-scale-panel .legacy-search-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 671px) {
+  .provincial-application-detail .application-client-edit-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }
 
 .application-detail-tab-panel .cds--form-item + .lexis-table-frame,

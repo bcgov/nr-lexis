@@ -275,6 +275,7 @@ const configureBlanketOicCreationDependencies = () => {
   vi.mocked(fetchExemptionClientData).mockImplementation(async (clientNumber) => ({
     clientNumber: clientNumber.padStart(8, '0'),
     companyName: 'Test Client',
+    clientAcronym: '',
     address: '',
     city: '',
     province: '',

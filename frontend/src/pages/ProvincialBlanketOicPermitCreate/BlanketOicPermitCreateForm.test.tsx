@@ -51,6 +51,7 @@ const shippingReferences = {
 const clientDetails = (clientNumber: string, locationCode: string) => ({
   clientNumber,
   companyName: `Resolved client ${clientNumber}`,
+  clientAcronym: '',
   address: `Address ${locationCode}`,
   city: 'Test city',
   province: 'BC',
@@ -126,6 +127,7 @@ describe('BlanketOicPermitCreateForm', () => {
     vi.mocked(fetchExemptionClientData).mockResolvedValue({
       clientNumber: '12345678',
       companyName: 'Test client',
+      clientAcronym: '',
       address: '',
       city: '',
       province: '',
@@ -465,6 +467,7 @@ describe('BlanketOicPermitCreateForm', () => {
     vi.mocked(fetchExemptionClientData).mockImplementation(async (clientNumber) => ({
       clientNumber,
       companyName: 'Test client',
+      clientAcronym: '',
       address: '',
       city: '',
       province: '',

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.oracle.OracleAggregateLockRepository;
@@ -46,7 +47,7 @@ class OracleAggregateRowLockServiceTest {
 
     String result =
         service.execute(
-            List.of(" z-2 ", "A-1", "a-1"),
+            List.of(" z-2 ", "[", "a", "A-1", "a-1", "A"),
             List.of(20L, 10L, 20L),
             List.of(200L, 100L, 200L),
             () -> {
@@ -55,8 +56,10 @@ class OracleAggregateRowLockServiceTest {
             });
 
     InOrder order = inOrder(repository);
+    order.verify(repository).lockExemption("a");
     order.verify(repository).lockExemption("A-1");
-    order.verify(repository).lockExemption("Z-2");
+    order.verify(repository).lockExemption("z-2");
+    order.verify(repository).lockExemption("[");
     order.verify(repository).lockApplication(10L);
     order.verify(repository).lockApplication(20L);
     order.verify(repository).lockPermit(100L);
@@ -210,6 +213,52 @@ class OracleAggregateRowLockServiceTest {
                   .isEqualTo(Instant.parse("2026-07-15T18:01:00Z"));
               assertThat(stale.currentUpdatedBy()).isEqualTo("IDIR\\SECOND");
             });
+  }
+
+  @Test
+  void staleLowercaseExemptionShouldBeRejectedUsingItsCanonicalVersionIdentity() {
+    AtomicBoolean invoked = new AtomicBoolean();
+    RootRecordSnapshot current =
+        new RootRecordSnapshot(
+            "current-fingerprint", Instant.parse("2026-07-15T18:01:00Z"), "IDIR\\SECOND");
+    when(repository.lockExemption("test8q4b")).thenReturn(Optional.of(current));
+    OptimisticRecordVersion expected =
+        new OptimisticRecordVersion(
+            OptimisticRecordType.EXEMPTION,
+            "TEST8Q4B",
+            Instant.parse("2026-07-15T18:00:00Z"),
+            "IDIR\\FIRST",
+            "original-fingerprint");
+    when(requestReader.currentRequest())
+        .thenReturn(
+            new OptimisticLockRequest(
+                Optional.of(OptimisticRecordVersion.parse(expected.token()))));
+
+    assertThatThrownBy(
+            () ->
+                service.execute(
+                    List.of(" test8q4b "),
+                    List.of(),
+                    List.of(),
+                    () -> {
+                      invoked.set(true);
+                      return "not-reached";
+                    }))
+        .isInstanceOf(StaleRecordException.class)
+        .satisfies(
+            error -> {
+              StaleRecordException stale = (StaleRecordException) error;
+              assertThat(stale.recordId()).isEqualTo("TEST8Q4B");
+              assertThat(stale.currentVersion())
+                  .isEqualTo(
+                      new OracleOptimisticRecordVersionService(repository)
+                          .toVersion(OptimisticRecordType.EXEMPTION, "TEST8Q4B", current)
+                          .token());
+              assertThat(stale.currentUpdatedBy()).isEqualTo("IDIR\\SECOND");
+            });
+
+    verify(repository).lockExemption("test8q4b");
+    assertThat(invoked).isFalse();
   }
 
   @Test

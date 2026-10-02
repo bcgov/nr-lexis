@@ -13,10 +13,12 @@ import ca.bc.gov.mof.lexis.service.coordination.OracleOptimisticRecordVersionSer
 import ca.bc.gov.mof.lexis.service.coordination.StaleRecordException;
 import java.util.ArrayList;
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.TreeSet;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -184,6 +186,7 @@ public class OracleAggregateRowLockService {
     return new LockedRecord(
         recordType,
         recordType.normalizeIdentifier(recordId),
+        recordId.trim(),
         safeSnapshot.map(value -> versionService.toVersion(recordType, recordId, value)));
   }
 
@@ -239,7 +242,7 @@ public class OracleAggregateRowLockService {
         switch (target.recordType()) {
           case APPLICATION ->
               repository.findApplicationVersion(Long.valueOf(target.recordId()));
-          case EXEMPTION -> repository.findExemptionVersion(target.recordId());
+          case EXEMPTION -> repository.findExemptionVersion(target.oracleRecordId());
           case PERMIT -> repository.findPermitVersion(Long.valueOf(target.recordId()));
           case OFFER -> repository.findOfferVersion(Long.valueOf(target.recordId()));
         };
@@ -257,13 +260,13 @@ public class OracleAggregateRowLockService {
     if (values == null) {
       throw new IllegalArgumentException("Exemption lock values are required.");
     }
-    return values.stream()
+    TreeSet<String> normalized =
+        new TreeSet<>(Comparator.comparing(value -> value.toUpperCase(Locale.ROOT)));
+    values.stream()
         .map(value -> Objects.requireNonNull(value, "exemptionNumber").trim())
         .filter(value -> !value.isEmpty())
-        .map(value -> value.toUpperCase(Locale.ROOT))
-        .distinct()
-        .sorted()
-        .toList();
+        .forEach(normalized::add);
+    return List.copyOf(normalized);
   }
 
   private List<Long> normalizeNumbers(Collection<Long> values, String label) {
@@ -281,5 +284,6 @@ public class OracleAggregateRowLockService {
   private record LockedRecord(
       OptimisticRecordType recordType,
       String recordId,
+      String oracleRecordId,
       Optional<OptimisticRecordVersion> version) {}
 }

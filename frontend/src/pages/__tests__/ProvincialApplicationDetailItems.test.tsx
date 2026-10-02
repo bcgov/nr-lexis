@@ -18,7 +18,6 @@ import type {
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   setupApplicationDetailTests,
-  LocationProbe,
   applicationDetail,
   applicationSummarySnapshot,
   chooseComboBoxOption,
@@ -123,40 +122,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
 
     await waitFor(() => expect(mockedFetchApplicationDocuments).toHaveBeenCalledWith('321'))
-  })
-
-  it('renders application permits and opens permit details', async () => {
-    mockedFetchApplicationPermits.mockResolvedValue([
-      { permitNumber: '900100', permitStatusDescription: 'Active' },
-      { permitNumber: '900101', permitStatusDescription: 'Complete' },
-    ])
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321?packageFilter=PKG-1']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-          <Route path="/provincial/permit/:permitNumber" element={<LocationProbe />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await waitFor(() => {
-      expect(mockedFetchApplicationPermits).toHaveBeenCalledWith('321')
-    })
-    await selectApplicationDetailTab('Application')
-    const permitRow = (await screen.findByText('900101')).closest('tr')
-    expect(permitRow).toBeTruthy()
-    const permitStatus = within(permitRow as HTMLElement).getByText('Complete')
-    expect(permitStatus).toHaveClass('lexis-status-tag')
-    expect(permitStatus).toHaveAttribute('data-status-variant', 'positive')
-
-    await userEvent.click(within(permitRow as HTMLElement).getByRole('button', { name: 'Open' }))
-
-    const location = await screen.findByTestId('location')
-    expect(location.textContent).toBe('/provincial/permit/900101?packageFilter=PKG-1')
   })
 
   it('opens a scale deep link on the Items tab and selects its package for an owner application', async () => {
@@ -444,7 +409,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const applicationItemDetailsTile = await selectApplicationItemDetailsTile(false)
     const applicationItemDetails = within(applicationItemDetailsTile)
     const applicationTotalPieces = () => {
-      const label = applicationItemDetails.getByText('Application total pieces')
+      const label = applicationItemDetails.getByText('Total pieces')
       return label.parentElement?.querySelector('dd')
     }
     expect(applicationTotalPieces()).toHaveTextContent('8')
@@ -452,7 +417,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       Array.from(applicationItemDetailsTile.querySelectorAll('.detail-field-label'))
         .map((field) => field.textContent)
         .slice(-3),
-    ).toEqual(['Species list', 'End use', 'Application total pieces'])
+    ).toEqual(['Species list', 'End use', 'Total pieces'])
 
     const packagesSection = (await screen.findByRole('heading', { name: 'Packages' })).closest(
       '.cds--tile',
@@ -490,7 +455,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       applicationItemDetails.getByRole('button', { name: 'Edit scale details' }),
     )
     await waitFor(() => {
-      expect(applicationItemDetails.getAllByText('Application total pieces')).toHaveLength(1)
+      expect(applicationItemDetails.getAllByText('Total pieces')).toHaveLength(1)
       expect(applicationTotalPieces()).toHaveTextContent('8')
     })
   })
@@ -1698,14 +1663,18 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
 
     await chooseComboBoxOption(packageSelector, 'PKG-1')
-    await waitFor(() => {
-      expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toHaveValue(
-        'LU - Lumber',
-      )
-      expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toBeEnabled()
-      expect(savePackage).toBeEnabled()
-      expect(addScale).toBeDisabled()
-    })
+    // Package reload and Carbon's selected-label effect can exceed 1s under CI coverage.
+    await waitFor(
+      () => {
+        expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toHaveValue(
+          'LU - Lumber',
+        )
+        expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toBeEnabled()
+        expect(savePackage).toBeEnabled()
+        expect(addScale).toBeDisabled()
+      },
+      { timeout: 5_000 },
+    )
   })
 
   it('keeps a ready selected package available while create package end uses load', async () => {

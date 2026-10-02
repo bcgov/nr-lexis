@@ -82,18 +82,25 @@ describe('ExemptionApprovalModal', () => {
     const submit = screen.getByRole('button', { name: 'Approve and send email' })
     expect(submit).toBeEnabled()
     await user.click(submit)
-    expect(screen.getByText('Certification is required')).toBeVisible()
+    expect(
+      screen.getByText('Confirm that you certify this exemption has been approved.'),
+    ).toBeVisible()
+    await waitFor(() => expect(screen.getByRole('checkbox', { name: /I certify/ })).toHaveFocus())
     expect(
       screen.getByText(
-        'Enter at least one email, or clear “Send approval email” to notify the applicant another way.',
+        'Enter an email address, or clear “Send approval email to the applicant” to notify the applicant another way.',
       ),
     ).toBeVisible()
 
     await user.click(screen.getByRole('checkbox', { name: /I certify/ }))
-    expect(screen.queryByText('Certification is required')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Confirm that you certify this exemption has been approved.'),
+    ).not.toBeInTheDocument()
     await user.type(screen.getByRole('textbox', { name: 'Owner email' }), 'invalid address')
     await user.click(submit)
-    expect(screen.getByText('Enter one valid email address.')).toBeVisible()
+    expect(
+      screen.getByText('Enter an email address in the correct format, like name@example.com.'),
+    ).toBeVisible()
     await user.clear(screen.getByRole('textbox', { name: 'Owner email' }))
     await user.type(screen.getByRole('textbox', { name: 'Agent email' }), 'agent@example.com')
     expect(onApprove).not.toHaveBeenCalled()
@@ -528,7 +535,8 @@ describe('ExemptionApprovalModal', () => {
     await user.click(screen.getByRole('button', { name: 'Approve and send email' }))
     await waitFor(() => expect(sendExemptionApprovalNotifications).toHaveBeenCalledTimes(1))
     expect(screen.getByRole('dialog', { name: 'Approve exemption EX-205' })).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Sending…' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /Sending…$/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
     expect(
       screen.queryByText(
         'Approval is complete. Retry only the notifications that were not queued.',

@@ -77,6 +77,6 @@ class AuthoritativeClientEmailResolverTest {
 
   private static ClientData client(String email) {
     return new ClientData(
-        "00077881", "Client", null, null, null, null, null, null, null, email);
+        "00077881", "Client", null, null, null, null, null, null, null, email, null);
   }
 }

@@ -4,7 +4,10 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.spy;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -22,6 +25,9 @@ import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.core.PreparedStatementSetter;
 import org.springframework.jdbc.core.RowMapper;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabase;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseBuilder;
+import org.springframework.jdbc.datasource.embedded.EmbeddedDatabaseType;
 
 class ClientLookupRepositoryTest {
 
@@ -42,7 +48,8 @@ class ClientLookupRepositoryTest {
             null,
             null,
             null,
-            "applicant@example.com");
+            "applicant@example.com",
+            null);
     StubRequiredClientLookupRepository repository =
         new StubRequiredClientLookupRepository(Optional.of(location));
 
@@ -59,11 +66,8 @@ class ClientLookupRepositoryTest {
     ClientLookupRepository repository =
         new StubRequiredClientLookupRepository(Optional.empty()) {
           @Override
-          protected <T> Optional<T> queryCursorSingleRequired(
-              String procedureSignature,
-              SqlConsumer<CallableStatement> binder,
-              int cursorOutIndex,
-              SqlRowMapper<T> rowMapper) {
+          protected <T> List<T> queryDirectRequired(
+              String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
             throw new DataAccessResourceFailureException(
                 "Oracle client lookup unavailable");
           }
@@ -80,6 +84,137 @@ class ClientLookupRepositoryTest {
 
     assertThatThrownBy(() -> repository.findLocationByClientNumberCode("00077881", "00"))
         .isInstanceOf(DataAccessResourceFailureException.class);
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void clientDetailShouldReadLocationClientAndAcronymInOneBoundQuery() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString("CLIENT_NUMBER")).thenReturn("00001086");
+    when(resultSet.getString("CLIENT_LOCN_CODE")).thenReturn("00");
+    when(resultSet.getString("COMPANY_NAME")).thenReturn(" TOLKO INDUSTRIES ");
+    when(resultSet.getString("EMAIL_ADDRESS")).thenReturn("applicant@example.com");
+    when(resultSet.getString("CLIENT_ACRONYM")).thenReturn(" TOLKOL ");
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("00001086"), eq("00")))
+        .thenAnswer(
+            invocation ->
+                List.of(invocation.getArgument(1, RowMapper.class).mapRow(resultSet, 0)));
+    ClientLookupRepository repository = new ClientLookupRepository(jdbcTemplate);
+
+    ClientLocationRow expected =
+        new ClientLocationRow(
+            "00001086",
+            "00",
+            null,
+            "TOLKO INDUSTRIES",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            "applicant@example.com",
+            "TOLKOL");
+    assertThat(repository.findLocationByClientNumberCode(" 00001086 ", " 00 ")).contains(expected);
+    assertThat(repository.findLocationByClientNumberCodeRequired("00001086", "00"))
+        .contains(expected);
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate, times(2))
+        .query(sql.capture(), any(RowMapper.class), eq("00001086"), eq("00"));
+    assertThat(sql.getValue())
+        .doesNotContain("FIND_CLIENT_LOCATION")
+        .contains("FROM THE.CLIENT_LOCATION L")
+        .contains("LEFT JOIN THE.V_CLIENT_PUBLIC FC ON FC.CLIENT_NUMBER = L.CLIENT_NUMBER")
+        .contains("SELECT MIN(CA.CLIENT_ACRONYM)")
+        .contains("WHERE CA.CLIENT_NUMBER = L.CLIENT_NUMBER")
+        .doesNotContain("LEFT JOIN THE.CLIENT_ACRONYM")
+        .contains("WHERE L.CLIENT_NUMBER = ?")
+        .contains("AND L.CLIENT_LOCN_CODE = ?");
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void clientDetailShouldReturnOneLocationWithDeterministicAcronym() {
+    EmbeddedDatabase database =
+        new EmbeddedDatabaseBuilder()
+            .generateUniqueName(true)
+            .setType(EmbeddedDatabaseType.H2)
+            .build();
+    try {
+      JdbcTemplate jdbcTemplate = spy(new JdbcTemplate(database));
+      jdbcTemplate.execute("CREATE SCHEMA THE");
+      jdbcTemplate.execute(
+          """
+          CREATE TABLE THE.CLIENT_LOCATION (
+            CLIENT_NUMBER VARCHAR(8), CLIENT_LOCN_CODE VARCHAR(2),
+            CLIENT_LOCN_NAME VARCHAR(80), ADDRESS_1 VARCHAR(80), ADDRESS_2 VARCHAR(80),
+            ADDRESS_3 VARCHAR(80), CITY VARCHAR(80), PROVINCE VARCHAR(80),
+            POSTAL_CODE VARCHAR(20), COUNTRY VARCHAR(80), BUSINESS_PHONE VARCHAR(20),
+            FAX_NUMBER VARCHAR(20), EMAIL_ADDRESS VARCHAR(100),
+            PRIMARY KEY (CLIENT_NUMBER, CLIENT_LOCN_CODE)
+          )
+          """);
+      jdbcTemplate.execute(
+          """
+          CREATE TABLE THE.V_CLIENT_PUBLIC (
+            CLIENT_NUMBER VARCHAR(8) PRIMARY KEY, CLIENT_NAME VARCHAR(100)
+          )
+          """);
+      jdbcTemplate.execute(
+          """
+          CREATE TABLE THE.CLIENT_ACRONYM (
+            CLIENT_NUMBER VARCHAR(8), CLIENT_ACRONYM VARCHAR(20)
+          )
+          """);
+      jdbcTemplate.execute(
+          """
+          INSERT INTO THE.CLIENT_LOCATION (CLIENT_NUMBER, CLIENT_LOCN_CODE, CLIENT_LOCN_NAME)
+          VALUES ('00001086', '00', 'Primary'), ('00001086', '01', 'Secondary'),
+                 ('00001087', '00', 'Without acronym')
+          """);
+      jdbcTemplate.execute(
+          """
+          INSERT INTO THE.V_CLIENT_PUBLIC VALUES
+          ('00001086', 'Example Forestry'), ('00001087', 'Other Forestry')
+          """);
+      jdbcTemplate.execute(
+          """
+          INSERT INTO THE.CLIENT_ACRONYM VALUES
+          ('00001086', 'ZETA'), ('00001086', 'ALPHA'), ('00001086', 'BETA'),
+          ('00001088', 'AAAA')
+          """);
+      ClientLookupRepository repository = new ClientLookupRepository(jdbcTemplate);
+
+      Optional<ClientLocationRow> location =
+          repository.findLocationByClientNumberCode("00001086", "00");
+      Optional<ClientLocationRow> requiredLocation =
+          repository.findLocationByClientNumberCodeRequired("00001086", "00");
+
+      ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+      verify(jdbcTemplate, times(2))
+          .query(sql.capture(), any(RowMapper.class), eq("00001086"), eq("00"));
+      assertThat(jdbcTemplate.queryForList(sql.getValue(), "00001086", "00")).hasSize(1);
+      assertThat(location)
+          .hasValueSatisfying(
+              row -> {
+                assertThat(row.clientLocationCode()).isEqualTo("00");
+                assertThat(row.clientLocationName()).isEqualTo("Primary");
+                assertThat(row.companyName()).isEqualTo("Example Forestry");
+                assertThat(row.clientAcronym()).isEqualTo("ALPHA");
+              });
+      assertThat(requiredLocation).isEqualTo(location);
+      assertThat(repository.findLocationByClientNumberCode("00001087", "00"))
+          .hasValueSatisfying(row -> assertThat(row.clientAcronym()).isNull());
+      assertThat(repository.findLocationByClientNumberCodeRequired("00001087", "00"))
+          .hasValueSatisfying(row -> assertThat(row.clientAcronym()).isNull());
+    } finally {
+      database.shutdown();
+    }
   }
 
   @Test
@@ -261,6 +396,12 @@ class ClientLookupRepositoryTest {
         SqlRowMapper<T> rowMapper) {
       throw new DataAccessResourceFailureException("Oracle client lookup unavailable");
     }
+
+    @Override
+    protected <T> List<T> queryDirectFailClosed(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      throw new DataAccessResourceFailureException("Oracle client lookup unavailable");
+    }
   }
 
   private static class StubRequiredClientLookupRepository extends ClientLookupRepository {
@@ -274,12 +415,9 @@ class ClientLookupRepositoryTest {
 
     @Override
     @SuppressWarnings("unchecked")
-    protected <T> Optional<T> queryCursorSingleRequired(
-        String procedureSignature,
-        SqlConsumer<CallableStatement> binder,
-        int cursorOutIndex,
-        SqlRowMapper<T> rowMapper) {
-      return (Optional<T>) result;
+    protected <T> List<T> queryDirectRequired(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      return result.map(row -> List.of((T) row)).orElseGet(List::of);
     }
   }
 }

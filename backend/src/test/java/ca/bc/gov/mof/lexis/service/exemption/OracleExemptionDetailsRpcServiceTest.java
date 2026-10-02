@@ -865,7 +865,7 @@ class OracleExemptionDetailsRpcServiceTest {
     List<ExemptionDetailsRpcService.DocumentItem> response = service.getDocumentDetails("EX-205");
 
     assertThat(response).hasSize(2);
-    assertThat(response.get(0).description()).isEqualTo("Not on file");
+    assertThat(response.get(0).description()).isNull();
     assertThat(response.get(0).type()).isEqualTo("Uploaded document");
     assertThat(response.get(0).source()).isEqualTo("exemption");
     assertThat(response.get(0).sourceExemptionNumber()).isEqualTo("EX-205");

@@ -6,6 +6,7 @@ import {
   normalizeDocumentRowBase,
   parseDocumentArrayPayload,
   parseRemoveDocumentSuccess,
+  savedDocumentsTitle,
 } from '@/service/document-service-utils'
 
 describe('document-service-utils', () => {
@@ -92,5 +93,10 @@ describe('document-service-utils', () => {
     expect(parseRemoveDocumentSuccess({ removed: true })).toBe(true)
     expect(parseRemoveDocumentSuccess({ valid: 'false' })).toBe(false)
     expect(parseRemoveDocumentSuccess({ ok: true })).toBe(false)
+  })
+
+  it('titles saved documents with the Figma count', () => {
+    expect(savedDocumentsTitle(1)).toBe('Document saved.')
+    expect(savedDocumentsTitle(2)).toBe('2 documents saved.')
   })
 })

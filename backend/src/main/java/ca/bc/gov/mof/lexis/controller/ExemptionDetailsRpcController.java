@@ -1039,9 +1039,10 @@ public class ExemptionDetailsRpcController {
     }
     List<String> numbers =
         recipients.stream()
-            .map(row -> row.exemptionNumber().trim().toUpperCase(Locale.ROOT))
+            .map(row -> row.exemptionNumber().trim())
             .toList();
-    if (numbers.stream().distinct().count() != numbers.size()) {
+    if (numbers.stream().map(number -> number.toUpperCase(Locale.ROOT)).distinct().count()
+        != numbers.size()) {
       return ResponseEntity.badRequest().build();
     }
     numbers.forEach(
@@ -1081,12 +1082,14 @@ public class ExemptionDetailsRpcController {
                         data.phone(),
                         data.fax(),
                         data.email(),
-                        null)))
+                        null,
+                        data.clientAcronym(),
+                        data.locationName())))
         .orElseGet(
             () ->
                 ResponseEntity.ok(
                     new ExemptionClientDataResponseDto(
-                        null, null, null, null, null, null, null, null, null, null, "true")));
+                        null, null, null, null, null, null, null, null, null, null, "true", null, null)));
   }
 
   @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_GET_CLIENT_DATA)
@@ -1452,10 +1455,16 @@ public class ExemptionDetailsRpcController {
       return List.of();
     }
 
+    // Record lookups keep the stored case; only lock keys use case-insensitive ordering.
+    List<String> lockKeys = normalizedExemptionNumbers.stream()
+        .map(number -> number.toUpperCase(Locale.ROOT))
+        .distinct()
+        .sorted()
+        .toList();
     String currentUser = userId(authentication);
     List<String> acquiredForMutation = new ArrayList<>();
     try {
-      for (String exemptionNumber : normalizedExemptionNumbers) {
+      for (String exemptionNumber : lockKeys) {
         ApplicationEditLockDto previous =
             editLockService.snapshotExemption(exemptionNumber, currentUser, false);
         ApplicationEditLockDto acquired =
@@ -1516,7 +1525,6 @@ public class ExemptionDetailsRpcController {
     return Arrays.stream(exemptionNumbers.split(","))
         .map(String::trim)
         .filter(value -> !value.isEmpty())
-        .map(value -> value.toUpperCase(Locale.ROOT))
         .distinct()
         .sorted()
         .toList();
@@ -1531,7 +1539,6 @@ public class ExemptionDetailsRpcController {
         .flatMap(value -> Arrays.stream(value.split(",")))
         .map(String::trim)
         .filter(value -> !value.isEmpty())
-        .map(value -> value.toUpperCase(Locale.ROOT))
         .distinct()
         .sorted()
         .toList();
@@ -1785,7 +1792,9 @@ public class ExemptionDetailsRpcController {
       String phone,
       String fax,
       String email,
-      String notfound) {}
+      String notfound,
+      String clientAcronym,
+      String locationName) {}
 
   public record ExemptionClientLocationResponseDto(
       String locationName, String locationCode, boolean selected) {}

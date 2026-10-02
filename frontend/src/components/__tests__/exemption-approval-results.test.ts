@@ -165,7 +165,7 @@ describe('exemptionApprovalResults', () => {
 
     expect(results[0]).toMatchObject({
       title: '2 exemptions approved and now Active.',
-      message: 'Approval emails were not sent.',
+      message: 'No approval emails were sent. Notify the applicants another way.',
       items: [
         { id: 'TEST-1', text: '' },
         { id: 'TEST-2', text: '' },

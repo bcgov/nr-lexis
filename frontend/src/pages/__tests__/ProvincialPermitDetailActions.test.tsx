@@ -693,6 +693,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           return {
             clientNumber,
             companyName: 'Owner Co',
+            clientAcronym: '',
             address: '1 Owner St',
             city: 'Victoria',
             province: 'BC',
@@ -708,6 +709,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         return {
           clientNumber,
           companyName: 'Agent Co',
+          clientAcronym: '',
           address: '2 Agent St',
           city: 'Nanaimo',
           province: 'BC',
@@ -735,6 +737,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       clientNumber: clientNumber === '67890' ? '00067890' : clientNumber,
       companyName:
         clientLocationCode === '01' || clientLocationCode === '02' ? 'Agent Co' : 'Owner Co',
+      clientAcronym: '',
       address:
         clientLocationCode === '01' || clientLocationCode === '02' ? '2 Agent St' : '1 Owner St',
       city: clientLocationCode === '01' || clientLocationCode === '02' ? 'Nanaimo' : 'Victoria',
@@ -1352,6 +1355,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const scaleEmptyState = (await screen.findByRole('heading', { name: 'No scale yet' })).closest(
       '.lexis-empty-state',
     )
+    expect(scaleEmptyState?.closest('.cds--tile')).toBeNull()
     expect(scaleEmptyState).toHaveTextContent(
       'Scale comes from the applications selected for this permit. Select an application on the Permit tab.',
     )
@@ -1373,6 +1377,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const feesEmptyState = (await screen.findByRole('heading', { name: 'No fees yet' })).closest(
       '.lexis-empty-state',
     )
+    expect(feesEmptyState?.closest('.cds--tile')).toBeNull()
     expect(feesEmptyState).toHaveTextContent(
       "Fees are calculated from the permit's Summary of Scale. They appear once an application is selected on the Permit tab.",
     )
@@ -4692,7 +4697,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ) as HTMLElement
     await waitFor(() => expect(within(editor).getByLabelText('Package number')).toBeEnabled())
     expect(screen.getByRole('combobox', { name: 'Package number' })).toBeDisabled()
-    expect(screen.getByLabelText('Timber mark')).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Add scale' })).toBeDisabled()
+    expect(screen.queryByLabelText('Timber mark')).not.toBeInTheDocument()
     await userEvent.clear(within(editor).getByLabelText('Package number'))
     await userEvent.type(within(editor).getByLabelText('Package number'), 'BOIC-NEW')
     const save = within(editor).getByRole('button', { name: 'Save package' })
@@ -4859,7 +4865,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
 
       await selectPermitDetailTab('Items')
-      expect(await screen.findByRole('heading', { name: 'No packages yet' })).toBeInTheDocument()
+      expect(
+        await screen.findByRole('heading', { name: 'No packages for this permit' }),
+      ).toBeInTheDocument()
       expect(screen.queryByRole('heading', { name: 'No package details' })).not.toBeInTheDocument()
       expect(screen.queryByRole('group', { name: 'Summary of Scale' })).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
@@ -5355,6 +5363,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Items')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     await userEvent.type(await screen.findByLabelText('Timber mark'), 'TM-NEW')
     await chooseComboBoxOption(
       await screen.findByRole('combobox', { name: 'Species' }),
@@ -5363,7 +5372,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), 'W - Utility')
     await userEvent.type(screen.getByLabelText('Pieces'), '12')
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '10.5')
-    await userEvent.click(screen.getByRole('button', { name: 'Add scale' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
 
     await waitFor(() => expect(mockedAddBlanketOicScale).toHaveBeenCalledTimes(1))
     expect(
@@ -5372,6 +5381,111 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const committedUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(committedUnload)
     expect(committedUnload.defaultPrevented).toBe(false)
+  })
+
+  it('keeps a BOIC scale draft in its drawer until save or confirmed discard', async () => {
+    configureEditableBlanketOicPackage()
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+    expect(screen.queryByLabelText('Timber mark')).not.toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
+    const panel = await screen.findByRole('complementary', { name: 'Add scale' })
+    expect(mockedAddBlanketOicScale).not.toHaveBeenCalled()
+    const pristineUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(pristineUnload)
+    expect(pristineUnload.defaultPrevented).toBe(false)
+    await waitFor(() =>
+      expect(within(panel).getByRole('button', { name: 'Save scale' })).toBeEnabled(),
+    )
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save scale' }))
+    expect(
+      await within(panel).findByText(
+        'Enter package, timber mark, species, grade, pieces, and volume.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedAddBlanketOicScale).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(
+        within(panel).getByText('Scale needs attention').closest('[data-scale-error]'),
+      ).toHaveFocus(),
+    )
+    await userEvent.type(within(panel).getByLabelText('Timber mark'), 'KEEP-ME')
+    const dirtyUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(dirtyUnload)
+    expect(dirtyUnload.defaultPrevented).toBe(true)
+    await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard scale changes?' })).getByRole(
+        'button',
+        { name: 'Keep editing' },
+      ),
+    )
+    expect(within(panel).getByLabelText('Timber mark')).toHaveValue('KEEP-ME')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard scale changes?' })).getByRole(
+        'button',
+        { name: 'Discard changes' },
+      ),
+    )
+    expect(screen.queryByRole('complementary', { name: 'Add scale' })).not.toBeInTheDocument()
+    const discardedUnload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(discardedUnload)
+    expect(discardedUnload.defaultPrevented).toBe(false)
+    expect(mockedAddBlanketOicScale).not.toHaveBeenCalled()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add scale' })).toHaveFocus())
+  })
+
+  it('holds the BOIC scale package and draft through a rejected in-flight save', async () => {
+    configureEditableBlanketOicPackage()
+    let resolveSave!: (result: Awaited<ReturnType<typeof addBlanketOicScale>>) => void
+    mockedAddBlanketOicScale.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveSave = resolve
+      }),
+    )
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
+    const panel = await screen.findByRole('complementary', { name: 'Add scale' })
+    await userEvent.type(within(panel).getByLabelText('Timber mark'), 'TM-RETRY')
+    await chooseComboBoxOption(
+      within(panel).getByRole('combobox', { name: 'Species' }),
+      'HE - Hemlock',
+    )
+    await chooseComboBoxOption(within(panel).getByRole('combobox', { name: 'Grade' }), 'A - Sawlog')
+    await userEvent.type(within(panel).getByLabelText('Pieces'), '4')
+    await userEvent.type(within(panel).getByLabelText('Volume (m³)'), '2.5')
+    const save = within(panel).getByRole('button', { name: 'Save scale' })
+    await waitFor(() => expect(save).toBeEnabled())
+    act(() => {
+      fireEvent.click(save)
+      fireEvent.click(save)
+    })
+    expect(mockedAddBlanketOicScale).toHaveBeenCalledTimes(1)
+    expect(within(panel).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Package number' })).toBeDisabled()
+    await act(async () =>
+      resolveSave({
+        success: false,
+        message: 'Record changed. Reload before retrying.',
+        errors: [],
+        warnings: [],
+      }),
+    )
+    expect(
+      await within(panel).findByText('Record changed. Reload before retrying.'),
+    ).toBeInTheDocument()
+    expect(within(panel).getByLabelText('Timber mark')).toHaveValue('TM-RETRY')
+    expect(within(panel).getByLabelText('Volume (m³)')).toHaveValue('2.5')
+    expect(mockedAddBlanketOicScale).toHaveBeenCalledWith(
+      expect.objectContaining({ packageNumber: 'BOIC-9', timberMark: 'TM-RETRY' }),
+    )
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save scale' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('complementary', { name: 'Add scale' })).not.toBeInTheDocument(),
+    )
+    expect(mockedAddBlanketOicScale).toHaveBeenCalledTimes(2)
   })
 
   it('does not mark the derived first BOIC scale package dirty after reverting selection', async () => {
@@ -5464,6 +5578,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('cell', { name: 'TM-10' })).toBeInTheDocument()
     expect(screen.queryByRole('cell', { name: 'TM-9' })).not.toBeInTheDocument()
 
+    await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     await userEvent.type(await screen.findByLabelText('Timber mark'), 'TM-NEW')
     expect(packageSelect).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Create package' })).toBeDisabled()
@@ -5472,10 +5587,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(selectedPackageRow).getByRole('button', { name: 'Delete package' }),
     ).toBeDisabled()
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel scale' }))
+    await userEvent.click(
+      within(screen.getByRole('complementary', { name: 'Add scale' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
+    const discardScale = await screen.findByRole('dialog', { name: 'Discard scale changes?' })
+    await userEvent.click(within(discardScale).getByRole('button', { name: 'Discard changes' }))
     expect(packageSelect).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Create package' })).toBeEnabled()
     expect(within(selectedPackageRow).getByRole('button', { name: 'Edit package' })).toBeEnabled()
+    expect(screen.queryByLabelText('Timber mark')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Add scale' }))
     expect(screen.getByLabelText('Timber mark')).toHaveValue('')
     await chooseComboBoxOption(
       await screen.findByRole('combobox', { name: 'Species' }),
@@ -5485,7 +5608,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), 'A - Sawlog')
     await userEvent.type(screen.getByLabelText('Pieces'), '4')
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '2.5')
-    await userEvent.click(screen.getByRole('button', { name: 'Add scale' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
 
     await waitFor(() =>
       expect(mockedAddBlanketOicScale).toHaveBeenCalledWith(
@@ -5577,12 +5700,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(packageSelect).toHaveValue('PKG-1 (1 trailing space)')
     })
 
+    await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     await userEvent.type(screen.getByLabelText('Timber mark'), 'TM-PAD')
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Species' }), 'HE - Hemlock')
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), 'A - Sawlog')
     await userEvent.type(screen.getByLabelText('Pieces'), '4')
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '2.5')
-    await userEvent.click(screen.getByRole('button', { name: 'Add scale' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
 
     await waitFor(() => {
       expect(mockedAddBlanketOicScale).toHaveBeenCalledWith(
@@ -5719,6 +5843,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Items')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     await userEvent.type(await screen.findByLabelText('Timber mark'), 'TM-NEW')
     await chooseComboBoxOption(
       await screen.findByRole('combobox', { name: 'Species' }),
@@ -5727,7 +5852,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), 'W - Utility')
     await userEvent.type(screen.getByLabelText('Pieces'), '12')
     await userEvent.type(screen.getByLabelText('Volume (m³)'), '10.5')
-    await userEvent.click(screen.getByRole('button', { name: 'Add scale' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
 
     await waitFor(() => {
       expect(mockedAddBlanketOicScale).toHaveBeenCalledWith({
@@ -6003,17 +6128,34 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it('shows saved Blanket OIC applicant and agent contact details in one tab', async () => {
     configureEditableBlanketOicPackage()
+    const lookup = mockedFetchApplicationClientData.getMockImplementation()!
+    mockedFetchApplicationClientData.mockImplementation(async (...args) => {
+      const data = await lookup(...args)
+      return data
+        ? {
+            ...data,
+            clientAcronym: 'TEST',
+            locationName: data.clientNumber === '00067890' ? 'Main office' : 'Agent office',
+          }
+        : null
+    })
     renderPermitDetails()
 
     await selectPermitDetailTab('Owner')
     await waitFor(() => {
-      expect(screen.getByText('Owner Co · 00067890')).toBeInTheDocument()
-      expect(screen.getByText('Agent Co · 00012345')).toBeInTheDocument()
+      expect(screen.getByText('Owner Co (TEST) · 00067890')).toBeInTheDocument()
+      expect(screen.getByText('Agent Co (TEST) · 00012345')).toBeInTheDocument()
+      expect(screen.getByText('03 - Main office')).toBeInTheDocument()
+      expect(screen.getByText('01 - Agent office')).toBeInTheDocument()
     })
     expect(screen.getByRole('heading', { name: 'Applicant details' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Agent information' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Agent' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Owner' }).closest('.cds--tile')).toBe(
+      screen.getByRole('heading', { name: 'Agent' }).closest('.cds--tile'),
+    )
+    expect(screen.queryByRole('checkbox', { name: "I'm an agent" })).not.toBeInTheDocument()
     expect(screen.getAllByText('Client')).toHaveLength(2)
-    expect(screen.getAllByText('Location')).toHaveLength(2)
+    expect(screen.getAllByText('Client location')).toHaveLength(2)
     expect(screen.getAllByText('Phone number')).toHaveLength(2)
     expect(screen.getAllByText('Fax number')).toHaveLength(2)
     expect(screen.getAllByText('Email address')).toHaveLength(2)
@@ -6826,9 +6968,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ['Status', 'Active'],
       ['Exemption type', 'Blanket OIC'],
       ['Region', permitDetail.region ?? ''],
-      ['Submit date', permitDetail.applicationDate ?? ''],
-      ['Issued date', permitDetail.issueDate ?? ''],
-      ['Expiry date', permitDetail.expiryDate ?? ''],
+      ['Submit date', 'Apr 10, 2026'],
+      ['Issued date', 'May 1, 2026'],
+      ['Expiry date', 'Jun 1, 2026'],
     ]
     for (const [label, value] of savedSummaryFields) {
       const field = within(permitTile as HTMLElement)
@@ -7863,7 +8005,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.queryByRole('dialog', { name: /Email permit .* approval/ })).toBeNull()
       expect(screen.getByText('Permit review request email sent.')).toBeInTheDocument()
     })
-    expect(screen.getAllByText('2026-07-10')).toHaveLength(1)
+    expect(screen.getAllByText('Jul 10, 2026')).toHaveLength(1)
   })
 
   it('saves a permit fee override without changing unrelated permit fields', async () => {
@@ -8328,7 +8470,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByText('Document uploaded')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
-    const documentSection = screen.getByRole('heading', { name: 'Documents' }).closest('.cds--tile')
+    const documentSection = screen.getByRole('region', { name: 'Documents' })
+    expect(documentSection.closest('.cds--tile')).toBeNull()
     expect(documentSection).toBeTruthy()
     expect(
       within(documentSection as HTMLElement).queryByRole('button', { name: 'Cancel' }),

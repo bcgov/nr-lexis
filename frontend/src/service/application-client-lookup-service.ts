@@ -13,14 +13,11 @@ export type ApplicationClientLocation = {
   selected: boolean
 }
 
-export type ApplicationClientContact = {
-  contactName: string
-  contactId: string
-}
-
 export type ApplicationClientData = {
   clientNumber: string
   companyName: string
+  clientAcronym: string
+  locationName?: string
   address: string
   city: string
   province: string
@@ -57,6 +54,8 @@ const parseClientData = (input: unknown): ApplicationClientData | null => {
   return {
     clientNumber,
     companyName: stringField(input, 'companyName'),
+    clientAcronym: stringField(input, 'clientAcronym'),
+    locationName: stringField(input, 'locationName'),
     address: stringField(input, 'address'),
     city: stringField(input, 'city'),
     province: stringField(input, 'province'),
@@ -86,26 +85,6 @@ const parseClientLocations = (input: unknown): ApplicationClientLocation[] => {
       locationCode,
       locationName,
       selected: booleanField(item, 'selected'),
-    }
-  })
-}
-
-const parseClientContacts = (input: unknown): ApplicationClientContact[] => {
-  if (!Array.isArray(input)) {
-    throw new Error('Client contact lookup returned an empty or malformed response.')
-  }
-
-  return mapRecordArray(input, (item) => {
-    const contactName = firstStringField(item, ['contactName', 'name'])
-    const contactId = firstStringField(item, ['contactId', 'id'])
-
-    if (!contactName || contactId === '0') {
-      return null
-    }
-
-    return {
-      contactName,
-      contactId,
     }
   })
 }
@@ -234,41 +213,4 @@ export const fetchExemptionClientLocations = async (
     },
   )
   return parseClientLocations(data)
-}
-
-export const fetchApplicationClientContacts = async (
-  clientNumber: string,
-  clientLocationCode: string,
-  applicantType: 'owner' | 'agent' = 'owner',
-  applicationNumber = '',
-): Promise<ApplicationClientContact[]> => {
-  const normalizedClientNumber = clientNumber.trim()
-  const normalizedClientLocationCode = clientLocationCode.trim()
-  const normalizedApplicationNumber = applicationNumber.trim()
-  if (!normalizedClientNumber || !normalizedClientLocationCode) {
-    return []
-  }
-
-  const data = await apiService.getCachedData<unknown>(
-    '/lexis/rpc/application-details/contacts-for-location',
-    {
-      params: {
-        applicantType,
-        applicationNumber: normalizedApplicationNumber,
-        clientLocationCode: normalizedClientLocationCode,
-        clientNumber: normalizedClientNumber,
-      },
-    },
-    {
-      cacheKey: [
-        'application-client-contacts',
-        applicantType,
-        normalizedClientNumber,
-        normalizedClientLocationCode,
-        normalizedApplicationNumber,
-      ].join(':'),
-      ttlMs: CLIENT_LOCATION_CACHE_TTL_MS,
-    },
-  )
-  return parseClientContacts(data)
 }

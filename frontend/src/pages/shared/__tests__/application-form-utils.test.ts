@@ -5,17 +5,23 @@ import {
   clientLocationLabel,
   codeOptionLabel,
   isAgentApplicant,
-  isSelectableClientContact,
   isSelectableClientLocation,
   productTypeRequiresGrowthType,
   productTypeRequiresLogDetails,
-  resolveClientContactName,
   resolveClientLocationCode,
   toApplicationCodeOption,
   toSearchOption,
 } from '@/pages/shared/application-form-utils'
 
 describe('application-form-utils', () => {
+  it('uses authorized client data when a location option has no description', () => {
+    expect(clientLocationLabel('00', '00', 'Main office')).toBe('00 - Main office')
+    expect(clientLocationLabel('01', '', 'Export office')).toBe('01 - Export office')
+    expect(clientLocationLabel('01', '01 - Current office', 'Old office')).toBe(
+      '01 - Current office',
+    )
+  })
+
   it.each([
     ['123', '00000123', true],
     [' 00000123 ', '123', true],
@@ -38,20 +44,6 @@ describe('application-form-utils', () => {
     expect(resolveClientLocationCode(locations, '01')).toBe('01')
     expect(resolveClientLocationCode(locations, '99')).toBe('02')
     expect(resolveClientLocationCode([{ ...locations[0] }], '')).toBe('')
-  })
-
-  it('resolves selectable contacts while preserving unknown typed names', () => {
-    const contacts = [
-      { contactId: '0', contactName: 'Placeholder' },
-      { contactId: '12', contactName: 'Alex Tester' },
-    ]
-
-    expect(
-      contacts.filter(isSelectableClientContact).map((contact) => contact.contactName),
-    ).toEqual(['Alex Tester'])
-    expect(resolveClientContactName(contacts, 'Alex Tester')).toBe('Alex Tester')
-    expect(resolveClientContactName(contacts, 'Typed Name')).toBe('Alex Tester')
-    expect(resolveClientContactName([{ ...contacts[0] }], 'Typed Name')).toBe('Typed Name')
   })
 
   it.each([

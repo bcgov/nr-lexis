@@ -16,10 +16,7 @@ import {
   fetchProvincialApplicationOptions,
   fetchProvincialExemptionOptions,
 } from '@/service/search-options-service'
-import {
-  fetchApplicationClientContacts,
-  fetchApplicationClientLocations,
-} from '@/service/application-client-lookup-service'
+import { fetchApplicationClientLocations } from '@/service/application-client-lookup-service'
 import {
   fetchApplicationEndUsesForSpeciesRegion,
   fetchApplicationRemainingSpecies,
@@ -49,7 +46,6 @@ vi.mock('@/service/create-submit-service', () => ({
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
-  fetchApplicationClientContacts: vi.fn(),
   fetchApplicationClientLocations: vi.fn(),
 }))
 
@@ -122,7 +118,6 @@ const mockedFetchProvincialExemptionCreatePreview = vi.mocked(fetchProvincialExe
 const mockedSubmitProvincialApplicationCreate = vi.mocked(submitProvincialApplicationCreate)
 const mockedSubmitProvincialExemptionCreate = vi.mocked(submitProvincialExemptionCreate)
 const mockedSubmitProvincialOfferCreate = vi.mocked(submitProvincialOfferCreate)
-const mockedFetchApplicationClientContacts = vi.mocked(fetchApplicationClientContacts)
 const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchApplicationRemainingSpecies = vi.mocked(fetchApplicationRemainingSpecies)
 const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
@@ -229,7 +224,6 @@ describe('create page unsaved changes', () => {
       applicationNumbers: [],
     })
     mockedFetchApplicationClientLocations.mockResolvedValue([])
-    mockedFetchApplicationClientContacts.mockResolvedValue([])
     mockedFetchApplicationRemainingSpecies.mockResolvedValue([])
     mockedFetchApplicationEndUsesForSpeciesRegion.mockResolvedValue([])
     mockedFetchOfferApplicationDetails.mockResolvedValue({
@@ -408,7 +402,7 @@ describe('create page unsaved changes', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
     )
-    await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '10')
+    await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '10')
 
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
@@ -431,7 +425,7 @@ describe('create page unsaved changes', () => {
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
     )
-    await userEvent.type(screen.getByLabelText('Approved volume (m³)'), '10')
+    await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '10')
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await screen.findByRole('dialog', { name: 'Unsaved changes' })
 

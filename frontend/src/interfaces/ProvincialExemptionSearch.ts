@@ -11,6 +11,7 @@ export type ProvincialExemptionSearchFilters = {
   exemptionStatusCode: string
   applicantClientNumber: string
   ownerClientNumber: string
+  agentClientNumber?: string
 }
 
 export type ProvincialExemptionSearchSortField =

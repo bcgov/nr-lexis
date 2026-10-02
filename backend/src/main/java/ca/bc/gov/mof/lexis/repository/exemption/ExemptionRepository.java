@@ -598,6 +598,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
     }
     where.addEquals("EE.EXPORT_EXEMPTION_STATUS_CODE", criteria.exemptionStatus());
     where.addLike("EEA.OWNER_CLIENT_NUMBER", criteria.ownerClientNumber());
+    where.addLike("EEA.AGENT_CLIENT_NUMBER", criteria.agentClientNumber());
 
     String applicantClientNumber = trim(criteria.applicantClientNumber());
     if (applicantClientNumber != null && !criteria.broadClientMatch()) {
@@ -696,6 +697,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
         && trim(criteria.packageNumber()) == null
         && trim(criteria.ownerClientNumber()) == null
         && trim(criteria.applicantClientNumber()) == null
+        && trim(criteria.agentClientNumber()) == null
         && criteria.listingFromDate() == null
         && criteria.listingToDate() == null;
   }

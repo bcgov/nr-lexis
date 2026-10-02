@@ -1964,7 +1964,9 @@ class ApplicationDetailsRpcControllerTest {
                     "CA",
                     "250-555-0100",
                     "250-555-0199",
-                    "contact@example.com")));
+                    "contact@example.com",
+                    "ACME",
+                    "Main")));
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationClientDataResponseDto> response =
         controller.getClientDataLegacy("77881", "00");
@@ -1973,6 +1975,7 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().clientNumber()).isEqualTo("00077881");
     assertThat(response.getBody().companyName()).isEqualTo("Acme Forestry");
+    assertThat(response.getBody().locationName()).isEqualTo("Main");
     assertThat(response.getBody().notfound()).isNull();
     verify(clientLookupService).getClientData("77881", "00");
   }
@@ -2012,7 +2015,8 @@ class ApplicationDetailsRpcControllerTest {
                     "CA",
                     "250-555-0300",
                     null,
-                    "agent@example.com")));
+                    "agent@example.com",
+                    null)));
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationClientDataResponseDto> response =
         controller.getClientData("22222", "01", "1000456", null);
@@ -2073,7 +2077,8 @@ class ApplicationDetailsRpcControllerTest {
                     "CA",
                     "250-555-0200",
                     null,
-                    "owner@example.com")));
+                    "owner@example.com",
+                    null)));
 
     ResponseEntity<List<ApplicationDetailsRpcController.ApplicationClientContactResponseDto>>
         response = controller.getContactsForLocationLegacy("11111", "02", "1000456", "owner");
@@ -2856,7 +2861,7 @@ class ApplicationDetailsRpcControllerTest {
 
   private ClientLookupService.ClientData clientData(String clientNumber) {
     return new ClientLookupService.ClientData(
-        clientNumber, null, null, null, null, null, null, null, null, null);
+        clientNumber, null, null, null, null, null, null, null, null, null, null);
   }
 
   private MultiValueMap<String, String> linkedApplicationCreateParameters() {

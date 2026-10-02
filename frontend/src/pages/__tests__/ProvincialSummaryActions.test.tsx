@@ -68,6 +68,7 @@ describe('Provincial Summary', () => {
     mockedFetchApplicationClientData.mockResolvedValue({
       clientNumber: '11111111',
       companyName: 'SYNTHETIC FOREST CLIENT',
+      clientAcronym: '',
       address: '',
       city: '',
       province: '',

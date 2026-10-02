@@ -506,7 +506,7 @@ class ProvincialPermitMutationValidatorTest {
 
   private ClientData validClient() {
     return new ClientData(
-        "00077881", "Client", null, null, null, null, null, null, null, null);
+        "00077881", "Client", null, null, null, null, null, null, null, null, null);
   }
 
   private static final class PermitBuilder {

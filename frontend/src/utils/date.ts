@@ -29,6 +29,20 @@ export const formatBusinessIsoDate = (date: Date = new Date()): string => {
   return formatIsoDateParts(year, month, day)
 }
 
+/** A stored calendar date has no time zone; keep its day when showing the month name. */
+export const formatIsoDateLabel = (value: string | null | undefined): string => {
+  const text = value?.trim() ?? ''
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) return text
+  const date = new Date(`${text}T00:00:00Z`)
+  if (Number.isNaN(date.getTime())) return text
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: 'UTC',
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+  }).format(date)
+}
+
 export const formatBusinessDateTime = (value: string | null | undefined): string => {
   const text = value?.trim() ?? ''
   if (!text) return ''
@@ -50,4 +64,26 @@ export const formatBusinessDateTime = (value: string | null | undefined): string
     parts.find((item) => item.type === type)?.value ?? ''
 
   return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
+}
+
+/** Signed-off application tables show a month name and a 12-hour time in B.C. */
+export const formatBusinessDateTimeLabel = (value: string | null | undefined): string => {
+  const text = value?.trim() ?? ''
+  if (!text) return ''
+  const date = new Date(text)
+  if (Number.isNaN(date.getTime())) return text
+
+  const parts = new Intl.DateTimeFormat('en-US', {
+    timeZone: LEXIS_BUSINESS_TIME_ZONE,
+    year: 'numeric',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  }).formatToParts(date)
+  const part = (type: Intl.DateTimeFormatPartTypes): string =>
+    parts.find((item) => item.type === type)?.value ?? ''
+  return `${part('month')} ${part('day')}, ${part('year')} · ${part('hour')}:${part('minute')}:${part('second')} ${part('dayPeriod')}`
 }

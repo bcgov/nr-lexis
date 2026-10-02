@@ -18,6 +18,16 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import {
+  Box,
+  Chat,
+  ContainerRegistry,
+  DataDefinition,
+  DocumentAttachment,
+  Enterprise,
+  Stamp,
+  Task,
+} from '@carbon/icons-react'
 import SearchableSelect from '../../components/SearchableSelect'
 import { AppNotification } from '../../components/AppNotification'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
@@ -38,11 +48,9 @@ import {
   clientLookupNumbersMatch,
   clientLocationLabel,
   isAgentApplicant,
-  isSelectableClientContact,
   isSelectableClientLocation,
   productTypeRequiresGrowthType,
   productTypeRequiresLogDetails,
-  resolveClientContactName,
   resolveClientLocationCode,
   toSearchOption,
 } from '@/pages/shared/application-form-utils'
@@ -68,10 +76,8 @@ import {
 import { submitProvincialApplicationCreate } from '@/service/create-submit-service'
 import {
   fetchApplicationClientData,
-  fetchApplicationClientContacts,
   fetchApplicationClientLocations,
   type ApplicationClientData,
-  type ApplicationClientContact,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
 import {
@@ -147,6 +153,16 @@ const APPLICATION_CREATE_TAB_LABELS: Record<ApplicationCreateTab, string> = {
   remarks: 'Remarks',
   offers: 'Offers',
   review: 'Review',
+}
+
+const APPLICATION_CREATE_TAB_ICONS = {
+  owner: Enterprise,
+  application: Task,
+  items: Box,
+  documents: DocumentAttachment,
+  remarks: Chat,
+  offers: DataDefinition,
+  review: Stamp,
 }
 
 const CLIENT_NUMBER_PATTERN = /^\d{1,8}$/
@@ -408,8 +424,6 @@ const ProvincialApplicationCreatePage = () => {
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
-  const [ownerClientContacts, setOwnerClientContacts] = useState<ApplicationClientContact[]>([])
-  const [agentClientContacts, setAgentClientContacts] = useState<ApplicationClientContact[]>([])
   const [ownerClientData, setOwnerClientData] = useState<ApplicationClientData | null>(null)
   const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
   const [applicationSpeciesOptions, setApplicationSpeciesOptions] = useState<
@@ -421,8 +435,8 @@ const ProvincialApplicationCreatePage = () => {
   )
   const [isLoadingOwnerClientLocations, setIsLoadingOwnerClientLocations] = useState(false)
   const [isLoadingAgentClientLocations, setIsLoadingAgentClientLocations] = useState(false)
-  const [isLoadingOwnerClientContacts, setIsLoadingOwnerClientContacts] = useState(false)
-  const [isLoadingAgentClientContacts, setIsLoadingAgentClientContacts] = useState(false)
+  const [isLoadingOwnerClientData, setIsLoadingOwnerClientData] = useState(false)
+  const [isLoadingAgentClientData, setIsLoadingAgentClientData] = useState(false)
   const [isLoadingApplicationSpecies, setIsLoadingApplicationSpecies] = useState(false)
   const [isLoadingApplicationEndUses, setIsLoadingApplicationEndUses] = useState(false)
   const [status, setStatus] = useState<PageStatus | null>(null)
@@ -637,14 +651,11 @@ const ProvincialApplicationCreatePage = () => {
         }
 
         setOwnerClientLocations([])
-        setOwnerClientContacts([])
         setOwnerClientData(null)
         setIsLoadingOwnerClientLocations(false)
         updateClientLookupFailure('owner-locations', false)
         setForm((current) =>
-          current.ownerClientLocationCode || current.ownerContactName
-            ? { ...current, ownerClientLocationCode: '', ownerContactName: '' }
-            : current,
+          current.ownerClientLocationCode ? { ...current, ownerClientLocationCode: '' } : current,
         )
       })
 
@@ -680,18 +691,9 @@ const ProvincialApplicationCreatePage = () => {
             locations,
             current.ownerClientLocationCode,
           )
-          const nextOwnerContactName =
-            nextOwnerClientLocationCode === current.ownerClientLocationCode
-              ? current.ownerContactName
-              : ''
-          return current.ownerClientLocationCode === nextOwnerClientLocationCode &&
-            current.ownerContactName === nextOwnerContactName
+          return current.ownerClientLocationCode === nextOwnerClientLocationCode
             ? current
-            : {
-                ...current,
-                ownerClientLocationCode: nextOwnerClientLocationCode,
-                ownerContactName: nextOwnerContactName,
-              }
+            : { ...current, ownerClientLocationCode: nextOwnerClientLocationCode }
         })
       })
       .catch(() => {
@@ -750,14 +752,11 @@ const ProvincialApplicationCreatePage = () => {
         }
 
         setAgentClientLocations([])
-        setAgentClientContacts([])
         setAgentClientData(null)
         setIsLoadingAgentClientLocations(false)
         updateClientLookupFailure('agent-locations', false)
         setForm((current) =>
-          current.agentClientLocationCode || current.agentContactName
-            ? { ...current, agentClientLocationCode: '', agentContactName: '' }
-            : current,
+          current.agentClientLocationCode ? { ...current, agentClientLocationCode: '' } : current,
         )
       })
 
@@ -793,18 +792,9 @@ const ProvincialApplicationCreatePage = () => {
             locations,
             current.agentClientLocationCode,
           )
-          const nextAgentContactName =
-            nextAgentClientLocationCode === current.agentClientLocationCode
-              ? current.agentContactName
-              : ''
-          return current.agentClientLocationCode === nextAgentClientLocationCode &&
-            current.agentContactName === nextAgentContactName
+          return current.agentClientLocationCode === nextAgentClientLocationCode
             ? current
-            : {
-                ...current,
-                agentClientLocationCode: nextAgentClientLocationCode,
-                agentContactName: nextAgentContactName,
-              }
+            : { ...current, agentClientLocationCode: nextAgentClientLocationCode }
         })
       })
       .catch(() => {
@@ -836,13 +826,9 @@ const ProvincialApplicationCreatePage = () => {
           return
         }
 
-        setOwnerClientContacts([])
         setOwnerClientData(null)
-        setIsLoadingOwnerClientContacts(false)
+        setIsLoadingOwnerClientData(false)
         updateClientLookupFailure('owner-details', false)
-        setForm((current) =>
-          current.ownerContactName ? { ...current, ownerContactName: '' } : current,
-        )
       })
 
       return () => {
@@ -853,15 +839,12 @@ const ProvincialApplicationCreatePage = () => {
     let isActive = true
     void Promise.resolve().then(() => {
       if (isActive) {
-        setIsLoadingOwnerClientContacts(true)
+        setIsLoadingOwnerClientData(true)
       }
     })
 
-    void Promise.all([
-      fetchApplicationClientContacts(ownerClientNumber, ownerClientLocationCode, 'owner'),
-      fetchApplicationClientData(ownerClientNumber, ownerClientLocationCode),
-    ])
-      .then(([contacts, clientData]) => {
+    void fetchApplicationClientData(ownerClientNumber, ownerClientLocationCode)
+      .then((clientData) => {
         const currentForm = currentFormRef.current
         if (
           !isActive ||
@@ -871,7 +854,6 @@ const ProvincialApplicationCreatePage = () => {
           return
         }
 
-        setOwnerClientContacts(contacts)
         setOwnerClientData(clientData)
         updateClientLookupFailure('owner-details', false)
         setForm((current) => {
@@ -883,15 +865,9 @@ const ProvincialApplicationCreatePage = () => {
           }
 
           const confirmedOwnerClientNumber = clientData?.clientNumber.trim() || ownerClientNumber
-          const nextOwnerContactName = resolveClientContactName(contacts, current.ownerContactName)
-          return current.ownerClientNumber === confirmedOwnerClientNumber &&
-            current.ownerContactName === nextOwnerContactName
+          return current.ownerClientNumber === confirmedOwnerClientNumber
             ? current
-            : {
-                ...current,
-                ownerClientNumber: confirmedOwnerClientNumber,
-                ownerContactName: nextOwnerContactName,
-              }
+            : { ...current, ownerClientNumber: confirmedOwnerClientNumber }
         })
       })
       .catch(() => {
@@ -906,7 +882,7 @@ const ProvincialApplicationCreatePage = () => {
       })
       .finally(() => {
         if (isActive) {
-          setIsLoadingOwnerClientContacts(false)
+          setIsLoadingOwnerClientData(false)
         }
       })
 
@@ -923,9 +899,8 @@ const ProvincialApplicationCreatePage = () => {
           return
         }
 
-        setAgentClientContacts([])
         setAgentClientData(null)
-        setIsLoadingAgentClientContacts(false)
+        setIsLoadingAgentClientData(false)
         updateClientLookupFailure('agent-details', false)
         setForm((current) =>
           current.agentContactName ? { ...current, agentContactName: '' } : current,
@@ -946,9 +921,8 @@ const ProvincialApplicationCreatePage = () => {
           return
         }
 
-        setAgentClientContacts([])
         setAgentClientData(null)
-        setIsLoadingAgentClientContacts(false)
+        setIsLoadingAgentClientData(false)
         updateClientLookupFailure('agent-details', false)
       })
 
@@ -960,15 +934,12 @@ const ProvincialApplicationCreatePage = () => {
     let isActive = true
     void Promise.resolve().then(() => {
       if (isActive) {
-        setIsLoadingAgentClientContacts(true)
+        setIsLoadingAgentClientData(true)
       }
     })
 
-    void Promise.all([
-      fetchApplicationClientContacts(agentClientNumber, agentClientLocationCode, 'agent'),
-      fetchApplicationClientData(agentClientNumber, agentClientLocationCode),
-    ])
-      .then(([contacts, clientData]) => {
+    void fetchApplicationClientData(agentClientNumber, agentClientLocationCode)
+      .then((clientData) => {
         const currentForm = currentFormRef.current
         if (
           !isActive ||
@@ -978,7 +949,6 @@ const ProvincialApplicationCreatePage = () => {
           return
         }
 
-        setAgentClientContacts(contacts)
         setAgentClientData(clientData)
         updateClientLookupFailure('agent-details', false)
         setForm((current) => {
@@ -990,15 +960,9 @@ const ProvincialApplicationCreatePage = () => {
           }
 
           const confirmedAgentClientNumber = clientData?.clientNumber.trim() || agentClientNumber
-          const nextAgentContactName = resolveClientContactName(contacts, current.agentContactName)
-          return current.agentClientNumber === confirmedAgentClientNumber &&
-            current.agentContactName === nextAgentContactName
+          return current.agentClientNumber === confirmedAgentClientNumber
             ? current
-            : {
-                ...current,
-                agentClientNumber: confirmedAgentClientNumber,
-                agentContactName: nextAgentContactName,
-              }
+            : { ...current, agentClientNumber: confirmedAgentClientNumber }
         })
       })
       .catch(() => {
@@ -1013,7 +977,7 @@ const ProvincialApplicationCreatePage = () => {
       })
       .finally(() => {
         if (isActive) {
-          setIsLoadingAgentClientContacts(false)
+          setIsLoadingAgentClientData(false)
         }
       })
 
@@ -1298,8 +1262,6 @@ const ProvincialApplicationCreatePage = () => {
   const missingRequiredOptions = requiredApplicationOptionsMissing && showMissingRequiredOptions
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
-  const hasSelectableOwnerClientContacts = ownerClientContacts.some(isSelectableClientContact)
-  const hasSelectableAgentClientContacts = agentClientContacts.some(isSelectableClientContact)
   const hasValidOwnerClientNumber = CLIENT_NUMBER_PATTERN.test(form.ownerClientNumber.trim())
   const hasValidAgentClientNumber = CLIENT_NUMBER_PATTERN.test(form.agentClientNumber.trim())
   const selectedApplicationSpeciesOptions = form.speciesCodes.map(
@@ -1342,20 +1304,6 @@ const ProvincialApplicationCreatePage = () => {
         : hasSelectableAgentClientLocations
           ? 'Select agent client location'
           : 'No locations on file'
-  const ownerContactPlaceholder = !form.ownerClientLocationCode.trim()
-    ? 'Select applicant location first'
-    : isLoadingOwnerClientContacts
-      ? 'Loading contacts'
-      : hasSelectableOwnerClientContacts
-        ? 'Select applicant contact'
-        : 'No contacts on file'
-  const agentContactPlaceholder = !form.agentClientLocationCode.trim()
-    ? 'Select agent location first'
-    : isLoadingAgentClientContacts
-      ? 'Loading contacts'
-      : hasSelectableAgentClientContacts
-        ? 'Select agent contact'
-        : 'No contacts on file'
   const speciesPlaceholder = !form.region.trim()
     ? 'Select region first'
     : !form.productTypeCode.trim()
@@ -1405,8 +1353,8 @@ const ProvincialApplicationCreatePage = () => {
       requiredApplicationOptionsMissing ||
       isLoadingOwnerClientLocations ||
       isLoadingAgentClientLocations ||
-      isLoadingOwnerClientContacts ||
-      isLoadingAgentClientContacts ||
+      isLoadingOwnerClientData ||
+      isLoadingAgentClientData ||
       provincialSubmitterScopeUnavailable
     ) {
       return false
@@ -1578,8 +1526,8 @@ const ProvincialApplicationCreatePage = () => {
                   isSubmitting ||
                   isLoadingOwnerClientLocations ||
                   isLoadingAgentClientLocations ||
-                  isLoadingOwnerClientContacts ||
-                  isLoadingAgentClientContacts ||
+                  isLoadingOwnerClientData ||
+                  isLoadingAgentClientData ||
                   provincialSubmitterScopeUnavailable
                 }
               >
@@ -1688,6 +1636,7 @@ const ProvincialApplicationCreatePage = () => {
                   key={tab}
                   aria-label={APPLICATION_CREATE_TAB_LABELS[tab]}
                   aria-description={errorCount ? `${errorCount} fields need attention` : undefined}
+                  renderIcon={errorCount > 0 ? undefined : APPLICATION_CREATE_TAB_ICONS[tab]}
                 >
                   {APPLICATION_CREATE_TAB_LABELS[tab]}
                   {errorCount > 0 && (
@@ -1707,55 +1656,33 @@ const ProvincialApplicationCreatePage = () => {
                 aria-label="Applicant"
               >
                 <div className="detail-section-card__header">
-                  <h2 className="detail-tile-title">Applicant details</h2>
+                  <h2 className="detail-tile-title">
+                    <Enterprise size={24} aria-hidden="true" />
+                    Applicant details
+                  </h2>
                 </div>
                 <p className="application-create-required">{requiredLabel('Required fields')}</p>
+                <h3 className="detail-tile-title">
+                  {form.applicantTypeCode === 'M' ? 'Ministerial' : 'Owner'}
+                </h3>
                 <div className="legacy-search-grid create-form-grid application-create-client-grid">
-                  {hasSelectableOwnerClientContacts || isLoadingOwnerClientContacts ? (
-                    <SearchableSelect
-                      id="ownerContactName"
-                      labelText={requiredLabel('Contact name')}
-                      required
-                      value={form.ownerContactName}
-                      disabled={
-                        !form.ownerClientLocationCode.trim() || isLoadingOwnerClientContacts
-                      }
-                      invalid={!!fieldError('ownerContactName')}
-                      invalidText={fieldError('ownerContactName')}
-                      placeholder={ownerContactPlaceholder}
-                      allowCustomValue
-                      options={ownerClientContacts
-                        .filter(isSelectableClientContact)
-                        .map((contact) => ({
-                          value: contact.contactName,
-                          label: contact.contactName,
-                        }))}
-                      onBlur={() => markFieldTouched('ownerContactName')}
-                      onChange={(value) => {
-                        markFormEdited()
-                        setForm((current) => ({ ...current, ownerContactName: value }))
-                      }}
-                    />
-                  ) : (
-                    <TextInput
-                      id="ownerContactName"
-                      labelText={requiredLabel('Contact name')}
-                      aria-required="true"
-                      value={form.ownerContactName}
-                      disabled={!form.ownerClientLocationCode.trim()}
-                      placeholder="Enter applicant contact name"
-                      invalid={!!fieldError('ownerContactName')}
-                      invalidText={fieldError('ownerContactName')}
-                      onBlur={() => markFieldTouched('ownerContactName')}
-                      onChange={(event) => {
-                        markFormEdited()
-                        setForm((current) => ({
-                          ...current,
-                          ownerContactName: event.target.value,
-                        }))
-                      }}
-                    />
-                  )}
+                  <TextInput
+                    id="ownerContactName"
+                    labelText={requiredLabel('Contact name')}
+                    aria-required="true"
+                    value={form.ownerContactName}
+                    placeholder="Enter applicant contact name"
+                    invalid={!!fieldError('ownerContactName')}
+                    invalidText={fieldError('ownerContactName')}
+                    onBlur={() => markFieldTouched('ownerContactName')}
+                    onChange={(event) => {
+                      markFormEdited()
+                      setForm((current) => ({
+                        ...current,
+                        ownerContactName: event.target.value,
+                      }))
+                    }}
+                  />
                   {provincialSubmitterIdentityLocked ? (
                     <TextInput
                       id="ownerClientNumber"
@@ -1770,13 +1697,11 @@ const ProvincialApplicationCreatePage = () => {
                       onChange={(event) => {
                         markFormEdited()
                         setOwnerClientLocations([])
-                        setOwnerClientContacts([])
                         setOwnerClientData(null)
                         setForm((current) => ({
                           ...current,
                           ownerClientNumber: event.target.value,
                           ownerClientLocationCode: '',
-                          ownerContactName: '',
                         }))
                       }}
                     />
@@ -1795,13 +1720,11 @@ const ProvincialApplicationCreatePage = () => {
                       onChange={(ownerClientNumber) => {
                         markFormEdited()
                         setOwnerClientLocations([])
-                        setOwnerClientContacts([])
                         setOwnerClientData(null)
                         setForm((current) => ({
                           ...current,
                           ownerClientNumber,
                           ownerClientLocationCode: '',
-                          ownerContactName: '',
                         }))
                       }}
                     />
@@ -1824,13 +1747,10 @@ const ProvincialApplicationCreatePage = () => {
                     onBlur={() => markFieldTouched('ownerClientLocationCode')}
                     onChange={(value) => {
                       markFormEdited()
-                      setOwnerClientContacts([])
                       setOwnerClientData(null)
                       setForm((current) => ({
                         ...current,
                         ownerClientLocationCode: value,
-                        ownerContactName:
-                          current.ownerClientLocationCode === value ? current.ownerContactName : '',
                       }))
                     }}
                   />
@@ -1908,50 +1828,23 @@ const ProvincialApplicationCreatePage = () => {
                   >
                     <h2>Agent information</h2>
                     <div className="legacy-search-grid create-form-grid application-create-client-grid">
-                      {hasSelectableAgentClientContacts || isLoadingAgentClientContacts ? (
-                        <SearchableSelect
-                          id="agentContactName"
-                          labelText={requiredLabel('Contact name')}
-                          required
-                          value={form.agentContactName}
-                          disabled={
-                            !form.agentClientLocationCode.trim() || isLoadingAgentClientContacts
-                          }
-                          invalid={!!fieldError('agentContactName')}
-                          invalidText={fieldError('agentContactName')}
-                          placeholder={agentContactPlaceholder}
-                          options={agentClientContacts
-                            .filter(isSelectableClientContact)
-                            .map((contact) => ({
-                              value: contact.contactName,
-                              label: contact.contactName,
-                            }))}
-                          onBlur={() => markFieldTouched('agentContactName')}
-                          onChange={(value) => {
-                            markFormEdited()
-                            setForm((current) => ({ ...current, agentContactName: value }))
-                          }}
-                        />
-                      ) : (
-                        <TextInput
-                          id="agentContactName"
-                          labelText={requiredLabel('Contact name')}
-                          aria-required="true"
-                          value={form.agentContactName}
-                          disabled={!form.agentClientLocationCode.trim()}
-                          placeholder="Enter agent contact name"
-                          invalid={!!fieldError('agentContactName')}
-                          invalidText={fieldError('agentContactName')}
-                          onBlur={() => markFieldTouched('agentContactName')}
-                          onChange={(event) => {
-                            markFormEdited()
-                            setForm((current) => ({
-                              ...current,
-                              agentContactName: event.target.value,
-                            }))
-                          }}
-                        />
-                      )}
+                      <TextInput
+                        id="agentContactName"
+                        labelText={requiredLabel('Contact name')}
+                        aria-required="true"
+                        value={form.agentContactName}
+                        placeholder="Enter agent contact name"
+                        invalid={!!fieldError('agentContactName')}
+                        invalidText={fieldError('agentContactName')}
+                        onBlur={() => markFieldTouched('agentContactName')}
+                        onChange={(event) => {
+                          markFormEdited()
+                          setForm((current) => ({
+                            ...current,
+                            agentContactName: event.target.value,
+                          }))
+                        }}
+                      />
                       <ForestClientComboBox
                         id="agentClientNumber"
                         labelText={requiredLabel('Agent client')}
@@ -1966,13 +1859,11 @@ const ProvincialApplicationCreatePage = () => {
                         onChange={(agentClientNumber) => {
                           markFormEdited()
                           setAgentClientLocations([])
-                          setAgentClientContacts([])
                           setAgentClientData(null)
                           setForm((current) => ({
                             ...current,
                             agentClientNumber,
                             agentClientLocationCode: '',
-                            agentContactName: '',
                           }))
                         }}
                       />
@@ -1997,15 +1888,10 @@ const ProvincialApplicationCreatePage = () => {
                         onBlur={() => markFieldTouched('agentClientLocationCode')}
                         onChange={(value) => {
                           markFormEdited()
-                          setAgentClientContacts([])
                           setAgentClientData(null)
                           setForm((current) => ({
                             ...current,
                             agentClientLocationCode: value,
-                            agentContactName:
-                              current.agentClientLocationCode === value
-                                ? current.agentContactName
-                                : '',
                           }))
                         }}
                       />
@@ -2025,7 +1911,10 @@ const ProvincialApplicationCreatePage = () => {
                 aria-label="Application"
               >
                 <div className="detail-section-card__header">
-                  <h2 className="detail-tile-title">Application details</h2>
+                  <h2 className="detail-tile-title">
+                    <Task size={24} aria-hidden="true" />
+                    Application details
+                  </h2>
                 </div>
                 <p className="application-create-required">{requiredLabel('Required fields')}</p>
                 <div className="legacy-search-grid create-form-grid">
@@ -2180,7 +2069,10 @@ const ProvincialApplicationCreatePage = () => {
                   aria-label="Scale"
                 >
                   <div className="detail-section-card__header">
-                    <h2 className="detail-tile-title">Scale details</h2>
+                    <h2 className="detail-tile-title">
+                      <ContainerRegistry size={24} aria-hidden="true" />
+                      Scale details
+                    </h2>
                   </div>
                   <p className="application-create-required">{requiredLabel('Required fields')}</p>
                   <div className="legacy-search-grid create-form-grid">
@@ -2287,7 +2179,8 @@ const ProvincialApplicationCreatePage = () => {
                     />
                     <SearchableSelect
                       id="applicationEndUse"
-                      labelText="End use"
+                      labelText={requiredLabel('End use')}
+                      required
                       value={form.endUseCode}
                       disabled={
                         form.speciesCodes.length === 0 ||
@@ -2389,8 +2282,8 @@ const ProvincialApplicationCreatePage = () => {
             ? 'Authoritative application options must load before this application can be saved.'
             : isLoadingOwnerClientLocations ||
                 isLoadingAgentClientLocations ||
-                isLoadingOwnerClientContacts ||
-                isLoadingAgentClientContacts
+                isLoadingOwnerClientData ||
+                isLoadingAgentClientData
               ? 'Client details must finish loading before this application can be saved.'
               : provincialSubmitterScopeUnavailable
                 ? 'An authenticated forest client is required before this application can be saved.'

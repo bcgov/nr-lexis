@@ -43,14 +43,17 @@ class OracleClientLookupServiceTest {
                     "CA",
                     "250-555-0100",
                     "250-555-0199",
-                    "user@example.com")));
+                    "user@example.com",
+                    " ACME ")));
 
     Optional<ClientLookupService.ClientData> response = service.getClientData("77881", null);
 
     assertThat(response).isPresent();
     assertThat(response.get().clientNumber()).isEqualTo("00077881");
+    assertThat(response.get().locationName()).isEqualTo("Main");
     assertThat(response.get().companyName()).isEqualTo("Acme Forestry");
     assertThat(response.get().address()).isEqualTo("123 Main St");
+    assertThat(response.get().clientAcronym()).isEqualTo("ACME");
     verify(repository).findLocationByClientNumberCode("00077881", "00");
   }
 
@@ -73,13 +76,17 @@ class OracleClientLookupServiceTest {
                     "CA",
                     "250-555-0100",
                     null,
-                    "user@example.com")));
+                    "user@example.com",
+                    null)));
 
     Optional<ClientLookupService.ClientData> response =
         service.getClientDataRequired("77881", "01");
 
     assertThat(response).isPresent();
     assertThat(response.get().clientNumber()).isEqualTo("00077881");
+    // Empty fields stay empty instead of carrying a "Not on file" placeholder.
+    assertThat(response.get().fax()).isNull();
+    assertThat(response.get().clientAcronym()).isNull();
     verify(repository).findLocationByClientNumberCodeRequired("00077881", "01");
   }
 

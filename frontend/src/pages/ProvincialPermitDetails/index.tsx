@@ -71,6 +71,8 @@ import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
+import { displayTableValue } from '@/utils/text'
+import { formatIsoDateLabel } from '@/utils/date'
 import {
   locationPath,
   readDetailReturnTo,
@@ -390,6 +392,7 @@ type PermitClientTileProps = {
   title: string
   clientNumber: string | null
   locationCode: string | null
+  locationName?: string
   clientData: ApplicationClientData | null
   isLoading: boolean
   errorMessage: string
@@ -410,10 +413,20 @@ const permitClientFields = (kind: PermitClientKind) =>
         location: 'agentClientLocation' as const,
       }
 
+const permitClientDisplayName = (
+  clientData: ApplicationClientData | null,
+  clientNumber: string | null,
+) => {
+  const name = clientData?.companyName.trim() ?? ''
+  const acronym = clientData?.clientAcronym?.trim() ?? ''
+  return [name && acronym ? `${name} (${acronym})` : name, clientNumber].filter(Boolean).join(' · ')
+}
+
 const PermitClientTile = ({
   title,
   clientNumber,
   locationCode,
+  locationName = '',
   clientData,
   isLoading,
   errorMessage,
@@ -422,26 +435,28 @@ const PermitClientTile = ({
 }: PermitClientTileProps) => (
   <>
     {reviewedLayout ? (
-      <Tile className="detail-section-card permit-client-tile">
-        <div className="detail-section-card__header">
-          <h2 className="detail-tile-title">
-            <Enterprise size={24} aria-hidden="true" />
-            {title}
-          </h2>
-          {headerAction}
-        </div>
+      <section className="permit-client-tile">
+        <h3 className="permit-client-subheading">{title}</h3>
         <dl className="detail-field-grid permit-client-tile__identity">
           <div className="detail-field-item">
             <dt className="detail-field-label">Client</dt>
             <dd className="detail-field-value">
               {isLoading
                 ? 'Loading…'
-                : displayValue([clientData?.companyName, clientNumber].filter(Boolean).join(' · '))}
+                : displayTableValue(permitClientDisplayName(clientData, clientNumber))}
             </dd>
           </div>
           <div className="detail-field-item">
-            <dt className="detail-field-label">Location</dt>
-            <dd className="detail-field-value">{displayValue(locationCode)}</dd>
+            <dt className="detail-field-label">Client location</dt>
+            <dd className="detail-field-value">
+              {displayTableValue(
+                clientLocationLabel(
+                  locationCode ?? '',
+                  locationName,
+                  clientData?.locationName ?? '',
+                ),
+              )}
+            </dd>
           </div>
         </dl>
         <dl className="detail-field-grid permit-client-tile__address-fields">
@@ -454,7 +469,9 @@ const PermitClientTile = ({
           ].map(([label, value]) => (
             <div key={label} className="detail-field-item">
               <dt className="detail-field-label">{label}</dt>
-              <dd className="detail-field-value">{isLoading ? 'Loading…' : displayValue(value)}</dd>
+              <dd className="detail-field-value">
+                {isLoading ? 'Loading…' : displayTableValue(value)}
+              </dd>
             </div>
           ))}
         </dl>
@@ -466,11 +483,13 @@ const PermitClientTile = ({
           ].map(([label, value]) => (
             <div key={label} className="detail-field-item">
               <dt className="detail-field-label">{label}</dt>
-              <dd className="detail-field-value">{isLoading ? 'Loading…' : displayValue(value)}</dd>
+              <dd className="detail-field-value">
+                {isLoading ? 'Loading…' : displayTableValue(value)}
+              </dd>
             </div>
           ))}
         </dl>
-      </Tile>
+      </section>
     ) : (
       <DetailFieldTile
         title={title}
@@ -951,6 +970,11 @@ const ProvincialPermitDetailsPage = () => {
   const [boicScalePendingRemoval, setBoicScalePendingRemoval] =
     useState<ProvincialPermitItemRow | null>(null)
   const [isSavingBoicScale, setIsSavingBoicScale] = useState(false)
+  const [isAddingBoicScale, setIsAddingBoicScale] = useState(false)
+  const [discardBoicScaleOpen, setDiscardBoicScaleOpen] = useState(false)
+  const [boicScaleErrorMessage, setBoicScaleErrorMessage] = useState('')
+  const scalePanelLauncherRef = useRef<HTMLButtonElement | null>(null)
+  const scaleSaveInFlightRef = useRef(false)
   const [boicPackageForm, setBoicPackageForm] = useState<BlanketOicPackageForm>(
     EMPTY_BLANKET_OIC_PACKAGE_FORM,
   )
@@ -1088,6 +1112,9 @@ const ProvincialPermitDetailsPage = () => {
     setIsCreatingBoicPackage(false)
     setBoicCodeOptionsReady(false)
     setBoicScaleCodeOptionsReady(false)
+    setIsAddingBoicScale(false)
+    setDiscardBoicScaleOpen(false)
+    setBoicScaleErrorMessage('')
     setSelectedBlanketOicPackageNumberState('')
     setSelectedMinisterialPackageNumberState('')
     setMinisterialScaleSelectionDraft(null)
@@ -2151,6 +2178,7 @@ const ProvincialPermitDetailsPage = () => {
     !formValuesEqual(resolvedBlanketOicScaleForm, resolvedBlanketOicScaleBaselineForm)
   const blanketOicPackageEditorOpen = isCreatingBoicPackage || editingBoicPackageNumber !== null
   const blanketOicPackageActionsDisabled =
+    isAddingBoicScale ||
     blanketOicScaleDirty ||
     isSavingBoicScale ||
     isDeletingBoicScaleId !== null ||
@@ -3904,9 +3932,37 @@ const ProvincialPermitDetailsPage = () => {
     setBoicScaleForm((current) => ({ ...current, [field]: value }))
   }
 
+  const discardBlanketOicScale = () => {
+    if (scaleSaveInFlightRef.current) return
+    setBoicScaleForm(boicScaleBaselineForm)
+    setBoicScaleErrorMessage('')
+    setIsAddingBoicScale(false)
+    setDiscardBoicScaleOpen(false)
+  }
+  const closeBlanketOicScale = () => {
+    if (scaleSaveInFlightRef.current) return
+    if (blanketOicScaleDirty) setDiscardBoicScaleOpen(true)
+    else discardBlanketOicScale()
+  }
+  const startBlanketOicScale = (launcher: HTMLButtonElement) => {
+    if (!canEditBlanketOicScaleRows || blanketOicScaleActionsDisabled || !selectedBlanketOicPackage)
+      return
+    const baseline = {
+      ...EMPTY_BLANKET_OIC_SCALE_FORM,
+      packageNumber: selectedBlanketOicPackageNumber,
+    }
+    setBoicScaleForm(baseline)
+    setBoicScaleBaselineForm(baseline)
+    setBoicScaleErrorMessage('')
+    setBoicScaleCodeOptionsReady(false)
+    scalePanelLauncherRef.current = launcher
+    setIsAddingBoicScale(true)
+  }
+
   const onAddBlanketOicScale = useCallback(async (): Promise<boolean> => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
     if (
+      scaleSaveInFlightRef.current ||
       !canEditBlanketOicScaleRows ||
       !resolvedPermitNumber ||
       blanketOicScaleActionsDisabled ||
@@ -3915,10 +3971,11 @@ const ProvincialPermitDetailsPage = () => {
       return false
     }
     setActionResult(null)
+    setBoicScaleErrorMessage('')
 
     const request = {
       permitNumber: resolvedPermitNumber,
-      packageNumber: selectedBlanketOicPackageNumber,
+      packageNumber: boicScaleForm.packageNumber,
       timberMark: boicScaleForm.timberMark.trim(),
       scaleVolume: boicScaleForm.scaleVolume.trim(),
       scalePieces: boicScaleForm.scalePieces.trim(),
@@ -3927,10 +3984,7 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     if (!detail?.oicApplicationNumber) {
-      setActionResult({
-        kind: 'error',
-        message: 'The permit does not have an OIC application number.',
-      })
+      setBoicScaleErrorMessage('The permit does not have an OIC application number.')
       return false
     }
     if (
@@ -3941,22 +3995,19 @@ const ProvincialPermitDetailsPage = () => {
       !request.speciesCode ||
       !request.gradeCode
     ) {
-      setActionResult({
-        kind: 'error',
-        message: 'Enter package, timber mark, species, grade, pieces, and volume.',
-      })
+      setBoicScaleErrorMessage('Enter package, timber mark, species, grade, pieces, and volume.')
       return false
     }
 
-    setActionResult(null)
+    setBoicScaleErrorMessage('')
+    scaleSaveInFlightRef.current = true
     setIsSavingBoicScale(true)
     try {
       const result = await addBlanketOicScale(request)
       if (!result.success) {
-        setActionResult({
-          kind: 'error',
-          message: result.errors[0] || result.message || 'Unable to add Blanket OIC scale detail.',
-        })
+        setBoicScaleErrorMessage(
+          result.errors[0] || result.message || 'Unable to add Blanket OIC scale detail.',
+        )
         return false
       }
 
@@ -3966,6 +4017,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       setBoicScaleForm(savedScaleBaseline)
       setBoicScaleBaselineForm(savedScaleBaseline)
+      setIsAddingBoicScale(false)
       try {
         await reloadPermitScaleState()
         setActionResult({
@@ -3985,9 +4037,10 @@ const ProvincialPermitDetailsPage = () => {
       return true
     } catch (error) {
       console.error(error)
-      setActionResult({ kind: 'error', message: 'Unable to add Blanket OIC scale detail.' })
+      setBoicScaleErrorMessage('Unable to add Blanket OIC scale detail.')
       return false
     } finally {
+      scaleSaveInFlightRef.current = false
       setIsSavingBoicScale(false)
     }
   }, [
@@ -4426,6 +4479,9 @@ const ProvincialPermitDetailsPage = () => {
     setIsEditingFeeOverride(false)
     resetBlanketOicPackageForm()
     setBoicScaleForm(boicScaleBaselineForm)
+    setIsAddingBoicScale(false)
+    setDiscardBoicScaleOpen(false)
+    setBoicScaleErrorMessage('')
     setPermitDocumentUploadDirty(false)
     setPermitDocumentUploadBusy(false)
     setInvoiceDocumentUploadDirty(false)
@@ -4470,9 +4526,7 @@ const ProvincialPermitDetailsPage = () => {
     const isLoading = isOwner ? isOwnerClientLookupLoading : isAgentClientLookupLoading
     const errorMessage = isOwner ? ownerClientLookupError : agentClientLookupError
     const label = isOwner ? 'Applicant' : 'Agent'
-    const reviewedClientDisplay = [clientData?.companyName, clientNumber]
-      .filter(Boolean)
-      .join(' · ')
+    const reviewedClientDisplay = permitClientDisplayName(clientData, clientNumber)
     const reviewedAddressFields = [
       ['Address', clientData?.address],
       ['City', clientData?.city],
@@ -4521,7 +4575,11 @@ const ProvincialPermitDetailsPage = () => {
           )}
           <Select
             id={`permit-${locationField}`}
-            labelText={requiredLabel(usesReviewedPermitFlow ? 'Location' : `${label} location`)}
+            labelText={requiredLabel(
+              usesReviewedPermitFlow
+                ? `${isOwner ? 'Client' : 'Agent client'} location`
+                : `${label} location`,
+            )}
             aria-label={`${label} location`}
             aria-required="true"
             value={locationCode}
@@ -5335,68 +5393,16 @@ const ProvincialPermitDetailsPage = () => {
             </div>
           </dl>
         )}
-        {canEditBlanketOicScaleRows && (
-          <>
-            <div className="legacy-search-grid">
-              <TextInput
-                id="boicScaleTimberMark"
-                labelText={requiredLabel('Timber mark')}
-                aria-required="true"
-                value={boicScaleForm.timberMark}
-                onChange={(event) => setBlanketOicScaleFormField('timberMark', event.target.value)}
-                disabled={blanketOicScaleActionsDisabled}
-              />
-              <BlanketOicScaleCodeFields
-                region={String(detail.orgUnitNumber ?? '')}
-                value={boicScaleForm}
-                onChange={setBlanketOicScaleFormField}
-                disabled={blanketOicScaleActionsDisabled}
-                onAvailabilityChange={setBoicScaleCodeOptionsReady}
-              />
-              <TextInput
-                id="boicScalePieces"
-                labelText={requiredLabel('Pieces')}
-                aria-required="true"
-                value={boicScaleForm.scalePieces}
-                onChange={(event) => setBlanketOicScaleFormField('scalePieces', event.target.value)}
-                disabled={blanketOicScaleActionsDisabled}
-              />
-              <TextInput
-                id="boicScaleVolume"
-                labelText={requiredLabel('Volume (m³)')}
-                aria-required="true"
-                value={boicScaleForm.scaleVolume}
-                onChange={(event) => setBlanketOicScaleFormField('scaleVolume', event.target.value)}
-                disabled={blanketOicScaleActionsDisabled}
-              />
-            </div>
-            <div className="legacy-search-actions">
-              <Button
-                kind="primary"
-                size="sm"
-                disabled={
-                  blanketOicScaleActionsDisabled ||
-                  !boicScaleCodeOptionsReady ||
-                  !detail.oicApplicationNumber ||
-                  blanketOicPackageOptions.length === 0
-                }
-                renderIcon={isSavingBoicScale ? PendingIcon : undefined}
-                onClick={() => void onAddBlanketOicScale()}
-              >
-                {isSavingBoicScale ? 'Adding scale…' : 'Add scale'}
-              </Button>
-              {blanketOicScaleDirty && (
-                <Button
-                  kind="tertiary"
-                  size="sm"
-                  disabled={isSavingBoicScale}
-                  onClick={() => setBoicScaleForm(boicScaleBaselineForm)}
-                >
-                  Cancel scale
-                </Button>
-              )}
-            </div>
-          </>
+        {canEditBlanketOicScaleRows && selectedBlanketOicPackage && (
+          <Button
+            id="add-boic-scale"
+            kind="tertiary"
+            size="md"
+            disabled={blanketOicScaleActionsDisabled || isAddingBoicScale}
+            onClick={(event) => startBlanketOicScale(event.currentTarget)}
+          >
+            Add scale
+          </Button>
         )}
         {!permitTablesErrorMessage &&
           !ministerialScaleEmpty &&
@@ -5769,6 +5775,47 @@ const ProvincialPermitDetailsPage = () => {
     )
   }
 
+  const emptyPermitDocuments =
+    usesReviewedPermitFlow &&
+    deferredPermitTabLoaded.documents &&
+    !deferredPermitTabLoading.documents &&
+    !documentsErrorMessage &&
+    documentRows.length === 0
+  const emptyPermitScale = ministerialScaleEmpty || blanketOicPackageCreationRequired
+  const ScaleContainer = detail?.blanketOic || ministerialScaleEmpty ? 'section' : Tile
+  const FeesContainer = ministerialFeeShellEmpty ? 'section' : Tile
+  const DocumentsContainer = usesReviewedPermitFlow ? 'section' : Tile
+  const addPermitDocumentsButton =
+    canUploadPermitDocuments && !isEditingPermitDocuments ? (
+      <Button
+        kind="tertiary"
+        size="md"
+        className="detail-documents-add-button"
+        ref={permitDocumentUploadLauncherRef}
+        disabled={permitDocumentUploadBusy}
+        onClick={() => {
+          setPermitDocumentUploadResetKey((current) => current + 1)
+          setIsEditingPermitDocuments(true)
+        }}
+      >
+        Add document
+      </Button>
+    ) : null
+  const createBlanketOicPackageButton = canEditBlanketOicPackages ? (
+    <Button
+      id="create-boic-package"
+      kind="tertiary"
+      size="md"
+      disabled={blanketOicPackageActionsDisabled}
+      onClick={(event) => {
+        packagePanelLauncherRef.current = event.currentTarget
+        startBlanketOicPackageCreate()
+      }}
+    >
+      Create package
+    </Button>
+  ) : null
+
   return (
     <Grid
       id="permit-detail-content"
@@ -6051,13 +6098,13 @@ const ProvincialPermitDetailsPage = () => {
                             <div className="detail-field-item">
                               <dt className="detail-field-label">Exemption number</dt>
                               <dd className="detail-field-value">
-                                {displayValue(detail.exemptionNumber)}
+                                {displayTableValue(detail.exemptionNumber)}
                               </dd>
                             </div>
                             <div className="detail-field-item">
                               <dt className="detail-field-label">Exemption type</dt>
                               <dd className="detail-field-value">
-                                {displayValue(detail.exemptionTypeDescription)}
+                                {displayTableValue(detail.exemptionTypeDescription)}
                               </dd>
                             </div>
                             {detail.blanketOic ? (
@@ -6107,7 +6154,7 @@ const ProvincialPermitDetailsPage = () => {
                               <div className="detail-field-item">
                                 <dt className="detail-field-label">Region</dt>
                                 <dd className="detail-field-value">
-                                  {displayValue(detail.region ?? detail.orgUnitNumber)}
+                                  {displayTableValue(detail.region ?? detail.orgUnitNumber)}
                                 </dd>
                               </div>
                             )}
@@ -6147,7 +6194,7 @@ const ProvincialPermitDetailsPage = () => {
                                     Total exemption volume (m³)
                                   </dt>
                                   <dd className="detail-field-value">
-                                    {displayValue(detail.approvedExemptionVolume)}
+                                    {displayTableValue(detail.approvedExemptionVolume)}
                                   </dd>
                                 </div>
                                 <div className="detail-field-item">
@@ -6155,19 +6202,19 @@ const ProvincialPermitDetailsPage = () => {
                                     Total volume remaining (m³)
                                   </dt>
                                   <dd className="detail-field-value">
-                                    {displayValue(detail.exemptionVolumeRemaining)}
+                                    {displayTableValue(detail.exemptionVolumeRemaining)}
                                   </dd>
                                 </div>
                                 <div className="detail-field-item">
                                   <dt className="detail-field-label">Current permit pieces</dt>
                                   <dd className="detail-field-value">
-                                    {displayValue(detail.numberOfPieces)}
+                                    {displayTableValue(detail.numberOfPieces)}
                                   </dd>
                                 </div>
                                 <div className="detail-field-item">
                                   <dt className="detail-field-label">Current permit volume (m³)</dt>
                                   <dd className="detail-field-value">
-                                    {displayValue(detail.permitVolume)}
+                                    {displayTableValue(detail.permitVolume)}
                                   </dd>
                                 </div>
                               </dl>
@@ -6423,7 +6470,9 @@ const ProvincialPermitDetailsPage = () => {
                             ].map(([label, value]) => (
                               <div key={label} className="detail-field-item">
                                 <dt className="detail-field-label">{label}</dt>
-                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                                <dd className="detail-field-value">
+                                  {displayTableValue(formatIsoDateLabel(value))}
+                                </dd>
                               </div>
                             ))}
                           </dl>
@@ -6505,20 +6554,20 @@ const ProvincialPermitDetailsPage = () => {
                                     {detail.exemptionNumber}
                                   </Link>
                                 ) : (
-                                  displayValue(detail.exemptionNumber)
+                                  displayTableValue(detail.exemptionNumber)
                                 )}
                               </dd>
                             </div>
                             <div className="detail-field-item">
                               <dt className="detail-field-label">Exemption type</dt>
                               <dd className="detail-field-value">
-                                {displayValue(detail.exemptionTypeDescription)}
+                                {displayTableValue(detail.exemptionTypeDescription)}
                               </dd>
                             </div>
                             <div className="detail-field-item">
                               <dt className="detail-field-label">Region</dt>
                               <dd className="detail-field-value">
-                                {displayValue(detail.region ?? detail.orgUnitNumber)}
+                                {displayTableValue(detail.region ?? detail.orgUnitNumber)}
                               </dd>
                             </div>
                           </dl>
@@ -6530,7 +6579,9 @@ const ProvincialPermitDetailsPage = () => {
                             ].map(([label, value]) => (
                               <div key={label} className="detail-field-item">
                                 <dt className="detail-field-label">{label}</dt>
-                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                                <dd className="detail-field-value">
+                                  {displayTableValue(formatIsoDateLabel(value))}
+                                </dd>
                               </div>
                             ))}
                           </dl>
@@ -6543,7 +6594,7 @@ const ProvincialPermitDetailsPage = () => {
                             ].map(([label, value]) => (
                               <div key={label} className="detail-field-item">
                                 <dt className="detail-field-label">{label}</dt>
-                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                                <dd className="detail-field-value">{displayTableValue(value)}</dd>
                               </div>
                             ))}
                           </dl>
@@ -6554,14 +6605,16 @@ const ProvincialPermitDetailsPage = () => {
                             ].map(([label, value]) => (
                               <div key={label} className="detail-field-item">
                                 <dt className="detail-field-label">{label}</dt>
-                                <dd className="detail-field-value">{displayValue(value)}</dd>
+                                <dd className="detail-field-value">{displayTableValue(value)}</dd>
                               </div>
                             ))}
                           </dl>
                           <dl className="boic-permit-details__remarks detail-field-grid">
                             <div className="detail-field-item detail-field-item--full">
                               <dt className="detail-field-label">Remarks</dt>
-                              <dd className="detail-field-value">{displayValue(detail.remarks)}</dd>
+                              <dd className="detail-field-value">
+                                {displayTableValue(detail.remarks)}
+                              </dd>
                             </div>
                           </dl>
                         </Tile>
@@ -6870,45 +6923,81 @@ const ProvincialPermitDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     {!ownerEditMode && (
                       <Column sm={4} md={8} lg={16}>
-                        <PermitClientTile
-                          title="Applicant details"
-                          clientNumber={detail.ownerClientNumber}
-                          locationCode={detail.ownerClientLocationCode}
-                          clientData={ownerClientData}
-                          isLoading={isClientDataLoading}
-                          errorMessage={activePermitTabId === 'owner' ? clientDataErrorMessage : ''}
-                          reviewedLayout={usesReviewedPermitFlow}
-                          headerAction={
-                            usesReviewedPermitFlow && canEditPermitClients ? (
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                renderIcon={Edit}
-                                onClick={startPermitClientEdit}
-                              >
-                                Edit applicant details
-                              </Button>
-                            ) : undefined
-                          }
-                        />
-                        <Checkbox
-                          id="permit-agent-used"
-                          labelText="I'm an agent"
-                          checked={agentUsed}
-                          disabled
-                        />
-                        {usesReviewedPermitFlow && hasPermitAgent && (
-                          <PermitClientTile
-                            title="Agent information"
-                            clientNumber={detail.applicantClientNumber}
-                            locationCode={detail.agentClientLocationCode}
-                            clientData={agentClientData}
-                            isLoading={isClientDataLoading}
-                            errorMessage={
-                              activePermitTabId === 'owner' ? clientDataErrorMessage : ''
-                            }
-                            reviewedLayout
-                          />
+                        {usesReviewedPermitFlow ? (
+                          <Tile className="detail-section-card permit-applicant-card">
+                            <div className="detail-section-card__header">
+                              <h2 className="detail-tile-title">
+                                <Enterprise size={24} aria-hidden="true" />
+                                Applicant details
+                              </h2>
+                              {canEditPermitClients && (
+                                <Button
+                                  kind="tertiary"
+                                  size="md"
+                                  renderIcon={Edit}
+                                  onClick={startPermitClientEdit}
+                                >
+                                  Edit applicant details
+                                </Button>
+                              )}
+                            </div>
+                            <PermitClientTile
+                              title="Owner"
+                              clientNumber={detail.ownerClientNumber}
+                              locationCode={detail.ownerClientLocationCode}
+                              locationName={
+                                ownerClientLocations.find(
+                                  (location) =>
+                                    location.locationCode === detail.ownerClientLocationCode,
+                                )?.locationName
+                              }
+                              clientData={ownerClientData}
+                              isLoading={isClientDataLoading}
+                              errorMessage={
+                                activePermitTabId === 'owner' ? clientDataErrorMessage : ''
+                              }
+                              reviewedLayout
+                            />
+                            {hasPermitAgent && (
+                              <>
+                                <hr className="permit-client-editor__agent-divider" />
+                                <PermitClientTile
+                                  title="Agent"
+                                  clientNumber={detail.applicantClientNumber}
+                                  locationCode={detail.agentClientLocationCode}
+                                  locationName={
+                                    agentClientLocations.find(
+                                      (location) =>
+                                        location.locationCode === detail.agentClientLocationCode,
+                                    )?.locationName
+                                  }
+                                  clientData={agentClientData}
+                                  isLoading={isClientDataLoading}
+                                  errorMessage=""
+                                  reviewedLayout
+                                />
+                              </>
+                            )}
+                          </Tile>
+                        ) : (
+                          <>
+                            <PermitClientTile
+                              title="Applicant details"
+                              clientNumber={detail.ownerClientNumber}
+                              locationCode={detail.ownerClientLocationCode}
+                              clientData={ownerClientData}
+                              isLoading={isClientDataLoading}
+                              errorMessage={
+                                activePermitTabId === 'owner' ? clientDataErrorMessage : ''
+                              }
+                            />
+                            <Checkbox
+                              id="permit-agent-used"
+                              labelText="I'm an agent"
+                              checked={agentUsed}
+                              disabled
+                            />
+                          </>
                         )}
                       </Column>
                     )}
@@ -6923,6 +7012,9 @@ const ProvincialPermitDetailsPage = () => {
                             <p className="permit-client-editor__required-hint">
                               {requiredLabel('Required fields')}
                             </p>
+                          )}
+                          {usesReviewedPermitFlow && (
+                            <h3 className="permit-client-subheading">Owner</h3>
                           )}
                           {renderPermitClientEditor('owner', invoiceMaterialLocked)}
                           {usesReviewedPermitFlow && (
@@ -7287,11 +7379,11 @@ const ProvincialPermitDetailsPage = () => {
                             fields={[
                               {
                                 label: 'Purchaser',
-                                value: displayValue(detail.destinationCompanyName),
+                                value: displayTableValue(detail.destinationCompanyName),
                               },
                               {
                                 label: 'Final destination country',
-                                value: displayValue(
+                                value: displayTableValue(
                                   shippingReferenceLabel(
                                     shippingReferences?.countries,
                                     detail.destinationCountryCode,
@@ -7300,7 +7392,7 @@ const ProvincialPermitDetailsPage = () => {
                               },
                               {
                                 label: 'Transport type',
-                                value: displayValue(
+                                value: displayTableValue(
                                   shippingReferenceLabel(
                                     shippingReferences?.transportTypes,
                                     detail.transportTypeCode,
@@ -7309,15 +7401,17 @@ const ProvincialPermitDetailsPage = () => {
                               },
                               {
                                 label: 'Transport name',
-                                value: displayValue(detail.transportName),
+                                value: displayTableValue(detail.transportName),
                               },
                               {
                                 label: 'Estimated shipping date',
-                                value: displayValue(detail.estimatedShippingDate),
+                                value: displayTableValue(
+                                  formatIsoDateLabel(detail.estimatedShippingDate),
+                                ),
                               },
                               {
                                 label: 'Customs port of export',
-                                value: displayValue(
+                                value: displayTableValue(
                                   shippingReferenceLabel(
                                     shippingReferences?.ports,
                                     detail.portOfExportCode,
@@ -7328,7 +7422,7 @@ const ProvincialPermitDetailsPage = () => {
                                 ? [
                                     {
                                       label: 'Other port of export',
-                                      value: displayValue(detail.otherPortOfExport),
+                                      value: displayTableValue(detail.otherPortOfExport),
                                     },
                                   ]
                                 : []),
@@ -7393,14 +7487,21 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                   </Grid>
                 </TabPanel>
-                <TabPanel key="items" className="application-detail-tab-panel">
+                <TabPanel
+                  key="items"
+                  className={`application-detail-tab-panel${emptyPermitScale ? ' application-detail-tab-panel--empty' : ''}`}
+                >
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <h2 className="detail-tile-title">
-                          {usesReviewedPermitFlow && <Box size={24} aria-hidden="true" />}
-                          {usesReviewedPermitFlow ? 'Scale' : 'Permit items'}
-                        </h2>
+                      <ScaleContainer
+                        className={emptyPermitScale ? 'permit-detail-empty-section' : undefined}
+                      >
+                        {!emptyPermitScale && !detail.blanketOic && (
+                          <h2 className="detail-tile-title">
+                            {usesReviewedPermitFlow && <Box size={24} aria-hidden="true" />}
+                            {usesReviewedPermitFlow ? 'Scale' : 'Permit items'}
+                          </h2>
+                        )}
                         {ministerialScaleEmpty && (
                           <EmptyState
                             title="No scale yet"
@@ -7421,22 +7522,363 @@ const ProvincialPermitDetailsPage = () => {
                             headingLevel={3}
                           />
                         )}
-                        <fieldset className="legacy-form-fieldset" hidden={ministerialScaleEmpty}>
-                          <legend>
-                            {detail.blanketOic ? 'Blanket OIC package details' : 'Package details'}
-                          </legend>
-                          {detail.blanketOic && blanketOicPackageOptions.length > 0 && (
-                            <div className="boic-package-selector">
-                              <SearchableSelect
-                                id="boicScalePackageNumber"
-                                labelText="Package number"
-                                value={selectedBlanketOicPackageNumber}
-                                options={blanketOicPackageOptions}
-                                placeholder="Select package"
-                                disabled={blanketOicPackageActionsDisabled}
-                                onChange={setSelectedBlanketOicPackageNumberState}
+                        {blanketOicPackageCreationRequired && (
+                          <EmptyState
+                            title="No packages for this permit"
+                            description="Scale is recorded by package. Create a package, then add Summary of scale."
+                            action={createBlanketOicPackageButton}
+                            headingLevel={3}
+                          />
+                        )}
+                        {!emptyPermitScale && (
+                          <fieldset className="legacy-form-fieldset">
+                            <legend>
+                              {detail.blanketOic
+                                ? 'Blanket OIC package details'
+                                : 'Package details'}
+                            </legend>
+                            {detail.blanketOic && blanketOicPackageOptions.length > 0 && (
+                              <div className="boic-package-selector">
+                                <SearchableSelect
+                                  id="boicScalePackageNumber"
+                                  labelText="Package number"
+                                  value={selectedBlanketOicPackageNumber}
+                                  options={blanketOicPackageOptions}
+                                  placeholder="Select package"
+                                  disabled={blanketOicPackageActionsDisabled}
+                                  onChange={setSelectedBlanketOicPackageNumberState}
+                                />
+                                {canEditBlanketOicPackages && (
+                                  <Button
+                                    id="create-boic-package"
+                                    type="button"
+                                    kind="primary"
+                                    size="sm"
+                                    disabled={blanketOicPackageActionsDisabled}
+                                    onClick={(event) => {
+                                      packagePanelLauncherRef.current = event.currentTarget
+                                      startBlanketOicPackageCreate()
+                                    }}
+                                  >
+                                    Create package
+                                  </Button>
+                                )}
+                              </div>
+                            )}
+                            {ministerialPermit && ministerialPackageOptions.length > 0 && (
+                              <div className="legacy-search-grid">
+                                <SearchableSelect
+                                  id="ministerialScalePackageNumber"
+                                  labelText="Package number"
+                                  value={selectedMinisterialPackageNumber}
+                                  disabled={ministerialScaleSelectionDraft !== null}
+                                  options={ministerialPackageOptions}
+                                  placeholder="Select package"
+                                  onChange={setSelectedMinisterialPackageNumberState}
+                                />
+                              </div>
+                            )}
+                            {isPermitTablesLoading ? (
+                              <InlineLoading description="Loading permit items…" />
+                            ) : permitTablesErrorMessage ? (
+                              <EmptyState
+                                title={
+                                  usesReviewedPermitFlow
+                                    ? 'Scale unavailable'
+                                    : 'Permit items unavailable'
+                                }
+                                description={permitTablesErrorMessage}
+                                headingLevel={3}
+                                role="alert"
                               />
-                              {canEditBlanketOicPackages && (
+                            ) : detail.blanketOic && selectedBlanketOicPackage ? (
+                              <DetailFieldTile
+                                title={`Package ${formatPackageNumberLabel(selectedBlanketOicPackage.packageNumber)}`}
+                                icon={<Box size={24} aria-hidden="true" />}
+                                headerAction={
+                                  canEditBlanketOicPackages ? (
+                                    <div className="boic-package-summary__actions">
+                                      {selectedBlanketOicPackageHasScaleRows && (
+                                        <p
+                                          id={`boic-package-delete-help-${encodeURIComponent(selectedBlanketOicPackage.packageNumber)}`}
+                                          className="cds--visually-hidden"
+                                        >
+                                          Delete unavailable while this package has scale details.
+                                        </p>
+                                      )}
+                                      <Button
+                                        type="button"
+                                        kind="danger--ghost"
+                                        size="sm"
+                                        disabled={
+                                          blanketOicPackageActionsDisabled ||
+                                          selectedBlanketOicPackageHasScaleRows
+                                        }
+                                        aria-describedby={
+                                          selectedBlanketOicPackageHasScaleRows
+                                            ? `boic-package-delete-help-${encodeURIComponent(selectedBlanketOicPackage.packageNumber)}`
+                                            : undefined
+                                        }
+                                        onClick={() => {
+                                          clearActionNotifications()
+                                          setBoicPackageNumberPendingDeletion(
+                                            selectedBlanketOicPackage.packageNumber,
+                                          )
+                                        }}
+                                      >
+                                        {isDeletingBoicPackageNumber ===
+                                        selectedBlanketOicPackage.packageNumber
+                                          ? 'Deleting…'
+                                          : 'Delete package'}
+                                      </Button>
+                                      <Button
+                                        type="button"
+                                        kind="ghost"
+                                        size="sm"
+                                        renderIcon={Edit}
+                                        disabled={blanketOicPackageActionsDisabled}
+                                        onClick={(event) => {
+                                          packagePanelLauncherRef.current = event.currentTarget
+                                          void onEditBlanketOicPackage(
+                                            selectedBlanketOicPackage.packageNumber,
+                                          )
+                                        }}
+                                      >
+                                        Edit package
+                                      </Button>
+                                    </div>
+                                  ) : undefined
+                                }
+                                fields={[
+                                  {
+                                    label: 'Species list',
+                                    value:
+                                      selectedBlanketOicPackage.speciesCodes?.join(', ') || '—',
+                                  },
+                                  {
+                                    label: 'End use',
+                                    value: selectedBlanketOicPackage.endUseCodes?.join(', ') || '—',
+                                  },
+                                  {
+                                    label: 'Age class',
+                                    value: selectedBlanketOicPackage.ageClass || '—',
+                                  },
+                                  {
+                                    label: 'Product type',
+                                    value: selectedBlanketOicPackage.productType || '—',
+                                  },
+                                  {
+                                    label: 'Volume (m³)',
+                                    value: selectedBlanketOicPackage.packageVolume || '—',
+                                  },
+                                  {
+                                    label: 'Average length (m)',
+                                    value: selectedBlanketOicPackage.averageLength || '—',
+                                  },
+                                  {
+                                    label: 'Average top diameter (rads)',
+                                    value: selectedBlanketOicPackage.averageTopDiameter || '—',
+                                  },
+                                  {
+                                    label: 'Comments',
+                                    value: (
+                                      <span style={{ whiteSpace: 'pre-wrap' }}>
+                                        {selectedBlanketOicPackage.comments || '—'}
+                                      </span>
+                                    ),
+                                  },
+                                ]}
+                              >
+                                <div className="boic-package-summary__scale">
+                                  {renderScaleSummary()}
+                                </div>
+                              </DetailFieldTile>
+                            ) : ministerialPermit && selectedMinisterialPackage ? (
+                              <dl className="detail-field-grid ministerial-package-summary">
+                                {[
+                                  ['Region', selectedMinisterialPackage.region],
+                                  [
+                                    'Species and end use sort',
+                                    selectedMinisterialPackage.speciesEndUseSort,
+                                  ],
+                                  ['Age class', selectedMinisterialPackage.ageClass],
+                                  ['Product type', selectedMinisterialPackage.productType],
+                                  [
+                                    'Package volume (m³)',
+                                    (
+                                      selectedPermitScaleTotalsByPackage.get(
+                                        selectedMinisterialPackage.packageNumber,
+                                      )?.volume ?? 0
+                                    ).toLocaleString(),
+                                  ],
+                                  [
+                                    'Package pieces',
+                                    (
+                                      selectedPermitScaleTotalsByPackage.get(
+                                        selectedMinisterialPackage.packageNumber,
+                                      )?.pieces ?? 0
+                                    ).toLocaleString(),
+                                  ],
+                                  ['Average length (m)', selectedMinisterialPackage.averageLength],
+                                  [
+                                    'Average top diameter (rads)',
+                                    selectedMinisterialPackage.averageTopDiameter,
+                                  ],
+                                ].map(([label, value]) => (
+                                  <div key={label} className="detail-field-item">
+                                    <dt className="detail-field-label">{label}</dt>
+                                    <dd className="detail-field-value">{value || '—'}</dd>
+                                  </div>
+                                ))}
+                              </dl>
+                            ) : visiblePackages.length > 0 ? (
+                              <TableFrame ariaLabel="Permit packages">
+                                <Table size="md" useZebraStyles>
+                                  <TableHead>
+                                    <TableRow>
+                                      <TableHeader>Package number</TableHeader>
+                                      <TableHeader>Region</TableHeader>
+                                      <TableHeader>Species and end use sort</TableHeader>
+                                      <TableHeader>Age class</TableHeader>
+                                      {usesReviewedPermitFlow && (
+                                        <TableHeader>Package pieces</TableHeader>
+                                      )}
+                                      <TableHeader>Package volume (m³)</TableHeader>
+                                      <TableHeader>Average length</TableHeader>
+                                      <TableHeader>Average top diameter</TableHeader>
+                                      <TableHeader>Product type</TableHeader>
+                                      {detail.blanketOic && (
+                                        <>
+                                          <TableHeader>Current package volume (m³)</TableHeader>
+                                          <TableHeader>Comments</TableHeader>
+                                        </>
+                                      )}
+                                      {canEditBlanketOicPackages && (
+                                        <TableHeader>Actions</TableHeader>
+                                      )}
+                                    </TableRow>
+                                  </TableHead>
+                                  <TableBody>
+                                    {visiblePackages.map((row) => (
+                                      <TableRow key={row.packageNumber}>
+                                        <TableCell>
+                                          {row.packageNumber
+                                            ? formatPackageNumberLabel(row.packageNumber)
+                                            : '-'}
+                                        </TableCell>
+                                        <TableCell>{row.region || '-'}</TableCell>
+                                        <TableCell style={{ whiteSpace: 'pre-line' }}>
+                                          {row.speciesEndUseSort || '-'}
+                                        </TableCell>
+                                        <TableCell>{row.ageClass || '-'}</TableCell>
+                                        {usesReviewedPermitFlow && (
+                                          <TableCell>
+                                            {(
+                                              selectedPermitScaleTotalsByPackage.get(
+                                                row.packageNumber,
+                                              )?.pieces ?? 0
+                                            ).toLocaleString()}
+                                          </TableCell>
+                                        )}
+                                        <TableCell>
+                                          {ministerialPermit
+                                            ? (
+                                                selectedPermitScaleTotalsByPackage.get(
+                                                  row.packageNumber,
+                                                )?.volume ?? 0
+                                              ).toLocaleString()
+                                            : row.packageVolume || '-'}
+                                        </TableCell>
+                                        <TableCell>{row.averageLength || '-'}</TableCell>
+                                        <TableCell>{row.averageTopDiameter || '-'}</TableCell>
+                                        <TableCell>{row.productType || '-'}</TableCell>
+                                        {detail.blanketOic && (
+                                          <>
+                                            <TableCell>{row.currentPackageVolume || '-'}</TableCell>
+                                            <TableCell>{row.comments || '-'}</TableCell>
+                                          </>
+                                        )}
+                                        {canEditBlanketOicPackages && (
+                                          <TableCell>
+                                            {(tabsData?.items ?? []).some(
+                                              (item) => item.packageNumber === row.packageNumber,
+                                            ) && (
+                                              <p
+                                                id={`boic-package-delete-help-${encodeURIComponent(row.packageNumber)}`}
+                                              >
+                                                Delete unavailable while this package has scale
+                                                details.
+                                              </p>
+                                            )}
+                                            <Button
+                                              type="button"
+                                              kind="ghost"
+                                              size="sm"
+                                              disabled={blanketOicPackageActionsDisabled}
+                                              onClick={(event) => {
+                                                packagePanelLauncherRef.current =
+                                                  event.currentTarget
+                                                void onEditBlanketOicPackage(row.packageNumber)
+                                              }}
+                                            >
+                                              Edit
+                                            </Button>
+                                            <Button
+                                              type="button"
+                                              kind="danger--ghost"
+                                              size="sm"
+                                              aria-describedby={
+                                                (tabsData?.items ?? []).some(
+                                                  (item) =>
+                                                    item.packageNumber === row.packageNumber,
+                                                )
+                                                  ? `boic-package-delete-help-${encodeURIComponent(row.packageNumber)}`
+                                                  : undefined
+                                              }
+                                              disabled={
+                                                blanketOicPackageActionsDisabled ||
+                                                (tabsData?.items ?? []).some(
+                                                  (item) =>
+                                                    item.packageNumber === row.packageNumber,
+                                                )
+                                              }
+                                              onClick={() => {
+                                                clearActionNotifications()
+                                                setBoicPackageNumberPendingDeletion(
+                                                  row.packageNumber,
+                                                )
+                                              }}
+                                            >
+                                              {isDeletingBoicPackageNumber === row.packageNumber
+                                                ? 'Deleting…'
+                                                : 'Delete'}
+                                            </Button>
+                                          </TableCell>
+                                        )}
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </TableFrame>
+                            ) : detail.blanketOic ? (
+                              <EmptyState
+                                title="No packages yet"
+                                description={
+                                  canEditBlanketOicPackages
+                                    ? 'Scale is recorded by package. Create a package, then add its scales.'
+                                    : 'No package has been created for this Blanket OIC permit.'
+                                }
+                                headingLevel={3}
+                              />
+                            ) : ministerialScaleEmpty ? null : (
+                              <EmptyState
+                                title="No package details"
+                                description="No package detail rows are available for this permit."
+                                headingLevel={3}
+                              />
+                            )}
+                            {canEditBlanketOicPackages && blanketOicPackageOptions.length === 0 && (
+                              <div className="application-detail-edit-section">
                                 <Button
                                   id="create-boic-package"
                                   type="button"
@@ -7450,339 +7892,21 @@ const ProvincialPermitDetailsPage = () => {
                                 >
                                   Create package
                                 </Button>
-                              )}
-                            </div>
-                          )}
-                          {ministerialPermit && ministerialPackageOptions.length > 0 && (
-                            <div className="legacy-search-grid">
-                              <SearchableSelect
-                                id="ministerialScalePackageNumber"
-                                labelText="Package number"
-                                value={selectedMinisterialPackageNumber}
-                                disabled={ministerialScaleSelectionDraft !== null}
-                                options={ministerialPackageOptions}
-                                placeholder="Select package"
-                                onChange={setSelectedMinisterialPackageNumberState}
-                              />
-                            </div>
-                          )}
-                          {isPermitTablesLoading ? (
-                            <InlineLoading description="Loading permit items…" />
-                          ) : permitTablesErrorMessage ? (
-                            <EmptyState
-                              title={
-                                usesReviewedPermitFlow
-                                  ? 'Scale unavailable'
-                                  : 'Permit items unavailable'
-                              }
-                              description={permitTablesErrorMessage}
-                              headingLevel={3}
-                              role="alert"
-                            />
-                          ) : detail.blanketOic && selectedBlanketOicPackage ? (
-                            <DetailFieldTile
-                              title={`Package ${formatPackageNumberLabel(selectedBlanketOicPackage.packageNumber)}`}
-                              icon={<Box size={24} aria-hidden="true" />}
-                              headerAction={
-                                canEditBlanketOicPackages ? (
-                                  <div className="boic-package-summary__actions">
-                                    {selectedBlanketOicPackageHasScaleRows && (
-                                      <p
-                                        id={`boic-package-delete-help-${encodeURIComponent(selectedBlanketOicPackage.packageNumber)}`}
-                                        className="cds--visually-hidden"
-                                      >
-                                        Delete unavailable while this package has scale details.
-                                      </p>
-                                    )}
-                                    <Button
-                                      type="button"
-                                      kind="danger--ghost"
-                                      size="sm"
-                                      disabled={
-                                        blanketOicPackageActionsDisabled ||
-                                        selectedBlanketOicPackageHasScaleRows
-                                      }
-                                      aria-describedby={
-                                        selectedBlanketOicPackageHasScaleRows
-                                          ? `boic-package-delete-help-${encodeURIComponent(selectedBlanketOicPackage.packageNumber)}`
-                                          : undefined
-                                      }
-                                      onClick={() => {
-                                        clearActionNotifications()
-                                        setBoicPackageNumberPendingDeletion(
-                                          selectedBlanketOicPackage.packageNumber,
-                                        )
-                                      }}
-                                    >
-                                      {isDeletingBoicPackageNumber ===
-                                      selectedBlanketOicPackage.packageNumber
-                                        ? 'Deleting…'
-                                        : 'Delete package'}
-                                    </Button>
-                                    <Button
-                                      type="button"
-                                      kind="ghost"
-                                      size="sm"
-                                      renderIcon={Edit}
-                                      disabled={blanketOicPackageActionsDisabled}
-                                      onClick={(event) => {
-                                        packagePanelLauncherRef.current = event.currentTarget
-                                        void onEditBlanketOicPackage(
-                                          selectedBlanketOicPackage.packageNumber,
-                                        )
-                                      }}
-                                    >
-                                      Edit package
-                                    </Button>
-                                  </div>
-                                ) : undefined
-                              }
-                              fields={[
-                                {
-                                  label: 'Species list',
-                                  value: selectedBlanketOicPackage.speciesCodes?.join(', ') || '—',
-                                },
-                                {
-                                  label: 'End use',
-                                  value: selectedBlanketOicPackage.endUseCodes?.join(', ') || '—',
-                                },
-                                {
-                                  label: 'Age class',
-                                  value: selectedBlanketOicPackage.ageClass || '—',
-                                },
-                                {
-                                  label: 'Product type',
-                                  value: selectedBlanketOicPackage.productType || '—',
-                                },
-                                {
-                                  label: 'Volume (m³)',
-                                  value: selectedBlanketOicPackage.packageVolume || '—',
-                                },
-                                {
-                                  label: 'Average length (m)',
-                                  value: selectedBlanketOicPackage.averageLength || '—',
-                                },
-                                {
-                                  label: 'Average top diameter (rads)',
-                                  value: selectedBlanketOicPackage.averageTopDiameter || '—',
-                                },
-                                {
-                                  label: 'Comments',
-                                  value: (
-                                    <span style={{ whiteSpace: 'pre-wrap' }}>
-                                      {selectedBlanketOicPackage.comments || '—'}
-                                    </span>
-                                  ),
-                                },
-                              ]}
-                            >
-                              <div className="boic-package-summary__scale">
-                                {renderScaleSummary()}
                               </div>
-                            </DetailFieldTile>
-                          ) : ministerialPermit && selectedMinisterialPackage ? (
-                            <dl className="detail-field-grid ministerial-package-summary">
-                              {[
-                                ['Region', selectedMinisterialPackage.region],
-                                [
-                                  'Species and end use sort',
-                                  selectedMinisterialPackage.speciesEndUseSort,
-                                ],
-                                ['Age class', selectedMinisterialPackage.ageClass],
-                                ['Product type', selectedMinisterialPackage.productType],
-                                [
-                                  'Package volume (m³)',
-                                  (
-                                    selectedPermitScaleTotalsByPackage.get(
-                                      selectedMinisterialPackage.packageNumber,
-                                    )?.volume ?? 0
-                                  ).toLocaleString(),
-                                ],
-                                [
-                                  'Package pieces',
-                                  (
-                                    selectedPermitScaleTotalsByPackage.get(
-                                      selectedMinisterialPackage.packageNumber,
-                                    )?.pieces ?? 0
-                                  ).toLocaleString(),
-                                ],
-                                ['Average length (m)', selectedMinisterialPackage.averageLength],
-                                [
-                                  'Average top diameter (rads)',
-                                  selectedMinisterialPackage.averageTopDiameter,
-                                ],
-                              ].map(([label, value]) => (
-                                <div key={label} className="detail-field-item">
-                                  <dt className="detail-field-label">{label}</dt>
-                                  <dd className="detail-field-value">{value || '—'}</dd>
-                                </div>
-                              ))}
-                            </dl>
-                          ) : visiblePackages.length > 0 ? (
-                            <TableFrame ariaLabel="Permit packages">
-                              <Table size="md" useZebraStyles>
-                                <TableHead>
-                                  <TableRow>
-                                    <TableHeader>Package number</TableHeader>
-                                    <TableHeader>Region</TableHeader>
-                                    <TableHeader>Species and end use sort</TableHeader>
-                                    <TableHeader>Age class</TableHeader>
-                                    {usesReviewedPermitFlow && (
-                                      <TableHeader>Package pieces</TableHeader>
-                                    )}
-                                    <TableHeader>Package volume (m³)</TableHeader>
-                                    <TableHeader>Average length</TableHeader>
-                                    <TableHeader>Average top diameter</TableHeader>
-                                    <TableHeader>Product type</TableHeader>
-                                    {detail.blanketOic && (
-                                      <>
-                                        <TableHeader>Current package volume (m³)</TableHeader>
-                                        <TableHeader>Comments</TableHeader>
-                                      </>
-                                    )}
-                                    {canEditBlanketOicPackages && (
-                                      <TableHeader>Actions</TableHeader>
-                                    )}
-                                  </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {visiblePackages.map((row) => (
-                                    <TableRow key={row.packageNumber}>
-                                      <TableCell>
-                                        {row.packageNumber
-                                          ? formatPackageNumberLabel(row.packageNumber)
-                                          : '-'}
-                                      </TableCell>
-                                      <TableCell>{row.region || '-'}</TableCell>
-                                      <TableCell style={{ whiteSpace: 'pre-line' }}>
-                                        {row.speciesEndUseSort || '-'}
-                                      </TableCell>
-                                      <TableCell>{row.ageClass || '-'}</TableCell>
-                                      {usesReviewedPermitFlow && (
-                                        <TableCell>
-                                          {(
-                                            selectedPermitScaleTotalsByPackage.get(
-                                              row.packageNumber,
-                                            )?.pieces ?? 0
-                                          ).toLocaleString()}
-                                        </TableCell>
-                                      )}
-                                      <TableCell>
-                                        {ministerialPermit
-                                          ? (
-                                              selectedPermitScaleTotalsByPackage.get(
-                                                row.packageNumber,
-                                              )?.volume ?? 0
-                                            ).toLocaleString()
-                                          : row.packageVolume || '-'}
-                                      </TableCell>
-                                      <TableCell>{row.averageLength || '-'}</TableCell>
-                                      <TableCell>{row.averageTopDiameter || '-'}</TableCell>
-                                      <TableCell>{row.productType || '-'}</TableCell>
-                                      {detail.blanketOic && (
-                                        <>
-                                          <TableCell>{row.currentPackageVolume || '-'}</TableCell>
-                                          <TableCell>{row.comments || '-'}</TableCell>
-                                        </>
-                                      )}
-                                      {canEditBlanketOicPackages && (
-                                        <TableCell>
-                                          {(tabsData?.items ?? []).some(
-                                            (item) => item.packageNumber === row.packageNumber,
-                                          ) && (
-                                            <p
-                                              id={`boic-package-delete-help-${encodeURIComponent(row.packageNumber)}`}
-                                            >
-                                              Delete unavailable while this package has scale
-                                              details.
-                                            </p>
-                                          )}
-                                          <Button
-                                            type="button"
-                                            kind="ghost"
-                                            size="sm"
-                                            disabled={blanketOicPackageActionsDisabled}
-                                            onClick={(event) => {
-                                              packagePanelLauncherRef.current = event.currentTarget
-                                              void onEditBlanketOicPackage(row.packageNumber)
-                                            }}
-                                          >
-                                            Edit
-                                          </Button>
-                                          <Button
-                                            type="button"
-                                            kind="danger--ghost"
-                                            size="sm"
-                                            aria-describedby={
-                                              (tabsData?.items ?? []).some(
-                                                (item) => item.packageNumber === row.packageNumber,
-                                              )
-                                                ? `boic-package-delete-help-${encodeURIComponent(row.packageNumber)}`
-                                                : undefined
-                                            }
-                                            disabled={
-                                              blanketOicPackageActionsDisabled ||
-                                              (tabsData?.items ?? []).some(
-                                                (item) => item.packageNumber === row.packageNumber,
-                                              )
-                                            }
-                                            onClick={() => {
-                                              clearActionNotifications()
-                                              setBoicPackageNumberPendingDeletion(row.packageNumber)
-                                            }}
-                                          >
-                                            {isDeletingBoicPackageNumber === row.packageNumber
-                                              ? 'Deleting…'
-                                              : 'Delete'}
-                                          </Button>
-                                        </TableCell>
-                                      )}
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </TableFrame>
-                          ) : detail.blanketOic ? (
-                            <EmptyState
-                              title="No packages yet"
-                              description={
-                                canEditBlanketOicPackages
-                                  ? 'Scale is recorded by package. Create a package, then add its scales.'
-                                  : 'No package has been created for this Blanket OIC permit.'
-                              }
-                              headingLevel={3}
-                            />
-                          ) : ministerialScaleEmpty ? null : (
-                            <EmptyState
-                              title="No package details"
-                              description="No package detail rows are available for this permit."
-                              headingLevel={3}
-                            />
-                          )}
-                          {canEditBlanketOicPackages && blanketOicPackageOptions.length === 0 && (
-                            <div className="application-detail-edit-section">
-                              <Button
-                                id="create-boic-package"
-                                type="button"
-                                kind="primary"
-                                size="sm"
-                                disabled={blanketOicPackageActionsDisabled}
-                                onClick={(event) => {
-                                  packagePanelLauncherRef.current = event.currentTarget
-                                  startBlanketOicPackageCreate()
-                                }}
-                              >
-                                Create package
-                              </Button>
-                            </div>
-                          )}
-                        </fieldset>
-                        {!(detail.blanketOic && selectedBlanketOicPackage) && renderScaleSummary()}
-                      </Tile>
+                            )}
+                          </fieldset>
+                        )}
+                        {!emptyPermitScale &&
+                          !(detail.blanketOic && selectedBlanketOicPackage) &&
+                          renderScaleSummary()}
+                      </ScaleContainer>
                     </Column>
                   </Grid>
                 </TabPanel>
-                <TabPanel key="fees" className="application-detail-tab-panel">
+                <TabPanel
+                  key="fees"
+                  className={`application-detail-tab-panel${ministerialFeeShellEmpty ? ' application-detail-tab-panel--empty' : ''}`}
+                >
                   <Grid fullWidth className="application-detail-tab-grid">
                     {usesReviewedPermitFlow && !ministerialFeeShellEmpty ? (
                       <>
@@ -7837,13 +7961,19 @@ const ProvincialPermitDetailsPage = () => {
                       </>
                     ) : (
                       <Column sm={4} md={8} lg={16}>
-                        <Tile>
-                          <h2 className="detail-tile-title">
-                            {usesReviewedPermitFlow ? 'Fees' : 'Fee calculation details'}
-                          </h2>
+                        <FeesContainer
+                          className={
+                            ministerialFeeShellEmpty ? 'permit-detail-empty-section' : undefined
+                          }
+                        >
+                          {!ministerialFeeShellEmpty && (
+                            <h2 className="detail-tile-title">
+                              {usesReviewedPermitFlow ? 'Fees' : 'Fee calculation details'}
+                            </h2>
+                          )}
                           {!ministerialFeeShellEmpty && renderPermitFeeSummary()}
                           {renderPackageFees()}
-                        </Tile>
+                        </FeesContainer>
                       </Column>
                     )}
                   </Grid>
@@ -7896,57 +8026,49 @@ const ProvincialPermitDetailsPage = () => {
                     </Grid>
                   </TabPanel>
                 )}
-                <TabPanel key="documents" className="application-detail-tab-panel">
+                <TabPanel
+                  key="documents"
+                  className={`application-detail-tab-panel detail-documents-tab-panel${emptyPermitDocuments ? ' application-detail-tab-panel--empty' : ''}`}
+                >
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">
-                            {usesReviewedPermitFlow ? 'Documents' : 'Permit documents'}
-                          </h2>
-                          {detail.blanketOic && canUploadPermitDocuments && (
-                            <Button
-                              kind="tertiary"
-                              size="sm"
-                              disabled={permitDocumentUploadBusy}
-                              ref={
-                                usesReviewedPermitFlow ? permitDocumentUploadLauncherRef : undefined
-                              }
-                              onClick={() => {
-                                setPermitDocumentUploadResetKey((current) => current + 1)
-                                setIsEditingPermitDocuments(true)
-                              }}
-                            >
-                              Add document
-                            </Button>
-                          )}
-                          {!detail.blanketOic &&
-                            canEditPermitDocuments &&
-                            (isEditingPermitDocuments ? (
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                disabled={permitDocumentUploadBusy || isRemovingDocumentId !== null}
-                                onClick={onCancelPermitDocumentEditing}
-                              >
-                                Cancel
-                              </Button>
-                            ) : (
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                renderIcon={Edit}
-                                ref={
-                                  usesReviewedPermitFlow
-                                    ? permitDocumentUploadLauncherRef
-                                    : undefined
-                                }
-                                onClick={() => setIsEditingPermitDocuments(true)}
-                              >
-                                {usesReviewedPermitFlow ? 'Add document' : 'Edit permit documents'}
-                              </Button>
-                            ))}
-                        </div>
+                      <DocumentsContainer
+                        className={usesReviewedPermitFlow ? 'detail-documents-section' : undefined}
+                        aria-label="Documents"
+                      >
+                        {usesReviewedPermitFlow ? (
+                          !emptyPermitDocuments && (
+                            <div className="detail-section-card__header detail-section-card__header--actions-only">
+                              {addPermitDocumentsButton}
+                            </div>
+                          )
+                        ) : (
+                          <div className="detail-section-card__header">
+                            <h2 className="detail-tile-title">Permit documents</h2>
+                            {canEditPermitDocuments &&
+                              (isEditingPermitDocuments ? (
+                                <Button
+                                  kind="tertiary"
+                                  size="sm"
+                                  disabled={
+                                    permitDocumentUploadBusy || isRemovingDocumentId !== null
+                                  }
+                                  onClick={onCancelPermitDocumentEditing}
+                                >
+                                  Cancel
+                                </Button>
+                              ) : (
+                                <Button
+                                  kind="tertiary"
+                                  size="sm"
+                                  renderIcon={Edit}
+                                  onClick={() => setIsEditingPermitDocuments(true)}
+                                >
+                                  Edit permit documents
+                                </Button>
+                              ))}
+                          </div>
+                        )}
                         {isEditingPermitDocuments && canUploadPermitDocuments && (
                           <DetailDocumentUploadPanel
                             key={`permit-document-upload-${permitNumber}-${permitDocumentUploadResetKey}`}
@@ -8075,10 +8197,11 @@ const ProvincialPermitDetailsPage = () => {
                                 ? 'Documents stay with the record as it moves through the application, exemption and permit stages.'
                                 : 'No documents are available for this permit.'
                             }
+                            action={usesReviewedPermitFlow ? addPermitDocumentsButton : undefined}
                             headingLevel={3}
                           />
                         )}
-                      </Tile>
+                      </DocumentsContainer>
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -8297,6 +8420,100 @@ const ProvincialPermitDetailsPage = () => {
       />
       {detail?.blanketOic && (
         <DetailSidePanel
+          open={isAddingBoicScale}
+          title="Add scale"
+          className="permit-scale-panel application-detail-edit-section"
+          contentSelector="#permit-detail-content"
+          initialFocusSelector="#boicScaleTimberMark"
+          launcherRef={scalePanelLauncherRef}
+          fallbackFocusSelector="#add-boic-scale"
+          busy={isSavingBoicScale}
+          onClose={closeBlanketOicScale}
+          actions={[
+            {
+              label: 'Cancel',
+              kind: 'tertiary',
+              disabled: isSavingBoicScale,
+              onClick: closeBlanketOicScale,
+            },
+            {
+              label: isSavingBoicScale ? 'Saving…' : 'Save scale',
+              kind: 'primary',
+              disabled:
+                blanketOicScaleActionsDisabled ||
+                !canEditBlanketOicScaleRows ||
+                !boicScaleCodeOptionsReady,
+              renderIcon: isSavingBoicScale ? PendingIcon : undefined,
+              onClick: async () => {
+                if (await onAddBlanketOicScale()) return
+                requestAnimationFrame(() =>
+                  document.querySelector<HTMLElement>('[data-scale-error]')?.focus(),
+                )
+              },
+            },
+          ]}
+        >
+          <p className="application-detail-required">{requiredLabel('Required fields')}</p>
+          {!!boicScaleErrorMessage && (
+            <div tabIndex={-1} data-scale-error>
+              <InlineNotification
+                kind="error"
+                title="Scale needs attention"
+                subtitle={boicScaleErrorMessage}
+                lowContrast
+                hideCloseButton
+              />
+            </div>
+          )}
+          <div className="legacy-search-grid">
+            <TextInput
+              id="boicScaleTimberMark"
+              labelText={requiredLabel('Timber mark')}
+              aria-required="true"
+              value={boicScaleForm.timberMark}
+              onChange={(event) => setBlanketOicScaleFormField('timberMark', event.target.value)}
+              disabled={blanketOicScaleActionsDisabled}
+            />
+            <TextInput
+              id="boicScalePieces"
+              labelText={requiredLabel('Pieces')}
+              aria-required="true"
+              value={boicScaleForm.scalePieces}
+              onChange={(event) => setBlanketOicScaleFormField('scalePieces', event.target.value)}
+              disabled={blanketOicScaleActionsDisabled}
+            />
+            <BlanketOicScaleCodeFields
+              region={String(detail.orgUnitNumber ?? '')}
+              value={boicScaleForm}
+              onChange={setBlanketOicScaleFormField}
+              disabled={blanketOicScaleActionsDisabled}
+              onAvailabilityChange={setBoicScaleCodeOptionsReady}
+            />
+            <TextInput
+              id="boicScaleVolume"
+              labelText={requiredLabel('Volume (m³)')}
+              aria-required="true"
+              value={boicScaleForm.scaleVolume}
+              onChange={(event) => setBlanketOicScaleFormField('scaleVolume', event.target.value)}
+              disabled={blanketOicScaleActionsDisabled}
+            />
+          </div>
+        </DetailSidePanel>
+      )}
+      {discardBoicScaleOpen && (
+        <ConfirmationModal
+          open
+          title="Discard scale changes?"
+          description="Your unsaved scale changes will be lost."
+          confirmLabel="Discard changes"
+          cancelLabel="Keep editing"
+          danger
+          onClose={() => setDiscardBoicScaleOpen(false)}
+          onConfirm={discardBlanketOicScale}
+        />
+      )}
+      {detail?.blanketOic && (
+        <DetailSidePanel
           open={canEditBlanketOicPackages && blanketOicPackageEditorOpen}
           title={
             editingBoicPackageNumber
@@ -8314,7 +8531,7 @@ const ProvincialPermitDetailsPage = () => {
           actions={[
             {
               label: editingBoicPackageNumber ? 'Cancel edit' : 'Cancel',
-              kind: 'secondary',
+              kind: 'tertiary',
               disabled: isSavingBoicPackage,
               onClick: resetBlanketOicPackageForm,
             },

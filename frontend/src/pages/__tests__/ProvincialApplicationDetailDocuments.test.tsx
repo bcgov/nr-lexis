@@ -53,20 +53,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Application')
-    expect(
-      await screen.findByRole('heading', {
-        level: 3,
-        name: 'Permits unavailable',
-      }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('Permit information could not be retrieved for this application.'),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('heading', { level: 3, name: 'No permits found' }),
-    ).not.toBeInTheDocument()
-
+    await waitFor(() => expect(mockedFetchApplicationPermits).toHaveBeenCalledWith('321'))
     await selectApplicationDetailTab('Applicant')
     expect(
       screen.queryByText(
@@ -180,7 +167,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     ).toBeInTheDocument()
     expect(
       await screen.findByText(
-        'Documents stay with this record through the application, exemption, and permit stages.',
+        'Documents stay with the record as it moves through the application, exemption and permit stages.',
       ),
     ).toBeInTheDocument()
     expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
@@ -199,6 +186,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
           name: 'existing-doc.pdf',
           description: 'Existing document',
           type: 'Attachment',
+          source: 'application',
         },
       ],
       source: 'api',
@@ -227,8 +215,50 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(
       uploadTrigger.compareDocumentPosition(documentName) & Node.DOCUMENT_POSITION_FOLLOWING,
     ).toBeTruthy()
+    // Figma has no Documents card title, and its Type column says where the document was added.
+    expect(screen.queryByRole('heading', { name: 'Documents' })).not.toBeInTheDocument()
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent?.trim())).toEqual(
+      ['File name', 'Description', 'Type', 'Actions'],
+    )
+    const documentRow = documentName.closest('tr') as HTMLElement
+    expect(within(documentRow).getAllByRole('cell')[2]).toHaveTextContent('Application')
+    expect(within(documentRow).queryByText('Attachment')).not.toBeInTheDocument()
     await userEvent.click(uploadTrigger)
     expect(screen.getByLabelText('Document File')).toBeVisible()
+    expect(
+      within(screen.getByRole('complementary', { name: 'Add documents' })).getByRole('button', {
+        name: 'Close',
+      }),
+    ).toBeInTheDocument()
+    // Figma's drawer footer pairs a tertiary Cancel with the primary action at the standard size.
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    expect(cancel).toHaveClass('cds--btn--tertiary')
+    expect(cancel).not.toHaveClass('cds--btn--expressive')
+    expect(screen.getByRole('button', { name: 'Save documents' })).not.toHaveClass(
+      'cds--btn--expressive',
+    )
+  })
+
+  it('shows the usual table empty value for a document saved without a description', async () => {
+    mockedFetchApplicationDocuments.mockResolvedValue({
+      rows: [{ id: '901', name: 'no-description.pdf', description: '', type: 'Attachment' }],
+      source: 'api',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Documents')
+    const row = (await screen.findByText('no-description.pdf')).closest('tr') as HTMLElement
+    expect(within(row).getAllByRole('cell')[1]).toHaveTextContent('—')
   })
 
   it('allows application uploads for expired applications to match legacy', async () => {
@@ -360,6 +390,9 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     })
     // Figma confirms an upload with the title alone, not the server's persistence message.
     expect(await screen.findByText('Document saved.')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('tabpanel', { name: 'Documents' })).getByText('Document saved.'),
+    ).toBeInTheDocument()
     expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
   })
 
@@ -688,8 +721,12 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     })
     expect(deleteButton).toBeEnabled()
     await userEvent.click(deleteButton)
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
-    expect(confirmation).toHaveTextContent('Permanently delete app-doc.pdf? This cannot be undone.')
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this document?',
+    })
+    expect(confirmation).toHaveTextContent(
+      'app-doc.pdf will be deleted. This action cannot be undone.',
+    )
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
@@ -698,6 +735,10 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       expect(mockedFetchApplicationDocuments).toHaveBeenCalledTimes(2)
       expect(screen.queryByText('app-doc.pdf')).not.toBeInTheDocument()
     })
+    expect(screen.getByText('Document deleted.')).toBeInTheDocument()
+    expect(
+      within(screen.getByRole('tabpanel', { name: 'Documents' })).getByText('Document deleted.'),
+    ).toBeInTheDocument()
   })
 
   it('keeps a failed document deletion open for retry', async () => {
@@ -737,12 +778,16 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       }),
     )
 
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this document?',
+    })
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
     expect(await screen.findByText('Failed to delete document')).toBeInTheDocument()
     expect(screen.getByText('Document removal failed. Refresh and try again.')).toBeInTheDocument()
-    expect(screen.getByRole('dialog', { name: 'Delete document' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('dialog', { name: 'Are you sure you want to delete this document?' }),
+    ).toBeInTheDocument()
     expect(within(confirmation).getByRole('button', { name: 'Cancel' })).toBeEnabled()
     expect(within(documentRow as HTMLElement).getByText('app-doc.pdf')).toBeInTheDocument()
   })
@@ -939,7 +984,9 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
         name: 'Delete',
       }),
     )
-    const deleteDialog = await screen.findByRole('dialog', { name: 'Delete document' })
+    const deleteDialog = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this document?',
+    })
     await userEvent.click(within(deleteDialog).getByRole('button', { name: 'Delete' }))
 
     await waitFor(() => {

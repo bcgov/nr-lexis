@@ -47,7 +47,7 @@ const emailNotice = (email: ApprovalEmailResult): string => {
     case 'sent':
       return `Approval email sent to ${recipients(email)}.`
     case 'skipped':
-      return 'No approval email was sent.'
+      return 'No approval email was sent. Notify the applicant another way.'
     case 'notSent':
       return `The approval email was not sent. ${reason(email.reason, EMAIL_NOT_SENT_REASON)}`
     case 'unknown':
@@ -96,7 +96,10 @@ export const exemptionApprovalResults = (
         `${exemptionCount(approved.length)} approved and now Active.`,
         allSent ? `Approval ${approved.length === 1 ? 'email' : 'emails'} sent:` : '',
       ]),
-      message: joined([skipped ? 'Approval emails were not sent.' : '', ...notes]),
+      message: joined([
+        skipped ? 'No approval emails were sent. Notify the applicants another way.' : '',
+        ...notes,
+      ]),
       items: approved.map(({ exemptionNumber, email }) =>
         item(
           exemptionNumber,

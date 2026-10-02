@@ -41,6 +41,29 @@ class ExemptionOracleServiceTest {
 
   @InjectMocks private ExemptionOracleService service;
 
+  @Test
+  void agentSearchShouldKeepItsOwnCriterionAndDefaultToMinisterial() {
+    when(repository.search(any(ExemptionSearchCriteria.class))).thenReturn(page(List.of(), 0));
+    ExemptionSearchCriteria criteria = new ExemptionSearchCriteria(
+        null, null, null, null, null, null, null,
+        null, null, null, null, List.of(), false, false, false,
+        null, 0, 25, null, " 00012345 ");
+
+    service.search(criteria);
+    service.count(criteria);
+
+    ArgumentCaptor<ExemptionSearchCriteria> searchCaptor = ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
+    ArgumentCaptor<ExemptionSearchCriteria> countCaptor = ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
+    verify(repository).search(searchCaptor.capture());
+    verify(repository).count(countCaptor.capture());
+    for (ExemptionSearchCriteria actual : List.of(searchCaptor.getValue(), countCaptor.getValue())) {
+      assertThat(actual.agentClientNumber()).isEqualTo("00012345");
+      assertThat(actual.applicantClientNumber()).isNull();
+      assertThat(actual.ownerClientNumber()).isNull();
+      assertThat(actual.exemptionType()).isEqualTo("M");
+    }
+  }
+
   @ParameterizedTest
   @CsvSource({"' pkg-903 ',PKG-903", "' pKg_% ',PKG_%", "'  ',", ","})
   void searchAndCountShouldNormalizePackageNumberLikeLegacy(String packageNumber, String expected) {
