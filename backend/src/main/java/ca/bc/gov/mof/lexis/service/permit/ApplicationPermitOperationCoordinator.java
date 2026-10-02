@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import java.util.Collection;
+import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
 import java.util.NavigableSet;
@@ -287,13 +288,14 @@ public final class ApplicationPermitOperationCoordinator {
       throw new DataRetrievalFailureException(
           "The exemption relationship lookup returned no result.");
     }
-    NavigableSet<String> normalized = new TreeSet<>();
+    NavigableSet<String> normalized =
+        new TreeSet<>(Comparator.comparing(value -> value.toUpperCase(Locale.ROOT)));
     for (String exemptionNumber : exemptionNumbers) {
       if (exemptionNumber == null || exemptionNumber.isBlank()) {
         throw new DataRetrievalFailureException(
             "The exemption relationship lookup returned an invalid number.");
       }
-      normalized.add(exemptionNumber.trim().toUpperCase(Locale.ROOT));
+      normalized.add(exemptionNumber.trim());
     }
     return normalized;
   }
