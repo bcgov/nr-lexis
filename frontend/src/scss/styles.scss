@@ -4840,14 +4840,14 @@ $notification-types: 'error', 'info', 'success', 'warning';
   line-height: 1.375rem;
 }
 
-.provincial-application-detail .detail-section-card .detail-tile-title {
+.provincial-application-detail .detail-section-card__header .detail-tile-title {
   font-size: 1.25rem;
   font-weight: 400;
   line-height: 1.75rem;
 }
 
 .provincial-application-detail
-  .detail-section-card
+  .application-detail-summary
   :is(.application-summary-fields, .application-scale-fields) {
   display: flex;
   flex-wrap: wrap;
@@ -4907,7 +4907,9 @@ $notification-types: 'error', 'info', 'success', 'warning';
   line-height: 1.375rem;
 }
 
-.provincial-application-detail .detail-section-card .detail-section-card__header {
+.provincial-application-detail
+  :is(.application-detail-clients, .application-detail-summary)
+  .detail-section-card__header {
   min-block-size: 2.75rem;
   margin-block-end: 2rem;
 }
@@ -4966,7 +4968,9 @@ $notification-types: 'error', 'info', 'success', 'warning';
     row-gap: 2rem;
   }
 
-  .provincial-application-detail .application-detail-tab-panel .cds--tile.detail-section-card,
+  .provincial-application-detail
+    .application-detail-tab-panel
+    .cds--tile:is(.application-detail-clients, .application-detail-summary),
   .provincial-application-detail .application-items-card {
     padding: 2rem;
     border: 1px solid var(--cds-border-subtle-00);
