@@ -162,7 +162,8 @@ public class OracleLexisApplicationService implements LexisApplicationService {
         input.broadClientMatch(),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
-        Math.max(1, input.size()));
+        Math.max(1, input.size()),
+        trimToNull(input.agentOnlyClientNumber()));
   }
 
   private String preservePackageNumber(String value) {

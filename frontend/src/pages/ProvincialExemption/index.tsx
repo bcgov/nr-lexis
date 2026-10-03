@@ -100,6 +100,7 @@ import {
   type SearchOption,
 } from '@/service/search-options-service'
 import IsoDatePicker from '../../components/IsoDatePicker'
+import IsoDateRangePicker from '@/components/IsoDateRangePicker'
 import {
   approveExemptions,
   type ExemptionApprovalResult,
@@ -942,21 +943,17 @@ const ProvincialExemptionPage = () => {
                   invalidText="Date must be YYYY-MM-DD"
                   onChange={(value) => updateFilter('approvalToDate', value)}
                 />
-                <IsoDatePicker
-                  id="listFromDate"
-                  labelText="List date from"
-                  value={filters.listFromDate}
-                  invalid={!isValidIsoDate(filters.listFromDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('listFromDate', value)}
-                />
-                <IsoDatePicker
-                  id="listToDate"
-                  labelText="List date to"
-                  value={filters.listToDate}
-                  invalid={!isValidIsoDate(filters.listToDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('listToDate', value)}
+                <IsoDateRangePicker
+                  fromId="listFromDate"
+                  toId="listToDate"
+                  fromLabel="List date from"
+                  toLabel="List date to"
+                  fromValue={filters.listFromDate}
+                  toValue={filters.listToDate}
+                  onChange={([listFromDate, listToDate]) => {
+                    clearSelection()
+                    setFilters((current) => ({ ...current, listFromDate, listToDate }))
+                  }}
                 />
                 <SearchableSelect
                   id="exemptionTypeCode"
@@ -1229,13 +1226,14 @@ const ProvincialExemptionPage = () => {
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
               <>
-                <p className="legacy-search-result-count">
+                <div className="legacy-search-result-count">
                   {formatDeferredSearchTotalLabel(
                     results.page.totalElements,
                     totalStatus,
                     results.page.number * results.page.size + results.content.length,
-                  )}
-                </p>
+                  ) ??
+                    `${results.page.totalElements.toLocaleString('en-CA')} ${results.page.totalElements === 1 ? 'result' : 'results'} found`}
+                </div>
                 <Pagination
                   page={results.page.number + 1}
                   pageSize={results.page.size}

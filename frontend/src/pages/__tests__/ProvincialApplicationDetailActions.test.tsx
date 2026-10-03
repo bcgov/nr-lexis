@@ -2947,10 +2947,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(within(reopenedDialog).getByRole('button', { name: 'Save changes' }))
 
     expect(
-      await screen.findByText(
+      await within(reopenedDialog).findByText(
         'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
       ),
     ).toBeInTheDocument()
+    expect(screen.getAllByText('Review package volumes')).toHaveLength(1)
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     expect(reopenedDialog).toBeVisible()
     expect(reopenedAcknowledgement).toBeChecked()

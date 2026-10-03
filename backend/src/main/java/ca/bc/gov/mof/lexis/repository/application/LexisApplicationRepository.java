@@ -280,6 +280,9 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       where.addRawWithBinds(" AND v.EXPORT_SCHEDULE_ID = ?", criteria.exportScheduleId());
     }
     where.addLike("v.OWNER_CLIENT_NUMBER", criteria.ownerClientNumber());
+    // The historical agentClientNumber criterion matches the designated applicant below.
+    // This independent criterion matches only the actual agent.
+    where.addLike("v.AGENT_CLIENT_NUMBER", criteria.agentOnlyClientNumber());
     where.addRaw(" AND v.EXPORT_JURISDICTION_CODE <> '" + JURISDICTION_FEDERAL + "'");
     where.addEquals("v.OIC_INDICATOR", OIC_INDICATOR_NO);
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {

@@ -1747,8 +1747,71 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 0;
 }
 
-.provincial-application-search-grid > .region-multi-select {
+.provincial-application-search-grid {
+  > .forest-client-combobox {
+    grid-column: span 2;
+  }
+
+  > .forest-client-combobox:has(#ownerClientNumber) {
+    grid-column: 1 / span 2;
+  }
+
+  > .application-search-product-filter {
+    grid-column: 1;
+  }
+}
+
+:is(.provincial-application-search-grid, .provincial-exemption-search-grid) > .search-date-range {
   grid-column: span 2;
+
+  .cds--date-picker {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 1rem;
+    inline-size: 100%;
+  }
+
+  .cds--date-picker-container {
+    min-inline-size: 0;
+    margin: 0;
+  }
+}
+
+.provincial-application-search-page .legacy-search-table-frame {
+  .cds--data-table {
+    inline-size: 100%;
+    min-inline-size: 0;
+    table-layout: fixed;
+  }
+
+  .cds--data-table th,
+  .cds--data-table td,
+  .cds--data-table thead th .cds--table-header-label {
+    min-inline-size: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+
+  .cds--table-sort__flex {
+    min-inline-size: 0;
+  }
+
+  .cds--table-header-label {
+    flex: 1 1 0;
+  }
+
+  .application-search-table--selectable th:first-child,
+  .application-search-table--selectable td:first-child {
+    inline-size: 3rem;
+  }
+
+  .application-search-table--selectable th:nth-child(4) {
+    inline-size: 15%;
+  }
+
+  .application-search-table--selectable th:nth-child(6) {
+    inline-size: 10%;
+  }
 }
 
 .federal-application-lock {
@@ -2251,6 +2314,28 @@ $notification-types: 'error', 'info', 'success', 'warning';
     min-block-size: 2.5rem;
     padding-block: 0.625rem;
     white-space: normal;
+  }
+
+  :is(.provincial-application-search-page, .provincial-exemption-search-page) {
+    .cds--batch-actions--active {
+      position: relative;
+      flex-direction: column;
+      align-items: stretch;
+    }
+
+    .cds--batch-summary {
+      position: static;
+    }
+
+    .cds--action-list {
+      flex-direction: column;
+    }
+
+    .cds--action-list .cds--btn {
+      inline-size: 100%;
+      max-inline-size: none;
+      min-inline-size: 0;
+    }
   }
 }
 
@@ -6050,8 +6135,20 @@ $notification-types: 'error', 'info', 'success', 'warning';
     grid-template-columns: 1fr;
   }
 
-  .provincial-application-search-grid > .region-multi-select {
+  .provincial-application-search-grid > .forest-client-combobox,
+  .provincial-application-search-grid > .forest-client-combobox:has(#ownerClientNumber),
+  :is(.provincial-application-search-grid, .provincial-exemption-search-grid) > .search-date-range {
     grid-column: auto;
+  }
+
+  :is(.provincial-application-search-grid, .provincial-exemption-search-grid)
+    > .search-date-range
+    .cds--date-picker {
+    grid-template-columns: 1fr;
+  }
+
+  .provincial-application-search-page .legacy-search-table-frame .cds--data-table {
+    min-inline-size: 50rem;
   }
 
   .provincial-review-search-grid {

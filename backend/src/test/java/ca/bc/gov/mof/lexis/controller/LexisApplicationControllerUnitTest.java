@@ -138,7 +138,8 @@ class LexisApplicationControllerUnitTest {
         0,
         25,
         null,
-        authentication);
+        authentication,
+        "00066777");
 
     ArgumentCaptor<LexisApplicationSearchCriteria> criteriaCaptor =
         ArgumentCaptor.forClass(LexisApplicationSearchCriteria.class);
@@ -147,6 +148,7 @@ class LexisApplicationControllerUnitTest {
     LexisApplicationSearchCriteria criteria = criteriaCaptor.getValue();
     assertThat(criteria.ownerClientNumber()).isNull();
     assertThat(criteria.agentClientNumber()).isEqualTo("00077881");
+    assertThat(criteria.agentOnlyClientNumber()).isNull();
     assertThat(criteria.broadClientMatch()).isTrue();
     assertThat(criteria.exemptionType()).isEqualTo(exemptionType);
 
@@ -165,11 +167,13 @@ class LexisApplicationControllerUnitTest {
         null,
         null,
         List.of(),
-        authentication);
+        authentication,
+        "00066777");
     verify(service).count(criteriaCaptor.capture());
     LexisApplicationSearchCriteria countCriteria = criteriaCaptor.getValue();
     assertThat(countCriteria.ownerClientNumber()).isNull();
     assertThat(countCriteria.agentClientNumber()).isEqualTo("00077881");
+    assertThat(countCriteria.agentOnlyClientNumber()).isNull();
     assertThat(countCriteria.broadClientMatch()).isTrue();
     assertThat(countCriteria.exemptionType()).isEqualTo(exemptionType);
   }
@@ -213,7 +217,8 @@ class LexisApplicationControllerUnitTest {
         0,
         25,
         null,
-        mixedRoleAdministrator);
+        mixedRoleAdministrator,
+        "00066777");
 
     ArgumentCaptor<LexisApplicationSearchCriteria> criteriaCaptor =
         ArgumentCaptor.forClass(LexisApplicationSearchCriteria.class);
@@ -222,6 +227,7 @@ class LexisApplicationControllerUnitTest {
     LexisApplicationSearchCriteria criteria = criteriaCaptor.getValue();
     assertThat(criteria.ownerClientNumber()).isEqualTo("00099999");
     assertThat(criteria.agentClientNumber()).isEqualTo("00088888");
+    assertThat(criteria.agentOnlyClientNumber()).isEqualTo("00066777");
     assertThat(criteria.broadClientMatch()).isFalse();
   }
 
@@ -263,7 +269,8 @@ class LexisApplicationControllerUnitTest {
             0,
             25,
             null,
-            authentication);
+            authentication,
+            null);
 
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().results())
@@ -295,7 +302,8 @@ class LexisApplicationControllerUnitTest {
         0,
         25,
         null,
-        authentication);
+        authentication,
+        null);
 
     ArgumentCaptor<LexisApplicationSearchCriteria> criteriaCaptor =
         ArgumentCaptor.forClass(LexisApplicationSearchCriteria.class);

@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -10,7 +10,7 @@ import {
   searchProvincialApplications,
 } from '@/service/provincial-application-search-service'
 import { fetchProvincialApplicationOptions } from '@/service/search-options-service'
-import { createTestAuthContext } from '@/test-utils/auth'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
 
@@ -249,14 +249,15 @@ describe('Provincial Application Search Actions', () => {
     renderPage()
     await screen.findByText('321')
 
-    const createExemptionButton = screen.getByRole('button', {
-      name: 'Create exemption for selected applications',
-    })
-    expect(createExemptionButton).toBeDisabled()
-    expect(createExemptionButton.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
-
-    expect(screen.getByRole('checkbox', { name: 'Select 321' })).toBeEnabled()
-    expect(screen.getByRole('checkbox', { name: 'Select 654' })).toBeDisabled()
+    expect(
+      screen.queryByRole('button', {
+        name: 'Create exemption for selected applications',
+      }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select application 321' })).toBeEnabled()
+    expect(
+      screen.queryByRole('checkbox', { name: 'Select application 654' }),
+    ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('link', { name: 'Upload Application Submission' }),
     ).not.toBeInTheDocument()
@@ -265,19 +266,11 @@ describe('Provincial Application Search Actions', () => {
     expect(addApplicationAction).toHaveClass('cds--btn--primary')
     expect(addApplicationAction.closest('.lexis-page-header__actions')).not.toBeNull()
 
-    const ineligibleCheckbox = screen.getByRole('checkbox', { name: 'Select 654' })
-    const ineligibleCheckboxTooltipTrigger = ineligibleCheckbox.closest(
-      '.disabled-button-tooltip',
-    ) as HTMLElement
-    expect(ineligibleCheckboxTooltipTrigger).toBeTruthy()
+    expect(
+      screen.getAllByText('This application already has an exemption.').length,
+    ).toBeGreaterThan(0)
 
-    await userEvent.hover(ineligibleCheckboxTooltipTrigger)
-
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'This application already has an exemption.',
-    )
-
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
     expect(
       screen.getByRole('button', { name: 'Create exemption for selected applications' }),
     ).toBeEnabled()
@@ -329,16 +322,12 @@ describe('Provincial Application Search Actions', () => {
     renderPage()
     await screen.findByText(rowState.applicationNumber)
 
-    const checkbox = screen.getByRole('checkbox', {
-      name: `Select ${rowState.applicationNumber}`,
-    })
-    expect(checkbox).toBeDisabled()
-    const tooltipTrigger = checkbox.closest('.disabled-button-tooltip') as HTMLElement
-    expect(tooltipTrigger).toBeTruthy()
-
-    await userEvent.hover(tooltipTrigger)
-
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(rowState.expected)
+    expect(
+      screen.queryByRole('checkbox', {
+        name: `Select application ${rowState.applicationNumber}`,
+      }),
+    ).not.toBeInTheDocument()
+    expect(screen.getAllByText(rowState.expected).length).toBeGreaterThan(0)
   })
 
   it('paints application rows before the exact result count is available', async () => {
@@ -367,7 +356,7 @@ describe('Provincial Application Search Actions', () => {
 
     await waitFor(() => expect(mockedCountProvincialApplications).toHaveBeenCalledOnce())
     expect(await screen.findByText('8000')).toBeInTheDocument()
-    expect(screen.getByRole('status', { name: 'Counting search results' })).toBeInTheDocument()
+    expect(screen.getAllByRole('status', { name: 'Counting search results' })).toHaveLength(2)
     expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Loading application search results…')).not.toBeInTheDocument()
 
@@ -375,7 +364,7 @@ describe('Provincial Application Search Actions', () => {
       resolveCount(125)
     })
 
-    expect(await screen.findByText('125 results found')).toBeInTheDocument()
+    expect(await screen.findAllByText('125 results found')).toHaveLength(2)
     expect(screen.getByText('8000')).toBeInTheDocument()
   })
 
@@ -395,8 +384,8 @@ describe('Provincial Application Search Actions', () => {
 
     expect(await screen.findByText('8100')).toBeInTheDocument()
     expect(
-      await screen.findByText('At least 10 results found — exact count unavailable'),
-    ).toBeInTheDocument()
+      await screen.findAllByText('At least 10 results found — exact count unavailable'),
+    ).toHaveLength(2)
     expect(screen.getByText('8100')).toBeInTheDocument()
   })
 
@@ -417,8 +406,8 @@ describe('Provincial Application Search Actions', () => {
     renderPage()
     await screen.findByText('321')
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 654' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 654' }))
     await userEvent.click(
       screen.getByRole('button', { name: 'Create exemption for selected applications' }),
     )
@@ -490,27 +479,24 @@ describe('Provincial Application Search Actions', () => {
 
     const filterGrid = document.querySelector('.provincial-application-search-grid')
     expect(filterGrid).toBeTruthy()
-    const fieldLabels = Array.from((filterGrid as HTMLElement).children).map((field) =>
-      field
-        .querySelector('label, .cds--label')
-        ?.textContent?.replace(/Total items selected:.*/, '')
-        .trim(),
-    )
+    const fieldLabels = Array.from(
+      (filterGrid as HTMLElement).querySelectorAll('label, .cds--label'),
+    ).map((field) => field?.textContent?.replace(/Total items selected:.*/, '').trim())
 
     expect(fieldLabels).toEqual([
       'Application number',
       'Package number',
-      'Exemption type',
       'Exemption number',
-      'Application status',
-      'Product type',
       'Region',
       'Received from date',
       'Received to date',
-      'Listing from date',
-      'Listing to date',
-      'Applicant client number',
-      'Owner client number',
+      'List date from',
+      'List date to',
+      'Exemption type',
+      'Application status',
+      'Owner client',
+      'Agent client',
+      'Product type',
     ])
   })
 
@@ -558,44 +544,125 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('hides exemption-only filters, selection, action, and applicant column without permission', async () => {
-    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+  it('hides staff client filters and exemption actions for an industry session', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: () => false,
+        capabilities: createTestCapabilities({ roles: ['PROVINCIAL_SUBMITTER_00012345'] }),
+      }),
+    )
 
     renderPage()
     await screen.findByText('321')
 
     expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Owner client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Owner client')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Agent client')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: 'Create exemption for selected applications' }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
     ).not.toBeInTheDocument()
-    expect(screen.queryByRole('checkbox', { name: 'Select 321' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: 'Select application 321' }),
+    ).not.toBeInTheDocument()
     expect(screen.queryByText('Applicant client number')).not.toBeInTheDocument()
     expect(screen.queryByText('11111111')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Owner client number' })).toBeInTheDocument()
   })
 
-  it('uses canonical applicant and owner client selections in the search request', async () => {
+  it('uses independent canonical owner and agent client selections in the search request', async () => {
     renderPage('/provincial/application')
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled())
 
-    await userEvent.click(screen.getByRole('button', { name: 'Select Applicant client number' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Select Owner client number' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Select Agent client' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Select Owner client' }))
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
 
     await waitFor(() => {
       expect(
         mockedSearchProvincialApplications.mock.calls.some(
           ([request]) =>
-            request.filters.applicantClientNumber === '00012345' &&
+            request.filters.agentClientNumber === '00012345' &&
+            request.filters.applicantClientNumber === '' &&
             request.filters.ownerClientNumber === '00054321',
         ),
       ).toBe(true)
     })
+  })
+
+  it.each(['url', 'session'])(
+    'keeps a restored Applicant criterion separate from Agent and removable from %s',
+    async (source) => {
+      const query = 'applicantClientNumber=00011111&agentClientNumber=00022222'
+      if (source === 'session') {
+        sessionStorage.setItem('lexis.search-state.v1.provincial-applications', query)
+      }
+      renderPage(source === 'url' ? `/provincial/application?${query}` : '/provincial/application')
+      await screen.findByText('321')
+      expect(screen.getByText('Applicant client: 00011111')).toBeVisible()
+      expect(screen.getByLabelText('Agent client')).toHaveValue('00022222')
+      expect(mockedSearchProvincialApplications).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            applicantClientNumber: '00011111',
+            agentClientNumber: '00022222',
+          }),
+        }),
+        expect.any(Object),
+      )
+
+      mockedSearchProvincialApplications.mockClear()
+      await userEvent.click(screen.getByRole('button', { name: 'Remove applicant client filter' }))
+      expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
+      expect(screen.getByLabelText('Agent client')).toHaveValue('00022222')
+      await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+      await waitFor(() =>
+        expect(mockedSearchProvincialApplications).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            filters: expect.objectContaining({
+              applicantClientNumber: '',
+              agentClientNumber: '00022222',
+            }),
+          }),
+          expect.any(Object),
+        ),
+      )
+    },
+  )
+
+  it('renders readable results and counts at both ends without changing application terminology', async () => {
+    renderPage()
+    const link = await screen.findByRole('link', { name: '321' })
+    const row = within(link.closest('tr')!)
+    expect(screen.getByRole('heading', { name: 'Application search' })).toBeVisible()
+    expect(row.getByText('New')).toBeVisible()
+    expect(row.getByText('100.0')).toBeVisible()
+    expect(row.getByText('Jan 10, 2026')).toBeVisible()
+    expect(screen.getByText('Application volume (m³)')).toBeVisible()
+    expect(screen.getAllByText('2 results found')).toHaveLength(2)
+  })
+
+  it('restores and submits independently optional list-date bounds from a range control', async () => {
+    renderPage('/provincial/application?listingToDate=2026-01-31')
+    await screen.findByText('321')
+    await waitFor(() => expect(screen.getByLabelText('List date from')).toHaveValue(''))
+    expect(screen.getByLabelText('List date to')).toHaveValue('2026-01-31')
+    fireEvent.change(screen.getByLabelText('List date from'), { target: { value: '2026-01-01' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() =>
+      expect(mockedSearchProvincialApplications).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            listingFromDate: '2026-01-01',
+            listingToDate: '2026-01-31',
+          }),
+        }),
+        expect.any(Object),
+      ),
+    )
   })
 
   it('renders legacy non-sortable application result headers as plain text', async () => {
@@ -686,13 +753,19 @@ describe('Provincial Application Search Actions', () => {
       ).toBeInTheDocument()
     })
     expect(mockNavigate).not.toHaveBeenCalled()
+    expect(screen.getByRole('checkbox', { name: 'Select application 321' })).not.toBeChecked()
+    expect(
+      screen.queryByRole('button', {
+        name: 'Create exemption for selected applications',
+      }),
+    ).not.toBeInTheDocument()
   })
 
   it('clears selected rows when filters change', async () => {
     renderPage()
     await screen.findByText('321')
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 321' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
     expect(
       screen.getByRole('button', { name: 'Create exemption for selected applications' }),
     ).toBeEnabled()
@@ -702,8 +775,8 @@ describe('Provincial Application Search Actions', () => {
 
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: 'Create exemption for selected applications' }),
-      ).toBeDisabled()
+        screen.queryByRole('button', { name: 'Create exemption for selected applications' }),
+      ).not.toBeInTheDocument()
     })
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
 
