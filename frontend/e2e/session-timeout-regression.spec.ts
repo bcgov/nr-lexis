@@ -191,12 +191,10 @@ test.describe('session timeout regression', () => {
     )
     await installSyntheticLexisApi(page)
     await gotoWithRecovery(page, new URL('/provincial/application', E2E_BASE_URL).toString(), {
-      ready: page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+      ready: page.getByRole('heading', { level: 1, name: 'Application search' }),
     })
 
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
-    ).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Application search' })).toBeVisible()
 
     const expiredAccessToken = createUnsignedToken({
       ...syntheticSession.profile,
@@ -253,12 +251,10 @@ test.describe('session timeout regression', () => {
     await installSyntheticLexisApi(page)
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoWithRecovery(page, new URL('/provincial/application', E2E_BASE_URL).toString(), {
-      ready: page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+      ready: page.getByRole('heading', { level: 1, name: 'Application search' }),
     })
 
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
-    ).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Application search' })).toBeVisible()
     await page.getByRole('switch', { name: 'Dark theme' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
 
@@ -371,7 +367,7 @@ test.describe('session timeout regression', () => {
     await installSyntheticLexisApi(page, sessionState)
     await installSyntheticLogoutRedirect(page, sessionState)
     await gotoWithRecovery(page, new URL('/provincial/application', E2E_BASE_URL).toString(), {
-      ready: page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+      ready: page.getByRole('heading', { level: 1, name: 'Application search' }),
     })
     await page.clock.fastForward(SESSION_IDLE_WARNING_DELAY_MS)
     const dialog = page.getByRole('alertdialog', { name: 'You’re about to be logged out' })
@@ -428,12 +424,10 @@ test.describe('session timeout regression', () => {
     await installSyntheticLexisApi(page, sessionState)
     await installSyntheticLogoutRedirect(page, sessionState)
     await gotoWithRecovery(page, new URL('/provincial/application', E2E_BASE_URL).toString(), {
-      ready: page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+      ready: page.getByRole('heading', { level: 1, name: 'Application search' }),
     })
 
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
-    ).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Application search' })).toBeVisible()
 
     await page.clock.fastForward(SESSION_IDLE_WARNING_DELAY_MS + SESSION_IDLE_WARNING_DURATION_MS)
 
@@ -450,7 +444,7 @@ test.describe('session timeout regression', () => {
     await installSyntheticLexisApi(page, sessionState)
     await installSyntheticLogoutRedirect(page, sessionState)
     await gotoWithRecovery(page, new URL('/provincial/application', E2E_BASE_URL).toString(), {
-      ready: page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
+      ready: page.getByRole('heading', { level: 1, name: 'Application search' }),
     })
 
     const profileButton = page.locator('button[aria-controls="profile-panel"]')

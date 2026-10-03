@@ -358,7 +358,10 @@ const submitApplicationSearch = async (page: Page) => {
   const searchButton = page.getByRole('button', { name: 'Search', exact: true })
   await expect(searchButton).toBeVisible()
   await searchButton.click()
-  await expect(page.getByText('2 results found', { exact: true })).toBeVisible()
+  const counts = page.getByText('2 results found', { exact: true })
+  await expect(counts).toHaveCount(2)
+  await expect(counts.nth(0)).toBeVisible()
+  await expect(counts.nth(1)).toBeVisible()
 }
 
 test.describe('FSPTS-aligned LEXIS shell', () => {
@@ -562,7 +565,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     page,
   }) => {
     await gotoSyntheticRoute(page, '/provincial/application', {
-      ready: page.getByRole('heading', { name: 'Provincial application search', exact: true }),
+      ready: page.getByRole('heading', { name: 'Application search', exact: true }),
     })
     const provincial = page.getByRole('button', { name: 'Provincial', exact: true })
     const reports = page.getByRole('button', { name: 'Reports', exact: true })
@@ -600,7 +603,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
       ready: page.getByRole('heading', {
         level: 1,
-        name: 'Provincial application search',
+        name: 'Application search',
         exact: true,
       }),
     })
@@ -608,9 +611,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page).toHaveTitle('Log Exemption Information System')
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('type', 'image/png')
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/bcid-192x192.png')
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
-    ).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Application search' })).toBeVisible()
     await expect(page.locator('.csp-header-prefix')).toHaveText('LEXIS')
     const applicationName = page.getByRole('link', {
       name: /LEXIS Log Exemption Information System/,
@@ -778,12 +779,38 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBeLessThanOrEqual(1)
     expect(fullWidthResults.headingLeft).toBe(initialShellLayout.headingLeft)
     expect(fullWidthResults.filterResultsGap).toBe(32)
+    const resultToolbar = page.locator('.legacy-search-table-toolbar')
+    const resultToolbarContent = resultToolbar.locator('.cds--toolbar-content')
+    const createExemptionAction = page.getByRole('button', {
+      name: 'Create exemption for selected applications',
+    })
+    await expect(resultToolbar).not.toHaveClass(/legacy-search-table-toolbar--with-actions/)
+    await expect(resultToolbarContent).toHaveCSS('height', '40px')
+    await expect(createExemptionAction).toHaveCount(0)
+    const eligibleApplication = page.getByRole('checkbox', {
+      name: 'Select application 281001',
+      exact: true,
+    })
+    await expect(eligibleApplication).toBeVisible()
+    await expect(eligibleApplication).toBeEnabled()
+    const eligibleApplicationLabel = page.locator('label[for="selectRow-281001"]')
+    await expect(eligibleApplicationLabel).toBeVisible()
+    await eligibleApplicationLabel.click()
+    await expect(eligibleApplication).toBeChecked()
+    await expect(createExemptionAction).toBeEnabled()
     const resultActionToolbar = page.locator(
       '.legacy-search-table-toolbar--with-actions .cds--toolbar-content',
     )
     await expect(resultActionToolbar).toHaveCSS('align-items', 'center')
     await expect(resultActionToolbar).toHaveCSS('height', '56px')
     await expect(resultActionToolbar).toHaveCSS('padding-left', '16px')
+    const batchActions = page.locator('.cds--batch-actions--active')
+    await expect(batchActions).toContainText('1 item selected')
+    await batchActions.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(eligibleApplication).not.toBeChecked()
+    await expect(createExemptionAction).toHaveCount(0)
+    await expect(resultToolbar).not.toHaveClass(/legacy-search-table-toolbar--with-actions/)
+    await expect(resultToolbarContent).toHaveCSS('height', '40px')
     await expect(page.locator('.legacy-search-table-toolbar')).toHaveCSS(
       'background-color',
       'rgb(244, 244, 244)',
@@ -1063,7 +1090,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
       ready: page.getByRole('heading', {
         level: 1,
-        name: 'Provincial application search',
+        name: 'Application search',
         exact: true,
       }),
     })
@@ -1210,6 +1237,16 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       const pageGrid = page.locator('.default-grid.fullbleed-table-page')
       await expect(pageGrid).toBeVisible()
       await expect(page.locator('.legacy-search-section--filters')).toBeVisible()
+      if (route === '/provincial/application' || route === '/provincial/exemption') {
+        const range = page.locator('.search-date-range .cds--date-picker--range')
+        await expect(range).toHaveCount(1)
+        await expect(
+          range.getByRole('textbox', { name: 'List date from', exact: true }),
+        ).toBeVisible()
+        await expect(
+          range.getByRole('textbox', { name: 'List date to', exact: true }),
+        ).toBeVisible()
+      }
 
       const alignment = await page.evaluate(() => {
         const main = document.querySelector('main.app-main')
@@ -1247,7 +1284,81 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     }
   })
 
-  test('keeps related application and offer criteria together across search-grid widths', async ({
+  test('keeps Owner and Agent selections distinct from a restored Applicant filter', async ({
+    page,
+  }) => {
+    const clients = [
+      { clientNumber: '00020001', companyName: 'Synthetic owner', clientAcronym: 'OWN' },
+      { clientNumber: '00010001', companyName: 'Synthetic agent', clientAcronym: 'AGT' },
+    ]
+    await page.route('**/api/lexis/client-search?*', async (route) => {
+      const query = new URL(route.request().url()).searchParams.get('q')?.toLowerCase() ?? ''
+      await route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify(
+          clients.filter((client) =>
+            `${client.companyName} ${client.clientAcronym} ${client.clientNumber}`
+              .toLowerCase()
+              .includes(query),
+          ),
+        ),
+      })
+    })
+    await page.route('**/api/lexis/applications/search?*', (route) =>
+      route.fulfill({
+        status: 200,
+        contentType: 'application/json',
+        body: JSON.stringify({ results: [], total: 0, page: 0, size: 25 }),
+      }),
+    )
+    await gotoSyntheticRoute(page, '/provincial/application?applicantClientNumber=00020001', {
+      ready: page.getByRole('heading', { name: 'Application search', exact: true }),
+    })
+    await expect(page.getByText('Applicant client: 00020001', { exact: true })).toBeVisible()
+    const owner = page.getByRole('combobox', { name: 'Owner client', exact: true })
+    const agent = page.getByRole('combobox', { name: 'Agent client', exact: true })
+    await owner.fill('Synthetic owner')
+    await page.getByRole('option', { name: /Synthetic owner.*00020001/ }).click()
+    await agent.fill('Synthetic agent')
+    await page.getByRole('option', { name: /Synthetic agent.*00010001/ }).click()
+    await expect(owner).toHaveValue(/Synthetic owner.*00020001/)
+    await expect(agent).toHaveValue(/Synthetic agent.*00010001/)
+
+    const request = page.waitForRequest((request) => {
+      const url = new URL(request.url())
+      return (
+        url.pathname === '/api/lexis/applications/search' &&
+        url.searchParams.get('ownerClientNumber') === '00020001' &&
+        url.searchParams.get('agentOnlyClientNumber') === '00010001'
+      )
+    })
+    await page.getByRole('button', { name: 'Search', exact: true }).click()
+    const params = new URL((await request).url()).searchParams
+    // This historical API parameter retains Applicant semantics; the new Agent is independent.
+    expect(params.get('agentClientNumber')).toBe('00020001')
+    expect(params.get('agentOnlyClientNumber')).toBe('00010001')
+    expect(params.get('ownerClientNumber')).toBe('00020001')
+
+    await page.getByRole('button', { name: 'Remove applicant client filter', exact: true }).click()
+    await expect(page.getByText('Applicant client: 00020001', { exact: true })).toHaveCount(0)
+    await expect(agent).toHaveValue(/Synthetic agent.*00010001/)
+    const withoutApplicant = page.waitForRequest((request) => {
+      const url = new URL(request.url())
+      return (
+        url.pathname === '/api/lexis/applications/search' &&
+        !url.searchParams.has('agentClientNumber') &&
+        url.searchParams.get('agentOnlyClientNumber') === '00010001'
+      )
+    })
+    await page.getByRole('button', { name: 'Search', exact: true }).click()
+    expect(new URL((await withoutApplicant).url()).searchParams.get('ownerClientNumber')).toBe(
+      '00020001',
+    )
+    await expect(page.getByText('0 results found', { exact: true })).toHaveCount(2)
+  })
+
+  test('keeps application ranges and client groups aligned without changing offer layout', async ({
     page,
   }) => {
     const readFieldLayout = async (gridSelector: string, fieldIds: string[]) =>
@@ -1255,10 +1366,16 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         const fields = Array.from(grid.children)
         return Object.fromEntries(
           ids.map((id) => {
-            const field = fields.find((candidate) => candidate.querySelector(`#${id}`))
+            const input = grid.querySelector(`#${id}`)
+            const field =
+              input?.closest('.cds--date-picker-container') ??
+              fields.find((candidate) => input && candidate.contains(input))
             if (!(field instanceof HTMLElement)) throw new Error(`Search field ${id} not found`)
             const bounds = field.getBoundingClientRect()
-            return [id, { top: bounds.top, width: bounds.width }]
+            return [
+              id,
+              { top: bounds.top, bottom: bounds.bottom, left: bounds.left, width: bounds.width },
+            ]
           }),
         )
       }, fieldIds)
@@ -1280,49 +1397,86 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         waitUntil: 'domcontentloaded',
         ready: page.getByRole('heading', {
           level: 1,
-          name: 'Provincial application search',
+          name: 'Application search',
           exact: true,
         }),
       })
 
+      await expect(page.getByRole('combobox', { name: 'Owner client', exact: true })).toBeVisible()
+      await expect(page.getByRole('combobox', { name: 'Agent client', exact: true })).toBeVisible()
+      await expect(page.locator('#applicantClientNumber')).toHaveCount(0)
+      const listDateRange = page.locator('.search-date-range .cds--date-picker--range')
+      await expect(listDateRange).toHaveCount(1)
+      await expect(
+        listDateRange.getByRole('textbox', { name: 'List date from', exact: true }),
+      ).toBeVisible()
+      await expect(
+        listDateRange.getByRole('textbox', { name: 'List date to', exact: true }),
+      ).toBeVisible()
+
       const applicationLayout = await readFieldLayout('.provincial-application-search-grid', [
         'applicationNumber',
         'packageNumber',
-        'exemptionType',
         'exemptionNumber',
-        'applicationStatus',
-        'productTypeCode',
         'region',
         'receivedFromDate',
         'receivedToDate',
         'listingFromDate',
         'listingToDate',
-        'applicantClientNumber',
+        'exemptionType',
+        'applicationStatus',
         'ownerClientNumber',
+        'agentClientNumber',
+        'productTypeCode',
       ])
+      const columnGap = await page
+        .locator('.provincial-application-search-grid')
+        .evaluate((grid) => Number.parseFloat(getComputedStyle(grid).columnGap))
+      const singleColumnWidth = applicationLayout.applicationNumber.width
+      for (const clientField of ['ownerClientNumber', 'agentClientNumber']) {
+        expect(
+          Math.abs(applicationLayout[clientField].width - (singleColumnWidth * 2 + columnGap)),
+        ).toBeLessThanOrEqual(1)
+      }
+      for (const dateField of ['listingFromDate', 'listingToDate']) {
+        expect(
+          Math.abs(applicationLayout[dateField].width - singleColumnWidth),
+        ).toBeLessThanOrEqual(1)
+      }
+      expectSameRow(applicationLayout, ['exemptionType', 'applicationStatus'])
+      expect(applicationLayout.productTypeCode.top).toBeGreaterThan(
+        Math.max(
+          applicationLayout.ownerClientNumber.bottom,
+          applicationLayout.agentClientNumber.bottom,
+        ),
+      )
+      expect(
+        Math.abs(applicationLayout.productTypeCode.left - applicationLayout.applicationNumber.left),
+      ).toBeLessThanOrEqual(1)
 
       if (viewport.columns === 4) {
         expectSameRow(applicationLayout, [
           'applicationNumber',
           'packageNumber',
-          'exemptionType',
           'exemptionNumber',
+          'region',
         ])
-        expectSameRow(applicationLayout, ['applicationStatus', 'productTypeCode', 'region'])
         expectSameRow(applicationLayout, [
           'receivedFromDate',
           'receivedToDate',
           'listingFromDate',
           'listingToDate',
         ])
+        expectSameRow(applicationLayout, ['ownerClientNumber', 'agentClientNumber'])
       } else {
         expectSameRow(applicationLayout, ['applicationNumber', 'packageNumber'])
-        expectSameRow(applicationLayout, ['exemptionType', 'exemptionNumber'])
-        expectSameRow(applicationLayout, ['applicationStatus', 'productTypeCode'])
+        expectSameRow(applicationLayout, ['exemptionNumber', 'region'])
         expectSameRow(applicationLayout, ['receivedFromDate', 'receivedToDate'])
         expectSameRow(applicationLayout, ['listingFromDate', 'listingToDate'])
+        expect(applicationLayout.agentClientNumber.top).toBeGreaterThan(
+          applicationLayout.ownerClientNumber.bottom,
+        )
       }
-      expectSameRow(applicationLayout, ['applicantClientNumber', 'ownerClientNumber'])
 
       await gotoSyntheticRoute(page, '/provincial/offers', {
         waitUntil: 'domcontentloaded',
@@ -1362,7 +1516,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
       ready: page.getByRole('heading', {
         level: 1,
-        name: 'Provincial application search',
+        name: 'Application search',
         exact: true,
       }),
     })
@@ -1375,10 +1529,29 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const secondRowCell = rows.nth(1).locator('td').first()
 
     await expect(rows).toHaveCount(2)
-    const disabledCreateExemptionAction = page.getByRole('button', {
+    const createExemptionAction = page.getByRole('button', {
       name: 'Create exemption for selected applications',
     })
-    await expect(disabledCreateExemptionAction).toBeDisabled()
+    await expect(createExemptionAction).toHaveCount(0)
+    const eligibleApplication = page.getByRole('checkbox', {
+      name: 'Select application 281001',
+      exact: true,
+    })
+    await expect(eligibleApplication).toBeVisible()
+    await expect(eligibleApplication).toBeEnabled()
+    await expect(
+      page.getByRole('checkbox', { name: 'Select application 281002', exact: true }),
+    ).toHaveCount(0)
+    const eligibleApplicationLabel = page.locator('label[for="selectRow-281001"]')
+    await expect(eligibleApplicationLabel).toBeVisible()
+    await eligibleApplicationLabel.click()
+    await expect(eligibleApplication).toBeChecked()
+    const batchActions = page.locator('.cds--batch-actions--active')
+    await expect(batchActions).toContainText('1 item selected')
+    await expect(createExemptionAction).toBeEnabled()
+    await batchActions.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(eligibleApplication).not.toBeChecked()
+    await expect(createExemptionAction).toHaveCount(0)
     await expect(table).toHaveClass(/cds--data-table--md/)
     await expect(rows.first().getByRole('cell', { name: '—', exact: true })).toBeVisible()
     const firstRowHeight = await rows.first().evaluate((row) => row.getBoundingClientRect().height)
@@ -1386,13 +1559,19 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(firstRowHeight).toBeLessThanOrEqual(64)
     await expect(table.getByRole('columnheader', { name: 'Application', exact: true })).toHaveCSS(
       'white-space',
-      'nowrap',
+      'normal',
     )
     await expect(table.locator('.legacy-search-table-date').first()).toHaveCSS(
       'white-space',
-      'nowrap',
+      'normal',
     )
     await expect(table.locator('.lexis-status-tag').first()).toHaveCSS('white-space', 'nowrap')
+    const desktopOverflow = await resultsRegion.evaluate((region) => ({
+      clientWidth: region.clientWidth,
+      scrollWidth: region.scrollWidth,
+    }))
+    expect(desktopOverflow.scrollWidth).toBeLessThanOrEqual(desktopOverflow.clientWidth + 1)
+
     await expect(firstRowCell).toHaveCSS('font-size', '14px')
     await expect(firstRowCell).toHaveCSS('vertical-align', 'top')
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
@@ -1412,7 +1591,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(rowDividerStyles[0]?.borderBlockEndColor).toBe(rowDividerStyles[0]?.backgroundColor)
     expect(rowDividerStyles[1]?.borderBlockStartColor).toBe(rowDividerStyles[1]?.backgroundColor)
     expect(rowDividerStyles[1]?.borderBlockEndColor).toBe(rowDividerStyles[1]?.backgroundColor)
-    await expect(page.getByText('2 results found', { exact: true })).toHaveCSS('font-weight', '400')
+    const resultCounts = page.getByText('2 results found', { exact: true })
+    await expect(resultCounts).toHaveCount(2)
+    for (const count of await resultCounts.all()) {
+      await expect(count).toHaveCSS('font-weight', '400')
+    }
 
     const pagination = page.locator('.legacy-search-table-frame .cds--pagination')
     await expect(pagination).toHaveCSS('border-top-width', '1px')
@@ -1444,16 +1627,26 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await clearAllButton.hover()
     await expect(clearAllButton).toHaveCSS('background-color', 'rgb(51, 51, 51)')
     await expect(clearAllButton).toHaveCSS('color', 'rgb(255, 255, 255)')
-    const disabledStylesBeforeHover = await disabledCreateExemptionAction.evaluate((element) => {
+    const receivedFromDate = page.getByRole('textbox', { name: 'Received from date', exact: true })
+    await receivedFromDate.fill('2026-02-30')
+    await page.getByRole('heading', { name: 'Application search', exact: true }).click()
+    const disabledSearchAction = page.getByRole('button', { name: 'Search', exact: true })
+    await expect(disabledSearchAction).toBeDisabled()
+    await expect(disabledSearchAction).toHaveCSS('background-color', 'rgba(141, 141, 141, 0.3)')
+    await expect(disabledSearchAction).toHaveCSS('color', 'rgba(255, 255, 255, 0.25)')
+    const disabledStylesBeforeHover = await disabledSearchAction.evaluate((element) => {
       const style = getComputedStyle(element)
       return { backgroundColor: style.backgroundColor, color: style.color }
     })
-    await disabledCreateExemptionAction.hover({ force: true })
-    const disabledStylesAfterHover = await disabledCreateExemptionAction.evaluate((element) => {
+    await disabledSearchAction.hover({ force: true })
+    const disabledStylesAfterHover = await disabledSearchAction.evaluate((element) => {
       const style = getComputedStyle(element)
       return { backgroundColor: style.backgroundColor, color: style.color }
     })
     expect(disabledStylesAfterHover).toEqual(disabledStylesBeforeHover)
+    await receivedFromDate.fill('')
+    await page.getByRole('heading', { name: 'Application search', exact: true }).click()
+    await expect(disabledSearchAction).toBeEnabled()
     await expect(page.getByRole('button', { name: 'Search', exact: true })).toHaveCSS(
       'background-color',
       'rgb(0, 115, 230)',
@@ -1615,7 +1808,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
       ready: page.getByRole('heading', {
         level: 1,
-        name: 'Provincial application search',
+        name: 'Application search',
         exact: true,
       }),
     })
@@ -1637,9 +1830,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'true',
     )
 
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
-    ).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Application search' })).toBeVisible()
     await submitApplicationSearch(page)
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
     await expect(page.getByRole('region', { name: 'Search results table' })).toHaveAttribute(
@@ -1825,6 +2016,39 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       const exemptionAction = page.getByRole('button', {
         name: 'Create exemption for selected applications',
       })
+      if (route === '/provincial/application') {
+        const rangeBounds = await page.locator('.search-date-range').evaluate((range) =>
+          Array.from(range.querySelectorAll('.cds--date-picker-container')).map((field) => {
+            const bounds = field.getBoundingClientRect()
+            return { top: bounds.top, left: bounds.left, right: bounds.right }
+          }),
+        )
+        expect(rangeBounds).toHaveLength(2)
+        expect(rangeBounds[1].top).toBeGreaterThan(rangeBounds[0].top)
+        expect(Math.abs(rangeBounds[1].left - rangeBounds[0].left)).toBeLessThanOrEqual(1)
+        for (const bounds of rangeBounds) {
+          expect(bounds.left).toBeGreaterThanOrEqual(0)
+          expect(bounds.right).toBeLessThanOrEqual(320)
+        }
+        await expect(exemptionAction).toHaveCount(0)
+        const eligibleApplication = page.getByRole('checkbox', {
+          name: 'Select application 281001',
+          exact: true,
+        })
+        await expect(eligibleApplication).toBeVisible()
+        await expect(eligibleApplication).toBeEnabled()
+        await expect(
+          page.getByRole('checkbox', { name: 'Select application 281002', exact: true }),
+        ).toHaveCount(0)
+        const eligibleApplicationLabel = page.locator('label[for="selectRow-281001"]')
+        await expect(eligibleApplicationLabel).toBeVisible()
+        await eligibleApplicationLabel.click()
+        await expect(eligibleApplication).toBeChecked()
+        await expect(page.locator('.cds--batch-actions--active')).toContainText('1 item selected')
+        await expect(exemptionAction).toBeEnabled()
+      } else {
+        await expect(exemptionAction).toBeDisabled()
+      }
       await expect(exemptionAction).toBeVisible()
       expect(
         await exemptionAction.evaluate((action) =>
@@ -1840,6 +2064,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       expect(bounds.left).toBeGreaterThanOrEqual(0)
       expect(bounds.right).toBeLessThanOrEqual(320)
       expect(bounds.scrollWidth).toBeLessThanOrEqual(Math.ceil(bounds.right - bounds.left))
+      if (route === '/provincial/application') {
+        const batchCancel = page
+          .locator('.cds--batch-actions--active')
+          .getByRole('button', { name: 'Cancel', exact: true })
+        await expect(batchCancel).toBeVisible()
+        const cancelBounds = await batchCancel.boundingBox()
+        expect(cancelBounds).not.toBeNull()
+        expect(cancelBounds!.x + cancelBounds!.width).toBeLessThanOrEqual(320)
+      }
       expect(
         await page.evaluate(
           () => document.documentElement.scrollWidth > document.documentElement.clientWidth,

@@ -4986,6 +4986,19 @@ const ProvincialApplicationDetailsPage = () => {
                           id="application-remarks"
                           className="application-detail-section application-detail-remarks detail-remarks-section"
                           aria-label="Remarks"
+                          inert={remarkDiscardConfirmationOpen ? true : undefined}
+                          onKeyDownCapture={(event) => {
+                            if (
+                              isEditingRemarks &&
+                              event.key === 'Escape' &&
+                              !event.defaultPrevented
+                            ) {
+                              // Do not let the same Escape reach the newly opened discard dialog.
+                              event.preventDefault()
+                              event.stopPropagation()
+                              onCancelRemarkEditing()
+                            }
+                          }}
                         >
                           {remarkActionResult && (
                             <ActionResultNotification
@@ -5067,7 +5080,7 @@ const ProvincialApplicationDetailsPage = () => {
                               contentSelector=".provincial-application-detail"
                               initialFocusSelector="#applicationRemarkBody"
                               launcherRef={remarkLauncherRef}
-                              fallbackFocusSelector="#application-remarks button"
+                              fallbackFocusSelector="#application-remarks .detail-remarks-add-button"
                               busy={isSavingRemark}
                               onClose={onCancelRemarkEditing}
                               actions={[

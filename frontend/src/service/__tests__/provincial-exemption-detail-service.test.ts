@@ -144,14 +144,14 @@ describe('provincial exemption detail service', () => {
           permitNumber: 900101,
           permitVolume: '25.5',
           permitStatus: 'Active',
-          permitIssueDate: '12-Jul-2026',
+          permitIssueDate: '03/10/2026',
           canViewPermit: true,
         },
         {
           permitNumber: 900102,
           permitVolume: '14.0',
           permitStatus: 'Complete',
-          permitIssueDate: '10-Jul-2026',
+          permitIssueDate: '10/03/2026',
           canViewPermit: false,
         },
       ],
@@ -162,14 +162,14 @@ describe('provincial exemption detail service', () => {
         permitNumber: '900101',
         permitVolume: '25.5',
         permitStatus: 'Active',
-        permitIssueDate: '12-Jul-2026',
+        permitIssueDate: '2026-03-10',
         canViewPermit: true,
       },
       {
         permitNumber: '900102',
         permitVolume: '14.0',
         permitStatus: 'Complete',
-        permitIssueDate: '10-Jul-2026',
+        permitIssueDate: '2026-10-03',
         canViewPermit: false,
       },
     ])
@@ -186,6 +186,34 @@ describe('provincial exemption detail service', () => {
     await expect(fetchExemptionPermits('EX-777')).rejects.toThrow(
       'Unexpected exemption permit payload.',
     )
+  })
+
+  it.each([
+    ['02/29/2024', '2024-02-29'],
+    ['02/29/2026', '02/29/2026'],
+    ['04/31/2026', '04/31/2026'],
+    ['13/10/2026', '13/10/2026'],
+    ['not-a-date', 'not-a-date'],
+    ['2026-03-10', '2026-03-10'],
+    ['12-Jul-2026', '12-Jul-2026'],
+    ['', ''],
+    [null, ''],
+  ])('preserves the calendar day or original issue-date value for %j', async (value, expected) => {
+    getMock.mockResolvedValue({
+      data: [
+        {
+          permitNumber: 900101,
+          permitVolume: '25.5',
+          permitStatus: 'Active',
+          permitIssueDate: value,
+          canViewPermit: true,
+        },
+      ],
+    })
+
+    await expect(fetchExemptionPermits('EX-777')).resolves.toMatchObject([
+      { permitIssueDate: expected },
+    ])
   })
 
   it('parses Blanket OIC permit volume totals', async () => {

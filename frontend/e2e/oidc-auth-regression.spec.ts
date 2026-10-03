@@ -125,9 +125,7 @@ for (const provider of [
       ready: page.getByRole('button', { name: provider.button }),
     })
     await page.getByRole('button', { name: provider.button }).click()
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Provincial application search' }),
-    ).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Application search' })).toBeVisible()
     await expect(page).toHaveURL(`${origin}/provincial/application`)
     expect(exchanges).toBe(1)
     expect(authenticatedCapabilityRequests).toBeGreaterThan(0)
