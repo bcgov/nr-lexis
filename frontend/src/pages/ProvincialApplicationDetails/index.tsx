@@ -783,6 +783,8 @@ const ProvincialApplicationDetailsPage = () => {
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const remarkLauncherRef = useRef<HTMLButtonElement | null>(null)
+  const remarkBodyRef = useRef<HTMLTextAreaElement | null>(null)
+  const [remarkDiscardConfirmationOpen, setRemarkDiscardConfirmationOpen] = useState(false)
   const documentUploadLauncherRef = useRef<HTMLButtonElement | null>(null)
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
   const [summaryBaselineForm, setSummaryBaselineForm] =
@@ -1209,6 +1211,10 @@ const ProvincialApplicationDetailsPage = () => {
     Boolean(summaryForm) || canEditSummary || canEditPackages || canAddPackages || canAddScales
   const canUpdatePackageNumber = canEditPackages && !!detail?.canUpdatePackageNumber
   const canManageRemarks = canViewRemarks && canEditSummary
+  const remarkBaselineBody = editingRemarkId
+    ? (detail?.remarks.find((remark) => String(remark.remarkId) === editingRemarkId)?.remark ?? '')
+    : ''
+  const remarkDirty = canManageRemarks && isEditingRemarks && remarkBody !== remarkBaselineBody
   const isProvincialSubmitter = hasProvincialSubmitterRole(capabilities?.roles)
   const requiresApplicationAccuracyAcknowledgement =
     detail?.industryUser === true || isProvincialSubmitter
@@ -2674,12 +2680,20 @@ const ProvincialApplicationDetailsPage = () => {
     setPendingSummarySaveSource('summary')
   }, [summaryBaselineForm])
 
-  const onCancelRemarkEditing = useCallback(() => {
+  const discardRemarkEditing = useCallback(() => {
     setRemarkBody('')
     setEditingRemarkId(null)
     setRemarkValidationMessage('')
     setIsEditingRemarks(false)
   }, [])
+  const onCancelRemarkEditing = useCallback(() => {
+    if (isSavingRemark) return
+    if (remarkDirty) {
+      setRemarkDiscardConfirmationOpen(true)
+    } else {
+      discardRemarkEditing()
+    }
+  }, [discardRemarkEditing, isSavingRemark, remarkDirty])
 
   const onSaveSummary = useCallback(
     async (
@@ -3310,10 +3324,6 @@ const ProvincialApplicationDetailsPage = () => {
     missingSummaryOptionLabelsForSource(activeSummarySaveSource)
   const activeRequiredSummaryOptionsMissing =
     summaryOptionsAvailability === 'available' && activeMissingSummaryOptionLabels.length > 0
-  const remarkBaselineBody = editingRemarkId
-    ? (detail?.remarks.find((remark) => String(remark.remarkId) === editingRemarkId)?.remark ?? '')
-    : ''
-  const remarkDirty = canManageRemarks && isEditingRemarks && remarkBody !== remarkBaselineBody
   const reviewDirty =
     isRetryingApprovalRemark ||
     (canEditApplicationReview &&
@@ -4005,7 +4015,11 @@ const ProvincialApplicationDetailsPage = () => {
 
       {!!pageActionResult &&
         // The remark editor and accuracy confirmation show their own failures.
-        !(!!actionErrorMessage && (summaryAccuracyConfirmationOpen || isEditingRemarks)) && (
+        !(
+          summaryAccuracyConfirmationOpen &&
+          (!!actionErrorMessage || pageActionResult.volumeWarning)
+        ) &&
+        !(isEditingRemarks && !!actionErrorMessage) && (
           <ActionResultNotification
             result={pageActionResult}
             onClose={() => setActionResult(null)}
@@ -5077,6 +5091,7 @@ const ProvincialApplicationDetailsPage = () => {
                               ]}
                             >
                               <TextArea
+                                ref={remarkBodyRef}
                                 id="applicationRemarkBody"
                                 labelText={requiredLabel('Remark')}
                                 aria-required="true"
@@ -5155,9 +5170,23 @@ const ProvincialApplicationDetailsPage = () => {
             onConfirm={onConfirmSummaryAccuracy}
             onClose={closeSummaryAccuracyConfirmation}
             errorMessage={actionErrorMessage}
+            warningMessage={pageActionResult?.volumeWarning ? pageActionResult.message : undefined}
             onError={() => undefined}
           />
         )}
+      {remarkDiscardConfirmationOpen && (
+        <ConfirmationModal
+          open
+          title="Discard changes?"
+          description="Your changes will be lost."
+          confirmLabel="Discard changes"
+          cancelLabel="Keep editing"
+          danger
+          launcherButtonRef={remarkBodyRef}
+          onConfirm={discardRemarkEditing}
+          onClose={() => setRemarkDiscardConfirmationOpen(false)}
+        />
+      )}
       {documentPendingDeletion && (
         <ConfirmationModal
           open

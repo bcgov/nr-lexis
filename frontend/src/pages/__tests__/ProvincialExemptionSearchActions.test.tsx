@@ -990,7 +990,7 @@ describe('Provincial Exemption Search Actions', () => {
       ),
     ).toBeInTheDocument()
     expect(resultItems('1 exemption was not approved')).toEqual([
-      'EX-1001: Failed to approve invalid exemption EX-1001: Active ministerial exemptions require at least one application.',
+      'EX-1001: Failed to approve invalid exemption EX-1001: Active ministerial exemptions require at least one application. Review application links in Applications.',
     ])
     expect(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' })).not.toBeChecked()
     expect(
@@ -1204,7 +1204,7 @@ describe('Provincial Exemption Search Actions', () => {
       'cds--actionable-notification--error',
     )
     expect(resultItems('1 exemption was not approved')).toEqual([
-      'TEST-EX-002: Failed to approve invalid exemption TEST-EX-002: Active ministerial exemptions require at least one application.',
+      'TEST-EX-002: Failed to approve invalid exemption TEST-EX-002: Active ministerial exemptions require at least one application. Review application links in Applications.',
     ])
     expect(screen.getByRole('checkbox', { name: 'Select exemption TEST-EX-001' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Select exemption TEST-EX-002' })).not.toBeChecked()
@@ -1695,6 +1695,31 @@ describe('Provincial Exemption Search Actions', () => {
       'Owner client',
       'Agent client',
     ])
+  })
+
+  it('restores and submits a list-date range, retaining independent approval dates', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    renderPage('/provincial/exemption?listToDate=2026-01-31&approvalFromDate=2025-12-01')
+    await screen.findByText('EX-1001')
+    await waitFor(() => expect(screen.getByLabelText('List date from')).toHaveValue(''))
+    expect(screen.getByLabelText('List date to')).toHaveValue('2026-01-31')
+    expect(screen.getAllByText('2 results found')).toHaveLength(2)
+    fireEvent.change(screen.getByLabelText('List date from'), {
+      target: { value: '2026-01-01' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() =>
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            listFromDate: '2026-01-01',
+            listToDate: '2026-01-31',
+            approvalFromDate: '2025-12-01',
+          }),
+        }),
+        expect.any(Object),
+      ),
+    )
   })
 
   it('waits for explicit submission while text filters are typed', async () => {

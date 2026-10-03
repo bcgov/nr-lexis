@@ -56,6 +56,7 @@ const applicationRequest = {
     exportScheduleId: '31916',
     applicantClientNumber: '00012345',
     ownerClientNumber: '00054321',
+    agentClientNumber: '00067890',
   },
   page: 1,
   pageSize: 20,
@@ -258,6 +259,7 @@ describe('search-service contracts', () => {
     const params = readParams()
     expect(params.get('applicationNumber')).toBe('101')
     expect(params.get('agentClientNumber')).toBe('00012345')
+    expect(params.get('agentOnlyClientNumber')).toBe('00067890')
     expect(params.get('region')).toBe('12')
     expect(params.get('receivedFromDate')).toBe('2025-12-01')
     expect(params.get('receivedToDate')).toBe('2025-12-31')

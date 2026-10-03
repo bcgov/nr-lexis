@@ -21,7 +21,49 @@ public record LexisApplicationSearchCriteria(
     boolean broadClientMatch,
     String sortField,
     int page,
-    int size) {
+    int size,
+    String agentOnlyClientNumber) {
+
+  public LexisApplicationSearchCriteria(
+      String applicationNumber,
+      String packageNumber,
+      String exemptionNumber,
+      String exemptionType,
+      String applicationStatus,
+      String ownerClientNumber,
+      String agentClientNumber,
+      String productTypeCode,
+      LocalDate receivedFromDate,
+      LocalDate receivedToDate,
+      LocalDate listingFromDate,
+      LocalDate listingToDate,
+      Long exportScheduleId,
+      List<Long> regionNumbers,
+      boolean broadClientMatch,
+      String sortField,
+      int page,
+      int size) {
+    this(
+        applicationNumber,
+        packageNumber,
+        exemptionNumber,
+        exemptionType,
+        applicationStatus,
+        ownerClientNumber,
+        agentClientNumber,
+        productTypeCode,
+        receivedFromDate,
+        receivedToDate,
+        listingFromDate,
+        listingToDate,
+        exportScheduleId,
+        regionNumbers,
+        broadClientMatch,
+        sortField,
+        page,
+        size,
+        null);
+  }
 
   public LexisApplicationSearchCriteria(
       String applicationNumber,

@@ -1252,6 +1252,15 @@ const ProvincialApplicationCreatePage = () => {
     () => Object.values(fieldErrors).some((error) => !!error),
     [fieldErrors],
   )
+  // Field validation follows the current draft; server and unknown-save errors stay visible.
+  const currentStatus = status?.placement === 'inline' && !hasValidationError ? null : status
+  useEffect(() => {
+    if (status?.placement === 'inline' && !hasValidationError) {
+      // Retire the old save attempt so a later edit cannot restore its focus-changing feedback.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect
+      setStatus(null)
+    }
+  }, [hasValidationError, status])
   const requiredApplicationOptionsMissing =
     optionsLoaded &&
     !optionsUnavailable &&
@@ -1538,7 +1547,7 @@ const ProvincialApplicationCreatePage = () => {
         />
       </Column>
 
-      {status?.kind !== 'error' && !accuracyConfirmationOpen && (
+      {currentStatus?.kind !== 'error' && !accuracyConfirmationOpen && (
         <Column sm={4} md={8} lg={16}>
           <InlineNotification
             kind="info"
@@ -1587,12 +1596,12 @@ const ProvincialApplicationCreatePage = () => {
         </Column>
       )}
 
-      {!!status && status.placement !== 'inline' && !accuracyConfirmationOpen && (
+      {!!currentStatus && currentStatus.placement !== 'inline' && !accuracyConfirmationOpen && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
-            kind={status.kind}
-            title={status.title}
-            subtitle={status.message}
+            kind={currentStatus.kind}
+            title={currentStatus.title}
+            subtitle={currentStatus.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
           />
@@ -1600,13 +1609,14 @@ const ProvincialApplicationCreatePage = () => {
       )}
 
       <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
-        {status?.placement === 'inline' && !accuracyConfirmationOpen && (
+        {currentStatus?.placement === 'inline' && !accuracyConfirmationOpen && (
           <AppNotification
             className="create-form-validation-notification"
             kind="error"
-            revealKey={status}
-            title={status.title}
-            subtitle={status.message}
+            revealKey={currentStatus}
+            focusOnReveal
+            title={currentStatus.title}
+            subtitle={currentStatus.message}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
           />
@@ -1634,8 +1644,11 @@ const ProvincialApplicationCreatePage = () => {
               return (
                 <Tab
                   key={tab}
-                  aria-label={APPLICATION_CREATE_TAB_LABELS[tab]}
-                  aria-description={errorCount ? `${errorCount} fields need attention` : undefined}
+                  aria-label={
+                    errorCount
+                      ? `${APPLICATION_CREATE_TAB_LABELS[tab]}, ${errorCount} ${errorCount === 1 ? 'field needs' : 'fields need'} attention`
+                      : APPLICATION_CREATE_TAB_LABELS[tab]
+                  }
                   renderIcon={errorCount > 0 ? undefined : APPLICATION_CREATE_TAB_ICONS[tab]}
                 >
                   {APPLICATION_CREATE_TAB_LABELS[tab]}
@@ -2263,8 +2276,8 @@ const ProvincialApplicationCreatePage = () => {
           onConfirmedChange={setAccuracyConfirmed}
           onConfirm={onConfirmAccuracy}
           onClose={closeAccuracyConfirmation}
-          errorTitle={status?.title}
-          errorMessage={status?.kind === 'error' ? status.message : undefined}
+          errorTitle={currentStatus?.title}
+          errorMessage={currentStatus?.kind === 'error' ? currentStatus.message : undefined}
           onError={() => undefined}
         />
       )}

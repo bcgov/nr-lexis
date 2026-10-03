@@ -218,7 +218,7 @@ const clearComboBox = async (combobox: HTMLElement) => {
 }
 
 const selectApplicationCreateTab = async (name: string) => {
-  await userEvent.click(await screen.findByRole('tab', { name }))
+  await userEvent.click(await screen.findByRole('tab', { name: new RegExp(`^${name}(?:,|$)`) }))
 }
 
 const selectExemptionCreateTab = async (name: string) => {
@@ -1054,9 +1054,8 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(save).toBeEnabled())
     await userEvent.click(save)
     expect(await screen.findByText('Cannot save yet.')).toBeVisible()
-    const applicant = screen.getByRole('tab', { name: 'Applicant' })
+    const applicant = screen.getByRole('tab', { name: 'Applicant, 3 fields need attention' })
     expect(applicant).toHaveAttribute('aria-selected', 'true')
-    expect(applicant).toHaveAttribute('aria-description', '3 fields need attention')
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
     fireEvent.change(screen.getByRole('textbox', { name: 'Agent client' }), {
       target: { value: '00033333' },
@@ -1064,9 +1063,13 @@ describe('Create Page Core Flows', () => {
     await waitFor(() =>
       expect(screen.getByRole('combobox', { name: 'Agent location' })).toBeEnabled(),
     )
+    await waitFor(() =>
+      expect(applicant).toHaveAccessibleName('Applicant, 2 fields need attention'),
+    )
     await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
     expect(screen.queryByRole('region', { name: 'Agent information' })).not.toBeInTheDocument()
-    expect(applicant).not.toHaveAttribute('aria-description')
+    expect(applicant).toHaveAccessibleName('Applicant')
+    expect(screen.queryByText('Cannot save yet.')).not.toBeInTheDocument()
     await waitFor(() => expect(save).toBeEnabled())
     await userEvent.click(save)
     await waitFor(() =>
@@ -1079,6 +1082,62 @@ describe('Create Page Core Flows', () => {
         }),
       ),
     )
+  })
+
+  it('focuses only new application validation attempts and retires resolved feedback', async () => {
+    const visibleRects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+    try {
+      render(
+        <MemoryRouter
+          initialEntries={[
+            '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&applicationVolume=125.5&speciesCodes=HE&endUseCode=SA',
+          ]}
+        >
+          <Routes>
+            <Route
+              path="/provincial/application/create"
+              element={<ProvincialApplicationCreatePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+      const save = screen.getByRole('button', { name: 'Save application' })
+      await waitFor(() => expect(save).toBeEnabled())
+      const contact = screen.getByRole('textbox', { name: 'Contact name' })
+      await userEvent.clear(contact)
+      for (let attempt = 0; attempt < 2; attempt += 1) {
+        save.focus()
+        await userEvent.keyboard('{Enter}')
+        const feedback = await screen.findByRole('status')
+        expect(feedback).toHaveTextContent('Cannot save yet.')
+        await waitFor(() => expect(feedback).toHaveFocus())
+        expect(
+          screen.getByRole('tab', { name: 'Applicant, 1 field needs attention' }),
+        ).toBeVisible()
+        expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+      }
+
+      await userEvent.type(contact, 'Updated contact')
+      expect(screen.queryByText('Cannot save yet.')).not.toBeInTheDocument()
+      expect(screen.getByRole('tab', { name: 'Applicant' })).toBeVisible()
+      await userEvent.clear(contact)
+      await act(async () => {
+        await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+      })
+      expect(screen.queryByText('Cannot save yet.')).not.toBeInTheDocument()
+      expect(contact).toHaveFocus()
+
+      save.focus()
+      await userEvent.keyboard('{Enter}')
+      const feedback = await screen.findByRole('status')
+      expect(feedback).toHaveTextContent('Cannot save yet.')
+      await waitFor(() => expect(feedback).toHaveFocus())
+      expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+    } finally {
+      visibleRects.mockRestore()
+    }
   })
 
   it('submits a ministerial applicant type without agent fields', async () => {

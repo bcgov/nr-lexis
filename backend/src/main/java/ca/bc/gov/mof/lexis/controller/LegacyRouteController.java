@@ -229,7 +229,8 @@ public class LegacyRouteController {
         page,
         size,
         null,
-        authentication);
+        authentication,
+        null);
   }
 
   @GetMapping({"/applicationDetails", "/applicationDetails.do"})

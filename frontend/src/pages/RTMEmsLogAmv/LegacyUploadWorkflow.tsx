@@ -872,7 +872,7 @@ const RtmEmsLogAmvUploadPage = () => {
   const [isUploading, setIsUploading] = useState(false)
   const [isCheckingSavedValues, setIsCheckingSavedValues] = useState(true)
   const [savedValuesLoadError, setSavedValuesLoadError] = useState(false)
-  const [uploadError, setUploadError] = useState('')
+  const [uploadErrors, setUploadErrors] = useState<string[]>([])
   const [uploadSystemError, setUploadSystemError] = useState(false)
   const [notification, setNotification] = useState('')
   const [notificationTitle, setNotificationTitle] = useState('Average monthly values')
@@ -921,7 +921,7 @@ const RtmEmsLogAmvUploadPage = () => {
     validationRequestRef.current = requestId
 
     setSelectedUploadFile(nextFile)
-    setUploadError('')
+    setUploadErrors([])
     setUploadSystemError(false)
     setUploadResult(null)
     setPendingUploadValidation(null)
@@ -944,12 +944,12 @@ const RtmEmsLogAmvUploadPage = () => {
 
     const sizeError = validateUploadFileSize(nextFile)
     if (sizeError) {
-      setUploadError(sizeError)
+      setUploadErrors([sizeError])
       return
     }
 
     if (!isAcceptedUploadFile(nextFile)) {
-      setUploadError('Upload an XLSX file before continuing.')
+      setUploadErrors(['Upload an XLSX file before continuing.'])
       return
     }
 
@@ -975,7 +975,11 @@ const RtmEmsLogAmvUploadPage = () => {
       } else if (validatedResponse.status === 'validation_failed') {
         setPendingUploadValidation(null)
         if (isReplacingSavedValues) {
-          setUploadError(createResultMessage(validatedResponse.message, validatedResponse.errors))
+          setUploadErrors(
+            validatedResponse.errors.length > 0
+              ? validatedResponse.errors
+              : [validatedResponse.message],
+          )
         } else {
           setPreviewResult(validatedResponse)
         }
@@ -994,7 +998,7 @@ const RtmEmsLogAmvUploadPage = () => {
 
       console.error(error)
       setSelectedUploadFile(null)
-      setUploadError('')
+      setUploadErrors([])
       setUploadSystemError(true)
       if (!isReplacingSavedValues) {
         setPreviewResult(null)
@@ -1055,7 +1059,7 @@ const RtmEmsLogAmvUploadPage = () => {
     setReplacementUploadOpen(true)
     setSelectedUploadFile(null)
     setPendingUploadValidation(null)
-    setUploadError('')
+    setUploadErrors([])
     setUploadSystemError(false)
     setUploadResult(null)
     setIsDraggingUpload(false)
@@ -1077,7 +1081,7 @@ const RtmEmsLogAmvUploadPage = () => {
     savedValuesRequestRef.current += 1
     setUploadStep('upload')
     setSelectedUploadFile(null)
-    setUploadError('')
+    setUploadErrors([])
     setUploadSystemError(false)
     setPreviewResult(null)
     setSavedPreviewResult(null)
@@ -1103,7 +1107,7 @@ const RtmEmsLogAmvUploadPage = () => {
     validationRequestRef.current += 1
     setSelectedUploadFile(null)
     setPendingUploadValidation(null)
-    setUploadError('')
+    setUploadErrors([])
     setUploadSystemError(false)
     setUploadResult(null)
     setIsDraggingUpload(false)
@@ -1225,13 +1229,13 @@ const RtmEmsLogAmvUploadPage = () => {
 
   const submitUpload = async () => {
     if (!canManage) {
-      setUploadError('You do not have permission to upload average monthly value rows.')
+      setUploadErrors(['You do not have permission to upload average monthly value rows.'])
       return
     }
 
     const isSavedReview = savedReviewValues !== null
     if (!selectedUploadFile && !isSavedReview) {
-      setUploadError('Upload an XLSX file before submitting changes.')
+      setUploadErrors(['Upload an XLSX file before submitting changes.'])
       return
     }
 
@@ -1241,11 +1245,11 @@ const RtmEmsLogAmvUploadPage = () => {
         pendingUploadValidation.fileName !== selectedUploadFile?.name ||
         pendingUploadValidation.fileSize !== selectedUploadFile?.size)
     ) {
-      setUploadError('Validate this file before submitting changes.')
+      setUploadErrors(['Validate this file before submitting changes.'])
       return
     }
 
-    setUploadError('')
+    setUploadErrors([])
     setUploadResult(null)
     setIsUploading(true)
     const requestId = saveRequestRef.current + 1
@@ -1253,7 +1257,7 @@ const RtmEmsLogAmvUploadPage = () => {
 
     try {
       if (!previewResult) {
-        setUploadError('Validate this file before submitting changes.')
+        setUploadErrors(['Validate this file before submitting changes.'])
         return
       }
 
@@ -1368,13 +1372,14 @@ const RtmEmsLogAmvUploadPage = () => {
   ]
     .filter(Boolean)
     .join(' ')
-  const rejectedFileIssues = uploadError
-    ? [uploadError]
-    : previewResult && previewResult.status !== 'accepted'
-      ? previewResult.errors.length > 0
-        ? previewResult.errors
-        : [previewResult.message]
-      : []
+  const rejectedFileIssues =
+    uploadErrors.length > 0
+      ? uploadErrors
+      : previewResult && previewResult.status !== 'accepted'
+        ? previewResult.errors.length > 0
+          ? previewResult.errors
+          : [previewResult.message]
+        : []
 
   const renderUploadCard = (isReplacement: boolean) => {
     const titleId = isReplacement ? 'rtm-replacement-upload-title' : 'rtm-upload-title'
@@ -1793,7 +1798,7 @@ const RtmEmsLogAmvUploadPage = () => {
                   }
                   setSelectedUploadFile(null)
                   setPendingUploadValidation(null)
-                  setUploadError('')
+                  setUploadErrors([])
                   setUploadSystemError(false)
                   setUploadInputKey((current) => current + 1)
                   setReplacementUploadOpen(false)

@@ -4,6 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import Modal from '@/components/Modal'
 import { AppNotification } from '@/components/AppNotification'
 import {
+  exemptionApprovalFailureMessage,
   type ApprovalEmailResult,
   type ExemptionApprovalFailure,
   type ExemptionApprovalReport,
@@ -547,6 +548,7 @@ const ExemptionApprovalModal = ({
       </div>
       {error && (
         <AppNotification
+          focusOnReveal
           kind={approvalUnconfirmed && !retrying ? 'warning' : 'error'}
           title={
             retrying
@@ -555,7 +557,9 @@ const ExemptionApprovalModal = ({
                 ? 'Approval status unconfirmed'
                 : 'Approval failed'
           }
-          subtitle={error}
+          subtitle={
+            !retrying && !approvalUnconfirmed ? exemptionApprovalFailureMessage(error) : error
+          }
         />
       )}
     </Modal>

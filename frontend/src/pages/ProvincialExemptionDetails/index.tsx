@@ -2934,7 +2934,9 @@ const ProvincialExemptionDetailsPage = () => {
                               </dd>
                             </div>
                             <div className="detail-field-item">
-                              <dt className="detail-field-label">Sum of application scales (m³)</dt>
+                              <dt className="detail-field-label">
+                                Scale volume assigned to permits (m³)
+                              </dt>
                               <dd className="detail-field-value">
                                 {formatExemptionVolume(detail.usedVolume)}
                               </dd>

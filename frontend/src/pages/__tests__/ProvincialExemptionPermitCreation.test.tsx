@@ -553,7 +553,7 @@ describe('permit creation from an exemption', () => {
     const totals = screen.getByLabelText('Exemption permit volume totals')
     expect(within(totals).getByText('Requested volume (m³)')).toBeInTheDocument()
     expect(within(totals).getByText('Approved volume (m³)')).toBeInTheDocument()
-    expect(within(totals).getByText('Sum of application scales (m³)')).toBeInTheDocument()
+    expect(within(totals).getByText('Scale volume assigned to permits (m³)')).toBeInTheDocument()
     expect(within(totals).getByText('Balance remaining (m³)')).toBeInTheDocument()
     expect(within(totals).getAllByText('307.2')).toHaveLength(3)
     expect(within(totals).getByText('0.0')).toBeInTheDocument()

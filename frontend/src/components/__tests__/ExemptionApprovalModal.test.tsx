@@ -130,6 +130,124 @@ describe('ExemptionApprovalModal', () => {
     expect(screen.queryByRole('textbox', { name: 'Agent email' })).not.toBeInTheDocument()
   })
 
+  it('keeps one available contact read-only even when the other contact is missing', async () => {
+    const user = userEvent.setup()
+    vi.mocked(fetchExemptionApprovalRecipients).mockResolvedValue([
+      preview({ ownerEmail: '', agentEmail: 'agent@example.com' }),
+    ])
+    render(
+      <ExemptionApprovalModal
+        exemptionNumbers={['EX-205']}
+        onApprove={vi.fn().mockResolvedValue(approval())}
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    await screen.findByText('agent@example.com')
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Edit recipients' }))
+    const owner = screen.getByRole('textbox', { name: 'Owner email' })
+    await user.type(owner, 'owner@example.com')
+    await user.click(screen.getByRole('checkbox', { name: /I certify/ }))
+    expect(owner).toBeVisible()
+    expect(owner).toHaveValue('owner@example.com')
+  })
+
+  it('displays duplicate contacts under both roles without changing either preview value', async () => {
+    const shared = 'shared@example.com'
+    vi.mocked(fetchExemptionApprovalRecipients).mockResolvedValue([
+      preview({ ownerEmail: shared, agentEmail: shared }),
+    ])
+    render(
+      <ExemptionApprovalModal
+        exemptionNumbers={['EX-205']}
+        onApprove={vi.fn().mockResolvedValue(approval())}
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findAllByText(shared)).toHaveLength(2)
+    expect(screen.getByText('Owner email')).toBeVisible()
+    expect(screen.getByText('Agent email')).toBeVisible()
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument()
+  })
+
+  it('waits for interaction before showing a malformed stored address, then focuses its correction', async () => {
+    const user = userEvent.setup()
+    const onApprove = vi.fn().mockResolvedValue(approval())
+    vi.mocked(fetchExemptionApprovalRecipients).mockResolvedValue([
+      preview({ ownerEmail: 'invalid address' }),
+    ])
+    render(
+      <ExemptionApprovalModal
+        exemptionNumbers={['EX-205']}
+        onApprove={onApprove}
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    await screen.findByText('invalid address')
+    await user.click(screen.getByRole('button', { name: 'Edit recipients' }))
+    const owner = screen.getByRole('textbox', { name: 'Owner email' })
+    expect(owner).not.toHaveAttribute('aria-invalid', 'true')
+    await user.click(screen.getByRole('checkbox', { name: /I certify/ }))
+    await user.click(screen.getByRole('button', { name: 'Approve and send email' }))
+    expect(owner).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(owner).toHaveFocus())
+    expect(onApprove).not.toHaveBeenCalled()
+  })
+
+  it.each([false, true])(
+    'focuses server approval feedback with unconfirmed=%s',
+    async (unconfirmed) => {
+      const user = userEvent.setup()
+      const rects = vi
+        .spyOn(HTMLElement.prototype, 'getClientRects')
+        .mockReturnValue([new DOMRect(0, 0, 400, 80)] as unknown as DOMRectList)
+      const message = unconfirmed
+        ? 'Check the current approval status before trying again.'
+        : 'A valid expiry date is required for an active exemption.'
+      const onClose = vi.fn()
+      try {
+        render(
+          <ExemptionApprovalModal
+            exemptionNumbers={['EX-205']}
+            onApprove={vi.fn().mockResolvedValue({
+              approvedNumbers: [],
+              message,
+              warning: true,
+              unconfirmed,
+            })}
+            onComplete={vi.fn()}
+            onClose={onClose}
+          />,
+        )
+
+        await screen.findByText('owner@example.com')
+        await user.click(screen.getByRole('checkbox', { name: /I certify/ }))
+        await user.click(screen.getByRole('button', { name: 'Approve and send email' }))
+        const title = unconfirmed ? 'Approval status unconfirmed' : 'Approval failed'
+        const notification = (await screen.findByText(title)).closest('[role="status"]')
+        await waitFor(() => expect(notification).toHaveFocus())
+        expect(notification).toHaveTextContent(message)
+        if (!unconfirmed) {
+          expect(notification).toHaveTextContent('Review the expiry date in Exemption details.')
+          await user.click(screen.getByRole('button', { name: 'Approve and send email' }))
+          await waitFor(() =>
+            expect(screen.getByText(title).closest('[role="status"]')).toHaveFocus(),
+          )
+        }
+        expect(onClose).not.toHaveBeenCalled()
+        expect(sendExemptionApprovalNotifications).not.toHaveBeenCalled()
+      } finally {
+        rects.mockRestore()
+      }
+    },
+  )
+
   it('sends edited contacts for this approval without changing the preview data', async () => {
     const user = userEvent.setup()
     const onApprove = vi.fn().mockResolvedValue(approval())

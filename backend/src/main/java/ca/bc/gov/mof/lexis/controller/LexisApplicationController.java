@@ -124,12 +124,14 @@ public class LexisApplicationController {
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
       @RequestParam(name = "knownTotal", required = false) @PositiveOrZero Integer knownTotal,
-      Authentication authentication) {
+      Authentication authentication,
+      @RequestParam(name = "agentOnlyClientNumber", required = false) String agentOnlyClientNumber) {
 
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     if (scopedClientNumber != null) {
       ownerClientNumber = null;
       agentClientNumber = scopedClientNumber;
+      agentOnlyClientNumber = null;
     }
     OrgUnitConstraint orgUnits =
         provincialAuthorizationService.constrainOrgUnits(
@@ -158,7 +160,8 @@ public class LexisApplicationController {
             scopedClientNumber != null,
             sortField,
             page,
-            size);
+            size,
+            agentOnlyClientNumber);
     LexisApplicationSearchResponseDto response =
         knownTotal == null ? service.search(criteria) : service.search(criteria, knownTotal);
     return ResponseEntity.ok(withSearchLocks(response, authentication));
@@ -180,11 +183,13 @@ public class LexisApplicationController {
       @RequestParam(name = "listingToDate", required = false) String listingToDate,
       @RequestParam(name = "exportScheduleId", required = false) String exportScheduleId,
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
-      Authentication authentication) {
+      Authentication authentication,
+      @RequestParam(name = "agentOnlyClientNumber", required = false) String agentOnlyClientNumber) {
     String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     if (scopedClientNumber != null) {
       ownerClientNumber = null;
       agentClientNumber = scopedClientNumber;
+      agentOnlyClientNumber = null;
     }
     OrgUnitConstraint orgUnits =
         provincialAuthorizationService.constrainOrgUnits(
@@ -213,7 +218,8 @@ public class LexisApplicationController {
             scopedClientNumber != null,
             null,
             0,
-            1);
+            1,
+            agentOnlyClientNumber);
     return ResponseEntity.ok(new SearchCountResponseDto(service.count(criteria)));
   }
 
@@ -263,7 +269,8 @@ public class LexisApplicationController {
       boolean broadClientMatch,
       String sortField,
       Integer page,
-      Integer size) {
+      Integer size,
+      String agentOnlyClientNumber) {
     return new LexisApplicationSearchCriteria(
         applicationNumber,
         packageNumber,
@@ -282,7 +289,8 @@ public class LexisApplicationController {
         broadClientMatch,
         sortField,
         page,
-        size);
+        size,
+        agentOnlyClientNumber);
   }
 
   private LexisApplicationDetailDto withEditLock(

@@ -184,6 +184,50 @@ describe('AppNotification scrolling', () => {
     expect(HTMLElement.prototype.scrollIntoView).toHaveBeenCalledTimes(2)
   })
 
+  it('focuses validation feedback only when requested and repeats for a new attempt', () => {
+    const notification = (attempt: number) => (
+      <>
+        <button>Save</button>
+        <AppNotification
+          kind="error"
+          title="Validation error"
+          subtitle="A value is required."
+          focusOnReveal
+          revealKey={attempt}
+        />
+      </>
+    )
+    const { rerender } = render(notification(1))
+    const save = screen.getByRole('button', { name: 'Save' })
+    save.focus()
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(screen.getByRole('status')).toHaveFocus()
+
+    save.focus()
+    rerender(notification(1))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(save).toHaveFocus()
+
+    rerender(notification(2))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(screen.getByRole('status')).toHaveFocus()
+  })
+
+  it('does not move focus to page validation behind an open dialog', () => {
+    render(
+      <>
+        <AppNotification kind="error" title="Validation error" focusOnReveal />
+        <div className="cds--modal is-visible" role="dialog">
+          <button>Keep editing</button>
+        </div>
+      </>,
+    )
+    const keepEditing = screen.getByRole('button', { name: 'Keep editing' })
+    keepEditing.focus()
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(keepEditing).toHaveFocus()
+  })
+
   it('leaves informational page banners in place', () => {
     vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(
       bounds(window.innerHeight + 100, window.innerHeight + 200),

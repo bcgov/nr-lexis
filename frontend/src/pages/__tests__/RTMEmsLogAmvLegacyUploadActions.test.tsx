@@ -530,6 +530,74 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
   })
 
+  it('keeps replacement validation problems separate while preserving saved values', async () => {
+    const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
+    const nextMonth = monthOffset(currentMonth, 1)
+    mockedSearch.mockResolvedValueOnce([
+      {
+        species: 'BA',
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: nextMonth,
+        updateDate: nextMonth,
+        currentValue: 78.14,
+        newValue: 78.14,
+        returnCode: '0',
+      },
+    ])
+    const errors = [
+      'Hemlock grade J: more than two decimal places',
+      'Cedar grade J: more than two decimal places',
+      ...Array.from({ length: 10 }, (_, index) => `Problem ${index + 3}.`),
+      'Hemlock grade J: more than two decimal places',
+    ]
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'validation_failed',
+      fileName: 'replacement.xlsx',
+      fileSize: 1,
+      message: "This file couldn't be used.",
+      rowCount: 0,
+      errors,
+      warnings: [],
+      rows: [],
+    })
+    await renderUploadPage()
+    await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
+    await userEvent.upload(
+      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      new File([new Uint8Array([1])], 'replacement.xlsx', {
+        type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      }),
+    )
+
+    const rejectedFile = await screen.findByRole('alert', {
+      name: 'Rejected average monthly values upload file',
+    })
+    expect(
+      within(rejectedFile).getByText("This file couldn't be used — 12 problems found"),
+    ).toBeVisible()
+    const issueList = within(rejectedFile).getByRole('list', {
+      name: 'Upload validation issues',
+    })
+    expect(within(issueList).getAllByRole('listitem')).toHaveLength(11)
+    expect(within(issueList).getAllByText(errors[0])).toHaveLength(1)
+    expect(within(issueList).getByText(errors[1])).toBeVisible()
+    expect(within(issueList).getByText('and 2 more')).toBeVisible()
+    expect(within(issueList).queryByText('Problem 11.')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
+      '78.14',
+    )
+    expect(mockedSaveBatch).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Keep current values' }))
+    expect(
+      screen.queryByRole('alert', { name: 'Rejected average monthly values upload file' }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
+      '78.14',
+    )
+  })
+
   it('does not restore an old save banner after a rejected replacement upload is dismissed', async () => {
     const currentMonth = `${formatBusinessIsoDate().slice(0, 7)}-01`
     const nextMonth = monthOffset(currentMonth, 1)

@@ -199,7 +199,8 @@ class OracleLexisApplicationServiceTest {
             false,
             " listingDate DESC ",
             -2,
-            0);
+            0,
+            " 00066777 ");
     when(repository.search(any(LexisApplicationSearchCriteria.class)))
         .thenReturn(page(List.of(), 0));
 
@@ -217,6 +218,7 @@ class OracleLexisApplicationServiceTest {
     assertThat(normalized.applicationStatus()).isEqualTo("APP");
     assertThat(normalized.ownerClientNumber()).isEqualTo("00077881");
     assertThat(normalized.agentClientNumber()).isEqualTo("00055667");
+    assertThat(normalized.agentOnlyClientNumber()).isEqualTo("00066777");
     assertThat(normalized.productTypeCode()).isEqualTo("S");
     assertThat(normalized.exportScheduleId()).isEqualTo(31916L);
     assertThat(normalized.regionNumbers()).containsExactly(12L);
