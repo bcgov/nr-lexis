@@ -2687,14 +2687,13 @@ const ProvincialApplicationDetailsPage = () => {
     setIsEditingRemarks(false)
   }, [])
   const onCancelRemarkEditing = useCallback(() => {
-    // IBM's overlay panel also hears the Escape that closes the discard dialog.
-    if (isSavingRemark || remarkDiscardConfirmationOpen) return
+    if (isSavingRemark) return
     if (remarkDirty) {
       setRemarkDiscardConfirmationOpen(true)
     } else {
       discardRemarkEditing()
     }
-  }, [discardRemarkEditing, isSavingRemark, remarkDirty, remarkDiscardConfirmationOpen])
+  }, [discardRemarkEditing, isSavingRemark, remarkDirty])
 
   const onSaveSummary = useCallback(
     async (
