@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  exemptionApprovalFailureMessage,
   exemptionApprovalResults,
   type ExemptionApprovalReport,
 } from '@/components/exemption-approval-results'
@@ -13,6 +14,39 @@ const report = (overrides: Partial<ExemptionApprovalReport>): ExemptionApprovalR
 })
 
 describe('exemptionApprovalResults', () => {
+  it('keeps every activation problem and points to the forms where it can be corrected', () => {
+    const problems =
+      'A valid expiry date is required for an active exemption. Active ministerial exemptions require at least one application.'
+    const results = exemptionApprovalResults(
+      report({ failures: [{ exemptionNumber: 'EX-205', message: problems }] }),
+      (exemptionNumber) => ({ to: `/provincial/exemption/${exemptionNumber}` }),
+    )
+
+    expect(results[0].items).toEqual([
+      {
+        id: 'EX-205',
+        text: `: ${problems} Review the expiry date in Exemption details. Review application links in Applications.`,
+        to: '/provincial/exemption/EX-205',
+      },
+    ])
+  })
+
+  it('keeps unknown server problems without inventing correction instructions', () => {
+    expect(exemptionApprovalFailureMessage('The current record version changed.')).toBe(
+      'The current record version changed.',
+    )
+    expect(exemptionApprovalFailureMessage('')).toBe('The exemption could not be approved.')
+  })
+
+  it.each([
+    'The approved volume must be greater than or equal to the total requested volume (25.0).',
+    'The approved volume must have no more than two decimal places.',
+  ])('identifies the approval-volume form while preserving %s', (problem) => {
+    expect(exemptionApprovalFailureMessage(problem)).toBe(
+      `${problem} Review the approval volume in Exemption details.`,
+    )
+  })
+
   it('reports approvals and failures of one batch in separate notifications', () => {
     const results = exemptionApprovalResults(
       report({

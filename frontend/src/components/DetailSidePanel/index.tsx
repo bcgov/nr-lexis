@@ -84,6 +84,9 @@ export default function DetailSidePanel({
   if (!open) return null
 
   const requestClose = () => {
+    // IBM's overlay closes on any window Escape, even one a dialog above the panel has handled.
+    const event = window.event
+    if (event instanceof KeyboardEvent && event.defaultPrevented) return
     if (!busy) onClose()
   }
 

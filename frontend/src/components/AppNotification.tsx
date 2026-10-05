@@ -17,6 +17,8 @@ type AppNotificationProps = Omit<
   onCloseButtonClick?: () => void
   /** Change for a new action attempt that produces the same feedback text. */
   revealKey?: unknown
+  /** Move focus to feedback after a caller's explicit validation attempt. */
+  focusOnReveal?: boolean
 }
 
 /** Persistent feedback in the page, form, or dialog that owns the action. */
@@ -29,6 +31,7 @@ export function AppNotification({
   lowContrast = true,
   role = 'status',
   revealKey,
+  focusOnReveal = false,
   children,
   ...notificationProps
 }: AppNotificationProps) {
@@ -40,9 +43,14 @@ export function AppNotification({
       const notification = notificationRef.current
       if (!notification || notification.getClientRects().length === 0) return
       const dialog = notification.closest('[role="dialog"]')
-      if (!isActionFeedback && !dialog) return
+      if (!isActionFeedback && !dialog && !focusOnReveal) return
       // A page banner must not scroll the page behind an active dialog.
       if (!dialog && document.querySelector('.cds--modal.is-visible')) return
+      if (focusOnReveal) {
+        notification
+          .querySelector<HTMLElement>('.app-inline-notification')
+          ?.focus({ preventScroll: true })
+      }
       const bounds = notification.getBoundingClientRect()
       if (dialog) {
         const content = notification.closest<HTMLElement>('.cds--modal-content')
@@ -68,15 +76,16 @@ export function AppNotification({
       }
     })
     return () => cancelAnimationFrame(frame)
-  }, [isActionFeedback, kind, revealKey, subtitle, title])
+  }, [focusOnReveal, isActionFeedback, kind, revealKey, subtitle, title])
 
   return (
     <div className="app-notification-container" ref={notificationRef}>
       {children ? (
         // Carbon's inline notification rejects interactive content such as record links, so
-        // details use its actionable variant, kept as a status region without focus handling.
+        // Keep rich feedback as a status region without Carbon's automatic focus handling.
         <FeatureFlags enableFocusWrapWithoutSentinels>
           <ActionableNotification
+            tabIndex={focusOnReveal ? -1 : undefined}
             inline
             hasFocus={false}
             closeOnEscape={false}
@@ -102,6 +111,7 @@ export function AppNotification({
       ) : (
         <InlineNotification
           {...notificationProps}
+          tabIndex={focusOnReveal ? -1 : notificationProps.tabIndex}
           className={['app-inline-notification', className].filter(Boolean).join(' ')}
           hideCloseButton={!onCloseButtonClick}
           kind={kind}

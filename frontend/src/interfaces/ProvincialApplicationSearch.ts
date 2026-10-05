@@ -13,6 +13,7 @@ export type ProvincialApplicationSearchFilters = {
   exportScheduleId?: string
   applicantClientNumber: string
   ownerClientNumber: string
+  agentClientNumber?: string
 }
 
 export type ProvincialApplicationSearchSortField =

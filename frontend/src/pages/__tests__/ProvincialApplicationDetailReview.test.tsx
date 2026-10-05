@@ -465,6 +465,135 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(reviewRemark).toHaveValue('Preserve review draft')
   }, 30_000)
 
+  it.each([
+    { mode: 'add', close: 'Escape' },
+    { mode: 'add', close: 'Cancel' },
+    { mode: 'add', close: 'Close' },
+    { mode: 'edit', close: 'Escape' },
+    { mode: 'edit', close: 'Cancel' },
+    { mode: 'edit', close: 'Close' },
+  ])(
+    'preserves a dirty $mode remark after $close until discard is confirmed',
+    async ({ mode, close }) => {
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+      await selectApplicationDetailTab('Remarks')
+      const launcher =
+        mode === 'add'
+          ? await screen.findByRole('button', { name: 'Add remark' })
+          : within(screen.getByRole('region', { name: 'Application remarks' })).getByRole(
+              'button',
+              {
+                name: 'Edit',
+              },
+            )
+      await userEvent.click(launcher)
+      const remark = await screen.findByLabelText('Remark')
+      const original = mode === 'add' ? '' : 'ok'
+      expect(remark).toHaveValue(original)
+      fireEvent.change(remark, { target: { value: 'Unsaved application remark' } })
+
+      const requestClose = async () => {
+        if (close === 'Escape') {
+          remark.focus()
+          await userEvent.keyboard('{Escape}')
+        } else {
+          const drawer = remark.closest('.detail-side-panel') as HTMLElement
+          await userEvent.click(within(drawer).getByRole('button', { name: close }))
+        }
+      }
+      await requestClose()
+      const confirmation = await screen.findByRole('dialog', { name: 'Discard changes?' })
+      expect(confirmation).toHaveAccessibleDescription('Your changes will be lost.')
+      expect(remark).toHaveValue('Unsaved application remark')
+      await userEvent.click(within(confirmation).getByRole('button', { name: 'Keep editing' }))
+      await waitFor(() => expect(remark).toHaveFocus())
+      expect(remark).toHaveValue('Unsaved application remark')
+      expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
+
+      await requestClose()
+      await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+      await waitFor(() => expect(screen.queryByLabelText('Remark')).not.toBeInTheDocument())
+      await waitFor(() => expect(launcher).toHaveFocus())
+      await userEvent.click(launcher)
+      expect(await screen.findByLabelText('Remark')).toHaveValue(original)
+      expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each([
+    { layout: 'overlay', slideIn: false },
+    { layout: 'slide-in', slideIn: true },
+  ])(
+    'closes only the discard dialog on Escape in the $layout remark panel',
+    async ({ slideIn }) => {
+      const originalMatchMedia = window.matchMedia
+      vi.spyOn(window, 'matchMedia').mockImplementation((query) => ({
+        ...originalMatchMedia(query),
+        matches: slideIn && query === '(min-width: 1312px)',
+      }))
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+      await selectApplicationDetailTab('Remarks')
+      await userEvent.click(await screen.findByRole('button', { name: 'Add remark' }))
+      const remark = await screen.findByLabelText('Remark')
+      fireEvent.change(remark, { target: { value: 'Unsaved application remark' } })
+      const drawer = remark.closest('.detail-side-panel') as HTMLElement
+      await userEvent.click(within(drawer).getByRole('button', { name: 'Cancel' }))
+      await screen.findByRole('dialog', { name: 'Discard changes?' })
+
+      await userEvent.keyboard('{Escape}')
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument(),
+      )
+      await waitFor(() => expect(remark).toHaveFocus())
+      expect(remark).toHaveValue('Unsaved application remark')
+      expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
+    },
+  )
+
+  it('closes an unchanged existing remark without a discard dialog and restores focus', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await selectApplicationDetailTab('Remarks')
+    const launcher = within(screen.getByRole('region', { name: 'Application remarks' })).getByRole(
+      'button',
+      { name: 'Edit' },
+    )
+    await userEvent.click(launcher)
+    const remark = await screen.findByLabelText('Remark')
+    await waitFor(() => expect(remark).toHaveFocus())
+    await userEvent.keyboard('{Escape}')
+    await waitFor(() => expect(screen.queryByLabelText('Remark')).not.toBeInTheDocument())
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    await waitFor(() => expect(launcher).toHaveFocus())
+  })
+
   it('saves application remarks and refreshes detail', async () => {
     const detailAfterRemark: ProvincialApplicationDetail = {
       ...reviewableApplicationDetail,
@@ -869,6 +998,11 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(screen.getByLabelText('Remark')).toHaveValue('Unrelated remark draft')
     expect(screen.getByRole('cell', { name: 'Approval note' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    )
 
     await selectApplicationDetailTab('Application')
     expect(screen.getByLabelText('Exemption term (days)')).toHaveValue(181)

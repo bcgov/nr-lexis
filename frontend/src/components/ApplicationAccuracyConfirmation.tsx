@@ -2,6 +2,7 @@ import { Checkbox } from '@carbon/react'
 import { useId } from 'react'
 
 import ConfirmationModal from '@/components/ConfirmationModal'
+import { AppNotification } from '@/components/AppNotification'
 import { requiredLabel } from '@/utils/required-label'
 
 const APPLICATION_ACCURACY_DESCRIPTION =
@@ -23,6 +24,7 @@ type ApplicationAccuracyConfirmationProps = {
   onClose: () => void
   errorTitle?: string
   errorMessage?: string
+  warningMessage?: string
   onError?: (error: unknown) => void
 }
 
@@ -38,6 +40,7 @@ const ApplicationAccuracyConfirmation = ({
   onError,
   errorMessage,
   errorTitle,
+  warningMessage,
 }: ApplicationAccuracyConfirmationProps) => {
   const checkboxId = `application-accuracy-${useId().replaceAll(':', '')}`
 
@@ -60,6 +63,9 @@ const ApplicationAccuracyConfirmation = ({
       errorMessage={errorMessage}
       errorTitle={errorTitle}
     >
+      {warningMessage && (
+        <AppNotification kind="warning" title="Review package volumes" subtitle={warningMessage} />
+      )}
       <Checkbox
         id={checkboxId}
         labelText={requiredLabel(APPLICATION_ACCURACY_LABEL)}

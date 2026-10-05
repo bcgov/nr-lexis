@@ -325,7 +325,7 @@ describe('Detail Quick Action Smoke', () => {
     const permitTotals = screen.getByRole('tabpanel', { name: 'Permits' })
     for (const [label, value] of [
       ['Approved volume (m³)', '99.0'],
-      ['Sum of application scales (m³)', '5.0'],
+      ['Scale volume assigned to permits (m³)', '5.0'],
       ['Balance remaining (m³)', '94.0'],
     ]) {
       const field = within(permitTotals).getByText(label).closest('.detail-field-item')

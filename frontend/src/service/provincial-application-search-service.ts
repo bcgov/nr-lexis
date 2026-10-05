@@ -78,6 +78,8 @@ const buildBackendParams = (request: ProvincialApplicationSearchRequest): URLSea
       ['exportScheduleId', filters.exportScheduleId ?? ''],
       ['agentClientNumber', filters.applicantClientNumber],
       ['ownerClientNumber', filters.ownerClientNumber],
+      // Keep the historical agentClientNumber API parameter's Applicant semantics.
+      ['agentOnlyClientNumber', filters.agentClientNumber ?? ''],
     ],
     [['region', filters.region]],
   )

@@ -8,6 +8,7 @@ import ProvincialBlanketOicPermitCreatePage from '@/pages/ProvincialBlanketOicPe
 import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
 import { readDetailReturnTo, readDetailReturnTrail } from '@/pages/shared/detail-navigation'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
+import apiService from '@/service/api-service'
 import {
   fetchExemptionClientData,
   fetchExemptionClientLocations,
@@ -553,12 +554,40 @@ describe('permit creation from an exemption', () => {
     const totals = screen.getByLabelText('Exemption permit volume totals')
     expect(within(totals).getByText('Requested volume (m³)')).toBeInTheDocument()
     expect(within(totals).getByText('Approved volume (m³)')).toBeInTheDocument()
-    expect(within(totals).getByText('Sum of application scales (m³)')).toBeInTheDocument()
+    expect(within(totals).getByText('Scale volume assigned to permits (m³)')).toBeInTheDocument()
     expect(within(totals).getByText('Balance remaining (m³)')).toBeInTheDocument()
     expect(within(totals).getAllByText('307.2')).toHaveLength(3)
     expect(within(totals).getByText('0.0')).toBeInTheDocument()
     expect(screen.getByText('9020934 (Pending)')).toBeInTheDocument()
     expect(screen.getByText('9020933')).toBeInTheDocument()
+  })
+
+  it('renders the legacy permit issue date with a month name without shifting its day', async () => {
+    const actualService = await vi.importActual<{
+      fetchExemptionPermits: typeof fetchExemptionPermits
+    }>('@/service/provincial-exemption-detail-service')
+    const get = vi.spyOn(apiService.getAxiosInstance(), 'get').mockResolvedValue({
+      data: [
+        {
+          permitNumber: 900123,
+          permitVolume: '2.0',
+          permitStatus: 'Complete',
+          permitIssueDate: '03/10/2026',
+          canViewPermit: true,
+        },
+      ],
+    })
+    vi.mocked(fetchExemptionPermits).mockImplementation(actualService.fetchExemptionPermits)
+    try {
+      renderPage(activeMinisterialExemption)
+      await openPermitsTab()
+
+      const table = await screen.findByRole('region', { name: 'Related exemption permits' })
+      expect(within(table).getByText('Mar 10, 2026')).toBeVisible()
+      expect(within(table).queryByText('03/10/2026')).not.toBeInTheDocument()
+    } finally {
+      get.mockRestore()
+    }
   })
 
   it('confirms the shell behavior and navigates to a newly created permit', async () => {

@@ -535,6 +535,49 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
+  void independentAgentFilterShouldNotUseApplicantFallbackAndShouldMatchCount() {
+    TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
+    LexisApplicationSearchCriteria criteria =
+        new LexisApplicationSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            "00011111",
+            "00022222",
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            List.of(),
+            false,
+            null,
+            0,
+            10,
+            "00033333");
+
+    repository.search(criteria);
+
+    assertThat(repository.whereSql())
+        .contains("v.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains(" AND v.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains("v.EXPORT_APPLICANT_TYPE_CODE = 'O'")
+        .contains("v.EXPORT_APPLICANT_TYPE_CODE = 'A'");
+    assertThat(repository.bindValues())
+        .containsExactly("00011111", "00033333", "N", "00022222", "00022222");
+
+    repository.count(criteria);
+    assertThat(repository.countBindValues()).isEqualTo(repository.bindValues());
+    assertThat(repository.countWhereSql())
+        .contains(" AND v.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains("v.EXPORT_APPLICANT_TYPE_CODE = 'O'")
+        .doesNotContain("ORDER BY");
+  }
+
+  @Test
   void searchShouldLoadRequestedDirectPageWithCountTotal() {
     List<LexisApplicationSearchResultDto> rows =
         java.util.stream.LongStream.rangeClosed(900101L, 900111L)

@@ -57,6 +57,31 @@ const emailNotice = (email: ApprovalEmailResult): string => {
 
 const joined = (parts: string[]) => parts.filter(Boolean).join(' ')
 
+/** Keep the server's problems and identify the form for known activation failures. */
+export const exemptionApprovalFailureMessage = (message: string): string => {
+  const problem = reason(message, APPROVAL_FAILED_REASON)
+  const guidance: string[] = []
+  if (
+    [
+      'A valid expiry date is required for an active exemption.',
+      'The expiry date must be after the approval date.',
+      'An active exemption cannot have an expiry date before today.',
+    ].some((message) => problem.includes(message))
+  ) {
+    guidance.push('Review the expiry date in Exemption details.')
+  }
+  if (
+    problem.includes('The approved volume must be') ||
+    problem.includes('The approved volume must have no more than two decimal places.')
+  ) {
+    guidance.push('Review the approval volume in Exemption details.')
+  }
+  if (problem.includes('Active ministerial exemptions require at least one application.')) {
+    guidance.push('Review application links in Applications.')
+  }
+  return joined([problem, ...guidance])
+}
+
 /**
  * Page notifications for an approval: at most one for the approved exemptions and one for those
  * that were not approved or could not be confirmed, each listed by exemption. A single exemption
@@ -130,7 +155,7 @@ export const exemptionApprovalResults = (
           : 'No approval emails were sent for these. Correct the details below, then approve again.',
       items: [
         ...failures.map(({ exemptionNumber, message }) =>
-          item(exemptionNumber, `: ${reason(message, APPROVAL_FAILED_REASON)}`),
+          item(exemptionNumber, `: ${exemptionApprovalFailureMessage(message)}`),
         ),
         ...unconfirmedNumbers.map((exemptionNumber) =>
           item(

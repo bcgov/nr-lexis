@@ -178,42 +178,71 @@ for (const mode of ['add', 'edit'] as const) {
               .getByRole('button', { name: 'Edit', exact: true })
       await launcher.focus()
       await page.keyboard.press('Enter')
-      const dialog = page.getByRole('dialog', {
+      const panel = page.getByRole('complementary', {
         name: mode === 'add' ? 'Add remark' : 'Edit remark',
+        includeHidden: true,
       })
-      const field = dialog.getByRole('textbox')
+      const field = panel.getByRole('textbox', { includeHidden: true })
       await expect(field).toBeFocused()
       await field.fill('Updated synthetic remark')
-      if (closeAction === 'escape') await page.keyboard.press('Escape')
-      else {
-        const action = dialog.getByRole('button', {
-          name:
-            closeAction === 'cancel' ? 'Cancel' : mode === 'add' ? 'Save Remark' : 'Update Remark',
-          exact: true,
-        })
-        for (
-          let i = 0;
-          i < 5 && !(await action.evaluate((el) => el === document.activeElement));
-          i++
-        ) {
-          await page.keyboard.press('Tab')
+      const activateAction = async () => {
+        if (closeAction === 'escape') await page.keyboard.press('Escape')
+        else {
+          const action = panel.getByRole('button', {
+            name:
+              closeAction === 'cancel'
+                ? 'Cancel'
+                : mode === 'add'
+                  ? 'Save remark'
+                  : 'Update remark',
+            exact: true,
+          })
+          for (
+            let i = 0;
+            i < 5 && !(await action.evaluate((el) => el === document.activeElement));
+            i++
+          ) {
+            await page.keyboard.press('Tab')
+          }
+          await expect(action).toBeFocused()
+          await page.keyboard.press('Enter')
         }
-        await expect(action).toBeFocused()
+      }
+      await activateAction()
+      if (closeAction !== 'save') {
+        const confirmation = page.getByRole('dialog', { name: 'Discard changes?', exact: true })
+        await expect(confirmation).toBeVisible()
+        await expect(confirmation).toHaveAccessibleDescription('Your changes will be lost.')
+        const keepEditing = confirmation.getByRole('button', { name: 'Keep editing', exact: true })
+        await expect(keepEditing).toBeFocused()
+        await expect(field).toHaveValue('Updated synthetic remark')
+        expect(saved).toBe(0)
+        await page.keyboard.press('Enter')
+        await expect(confirmation).not.toBeVisible()
+        await expect(field).toBeFocused()
+        await expect(field).toHaveValue('Updated synthetic remark')
+
+        await activateAction()
+        await expect(keepEditing).toBeFocused()
+        await page.keyboard.press('Tab')
+        await expect(
+          confirmation.getByRole('button', { name: 'Discard changes', exact: true }),
+        ).toBeFocused()
         await page.keyboard.press('Enter')
       }
       if (closeAction === 'save') {
         await refreshStarted
         try {
-          await expect(dialog).toBeVisible()
+          await expect(panel).toBeVisible()
           await expect(field).toHaveAccessibleName(/Remark/)
           await expect(field).toHaveValue('Updated synthetic remark')
           await expect(field).toBeDisabled()
-          await expect(dialog.getByRole('button', { name: 'Saving…', exact: true })).toBeDisabled()
+          await expect(panel.getByRole('button', { name: 'Saving…', exact: true })).toBeDisabled()
         } finally {
           releaseRefresh()
         }
       }
-      await expect(dialog).not.toBeVisible()
+      await expect(panel).not.toBeVisible()
       await expect(launcher).toBeFocused()
       expect(saved).toBe(closeAction === 'save' ? 1 : 0)
       if (closeAction === 'save') {
@@ -233,9 +262,12 @@ test('conflict recovery also releases a pending document deletion without retryi
     ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
   })
   await page.getByRole('tab', { name: 'Documents', exact: true }).click()
-  await page.getByRole('button', { name: 'Edit documents', exact: true }).click()
   await page.getByRole('button', { name: 'Delete', exact: true }).click()
-  const deletion = page.getByRole('dialog', { name: 'Delete document', includeHidden: true })
+  const deletion = page.getByRole('dialog', {
+    name: 'Are you sure you want to delete this document?',
+    exact: true,
+    includeHidden: true,
+  })
   await deletion.getByRole('button', { name: 'Delete', exact: true }).click()
 
   const conflict = page.getByRole('dialog', { name: 'Newer changes were saved' })
@@ -255,7 +287,6 @@ test('conflict recovery also releases a pending document deletion without retryi
   await expect(
     page.getByRole('cell', { name: 'synthetic-conflict.txt', exact: true }),
   ).toBeVisible()
-  await page.getByRole('button', { name: 'Edit documents', exact: true }).click()
   await expect(page.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled()
 })
 
@@ -276,9 +307,9 @@ for (const { code, heading, recovery } of [
     await expect(page.getByRole('heading', { level: 1, name: 'Application 321' })).toBeVisible()
     await page.getByRole('tab', { name: 'Remarks', exact: true }).click()
     await page.getByRole('button', { name: 'Add remark', exact: true }).click()
-    const form = page.getByRole('dialog', { name: 'Add remark', includeHidden: true })
+    const form = page.getByRole('complementary', { name: 'Add remark', includeHidden: true })
     await form.getByRole('textbox', { name: /Remark/ }).fill('Unsaved synthetic remark')
-    await form.getByRole('button', { name: 'Save Remark', exact: true }).click()
+    await form.getByRole('button', { name: 'Save remark', exact: true }).click()
 
     const conflict = page.getByRole('dialog', { name: heading })
     const refresh = conflict.getByRole('button', { name: 'Refresh', exact: true })
@@ -297,7 +328,9 @@ for (const { code, heading, recovery } of [
     ).toBe(true)
 
     // A lower dialog's close button must not steal focus back from recovery.
-    await form.locator('.cds--modal-close').evaluate((button: HTMLElement) => button.focus())
+    await form
+      .getByRole('button', { name: 'Close', exact: true, includeHidden: true })
+      .evaluate((button: HTMLElement) => button.focus())
     await expect(refresh).toBeFocused()
     await page.keyboard.press('Shift+Tab')
     await expect(conflict.getByRole('button', { name: 'Close', exact: true })).toBeFocused()

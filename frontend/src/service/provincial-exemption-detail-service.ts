@@ -7,6 +7,7 @@ import {
 import { LEGACY_FORM_CONTENT_TYPE, toUrlEncodedParams } from '@/service/legacy-form-utils'
 import { RECORD_VERSION_HEADER } from '@/service/optimistic-conflict'
 import { isRecord, recordOrEmpty } from '@/utils/record'
+import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 
 export type ExemptionApplicationRow = {
   applicationNumber: string
@@ -198,6 +199,15 @@ export const fetchExemptionApplications = async (
   }
 }
 
+const normalizeExemptionPermitIssueDate = (value: unknown): string => {
+  const text = asString(value)
+  // This legacy endpoint returns MM/dd/yyyy, while the detail view formats ISO calendar dates.
+  const match = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(text)
+  if (!match) return text
+  const isoDate = `${match[3]}-${match[1]}-${match[2]}`
+  return isValidIsoDate(isoDate) ? isoDate : text
+}
+
 export const fetchExemptionPermits = async (
   exemptionNumber: string,
 ): Promise<ExemptionPermitRow[]> => {
@@ -223,7 +233,7 @@ export const fetchExemptionPermits = async (
       permitNumber: asString(item.permitNumber),
       permitVolume: asString(item.permitVolume),
       permitStatus: asString(item.permitStatus),
-      permitIssueDate: asString(item.permitIssueDate),
+      permitIssueDate: normalizeExemptionPermitIssueDate(item.permitIssueDate),
       canViewPermit: item.canViewPermit,
     }
   })
