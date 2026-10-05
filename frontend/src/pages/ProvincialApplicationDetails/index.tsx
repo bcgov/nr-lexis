@@ -78,7 +78,7 @@ import {
 } from '@/service/document-service-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { displayValue } from '@/pages/shared/detail-page-utils'
-import { readDetailReturnTo } from '@/pages/shared/detail-navigation'
+import { landingPageReturnTo, readDetailReturnTo } from '@/pages/shared/detail-navigation'
 import {
   fetchProvincialApplicationDetail,
   releaseApplicationEditLock,
@@ -262,11 +262,6 @@ const APPLICATION_STATUS_LABELS: Record<string, string> = {
   REJ: 'Rejected',
   WDN: 'Withdrawn',
 }
-const APPLICANT_TYPE_OPTIONS: SearchOption[] = [
-  { value: 'O', label: 'Owner' },
-  { value: 'M', label: 'Ministerial' },
-  { value: 'A', label: 'Agent' },
-]
 const optionDescription = (options: SearchOption[], value: string | null | undefined): string => {
   const normalizedValue = value?.trim() ?? ''
   return options.find((option) => option.value === normalizedValue)?.label ?? normalizedValue
@@ -326,31 +321,45 @@ function ClientDataSummary({
         loadingDescription={`Refreshing ${title.toLowerCase()}...`}
       />
       {showTitle && <h3 className="application-client-summary__title">{title}</h3>}
-      <dl className="detail-field-grid">
+      {/* Figma rows: contact, client identity, address, then phone, fax and email. */}
+      <div className="application-client-summary__groups">
         {[
-          ...persistedDetailFields,
-          ...(clientData
-            ? [
-                ...(showCompanyName
-                  ? [['Company name', displayValue(clientData.companyName)] as [string, string]]
-                  : []),
+          persistedDetailFields.slice(0, 1),
+          [
+            ...persistedDetailFields.slice(1),
+            ...(clientData && showCompanyName
+              ? [['Company name', displayValue(clientData.companyName)] as [string, string]]
+              : []),
+          ],
+          clientData
+            ? ([
                 ['Address', displayValue(clientData.address)],
                 ['City', displayValue(clientData.city)],
                 ['Province', displayValue(clientData.province)],
                 ['Country', displayValue(clientData.country)],
                 ['Postal code', displayValue(clientData.postalCode)],
+              ] as Array<[string, string]>)
+            : [],
+          clientData
+            ? ([
                 ['Phone number', displayValue(clientData.phone)],
                 ['Fax number', displayValue(clientData.fax)],
                 ['Email address', displayValue(clientData.email)],
-              ]
-            : []),
-        ].map(([label, value]) => (
-          <div key={label} className="detail-field-item">
-            <dt className="detail-field-label">{label}</dt>
-            <dd className="detail-field-value">{value}</dd>
-          </div>
-        ))}
-      </dl>
+              ] as Array<[string, string]>)
+            : [],
+        ]
+          .filter((group) => group.length > 0)
+          .map((group) => (
+            <dl key={group[0][0]} className="detail-field-grid">
+              {group.map(([label, value]) => (
+                <div key={label} className="detail-field-item">
+                  <dt className="detail-field-label">{label}</dt>
+                  <dd className="detail-field-value">{value}</dd>
+                </div>
+              ))}
+            </dl>
+          ))}
+      </div>
       {!clientData && !isLoading && (
         <InlineNotification
           className="detail-context-notification"
@@ -700,8 +709,8 @@ const ProvincialApplicationDetailsPage = () => {
   const [searchParams] = useSearchParams()
   const navigationState = location.state as ApplicationCreationNavigationState | null
   const fallbackReturnTo = canPerform('/applicationSearch')
-    ? { label: 'Provincial application search', to: '/provincial/application' }
-    : { label: 'Your landing page', to: defaultRoute }
+    ? { label: 'Application search', to: '/provincial/application' }
+    : landingPageReturnTo(defaultRoute)
   const detailReturnTo = readDetailReturnTo(navigationState) ?? fallbackReturnTo
   const createdApplicationNumber =
     navigationState?.applicationCreationNotice?.applicationNumber.trim()
@@ -3421,6 +3430,9 @@ const ProvincialApplicationDetailsPage = () => {
 
   const ownerApplicantTypeCode = summaryForm?.applicantTypeCode ?? ''
   const ownerApplicantTypeLabel = applicantTypeLabel(ownerApplicantTypeCode)
+  // Without an applicant type control, clearing "I'm an agent" keeps a saved Ministerial type.
+  const ownerNonAgentApplicantTypeCode =
+    summaryBaselineForm?.applicantTypeCode.trim().toUpperCase() === 'M' ? 'M' : 'O'
   // Figma heads the owner's details "Owner". A Ministerial applicant keeps its type visible
   // there, and an agent applicant's agent gets its own section below.
   const ownerSectionTitle =
@@ -3555,7 +3567,7 @@ const ProvincialApplicationDetailsPage = () => {
         <EmptyState
           title="No offers found"
           description="No offers are linked to this application."
-          headingLevel={3}
+          headingLevel={2}
         />
       )}
     </section>
@@ -4151,7 +4163,7 @@ const ProvincialApplicationDetailsPage = () => {
                               {requiredLabel('Required fields')}
                             </p>
                             <h3 className="detail-tile-title">{ownerSectionTitle}</h3>
-                            <div className="legacy-search-grid application-client-edit-grid">
+                            <div className="legacy-search-grid application-client-edit-grid application-client-edit-grid--fixed-client">
                               <TextInput
                                 id="applicationOwnerContactNameEdit"
                                 labelText={requiredLabel('Contact name')}
@@ -4165,20 +4177,23 @@ const ProvincialApplicationDetailsPage = () => {
                                   onSummaryFormChange('ownerContactName', event.target.value)
                                 }
                               />
-                              <ForestClientComboBox
-                                id="applicationOwnerClientNumberEdit"
-                                labelText={requiredLabel('Client')}
-                                value={summaryForm.ownerClientNumber}
-                                selectedClientName={clientDisplayName(ownerClientData, '')}
-                                counterpartyClientNumber={summaryForm.agentClientNumber}
-                                required
-                                invalid={Boolean(visibleSummaryFieldError('ownerClientNumber'))}
-                                invalidText={visibleSummaryFieldError('ownerClientNumber')}
-                                disabled={isSavingSummary}
-                                onChange={(ownerClientNumber) =>
-                                  onSummaryFormChange('ownerClientNumber', ownerClientNumber)
-                                }
-                              />
+                              {/* Figma: the saved application's client is shown, not changed. */}
+                              <dl className="detail-field-item">
+                                <dt className="detail-field-label">Client</dt>
+                                <dd className="detail-field-value">
+                                  {displayValue(
+                                    clientDisplayName(
+                                      ownerClientData,
+                                      summaryForm.ownerClientNumber,
+                                    ),
+                                  )}
+                                </dd>
+                                {visibleSummaryFieldError('ownerClientNumber') && (
+                                  <dd className="legacy-search-error" role="alert">
+                                    {visibleSummaryFieldError('ownerClientNumber')}
+                                  </dd>
+                                )}
+                              </dl>
                               <SearchableSelect
                                 id="applicationOwnerClientLocationEdit"
                                 labelText={requiredLabel('Client location')}
@@ -4214,35 +4229,6 @@ const ProvincialApplicationDetailsPage = () => {
                               clientData={ownerClientData}
                               isLoading={isLoadingOwnerClientData}
                             />
-                            <div className="application-applicant-type-edit">
-                              {canChangeApplicantType ? (
-                                <SearchableSelect
-                                  id="applicationOwnerApplicantTypeEdit"
-                                  labelText={requiredLabel('Applicant type')}
-                                  required
-                                  value={summaryForm.applicantTypeCode}
-                                  placeholder="Select applicant type"
-                                  options={optionsWithCurrentValue(
-                                    APPLICANT_TYPE_OPTIONS,
-                                    summaryForm.applicantTypeCode,
-                                  )}
-                                  invalid={Boolean(visibleSummaryFieldError('applicantTypeCode'))}
-                                  invalidText={visibleSummaryFieldError('applicantTypeCode')}
-                                  disabled={isSavingSummary}
-                                  onChange={(value) =>
-                                    onOwnerApplicantTypeChange(value.toUpperCase())
-                                  }
-                                />
-                              ) : (
-                                <TextInput
-                                  id="applicationOwnerApplicantTypeEdit"
-                                  labelText={requiredLabel('Applicant type')}
-                                  aria-required="true"
-                                  value={ownerApplicantTypeLabel}
-                                  readOnly
-                                />
-                              )}
-                            </div>
                             <hr className="application-applicant-divider" />
                             <Checkbox
                               id="applicationOwnerAgentUsedEdit"
@@ -4250,7 +4236,9 @@ const ProvincialApplicationDetailsPage = () => {
                               checked={summaryForm.applicantTypeCode === 'A'}
                               disabled={isSavingSummary || !canChangeApplicantType}
                               onChange={(_, { checked }) =>
-                                onOwnerApplicantTypeChange(checked ? 'A' : 'O')
+                                onOwnerApplicantTypeChange(
+                                  checked ? 'A' : ownerNonAgentApplicantTypeCode,
+                                )
                               }
                             />
                             {isSummaryAgentApplicant && (
@@ -4510,7 +4498,7 @@ const ProvincialApplicationDetailsPage = () => {
                                       key={option.value}
                                       id={`applicationSummarySchedule-${option.value}`}
                                       value={option.value}
-                                      labelText={option.label}
+                                      labelText={formatIsoDateLabel(option.label)}
                                     />
                                   ))}
                                 </RadioButtonGroup>
@@ -4881,7 +4869,7 @@ const ProvincialApplicationDetailsPage = () => {
                               documentsErrorMessage ||
                               'Document information could not be retrieved for this application.'
                             }
-                            headingLevel={3}
+                            headingLevel={2}
                             role="alert"
                           />
                         )}
@@ -4894,7 +4882,7 @@ const ProvincialApplicationDetailsPage = () => {
                             description={DOCUMENTS_EMPTY_DESCRIPTION}
                             icon={<AddDocument width={48} height={48} />}
                             action={addApplicationDocumentsButton}
-                            headingLevel={3}
+                            headingLevel={2}
                           />
                         )}
                         {hasApplicationDocuments && (
@@ -5017,7 +5005,7 @@ const ProvincialApplicationDetailsPage = () => {
                               description="Only staff can see remarks. Remarks added on the Review tab also appear here."
                               icon={<AddDocument width={48} height={48} />}
                               action={addApplicationRemarkButton}
-                              headingLevel={3}
+                              headingLevel={2}
                             />
                           ) : (
                             <>

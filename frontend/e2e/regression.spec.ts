@@ -2676,7 +2676,8 @@ test.describe('TEST IDIR admin regression', () => {
     expect(paragraphMetrics.resize).toBe('vertical')
 
     await page.getByRole('tab', { name: 'Applicant' }).click()
-    await expect(page.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Owner')
+    await expect(page.getByRole('heading', { name: 'Owner', level: 3 })).toBeVisible()
+    await expect(page.getByLabel('Applicant type')).toHaveCount(0)
   })
 
   test('shows create application tabs and guards record-dependent actions', async () => {
@@ -3077,7 +3078,7 @@ test.describe('TEST IDIR admin regression', () => {
       const count = JSON.parse(countResponseText) as SearchCountResponse
       expect(count.total, `${contract.source} count should be numeric`).toEqual(expect.any(Number))
 
-      const resultCount = page.locator('.legacy-search-result-count')
+      const resultCount = page.locator('.legacy-search-table-toolbar .legacy-search-result-count')
       await expect(
         resultCount,
         `${contract.source} should replace its count skeleton with the exact number`,

@@ -248,6 +248,48 @@ describe('ExemptionApprovalModal', () => {
     },
   )
 
+  it('lists each problem from the record without the server bullets', async () => {
+    const user = userEvent.setup()
+    const rects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 400, 80)] as unknown as DOMRectList)
+    try {
+      render(
+        <ExemptionApprovalModal
+          exemptionNumbers={['EX-205']}
+          onApprove={vi.fn().mockResolvedValue({
+            approvedNumbers: [],
+            message:
+              'Failed to approve invalid exemption EX-205: *A valid expiry date is required for an active exemption. *Active ministerial exemptions require at least one application.',
+            warning: true,
+          })}
+          onComplete={vi.fn()}
+          onClose={vi.fn()}
+        />,
+      )
+
+      await screen.findByText('owner@example.com')
+      await user.click(screen.getByRole('checkbox', { name: /I certify/ }))
+      await user.click(screen.getByRole('button', { name: 'Approve and send email' }))
+      const notification = (await screen.findByText('Approval failed')).closest(
+        '[role="status"]',
+      ) as HTMLElement
+      await waitFor(() => expect(notification).toHaveFocus())
+      expect(
+        within(notification)
+          .getAllByRole('listitem')
+          .map((item) => item.textContent),
+      ).toEqual([
+        'A valid expiry date is required for an active exemption. Review the expiry date in Exemption details.',
+        'Active ministerial exemptions require at least one application. Review application links in Applications.',
+      ])
+      expect(notification).not.toHaveTextContent('*')
+      expect(notification).not.toHaveTextContent('Failed to approve invalid exemption')
+    } finally {
+      rects.mockRestore()
+    }
+  })
+
   it('sends edited contacts for this approval without changing the preview data', async () => {
     const user = userEvent.setup()
     const onApprove = vi.fn().mockResolvedValue(approval())

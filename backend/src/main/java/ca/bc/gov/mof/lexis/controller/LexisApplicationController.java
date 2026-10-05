@@ -382,7 +382,8 @@ public class LexisApplicationController {
         row.applicationVolume(),
         row.showCheckbox(),
         true,
-        row.exemptionTypeDescription());
+        row.exemptionTypeDescription(),
+        row.agentClientNumber());
   }
 
   private String auditUser(Authentication authentication) {

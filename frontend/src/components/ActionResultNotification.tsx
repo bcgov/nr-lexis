@@ -36,6 +36,13 @@ export function ActionResultNotification({
                 item.id
               )}
               {item.text}
+              {item.details?.length ? (
+                <ul className="action-result-notification__details">
+                  {[...new Set(item.details)].map((detail) => (
+                    <li key={detail}>{detail}</li>
+                  ))}
+                </ul>
+              ) : null}
             </li>
           ))}
         </ul>

@@ -11,6 +11,7 @@ import {
   payloadValueAsStringList as asStringArray,
 } from '@/service/payload-utils'
 import { getConfiguredString, isEnabledConfig } from '@/service/service-config-utils'
+import { isClientErrorResponse } from '@/utils/http-error'
 import { isRecord } from '@/utils/record'
 
 export type CreateSubmissionResult = {
@@ -19,6 +20,8 @@ export type CreateSubmissionResult = {
   createdId?: string
   errors: string[]
   warnings: string[]
+  /** The record may still have been saved: there was no response, or the server failed after receiving it. */
+  outcomeUnknown?: boolean
 }
 
 type LegacyCreateResponse = {
@@ -127,6 +130,8 @@ const buildFailureResult = (
       createdId: undefined,
       errors: asStringArray(payload?.errors),
       warnings: asStringArray(payload?.warnings),
+      // Only a 4xx is a definite rejection; a 5xx or lost response may follow a commit.
+      ...(isClientErrorResponse(error) ? {} : { outcomeUnknown: true }),
     }
   }
 
@@ -136,6 +141,7 @@ const buildFailureResult = (
     createdId: undefined,
     errors: [],
     warnings: [],
+    outcomeUnknown: true,
   }
 }
 

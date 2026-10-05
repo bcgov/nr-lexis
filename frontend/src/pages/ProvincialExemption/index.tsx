@@ -50,7 +50,8 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole, isPureExemptionApprover } from '@/context/auth/role-utils'
-import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateValue } from '@/pages/shared/create-form-utils'
+import { batchSelectionTranslator } from '@/pages/shared/batch-selection'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -99,7 +100,6 @@ import {
   fetchProvincialExemptionOptions,
   type SearchOption,
 } from '@/service/search-options-service'
-import IsoDatePicker from '../../components/IsoDatePicker'
 import IsoDateRangePicker from '@/components/IsoDateRangePicker'
 import {
   approveExemptions,
@@ -124,11 +124,13 @@ const searchOptionLabel = (code: string, options: SearchOption[]): string => {
   )
 }
 
+// Keeps each reported problem on its own line so the results can list them.
 const normalizeApprovalMessage = (message: string): string =>
   message
-    .replace(/<\/?br\s*\/?\s*>/gi, ' ')
-    .replace(/(?:^|\s)\*\s*/g, ' ')
-    .replace(/\s+/g, ' ')
+    .replace(/<\/?br\s*\/?\s*>/gi, '\n')
+    .replace(/(?:^|\s)\*\s*/g, '\n')
+    .replace(/[^\S\n]+/g, ' ')
+    .replace(/\s*\n\s*/g, '\n')
     .trim()
 
 const normalizeApprovalFailureMessage = (message: string | null | undefined): string =>
@@ -176,6 +178,7 @@ const INITIAL_FILTERS: ProvincialExemptionSearchFilters = {
 }
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialExemptionSearchResponse>()
+const EXEMPTION_BATCH_SELECTION = batchSelectionTranslator('exemption', 'exemptions')
 
 const SORT_COLUMNS: {
   id: ProvincialExemptionSearchSortField
@@ -199,12 +202,23 @@ const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialExemptionSearchSortField[]
 
+const isMinisterialExemption = (row: ProvincialExemptionSearchItem): boolean =>
+  row.typeCode.trim().toUpperCase() === 'M'
+
+// INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_APPROVAL_MINISTERIAL_ONLY)
+// Figma: search approval is only for Ministerial exemptions in New status.
+const isApprovalSelectable = (row: ProvincialExemptionSearchItem): boolean =>
+  row.canApprove && row.statusCode === 'NEW' && isMinisterialExemption(row) && !row.isLocked
+
 const disabledApprovalSelectionDescription = (row: ProvincialExemptionSearchItem): string => {
   if (row.isLocked) {
     return 'This exemption is currently locked and cannot be approved.'
   }
   if (row.statusCode !== 'NEW') {
     return 'Only new exemptions can be approved.'
+  }
+  if (!isMinisterialExemption(row)) {
+    return 'Only Ministerial exemptions can be approved from search.'
   }
   return 'This exemption is not eligible for approval.'
 }
@@ -221,8 +235,6 @@ const buildSearchParams = (
     ['packageNumber', filters.packageNumber],
     ['exemptionNumber', filters.exemptionNumber],
     ['region', filters.region],
-    ['approvalFromDate', filters.approvalFromDate],
-    ['approvalToDate', filters.approvalToDate],
     ['listFromDate', filters.listFromDate],
     ['listToDate', filters.listToDate],
     ['exemptionTypeCode', filters.exemptionTypeCode],
@@ -298,8 +310,9 @@ const ProvincialExemptionPage = () => {
       packageNumber: searchParams.get('packageNumber') ?? '',
       exemptionNumber: searchParams.get('exemptionNumber') ?? '',
       region: parseCsvParam(searchParams.get('region')),
-      approvalFromDate: searchParams.get('approvalFromDate') ?? '',
-      approvalToDate: searchParams.get('approvalToDate') ?? '',
+      // Figma has no approval-date criteria, so an old link can't apply a hidden one.
+      approvalFromDate: '',
+      approvalToDate: '',
       listFromDate: searchParams.get('listFromDate') ?? '',
       listToDate: searchParams.get('listToDate') ?? '',
       exemptionTypeCode: exemptionTypeLocked ? 'M' : (searchParams.get('exemptionTypeCode') ?? ''),
@@ -369,13 +382,8 @@ const ProvincialExemptionPage = () => {
       (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
   const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(
-      filters.approvalFromDate,
-      filters.approvalToDate,
-      filters.listFromDate,
-      filters.listToDate,
-    )
-  }, [filters.approvalFromDate, filters.approvalToDate, filters.listFromDate, filters.listToDate])
+    return hasInvalidIsoDateValue(filters.listFromDate, filters.listToDate)
+  }, [filters.listFromDate, filters.listToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
@@ -423,14 +431,7 @@ const ProvincialExemptionPage = () => {
         }
       }
 
-      if (
-        hasInvalidIsoDateValue(
-          request.filters.approvalFromDate,
-          request.filters.approvalToDate,
-          request.filters.listFromDate,
-          request.filters.listToDate,
-        )
-      ) {
+      if (hasInvalidIsoDateValue(request.filters.listFromDate, request.filters.listToDate)) {
         setLoading(false)
         return false
       }
@@ -638,6 +639,9 @@ const ProvincialExemptionPage = () => {
     const defaultFilters = {
       ...INITIAL_FILTERS,
       exemptionTypeCode: shouldDefaultApprovalFilters ? 'M' : INITIAL_FILTERS.exemptionTypeCode,
+      exemptionStatusCode: shouldDefaultApprovalFilters
+        ? 'NEW'
+        : INITIAL_FILTERS.exemptionStatusCode,
       region: defaultZoneRegionIds,
     }
     setFilters(defaultFilters)
@@ -657,9 +661,7 @@ const ProvincialExemptionPage = () => {
     if (!canApproveExemption) {
       return []
     }
-    return results.content.filter(
-      (item) => item.canApprove && item.statusCode === 'NEW' && !item.isLocked,
-    )
+    return results.content.filter(isApprovalSelectable)
   }, [canApproveExemption, results.content])
 
   const allSelectableRowsAreSelected = useMemo(() => {
@@ -717,7 +719,7 @@ const ProvincialExemptionPage = () => {
       return
     }
 
-    setApprovalResults([])
+    // Figma: earlier results stay until a new approval replaces them, even if this one is cancelled.
     approvalRowsRef.current = { ...selectedRowsById }
     setApprovalConfirmationOpen(true)
   }
@@ -730,7 +732,7 @@ const ProvincialExemptionPage = () => {
           to: withCurrentSearch(`/provincial/exemption/${exemptionNumber}`),
           state: {
             returnTo: {
-              label: 'Provincial exemption search',
+              label: 'Exemption search',
               to: withCurrentSearch('/provincial/exemption'),
             },
           },
@@ -925,24 +927,6 @@ const ProvincialExemptionPage = () => {
                     )
                   }}
                 />
-                {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
-                    Modern exemption search exposes approval-date criteria hidden in legacy. */}
-                <IsoDatePicker
-                  id="approvalFromDate"
-                  labelText="Approval from date"
-                  value={filters.approvalFromDate}
-                  invalid={!isValidIsoDate(filters.approvalFromDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('approvalFromDate', value)}
-                />
-                <IsoDatePicker
-                  id="approvalToDate"
-                  labelText="Approval to date"
-                  value={filters.approvalToDate}
-                  invalid={!isValidIsoDate(filters.approvalToDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('approvalToDate', value)}
-                />
                 <IsoDateRangePicker
                   fromId="listFromDate"
                   toId="listToDate"
@@ -1072,13 +1056,14 @@ const ProvincialExemptionPage = () => {
                   totalSelected={selectedRowsCount}
                   shouldShowBatchActions
                   onCancel={clearSelection}
+                  translateWithId={EXEMPTION_BATCH_SELECTION}
                 >
                   <TableBatchAction
                     renderIcon={Checkmark}
                     onClick={onApproveSelectedClick}
                     disabled={approving}
                   >
-                    {approving ? 'Approving…' : 'Approve selected exemptions'}
+                    {approving ? 'Approving…' : 'Approve'}
                   </TableBatchAction>
                 </TableBatchActions>
               ) : undefined
@@ -1134,11 +1119,7 @@ const ProvincialExemptionPage = () => {
                 </TableHead>
                 <TableBody>
                   {results.content.map((row) => {
-                    const canSelectRow =
-                      canApproveExemption &&
-                      row.canApprove &&
-                      row.statusCode === 'NEW' &&
-                      !row.isLocked
+                    const canSelectRow = canApproveExemption && isApprovalSelectable(row)
                     const canViewExemption = row.canViewExemption
                     return (
                       <TableRow key={row.exemptionNumber}>
@@ -1177,7 +1158,7 @@ const ProvincialExemptionPage = () => {
                               to={withCurrentSearch(`/provincial/exemption/${row.exemptionNumber}`)}
                               state={{
                                 returnTo: {
-                                  label: 'Provincial exemption search',
+                                  label: 'Exemption search',
                                   to: withCurrentSearch('/provincial/exemption'),
                                 },
                               }}
@@ -1226,7 +1207,7 @@ const ProvincialExemptionPage = () => {
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
               <>
-                <div className="legacy-search-result-count">
+                <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(
                     results.page.totalElements,
                     totalStatus,

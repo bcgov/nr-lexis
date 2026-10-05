@@ -212,7 +212,7 @@ describe('Provincial exemption edit context', () => {
     expect(
       within(pageHeader as HTMLElement).getByText('Author: idir\\exemption-author'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to Your landing page' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Back to Application review' })).toHaveAttribute(
       'href',
       '/provincial/review',
     )
@@ -597,6 +597,44 @@ describe('Provincial exemption edit context', () => {
     expect(await screen.findByText('The exemption was saved.')).toBeInTheDocument()
     await waitFor(() => expect(router.state.location.state).toBeNull())
     expect(screen.getByText('The exemption was saved.')).toBeInTheDocument()
+  })
+
+  it('names the source applications when the created exemption was filled in from them', async () => {
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903'],
+      locked: false,
+      lockMessage: '',
+    })
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/exemption/:exemptionNumber',
+          element: <ProvincialExemptionDetailsPage />,
+        },
+      ],
+      {
+        initialEntries: [
+          {
+            pathname: '/provincial/exemption/BOIC-205',
+            state: {
+              exemptionCreationNotice: {
+                exemptionNumber: 'BOIC-205',
+                applicationNumbers: ['108597', '108594'],
+              },
+            },
+          },
+        ],
+      },
+    )
+
+    render(<RouterProvider router={router} />)
+
+    expect(await screen.findByText('Exemption BOIC-205 created.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Details were filled in from applications 108597 and 108594.'),
+    ).toBeInTheDocument()
   })
 
   it('renames an ordinary OIC and refreshes the saved number while retaining the return context', async () => {
@@ -1156,7 +1194,7 @@ describe('Provincial exemption edit context', () => {
 
     expect(
       screen.getByText(
-        'Approved volume must be greater than 0, at most 9,999,999.99, and have at most two decimal places.',
+        'Approval volume must be greater than 0, at most 9,999,999.99, and have at most two decimal places.',
       ),
     ).toBeInTheDocument()
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
@@ -1549,6 +1587,8 @@ describe('Provincial exemption edit context', () => {
     )
     vi.mocked(fetchProvincialExemptionDetail).mockImplementation(async (exemptionNumber) => ({
       ...ministerialExemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
       exemptionNumber,
       exemptionStatusCode: 'NEW',
       exemptionStatusDescription: 'New',
@@ -1598,6 +1638,8 @@ describe('Provincial exemption edit context', () => {
     )
     vi.mocked(fetchProvincialExemptionDetail).mockImplementation(async (exemptionNumber) => ({
       ...ministerialExemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
       exemptionNumber,
       exemptionStatusCode: 'NEW',
       exemptionStatusDescription: 'New',
@@ -1682,6 +1724,8 @@ describe('Provincial exemption edit context', () => {
     )
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...ministerialExemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
       exemptionStatusCode: 'NEW',
       exemptionStatusDescription: 'New',
     })
@@ -1720,6 +1764,8 @@ describe('Provincial exemption edit context', () => {
     )
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...ministerialExemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
       exemptionStatusCode: 'NEW',
       exemptionStatusDescription: 'New',
     })
@@ -1766,6 +1812,43 @@ describe('Provincial exemption edit context', () => {
     expect(approveExemptions).toHaveBeenCalledTimes(1)
   })
 
+  it('offers approval on the record only for a Ministerial exemption', async () => {
+    vi.mocked(useAuth).mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_EXEMPTION_APPROVER'] }),
+        canPerform: vi.fn(
+          (action: string) => action === 'saveExemption' || action === 'approveExemption',
+        ),
+      }),
+    )
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...ministerialExemptionDetail,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903'],
+      locked: false,
+      lockMessage: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Exemption EX-205', level: 1 })
+    expect(screen.queryByRole('button', { name: 'Approve exemption' })).not.toBeInTheDocument()
+  })
+
   it('requires explicit certification before approving one exemption', async () => {
     vi.mocked(useAuth).mockReturnValue(
       createTestAuthContext({
@@ -1777,6 +1860,8 @@ describe('Provincial exemption edit context', () => {
     )
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...ministerialExemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
       exemptionStatusCode: 'NEW',
       exemptionStatusDescription: 'New',
     })
@@ -1882,6 +1967,8 @@ describe('Provincial exemption edit context', () => {
     vi.mocked(fetchProvincialExemptionDetail)
       .mockResolvedValueOnce({
         ...ministerialExemptionDetail,
+        exemptionTypeCode: 'M',
+        exemptionTypeDescription: 'Ministerial',
         exemptionStatusCode: 'NEW',
         exemptionStatusDescription: 'New',
       })
@@ -1934,6 +2021,8 @@ describe('Provincial exemption edit context', () => {
     )
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...ministerialExemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
       exemptionStatusCode: 'NEW',
       exemptionStatusDescription: 'New',
     })
@@ -1986,6 +2075,8 @@ describe('Provincial exemption edit context', () => {
     )
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...ministerialExemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
       exemptionStatusCode: 'NEW',
       exemptionStatusDescription: 'New',
     })
@@ -2064,6 +2155,8 @@ describe('Provincial exemption edit context', () => {
     )
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...ministerialExemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
       exemptionStatusCode: 'NEW',
       exemptionStatusDescription: 'New',
     })

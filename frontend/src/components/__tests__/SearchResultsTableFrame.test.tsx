@@ -90,6 +90,31 @@ describe('SearchResultsTableFrame', () => {
     await waitFor(() => expect(viewport).toHaveAttribute('tabindex', '0'))
   })
 
+  it('keeps the count live region mounted so a new search total is announced', () => {
+    const frame = (loading: boolean) => (
+      <SearchResultsTableFrame
+        loading={loading}
+        loadingDescription="Loading search results…"
+        totalItems={3}
+      >
+        <table>
+          <tbody>
+            <tr>
+              <td>Rows</td>
+            </tr>
+          </tbody>
+        </table>
+      </SearchResultsTableFrame>
+    )
+    const { container, rerender } = render(frame(true))
+    const liveRegion = container.querySelector('[aria-live="polite"]')
+    expect(liveRegion).toBeEmptyDOMElement()
+
+    rerender(frame(false))
+    expect(container.querySelector('[aria-live="polite"]')).toBe(liveRegion)
+    expect(liveRegion).toHaveTextContent('3 results found')
+  })
+
   it('renders a result count label when total items are provided', () => {
     render(
       <SearchResultsTableFrame

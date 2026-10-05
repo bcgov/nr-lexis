@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  landingPageReturnTo,
   locationPath,
   readDetailReturnTo,
   readDetailReturnTrail,
@@ -181,5 +182,16 @@ describe('detail navigation state', () => {
         hash: '#offers',
       }),
     ).toBe('/provincial/application/321?status=APP&page=2#offers')
+  })
+})
+
+describe('landingPageReturnTo', () => {
+  it.each([
+    ['/provincial/review', 'Application review'],
+    ['/provincial/application', 'Application search'],
+    ['/provincial/exemption', 'Exemption search'],
+    ['/provincial/summary', 'Your landing page'],
+  ])('names the %s landing page', (route, label) => {
+    expect(landingPageReturnTo(route)).toEqual({ label, to: route })
   })
 })

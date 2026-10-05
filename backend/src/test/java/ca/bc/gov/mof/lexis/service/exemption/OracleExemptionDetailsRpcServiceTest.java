@@ -2766,6 +2766,25 @@ class OracleExemptionDetailsRpcServiceTest {
     verifyNoInteractions(notificationRecipientResolver, notificationService);
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"O", "B", " "})
+  void approveExemptionsShouldRejectNonMinisterialExemptionsWithoutEmailData(String typeCode) {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("NEW", typeCode)));
+
+    ExemptionDetailsRpcService.ExemptionApprovalResult response =
+        service.approveExemptions("EX-205", "idir\\jsmith", true);
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.sendGrid()).isEmpty();
+    assertThat(response.errorMessage())
+        .isEqualTo(
+            "Failed to approve exemption EX-205: only Ministerial exemptions can be approved.</br>");
+    verify(repository, never()).updateExemption(any());
+    verifyNoInteractions(
+        activationEligibilityValidator, notificationRecipientResolver, notificationService);
+  }
+
   @Test
   void approveExemptionsShouldDefaultUpdateUserWhenPrincipalIsMissing() {
     ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("NEW");

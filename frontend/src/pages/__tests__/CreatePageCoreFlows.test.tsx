@@ -1159,7 +1159,9 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectApplicationCreateTab('Applicant')
-    expect(screen.getByRole('combobox', { name: 'Applicant type' })).toHaveValue('Ministerial')
+    // Figma has no applicant type control; a prefilled Ministerial type is kept and shown.
+    expect(screen.getByRole('heading', { name: 'Ministerial', level: 3 })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Applicant type')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
 
     const submitButton = await screen.findByRole('button', { name: 'Save application' })
@@ -1497,9 +1499,8 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectApplicationCreateTab('Applicant')
-    const applicantType = screen.getByRole('textbox', { name: 'Applicant type' })
-    expect(applicantType).toHaveValue('Owner')
-    expect(applicantType).toHaveAttribute('readonly')
+    expect(screen.getByRole('heading', { name: 'Owner', level: 3 })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Applicant type')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: "I'm an agent" })).not.toBeInTheDocument()
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033333', 'agent')
@@ -1637,8 +1638,8 @@ describe('Create Page Core Flows', () => {
       )
       expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
       expect(screen.queryByRole('textbox', { name: /Date received/i })).not.toBeInTheDocument()
-      expect(screen.getByRole('radio', { name: '2026-08-05' })).toBeChecked()
-      expect(screen.getByRole('radio', { name: '2026-08-12' })).not.toBeChecked()
+      expect(screen.getByRole('radio', { name: 'Aug 5, 2026' })).toBeChecked()
+      expect(screen.getByRole('radio', { name: 'Aug 12, 2026' })).not.toBeChecked()
       expect(screen.getByRole('radio', { name: 'No list date' })).not.toBeChecked()
     })
 
@@ -1701,8 +1702,8 @@ describe('Create Page Core Flows', () => {
     })
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
     expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
-    expect(screen.getByRole('radio', { name: '2026-10-07' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: '2026-10-14' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Oct 7, 2026' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Oct 14, 2026' })).not.toBeChecked()
     expect(screen.queryByRole('radio', { name: 'No list date' })).not.toBeInTheDocument()
 
     await selectApplicationCreateTab('Applicant')
@@ -2129,7 +2130,9 @@ describe('Create Page Core Flows', () => {
       otherConditions: '',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-777', {
-      state: { exemptionCreationNotice: { exemptionNumber: 'EX-777' } },
+      state: {
+        exemptionCreationNotice: { exemptionNumber: 'EX-777', applicationNumbers: ['321', '654'] },
+      },
     })
   }, 20_000)
 
@@ -2283,7 +2286,7 @@ describe('Create Page Core Flows', () => {
         'true',
       ),
     )
-    expect(screen.getAllByText('Approved volume is required.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Approval volume is required.').length).toBeGreaterThan(0)
   })
 
   it('displays every application selected from provincial search', async () => {
@@ -2389,7 +2392,9 @@ describe('Create Page Core Flows', () => {
       otherConditions: '',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-901', {
-      state: { exemptionCreationNotice: { exemptionNumber: 'EX-901' } },
+      state: {
+        exemptionCreationNotice: { exemptionNumber: 'EX-901', applicationNumbers: ['2001', '321'] },
+      },
     })
   }, 20_000)
 
@@ -2456,7 +2461,7 @@ describe('Create Page Core Flows', () => {
       otherConditions: '',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-900', {
-      state: { exemptionCreationNotice: { exemptionNumber: 'EX-900' } },
+      state: { exemptionCreationNotice: { exemptionNumber: 'EX-900', applicationNumbers: [] } },
     })
   })
 
@@ -2582,7 +2587,7 @@ describe('Create Page Core Flows', () => {
       otherConditions: '',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/BOIC-1', {
-      state: { exemptionCreationNotice: { exemptionNumber: 'BOIC-1' } },
+      state: { exemptionCreationNotice: { exemptionNumber: 'BOIC-1', applicationNumbers: [] } },
     })
   })
 
@@ -2829,7 +2834,12 @@ describe('Create Page Core Flows', () => {
       otherConditions: '',
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-FED-777', {
-      state: { exemptionCreationNotice: { exemptionNumber: 'EX-FED-777' } },
+      state: {
+        exemptionCreationNotice: {
+          exemptionNumber: 'EX-FED-777',
+          applicationNumbers: ['301', '302'],
+        },
+      },
     })
   })
 
@@ -3014,7 +3024,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
-      await screen.findAllByText('Approved volume must be 9999999.99 or less.'),
+      await screen.findAllByText('Approval volume must be 9999999.99 or less.'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
@@ -3078,7 +3088,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
-      screen.getAllByText('Approved volume must have no more than two decimal places.').length,
+      screen.getAllByText('Approval volume must have no more than two decimal places.').length,
     ).toBeGreaterThan(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
@@ -3104,7 +3114,7 @@ describe('Create Page Core Flows', () => {
       )
     })
     expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-901', {
-      state: { exemptionCreationNotice: { exemptionNumber: 'EX-901' } },
+      state: { exemptionCreationNotice: { exemptionNumber: 'EX-901', applicationNumbers: [] } },
     })
   })
 

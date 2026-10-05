@@ -552,11 +552,11 @@ describe('permit creation from an exemption', () => {
     await openPermitsTab()
 
     const totals = screen.getByLabelText('Exemption permit volume totals')
-    expect(within(totals).getByText('Requested volume (m³)')).toBeInTheDocument()
+    expect(within(totals).queryByText('Requested volume (m³)')).not.toBeInTheDocument()
     expect(within(totals).getByText('Approved volume (m³)')).toBeInTheDocument()
     expect(within(totals).getByText('Scale volume assigned to permits (m³)')).toBeInTheDocument()
     expect(within(totals).getByText('Balance remaining (m³)')).toBeInTheDocument()
-    expect(within(totals).getAllByText('307.2')).toHaveLength(3)
+    expect(within(totals).getAllByText('307.2')).toHaveLength(2)
     expect(within(totals).getByText('0.0')).toBeInTheDocument()
     expect(screen.getByText('9020934 (Pending)')).toBeInTheDocument()
     expect(screen.getByText('9020933')).toBeInTheDocument()
@@ -859,7 +859,7 @@ describe('permit creation from an exemption', () => {
     expect(readDetailReturnTrail(permitReturnTo!).map(({ label, to }) => ({ label, to }))).toEqual([
       originatingSearch,
       {
-        label: 'Provincial exemption detail',
+        label: 'Exemption TEST13E2',
         to: '/provincial/exemption/TEST13E2?permitFilter=902',
       },
     ])
@@ -1179,7 +1179,7 @@ describe('permit creation from an exemption', () => {
 
     expect(
       await screen.findByText(
-        'The permit request outcome could not be confirmed. Reload this exemption and check Related permits before trying again.',
+        'The permit request outcome could not be confirmed. Reload this exemption and check the Permits tab before trying again.',
       ),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save permit' })).not.toBeInTheDocument()
@@ -1255,7 +1255,7 @@ describe('permit creation from an exemption', () => {
 
     expect(
       await screen.findByText(
-        'The permit request outcome could not be confirmed. Reload this exemption and check Related permits before trying again.',
+        'The permit request outcome could not be confirmed. Reload this exemption and check the Permits tab before trying again.',
       ),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Apply for new permit' })).not.toBeInTheDocument()

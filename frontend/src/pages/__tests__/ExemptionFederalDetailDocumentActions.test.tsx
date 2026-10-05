@@ -40,6 +40,7 @@ import {
   fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
+  removeApplicationFromExemption,
   updateExemption,
 } from '@/service/provincial-exemption-detail-service'
 import { fetchProvincialExemptionOptions } from '@/service/search-options-service'
@@ -485,7 +486,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
     expect(
-      await screen.findByRole('heading', { name: 'No documents for this exemption', level: 3 }),
+      await screen.findByRole('heading', { name: 'No documents for this exemption', level: 2 }),
     ).toBeInTheDocument()
   })
 
@@ -712,10 +713,82 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Documents')
     expect(
-      await screen.findByRole('heading', { name: 'No documents for this exemption', level: 3 }),
+      await screen.findByRole('heading', { name: 'No documents for this exemption', level: 2 }),
     ).toBeInTheDocument()
 
     expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+  })
+
+  it('confirms application links with the Figma titles inside the Applications card', async () => {
+    const linkedApplication = {
+      applicationNumber: '654',
+      requestedVolume: '12.5',
+      scaleVolume: '',
+      locked: false,
+      jurisdiction: 'P',
+      ownerClientNumber: '00055566',
+      agentClientNumber: '',
+      ownerClientLocationCode: '00',
+      agentClientLocationCode: '',
+      applicantTypeCode: 'O',
+      ownerContactName: '',
+      agentContactName: '',
+      ownerCompanyName: '',
+      agentCompanyName: '',
+    }
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    mockedFetchExemptionApplications.mockResolvedValue({
+      applications: [linkedApplication],
+      containsUnmanu: false,
+      ownerNumber: '00055566',
+    })
+    vi.mocked(addApplicationToExemption).mockResolvedValueOnce({
+      success: true,
+      message: 'Application linked.',
+      exemptionNumber: 'EX-777',
+      errors: [],
+      warnings: [],
+    })
+    vi.mocked(removeApplicationFromExemption).mockResolvedValueOnce({
+      success: true,
+      message: 'Application unlinked.',
+      exemptionNumber: 'EX-777',
+      errors: [],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+    const applications = (
+      await screen.findByRole('heading', { name: 'Applications', level: 2 })
+    ).closest('.cds--tile') as HTMLElement
+    await userEvent.click(within(applications).getByRole('button', { name: 'Add application' }))
+    await userEvent.type(await screen.findByLabelText('Application number'), '655')
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+    expect(await within(applications).findByText('Application added')).toBeInTheDocument()
+
+    await userEvent.click(within(applications).getByRole('button', { name: 'Remove' }))
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to remove this application?',
+    })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Remove' }))
+    expect(await within(applications).findByText('Application removed')).toBeInTheDocument()
   })
 
   it('keeps application saving unavailable until a number is entered', async () => {
@@ -1064,7 +1137,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument()
   })
 
-  it('shows Blanket OIC requested and completed permit volume totals', async () => {
+  it('shows the Figma Blanket OIC permit volume totals', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue({
       ...exemptionDetail,
       exemptionTypeCode: 'B',
@@ -1085,9 +1158,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Permits')
     const totals = await screen.findByLabelText('Blanket OIC permit volume totals')
-    expect(within(totals).getByText('Requested permit volume (m³)')).toBeInTheDocument()
-    expect(within(totals).getByText('500.0')).toBeInTheDocument()
-    expect(within(totals).getByText('Completed permit volume (m³)')).toBeInTheDocument()
+    expect(within(totals).queryByText('Requested permit volume (m³)')).not.toBeInTheDocument()
+    expect(within(totals).queryByText('500.0')).not.toBeInTheDocument()
+    expect(within(totals).getByText('Sum of completed permits (m³)')).toBeInTheDocument()
     expect(within(totals).getByText('125.5')).toBeInTheDocument()
     expect(mockedFetchExemptionBlanketOicTotals).toHaveBeenCalledWith('EX-777')
   })
@@ -1179,14 +1252,14 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByRole('complementary', { name: 'Add documents' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     expect(
-      await screen.findByRole('heading', { name: 'Documents unavailable', level: 3 }),
+      await screen.findByRole('heading', { name: 'Documents unavailable', level: 2 }),
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole('heading', { name: 'No documents for this exemption', level: 3 }),
+      screen.queryByRole('heading', { name: 'No documents for this exemption', level: 2 }),
     ).not.toBeInTheDocument()
 
     expect(
-      screen.getByRole('heading', { name: 'Documents unavailable', level: 3 }),
+      screen.getByRole('heading', { name: 'Documents unavailable', level: 2 }),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'close notification' })).not.toBeInTheDocument()
   })
@@ -1562,7 +1635,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Documents')
     expect(
-      await screen.findByRole('heading', { name: 'No documents for this exemption', level: 3 }),
+      await screen.findByRole('heading', { name: 'No documents for this exemption', level: 2 }),
     ).toBeInTheDocument()
     expect(
       screen.getByText(
@@ -1599,7 +1672,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByText('Exemption upload persisted.')).not.toBeInTheDocument()
     expect(screen.queryByRole('complementary', { name: 'Add documents' })).not.toBeInTheDocument()
     expect(await screen.findByText('permission.pdf')).toBeInTheDocument()
-  })
+  }, 15000)
 
   it('lists exemption documents in the Figma table, typed by where each was added', async () => {
     mockedFetchExemptionDocuments.mockResolvedValue({

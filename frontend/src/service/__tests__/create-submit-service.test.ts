@@ -444,6 +444,39 @@ describe('create-submit-service', () => {
     expect(body.get('agentClientNumber')).toBeNull()
   })
 
+  it.each([
+    ['a lost response', { isAxiosError: true, request: {} }, true],
+    ['a server failure', { isAxiosError: true, response: { status: 502, data: {} } }, true],
+    [
+      'a rejection',
+      { isAxiosError: true, response: { status: 400, data: { errors: ['Not eligible.'] } } },
+      undefined,
+    ],
+  ])(
+    'reports whether an exemption create may still have saved after %s',
+    async (_, error, unknown) => {
+      postMock.mockRejectedValue(error)
+
+      const result = await submitProvincialExemptionCreate({
+        applicationNumber: '321',
+        linkedApplicationNumbers: ['321'],
+        exemptionNumber: '',
+        exemptionTypeCode: 'M',
+        exemptionStatusCode: 'NEW',
+        approvalDate: '',
+        expiryDate: '2027-03-31',
+        approvedVolume: '150.0',
+        enableRateOverride: false,
+        feeRate: '',
+        regionNumbers: [],
+        otherConditions: '',
+      })
+
+      expect(result.success).toBe(false)
+      expect(result.outcomeUnknown).toBe(unknown)
+    },
+  )
+
   it('submits a standalone ministerial exemption without application or OIC fields', async () => {
     postMock.mockResolvedValue({
       data: { success: true, exemptionNumber: 'EX-900', message: 'saved' },

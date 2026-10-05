@@ -891,7 +891,7 @@ const ProvincialReviewPage = () => {
           to: withCurrentSearch(`/provincial/application/${applicationNumber}`),
           state: {
             returnTo: {
-              label: 'Provincial application review',
+              label: 'Application review',
               to: withCurrentSearch('/provincial/review'),
             },
           },
@@ -1034,7 +1034,7 @@ const ProvincialReviewPage = () => {
     <Grid fullWidth className="default-grid fullbleed-table-page provincial-review-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
-          title="Provincial application review"
+          title="Application review"
           subtitle="Review and action provincial applications awaiting a decision."
         />
       </Column>
@@ -1453,7 +1453,7 @@ const ProvincialReviewPage = () => {
                             )}
                             state={{
                               returnTo: {
-                                label: 'Provincial application review',
+                                label: 'Application review',
                                 to: withCurrentSearch('/provincial/review'),
                               },
                             }}

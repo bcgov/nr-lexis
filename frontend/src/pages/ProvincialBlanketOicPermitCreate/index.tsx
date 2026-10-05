@@ -197,13 +197,16 @@ const ProvincialBlanketOicPermitCreatePage = () => {
   const exemptionDetailPath = normalizedExemptionNumber
     ? `/provincial/exemption/${encodeURIComponent(normalizedExemptionNumber)}`
     : '/provincial/exemption'
+  const exemptionPageTitle = normalizedExemptionNumber
+    ? `Exemption ${normalizedExemptionNumber}`
+    : 'Exemption search'
   const detailReturnTo = useMemo(
     () =>
       readDetailReturnTo(location.state) ?? {
-        label: 'Provincial exemption detail',
+        label: exemptionPageTitle,
         to: exemptionDetailPath,
       },
-    [exemptionDetailPath, location.state],
+    [exemptionDetailPath, exemptionPageTitle, location.state],
   )
   const roles = capabilities?.roles ?? []
 
@@ -228,7 +231,7 @@ const ProvincialBlanketOicPermitCreatePage = () => {
     >
       <Column sm={4} md={8} lg={16}>
         <DetailBreadcrumb
-          label="Provincial exemption detail"
+          label={exemptionPageTitle}
           to={exemptionDetailPath}
           returnTo={detailReturnTo}
         />

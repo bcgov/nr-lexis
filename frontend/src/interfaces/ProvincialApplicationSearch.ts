@@ -19,6 +19,7 @@ export type ProvincialApplicationSearchFilters = {
 export type ProvincialApplicationSearchSortField =
   | 'applicationNumber'
   | 'applicantClientNumber'
+  | 'agentClientNumber'
   | 'displayOwnerClientNumber'
   | 'regionCode'
   | 'exemptionNumber'
@@ -29,6 +30,7 @@ export type ProvincialApplicationSearchItem = {
   status: string
   applicantClientNumber: string
   ownerClientNumber: string
+  agentClientNumber: string
   region: string
   applicationVolume: number
   exemptionNumber: string

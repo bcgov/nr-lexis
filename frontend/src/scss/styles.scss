@@ -1805,11 +1805,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
     inline-size: 3rem;
   }
 
-  .application-search-table--selectable th:nth-child(4) {
-    inline-size: 15%;
-  }
-
-  .application-search-table--selectable th:nth-child(6) {
+  .application-search-table--selectable th:last-child {
     inline-size: 10%;
   }
 }
@@ -2354,6 +2350,16 @@ $notification-types: 'error', 'info', 'success', 'warning';
   line-height: 1;
 }
 
+.application-exemption-confirmation__list {
+  list-style: disc;
+  margin-block: 0.5rem 1rem;
+  padding-inline-start: 1.25rem;
+}
+
+.legacy-search-result-count--footer {
+  padding: 0.75rem 1rem;
+}
+
 .legacy-search-result-count-skeleton {
   display: flex;
   visibility: hidden;
@@ -2595,6 +2601,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .action-result-notification__items {
   list-style: disc;
+  padding-inline-start: 1.25rem;
+}
+
+.action-result-notification__details {
+  list-style: circle;
   padding-inline-start: 1.25rem;
 }
 
@@ -5370,6 +5381,22 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-top: 1rem;
 }
 
+.application-client-summary__groups {
+  display: grid;
+  gap: 1.75rem;
+
+  .detail-field-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem 2rem;
+    margin: 0;
+  }
+
+  .detail-field-item {
+    min-inline-size: 7rem;
+  }
+}
+
 .application-client-summary__title {
   margin: 0 0 0.75rem;
   @include carbon-type.type-style('heading-compact-02');
@@ -5457,6 +5484,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   inline-size: 100%;
   max-inline-size: none;
   margin-block: 0.75rem 1rem;
+}
+
+// Exemption page banners sit outside a Column, so they span the grid (Figma 3456:34875).
+.provincial-exemption-detail > :is(.exemption-page-result, .detail-context-notification) {
+  grid-column: 1 / -1;
 }
 
 .detail-page-loading {
@@ -5807,9 +5839,9 @@ $notification-types: 'error', 'info', 'success', 'warning';
   max-inline-size: 24rem;
 }
 
-.provincial-application-detail .application-applicant-type-edit {
-  max-inline-size: 24rem;
-  margin-block-start: 1.5rem;
+// Figma 2765:28889: the read-only owner client sits beside its location.
+.provincial-application-detail .application-client-edit-grid--fixed-client {
+  grid-template-columns: minmax(0, max-content) minmax(12rem, 24rem);
 }
 
 #permit-detail-content .permit-client-subheading {

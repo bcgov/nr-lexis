@@ -8,6 +8,8 @@ export type ActionResultItem = {
   /** Links the identifier; omit it inside a dialog or for the page's own record. */
   to?: string
   state?: unknown
+  /** Separate points about this record, listed under it. */
+  details?: string[]
 }
 
 /** The latest action outcome owned by one page, form, or dialog. */
@@ -29,7 +31,9 @@ export const actionResultTitle = (result: ActionResult): string =>
 
 /** A result as one line of text, for a place that can't list its records. */
 export const actionResultText = ({ message, items = [] }: ActionResult): string =>
-  [message, ...items.map(({ id, text }) => `${id}${text}`)].filter(Boolean).join(' ')
+  [message, ...items.map(({ id, text, details = [] }) => [`${id}${text}`, ...details].join(' '))]
+    .filter(Boolean)
+    .join(' ')
 
 /**
  * State updater for leaving an edit or draft: the failed attempt no longer applies, but a

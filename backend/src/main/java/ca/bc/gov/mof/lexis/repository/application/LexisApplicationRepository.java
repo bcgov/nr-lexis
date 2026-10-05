@@ -46,6 +46,12 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   private static final String EXEMPTION_STATUS_NEW = "NEW";
   private static final String APPLICANT_TYPE_AGENT = "A";
   private static final String APPLICANT_TYPE_OWNER = "O";
+  // Legacy also stores the owner in AGENT_CLIENT_NUMBER on owner applications, so the column
+  // names an agent only on agent applications.
+  private static final String RECORDED_AGENT_CLIENT_NUMBER =
+      "CASE WHEN v.EXPORT_APPLICANT_TYPE_CODE = '"
+          + APPLICANT_TYPE_AGENT
+          + "' THEN v.AGENT_CLIENT_NUMBER END";
   private static final String JURISDICTION_FEDERAL = "F";
   private static final String OIC_INDICATOR_NO = "N";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
@@ -129,6 +135,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
           Map.entry("applicationNumber", "v.APPLICATION_NUMBER"),
           Map.entry("application", "v.APPLICATION_NUMBER"),
           Map.entry("applicantClientNumber", "v.APPLICANT_CLIENT_NUMBER"),
+          Map.entry("agentClientNumber", RECORDED_AGENT_CLIENT_NUMBER),
           Map.entry("displayOwnerClientNumber", "v.OWNER_CLIENT_NUMBER"),
           Map.entry("ownerClientNumber", "v.OWNER_CLIENT_NUMBER"),
           Map.entry("exemptionNumber", "v.EXEMPTION_NUMBER"),
@@ -282,7 +289,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
     where.addLike("v.OWNER_CLIENT_NUMBER", criteria.ownerClientNumber());
     // The historical agentClientNumber criterion matches the designated applicant below.
     // This independent criterion matches only the actual agent.
-    where.addLike("v.AGENT_CLIENT_NUMBER", criteria.agentOnlyClientNumber());
+    where.addLike(RECORDED_AGENT_CLIENT_NUMBER, criteria.agentOnlyClientNumber());
     where.addRaw(" AND v.EXPORT_JURISDICTION_CODE <> '" + JURISDICTION_FEDERAL + "'");
     where.addEquals("v.OIC_INDICATOR", OIC_INDICATOR_NO);
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
@@ -601,7 +608,10 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
         coalesce(applicationVolume, 0.0d),
         showCheckbox,
         false,
-        getString(rs, "EXEMPTION_TYPE_DESCRIPTION"));
+        getString(rs, "EXEMPTION_TYPE_DESCRIPTION"),
+        APPLICANT_TYPE_AGENT.equalsIgnoreCase(applicantType)
+            ? firstNonNull(agentClientNumber, "")
+            : "");
   }
 
   private String displayStatus(
