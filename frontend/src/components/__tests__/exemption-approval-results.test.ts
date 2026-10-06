@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   exemptionApprovalFailureMessage,
+  exemptionApprovalProblems,
   exemptionApprovalResults,
   type ExemptionApprovalReport,
 } from '@/components/exemption-approval-results'
@@ -14,21 +15,64 @@ const report = (overrides: Partial<ExemptionApprovalReport>): ExemptionApprovalR
 })
 
 describe('exemptionApprovalResults', () => {
-  it('keeps every activation problem and points to the forms where it can be corrected', () => {
-    const problems =
-      'A valid expiry date is required for an active exemption. Active ministerial exemptions require at least one application.'
+  it('lists every activation problem under its exemption with where to correct it', () => {
     const results = exemptionApprovalResults(
-      report({ failures: [{ exemptionNumber: 'EX-205', message: problems }] }),
+      report({
+        failures: [
+          {
+            exemptionNumber: 'EX-205',
+            message:
+              'Failed to approve invalid exemption EX-205: *A valid expiry date is required for an active exemption.</br>*Active ministerial exemptions require at least one application.',
+          },
+        ],
+      }),
       (exemptionNumber) => ({ to: `/provincial/exemption/${exemptionNumber}` }),
     )
 
     expect(results[0].items).toEqual([
       {
         id: 'EX-205',
-        text: `: ${problems} Review the expiry date in Exemption details. Review application links in Applications.`,
+        text: ':',
         to: '/provincial/exemption/EX-205',
+        details: [
+          'A valid expiry date is required for an active exemption. Review the expiry date in Exemption details.',
+          'Active ministerial exemptions require at least one application. Review application links in Applications.',
+        ],
       },
     ])
+  })
+
+  it('keeps an unseparated activation failure on one line with all of its corrections', () => {
+    const problems =
+      'A valid expiry date is required for an active exemption. Active ministerial exemptions require at least one application.'
+    const results = exemptionApprovalResults(
+      report({ failures: [{ exemptionNumber: 'EX-206', message: problems }] }),
+    )
+
+    expect(results[0].items).toEqual([
+      {
+        id: 'EX-206',
+        text: `: ${problems} Review the expiry date in Exemption details. Review application links in Applications.`,
+      },
+    ])
+  })
+
+  it('lists a repeated problem once', () => {
+    expect(
+      exemptionApprovalProblems(
+        'Failed to approve invalid exemption EX-208: *The expiry date must be after the approval date.</br>*The expiry date must be after the approval date.</br>',
+      ),
+    ).toEqual([
+      'The expiry date must be after the approval date. Review the expiry date in Exemption details.',
+    ])
+  })
+
+  it('drops the repeated exemption number from a rejected approval', () => {
+    expect(
+      exemptionApprovalFailureMessage(
+        'Failed to approve exemption EX-207: only Ministerial exemptions can be approved.</br>',
+      ),
+    ).toBe('Only Ministerial exemptions can be approved.')
   })
 
   it('keeps unknown server problems without inventing correction instructions', () => {

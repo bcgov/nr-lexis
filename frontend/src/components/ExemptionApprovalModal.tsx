@@ -4,7 +4,7 @@ import { useEffect, useId, useRef, useState } from 'react'
 import Modal from '@/components/Modal'
 import { AppNotification } from '@/components/AppNotification'
 import {
-  exemptionApprovalFailureMessage,
+  exemptionApprovalProblems,
   type ApprovalEmailResult,
   type ExemptionApprovalFailure,
   type ExemptionApprovalReport,
@@ -359,6 +359,9 @@ const ExemptionApprovalModal = ({
         : plural
           ? 'Approve exemptions'
           : 'Approve exemption'
+  // A definite failure lists each problem the server reported.
+  const approvalProblems =
+    error && !retrying && !approvalUnconfirmed ? exemptionApprovalProblems(error) : []
 
   return (
     <Modal
@@ -557,10 +560,16 @@ const ExemptionApprovalModal = ({
                 ? 'Approval status unconfirmed'
                 : 'Approval failed'
           }
-          subtitle={
-            !retrying && !approvalUnconfirmed ? exemptionApprovalFailureMessage(error) : error
-          }
-        />
+          subtitle={approvalProblems.length > 1 ? undefined : (approvalProblems[0] ?? error)}
+        >
+          {approvalProblems.length > 1 ? (
+            <ul className="action-result-notification__items">
+              {approvalProblems.map((problem) => (
+                <li key={problem}>{problem}</li>
+              ))}
+            </ul>
+          ) : null}
+        </AppNotification>
       )}
     </Modal>
   )

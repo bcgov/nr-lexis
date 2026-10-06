@@ -782,7 +782,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const resultToolbar = page.locator('.legacy-search-table-toolbar')
     const resultToolbarContent = resultToolbar.locator('.cds--toolbar-content')
     const createExemptionAction = page.getByRole('button', {
-      name: 'Create exemption for selected applications',
+      name: 'Create exemption',
     })
     await expect(resultToolbar).not.toHaveClass(/legacy-search-table-toolbar--with-actions/)
     await expect(resultToolbarContent).toHaveCSS('height', '40px')
@@ -805,7 +805,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(resultActionToolbar).toHaveCSS('height', '56px')
     await expect(resultActionToolbar).toHaveCSS('padding-left', '16px')
     const batchActions = page.locator('.cds--batch-actions--active')
-    await expect(batchActions).toContainText('1 item selected')
+    await expect(batchActions).toContainText('1 application selected')
     await batchActions.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(eligibleApplication).not.toBeChecked()
     await expect(createExemptionAction).toHaveCount(0)
@@ -1419,8 +1419,6 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         'packageNumber',
         'exemptionNumber',
         'region',
-        'receivedFromDate',
-        'receivedToDate',
         'listingFromDate',
         'listingToDate',
         'exemptionType',
@@ -1462,16 +1460,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
           'region',
         ])
         expectSameRow(applicationLayout, [
-          'receivedFromDate',
-          'receivedToDate',
           'listingFromDate',
           'listingToDate',
+          'exemptionType',
+          'applicationStatus',
         ])
         expectSameRow(applicationLayout, ['ownerClientNumber', 'agentClientNumber'])
       } else {
         expectSameRow(applicationLayout, ['applicationNumber', 'packageNumber'])
         expectSameRow(applicationLayout, ['exemptionNumber', 'region'])
-        expectSameRow(applicationLayout, ['receivedFromDate', 'receivedToDate'])
         expectSameRow(applicationLayout, ['listingFromDate', 'listingToDate'])
         expect(applicationLayout.agentClientNumber.top).toBeGreaterThan(
           applicationLayout.ownerClientNumber.bottom,
@@ -1530,7 +1527,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await expect(rows).toHaveCount(2)
     const createExemptionAction = page.getByRole('button', {
-      name: 'Create exemption for selected applications',
+      name: 'Create exemption',
     })
     await expect(createExemptionAction).toHaveCount(0)
     const eligibleApplication = page.getByRole('checkbox', {
@@ -1547,13 +1544,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await eligibleApplicationLabel.click()
     await expect(eligibleApplication).toBeChecked()
     const batchActions = page.locator('.cds--batch-actions--active')
-    await expect(batchActions).toContainText('1 item selected')
+    await expect(batchActions).toContainText('1 application selected')
     await expect(createExemptionAction).toBeEnabled()
     await batchActions.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(eligibleApplication).not.toBeChecked()
     await expect(createExemptionAction).toHaveCount(0)
     await expect(table).toHaveClass(/cds--data-table--md/)
-    await expect(rows.first().getByRole('cell', { name: '—', exact: true })).toBeVisible()
+    // Empty values render as an em dash; owner-only rows have more than one.
+    await expect(rows.first().getByRole('cell', { name: '—', exact: true }).first()).toBeVisible()
     const firstRowHeight = await rows.first().evaluate((row) => row.getBoundingClientRect().height)
     expect(firstRowHeight).toBeGreaterThanOrEqual(40)
     expect(firstRowHeight).toBeLessThanOrEqual(64)
@@ -1627,8 +1625,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await clearAllButton.hover()
     await expect(clearAllButton).toHaveCSS('background-color', 'rgb(51, 51, 51)')
     await expect(clearAllButton).toHaveCSS('color', 'rgb(255, 255, 255)')
-    const receivedFromDate = page.getByRole('textbox', { name: 'Received from date', exact: true })
-    await receivedFromDate.fill('2026-02-30')
+    const listDateFrom = page.getByRole('textbox', { name: 'List date from', exact: true })
+    await listDateFrom.fill('2026-02-30')
     await page.getByRole('heading', { name: 'Application search', exact: true }).click()
     const disabledSearchAction = page.getByRole('button', { name: 'Search', exact: true })
     await expect(disabledSearchAction).toBeDisabled()
@@ -1644,7 +1642,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       return { backgroundColor: style.backgroundColor, color: style.color }
     })
     expect(disabledStylesAfterHover).toEqual(disabledStylesBeforeHover)
-    await receivedFromDate.fill('')
+    // Clear the range input as a person does. fill('') selects before focus, and the date
+    // picker's focus handler restores the draft, so its Delete would remove nothing.
+    await listDateFrom.click()
+    await listDateFrom.press('ControlOrMeta+a')
+    await listDateFrom.press('Delete')
     await page.getByRole('heading', { name: 'Application search', exact: true }).click()
     await expect(disabledSearchAction).toBeEnabled()
     await expect(page.getByRole('button', { name: 'Search', exact: true })).toHaveCSS(
@@ -2014,7 +2016,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       await expect(searchButton).toBeEnabled()
       await searchButton.click()
       const exemptionAction = page.getByRole('button', {
-        name: 'Create exemption for selected applications',
+        name: 'Create exemption',
       })
       if (route === '/provincial/application') {
         const rangeBounds = await page.locator('.search-date-range').evaluate((range) =>
@@ -2044,7 +2046,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         await expect(eligibleApplicationLabel).toBeVisible()
         await eligibleApplicationLabel.click()
         await expect(eligibleApplication).toBeChecked()
-        await expect(page.locator('.cds--batch-actions--active')).toContainText('1 item selected')
+        await expect(page.locator('.cds--batch-actions--active')).toContainText(
+          '1 application selected',
+        )
         await expect(exemptionAction).toBeEnabled()
       } else {
         await expect(exemptionAction).toBeDisabled()
@@ -2092,7 +2096,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       timeout: 30_000,
     })
     await expect(page.getByText('Check and manage this provincial offer')).toBeVisible()
-    const backLink = page.getByRole('link', { name: 'Back to Provincial offers search' })
+    const backLink = page.getByRole('link', { name: 'Back to Offer search' })
     await expect(backLink).toHaveAttribute('href', '/provincial/offers')
     await expect(backLink.locator('svg')).toBeVisible()
     await expect(backLink).toHaveCSS('column-gap', '4px')

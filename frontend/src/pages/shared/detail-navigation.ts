@@ -34,6 +34,19 @@ const readDetailReturnTarget = (value: unknown): DetailReturnTo | undefined => {
   }
 }
 
+// Page titles of role landing routes, so a fallback back link names its destination.
+const LANDING_PAGE_TITLES: Record<string, string> = {
+  '/provincial/review': 'Application review',
+  '/provincial/application': 'Application search',
+  '/provincial/exemption': 'Exemption search',
+}
+
+/** A back link to the role's landing page, named after that page when it is known. */
+export const landingPageReturnTo = (route: string): DetailReturnTo => ({
+  label: LANDING_PAGE_TITLES[route] ?? 'Your landing page',
+  to: route,
+})
+
 export const readDetailReturnTo = (state: unknown): DetailReturnTo | undefined =>
   isRecord(state) ? readDetailReturnTarget(state.returnTo) : undefined
 

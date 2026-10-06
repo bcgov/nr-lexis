@@ -986,7 +986,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       source: 'permit-create',
       lexisDetailTab: 'permit',
       returnTo: {
-        label: 'Provincial exemption detail',
+        label: 'Exemption EX-9',
         to: '/provincial/exemption/EX-9?filter=active',
         state: { source: 'search' },
       },

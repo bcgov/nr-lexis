@@ -823,7 +823,7 @@ const BlanketOicPermitCreateForm = ({
       const permitNumber = result.permitNumber.trim()
       if (!/^[1-9]\d*$/.test(permitNumber)) {
         reportUnknownOutcome(
-          'The permit response did not include a valid permit number. Reload this exemption and check Related permits before trying again.',
+          'The permit response did not include a valid permit number. Reload this exemption and check the Permits tab before trying again.',
           requestForm,
         )
         return false
@@ -837,7 +837,7 @@ const BlanketOicPermitCreateForm = ({
     } catch (error) {
       console.error(error)
       reportUnknownOutcome(
-        'The permit request outcome could not be confirmed. Reload this exemption and check Related permits before trying again.',
+        'The permit request outcome could not be confirmed. Reload this exemption and check the Permits tab before trying again.',
       )
       return false
     } finally {

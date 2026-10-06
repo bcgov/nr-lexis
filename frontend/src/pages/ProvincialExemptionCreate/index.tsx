@@ -374,6 +374,8 @@ const ProvincialExemptionCreatePage = () => {
   const selectedApplicationNumbersBaselineRef = useRef(selectedApplicationNumbers)
   const [formEdited, setFormEdited] = useState(false)
   const [createdExemptionNumber, setCreatedExemptionNumber] = useState<string | null>(null)
+  // The applications a created exemption was filled in from, for the record's confirmation.
+  const createdFromApplicationNumbersRef = useRef<string[]>([])
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
   const [exemptionStatuses, setExemptionStatuses] = useState<SearchOption[]>([])
   const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
@@ -509,7 +511,12 @@ const ProvincialExemptionCreatePage = () => {
     if (createdExemptionNumber) {
       // The detail page shows the saved confirmation once for the record this page created.
       navigate(`/provincial/exemption/${encodeURIComponent(createdExemptionNumber)}`, {
-        state: { exemptionCreationNotice: { exemptionNumber: createdExemptionNumber } },
+        state: {
+          exemptionCreationNotice: {
+            exemptionNumber: createdExemptionNumber,
+            applicationNumbers: createdFromApplicationNumbersRef.current,
+          },
+        },
       })
     }
   }, [createdExemptionNumber, navigate])
@@ -772,10 +779,10 @@ const ProvincialExemptionCreatePage = () => {
           undefined) ||
         undefined,
       approvedVolume: firstValidationError(
-        () => requiredFieldError(form.approvedVolume, 'Approved volume'),
+        () => requiredFieldError(form.approvedVolume, 'Approval volume'),
         () => positiveNumericFieldError(form.approvedVolume),
-        () => maxNumericValueFieldError(form.approvedVolume, 9999999.99, 'Approved volume'),
-        () => atMostTwoDecimalFieldError(form.approvedVolume, 'Approved volume'),
+        () => maxNumericValueFieldError(form.approvedVolume, 9999999.99, 'Approval volume'),
+        () => atMostTwoDecimalFieldError(form.approvedVolume, 'Approval volume'),
       ),
       feeRate: oicLike && form.enableRateOverride ? feeRateError(form.feeRate) : undefined,
       regionNumbers:
@@ -964,6 +971,7 @@ const ProvincialExemptionCreatePage = () => {
         setFormEdited(false)
         if (result.createdId) {
           if (navigateToCreatedRecord) {
+            createdFromApplicationNumbersRef.current = linkedApplicationNumbers
             setCreatedExemptionNumber(result.createdId)
           }
           return true
@@ -1193,6 +1201,9 @@ const ProvincialExemptionCreatePage = () => {
                       <Rule size={24} aria-hidden="true" />
                       Exemption details
                     </legend>
+                    <p className="application-detail-required">
+                      {requiredLabel('Required fields')}
+                    </p>
                     <div className="legacy-search-grid create-form-grid">
                       <RadioButtonGroup
                         className="provincial-exemption-type-group"

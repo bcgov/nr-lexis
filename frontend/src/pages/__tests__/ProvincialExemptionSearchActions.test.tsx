@@ -167,8 +167,8 @@ describe('Provincial Exemption Search Actions', () => {
       exemptionSearchResponse([
         {
           exemptionNumber: 'EX-1001',
-          type: 'Section 1',
-          typeCode: 'SECTION_1',
+          type: 'Ministerial',
+          typeCode: 'M',
           status: 'New',
           statusCode: 'NEW',
           applicantClientNumber: '11111111',
@@ -441,9 +441,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
 
-    expect(
-      screen.queryByRole('button', { name: 'Approve selected exemptions' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' })).toBeEnabled()
     expect(
       screen.queryByRole('checkbox', { name: 'Select exemption EX-2002' }),
@@ -451,9 +449,9 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByText('Locked')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
-    expect(screen.getByRole('button', { name: 'Approve selected exemptions' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const firstDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     expect(
       within(firstDialog).getByRole('heading', { name: 'Approve exemption EX-1001' }),
@@ -485,7 +483,7 @@ describe('Provincial Exemption Search Actions', () => {
       ).not.toBeInTheDocument(),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const reopenedDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     const reopenedCertification = within(reopenedDialog).getByRole('checkbox', {
       name: 'I certify that this exemption has been approved',
@@ -522,7 +520,7 @@ describe('Provincial Exemption Search Actions', () => {
     ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const postApprovalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     expect(
       within(postApprovalDialog).getByRole('checkbox', {
@@ -593,7 +591,7 @@ describe('Provincial Exemption Search Actions', () => {
 
     await userEvent.click(screen.getByLabelText('Next page'))
     await screen.findByText('EX-PAGE-2')
-    expect(screen.getByRole('button', { name: 'Approve selected exemptions' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
 
     await userEvent.click(screen.getByLabelText('Previous page'))
     await screen.findByText('EX-PAGE-1')
@@ -608,7 +606,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     await userEvent.click(
@@ -651,7 +649,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const dialog = screen.getByRole('dialog', { name: 'Approve exemption EX-1001' })
     await within(dialog).findByRole('button', { name: 'Edit recipients' })
     mockedSearchProvincialExemptions.mockRejectedValueOnce(new Error('Refresh failed'))
@@ -686,7 +684,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     await userEvent.click(
       within(approvalDialog).getByRole('checkbox', {
@@ -727,7 +725,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const dialog = screen.getByRole('dialog', { name: 'Approve 2 exemptions' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /I certify/ }))
     await within(dialog).findAllByText('client@example.test')
@@ -777,7 +775,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const dialog = screen.getByRole('dialog', { name: 'Approve 3 exemptions' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /I certify/ }))
     await within(dialog).findAllByText('client@example.test')
@@ -820,7 +818,7 @@ describe('Provincial Exemption Search Actions', () => {
     const router = renderDataRouter()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const dialog = screen.getByRole('dialog', { name: 'Approve exemption EX-1001' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /I certify/ }))
     await within(dialog).findByText('client@example.test')
@@ -873,7 +871,7 @@ describe('Provincial Exemption Search Actions', () => {
     const router = renderDataRouter()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const dialog = screen.getByRole('dialog', { name: 'Approve exemption EX-1001' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /I certify/ }))
     await within(dialog).findByText('client@example.test')
@@ -936,7 +934,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     await userEvent.click(
       within(approvalDialog).getByRole('checkbox', {
@@ -971,7 +969,8 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    expect(screen.getByText('1 exemption selected')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     await userEvent.click(
@@ -990,7 +989,7 @@ describe('Provincial Exemption Search Actions', () => {
       ),
     ).toBeInTheDocument()
     expect(resultItems('1 exemption was not approved')).toEqual([
-      'EX-1001: Failed to approve invalid exemption EX-1001: Active ministerial exemptions require at least one application. Review application links in Applications.',
+      'EX-1001: Active ministerial exemptions require at least one application. Review application links in Applications.',
     ])
     expect(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' })).not.toBeChecked()
     expect(
@@ -1008,13 +1007,43 @@ describe('Provincial Exemption Search Actions', () => {
     )
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
     expect(screen.getByText('1 exemption was not approved')).toBeVisible()
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const reopenedDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     expect(
       within(reopenedDialog).queryByText('1 exemption was not approved'),
     ).not.toBeInTheDocument()
     expect(within(reopenedDialog).getByRole('checkbox', { name: /I certify/ })).not.toBeChecked()
+    // The earlier result stays until a new approval replaces it.
+    await userEvent.click(within(reopenedDialog).getByRole('button', { name: 'Cancel' }))
+    expect(screen.getByText('1 exemption was not approved')).toBeVisible()
     expect(mockedApproveExemptions).toHaveBeenCalledTimes(1)
+  })
+
+  it('offers search approval only for Ministerial exemptions in New status', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([
+        selectableExemption('TEST-M-NEW'),
+        { ...selectableExemption('TEST-B-NEW'), type: 'BOIC', typeCode: 'B' },
+      ]),
+    )
+
+    renderPage()
+    await screen.findByText('TEST-M-NEW')
+
+    expect(
+      screen.getByRole('checkbox', { name: 'Select exemption TEST-M-NEW' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('checkbox', { name: 'Select exemption TEST-B-NEW' }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getAllByText('Only Ministerial exemptions can be approved from search.').length,
+    ).toBeGreaterThan(0)
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    expect(screen.getByText('1 exemption selected')).toBeInTheDocument()
   })
 
   it('approves selected exemptions one at a time with a freshly loaded version', async () => {
@@ -1025,8 +1054,8 @@ describe('Provincial Exemption Search Actions', () => {
       exemptionSearchResponse([
         {
           exemptionNumber: 'TEST-EX-001',
-          type: 'Section 1',
-          typeCode: 'SECTION_1',
+          type: 'Ministerial',
+          typeCode: 'M',
           status: 'New',
           statusCode: 'NEW',
           applicantClientNumber: 'TEST0001',
@@ -1042,8 +1071,8 @@ describe('Provincial Exemption Search Actions', () => {
         },
         {
           exemptionNumber: 'TEST-EX-002',
-          type: 'Section 1',
-          typeCode: 'SECTION_1',
+          type: 'Ministerial',
+          typeCode: 'M',
           status: 'New',
           statusCode: 'NEW',
           applicantClientNumber: 'TEST0003',
@@ -1080,7 +1109,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('TEST-EX-001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     await userEvent.click(
       within(approvalDialog).getByRole('checkbox', {
@@ -1183,7 +1212,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('TEST-EX-001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected exemptions' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     await userEvent.click(
@@ -1204,7 +1233,7 @@ describe('Provincial Exemption Search Actions', () => {
       'cds--actionable-notification--error',
     )
     expect(resultItems('1 exemption was not approved')).toEqual([
-      'TEST-EX-002: Failed to approve invalid exemption TEST-EX-002: Active ministerial exemptions require at least one application. Review application links in Applications.',
+      'TEST-EX-002: Active ministerial exemptions require at least one application. Review application links in Applications.',
     ])
     expect(screen.getByRole('checkbox', { name: 'Select exemption TEST-EX-001' })).not.toBeChecked()
     expect(screen.getByRole('checkbox', { name: 'Select exemption TEST-EX-002' })).not.toBeChecked()
@@ -1247,9 +1276,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(
       screen.queryByRole('checkbox', { name: 'Select exemption EX-LOCKED' }),
     ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Approve selected exemptions' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
   })
 
   it('explains why select-all is disabled when this page has no approvable exemptions', async () => {
@@ -1333,9 +1360,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(
       screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
     ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Approve selected exemptions' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
   })
 
   it('links authorized NEW exemptions for provincial submitters', async () => {
@@ -1447,6 +1472,7 @@ describe('Provincial Exemption Search Actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('Ministerial')
+    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('New')
   })
 
   it('keeps the exemption type editable for an Exemption Approver who also has Read Only', async () => {
@@ -1517,8 +1543,8 @@ describe('Provincial Exemption Search Actions', () => {
   it('renders a full result page before count and then prefetches the next page', async () => {
     const content = Array.from({ length: 10 }, (_, index) => ({
       exemptionNumber: `EX-${index + 1}`,
-      type: 'Section 1',
-      typeCode: 'SECTION_1',
+      type: 'Ministerial',
+      typeCode: 'M',
       status: 'New',
       statusCode: 'NEW',
       applicantClientNumber: '11111111',
@@ -1567,8 +1593,8 @@ describe('Provincial Exemption Search Actions', () => {
   it('keeps exemption rows and pagination available when the exact count fails', async () => {
     const rows = Array.from({ length: 11 }, (_, index) => ({
       exemptionNumber: `EX-${8100 + index}`,
-      type: 'Section 1',
-      typeCode: 'SECTION_1',
+      type: 'Ministerial',
+      typeCode: 'M',
       status: 'New',
       statusCode: 'NEW',
       applicantClientNumber: '11111111',
@@ -1686,8 +1712,6 @@ describe('Provincial Exemption Search Actions', () => {
       'Package number',
       'Exemption number',
       'Region',
-      'Approval from date',
-      'Approval to date',
       'List date from',
       'List date to',
       'Exemption type',
@@ -1697,7 +1721,7 @@ describe('Provincial Exemption Search Actions', () => {
     ])
   })
 
-  it('restores and submits a list-date range, retaining independent approval dates', async () => {
+  it('restores and submits a list-date range, ignoring approval dates from an old link', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     renderPage('/provincial/exemption?listToDate=2026-01-31&approvalFromDate=2025-12-01')
     await screen.findByText('EX-1001')
@@ -1714,7 +1738,7 @@ describe('Provincial Exemption Search Actions', () => {
           filters: expect.objectContaining({
             listFromDate: '2026-01-01',
             listToDate: '2026-01-31',
-            approvalFromDate: '2025-12-01',
+            approvalFromDate: '',
           }),
         }),
         expect.any(Object),
@@ -1749,21 +1773,20 @@ describe('Provincial Exemption Search Actions', () => {
     })
   })
 
-  it('clears approval date filters and removes results without searching again', async () => {
+  it('clears list date filters and removes results without searching again', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
-    renderPage(
-      '/provincial/exemption?approvalFromDate=2026-02-01&approvalToDate=2026-02-28&region=11',
-    )
+    renderPage('/provincial/exemption?listFromDate=2026-02-01&listToDate=2026-02-28&region=11')
     await screen.findByText('EX-1001')
 
-    expect(screen.getByLabelText('Approval from date')).toHaveValue('2026-02-01')
-    expect(screen.getByLabelText('Approval to date')).toHaveValue('2026-02-28')
+    expect(screen.queryByLabelText('Approval from date')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('List date from')).toHaveValue('2026-02-01')
+    expect(screen.getByLabelText('List date to')).toHaveValue('2026-02-28')
     expect(mockedSearchProvincialExemptions).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({
-          approvalFromDate: '2026-02-01',
-          approvalToDate: '2026-02-28',
+          listFromDate: '2026-02-01',
+          listToDate: '2026-02-28',
         }),
       }),
       expect.any(Object),
@@ -1773,8 +1796,8 @@ describe('Provincial Exemption Search Actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
-    expect(screen.getByLabelText('Approval from date')).toHaveValue('')
-    expect(screen.getByLabelText('Approval to date')).toHaveValue('')
+    expect(screen.getByLabelText('List date from')).toHaveValue('')
+    expect(screen.getByLabelText('List date to')).toHaveValue('')
     await waitFor(() => {
       expect(resultsTable).not.toBeVisible()
     })
@@ -1790,7 +1813,9 @@ describe('Provincial Exemption Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Approval from date'), '2026-99-99')
+    const listDateFrom = screen.getByLabelText('List date from')
+    fireEvent.change(listDateFrom, { target: { value: '2026-02-30' } })
+    fireEvent.blur(listDateFrom)
 
     await waitFor(() => {
       expect(searchButton).toBeDisabled()

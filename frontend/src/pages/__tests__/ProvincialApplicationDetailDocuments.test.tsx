@@ -88,13 +88,13 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     await selectApplicationDetailTab('Documents')
     expect(
       await screen.findByRole('heading', {
-        level: 3,
+        level: 2,
         name: 'Documents unavailable',
       }),
     ).toBeInTheDocument()
     expect(screen.getByText('Unable to retrieve application documents.')).toBeInTheDocument()
     expect(
-      screen.queryByRole('heading', { level: 3, name: 'No documents for this application' }),
+      screen.queryByRole('heading', { level: 2, name: 'No documents for this application' }),
     ).not.toBeInTheDocument()
   })
 
@@ -161,7 +161,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
 
     expect(
       await screen.findByRole('heading', {
-        level: 3,
+        level: 2,
         name: 'No documents for this application',
       }),
     ).toBeInTheDocument()

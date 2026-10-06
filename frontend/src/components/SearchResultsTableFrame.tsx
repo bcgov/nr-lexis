@@ -34,15 +34,17 @@ function SearchResultsTableFrame({
         >
           <TableToolbar>
             <TableToolbarContent>
-              {loading ? (
+              {loading && (
                 <div className="legacy-search-result-loading">
                   <InlineLoading description={loadingDescription} />
                 </div>
-              ) : totalItems !== undefined ? (
-                <div className="legacy-search-result-count" aria-live="polite">
-                  {totalItemsLabel ?? formatSearchResultCount(totalItems)}
-                </div>
-              ) : null}
+              )}
+              {/* Stays mounted so the new count is announced after each search. */}
+              <div className="legacy-search-result-count" aria-live="polite" aria-atomic="true">
+                {!loading && totalItems !== undefined
+                  ? (totalItemsLabel ?? formatSearchResultCount(totalItems))
+                  : null}
+              </div>
               {actions ? (
                 <div className="legacy-search-table-toolbar__actions">{actions}</div>
               ) : null}

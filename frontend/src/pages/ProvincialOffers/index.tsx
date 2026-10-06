@@ -526,7 +526,7 @@ const ProvincialOffersPage = () => {
     <Grid fullWidth className="default-grid fullbleed-table-page provincial-offer-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
-          title="Provincial offers search"
+          title="Offer search"
           subtitle="Find provincial purchase offers and open offer details."
         />
       </Column>
@@ -702,7 +702,7 @@ const ProvincialOffersPage = () => {
                           to={withCurrentSearch(`/provincial/offers/${row.offerNumber}`)}
                           state={{
                             returnTo: {
-                              label: 'Provincial offers search',
+                              label: 'Offer search',
                               to: withCurrentSearch('/provincial/offers'),
                             },
                           }}

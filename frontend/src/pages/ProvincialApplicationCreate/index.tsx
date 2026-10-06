@@ -89,7 +89,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import IsoDatePicker from '../../components/IsoDatePicker'
-import { formatBusinessIsoDate } from '@/utils/date'
+import { formatBusinessIsoDate, formatIsoDateLabel } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
 import { displayValue } from '@/utils/text'
 import './ApplicationCreate.scss'
@@ -1773,46 +1773,6 @@ const ProvincialApplicationCreatePage = () => {
                   />
                 </div>
                 <div className="application-create-applicant-type">
-                  {canChangeApplicantType && !hasAgentDetails ? (
-                    <SearchableSelect
-                      id="applicantTypeCode"
-                      labelText={requiredLabel('Applicant type')}
-                      required
-                      value={form.applicantTypeCode}
-                      placeholder="Select applicant type"
-                      options={[
-                        { value: 'O', label: 'Owner' },
-                        { value: 'M', label: 'Ministerial' },
-                      ]}
-                      invalid={!!fieldError('applicantTypeCode')}
-                      invalidText={fieldError('applicantTypeCode')}
-                      onBlur={() => markFieldTouched('applicantTypeCode')}
-                      onChange={(applicantTypeCode) => {
-                        markFormEdited()
-                        setForm((current) => ({
-                          ...current,
-                          applicantTypeCode,
-                          agentClientNumber: isAgentApplicant(applicantTypeCode)
-                            ? current.agentClientNumber
-                            : '',
-                          agentClientLocationCode: isAgentApplicant(applicantTypeCode)
-                            ? current.agentClientLocationCode
-                            : '',
-                          agentContactName: isAgentApplicant(applicantTypeCode)
-                            ? current.agentContactName
-                            : '',
-                        }))
-                      }}
-                    />
-                  ) : !canChangeApplicantType ? (
-                    <TextInput
-                      id="applicantTypeCode"
-                      labelText={requiredLabel('Applicant type')}
-                      aria-required="true"
-                      value="Owner"
-                      readOnly
-                    />
-                  ) : null}
                   {canChangeApplicantType && (
                     <Checkbox
                       id="applicationCreateAgentUsed"
@@ -1839,7 +1799,7 @@ const ProvincialApplicationCreatePage = () => {
                     role="region"
                     aria-label="Agent information"
                   >
-                    <h2>Agent information</h2>
+                    <h3>Agent information</h3>
                     <div className="legacy-search-grid create-form-grid application-create-client-grid">
                       <TextInput
                         id="agentContactName"
@@ -2043,7 +2003,7 @@ const ProvincialApplicationCreatePage = () => {
                           key={option.value}
                           id={`exportScheduleId-${option.value}`}
                           value={option.value}
-                          labelText={option.label}
+                          labelText={formatIsoDateLabel(option.label)}
                         />
                       ))}
                     </RadioButtonGroup>

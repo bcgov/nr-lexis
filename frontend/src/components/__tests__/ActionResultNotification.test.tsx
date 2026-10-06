@@ -42,4 +42,32 @@ describe('ActionResultNotification', () => {
     await userEvent.click(within(status).getByRole('button', { name: /close/i }))
     expect(onClose).toHaveBeenCalledTimes(1)
   })
+
+  it('lists a repeated detail once under its record', () => {
+    render(
+      <MemoryRouter>
+        <ActionResultNotification
+          result={{
+            kind: 'error',
+            title: '1 exemption was not approved',
+            message: '',
+            items: [
+              {
+                id: 'TEST-3',
+                text: ':',
+                details: ['Expiry date is required.', 'Expiry date is required.'],
+              },
+            ],
+          }}
+        />
+      </MemoryRouter>,
+    )
+
+    const details = screen.getByRole('status').querySelector('.action-result-notification__details')
+    expect(
+      within(details as HTMLElement)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['Expiry date is required.'])
+  })
 })

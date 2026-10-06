@@ -233,9 +233,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       within(pageHeader as HTMLElement).getByText('Author: idir\\application-author'),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole('link', { name: 'Back to Provincial application search' }),
-    ).toHaveAttribute('href', '/provincial/application')
+    expect(screen.getByRole('link', { name: 'Back to Application search' })).toHaveAttribute(
+      'href',
+      '/provincial/application',
+    )
     const status = within(pageHeader as HTMLElement).getByText('Approved')
     expect(status).toHaveClass('lexis-status-tag')
     expect(status).toHaveAttribute('data-status-variant', 'positive')
@@ -302,7 +303,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       productTypes: [{ value: 'H', label: 'Harvested Timber' }],
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '12', label: 'Coast' }],
-      currentSchedules: [{ value: '987', label: '2026-01-11' }],
+      currentSchedules: [{ value: '987', label: 'Jan 11, 2026' }],
     })
 
     render(
@@ -500,7 +501,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByRole('heading', { name: 'Documents', level: 2 })).not.toBeInTheDocument()
     expect(
       await screen.findByRole('heading', {
-        level: 3,
+        level: 2,
         name: 'No documents for this application',
       }),
     ).toBeInTheDocument()
@@ -512,7 +513,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByRole('heading', { name: 'Remarks', level: 2 })).not.toBeInTheDocument()
     expect(
       await screen.findByRole('heading', {
-        level: 3,
+        level: 2,
         name: 'No remarks for this application',
       }),
     ).toBeInTheDocument()
@@ -524,107 +525,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByRole('heading', { name: 'Offers', level: 2 })).not.toBeInTheDocument()
     expect(
       await screen.findByRole('heading', {
-        level: 3,
+        level: 2,
         name: 'No offers found',
       }),
     ).toBeInTheDocument()
-  })
-
-  it('does not show the previous client enrichment when a changed client lookup fails', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByRole('heading', { level: 2, name: 'Applicant details' })
-    const ownerTile = getOwnerClientDetailsTile()
-    const ownerControls = within(ownerTile)
-    expect(await ownerControls.findByText('Owner Forestry Ltd. · 00011122')).toBeInTheDocument()
-    await waitFor(() =>
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
-        '00011122',
-        'owner',
-        '321',
-      ),
-    )
-
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
-    mockedFetchApplicationClientLocations.mockRejectedValueOnce(
-      new Error('changed client endpoint unavailable'),
-    )
-    fireEvent.change(ownerControls.getByLabelText('Client'), {
-      target: { value: '00099988' },
-    })
-
-    expect(ownerControls.getByLabelText('Client')).toHaveValue('00099988')
-    expect(ownerControls.queryByText('Owner Forestry Ltd.')).not.toBeInTheDocument()
-    expect(ownerControls.getByRole('combobox', { name: 'Client location' })).toHaveValue('')
-
-    await waitFor(() =>
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
-        '00099988',
-        'owner',
-        '321',
-      ),
-    )
-    expect(
-      await screen.findByText(
-        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
-      ),
-    ).toBeInTheDocument()
-    expect(ownerControls.queryByText('Owner Main Location')).not.toBeInTheDocument()
-    expect(ownerControls.queryByText('Owner Contact')).not.toBeInTheDocument()
-  })
-
-  it('clears a client lookup warning after the latest lookup succeeds', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByRole('heading', { level: 2, name: 'Applicant details' })
-    const ownerControls = within(getOwnerClientDetailsTile())
-    expect(await ownerControls.findByText('Owner Forestry Ltd. · 00011122')).toBeInTheDocument()
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
-
-    mockedFetchApplicationClientLocations.mockRejectedValueOnce(
-      new Error('changed client endpoint unavailable'),
-    )
-    fireEvent.change(ownerControls.getByLabelText('Client'), {
-      target: { value: '00099988' },
-    })
-
-    const lookupErrorMessage =
-      'Client details could not be retrieved. Existing selections were preserved. Please try again.'
-    expect(await screen.findByText(lookupErrorMessage)).toBeInTheDocument()
-
-    fireEvent.change(ownerControls.getByLabelText('Client'), {
-      target: { value: '00099989' },
-    })
-
-    await waitFor(() =>
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
-        '00099989',
-        'owner',
-        '321',
-      ),
-    )
-    await waitFor(() => expect(screen.queryByText(lookupErrorMessage)).not.toBeInTheDocument())
-    expect(ownerControls.getByRole('combobox', { name: 'Client location' })).toHaveValue(
-      '00 - Owner Main Location',
-    )
   })
 
   it('shows an explicit empty state when no agent is assigned', async () => {
@@ -663,7 +567,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(agentDetails.queryByText('Client details unavailable')).not.toBeInTheDocument()
   })
 
-  it('edits owner client details with plain applicant type labels', async () => {
+  it('edits owner contact and location with the Figma read-only client', async () => {
     mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
     mockedFetchApplicationSummarySnapshot.mockResolvedValue({
       ...applicationSummarySnapshot,
@@ -698,30 +602,20 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       }),
     )
 
-    expect(ownerControls.getByLabelText('Client')).toHaveValue('00011122')
-    const applicantType = ownerControls
-      .getAllByLabelText('Applicant type')
-      .find((element) => element.getAttribute('role') === 'combobox')
-    expect(applicantType).toBeTruthy()
-
-    await chooseComboBoxOption(applicantType as HTMLElement, 'Ministerial')
-    expect(applicantType).toHaveValue('Ministerial')
-    expect(ownerControls.queryByDisplayValue('M - Ministerial')).not.toBeInTheDocument()
-    expect(ownerControls.queryByDisplayValue('O - Owner')).not.toBeInTheDocument()
-    expect(ownerControls.getByLabelText("I'm an agent")).not.toBeChecked()
+    // Figma: the saved client is read-only and there is no applicant type control.
+    expect(ownerControls.queryByRole('combobox', { name: 'Client' })).not.toBeInTheDocument()
+    expect(ownerControls.getByText('Client', { selector: 'dt' })).toBeInTheDocument()
+    expect(ownerControls.queryByLabelText('Applicant type')).not.toBeInTheDocument()
+    expect(ownerControls.getByLabelText("I'm an agent")).toBeChecked()
 
     await chooseComboBoxOption(
       ownerControls.getByRole('combobox', { name: 'Client location' }),
       '02 - Owner Alternate Location',
     )
     await waitFor(() =>
-      expect(
-        ownerControls.getByRole('textbox', {
-          name: 'Contact name',
-        }),
-      ).toBeEnabled(),
+      expect(ownerControls.getAllByRole('textbox', { name: 'Contact name' })[0]).toBeEnabled(),
     )
-    const ownerContactName = ownerControls.getByRole('textbox', { name: 'Contact name' })
+    const ownerContactName = ownerControls.getAllByRole('textbox', { name: 'Contact name' })[0]
     fireEvent.change(ownerContactName, { target: { value: 'Advertising Owner' } })
     await waitFor(() => expect(ownerContactName).toHaveValue('Advertising Owner'))
 
@@ -734,8 +628,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
           ownerClientNumber: '00011122',
           ownerClientLocationCode: '02',
           ownerContactName: 'Advertising Owner',
-          applicantTypeCode: 'M',
-          saveSource: 'owner',
+          applicantTypeCode: 'A',
         }),
       )
     })
@@ -748,6 +641,51 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       screen.getByText('The application was saved.').closest('.cds--inline-notification'),
     ).toHaveClass('cds--inline-notification--success')
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+  })
+
+  it("keeps a saved Ministerial applicant type when I'm an agent is cleared again", async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      agentClientNumber: null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicantTypeCode: 'M',
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      agentContactName: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    const agentChoice = ownerControls.getByLabelText("I'm an agent")
+    await userEvent.click(agentChoice)
+    await userEvent.click(agentChoice)
+    expect(agentChoice).not.toBeChecked()
+    const ownerContactName = ownerControls.getAllByRole('textbox', { name: 'Contact name' })[0]
+    fireEvent.change(ownerContactName, { target: { value: 'Ministerial Contact' } })
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerContactName: 'Ministerial Contact',
+          applicantTypeCode: 'M',
+        }),
+      ),
+    )
   })
 
   it('edits agent information in Applicant and saves the owner-agent change together', async () => {
@@ -777,10 +715,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await screen.findByRole('heading', { level: 1, name: 'Application 321' })
     const ownerControls = within(getOwnerClientDetailsTile())
     await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
-    const applicantType = getSummaryComboBox(ownerControls, 'Applicant type')
-
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
-    await chooseComboBoxOption(applicantType, 'Agent')
+    await userEvent.click(ownerControls.getByLabelText("I'm an agent"))
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     let agentControls = within(getAgentDetailsTile())
     expect(agentControls.getByLabelText('Agent client')).toHaveValue('00011122')
@@ -794,8 +730,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(
       resetOwnerControls.getByRole('button', { name: 'Edit applicant details' }),
     )
-    expect(getSummaryComboBox(resetOwnerControls, 'Applicant type')).toHaveValue('Ministerial')
-    await chooseComboBoxOption(getSummaryComboBox(resetOwnerControls, 'Applicant type'), 'Agent')
+    expect(resetOwnerControls.getByLabelText("I'm an agent")).not.toBeChecked()
+    await userEvent.click(resetOwnerControls.getByLabelText("I'm an agent"))
     agentControls = within(getAgentDetailsTile())
 
     await waitFor(() =>
@@ -824,146 +760,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         }),
       ),
     )
-  })
-
-  it('submits a selected canonical owner client number when editing an application', async () => {
-    mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
-      clientNumber,
-      companyName: 'Owner Forestry Ltd.',
-      clientAcronym: '',
-      address: '22 Owner Road',
-      city: 'Victoria',
-      province: 'BC',
-      postalCode: 'V8V 1A1',
-      country: 'Canada',
-      phone: '250-555-0101',
-      fax: '',
-      email: 'owner@example.test',
-      notfound: '',
-    }))
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
-    const ownerControls = within(getOwnerClientDetailsTile())
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
-    const ownerClientNumber = ownerControls.getByLabelText('Client')
-    fireEvent.change(ownerClientNumber, { target: { value: '00002176' } })
-
-    await waitFor(() => expect(ownerClientNumber).toHaveValue('00002176'))
-    await waitFor(() =>
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00002176', '00', {
-        applicationNumber: '321',
-      }),
-    )
-
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
-
-    await waitFor(() => {
-      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
-        expect.objectContaining({
-          ownerClientNumber: '00002176',
-          ownerClientLocationCode: '00',
-        }),
-      )
-    })
-  })
-
-  it('cancels owner client edits without changing the persisted summary', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
-    const ownerControls = within(getOwnerClientDetailsTile())
-    await userEvent.click(
-      ownerControls.getByRole('button', {
-        name: 'Edit applicant details',
-      }),
-    )
-    fireEvent.change(ownerControls.getByLabelText('Client'), {
-      target: { value: '00099988' },
-    })
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Cancel' }))
-
-    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
-    expect(ownerControls.queryByLabelText('Client')).not.toBeInTheDocument()
-    const clientField = ownerControls.getByText('Client').closest('.detail-field-item')
-    expect(clientField).toBeTruthy()
-    expect(within(clientField as HTMLElement).getByText(/00011122$/)).toBeInTheDocument()
-  })
-
-  it('clears discarded client enrichment when the saved client refresh fails after cancel', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
-    const ownerControls = within(getOwnerClientDetailsTile())
-    expect(await ownerControls.findByText('Owner Forestry Ltd. · 00011122')).toBeInTheDocument()
-
-    const callsBeforeEdit = mockedFetchApplicationClientData.mock.calls.length
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
-    await waitFor(() =>
-      expect(mockedFetchApplicationClientData.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
-    )
-
-    mockedFetchApplicationClientData.mockResolvedValueOnce({
-      clientNumber: '00099988',
-      companyName: 'Discarded Client Ltd.',
-      clientAcronym: '',
-      address: '99 Discarded Road',
-      city: 'Victoria',
-      province: 'BC',
-      postalCode: 'V8V 9Z9',
-      country: 'Canada',
-      phone: '250-555-9999',
-      fax: '',
-      email: 'discarded@example.test',
-      notfound: '',
-    })
-    fireEvent.change(ownerControls.getByLabelText('Client'), {
-      target: { value: '00099988' },
-    })
-    expect(await ownerControls.findByText('99 Discarded Road')).toBeInTheDocument()
-
-    mockedFetchApplicationClientData.mockRejectedValueOnce(
-      new Error('saved client refresh unavailable'),
-    )
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Cancel' }))
-
-    expect(
-      await screen.findByText(
-        'Client details could not be retrieved. Existing selections were preserved. Please try again.',
-      ),
-    ).toBeInTheDocument()
-    expect(ownerControls.queryByText('Discarded Client Ltd.')).not.toBeInTheDocument()
-    const clientField = ownerControls.getByText('Client').closest('.detail-field-item')
-    expect(clientField).toBeTruthy()
-    expect(within(clientField as HTMLElement).getByText(/00011122$/)).toBeInTheDocument()
   })
 
   it('edits agent details using the legacy editable fields', async () => {
@@ -999,9 +795,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     agentControls = within(getAgentDetailsTile())
 
     expect(agentControls.getByLabelText('Agent client')).toHaveValue('00033344')
-    expect(
-      within(getOwnerClientDetailsTile()).getByRole('combobox', { name: 'Applicant type' }),
-    ).toHaveValue('Agent')
+    expect(within(getOwnerClientDetailsTile()).getByLabelText("I'm an agent")).toBeChecked()
 
     await chooseComboBoxOption(
       agentControls.getByRole('combobox', { name: 'Agent location' }),
@@ -1852,7 +1646,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(saved).not.toHaveProperty('agentContactName')
   })
 
-  it('keeps applicant type and workflow fields read-only for scoped submitters', async () => {
+  it('keeps the agent choice and workflow fields read-only for scoped submitters', async () => {
     mockApplicationDetailAuth(
       (action: string) => action === 'createApplication',
       ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
@@ -1872,10 +1666,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await selectApplicationDetailTab('Applicant')
     const ownerControls = within(getOwnerClientDetailsTile())
     await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
-    const applicantType = await ownerControls.findByLabelText('Applicant type')
-    expect(applicantType).toHaveAttribute('readonly')
-    expect(applicantType).toHaveValue('Agent')
-    expect(getSummaryComboBox(ownerControls, 'Applicant type')).toBeUndefined()
+    const agentChoice = await ownerControls.findByLabelText("I'm an agent")
+    expect(agentChoice).toBeChecked()
+    expect(agentChoice).toBeDisabled()
+    expect(ownerControls.queryByLabelText('Applicant type')).not.toBeInTheDocument()
     await userEvent.click(ownerControls.getByRole('button', { name: 'Cancel' }))
 
     const summaryControls = within(await selectApplicationSummaryTile())
@@ -2027,7 +1821,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue(
         'Historic Natural Resource Region',
       )
-      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
+      expect(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' })).toBeChecked()
     })
 
     fireEvent.change(termDaysInput, {
@@ -2062,10 +1856,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       productTypes: [{ value: 'H', label: 'Harvested Timber' }],
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '12', label: 'Coast' }],
-      currentSchedules: [{ value: '987', label: '2026-01-11' }],
+      currentSchedules: [{ value: '987', label: 'Jan 11, 2026' }],
       nextSchedules: [
-        { value: '987', label: '2026-01-11' },
-        { value: '988', label: '2026-01-25' },
+        { value: '987', label: 'Jan 11, 2026' },
+        { value: '988', label: 'Jan 25, 2026' },
       ],
     })
 
@@ -2082,12 +1876,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryControls = within(await selectApplicationSummaryTile())
     await waitFor(() => {
-      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
+      expect(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' })).toBeChecked()
     })
 
-    await userEvent.click(summaryControls.getByRole('radio', { name: '2026-01-25' }))
-    expect(summaryControls.getByRole('radio', { name: '2026-01-25' })).toBeChecked()
-    await userEvent.click(summaryControls.getByRole('radio', { name: '2011-11-25' }))
+    await userEvent.click(summaryControls.getByRole('radio', { name: 'Jan 25, 2026' }))
+    expect(summaryControls.getByRole('radio', { name: 'Jan 25, 2026' })).toBeChecked()
+    await userEvent.click(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' }))
     await userEvent.click(summaryControls.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
@@ -2197,7 +1991,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         { value: '1903', label: 'Cariboo Natural Resource Region' },
         { value: '1908', label: 'Skeena Natural Resource Region' },
       ],
-      currentSchedules: [{ value: '987', label: '2026-01-11' }],
+      currentSchedules: [{ value: '987', label: 'Jan 11, 2026' }],
     })
 
     render(
@@ -2241,14 +2035,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       growthTypes: [{ value: 'O', label: 'Old Growth' }],
       regions: [{ value: '12', label: 'Coast' }],
       currentSchedules: [
-        { value: '987', label: '2026-01-11' },
-        { value: '988', label: '2026-01-25' },
+        { value: '987', label: 'Jan 11, 2026' },
+        { value: '988', label: 'Jan 25, 2026' },
         { value: '989', label: '2026-02-08' },
         { value: '', label: 'Blank' },
       ],
       nextSchedules: [
-        { value: '987', label: '2026-01-11' },
-        { value: '988', label: '2026-01-25' },
+        { value: '987', label: 'Jan 11, 2026' },
+        { value: '988', label: 'Jan 25, 2026' },
       ],
     })
 
@@ -2266,10 +2060,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const summaryTile = await selectApplicationSummaryTile()
     const summaryControls = within(summaryTile)
     await waitFor(() => {
-      expect(summaryControls.getByRole('radio', { name: '2026-01-11' })).toBeChecked()
+      expect(summaryControls.getByRole('radio', { name: 'Jan 11, 2026' })).toBeChecked()
     })
-    await userEvent.click(summaryControls.getByRole('radio', { name: '2026-01-25' }))
-    expect(summaryControls.getByRole('radio', { name: '2026-01-25' })).toBeChecked()
+    await userEvent.click(summaryControls.getByRole('radio', { name: 'Jan 25, 2026' }))
+    expect(summaryControls.getByRole('radio', { name: 'Jan 25, 2026' })).toBeChecked()
     await userEvent.click(summaryControls.getByRole('radio', { name: 'No list date' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
@@ -2308,12 +2102,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       regions: [{ value: '12', label: 'Coast' }],
       currentSchedules: [
         { value: '986', label: '2026-01-04' },
-        { value: '987', label: '2026-01-11' },
+        { value: '987', label: 'Jan 11, 2026' },
         { value: '', label: 'Blank' },
       ],
       nextSchedules: [
-        { value: '987', label: '2026-01-11' },
-        { value: '988', label: '2026-01-25' },
+        { value: '987', label: 'Jan 11, 2026' },
+        { value: '988', label: 'Jan 25, 2026' },
         { value: '', label: 'Blank' },
       ],
     })
@@ -2350,7 +2144,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     await userEvent.click(within(blockedDialog).getByRole('button', { name: 'Cancel' }))
 
-    await userEvent.click(within(listDate).getByRole('radio', { name: '2026-01-25' }))
+    await userEvent.click(within(listDate).getByRole('radio', { name: 'Jan 25, 2026' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
@@ -3132,51 +2926,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         }),
       )
     })
-  })
-
-  it('loads owner client details after a canonical client selection', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectApplicationDetailTab('Applicant')
-    const ownerControls = within(getOwnerClientDetailsTile())
-    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
-    await waitFor(() => {
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '00', {
-        applicationNumber: '321',
-      })
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner', '321')
-    })
-    mockedFetchApplicationClientData.mockClear()
-    mockedFetchApplicationClientLocations.mockClear()
-
-    const ownerClientNumberInput = ownerControls.getByLabelText('Client')
-    fireEvent.change(ownerClientNumberInput, { target: { value: '00044444' } })
-
-    expect(mockedFetchApplicationClientData).not.toHaveBeenCalled()
-    expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
-
-    await waitFor(
-      () => {
-        expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00044444', '00', {
-          applicationNumber: '321',
-        })
-        expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
-          '00044444',
-          'owner',
-          '321',
-        )
-      },
-      { timeout: 5_000 },
-    )
   })
 
   it('does not substitute the owner email when an agent applicant has no email', async () => {

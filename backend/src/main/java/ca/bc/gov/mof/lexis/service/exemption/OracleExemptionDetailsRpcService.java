@@ -1268,6 +1268,15 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       return;
     }
 
+    // INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_APPROVAL_MINISTERIAL_ONLY): Figma approves only
+    // Ministerial exemptions. OIC and Blanket OIC exemptions are created Active.
+    if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(trimToNull(current.exemptionTypeCode()))) {
+      errorMessage.append("Failed to approve exemption ")
+          .append(exemptionNumber)
+          .append(": only Ministerial exemptions can be approved.</br>");
+      return;
+    }
+
     ExemptionDetailsRpcRepository.ExemptionUpdateRecord updateRecord =
         new ExemptionDetailsRpcRepository.ExemptionUpdateRecord(
             current.exemptionNumber(),

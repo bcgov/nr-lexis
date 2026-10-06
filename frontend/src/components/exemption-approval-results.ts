@@ -57,9 +57,14 @@ const emailNotice = (email: ApprovalEmailResult): string => {
 
 const joined = (parts: string[]) => parts.filter(Boolean).join(' ')
 
-/** Keep the server's problems and identify the form for known activation failures. */
-export const exemptionApprovalFailureMessage = (message: string): string => {
-  const problem = reason(message, APPROVAL_FAILED_REASON)
+// The server starts each failure reason with this, which repeats the exemption number.
+const FAILURE_PREAMBLE = /^failed to approve (?:invalid )?exemption\s+\S+?:\s*/i
+// Problems are separated by line breaks or "*" bullets.
+const PROBLEM_SEPARATOR = /<\/?br\s*\/?\s*>|\n|(?:^|\s)\*\s*/i
+
+const capitalized = (text: string) => text.charAt(0).toUpperCase() + text.slice(1)
+
+const whereToFix = (problem: string): string[] => {
   const guidance: string[] = []
   if (
     [
@@ -79,8 +84,39 @@ export const exemptionApprovalFailureMessage = (message: string): string => {
   if (problem.includes('Active ministerial exemptions require at least one application.')) {
     guidance.push('Review application links in Applications.')
   }
-  return joined([problem, ...guidance])
+  return guidance
 }
+
+/** Each problem the server reported, with where to fix it when the rule is known. */
+export const exemptionApprovalProblems = (message: string): string[] => {
+  const problems = reason(message, APPROVAL_FAILED_REASON)
+    .replace(FAILURE_PREAMBLE, '')
+    .split(PROBLEM_SEPARATOR)
+    .map((problem) =>
+      sentence(
+        capitalized(
+          problem
+            .replace(/^\s*\*\s*/, '')
+            .replace(/\s+/g, ' ')
+            .trim(),
+        ),
+      ),
+    )
+    // A trailing break leaves only punctuation behind.
+    .filter((problem) => /\w/.test(problem))
+  // Each problem is listed once; the text also keys the rendered list.
+  return [
+    ...new Set(
+      (problems.length ? problems : [APPROVAL_FAILED_REASON]).map((problem) =>
+        joined([problem, ...whereToFix(problem)]),
+      ),
+    ),
+  ]
+}
+
+/** The problems as one line, for feedback that can't list them. */
+export const exemptionApprovalFailureMessage = (message: string): string =>
+  exemptionApprovalProblems(message).join(' ')
 
 /**
  * Page notifications for an approval: at most one for the approved exemptions and one for those
@@ -154,9 +190,13 @@ export const exemptionApprovalResults = (
           ? `No approval ${single ? 'email was' : 'emails were'} sent.`
           : 'No approval emails were sent for these. Correct the details below, then approve again.',
       items: [
-        ...failures.map(({ exemptionNumber, message }) =>
-          item(exemptionNumber, `: ${exemptionApprovalFailureMessage(message)}`),
-        ),
+        ...failures.map(({ exemptionNumber, message }) => {
+          const problems = exemptionApprovalProblems(message)
+          // Figma: more than one problem is listed under its exemption.
+          return problems.length > 1
+            ? { ...item(exemptionNumber, ':'), details: problems }
+            : item(exemptionNumber, `: ${problems[0]}`)
+        }),
         ...unconfirmedNumbers.map((exemptionNumber) =>
           item(
             exemptionNumber,

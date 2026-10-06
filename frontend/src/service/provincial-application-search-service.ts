@@ -26,6 +26,7 @@ type BackendProvincialApplicationSearchResult = {
   applicationVolume: number
   showCheckbox: boolean
   locked: boolean
+  agentClientNumber?: string
 }
 
 type ProvincialApplicationSearchOptions = {
@@ -94,6 +95,7 @@ const parseBackendResponse = (payload: unknown): ProvincialApplicationSearchResp
     status: row.status,
     applicantClientNumber: row.client ?? '',
     ownerClientNumber: row.ownerClientNumber ?? '',
+    agentClientNumber: row.agentClientNumber ?? '',
     region: row.region ?? '',
     applicationVolume: row.applicationVolume ?? 0,
     exemptionNumber: row.exemptionNumber ?? '',

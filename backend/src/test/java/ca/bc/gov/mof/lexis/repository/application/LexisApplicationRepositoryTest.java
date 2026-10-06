@@ -563,7 +563,9 @@ class LexisApplicationRepositoryTest {
 
     assertThat(repository.whereSql())
         .contains("v.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'")
-        .contains(" AND v.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains(
+            " AND CASE WHEN v.EXPORT_APPLICANT_TYPE_CODE = 'A' THEN v.AGENT_CLIENT_NUMBER END"
+                + " LIKE '%' || ? || '%'")
         .contains("v.EXPORT_APPLICANT_TYPE_CODE = 'O'")
         .contains("v.EXPORT_APPLICANT_TYPE_CODE = 'A'");
     assertThat(repository.bindValues())
@@ -572,7 +574,9 @@ class LexisApplicationRepositoryTest {
     repository.count(criteria);
     assertThat(repository.countBindValues()).isEqualTo(repository.bindValues());
     assertThat(repository.countWhereSql())
-        .contains(" AND v.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .contains(
+            " AND CASE WHEN v.EXPORT_APPLICANT_TYPE_CODE = 'A' THEN v.AGENT_CLIENT_NUMBER END"
+                + " LIKE '%' || ? || '%'")
         .contains("v.EXPORT_APPLICANT_TYPE_CODE = 'O'")
         .doesNotContain("ORDER BY");
   }
@@ -622,6 +626,7 @@ class LexisApplicationRepositoryTest {
           applicationNumber DESC|ORDER BY v.APPLICATION_NUMBER DESC
           application DESC|ORDER BY v.APPLICATION_NUMBER DESC
           applicantClientNumber ASC|ORDER BY v.APPLICANT_CLIENT_NUMBER ASC, v.APPLICATION_NUMBER ASC
+          agentClientNumber DESC|ORDER BY CASE WHEN v.EXPORT_APPLICANT_TYPE_CODE = 'A' THEN v.AGENT_CLIENT_NUMBER END DESC, v.APPLICATION_NUMBER ASC
           displayOwnerClientNumber DESC|ORDER BY v.OWNER_CLIENT_NUMBER DESC, v.APPLICATION_NUMBER ASC
           ownerClientNumber ASC|ORDER BY v.OWNER_CLIENT_NUMBER ASC, v.APPLICATION_NUMBER ASC
           exemptionNumber DESC|ORDER BY v.EXEMPTION_NUMBER DESC, v.APPLICATION_NUMBER ASC
@@ -1079,6 +1084,33 @@ class LexisApplicationRepositoryTest {
             org.assertj.core.groups.Tuple.tuple(900102L, false, "Ministerial"));
     assertThat(repository.cursorCalls()).isZero();
     assertThat(repository.databaseCalls()).isEqualTo(2);
+  }
+
+  @Test
+  void searchMappingShouldReturnTheAgentOnlyForAgentApplications() throws SQLException {
+    // Legacy stores the owner in AGENT_CLIENT_NUMBER on owner applications.
+    ResultSet ownerApplicant = applicationSearchResultSet(900103L, 0L);
+    when(ownerApplicant.getString("AGENT_CLIENT_NUMBER")).thenReturn("00000002");
+    when(ownerApplicant.getString("EXPORT_APPLICANT_TYPE_CODE")).thenReturn("O");
+    ResultSet noAgent = applicationSearchResultSet(900104L, 0L);
+    ResultSet agentApplicant = applicationSearchResultSet(900105L, 0L);
+    when(agentApplicant.getString("AGENT_CLIENT_NUMBER")).thenReturn("00000003");
+    when(agentApplicant.getString("EXPORT_APPLICANT_TYPE_CODE")).thenReturn("A");
+    MappingLexisApplicationRepository repository =
+        new MappingLexisApplicationRepository(List.of(ownerApplicant, noAgent, agentApplicant));
+
+    Page<LexisApplicationSearchResultDto> results =
+        repository.search(emptyCriteria(null, 0, 200));
+
+    assertThat(results.getContent())
+        .extracting(
+            LexisApplicationSearchResultDto::application,
+            LexisApplicationSearchResultDto::client,
+            LexisApplicationSearchResultDto::agentClientNumber)
+        .containsExactly(
+            org.assertj.core.groups.Tuple.tuple(900103L, "", ""),
+            org.assertj.core.groups.Tuple.tuple(900104L, "", ""),
+            org.assertj.core.groups.Tuple.tuple(900105L, "00000003", "00000003"));
   }
 
   @Test

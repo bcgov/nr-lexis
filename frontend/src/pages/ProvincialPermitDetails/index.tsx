@@ -4682,6 +4682,8 @@ const ProvincialPermitDetailsPage = () => {
     detailMatchesRoute ? detail?.permitNumber : permitNumber,
     detailMatchesRoute ? (detail?.permitStatusCode ?? detail?.permitStatusDescription) : null,
   )
+  // Pages opened from this one name it by its title in their back link or breadcrumb.
+  const permitPageTitle = `Permit ${permitDisplayNumber}`.trim()
   const isMinisterialPermitEdit = ministerialPermit && isEditingPermit && !!permitForm
   const isReviewedPermitEdit = usesReviewedPermitFlow && isEditingPermit && !!permitForm
 
@@ -4801,7 +4803,7 @@ const ProvincialPermitDetailsPage = () => {
                           state={withDetailReturnTo(
                             location.state,
                             {
-                              label: 'Provincial permit detail',
+                              label: permitPageTitle,
                               to: locationPath(location),
                             },
                             detailReturnTo,
@@ -4875,7 +4877,7 @@ const ProvincialPermitDetailsPage = () => {
                           state={withDetailReturnTo(
                             location.state,
                             {
-                              label: 'Provincial permit detail',
+                              label: permitPageTitle,
                               to: locationPath(location),
                             },
                             detailReturnTo,
@@ -5608,7 +5610,7 @@ const ProvincialPermitDetailsPage = () => {
                         state={withDetailReturnTo(
                           location.state,
                           {
-                            label: 'Provincial permit detail',
+                            label: permitPageTitle,
                             to: locationPath(location),
                           },
                           detailReturnTo,
@@ -5666,7 +5668,7 @@ const ProvincialPermitDetailsPage = () => {
                               state={withDetailReturnTo(
                                 location.state,
                                 {
-                                  label: 'Provincial permit detail',
+                                  label: permitPageTitle,
                                   to: locationPath(location),
                                 },
                                 detailReturnTo,
@@ -5839,7 +5841,7 @@ const ProvincialPermitDetailsPage = () => {
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
-          title={`Permit ${permitDisplayNumber}`.trim()}
+          title={permitPageTitle}
           subtitle={
             <>
               <span>Check and manage this provincial permit</span>
@@ -6436,7 +6438,7 @@ const ProvincialPermitDetailsPage = () => {
                                     state={withDetailReturnTo(
                                       location.state,
                                       {
-                                        label: 'Provincial permit detail',
+                                        label: permitPageTitle,
                                         to: locationPath(location),
                                       },
                                       detailReturnTo,
@@ -6545,7 +6547,7 @@ const ProvincialPermitDetailsPage = () => {
                                     state={withDetailReturnTo(
                                       location.state,
                                       {
-                                        label: 'Provincial permit detail',
+                                        label: permitPageTitle,
                                         to: locationPath(location),
                                       },
                                       detailReturnTo,
@@ -6659,7 +6661,7 @@ const ProvincialPermitDetailsPage = () => {
                                   state={withDetailReturnTo(
                                     location.state,
                                     {
-                                      label: 'Provincial permit detail',
+                                      label: permitPageTitle,
                                       to: locationPath(location),
                                     },
                                     detailReturnTo,
@@ -6765,7 +6767,7 @@ const ProvincialPermitDetailsPage = () => {
                                           state={withDetailReturnTo(
                                             location.state,
                                             {
-                                              label: 'Provincial permit detail',
+                                              label: permitPageTitle,
                                               to: locationPath(location),
                                             },
                                             detailReturnTo,

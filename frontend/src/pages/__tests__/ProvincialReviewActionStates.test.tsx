@@ -342,9 +342,7 @@ describe('Provincial Review Action State Smoke', () => {
   it('uses the legacy provincial application review page title', async () => {
     renderPage()
 
-    expect(
-      await screen.findByRole('heading', { name: 'Provincial application review' }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Application review' })).toBeInTheDocument()
   })
 
   it('places the search action last and includes the search icon', async () => {
@@ -575,7 +573,10 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
 
     expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveValue('Rejected')
-    expect(screen.queryByText('Application review')).not.toBeInTheDocument()
+    // The page title is the only Application review text; the form has no review heading.
+    expect(screen.getAllByText('Application review')).toEqual([
+      screen.getByRole('heading', { name: 'Application review' }),
+    ])
     expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
     const sendToInput = await revealSendToField()
     expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000123')

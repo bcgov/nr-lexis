@@ -10,6 +10,10 @@ import {
   searchProvincialApplications,
 } from '@/service/provincial-application-search-service'
 import { fetchProvincialApplicationOptions } from '@/service/search-options-service'
+import {
+  fetchProvincialExemptionCreatePreview,
+  submitProvincialExemptionCreate,
+} from '@/service/create-submit-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 const mockNavigate = vi.fn()
@@ -38,6 +42,21 @@ vi.mock('@/service/provincial-application-search-service', () => ({
 vi.mock('@/service/search-options-service', () => ({
   fetchProvincialApplicationOptions: vi.fn(),
 }))
+
+vi.mock('@/service/create-submit-service', () => ({
+  fetchProvincialExemptionCreatePreview: vi.fn(),
+  submitProvincialExemptionCreate: vi.fn(),
+}))
+
+const mockedFetchExemptionCreatePreview = vi.mocked(fetchProvincialExemptionCreatePreview)
+const mockedSubmitExemptionCreate = vi.mocked(submitProvincialExemptionCreate)
+const exemptionPreview = (applicationNumbers: string[]) => ({
+  exemptionTypeCode: 'M',
+  exemptionStatusCode: 'NEW',
+  approvedVolume: '150.0',
+  expiryDate: '2027-03-31',
+  applicationNumbers,
+})
 
 vi.mock('@/components/ForestClientComboBox', () => ({
   default: ({
@@ -88,6 +107,7 @@ const searchRowsWithMixedEligibility = [
     status: 'NEW',
     applicantClientNumber: '11111111',
     ownerClientNumber: '22222222',
+    agentClientNumber: '11111111',
     region: '11',
     applicationVolume: 100,
     exemptionNumber: '',
@@ -103,6 +123,7 @@ const searchRowsWithMixedEligibility = [
     status: 'PER',
     applicantClientNumber: '11111111',
     ownerClientNumber: '22222222',
+    agentClientNumber: '11111111',
     region: '12',
     applicationVolume: 50,
     exemptionNumber: 'EX-9',
@@ -245,13 +266,49 @@ describe('Provincial Application Search Actions', () => {
     expect(await screen.findByText('Exempted - New')).toBeVisible()
   })
 
-  it('only allows selecting eligible rows and navigates to exemption create with prefill', async () => {
+  it('shows the Figma result columns with the recorded agent', async () => {
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: [
+        {
+          ...searchRowsWithMixedEligibility[0],
+          applicantClientNumber: '',
+          agentClientNumber: '33333333',
+        },
+      ],
+      page: { number: 0, size: 10, totalElements: 1, totalPages: 1 },
+    })
+
+    renderPage()
+    await screen.findByText('321')
+
+    expect(
+      screen
+        .getAllByRole('columnheader')
+        .map((header) =>
+          (header.querySelector('.cds--table-header-label') ?? header).textContent?.trim(),
+        ),
+    ).toEqual([
+      'Select all rows on this page',
+      'Application',
+      'Status',
+      'Owner client number',
+      'Agent client number',
+      'Application volume (m³)',
+      'Exemption number',
+      'List date',
+      'Region',
+    ])
+    const row = screen.getByText('321').closest('tr') as HTMLElement
+    expect(within(row).getByText('33333333')).toBeInTheDocument()
+  })
+
+  it('only allows selecting eligible rows and creates the exemption after confirmation', async () => {
     renderPage()
     await screen.findByText('321')
 
     expect(
       screen.queryByRole('button', {
-        name: 'Create exemption for selected applications',
+        name: 'Create exemption',
       }),
     ).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select application 321' })).toBeEnabled()
@@ -271,21 +328,108 @@ describe('Provincial Application Search Actions', () => {
     ).toBeGreaterThan(0)
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
-    expect(
-      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
-    ).toBeEnabled()
+    expect(screen.getByText('1 application selected')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Create exemption' })).toBeEnabled()
 
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
-    )
-
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/create', {
-      state: {
-        selectedApplicationNumbers: ['321'],
-        applicantClientNumber: '11111111',
-        ownerClientNumber: '22222222',
-      },
+    mockedFetchExemptionCreatePreview.mockResolvedValueOnce(exemptionPreview(['321']))
+    mockedSubmitExemptionCreate.mockResolvedValueOnce({
+      success: true,
+      message: '',
+      createdId: '26-9001',
+      errors: [],
+      warnings: [],
     })
+    await userEvent.click(screen.getByRole('button', { name: 'Create exemption' }))
+
+    // Figma 3474:66267: confirm the applications before the exemption is created.
+    const confirmation = screen.getByRole('dialog', { name: 'Create new exemption' })
+    expect(confirmation).toHaveTextContent(
+      'You are about to create a new exemption with the following applications:',
+    )
+    expect(within(confirmation).getByRole('listitem')).toHaveTextContent('321')
+    expect(confirmation).toHaveTextContent('This action cannot be undone.')
+    expect(mockedFetchExemptionCreatePreview).not.toHaveBeenCalled()
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Create exemption' }))
+
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/26-9001', {
+        state: {
+          exemptionCreationNotice: { exemptionNumber: '26-9001', applicationNumbers: ['321'] },
+          returnTo: {
+            label: 'Application search',
+            to: expect.stringMatching(/^\/provincial\/application\?.*region=11/),
+          },
+        },
+      }),
+    )
+    expect(mockedFetchExemptionCreatePreview).toHaveBeenCalledWith(['321'])
+    expect(mockedSubmitExemptionCreate).toHaveBeenCalledWith({
+      applicationNumber: '321',
+      linkedApplicationNumbers: ['321'],
+      exemptionNumber: '',
+      exemptionTypeCode: 'M',
+      exemptionStatusCode: 'NEW',
+      approvalDate: '',
+      expiryDate: '2027-03-31',
+      approvedVolume: '150.0',
+      enableRateOverride: false,
+      feeRate: '',
+      regionNumbers: [],
+      otherConditions: '',
+    })
+  })
+
+  it('asks the user to check before retrying when the create outcome is unknown', async () => {
+    mockedFetchExemptionCreatePreview.mockResolvedValueOnce(exemptionPreview(['321']))
+    mockedSubmitExemptionCreate.mockResolvedValueOnce({
+      success: false,
+      message: 'Exemption submission failed.',
+      createdId: undefined,
+      errors: [],
+      warnings: [],
+      outcomeUnknown: true,
+    })
+    renderPage()
+    await screen.findByText('321')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Create exemption' }))
+    const confirmation = screen.getByRole('dialog', { name: 'Create new exemption' })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Create exemption' }))
+
+    expect(
+      await within(confirmation).findByText(
+        'LEXIS could not confirm whether the exemption was created. Search for application 321 to check before trying again.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('keeps the confirmation open with the reason when the exemption cannot be created', async () => {
+    mockedFetchExemptionCreatePreview.mockRejectedValueOnce(
+      new Error('Application 321 is not eligible for an exemption.'),
+    )
+    renderPage()
+    await screen.findByText('321')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Create exemption' }))
+    const confirmation = screen.getByRole('dialog', { name: 'Create new exemption' })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Create exemption' }))
+
+    expect(
+      await within(confirmation).findByText('Application 321 is not eligible for an exemption.'),
+    ).toBeInTheDocument()
+    expect(mockedSubmitExemptionCreate).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
+
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('dialog', { name: 'Create new exemption' }),
+      ).not.toBeInTheDocument(),
+    )
+    // Cancel returns to the selection so it can be changed or confirmed again.
+    expect(screen.getByRole('checkbox', { name: 'Select application 321' })).toBeChecked()
+    expect(screen.getByText('1 application selected')).toBeInTheDocument()
   })
 
   it.each([
@@ -389,7 +533,7 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.getByText('8100')).toBeInTheDocument()
   })
 
-  it('passes every selected eligible application to exemption create', async () => {
+  it('creates one exemption from every selected eligible application', async () => {
     mockedSearchProvincialApplications.mockResolvedValue({
       content: searchRowsWithMixedEligibility.map((row) => ({
         ...row,
@@ -408,17 +552,43 @@ describe('Provincial Application Search Actions', () => {
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 654' }))
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
-    )
-
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/create', {
-      state: {
-        selectedApplicationNumbers: ['321', '654'],
-        applicantClientNumber: '11111111',
-        ownerClientNumber: '22222222',
-      },
+    mockedFetchExemptionCreatePreview.mockResolvedValueOnce(exemptionPreview(['321', '654']))
+    mockedSubmitExemptionCreate.mockResolvedValueOnce({
+      success: true,
+      message: '',
+      createdId: '26-9002',
+      errors: [],
+      warnings: [],
     })
+    await userEvent.click(screen.getByRole('button', { name: 'Create exemption' }))
+
+    const confirmation = screen.getByRole('dialog', { name: 'Create new exemption' })
+    expect(
+      within(confirmation)
+        .getAllByRole('listitem')
+        .map((item) => item.textContent),
+    ).toEqual(['321', '654'])
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Create exemption' }))
+
+    await waitFor(() =>
+      expect(mockedFetchExemptionCreatePreview).toHaveBeenCalledWith(['321', '654']),
+    )
+    expect(mockedSubmitExemptionCreate).toHaveBeenCalledWith(
+      expect.objectContaining({ linkedApplicationNumbers: ['321', '654'] }),
+    )
+    await waitFor(() =>
+      expect(mockNavigate).toHaveBeenCalledWith(
+        '/provincial/exemption/26-9002',
+        expect.objectContaining({
+          state: expect.objectContaining({
+            exemptionCreationNotice: {
+              exemptionNumber: '26-9002',
+              applicationNumbers: ['321', '654'],
+            },
+          }),
+        }),
+      ),
+    )
   })
 
   it('keeps authoritative filters disabled with a persistent warning when options fail', async () => {
@@ -488,8 +658,6 @@ describe('Provincial Application Search Actions', () => {
       'Package number',
       'Exemption number',
       'Region',
-      'Received from date',
-      'Received to date',
       'List date from',
       'List date to',
       'Exemption type',
@@ -501,18 +669,21 @@ describe('Provincial Application Search Actions', () => {
   })
 
   it('clears URL-backed filters and removes results without searching again', async () => {
+    // Figma has no received-date filter, so an old link's received dates are ignored.
     renderPage(
-      '/provincial/application?receivedFromDate=2026-01-01&receivedToDate=2026-01-31&region=11',
+      '/provincial/application?receivedFromDate=2026-01-01&listingFromDate=2026-01-01&listingToDate=2026-01-31&region=11',
     )
     await screen.findByText('321')
 
-    expect(screen.getByLabelText('Received from date')).toHaveValue('2026-01-01')
-    expect(screen.getByLabelText('Received to date')).toHaveValue('2026-01-31')
+    expect(screen.queryByLabelText('Received from date')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('List date from')).toHaveValue('2026-01-01')
+    expect(screen.getByLabelText('List date to')).toHaveValue('2026-01-31')
     expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
       expect.objectContaining({
         filters: expect.objectContaining({
-          receivedFromDate: '2026-01-01',
-          receivedToDate: '2026-01-31',
+          receivedFromDate: '',
+          listingFromDate: '2026-01-01',
+          listingToDate: '2026-01-31',
         }),
       }),
       expect.any(Object),
@@ -522,22 +693,24 @@ describe('Provincial Application Search Actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
-    expect(screen.getByLabelText('Received from date')).toHaveValue('')
-    expect(screen.getByLabelText('Received to date')).toHaveValue('')
+    expect(screen.getByLabelText('List date from')).toHaveValue('')
+    expect(screen.getByLabelText('List date to')).toHaveValue('')
     await waitFor(() => {
       expect(resultsTable).not.toBeVisible()
     })
     expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
-  it('disables search for an invalid received date', async () => {
+  it('disables search for an invalid list date', async () => {
     renderPage()
     await screen.findByText('321')
 
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Received from date'), '2026-13-01')
+    const listDateFrom = screen.getByLabelText('List date from')
+    fireEvent.change(listDateFrom, { target: { value: '2026-02-30' } })
+    fireEvent.blur(listDateFrom)
 
     await waitFor(() => {
       expect(searchButton).toBeDisabled()
@@ -558,9 +731,7 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Owner client')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Agent client')).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Create exemption for selected applications' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create exemption' })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
     ).not.toBeInTheDocument()
@@ -676,11 +847,11 @@ describe('Provincial Application Search Actions', () => {
   })
 
   it.each([
-    ['Applicant client number', 'applicantClientNumber'],
     ['Owner client number', 'displayOwnerClientNumber'],
-    ['Region', 'regionCode'],
+    ['Agent client number', 'agentClientNumber'],
     ['Exemption number', 'exemptionNumber'],
-    ['Listing date', 'listingDate'],
+    ['List date', 'listingDate'],
+    ['Region', 'regionCode'],
   ] as const)('dispatches the legacy %s sort key', async (header, expectedSortField) => {
     renderPage()
     await screen.findByText('321')
@@ -740,9 +911,7 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
-    )
+    await userEvent.click(screen.getByRole('button', { name: 'Create exemption' }))
 
     await waitFor(() => {
       expect(screen.getByText('Validation failed')).toBeInTheDocument()
@@ -756,7 +925,7 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.getByRole('checkbox', { name: 'Select application 321' })).not.toBeChecked()
     expect(
       screen.queryByRole('button', {
-        name: 'Create exemption for selected applications',
+        name: 'Create exemption',
       }),
     ).not.toBeInTheDocument()
   })
@@ -766,17 +935,13 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
-    expect(
-      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
-    ).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Create exemption' })).toBeEnabled()
 
     mockedSearchProvincialApplications.mockClear()
     await userEvent.type(screen.getByLabelText('Application number'), '9')
 
     await waitFor(() => {
-      expect(
-        screen.queryByRole('button', { name: 'Create exemption for selected applications' }),
-      ).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Create exemption' })).not.toBeInTheDocument()
     })
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
 
@@ -916,11 +1081,11 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
     mockedSearchProvincialApplications.mockClear()
 
-    fireEvent.change(screen.getByLabelText('Received from date'), {
-      target: { value: '2026-07-24' },
-    })
+    const listDateFrom = screen.getByLabelText('List date from')
+    fireEvent.change(listDateFrom, { target: { value: '2026-07-24' } })
+    fireEvent.blur(listDateFrom)
 
-    expect(screen.getByLabelText('Received from date')).toHaveValue('2026-07-24')
+    await waitFor(() => expect(listDateFrom).toHaveValue('2026-07-24'))
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
 
     const searchButton = screen.getByRole('button', { name: 'Search' })
@@ -933,7 +1098,7 @@ describe('Provincial Application Search Actions', () => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
       expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
         expect.objectContaining({
-          filters: expect.objectContaining({ receivedFromDate: '2026-07-24' }),
+          filters: expect.objectContaining({ listingFromDate: '2026-07-24' }),
         }),
         expect.any(Object),
       )

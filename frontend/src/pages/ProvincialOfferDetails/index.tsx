@@ -110,7 +110,7 @@ const ProvincialOfferDetailsPage = () => {
   const { canPerform, defaultRoute } = useAuth()
   const navigationState = location.state as OfferCreationNavigationState | null
   const fallbackReturnTo = canPerform('/offersSearch')
-    ? { label: 'Provincial offers search', to: '/provincial/offers' }
+    ? { label: 'Offer search', to: '/provincial/offers' }
     : { label: 'Your landing page', to: defaultRoute }
   const detailReturnTo = readDetailReturnTo(navigationState) ?? fallbackReturnTo
   const creationWarningMessage =
@@ -138,6 +138,8 @@ const ProvincialOfferDetailsPage = () => {
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
   const beginDetailRequest = useLatestRequestGuard()
   const currentDetail = detail && String(detail.offerNumber) === offerNumber ? detail : null
+  // Pages opened from this one name it by its title in their back link or breadcrumb.
+  const offerPageTitle = `Offer ${currentDetail?.offerNumber ?? offerNumber ?? ''}`.trim()
   const applicationNumber = form?.applicationNumber.trim() ?? ''
   const applicationDetailPath = applicationNumber
     ? `${currentDetail?.exportJurisdictionCode?.trim().toUpperCase() === 'F' ? '/federal/application' : '/provincial/application'}/${encodeURIComponent(applicationNumber)}`
@@ -442,7 +444,7 @@ const ProvincialOfferDetailsPage = () => {
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
-          title={`Offer ${currentDetail?.offerNumber ?? offerNumber ?? ''}`.trim()}
+          title={offerPageTitle}
           subtitle="Check and manage this provincial offer"
           actions={
             !loading && !isEditing && currentDetail && form && canEditAnyOfferField ? (
@@ -534,7 +536,7 @@ const ProvincialOfferDetailsPage = () => {
                       state={withDetailReturnTo(
                         navigationState,
                         {
-                          label: 'Provincial offer detail',
+                          label: offerPageTitle,
                           to: locationPath(location),
                         },
                         detailReturnTo,

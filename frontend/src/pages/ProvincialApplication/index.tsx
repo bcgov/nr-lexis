@@ -41,7 +41,8 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole } from '@/context/auth/role-utils'
-import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateValue } from '@/pages/shared/create-form-utils'
+import { batchSelectionTranslator } from '@/pages/shared/batch-selection'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -93,18 +94,16 @@ import {
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { displayTableValue } from '@/utils/text'
 import { formatIsoDateLabel } from '@/utils/date'
-import IsoDatePicker from '../../components/IsoDatePicker'
 import IsoDateRangePicker from '@/components/IsoDateRangePicker'
+import ConfirmationModal from '@/components/ConfirmationModal'
+import {
+  fetchProvincialExemptionCreatePreview,
+  submitProvincialExemptionCreate,
+} from '@/service/create-submit-service'
 
 type ExemptionStatus = {
   kind: 'error'
   message: string
-}
-
-type ExemptionCreatePrefillState = {
-  selectedApplicationNumbers: string[]
-  applicantClientNumber: string
-  ownerClientNumber: string
 }
 
 const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
@@ -126,7 +125,9 @@ const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
 }
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialApplicationSearchResponse>()
+const APPLICATION_BATCH_SELECTION = batchSelectionTranslator('application', 'applications')
 
+// INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_RESULT_COLUMNS)
 const RESULT_COLUMNS: {
   id: string
   label: string
@@ -135,19 +136,15 @@ const RESULT_COLUMNS: {
   { id: 'applicationNumber', label: 'Application', sortField: 'applicationNumber' },
   { id: 'status', label: 'Status' },
   {
-    id: 'applicantClientNumber',
-    label: 'Applicant client number',
-    sortField: 'applicantClientNumber',
-  },
-  {
     id: 'ownerClientNumber',
     label: 'Owner client number',
     sortField: 'displayOwnerClientNumber',
   },
-  { id: 'region', label: 'Region', sortField: 'regionCode' },
+  { id: 'agentClientNumber', label: 'Agent client number', sortField: 'agentClientNumber' },
   { id: 'applicationVolume', label: 'Application volume (m³)' },
   { id: 'exemptionNumber', label: 'Exemption number', sortField: 'exemptionNumber' },
-  { id: 'listingDate', label: 'Listing date', sortField: 'listingDate' },
+  { id: 'listingDate', label: 'List date', sortField: 'listingDate' },
+  { id: 'region', label: 'Region', sortField: 'regionCode' },
 ]
 
 const DEFAULT_SORT_FIELD: ProvincialApplicationSearchSortField = 'applicationNumber'
@@ -181,8 +178,6 @@ const buildSearchParams = (
     ['applicationStatus', filters.applicationStatus],
     ['productTypeCode', filters.productTypeCode],
     ['region', filters.region],
-    ['receivedFromDate', filters.receivedFromDate],
-    ['receivedToDate', filters.receivedToDate],
     ['listingFromDate', filters.listingFromDate],
     ['listingToDate', filters.listingToDate],
     ['exportScheduleId', filters.exportScheduleId ?? ''],
@@ -220,13 +215,17 @@ const ProvincialApplicationPage = () => {
     Record<string, ProvincialApplicationSearchItem>
   >({})
   const [exemptionStatus, setExemptionStatus] = useState<ExemptionStatus | null>(null)
+  // The applications in Figma's "Create new exemption" confirmation, while it is open.
+  const [exemptionConfirmationNumbers, setExemptionConfirmationNumbers] = useState<string[] | null>(
+    null,
+  )
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canCreateApplication = canPerform('createApplication')
   const canFilterByClient = hasProvincialStaffRole(capabilities.roles)
   const visibleResultColumns = canCreateExemption
     ? RESULT_COLUMNS
-    : RESULT_COLUMNS.filter((column) => column.id !== 'applicantClientNumber')
+    : RESULT_COLUMNS.filter((column) => column.id !== 'agentClientNumber')
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
@@ -242,8 +241,9 @@ const ProvincialApplicationPage = () => {
       applicationStatus: searchParams.get('applicationStatus') ?? '',
       productTypeCode: searchParams.get('productTypeCode') ?? '',
       region: parseCsvParam(searchParams.get('region')),
-      receivedFromDate: searchParams.get('receivedFromDate') ?? '',
-      receivedToDate: searchParams.get('receivedToDate') ?? '',
+      // Figma has no received-date criteria, so an old link can't apply a hidden one.
+      receivedFromDate: '',
+      receivedToDate: '',
       listingFromDate: searchParams.get('listingFromDate') ?? '',
       listingToDate: searchParams.get('listingToDate') ?? '',
       exportScheduleId: searchParams.get('exportScheduleId') ?? '',
@@ -313,18 +313,8 @@ const ProvincialApplicationPage = () => {
       (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
   const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(
-      filters.receivedFromDate,
-      filters.receivedToDate,
-      filters.listingFromDate,
-      filters.listingToDate,
-    )
-  }, [
-    filters.receivedFromDate,
-    filters.receivedToDate,
-    filters.listingFromDate,
-    filters.listingToDate,
-  ])
+    return hasInvalidIsoDateValue(filters.listingFromDate, filters.listingToDate)
+  }, [filters.listingFromDate, filters.listingToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
@@ -369,14 +359,7 @@ const ProvincialApplicationPage = () => {
         }
       }
 
-      if (
-        hasInvalidIsoDateValue(
-          request.filters.receivedFromDate,
-          request.filters.receivedToDate,
-          request.filters.listingFromDate,
-          request.filters.listingToDate,
-        )
-      ) {
+      if (hasInvalidIsoDateValue(request.filters.listingFromDate, request.filters.listingToDate)) {
         setLoading(false)
         return
       }
@@ -624,8 +607,9 @@ const ProvincialApplicationPage = () => {
 
   const onCreateExemptionClick = () => {
     const selectedRows = Object.values(selectedRowsById)
-    clearSelection()
+    // The selection stays while the confirmation is open, so Cancel returns to it.
     if (!canCreateExemption) {
+      clearSelection()
       setExemptionStatus({
         kind: 'error',
         message: 'Your account is not authorized to create exemptions.',
@@ -634,6 +618,7 @@ const ProvincialApplicationPage = () => {
     }
 
     if (selectedRows.length === 0) {
+      clearSelection()
       setExemptionStatus({
         kind: 'error',
         message: 'Select at least one application before creating an exemption.',
@@ -649,6 +634,7 @@ const ProvincialApplicationPage = () => {
     )
 
     if (!allRowsMatchClientNumbers) {
+      clearSelection()
       setExemptionStatus({
         kind: 'error',
         message:
@@ -657,13 +643,51 @@ const ProvincialApplicationPage = () => {
       return
     }
 
-    const prefillState: ExemptionCreatePrefillState = {
-      selectedApplicationNumbers: selectedRows.map((row) => row.applicationNumber),
-      applicantClientNumber: firstRow.applicantClientNumber,
-      ownerClientNumber: firstRow.ownerClientNumber,
-    }
+    setExemptionConfirmationNumbers(selectedRows.map((row) => row.applicationNumber))
+  }
 
-    navigate('/provincial/exemption/create', { state: prefillState })
+  // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_SEARCH_CREATE_EXEMPTION)
+  // Figma: confirm, create the exemption from the applications, then open it on its Applicant tab.
+  // The preview re-validates the applications, so a retry can't add them to a second exemption.
+  const createExemptionFromApplications = async (applicationNumbers: string[]) => {
+    const preview = await fetchProvincialExemptionCreatePreview(applicationNumbers)
+    const result = await submitProvincialExemptionCreate({
+      applicationNumber: preview.applicationNumbers[0] ?? '',
+      linkedApplicationNumbers: preview.applicationNumbers,
+      exemptionNumber: '',
+      exemptionTypeCode: preview.exemptionTypeCode,
+      exemptionStatusCode: preview.exemptionStatusCode,
+      approvalDate: '',
+      expiryDate: preview.expiryDate,
+      approvedVolume: preview.approvedVolume,
+      enableRateOverride: false,
+      feeRate: '',
+      regionNumbers: [],
+      otherConditions: '',
+    })
+    if (!result.success) {
+      throw new Error(
+        result.outcomeUnknown
+          ? `LEXIS could not confirm whether the exemption was created. Search for application ${preview.applicationNumbers[0]} to check before trying again.`
+          : result.errors[0] ||
+              result.message ||
+              'The exemption could not be created. Please try again. If the problem persists, contact support.',
+      )
+    }
+    if (!result.createdId) {
+      throw new Error(
+        `The exemption was created, but LEXIS did not return its number. Search for application ${preview.applicationNumbers[0]} to open it.`,
+      )
+    }
+    navigate(`/provincial/exemption/${encodeURIComponent(result.createdId)}`, {
+      state: {
+        exemptionCreationNotice: {
+          exemptionNumber: result.createdId,
+          applicationNumbers: preview.applicationNumbers,
+        },
+        returnTo: { label: 'Application search', to: withCurrentSearch('/provincial/application') },
+      },
+    })
   }
 
   return (
@@ -745,24 +769,6 @@ const ProvincialApplicationPage = () => {
                       nextSelected.map((item) => item.id),
                     )
                   }}
-                />
-                {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
-                    Modern application search exposes received-date criteria hidden in legacy. */}
-                <IsoDatePicker
-                  id="receivedFromDate"
-                  labelText="Received from date"
-                  value={filters.receivedFromDate}
-                  invalid={!isValidIsoDate(filters.receivedFromDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('receivedFromDate', value)}
-                />
-                <IsoDatePicker
-                  id="receivedToDate"
-                  labelText="Received to date"
-                  value={filters.receivedToDate}
-                  invalid={!isValidIsoDate(filters.receivedToDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('receivedToDate', value)}
                 />
                 <IsoDateRangePicker
                   fromId="listingFromDate"
@@ -895,9 +901,10 @@ const ProvincialApplicationPage = () => {
                   totalSelected={selectedRowsCount}
                   shouldShowBatchActions
                   onCancel={clearSelection}
+                  translateWithId={APPLICATION_BATCH_SELECTION}
                 >
                   <TableBatchAction renderIcon={Add} onClick={onCreateExemptionClick}>
-                    Create exemption for selected applications
+                    Create exemption
                   </TableBatchAction>
                 </TableBatchActions>
               ) : undefined
@@ -1005,11 +1012,10 @@ const ProvincialApplicationPage = () => {
                           }
                         />
                       </TableCell>
-                      {canCreateExemption && (
-                        <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
-                      )}
                       <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
-                      <TableCell>{displayTableValue(row.region)}</TableCell>
+                      {canCreateExemption && (
+                        <TableCell>{displayTableValue(row.agentClientNumber)}</TableCell>
+                      )}
                       <TableCell>{row.applicationVolume.toFixed(1)}</TableCell>
                       <TableCell>
                         {row.exemptionNumber ? (
@@ -1032,6 +1038,7 @@ const ProvincialApplicationPage = () => {
                       <TableCell className="legacy-search-table-date">
                         {displayTableValue(formatIsoDateLabel(row.listingDate))}
                       </TableCell>
+                      <TableCell>{displayTableValue(row.region)}</TableCell>
                     </TableRow>
                   ))}
                 </TableBody>
@@ -1044,7 +1051,7 @@ const ProvincialApplicationPage = () => {
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
               <>
-                <div className="legacy-search-result-count">
+                <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(
                     results.page.totalElements,
                     totalStatus,
@@ -1077,6 +1084,27 @@ const ProvincialApplicationPage = () => {
           </SearchResultsTableFrame>
         </section>
       </Column>
+      {exemptionConfirmationNumbers && (
+        <ConfirmationModal
+          open
+          title="Create new exemption"
+          description="You are about to create a new exemption with the following applications:"
+          confirmLabel="Create exemption"
+          pendingLabel="Creating exemption…"
+          errorTitle="Exemption not created"
+          onConfirm={() => createExemptionFromApplications(exemptionConfirmationNumbers)}
+          onClose={() => setExemptionConfirmationNumbers(null)}
+        >
+          <ul className="application-exemption-confirmation__list">
+            {exemptionConfirmationNumbers.map((applicationNumber) => (
+              <li key={applicationNumber}>
+                <strong>{applicationNumber}</strong>
+              </li>
+            ))}
+          </ul>
+          <p>This action cannot be undone.</p>
+        </ConfirmationModal>
+      )}
     </Grid>
   )
 }
