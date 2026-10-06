@@ -2311,7 +2311,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
     await page.getByRole('tab', { name: 'Documents' }).click()
 
-    const documentsTable = page.getByRole('region', { name: 'Federal application documents' })
+    const documentsTable = page.getByRole('region', { name: 'Application document rows' })
     const rowActions = documentsTable.locator('.legacy-search-actions')
 
     await expect(documentsTable).toBeVisible()

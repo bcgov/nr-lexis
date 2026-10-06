@@ -2,6 +2,11 @@ package ca.bc.gov.mof.lexis.service.scan;
 
 public class VirusScanException extends RuntimeException {
 
+  // Upload panels show the first sentence as the failed file's error title.
+  public static final String INFECTED_MESSAGE =
+      "File did not pass the security scan. "
+          + "Check it with your own antivirus software, or upload a different copy.";
+
   private final String userMessage;
 
   private VirusScanException(String userMessage, String detail, Throwable cause) {
@@ -10,7 +15,7 @@ public class VirusScanException extends RuntimeException {
   }
 
   public static VirusScanException infected(String detail) {
-    return new VirusScanException("The uploaded file failed virus scanning.", detail, null);
+    return new VirusScanException(INFECTED_MESSAGE, detail, null);
   }
 
   public static VirusScanException unavailable(String detail, Throwable cause) {

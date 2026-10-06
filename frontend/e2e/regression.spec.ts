@@ -413,7 +413,8 @@ const throwRegressionFailures = (summary: string, failures: Error[]): void => {
 }
 
 const missingApplicationNumber = '999999999'
-const virusScanRejectionMessage = 'The uploaded file failed virus scanning.'
+const virusScanRejectionMessage =
+  'File did not pass the security scan. Check it with your own antivirus software, or upload a different copy.'
 const regressionClientEmail = 'lexis-regression@example.test'
 const regressionEmailRemark = 'test 123'
 const naturalResourceRegionCodes = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']

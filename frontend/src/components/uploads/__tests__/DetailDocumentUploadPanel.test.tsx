@@ -139,7 +139,7 @@ describe('DetailDocumentUploadPanel', () => {
       within(panel).getByText("Say what the document is, if the file name doesn't make it clear."),
     ).toBeVisible()
     await waitFor(() =>
-      expect(within(panel).getByRole('button', { name: 'Remove application.pdf' })).toBeEnabled(),
+      expect(within(panel).getByRole('button', { name: 'Remove - application.pdf' })).toBeEnabled(),
     )
     await userEvent.type(screen.getByLabelText(/Document description for application.pdf/), 'Test')
     await waitFor(() =>
@@ -154,6 +154,51 @@ describe('DetailDocumentUploadPanel', () => {
     )
     expect(onUploadComplete).toHaveBeenCalledTimes(1)
     expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows a failed side panel file check on the file item', async () => {
+    mockedValidateAdminUpload.mockRejectedValueOnce(
+      Object.assign(new Error('Upload rejected'), {
+        response: {
+          status: 400,
+          data: {
+            message:
+              'File did not pass the security scan. Check it with your own antivirus software, or upload a different copy.',
+          },
+        },
+      }),
+    )
+    const file = new File(['document'], 'unsafe.pdf', { type: 'application/pdf' })
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        presentation="side-panel"
+        drawer={applicationDrawer}
+        initiallyOpen
+      />,
+    )
+
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+
+    const fileItem = (await screen.findByText('File did not pass the security scan.')).closest(
+      '.cds--file__selected-file',
+    )
+    expect(fileItem).toHaveClass('cds--file__selected-file--invalid')
+    expect(
+      within(fileItem as HTMLElement).getByText(
+        'Check it with your own antivirus software, or upload a different copy.',
+      ),
+    ).toBeVisible()
+    expect(
+      within(fileItem as HTMLElement).getByRole('button', { name: 'Remove - unsafe.pdf' }),
+    ).toBeEnabled()
+    expect(
+      screen.queryByText('1 file failed validation. Review the queue for details.'),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText(/will be excluded from saving/)).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Document description for unsafe.pdf/)).not.toBeInTheDocument()
   })
 
   it('retries only a failed application file from the direct side panel', async () => {

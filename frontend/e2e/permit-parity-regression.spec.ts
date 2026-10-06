@@ -690,8 +690,10 @@ test.describe('Provincial permit parity regressions', () => {
       page.locator('.detail-field-item').filter({ hasText: 'Total volume (m³)' }),
     ).toHaveText('Total volume (m³)0.0')
     await selectTab(page, 'Documents')
-    await page.getByRole('button', { name: 'Add document', exact: true }).click()
-    await expect(page.getByRole('dialog', { name: 'Add documents', exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Add documents', exact: true }).click()
+    await expect(
+      page.getByRole('complementary', { name: 'Add documents', exact: true }),
+    ).toBeVisible()
     expect(fixture.writes).toEqual([
       expect.objectContaining({
         path: '/api/lexis/rpc/permit-details/add-permit',
@@ -720,9 +722,9 @@ test.describe('Provincial permit parity regressions', () => {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
     })
     await selectTab(page, 'Documents')
-    const addDocument = page.getByRole('button', { name: 'Add document', exact: true })
+    const addDocument = page.getByRole('button', { name: 'Add documents', exact: true })
     await addDocument.click()
-    const upload = page.getByRole('dialog', { name: 'Add documents', exact: true })
+    const upload = page.getByRole('complementary', { name: 'Add documents', exact: true })
     await upload.getByLabel('Document File', { exact: true }).setInputFiles({
       name: 'synthetic-document.txt',
       mimeType: 'text/plain',

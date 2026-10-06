@@ -379,8 +379,9 @@ const selectPermitDetailTab = async (name: string) => {
   }
 }
 
+// Documents have no edit mode: their actions show whenever the user may use them.
 const enterPermitDocumentEditMode = async (): Promise<void> => {
-  await userEvent.click(await screen.findByRole('button', { name: 'Edit permit documents' }))
+  await waitFor(() => expect(document.querySelector('.detail-documents-section')).not.toBeNull())
 }
 
 // The package panel's End use and Age class are Dropdowns: click, then choose the option.
@@ -1377,7 +1378,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         'Documents stay with the record as it moves through the application, exemption and permit stages.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add documents' })).toBeInTheDocument()
 
     await selectPermitDetailTab('Fees')
     const feesEmptyState = (await screen.findByRole('heading', { name: 'No fees yet' })).closest(
@@ -1793,7 +1794,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       'true',
     )
     expect(
-      await screen.findByRole('heading', { name: 'No permit documents available', level: 3 }),
+      await screen.findByRole('heading', { name: 'No documents for this permit', level: 2 }),
     ).toBeInTheDocument()
     expect(mockedFetchPermitDocuments).toHaveBeenCalledWith('777')
   })
@@ -2789,7 +2790,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Documents')
     expect(
-      await screen.findByRole('heading', { name: 'No permit documents available', level: 3 }),
+      await screen.findByRole('heading', { name: 'No documents for this permit', level: 2 }),
     ).toBeInTheDocument()
     expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(1)
     await selectPermitDetailTab('Permit')
@@ -3769,9 +3770,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Documents')
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
     await enterPermitDocumentEditMode()
-    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
 
     expect(screen.queryByRole('tab', { name: 'Invoices' })).not.toBeInTheDocument()
@@ -3825,7 +3825,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Documents')
     await enterPermitDocumentEditMode()
-    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 
@@ -4057,7 +4057,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Documents')
     expect(
-      await screen.findByRole('heading', { name: 'No permit documents available', level: 3 }),
+      await screen.findByRole('heading', { name: 'No documents for this permit', level: 2 }),
     ).toBeInTheDocument()
 
     expect(screen.queryByRole('tab', { name: 'Invoices' })).not.toBeInTheDocument()
@@ -4077,7 +4077,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('tab', { name: 'GBMS' })).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Documents')
-    expect(await screen.findByRole('heading', { name: 'Permit documents' })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'No documents for this permit', level: 2 }),
+    ).toBeInTheDocument()
 
     expect(screen.queryByRole('tab', { name: 'Invoices' })).not.toBeInTheDocument()
   })
@@ -4126,11 +4128,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Documents')
 
     expect(
-      await screen.findByRole('heading', { name: 'Permit documents unavailable', level: 3 }),
+      await screen.findByRole('heading', { name: 'Documents unavailable', level: 2 }),
     ).toBeInTheDocument()
     expect(screen.getByText('Unable to retrieve permit documents.')).toBeInTheDocument()
     expect(
-      screen.queryByRole('heading', { name: 'No permit documents available', level: 3 }),
+      screen.queryByRole('heading', { name: 'No documents for this permit', level: 2 }),
     ).not.toBeInTheDocument()
 
     expect(screen.queryByRole('button', { name: 'close notification' })).not.toBeInTheDocument()
@@ -4450,7 +4452,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       await selectPermitDetailTab('Documents')
       await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
-      expect(await screen.findByText('Unable to open permit document.')).toBeVisible()
+      expect(await screen.findByText('Unable to open the selected document.')).toBeInTheDocument()
       await selectPermitDetailTab('Items')
       const packageRow = await findBlanketOicPackageCard()
       await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
@@ -4458,7 +4460,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       const loadError = 'Unable to load the Blanket OIC package for editing.'
       expect(await screen.findByText(loadError)).toBeVisible()
       expect(screen.queryByRole('heading', { name: 'Edit package' })).not.toBeInTheDocument()
-      expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+      expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
       expect(mockedFetchBlanketOicPackageEditContext).toHaveBeenCalledWith('BOIC-9')
 
       if (nextAction === 'Create package') {
@@ -4482,7 +4484,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       }
       expect(screen.queryByText(loadError)).not.toBeInTheDocument()
       expect(screen.queryByText('Package needs attention')).not.toBeInTheDocument()
-      expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+      expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
       expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
       expect(mockedUpdateBlanketOicPackage).not.toHaveBeenCalled()
       consoleError.mockRestore()
@@ -7964,7 +7966,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
 
     await selectPermitDetailTab('Documents')
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
 
     expect(screen.queryByRole('tab', { name: 'Invoices' })).not.toBeInTheDocument()
 
@@ -8595,10 +8597,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('heading', { name: 'Actions' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Upload Permit Document' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Open Permit Report' })).toBeNull()
-    expect(await screen.findByRole('button', { name: 'Edit permit documents' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
-    await enterPermitDocumentEditMode()
-    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit permit documents' })).not.toBeInTheDocument()
   })
 
   it('shows the permit upload action to a scoped Provincial Submitter', async () => {
@@ -8626,39 +8626,43 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Documents')
     await enterPermitDocumentEditMode()
-    expect(await screen.findByRole('button', { name: 'Add document' })).toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Add documents' })).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Invoices' })).not.toBeInTheDocument()
   })
 
-  it('opens, cancels, and reopens the Ministerial document modal from Add document', async () => {
+  it('opens, cancels, and reopens the Ministerial Add documents side panel', async () => {
     configureMinisterialActivePermit()
     renderPermitDetails()
     await selectPermitDetailTab('Documents')
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Add document' }))
-    const modal = await screen.findByRole('dialog', { name: 'Add document' })
-    expect(modal.closest('.detail-document-upload-modal--side-panel')).not.toBeInTheDocument()
-    await userEvent.click(within(modal).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Add documents' }))
+    const panel = await screen.findByRole('complementary', { name: 'Add documents' })
+    expect(screen.queryByRole('dialog', { name: 'Add documents' })).not.toBeInTheDocument()
+    await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
 
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole('complementary', { name: 'Add documents' }),
+      ).not.toBeInTheDocument(),
     )
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
-    await userEvent.click(screen.getByRole('button', { name: 'Add document' }))
-    expect(await screen.findByRole('dialog', { name: 'Add document' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add documents' })).toHaveFocus())
+    await userEvent.click(screen.getByRole('button', { name: 'Add documents' }))
+    expect(await screen.findByRole('complementary', { name: 'Add documents' })).toBeInTheDocument()
   })
 
-  it('closes the Ministerial upload modal after each successful upload and keeps Add document available', async () => {
+  it('closes the Ministerial side panel after each save and keeps Add documents available', async () => {
     configureMinisterialActivePermit()
     renderPermitDetails()
     await selectPermitDetailTab('Documents')
 
     const firstFile = new File(['first test'], 'first-ministerial.pdf', { type: 'application/pdf' })
-    await userEvent.click(await screen.findByRole('button', { name: 'Add document' }))
-    const firstModal = await screen.findByRole('dialog', { name: 'Add document' })
-    await userEvent.upload(within(firstModal).getByLabelText('Document File'), firstFile)
-    await userEvent.click(within(firstModal).getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(within(firstModal).getByRole('button', { name: 'Submit upload' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Add documents' }))
+    const firstPanel = await screen.findByRole('complementary', { name: 'Add documents' })
+    await userEvent.upload(within(firstPanel).getByLabelText('Document File'), firstFile)
+    await waitFor(() =>
+      expect(within(firstPanel).getByRole('button', { name: 'Save documents' })).toBeEnabled(),
+    )
+    await userEvent.click(within(firstPanel).getByRole('button', { name: 'Save documents' }))
 
     await waitFor(() =>
       expect(submitAdminUpload).toHaveBeenCalledWith(
@@ -8667,37 +8671,36 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ),
     )
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole('complementary', { name: 'Add documents' }),
+      ).not.toBeInTheDocument(),
     )
-    expect(screen.getByText('Document uploaded')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
     const documentSection = screen.getByRole('region', { name: 'Documents' })
+    expect(within(documentSection).getByText('Document saved.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add documents' })).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add documents' })).toHaveFocus())
     expect(documentSection.closest('.cds--tile')).toBeNull()
-    expect(documentSection).toBeTruthy()
-    expect(
-      within(documentSection as HTMLElement).queryByRole('button', { name: 'Cancel' }),
-    ).not.toBeInTheDocument()
 
     const secondFile = new File(['second test'], 'second-ministerial.pdf', {
       type: 'application/pdf',
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Add document' }))
-    const secondModal = await screen.findByRole('dialog', { name: 'Add document' })
-    await userEvent.upload(within(secondModal).getByLabelText('Document File'), secondFile)
-    await userEvent.click(within(secondModal).getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(within(secondModal).getByRole('button', { name: 'Submit upload' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add documents' }))
+    const secondPanel = await screen.findByRole('complementary', { name: 'Add documents' })
+    await userEvent.upload(within(secondPanel).getByLabelText('Document File'), secondFile)
+    await waitFor(() =>
+      expect(within(secondPanel).getByRole('button', { name: 'Save documents' })).toBeEnabled(),
+    )
+    await userEvent.click(within(secondPanel).getByRole('button', { name: 'Save documents' }))
 
     await waitFor(() => expect(submitAdminUpload).toHaveBeenCalledTimes(2))
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Add document' })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole('complementary', { name: 'Add documents' }),
+      ).not.toBeInTheDocument(),
     )
     expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(3)
-    expect(screen.getByText('Document uploaded')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add document' })).toBeInTheDocument()
-    expect(
-      within(documentSection as HTMLElement).queryByRole('button', { name: 'Cancel' }),
-    ).not.toBeInTheDocument()
+    expect(within(documentSection).getByText('Document saved.')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add documents' })).toBeInTheDocument()
   })
 
   it('allows an authorized Ministerial user to delete an existing document before uploading', async () => {
@@ -8724,9 +8727,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(
       within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
     )
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this document?',
+    })
     expect(confirmation).toHaveTextContent(
-      'Permanently delete ministerial-document.pdf? This cannot be undone.',
+      'ministerial-document.pdf will be deleted. This action cannot be undone.',
     )
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
     expect(mockedRemovePermitDocument).not.toHaveBeenCalled()
@@ -8737,11 +8742,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
     await selectPermitDetailTab('Documents')
     expect(await screen.findByRole('button', { name: 'Delete' })).toBeEnabled()
-    await userEvent.click(screen.getByRole('button', { name: 'Add document' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Add documents' }))
 
-    const panel = await screen.findByRole('dialog', { name: 'Add documents' })
-    expect(panel.closest('.detail-document-upload-modal--side-panel')).toBeInTheDocument()
-    expect(within(panel).queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    const panel = await screen.findByRole('complementary', { name: 'Add documents' })
+    expect(panel).toHaveClass('detail-document-upload-panel')
+    expect(within(panel).queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
     const file = new File(['test'], 'pending.pdf', { type: 'application/pdf' })
     await userEvent.upload(within(panel).getByLabelText('Document File'), file)
     await userEvent.type(
@@ -8751,7 +8756,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
     const discard = await screen.findByRole('dialog', { name: 'Discard changes?' })
     await userEvent.click(within(discard).getByRole('button', { name: 'Keep editing' }))
-    const reopenedPanel = await screen.findByRole('dialog', { name: 'Add documents' })
+    const reopenedPanel = await screen.findByRole('complementary', { name: 'Add documents' })
     expect(within(reopenedPanel).getByText('pending.pdf')).toBeInTheDocument()
     expect(
       within(reopenedPanel).getByLabelText(/Document description for pending.pdf/),
@@ -8763,9 +8768,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
       }),
     )
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Add documents' })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole('complementary', { name: 'Add documents' }),
+      ).not.toBeInTheDocument(),
     )
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add documents' })).toHaveFocus())
     expect(submitAdminUpload).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
@@ -8774,15 +8781,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     configureBlanketOicDocument()
     renderPermitDetails()
     await selectPermitDetailTab('Documents')
-    await userEvent.click(await screen.findByRole('button', { name: 'Add document' }))
-    const panel = await screen.findByRole('dialog', { name: 'Add documents' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Add documents' }))
+    const panel = await screen.findByRole('complementary', { name: 'Add documents' })
     const file = new File(['test'], 'new.pdf', { type: 'application/pdf' })
     await userEvent.upload(within(panel).getByLabelText('Document File'), file)
     await userEvent.type(
       within(panel).getByLabelText(/Document description for new.pdf/),
       'New document',
     )
-    await userEvent.click(within(panel).getByRole('button', { name: 'Review upload' }))
     await userEvent.click(within(panel).getByRole('button', { name: 'Save documents' }))
     await waitFor(() =>
       expect(submitAdminUpload).toHaveBeenCalledWith(
@@ -8791,13 +8797,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ),
     )
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Add documents' })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole('complementary', { name: 'Add documents' }),
+      ).not.toBeInTheDocument(),
     )
     expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(2)
-    expect(screen.getByText('Document uploaded')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
-    await userEvent.click(screen.getByRole('button', { name: 'Add document' }))
-    const secondPanel = await screen.findByRole('dialog', { name: 'Add documents' })
+    expect(screen.getByText('Document saved.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add documents' })).toHaveFocus())
+    await userEvent.click(screen.getByRole('button', { name: 'Add documents' }))
+    const secondPanel = await screen.findByRole('complementary', { name: 'Add documents' })
     expect(screen.queryByLabelText(/Document description for new.pdf/)).not.toBeInTheDocument()
     const secondFile = new File(['second test'], 'second-new.pdf', { type: 'application/pdf' })
     await userEvent.upload(within(secondPanel).getByLabelText('Document File'), secondFile)
@@ -8805,7 +8813,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
       within(secondPanel).getByLabelText(/Document description for second-new.pdf/),
       'Second document',
     )
-    await userEvent.click(within(secondPanel).getByRole('button', { name: 'Review upload' }))
     await userEvent.click(within(secondPanel).getByRole('button', { name: 'Save documents' }))
 
     await waitFor(() =>
@@ -8819,11 +8826,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ),
     )
     await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Add documents' })).not.toBeInTheDocument(),
+      expect(
+        screen.queryByRole('complementary', { name: 'Add documents' }),
+      ).not.toBeInTheDocument(),
     )
     expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(3)
-    expect(screen.getByText('Document uploaded')).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Add document' })).toHaveFocus())
+    expect(screen.getByText('Document saved.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add documents' })).toHaveFocus())
   })
 
   it.each(['BOIC', 'Ministerial'])(
@@ -8862,14 +8871,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
     await selectPermitDetailTab('Documents')
     await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
-    expect(await screen.findByText('Unable to open permit document.')).toBeInTheDocument()
+    expect(await screen.findByText('Unable to open the selected document.')).toBeInTheDocument()
     expect(previewWindow.close).toHaveBeenCalledOnce()
     expect(openDocumentPreview).not.toHaveBeenCalled()
     expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
     consoleError.mockRestore()
   })
 
-  it('keeps a delayed document error on the page while creating and cancelling a package', async () => {
+  it('keeps a delayed document error in the Documents tab while creating and cancelling a package', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     configureBlanketOicDocument()
     let rejectDocument!: (error: Error) => void
@@ -8889,16 +8898,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await act(() => rejectDocument(new Error('document unavailable')))
 
-    const documentError = await screen.findByText('Unable to open permit document.')
-    expect(documentError).toBeVisible()
+    // The error belongs to the Documents tab, which is hidden while Items is selected.
+    const documentError = await screen.findByText('Unable to open the selected document.')
+    expect(documentError.closest('#permit-documents')).not.toBeNull()
     expect(packageEditor).not.toContainElement(documentError)
-    expect(screen.getByText('Action failed')).toBeVisible()
     expect(within(packageEditor).queryByText('Package needs attention')).not.toBeInTheDocument()
 
     await userEvent.click(within(packageEditor).getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+    expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
-    expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+    expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
     expect(screen.queryByText('Package needs attention')).not.toBeInTheDocument()
     expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
     consoleError.mockRestore()
@@ -8926,7 +8935,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       renderPermitDetails()
       await selectPermitDetailTab('Documents')
       await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
-      expect(await screen.findByText('Unable to open permit document.')).toBeVisible()
+      expect(await screen.findByText('Unable to open the selected document.')).toBeInTheDocument()
       await selectPermitDetailTab('Items')
       const packageRow = await findBlanketOicPackageCard()
       await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
@@ -8935,7 +8944,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ) as HTMLElement
       const saveButton = within(packageEditor).getByRole('button', { name: 'Save package' })
       await waitFor(() => expect(saveButton).toBeEnabled())
-      expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+      expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
       fireEvent.change(within(packageEditor).getByLabelText('Comments'), {
         target: { value: 'Unsaved package changes' },
       })
@@ -8952,16 +8961,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(within(packageEditor).getByLabelText('Comments')).toHaveValue(
         'Unsaved package changes',
       )
-      const documentError = screen.getByText('Unable to open permit document.')
-      expect(documentError).toBeVisible()
+      const documentError = screen.getByText('Unable to open the selected document.')
+      expect(documentError.closest('#permit-documents')).not.toBeNull()
       expect(packageEditor).not.toContainElement(documentError)
-      expect(screen.getByText('Action failed')).toBeVisible()
       expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledOnce()
 
       await userEvent.click(within(packageEditor).getByRole('button', { name: 'Cancel' }))
-      expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+      expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
-      expect(screen.getByText('Unable to open permit document.')).toBeVisible()
+      expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
       expect(screen.queryByText('Package needs attention')).not.toBeInTheDocument()
       expect(screen.queryByText(packageMessage)).not.toBeInTheDocument()
       expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
@@ -9033,7 +9041,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Documents')
     expect(await screen.findByRole('button', { name: 'Open' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Download' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
     expect(window.open).not.toHaveBeenCalled()
   })
@@ -9155,9 +9163,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const deleteButton = await screen.findByRole('button', { name: 'Delete' })
     expect(deleteButton).toBeEnabled()
     await userEvent.click(deleteButton)
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete invoice and document' })
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this document?',
+    })
     expect(confirmation).toHaveTextContent(
-      'Permanently delete permit-doc.pdf? This also deletes the associated invoice record, including its value, conversion rate, and fee. This cannot be undone.',
+      'permit-doc.pdf will be deleted. This also deletes the associated invoice record, including its value, conversion rate, and fee. This action cannot be undone.',
     )
     expect(mockedRemovePermitInvoiceDocument).not.toHaveBeenCalled()
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
@@ -9167,11 +9177,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(2)
       expect(screen.queryByText('permit-doc.pdf')).not.toBeInTheDocument()
     })
-    const success = await screen.findByText('Document deleted')
+    const success = await within(screen.getByRole('region', { name: 'Documents' })).findByText(
+      'Document deleted.',
+    )
     expect(success.closest('.cds--inline-notification')).toHaveClass(
       'cds--inline-notification--success',
     )
-    expect(screen.getByText('permit-doc.pdf was deleted.')).toBeInTheDocument()
   })
 
   it('keeps refreshed permit documents visible when the independent invoice refresh fails', async () => {
@@ -9201,17 +9212,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await enterPermitDocumentEditMode()
     await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     await userEvent.click(
-      within(await screen.findByRole('dialog', { name: 'Delete document' })).getByRole('button', {
+      within(
+        await screen.findByRole('dialog', {
+          name: 'Are you sure you want to delete this document?',
+        }),
+      ).getByRole('button', {
         name: 'Delete',
       }),
     )
 
     await waitFor(() => expect(mockedRemovePermitDocument).toHaveBeenCalledWith('600', '777'))
     expect(screen.queryByText('permit-only.pdf')).not.toBeInTheDocument()
-    expect(screen.getByText('permit-only.pdf was deleted.')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('heading', { name: 'Permit documents unavailable' }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByText('Document deleted.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Documents unavailable' })).not.toBeInTheDocument()
   })
 
   it('keeps active invoice document delete independent from invoice upload permission', async () => {
@@ -9341,7 +9354,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
   })
 
-  it('disables invoice document delete outside active permit status', async () => {
+  it('hides invoice document delete outside active permit status', async () => {
     mockedFetchPermitDocuments.mockResolvedValue({
       rows: [
         {
@@ -9369,10 +9382,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Documents')
     await enterPermitDocumentEditMode()
     await screen.findByText('complete-invoice-doc.pdf')
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 
-  it('disables active permit document delete for read-only users', async () => {
+  it('hides active permit document delete from read-only users', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({ roles: ['LEXIS_READ_ONLY'] }),
@@ -9411,7 +9424,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Documents')
     await enterPermitDocumentEditMode()
     await screen.findByText('readonly-permit-doc.pdf')
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
   })
 
   it('allows scoped submitters with a concurrent read-only role to delete active permit documents without upload access', async () => {
@@ -9453,14 +9466,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     await selectPermitDetailTab('Documents')
-    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
     await enterPermitDocumentEditMode()
     await screen.findByText('submitter-permit-doc.pdf')
     expect(screen.getByRole('button', { name: 'Delete' })).toBeEnabled()
     await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete document' })
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this document?',
+    })
     expect(confirmation).toHaveTextContent(
-      'Permanently delete submitter-permit-doc.pdf? This cannot be undone.',
+      'submitter-permit-doc.pdf will be deleted. This action cannot be undone.',
     )
     expect(confirmation).not.toHaveTextContent('invoice record')
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
@@ -9501,8 +9516,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(documentRow).toBeTruthy()
     expect(within(documentRow as HTMLElement).getAllByText('Unknown')).toHaveLength(1)
     expect(
-      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
-    ).toBeDisabled()
+      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+    ).not.toBeInTheDocument()
     expect(mockedRemovePermitDocument).not.toHaveBeenCalled()
   })
 
@@ -9539,8 +9554,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(documentRow).toBeTruthy()
     expect(within(documentRow as HTMLElement).getAllByText('Application')).toHaveLength(1)
     expect(
-      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
-    ).toBeDisabled()
+      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+    ).not.toBeInTheDocument()
     expect(mockedRemovePermitApplicationDocument).not.toHaveBeenCalled()
     expect(mockedRemovePermitDocument).not.toHaveBeenCalled()
     expect(mockedRemovePermitInvoiceDocument).not.toHaveBeenCalled()

@@ -195,7 +195,7 @@ class OracleLexisUploadServiceTest {
         uploadApplication(service, file, 7000123L, "App file", "jsmith").orElseThrow();
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.message()).isEqualTo("The uploaded file failed virus scanning.");
+    assertThat(result.message()).isEqualTo(VirusScanException.INFECTED_MESSAGE);
     verify(uploadRepository).isFileTypeCodeValidRequired("PDF");
     verifyNoMoreInteractions(uploadRepository);
   }

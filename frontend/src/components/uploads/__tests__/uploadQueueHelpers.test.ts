@@ -31,7 +31,7 @@ describe('uploadQueueHelpers', () => {
       'File type is not supported',
     )
     expect(DOCUMENT_UPLOAD_GUIDANCE).toBe(
-      'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, and ZIP. Maximum file size: 20 MB.',
+      'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML and ZIP. Maximum file size: 20 MB.',
     )
     expect(DOCUMENT_UPLOAD_GUIDANCE).not.toMatch(/ASCII|bytes/i)
   })

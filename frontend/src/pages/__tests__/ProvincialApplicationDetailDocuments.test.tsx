@@ -552,13 +552,13 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       new File(['queued'], 'queued-doc.pdf', { type: 'application/pdf' }),
     )
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Remove queued-doc.pdf' })).toBeEnabled(),
+      expect(screen.getByRole('button', { name: 'Remove - queued-doc.pdf' })).toBeEnabled(),
     )
     const queuedUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(queuedUnload)
     expect(queuedUnload.defaultPrevented).toBe(true)
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove queued-doc.pdf' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove - queued-doc.pdf' }))
     const clearedUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(clearedUnload)
     expect(clearedUnload.defaultPrevented).toBe(false)
@@ -823,10 +823,8 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(documentRow).toBeTruthy()
     expect(within(documentRow as HTMLElement).getByText('Permit')).toBeInTheDocument()
     expect(
-      within(documentRow as HTMLElement).getByRole('button', {
-        name: 'Delete',
-      }),
-    ).toBeDisabled()
+      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+    ).not.toBeInTheDocument()
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
   })
 
