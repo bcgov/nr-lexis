@@ -4683,7 +4683,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
         ...tabsResult,
         packages: [
           editableBlanketOicPackage,
-          { ...editableBlanketOicPackage, packageNumber: 'BOIC-10' },
+          // BOIC-9 already uses the whole permit request volume.
+          { ...editableBlanketOicPackage, packageNumber: 'BOIC-10', packageVolume: '0.0' },
         ],
       })
       .mockResolvedValue({
@@ -5028,6 +5029,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it.each([
     ['Volume (m³)', '10.25', 'Package volume must have no more than one decimal place.'],
+    ['Volume (m³)', '0', 'Enter a volume greater than 0 and no more than 120.5.'],
+    ['Volume (m³)', '120.6', 'Enter a volume greater than 0 and no more than 120.5.'],
     ['Average length (m)', '0', 'Enter a length greater than 0 and no more than 99.'],
     ['Average length (m)', '-1', 'Enter a length greater than 0 and no more than 99.'],
     ['Average top diameter (rads)', '0', 'Enter a diameter greater than 0 and no more than 99.99.'],
@@ -5192,7 +5195,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(secondPackageEditor).queryByText(validationMessage)).not.toBeInTheDocument()
   })
 
-  it('accepts zero volume and the maximum Blanket OIC package dimensions', async () => {
+  it('accepts the permit request volume and the maximum Blanket OIC package dimensions', async () => {
     configureEditableBlanketOicPackage()
     renderPermitDetails()
 
@@ -5204,7 +5207,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ) as HTMLElement
     const volume = within(packageEditor).getByLabelText('Volume (m³)')
     await userEvent.clear(volume)
-    await userEvent.type(volume, '0.0')
+    await userEvent.type(volume, '120.5')
     const averageLength = within(packageEditor).getByLabelText('Average length (m)')
     await userEvent.clear(averageLength)
     await userEvent.type(averageLength, '99')
@@ -5217,7 +5220,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledWith(
         expect.objectContaining({
           packageNumber: 'BOIC-9',
-          volume: '0.0',
+          volume: '120.5',
           averageLength: '99',
           averageDiameter: '99.99',
         }),
@@ -5357,6 +5360,51 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(await within(packageEditor).findByText('Select an end use.')).toBeVisible()
     await waitFor(() => expect(endUse).toHaveFocus())
+    expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
+  })
+
+  it('limits a package volume to the permit request volume the other packages leave', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+      oicApplicationNumber: 1000999,
+      oicRequestVolume: 200,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [editableBlanketOicPackage],
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Items')
+    await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
+    const packageEditor = (await screen.findByRole('heading', { name: 'Create package' })).closest(
+      '.application-detail-edit-section',
+    ) as HTMLElement
+    const volume = within(packageEditor).getByLabelText('Volume (m³)')
+    expect(volume).toHaveAttribute('aria-required', 'true')
+    expect(
+      within(packageEditor).getByText(
+        'Must be less than or equal to permit request volume. Must be greater than 0.',
+      ),
+    ).toBeVisible()
+    const save = within(packageEditor).getByRole('button', { name: 'Save package' })
+    const limitError = 'Enter a volume greater than 0 and no more than 79.5.'
+
+    for (const value of ['0', '79.6']) {
+      await userEvent.clear(volume)
+      await userEvent.type(volume, value)
+      await userEvent.click(save)
+      expect(await within(packageEditor).findByText(limitError)).toBeVisible()
+    }
+    await userEvent.clear(volume)
+    await userEvent.type(volume, '79.5')
+    await userEvent.click(save)
+    await within(packageEditor).findByText('Enter a package number.')
+    expect(within(packageEditor).queryByText(limitError)).not.toBeInTheDocument()
     expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
   })
 

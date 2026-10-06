@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import BlanketOicPackageCodeFields, {
   type BlanketOicPackageCodeField,
   type BlanketOicPackageCodeFieldsValue,
+  type BlanketOicPackageOptionsStatus,
 } from './BlanketOicPackageCodeFields'
 import {
   fetchApplicationEndUsesForSpeciesRegion,
@@ -40,7 +41,7 @@ const DEFAULT_VALUE: BlanketOicPackageCodeFieldsValue = {
 type ControlledFieldsProps = {
   initialValue?: Partial<BlanketOicPackageCodeFieldsValue>
   onChange: (field: BlanketOicPackageCodeField, value: string) => void
-  onAvailabilityChange: (ready: boolean) => void
+  onAvailabilityChange: (status: BlanketOicPackageOptionsStatus) => void
 }
 
 const ControlledFields = ({
@@ -108,7 +109,7 @@ describe('BlanketOicPackageCodeFields', () => {
 
     await waitFor(() => {
       expect(mockedFetchApplicationRemainingSpecies).toHaveBeenCalledWith('101', 'H', [])
-      expect(onAvailabilityChange).toHaveBeenLastCalledWith(true)
+      expect(onAvailabilityChange).toHaveBeenLastCalledWith('ready')
     })
     expect(mockedFetchApplicationEndUsesForSpeciesRegion).not.toHaveBeenCalled()
     const endUse = screen.getByRole('combobox', { name: 'End use' })
@@ -180,10 +181,9 @@ describe('BlanketOicPackageCodeFields', () => {
     mockedFetchApplicationPackageStatusCodes.mockRejectedValue(new Error('status unavailable'))
     render(<ControlledFields onChange={onChange} onAvailabilityChange={onAvailabilityChange} />)
 
-    await waitFor(() => expect(onAvailabilityChange).toHaveBeenLastCalledWith(true))
+    await waitFor(() => expect(onAvailabilityChange).toHaveBeenLastCalledWith('ready'))
     expect(screen.queryByRole('combobox', { name: 'Status' })).not.toBeInTheDocument()
     expect(screen.queryByRole('group', { name: 'Reprocessed' })).not.toBeInTheDocument()
-    expect(screen.queryByText('Package options unavailable')).not.toBeInTheDocument()
     expect(mockedFetchApplicationPackageStatusCodes).not.toHaveBeenCalled()
     expect(onChange).not.toHaveBeenCalled()
   })
@@ -195,6 +195,11 @@ describe('BlanketOicPackageCodeFields', () => {
     const ageClass = screen.getByRole('combobox', { name: 'Age class' })
     await waitFor(() => expect(ageClass).toBeEnabled())
     expect(ageClass).toHaveTextContent('Old growth')
+    expect(ageClass).toHaveAttribute('aria-required', 'true')
+    expect(screen.getByRole('combobox', { name: 'End use' })).toHaveAttribute(
+      'aria-required',
+      'true',
+    )
     const productType = screen.getByRole('combobox', { name: 'Product type' })
     expect(productType).toHaveTextContent('Harvested')
     expect(productType).toHaveAttribute('aria-disabled', 'true')
@@ -265,10 +270,7 @@ describe('BlanketOicPackageCodeFields', () => {
       />,
     )
 
-    await waitFor(() => {
-      expect(screen.getByText('Package options unavailable')).toBeInTheDocument()
-      expect(onAvailabilityChange).toHaveBeenLastCalledWith(false)
-    })
+    await waitFor(() => expect(onAvailabilityChange).toHaveBeenLastCalledWith('unavailable'))
 
     expect(screen.getByRole('combobox', { name: /^Species list/ })).toHaveAccessibleName(
       /Total items selected: 1/,

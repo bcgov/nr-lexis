@@ -1,11 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  DismissibleTag,
-  Dropdown,
-  FilterableMultiSelect,
-  InlineLoading,
-  InlineNotification,
-} from '@carbon/react'
+import { DismissibleTag, Dropdown, FilterableMultiSelect } from '@carbon/react'
 import { requiredLabel } from '@/utils/required-label'
 import {
   fetchApplicationEndUsesForSpeciesRegion,
@@ -27,12 +21,15 @@ export type BlanketOicPackageCodeFieldsValue = {
   productType: string
 }
 
+export type BlanketOicPackageOptionsStatus = 'loading' | 'ready' | 'unavailable'
+
 export type BlanketOicPackageCodeFieldsProps = {
   region: string
   value: BlanketOicPackageCodeFieldsValue
   onChange: (field: BlanketOicPackageCodeField, value: string) => void
   disabled: boolean
-  onAvailabilityChange: (ready: boolean) => void
+  // The panel shows loading and load failures at its top, so the fields only report them.
+  onAvailabilityChange: (status: BlanketOicPackageOptionsStatus) => void
   fieldErrors?: Partial<Record<BlanketOicPackageCodeField, string>>
 }
 
@@ -68,6 +65,10 @@ const endUseName = (option: ApplicationCodeOption | null): string =>
 
 const optionLabelOf = (option: SearchOption | null): string => option?.label ?? ''
 
+// Carbon's Dropdown doesn't forward aria-required, but its ref is the combobox button.
+const markRequired = (button: HTMLButtonElement | null) =>
+  button?.setAttribute('aria-required', 'true')
+
 // INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_SPECIES_LIST): the designer's Species list
 // multi-select replaces legacy's one-at-a-time species dialog; End use lists only sorts that save.
 export default function BlanketOicPackageCodeFields({
@@ -84,7 +85,7 @@ export default function BlanketOicPackageCodeFields({
   const [speciesAvailability, setSpeciesAvailability] = useState<ReferenceAvailability>('loading')
   const [endUseAvailability, setEndUseAvailability] = useState<ReferenceAvailability>('idle')
   const [ageClassAvailability, setAgeClassAvailability] = useState<ReferenceAvailability>('loading')
-  const lastAvailabilityRef = useRef<boolean | null>(null)
+  const lastAvailabilityRef = useRef<BlanketOicPackageOptionsStatus | null>(null)
   const speciesFieldRef = useRef<HTMLDivElement>(null)
   const availabilityChangeRef = useRef(onAvailabilityChange)
   const onChangeRef = useRef(onChange)
@@ -197,25 +198,25 @@ export default function BlanketOicPackageCodeFields({
     }
   }, [normalizedRegion, requiresEndUseOptions, selectedSpeciesCodes])
 
-  const referenceOptionsReady =
-    ageClassAvailability === 'available' &&
-    speciesAvailability === 'available' &&
-    (!requiresEndUseOptions || endUseAvailability === 'available')
-
-  useEffect(() => {
-    if (lastAvailabilityRef.current === referenceOptionsReady) return
-    lastAvailabilityRef.current = referenceOptionsReady
-    availabilityChangeRef.current(referenceOptionsReady)
-  }, [referenceOptionsReady])
-
-  const referenceOptionsLoading =
-    ageClassAvailability === 'loading' ||
-    speciesAvailability === 'loading' ||
-    (requiresEndUseOptions && endUseAvailability === 'loading')
   const referenceOptionsUnavailable =
     ageClassAvailability === 'unavailable' ||
     speciesAvailability === 'unavailable' ||
     (requiresEndUseOptions && endUseAvailability === 'unavailable')
+  const referenceOptionsReady =
+    ageClassAvailability === 'available' &&
+    speciesAvailability === 'available' &&
+    (!requiresEndUseOptions || endUseAvailability === 'available')
+  const referenceOptionsStatus: BlanketOicPackageOptionsStatus = referenceOptionsUnavailable
+    ? 'unavailable'
+    : referenceOptionsReady
+      ? 'ready'
+      : 'loading'
+
+  useEffect(() => {
+    if (lastAvailabilityRef.current === referenceOptionsStatus) return
+    lastAvailabilityRef.current = referenceOptionsStatus
+    availabilityChangeRef.current(referenceOptionsStatus)
+  }, [referenceOptionsStatus])
   const endUseAwaitsSpecies =
     !requiresEndUseOptions || (endUseAvailability === 'available' && endUseOptions.length === 0)
   const endUseDisabled = disabled || endUseAwaitsSpecies || endUseAvailability !== 'available'
@@ -268,16 +269,6 @@ export default function BlanketOicPackageCodeFields({
 
   return (
     <div className="blanket-oic-package-code-fields">
-      {referenceOptionsLoading && <InlineLoading description="Loading package options…" />}
-      {referenceOptionsUnavailable && (
-        <InlineNotification
-          kind="warning"
-          title="Package options unavailable"
-          subtitle="Package options could not be loaded. Reload the page to try again."
-          lowContrast
-          hideCloseButton
-        />
-      )}
       <div className="legacy-search-grid permit-package-panel__pair">
         <div className="boic-package-species" ref={speciesFieldRef}>
           <FilterableMultiSelect<SpeciesListItem>
@@ -310,6 +301,7 @@ export default function BlanketOicPackageCodeFields({
         </div>
         <Dropdown<ApplicationCodeOption | null>
           id="boicPackageEndUse"
+          ref={markRequired}
           titleText={requiredLabel('End use')}
           label="Choose an option"
           items={endUseOptions}
@@ -327,6 +319,7 @@ export default function BlanketOicPackageCodeFields({
       <div className="legacy-search-grid permit-package-panel__pair">
         <Dropdown<SearchOption | null>
           id="boicPackageAgeClass"
+          ref={markRequired}
           titleText={requiredLabel('Age class')}
           label="Choose an option"
           items={ageClassOptions}

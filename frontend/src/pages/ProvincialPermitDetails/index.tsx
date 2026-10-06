@@ -86,7 +86,6 @@ import {
   formatRoundedNumericFieldValue,
   getVisibleFieldError,
   greaterThanFieldError,
-  greaterThanOrEqualFieldError,
   integerFieldError,
   isoDateFieldError,
   lessThanOrEqualFieldError,
@@ -100,7 +99,9 @@ import {
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
-import BlanketOicPackageCodeFields from './BlanketOicPackageCodeFields'
+import BlanketOicPackageCodeFields, {
+  type BlanketOicPackageOptionsStatus,
+} from './BlanketOicPackageCodeFields'
 import { blanketOicProductTypeLabel } from './blanket-oic-package-options'
 import BlanketOicScaleCodeFields from './BlanketOicScaleCodeFields'
 import { resolveBlanketOicRegionContext } from '../ProvincialBlanketOicPermitCreate/region-context'
@@ -342,8 +343,37 @@ const parseBlanketOicSpeciesCodes = (value: string): string[] =>
     ),
   )
 
-// Error copy follows the designer's Create package mockup; the volume rule is unchanged.
-const validateBlanketOicPackage = (form: BlanketOicPackageForm): BlanketOicPackageFieldErrors => {
+// Volumes show one decimal place in the package panel, as the UX review asks for every volume.
+const formatBlanketOicPackageVolume = (value: string): string => {
+  const volume = Number(value.trim())
+  return value.trim() && Number.isFinite(volume) ? volume.toFixed(1) : value
+}
+
+// The designer's mockup: greater than 0 and no more than the permit request volume, which the
+// other packages on the permit already use part of.
+const blanketOicPackageVolumeError = (
+  value: string,
+  maxVolume: number | null,
+): string | undefined => {
+  const outOfRange = firstValidationError(
+    () => requiredNumericFieldError(value, 'Package volume'),
+    () => greaterThanFieldError(value, 'Package volume', 0),
+    () =>
+      maxVolume === null ? null : lessThanOrEqualFieldError(value, 'Package volume', maxVolume),
+  )
+  if (outOfRange) {
+    return maxVolume === null
+      ? 'Enter a volume greater than 0.'
+      : `Enter a volume greater than 0 and no more than ${maxVolume.toFixed(1)}.`
+  }
+  return atMostOneDecimalFieldError(value, 'Package volume') ?? undefined
+}
+
+// Error copy follows the designer's Create package mockup.
+const validateBlanketOicPackage = (
+  form: BlanketOicPackageForm,
+  maxVolume: number | null,
+): BlanketOicPackageFieldErrors => {
   const speciesCodes = parseBlanketOicSpeciesCodes(form.speciesCodes)
   const outOfRange = (value: string, label: string, max: number) =>
     !!firstValidationError(
@@ -354,11 +384,7 @@ const validateBlanketOicPackage = (form: BlanketOicPackageForm): BlanketOicPacka
 
   return {
     packageNumber: form.packageNumber.trim() ? undefined : 'Enter a package number.',
-    volume: firstValidationError(
-      () => requiredNumericFieldError(form.volume, 'Package volume'),
-      () => greaterThanOrEqualFieldError(form.volume, 'Package volume', 0),
-      () => atMostOneDecimalFieldError(form.volume, 'Package volume'),
-    ),
+    volume: blanketOicPackageVolumeError(form.volume, maxVolume),
     averageLength: outOfRange(form.averageLength, 'Average length', 99)
       ? 'Enter a length greater than 0 and no more than 99.'
       : undefined,
@@ -994,7 +1020,8 @@ const ProvincialPermitDetailsPage = () => {
   const [boicPackageErrorMessage, setBoicPackageErrorMessage] = useState('')
   const [editingBoicPackageNumber, setEditingBoicPackageNumber] = useState<string | null>(null)
   const [isCreatingBoicPackage, setIsCreatingBoicPackage] = useState(false)
-  const [boicCodeOptionsReady, setBoicCodeOptionsReady] = useState(false)
+  const [boicCodeOptionsStatus, setBoicCodeOptionsStatus] =
+    useState<BlanketOicPackageOptionsStatus>('loading')
   const [boicScaleCodeOptionsReady, setBoicScaleCodeOptionsReady] = useState(false)
   const [isLoadingBoicPackage, setIsLoadingBoicPackage] = useState(false)
   const [isSavingBoicPackage, setIsSavingBoicPackage] = useState(false)
@@ -1118,7 +1145,7 @@ const ProvincialPermitDetailsPage = () => {
     setGbmsErrorMessage('')
     void beginBoicPackageEditRequest()
     setIsCreatingBoicPackage(false)
-    setBoicCodeOptionsReady(false)
+    setBoicCodeOptionsStatus('loading')
     setBoicScaleCodeOptionsReady(false)
     setIsAddingBoicScale(false)
     setDiscardBoicScaleOpen(false)
@@ -3700,7 +3727,7 @@ const ProvincialPermitDetailsPage = () => {
     beginBoicPackageEditRequest()
     setBoicPackageErrorMessage('')
     setIsLoadingBoicPackage(false)
-    setBoicCodeOptionsReady(false)
+    setBoicCodeOptionsStatus('loading')
     setIsCreatingBoicPackage(false)
     setEditingBoicPackageNumber(null)
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
@@ -3730,7 +3757,7 @@ const ProvincialPermitDetailsPage = () => {
         setEditingBoicPackageNumber(packageNumberToEdit)
         const loadedPackageForm: BlanketOicPackageForm = {
           packageNumber: context.packageNumber,
-          volume: context.volume,
+          volume: formatBlanketOicPackageVolume(context.volume),
           averageLength: context.averageLength,
           averageDiameter: context.averageDiameter,
           status: context.status,
@@ -3739,7 +3766,8 @@ const ProvincialPermitDetailsPage = () => {
           ageClass: context.ageClass || 'O',
           productType: context.productType || 'H',
           endUseCode: context.endUseCode,
-          speciesCodes: context.speciesCodes.join(', '),
+          // Sorted, as the package card lists them.
+          speciesCodes: [...context.speciesCodes].sort().join(', '),
         }
         setBoicPackageForm(loadedPackageForm)
         setBoicPackageBaselineForm(loadedPackageForm)
@@ -3762,6 +3790,17 @@ const ProvincialPermitDetailsPage = () => {
     ],
   )
 
+  // The server applies the same limit across all of the permit's packages when saving.
+  const boicPackageVolumeLimit = useMemo(() => {
+    const requestVolume = detail?.oicRequestVolume
+    if (requestVolume === null || requestVolume === undefined) return null
+    const editingPackage = editingBoicPackageNumber?.trim().toUpperCase()
+    const otherPackagesVolume = (tabsData?.packages ?? [])
+      .filter((row) => row.packageNumber.trim().toUpperCase() !== editingPackage)
+      .reduce((total, row) => total + (Number(row.packageVolume) || 0), 0)
+    return Math.max(0, Math.round((Number(requestVolume) - otherPackagesVolume) * 10) / 10)
+  }, [detail?.oicRequestVolume, editingBoicPackageNumber, tabsData?.packages])
+
   const onSaveBlanketOicPackage = useCallback(async (): Promise<boolean> => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
     if (
@@ -3769,7 +3808,6 @@ const ProvincialPermitDetailsPage = () => {
       !resolvedPermitNumber ||
       isSavingBoicPackage ||
       isLoadingBoicPackage ||
-      !boicCodeOptionsReady ||
       blanketOicScaleDirty
     ) {
       return false
@@ -3782,7 +3820,7 @@ const ProvincialPermitDetailsPage = () => {
       setBoicPackageErrorMessage('Save or discard the Region change before saving a package.')
       return false
     }
-    const fieldErrors = validateBlanketOicPackage(boicPackageForm)
+    const fieldErrors = validateBlanketOicPackage(boicPackageForm, boicPackageVolumeLimit)
     if (Object.values(fieldErrors).some(Boolean)) {
       setBoicPackageFieldErrors(fieldErrors)
       setBoicPackageErrorMessage(
@@ -3871,7 +3909,7 @@ const ProvincialPermitDetailsPage = () => {
     }
   }, [
     boicPackageForm,
-    boicCodeOptionsReady,
+    boicPackageVolumeLimit,
     blanketOicScaleDirty,
     isLoadingBoicPackage,
     canEditBlanketOicPackages,
@@ -8562,7 +8600,8 @@ const ProvincialPermitDetailsPage = () => {
             {
               label: isSavingBoicPackage ? 'Saving…' : 'Save package',
               kind: 'primary',
-              disabled: isLoadingBoicPackage || isSavingBoicPackage || !boicCodeOptionsReady,
+              // The UX review keeps Save enabled and validates on click.
+              disabled: isLoadingBoicPackage || isSavingBoicPackage,
               renderIcon: isSavingBoicPackage ? PendingIcon : undefined,
               onClick: async () => {
                 if (await onSaveBlanketOicPackage()) return
@@ -8601,7 +8640,19 @@ const ProvincialPermitDetailsPage = () => {
                 />
               </div>
             )}
+            {boicCodeOptionsStatus === 'unavailable' && (
+              <InlineNotification
+                kind="warning"
+                title="Package options unavailable"
+                subtitle="Package options could not be loaded. Reload the page to try again."
+                lowContrast
+                hideCloseButton
+              />
+            )}
             {isLoadingBoicPackage && <InlineLoading description="Loading package…" />}
+            {!isLoadingBoicPackage && boicCodeOptionsStatus === 'loading' && (
+              <InlineLoading description="Loading package options…" />
+            )}
             <div className="legacy-search-grid">
               <TextInput
                 id="boicPackageNumber"
@@ -8622,13 +8673,13 @@ const ProvincialPermitDetailsPage = () => {
               value={boicPackageForm}
               onChange={setBlanketOicPackageFormField}
               disabled={isLoadingBoicPackage || isSavingBoicPackage}
-              onAvailabilityChange={setBoicCodeOptionsReady}
+              onAvailabilityChange={setBoicCodeOptionsStatus}
               fieldErrors={boicPackageFieldErrors}
             />
             <div className="legacy-search-grid">
               <TextInput
                 id="boicPackageVolume"
-                helperText="Must be less than or equal to permit request volume."
+                helperText="Must be less than or equal to permit request volume. Must be greater than 0."
                 labelText={requiredLabel('Volume (m³)')}
                 aria-required="true"
                 value={boicPackageForm.volume}
