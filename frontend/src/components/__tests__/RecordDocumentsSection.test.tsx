@@ -61,7 +61,7 @@ const renderSection = (
   )
 
 describe('RecordDocumentsSection', () => {
-  it('shows the Figma empty state on the tab background with Add documents', async () => {
+  it('shows the empty state on the tab background with Add documents', async () => {
     const onOpen = vi.fn()
     renderSection({ rows: [], upload: { ...upload, onOpen } })
 
@@ -126,7 +126,7 @@ describe('RecordDocumentsSection', () => {
     expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled()
   })
 
-  it('confirms deletion with the Figma copy and any extra consequence', async () => {
+  it('confirms deletion with the file name and any extra consequence', async () => {
     const onDeleteStart = vi.fn()
     const onDelete = vi
       .fn()

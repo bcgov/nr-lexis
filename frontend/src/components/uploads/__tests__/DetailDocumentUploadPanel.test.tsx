@@ -156,7 +156,7 @@ describe('DetailDocumentUploadPanel', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
-  it('shows a failed side panel file check on the file item, as in Figma', async () => {
+  it('shows a failed side panel file check on the file item', async () => {
     mockedValidateAdminUpload.mockRejectedValueOnce(
       Object.assign(new Error('Upload rejected'), {
         response: {

@@ -2,7 +2,7 @@ package ca.bc.gov.mof.lexis.service.scan;
 
 public class VirusScanException extends RuntimeException {
 
-  // Figma copy for a file item that fails the scan: the first sentence is its error title.
+  // Upload panels show the first sentence as the failed file's error title.
   public static final String INFECTED_MESSAGE =
       "File did not pass the security scan. "
           + "Check it with your own antivirus software, or upload a different copy.";

@@ -29,14 +29,14 @@ import './RecordDocumentsSection.scss'
 
 export type DocumentsRecordType = 'application' | 'exemption' | 'permit'
 
-/** Figma's in-tab feedback after documents are saved. */
+/** In-tab feedback after documents are saved. */
 export const documentsSavedResult = (savedCount: number): ActionResult => ({
   kind: 'success',
   title: savedDocumentsTitle(savedCount),
   message: '',
 })
 
-/** Figma's in-tab feedback after a document is deleted. */
+/** In-tab feedback after a document is deleted. */
 export const DOCUMENT_DELETED_RESULT: ActionResult = {
   kind: 'success',
   title: 'Document deleted.',
@@ -101,7 +101,7 @@ const documentTypeLabel = (row: DocumentRowBase): string =>
  * The Documents tab shared by application, exemption and permit records: the list or empty
  * state on the tab background, the Add documents side panel, in-tab results and deletion.
  */
-// INTENTIONAL_LEGACY_DIVERGENCE(DETAIL_DOCUMENTS_LAYOUT): one Figma Documents tab for every record.
+// INTENTIONAL_LEGACY_DIVERGENCE(DETAIL_DOCUMENTS_LAYOUT): one Documents tab for every record.
 const RecordDocumentsSection = <Row extends DocumentRowBase>({
   id,
   recordType,

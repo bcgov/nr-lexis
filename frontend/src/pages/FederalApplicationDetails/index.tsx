@@ -1620,7 +1620,6 @@ const FederalApplicationDetailsPage = () => {
                 >
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      {/* Figma shows the documents table on the page, with no card or title. */}
                       <RecordDocumentsSection
                         id="federal-application-documents"
                         recordType="application"

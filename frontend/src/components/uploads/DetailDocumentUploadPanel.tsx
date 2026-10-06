@@ -106,7 +106,7 @@ const uploadTargetSummary = (copy: UploadCopy, targetNumber: string): string =>
 
 const DOCUMENT_UPLOAD_VALIDATED_MESSAGE = 'File passed validation and virus scanning.'
 
-// Figma's file items: a spinner while the file is checked or saved, then remove (×), and a
+// File items show a spinner while the file is checked or saved, then remove (×). A
 // failed file keeps its first sentence as the error title and the rest as guidance.
 const drawerFileStatus = (status: UploadQueueStatus): 'uploading' | 'edit' | 'complete' =>
   status === 'queued' || status === 'validating' || status === 'uploading'
