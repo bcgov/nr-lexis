@@ -2739,6 +2739,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Documents')
     const documentName = await screen.findByText('federal-doc.pdf')
+    expect(screen.getByRole('region', { name: 'Application document rows' })).toContainElement(
+      documentName,
+    )
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
     await userEvent.click(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' }))
