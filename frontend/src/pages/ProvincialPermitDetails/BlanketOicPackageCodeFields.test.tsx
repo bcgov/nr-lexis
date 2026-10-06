@@ -188,7 +188,7 @@ describe('BlanketOicPackageCodeFields', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
-  it('shows Age class as a dropdown and Product type read-only, as in the mockup', async () => {
+  it('shows Age class as a dropdown and Product type read-only', async () => {
     const onChange = vi.fn()
     render(<ControlledFields onChange={onChange} onAvailabilityChange={vi.fn()} />)
 

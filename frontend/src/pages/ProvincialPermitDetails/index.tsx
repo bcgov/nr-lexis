@@ -356,21 +356,19 @@ const normalizeBlanketOicPackageMeasurements = (
   }
 }
 
-// Server errors that belong to a field show on that field, as the UX review asks.
+// Server errors that belong to a field show on that field.
 const blanketOicPackageServerFieldErrors = (message: string): BlanketOicPackageFieldErrors => {
   if (/^Package .+ already exists\.$/.test(message)) return { packageNumber: message }
   if (message.startsWith('The total package volume must not exceed')) return { volume: message }
   return {}
 }
 
-// Volumes show one decimal place in the package panel, as the UX review asks for every volume.
 const formatBlanketOicPackageVolume = (value: string): string => {
   const volume = Number(value.trim())
   return value.trim() && Number.isFinite(volume) ? volume.toFixed(1) : value
 }
 
-// The designer's mockup: greater than 0 and no more than the permit request volume, which the
-// other packages on the permit already use part of.
+// Greater than 0 and no more than the permit request volume the other packages leave.
 const blanketOicPackageVolumeError = (
   value: string,
   maxVolume: number | null,
@@ -389,7 +387,6 @@ const blanketOicPackageVolumeError = (
   return atMostOneDecimalFieldError(value, 'Package volume') ?? undefined
 }
 
-// Error copy follows the designer's Create package mockup.
 const validateBlanketOicPackage = (
   form: BlanketOicPackageForm,
   maxVolume: number | null,
@@ -8622,7 +8619,7 @@ const ProvincialPermitDetailsPage = () => {
             {
               label: isSavingBoicPackage ? 'Saving…' : 'Save package',
               kind: 'primary',
-              // The UX review keeps Save enabled and validates on click.
+              // Save validates on click, so it is only disabled while busy.
               disabled: isLoadingBoicPackage || isSavingBoicPackage,
               renderIcon: isSavingBoicPackage ? PendingIcon : undefined,
               onClick: async () => {
@@ -8645,8 +8642,7 @@ const ProvincialPermitDetailsPage = () => {
             },
           ]}
         >
-          {/* The mockup sets the form on Carbon's first layer, so fields and menus are grey on the
-              white panel. */}
+          {/* Carbon's first layer gives grey fields and menus on the white panel. */}
           <Layer level={0} className="permit-package-panel__form">
             <p className="application-detail-required">{requiredLabel('Required fields')}</p>
             {/* Field errors show on their fields; this notification is only for errors that don't

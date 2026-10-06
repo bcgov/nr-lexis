@@ -159,8 +159,8 @@
   color: var(--cds-text-secondary);
 }
 
-// The designer's mockup is a white panel with grey fields. c4p paints the panel with layer-01 and
-// forces side-panel fields to field-02, so swap that token for this panel.
+// A white panel with grey fields. c4p paints the panel with layer-01 and forces side-panel fields
+// to field-02, so swap that token for this panel.
 .permit-package-panel.c4p--side-panel {
   --cds-field-02: var(--cds-field-01);
   --cds-field-hover-02: var(--cds-field-hover-01);
@@ -197,8 +197,7 @@
     gap: 1.5rem;
   }
 
-  // The designer's mockup pairs Species list with End use, and Age class with Product type,
-  // at every panel width.
+  // Two columns at every panel width.
   .legacy-search-grid.permit-package-panel__pair {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -210,14 +209,13 @@
     line-height: 1.125rem;
   }
 
-  // The mockup sets panel labels at 14px.
   .cds--label {
     font-size: 0.875rem;
     line-height: 1.125rem;
   }
 
   // List-box labels are inline-block, so the app's taller body line height would add space above
-  // them and break the mockup's 24px between fields.
+  // them.
   .cds--list-box__wrapper,
   .cds--multi-select__wrapper {
     line-height: 1.125rem;
@@ -228,7 +226,7 @@
     color: var(--cds-text-secondary);
   }
 
-  // The mockup keeps End use's required marker red while the field waits for species.
+  // End use's required marker stays red while the field waits for species.
   .cds--label--disabled .required-label__marker {
     color: var(--cds-text-error, #da1e28);
   }
@@ -249,7 +247,7 @@
   }
 }
 
-// Figma's saved package card groups its values in rows, as the exemption client card does.
+// The saved package card groups its values in rows, as the exemption client card does.
 .boic-package-field-groups {
   display: grid;
   gap: 1.75rem;

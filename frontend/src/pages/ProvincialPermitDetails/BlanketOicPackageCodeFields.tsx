@@ -59,7 +59,6 @@ const optionLabel = (option: ApplicationCodeOption): string =>
     ? `${option.code} - ${option.description}`
     : option.code
 
-// The designer's Create package mockup shows end uses by name only ("Peeler").
 const endUseName = (option: ApplicationCodeOption | null): string =>
   option ? option.description || option.code : ''
 
@@ -69,8 +68,8 @@ const optionLabelOf = (option: SearchOption | null): string => option?.label ?? 
 const markRequired = (button: HTMLButtonElement | null) =>
   button?.setAttribute('aria-required', 'true')
 
-// INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_SPECIES_LIST): the designer's Species list
-// multi-select replaces legacy's one-at-a-time species dialog; End use lists only sorts that save.
+// INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_SPECIES_LIST): one Species list multi-select replaces
+// legacy's one-at-a-time species dialog; End use lists only sorts that save.
 export default function BlanketOicPackageCodeFields({
   region,
   value,
@@ -332,7 +331,7 @@ export default function BlanketOicPackageCodeFields({
             onChange('ageClass', selectedItem ? normalizeCode(selectedItem.value) : '')
           }
         />
-        {/* Blanket OIC packages are harvested only, so the mockup shows the type read-only. */}
+        {/* Blanket OIC packages are harvested only. */}
         <Dropdown<SearchOption | null>
           id="boicPackageProductType"
           titleText="Product type"
