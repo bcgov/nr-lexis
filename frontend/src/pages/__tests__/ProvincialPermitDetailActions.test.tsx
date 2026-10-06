@@ -5408,6 +5408,60 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
   })
 
+  it('shows a taken package number on its field and reads ".1" as 0.1', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+      oicApplicationNumber: null,
+      oicRequestVolume: 1,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
+    mockedAddBlanketOicPackage.mockResolvedValueOnce({
+      success: false,
+      message: '',
+      errors: ['Package 2 already exists.'],
+      warnings: [],
+      permitNumber: '777',
+      applicationNumber: '',
+      packageNumber: '2',
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Items')
+    await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
+    const packageEditor = (await screen.findByRole('heading', { name: 'Create package' })).closest(
+      '.application-detail-edit-section',
+    ) as HTMLElement
+    const packageNumber = within(packageEditor).getByLabelText('Package number')
+    await userEvent.type(packageNumber, '2')
+    await userEvent.click(within(packageEditor).getByRole('combobox', { name: /^Species list/ }))
+    await userEvent.click(await within(packageEditor).findByRole('option', { name: /FI - Fir/ }))
+    const endUse = within(packageEditor).getByRole('combobox', { name: 'End use' })
+    await waitFor(() => expect(endUse).toBeEnabled())
+    await chooseDropdownOption(endUse, 'Lumber')
+    await userEvent.type(within(packageEditor).getByLabelText('Volume (m³)'), '.1')
+    await userEvent.type(within(packageEditor).getByLabelText('Average length (m)'), '2')
+    await userEvent.type(within(packageEditor).getByLabelText('Average top diameter (rads)'), '2')
+    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
+
+    await waitFor(() =>
+      expect(mockedAddBlanketOicPackage).toHaveBeenCalledWith(
+        expect.objectContaining({ packageNumber: '2', volume: '0.1' }),
+      ),
+    )
+    expect(await within(packageEditor).findByText('Package 2 already exists.')).toBeVisible()
+    expect(within(packageEditor).getByLabelText('Volume (m³)')).toHaveValue('0.1')
+    expect(within(packageEditor).queryByText('Package needs attention')).not.toBeInTheDocument()
+    await waitFor(() => expect(packageNumber).toHaveFocus())
+
+    await userEvent.type(packageNumber, '5')
+    expect(within(packageEditor).queryByText('Package 2 already exists.')).not.toBeInTheDocument()
+    expect(within(packageEditor).queryByText('Package needs attention')).not.toBeInTheDocument()
+  })
+
   it('clears a committed Blanket OIC package draft when table refresh fails', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,

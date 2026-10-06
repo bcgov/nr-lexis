@@ -343,6 +343,26 @@ const parseBlanketOicSpeciesCodes = (value: string): string[] =>
     ),
   )
 
+// Accept ".1" as 0.1 in the package measurements.
+const normalizeBlanketOicPackageMeasurements = (
+  form: BlanketOicPackageForm,
+): BlanketOicPackageForm => {
+  const withLeadingZero = (value: string) => value.trim().replace(/^\./, '0.')
+  return {
+    ...form,
+    volume: withLeadingZero(form.volume),
+    averageLength: withLeadingZero(form.averageLength),
+    averageDiameter: withLeadingZero(form.averageDiameter),
+  }
+}
+
+// Server errors that belong to a field show on that field, as the UX review asks.
+const blanketOicPackageServerFieldErrors = (message: string): BlanketOicPackageFieldErrors => {
+  if (/^Package .+ already exists\.$/.test(message)) return { packageNumber: message }
+  if (message.startsWith('The total package volume must not exceed')) return { volume: message }
+  return {}
+}
+
 // Volumes show one decimal place in the package panel, as the UX review asks for every volume.
 const formatBlanketOicPackageVolume = (value: string): string => {
   const volume = Number(value.trim())
@@ -3820,13 +3840,13 @@ const ProvincialPermitDetailsPage = () => {
       setBoicPackageErrorMessage('Save or discard the Region change before saving a package.')
       return false
     }
-    const fieldErrors = validateBlanketOicPackage(boicPackageForm, boicPackageVolumeLimit)
+    const packageForm = normalizeBlanketOicPackageMeasurements(boicPackageForm)
+    setBoicPackageForm(packageForm)
+    const fieldErrors = validateBlanketOicPackage(packageForm, boicPackageVolumeLimit)
     if (Object.values(fieldErrors).some(Boolean)) {
       setBoicPackageFieldErrors(fieldErrors)
-      setBoicPackageErrorMessage(
-        Object.values(fieldErrors).find((error): error is string => !!error) ??
-          'Please fix validation errors before saving the Blanket OIC package.',
-      )
+      // The errors show on their fields, so there is no panel notification to go stale.
+      setBoicPackageErrorMessage('')
       return false
     }
     const speciesCodes = parseBlanketOicSpeciesCodes(boicPackageForm.speciesCodes)
@@ -3843,9 +3863,9 @@ const ProvincialPermitDetailsPage = () => {
       permitNumber: resolvedPermitNumber,
       packageNumber,
       newPackageNumber,
-      volume: boicPackageForm.volume.trim(),
-      averageLength: boicPackageForm.averageLength.trim(),
-      averageDiameter: boicPackageForm.averageDiameter.trim(),
+      volume: packageForm.volume,
+      averageLength: packageForm.averageLength,
+      averageDiameter: packageForm.averageDiameter,
       status: editingBoicPackageNumber ? boicPackageForm.status.trim().toUpperCase() : 'ACT',
       comments: boicPackageForm.comments,
       reprocessed: editingBoicPackageNumber
@@ -3865,9 +3885,11 @@ const ProvincialPermitDetailsPage = () => {
         ? await updateBlanketOicPackage(request)
         : await addBlanketOicPackage(request)
       if (!result.success) {
-        setBoicPackageErrorMessage(
-          result.errors[0] || result.message || 'Unable to save the Blanket OIC package.',
-        )
+        const message =
+          result.errors[0] || result.message || 'Unable to save the Blanket OIC package.'
+        const serverFieldErrors = blanketOicPackageServerFieldErrors(message)
+        setBoicPackageFieldErrors(serverFieldErrors)
+        setBoicPackageErrorMessage(Object.keys(serverFieldErrors).length > 0 ? '' : message)
         return false
       }
       if (result.applicationNumber) {
