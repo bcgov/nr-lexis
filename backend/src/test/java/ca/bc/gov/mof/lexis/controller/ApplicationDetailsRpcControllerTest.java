@@ -2220,6 +2220,21 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void getEndUseForSpeciesRegionShouldOfferOnlyCompleteSortsWhenAsked() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getEndUsesCompletingSpeciesSort("1909", List.of("HE", "BA")))
+        .thenReturn(List.of(new ApplicationDetailsRpcService.CodeItem("PL", "Peeler")));
+
+    ResponseEntity<List<ApplicationDetailsRpcController.ApplicationCodeResponseDto>> response =
+        controller.getEndUseForSpeciesRegion("[\"HE\",\"BA\"]", null, "1909", true);
+
+    assertThat(response.getBody())
+        .extracting(ApplicationDetailsRpcController.ApplicationCodeResponseDto::code)
+        .containsExactly("PL");
+    verify(service, never()).getEndUsesForSpeciesRegion(any(), any());
+  }
+
+  @Test
   void getRemainingSpeciesLegacyShouldReturnCodePayload() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getRemainingSpecies("11", "S", List.of("FI")))

@@ -171,6 +171,18 @@
     inline-size: 100%;
     max-inline-size: none;
   }
+
+  .blanket-oic-package-code-fields {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  // Figma pairs Species list with End use, and Age class with Product type.
+  @media (min-width: 672px) {
+    .legacy-search-grid.permit-package-panel__pair {
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+  }
 }
 
 .ministerial-permit-details__remarks .cds--text-area__wrapper,

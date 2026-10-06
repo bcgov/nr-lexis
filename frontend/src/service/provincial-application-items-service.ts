@@ -584,6 +584,7 @@ export const fetchApplicationRemainingSpecies = async (
 export const fetchApplicationEndUsesForSpeciesRegion = async (
   region: string,
   selectedSpecies: string[],
+  { completeSortOnly = false }: { completeSortOnly?: boolean } = {},
 ): Promise<ApplicationCodeOption[]> => {
   try {
     const response = await apiService.getCachedResponse<unknown>(
@@ -592,6 +593,7 @@ export const fetchApplicationEndUsesForSpeciesRegion = async (
         params: {
           orgUnitNumber: region,
           speciesJSON: JSON.stringify(selectedSpecies),
+          ...(completeSortOnly ? { completeSortOnly: true } : {}),
         },
       },
       { ttlMs: ITEMS_CACHE_TTL_MS },

@@ -104,7 +104,7 @@ describe('BlanketOicPackageCodeFields', () => {
     ])
   })
 
-  it('uses region and selected species for dependent selections without blocking empty required fields', async () => {
+  it('narrows the Species list and offers only end uses that complete a sort', async () => {
     const onChange = vi.fn()
     const onAvailabilityChange = vi.fn()
     render(<ControlledFields onChange={onChange} onAvailabilityChange={onAvailabilityChange} />)
@@ -114,24 +114,60 @@ describe('BlanketOicPackageCodeFields', () => {
       expect(onAvailabilityChange).toHaveBeenLastCalledWith(true)
     })
     expect(mockedFetchApplicationEndUsesForSpeciesRegion).not.toHaveBeenCalled()
+    expect(screen.getByRole('combobox', { name: 'End use' })).toBeDisabled()
+    expect(screen.getByText('Available once species are selected')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add species' })).not.toBeInTheDocument()
 
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Species' }), 'FI - Fir')
-    await userEvent.click(screen.getByRole('button', { name: 'Add species' }))
+    const species = screen.getByRole('combobox', { name: /^Species list/ })
+    expect(species).toHaveAttribute('aria-required', 'true')
+    await userEvent.click(species)
+    await userEvent.click(await screen.findByRole('option', { name: /FI - Fir/ }))
 
     await waitFor(() => {
       expect(onChange).toHaveBeenCalledWith('speciesCodes', 'FI')
       expect(mockedFetchApplicationRemainingSpecies).toHaveBeenLastCalledWith('101', 'H', ['FI'])
-      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('101', ['FI'])
+      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('101', ['FI'], {
+        completeSortOnly: true,
+      })
     })
+    expect(await screen.findByRole('option', { name: /HE - Hemlock/ })).toBeInTheDocument()
+    expect(species).toHaveAccessibleName(/Total items selected: 1/)
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'End use' })).toBeEnabled())
+    expect(screen.getByRole('combobox', { name: 'End use' })).toHaveValue('')
+    expect(onChange).not.toHaveBeenCalledWith('endUseCode', expect.anything())
 
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'End use' }), 'LU - Lumber')
     expect(onChange).toHaveBeenCalledWith('endUseCode', 'LU')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove FI' }))
-    expect(onChange).toHaveBeenCalledWith('speciesCodes', '')
+    await userEvent.click(species)
+    await userEvent.click(await screen.findByRole('option', { name: /FI/ }))
     await waitFor(() => {
+      expect(onChange).toHaveBeenCalledWith('speciesCodes', '')
+      expect(onChange).toHaveBeenLastCalledWith('endUseCode', '')
       expect(screen.getByRole('combobox', { name: 'End use' })).toBeDisabled()
     })
+  })
+
+  it('marks Escape on the open Species list as handled so the side panel stays open', async () => {
+    const escapeHandled: boolean[] = []
+    render(
+      <div
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') escapeHandled.push(event.defaultPrevented)
+        }}
+      >
+        <ControlledFields onChange={vi.fn()} onAvailabilityChange={vi.fn()} />
+      </div>,
+    )
+
+    const species = screen.getByRole('combobox', { name: /^Species list/ })
+    await waitFor(() => expect(species).toBeEnabled())
+    await userEvent.click(species)
+    expect(await screen.findByRole('option', { name: /FI - Fir/ })).toBeInTheDocument()
+    await userEvent.keyboard('{Escape}')
+
+    expect(escapeHandled).toEqual([true])
+    expect(screen.queryByRole('option', { name: /FI - Fir/ })).not.toBeInTheDocument()
   })
 
   it('omits status and reprocessed without requiring their lookup', async () => {
@@ -165,7 +201,7 @@ describe('BlanketOicPackageCodeFields', () => {
     expect(screen.getByRole('combobox', { name: 'Product type' })).toHaveValue('')
   })
 
-  it('keeps an end-use fallback for empty candidates and replaces it after a species change yields allowed candidates', async () => {
+  it('clears an end use that no longer completes a sort and waits for the user to choose one', async () => {
     const onChange = vi.fn()
     mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation(
       async (_region, selectedSpecies) =>
@@ -181,19 +217,28 @@ describe('BlanketOicPackageCodeFields', () => {
     )
 
     await waitFor(() => {
-      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('101', ['FI'])
+      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('101', ['FI'], {
+        completeSortOnly: true,
+      })
+      expect(onChange).toHaveBeenCalledWith('endUseCode', '')
     })
-    expect(screen.getByRole('combobox', { name: 'End use' })).toHaveValue('LEGACY-END-USE')
+    expect(screen.getByRole('combobox', { name: 'End use' })).toBeDisabled()
+    expect(screen.getByText('Available once species are selected')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Remove FI' }))
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Species' }), 'HE - Hemlock')
-    await userEvent.click(screen.getByRole('button', { name: 'Add species' }))
+    await userEvent.click(screen.getByRole('combobox', { name: /^Species list/ }))
+    await userEvent.click(await screen.findByRole('option', { name: /HE - Hemlock/ }))
 
     await waitFor(() => {
-      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('101', ['HE'])
-      expect(onChange).toHaveBeenCalledWith('endUseCode', 'LU')
+      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith(
+        '101',
+        ['FI', 'HE'],
+        { completeSortOnly: true },
+      )
+      expect(screen.getByRole('combobox', { name: 'End use' })).toBeEnabled()
     })
-    expect(screen.getByRole('combobox', { name: 'End use' })).toHaveValue('LU - Lumber')
+    expect(screen.getByRole('combobox', { name: 'End use' })).toHaveValue('')
+    expect(screen.queryByText('Available once species are selected')).not.toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalledWith('endUseCode', 'LU')
   })
 
   it('preserves persisted values and reports unavailable references when dependency loads fail', async () => {
@@ -222,7 +267,9 @@ describe('BlanketOicPackageCodeFields', () => {
       expect(onAvailabilityChange).toHaveBeenLastCalledWith(false)
     })
 
-    expect(screen.getByText('FI')).toBeInTheDocument()
+    expect(screen.getByRole('combobox', { name: /^Species list/ })).toHaveAccessibleName(
+      /Total items selected: 1/,
+    )
     expect(screen.getByRole('combobox', { name: 'End use' })).toHaveValue('OLD-END-USE')
     expect(screen.getByRole('combobox', { name: 'Age class' })).toHaveValue('OLD-AGE')
     expect(screen.getByRole('combobox', { name: 'Product type' })).toHaveValue('OLD-PRODUCT')

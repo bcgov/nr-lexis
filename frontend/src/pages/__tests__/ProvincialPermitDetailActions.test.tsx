@@ -4145,6 +4145,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           speciesEndUseSort: 'HE/PL',
           speciesCodes: ['AL', 'HE', 'PL'],
           endUseCodes: ['LU'],
+          endUseDescriptions: ['Lumber'],
           ageClass: 'Old growth',
           packageVolume: '120.5',
           averageLength: '7.1',
@@ -4193,7 +4194,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const packageCard = await findBlanketOicPackageCard()
     for (const [label, value] of [
       ['Species list', 'AL, HE, PL'],
-      ['End use', 'LU'],
+      ['End use', 'Lumber'],
     ]) {
       const field = within(packageCard)
         .getByText(label)
@@ -4882,22 +4883,22 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ).not.toBeInTheDocument()
 
       await userEvent.type(within(packageEditor).getByLabelText('Package number'), 'boic-new')
-      await chooseComboBoxOption(
-        within(packageEditor).getByRole('combobox', { name: 'Species' }),
-        'FI - Fir',
+      expect(within(packageEditor).getByText('Required fields')).toBeInTheDocument()
+      const speciesList = within(packageEditor).getByRole('combobox', { name: /^Species list/ })
+      await userEvent.click(speciesList)
+      await userEvent.click(await within(packageEditor).findByRole('option', { name: /FI - Fir/ }))
+      await userEvent.click(
+        await within(packageEditor).findByRole('option', { name: /HE - Hemlock/ }),
       )
-      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Add species' }))
-      await chooseComboBoxOption(
-        within(packageEditor).getByRole('combobox', { name: 'Species' }),
-        'HE - Hemlock',
+      await waitFor(() =>
+        expect(within(packageEditor).getByRole('combobox', { name: 'End use' })).toBeEnabled(),
       )
-      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Add species' }))
       await chooseComboBoxOption(
         within(packageEditor).getByRole('combobox', { name: 'End use' }),
         'LU - Lumber',
       )
-      await userEvent.clear(within(packageEditor).getByLabelText('Package volume (m³)'))
-      await userEvent.type(within(packageEditor).getByLabelText('Package volume (m³)'), '100.0')
+      await userEvent.clear(within(packageEditor).getByLabelText('Volume (m³)'))
+      await userEvent.type(within(packageEditor).getByLabelText('Volume (m³)'), '100.0')
       const averageLength = within(packageEditor).getByLabelText('Average length (m)')
       await userEvent.type(averageLength, '0')
       await userEvent.type(
@@ -5016,7 +5017,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it.each([
-    ['Package volume (m³)', '10.25', 'Package volume must have no more than one decimal place.'],
+    ['Volume (m³)', '10.25', 'Package volume must have no more than one decimal place.'],
     ['Average length (m)', '0', 'Average length must be greater than 0.'],
     ['Average length (m)', '-1', 'Average length must be numeric.'],
     ['Average top diameter (rads)', '0', 'Average top diameter must be greater than 0.'],
@@ -5182,7 +5183,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
       '.application-detail-edit-section',
     ) as HTMLElement
-    const volume = within(packageEditor).getByLabelText('Package volume (m³)')
+    const volume = within(packageEditor).getByLabelText('Volume (m³)')
     await userEvent.clear(volume)
     await userEvent.type(volume, '0.0')
     const averageLength = within(packageEditor).getByLabelText('Average length (m)')
@@ -5321,17 +5322,17 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
     ).closest('.application-detail-edit-section') as HTMLElement
     await userEvent.type(within(packageEditor).getByLabelText('Package number'), 'boic-new')
-    await chooseComboBoxOption(
-      within(packageEditor).getByRole('combobox', { name: 'Species' }),
-      'FI - Fir',
+    await userEvent.click(within(packageEditor).getByRole('combobox', { name: /^Species list/ }))
+    await userEvent.click(await within(packageEditor).findByRole('option', { name: /FI - Fir/ }))
+    await waitFor(() =>
+      expect(within(packageEditor).getByRole('combobox', { name: 'End use' })).toBeEnabled(),
     )
-    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Add species' }))
     await chooseComboBoxOption(
       within(packageEditor).getByRole('combobox', { name: 'End use' }),
       'LU - Lumber',
     )
-    await userEvent.clear(within(packageEditor).getByLabelText('Package volume (m³)'))
-    await userEvent.type(within(packageEditor).getByLabelText('Package volume (m³)'), '100.0')
+    await userEvent.clear(within(packageEditor).getByLabelText('Volume (m³)'))
+    await userEvent.type(within(packageEditor).getByLabelText('Volume (m³)'), '100.0')
     await userEvent.type(within(packageEditor).getByLabelText('Average length (m)'), '10.0')
     await userEvent.type(
       within(packageEditor).getByLabelText('Average top diameter (rads)'),

@@ -1,15 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import {
-  Button,
-  InlineLoading,
-  InlineNotification,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from '@carbon/react'
+import { FilterableMultiSelect, InlineLoading, InlineNotification } from '@carbon/react'
 import SearchableSelect from '@/components/SearchableSelect'
 import { requiredLabel } from '@/utils/required-label'
 import {
@@ -47,7 +37,14 @@ type SearchableOption = {
   label: string
 }
 
+type SpeciesListItem = {
+  id: string
+  text: string
+}
+
 const PRODUCT_TYPE_OPTIONS: SearchableOption[] = [{ value: 'H', label: 'Harvested' }]
+
+const END_USE_HELPER_TEXT = 'Available once species are selected'
 
 const normalizeCode = (value: string): string => value.trim().toUpperCase()
 
@@ -74,6 +71,8 @@ const toSearchableOption = (option: ApplicationCodeOption): SearchableOption => 
 const toSearchableOptions = (options: SearchOption[]): SearchableOption[] =>
   options.map((option) => ({ value: option.value, label: option.label }))
 
+// INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_SPECIES_LIST): Figma's Species list multi-select
+// replaces legacy's one-at-a-time species dialog; End use lists only sorts that will save.
 export default function BlanketOicPackageCodeFields({
   region,
   value,
@@ -82,7 +81,6 @@ export default function BlanketOicPackageCodeFields({
   onAvailabilityChange,
   fieldErrors,
 }: BlanketOicPackageCodeFieldsProps) {
-  const [speciesToAdd, setSpeciesToAdd] = useState('')
   const [speciesOptions, setSpeciesOptions] = useState<ApplicationCodeOption[]>([])
   const [endUseOptions, setEndUseOptions] = useState<ApplicationCodeOption[]>([])
   const [ageClassOptions, setAgeClassOptions] = useState<SearchOption[]>([])
@@ -160,10 +158,20 @@ export default function BlanketOicPackageCodeFields({
 
   useEffect(() => {
     let active = true
+    const clearUnavailableEndUse = (options: ApplicationCodeOption[]) => {
+      const currentEndUseCode = normalizeCode(valueRef.current.endUseCode)
+      if (
+        currentEndUseCode &&
+        !options.some((option) => normalizeCode(option.code) === currentEndUseCode)
+      ) {
+        onChangeRef.current('endUseCode', '')
+      }
+    }
     const loadEndUseOptions = async () => {
       if (!normalizedRegion || !requiresEndUseOptions) {
         setEndUseOptions([])
         setEndUseAvailability('idle')
+        if (!requiresEndUseOptions) clearUnavailableEndUse([])
         return
       }
 
@@ -172,21 +180,12 @@ export default function BlanketOicPackageCodeFields({
         const options = await fetchApplicationEndUsesForSpeciesRegion(
           normalizedRegion,
           selectedSpeciesCodes,
+          { completeSortOnly: true },
         )
         if (!active) return
         setEndUseOptions(options)
         setEndUseAvailability('available')
-        if (options.length > 0) {
-          const currentEndUseCode = normalizeCode(valueRef.current.endUseCode)
-          const nextEndUseCode = options.some(
-            (option) => normalizeCode(option.code) === currentEndUseCode,
-          )
-            ? currentEndUseCode
-            : normalizeCode(options[0].code)
-          if (nextEndUseCode !== currentEndUseCode) {
-            onChangeRef.current('endUseCode', nextEndUseCode)
-          }
-        }
+        clearUnavailableEndUse(options)
       } catch {
         if (!active) return
         setEndUseOptions([])
@@ -219,30 +218,29 @@ export default function BlanketOicPackageCodeFields({
     ageClassAvailability === 'unavailable' ||
     speciesAvailability === 'unavailable' ||
     (requiresEndUseOptions && endUseAvailability === 'unavailable')
-  const speciesSelectionDisabled = disabled || speciesAvailability !== 'available'
-  const endUseDisabled = disabled || !requiresEndUseOptions || endUseAvailability !== 'available'
+  const endUseAwaitsSpecies =
+    !requiresEndUseOptions || (endUseAvailability === 'available' && endUseOptions.length === 0)
+  const endUseDisabled = disabled || endUseAwaitsSpecies || endUseAvailability !== 'available'
 
-  const onAddSpecies = () => {
-    const normalizedSpeciesCode = normalizeCode(speciesToAdd)
-    if (!normalizedSpeciesCode || selectedSpeciesCodes.includes(normalizedSpeciesCode)) return
-    onChange('speciesCodes', [...selectedSpeciesCodes, normalizedSpeciesCode].join(', '))
-    setSpeciesToAdd('')
-  }
-
-  const onRemoveSpecies = (speciesCode: string) => {
-    onChange(
-      'speciesCodes',
-      selectedSpeciesCodes.filter((current) => current !== speciesCode).join(', '),
-    )
-  }
-
-  const speciesRows = selectedSpeciesCodes.map((speciesCode) => {
-    const option = speciesOptions.find((item) => item.code === speciesCode)
-    return {
-      code: speciesCode,
-      label: option ? optionLabel(option) : speciesCode,
+  // Remaining species narrow as species are chosen; chosen species stay listed so they show checked.
+  const speciesListItems = useMemo<SpeciesListItem[]>(() => {
+    const itemsByCode = new Map<string, SpeciesListItem>()
+    for (const option of speciesOptions) {
+      const code = normalizeCode(option.code)
+      itemsByCode.set(code, { id: code, text: optionLabel({ ...option, code }) })
     }
-  })
+    for (const code of selectedSpeciesCodes) {
+      if (!itemsByCode.has(code)) itemsByCode.set(code, { id: code, text: code })
+    }
+    return Array.from(itemsByCode.values()).sort((left, right) => left.id.localeCompare(right.id))
+  }, [selectedSpeciesCodes, speciesOptions])
+  const selectedSpeciesItems = useMemo(
+    () =>
+      selectedSpeciesCodes
+        .map((code) => speciesListItems.find((item) => item.id === code))
+        .filter((item): item is SpeciesListItem => !!item),
+    [selectedSpeciesCodes, speciesListItems],
+  )
 
   return (
     <div className="blanket-oic-package-code-fields">
@@ -256,42 +254,37 @@ export default function BlanketOicPackageCodeFields({
           hideCloseButton
         />
       )}
-      <div className="legacy-search-grid">
-        <SearchableSelect
-          id="boicPackageSpeciesToAdd"
-          labelText={requiredLabel('Species')}
-          required
-          value={speciesToAdd}
-          options={speciesOptions
-            .filter((option) => !selectedSpeciesCodes.includes(option.code))
-            .map(toSearchableOption)}
+      <div className="legacy-search-grid permit-package-panel__pair">
+        <FilterableMultiSelect<SpeciesListItem>
+          id="boicPackageSpeciesList"
+          titleText={requiredLabel('Species list')}
+          items={speciesListItems}
+          itemToString={(item) => item?.text ?? ''}
+          selectedItems={selectedSpeciesItems}
           placeholder="Select species"
-          disabled={speciesSelectionDisabled}
+          inputProps={{ 'aria-required': true }}
+          disabled={disabled || speciesAvailability !== 'available'}
           invalid={!!fieldErrors?.speciesCodes}
           invalidText={fieldErrors?.speciesCodes}
-          onChange={setSpeciesToAdd}
+          onChange={({ selectedItems }) =>
+            onChange('speciesCodes', selectedItems.map((item) => item.id).join(', '))
+          }
         />
-        <Button
-          type="button"
-          kind="tertiary"
-          size="sm"
-          disabled={speciesSelectionDisabled || !normalizeCode(speciesToAdd)}
-          onClick={onAddSpecies}
-        >
-          Add species
-        </Button>
         <SearchableSelect
           id="boicPackageEndUse"
           labelText={requiredLabel('End use')}
           required
           value={value.endUseCode}
           options={endUseOptions.map(toSearchableOption)}
-          placeholder={requiresEndUseOptions ? 'Select end use' : 'Select species first'}
+          placeholder="Select end use"
           disabled={endUseDisabled}
           invalid={!!fieldErrors?.endUseCode}
           invalidText={fieldErrors?.endUseCode}
+          helperText={endUseAwaitsSpecies ? END_USE_HELPER_TEXT : undefined}
           onChange={(nextValue) => onChange('endUseCode', normalizeCode(nextValue))}
         />
+      </div>
+      <div className="legacy-search-grid permit-package-panel__pair">
         <SearchableSelect
           id="boicPackageAgeClass"
           labelText={requiredLabel('Age class')}
@@ -306,8 +299,7 @@ export default function BlanketOicPackageCodeFields({
         />
         <SearchableSelect
           id="boicPackageProductType"
-          labelText={requiredLabel('Product type')}
-          required
+          labelText="Product type"
           value={value.productType}
           options={PRODUCT_TYPE_OPTIONS}
           placeholder="Select product type"
@@ -316,40 +308,6 @@ export default function BlanketOicPackageCodeFields({
           invalidText={fieldErrors?.productType}
           onChange={(nextValue) => onChange('productType', normalizeCode(nextValue))}
         />
-      </div>
-      <div className="application-items-species-panel">
-        <h4>Package species</h4>
-        <Table size="md" useZebraStyles>
-          <TableHead>
-            <TableRow>
-              <TableHeader>Species</TableHeader>
-              <TableHeader>Action</TableHeader>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {speciesRows.map((species) => (
-              <TableRow key={species.code}>
-                <TableCell>{species.label}</TableCell>
-                <TableCell>
-                  <Button
-                    type="button"
-                    kind="ghost"
-                    size="sm"
-                    disabled={disabled}
-                    onClick={() => onRemoveSpecies(species.code)}
-                  >
-                    Remove {species.code}
-                  </Button>
-                </TableCell>
-              </TableRow>
-            ))}
-            {speciesRows.length === 0 && (
-              <TableRow>
-                <TableCell colSpan={2}>No species assigned to this package.</TableCell>
-              </TableRow>
-            )}
-          </TableBody>
-        </Table>
       </div>
     </div>
   )

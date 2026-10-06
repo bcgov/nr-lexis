@@ -3332,7 +3332,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private PermitPackageInfoRpcResponseDto emptyPackageInfo() {
-    return new PermitPackageInfoRpcResponseDto("", "", "", "", "", "", "", List.of(), List.of());
+    return new PermitPackageInfoRpcResponseDto(
+        "", "", "", "", "", "", "", List.of(), List.of(), List.of());
   }
 
   private PermitPackageDetailsRpcResponseDto emptyPackageDetails() {
@@ -3358,6 +3359,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           formatVolume(packageInfo.averageDiameter()),
           "",
           List.of(),
+          List.of(),
           List.of());
     }
 
@@ -3382,6 +3384,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             : resolveApplicationEndUseSort(applicationInfo, lookupContext);
     List<EndUsePairRow> packageEndUses =
         getCorePackageEndUses(packageInfo.packageNumber(), lookupContext);
+    List<String> packageEndUseCodes =
+        packageEndUses.stream()
+            .map(EndUsePairRow::endUseCode)
+            .map(value -> trimToNull(value))
+            .filter(java.util.Objects::nonNull)
+            .distinct()
+            .toList();
 
     return new PermitPackageInfoRpcResponseDto(
         nonNull(applicationInfo.regionName()),
@@ -3397,11 +3406,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .filter(java.util.Objects::nonNull)
             .distinct()
             .toList(),
-        packageEndUses.stream()
-            .map(EndUsePairRow::endUseCode)
-            .map(value -> trimToNull(value))
-            .filter(java.util.Objects::nonNull)
-            .distinct()
+        packageEndUseCodes,
+        packageEndUseCodes.stream()
+            .map(code -> resolveEndUseDescription(code, lookupContext))
             .toList());
   }
 
@@ -3549,6 +3556,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         value -> repository.findGrowthTypeDescription(value).orElse(value));
   }
 
+  private String resolveEndUseDescription(
+      String endUseCode, PermitCoreLookupContext lookupContext) {
+    String normalizedEndUseCode = trimToNull(endUseCode);
+    if (normalizedEndUseCode == null) {
+      return "";
+    }
+    return lookupContext.endUseDescriptionByCode.computeIfAbsent(
+        normalizedEndUseCode,
+        value -> repository.findEndUseDescription(value).orElse(value));
+  }
+
   private String resolvePackageStatusDescription(
       String packageStatusCode, PermitCoreLookupContext lookupContext) {
     String normalizedPackageStatusCode = trimToNull(packageStatusCode);
@@ -3603,6 +3621,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     private final Map<String, String> productTypeDescriptionByCode = new HashMap<>();
     private final Map<String, String> growthTypeDescriptionByCode = new HashMap<>();
     private final Map<String, String> packageStatusDescriptionByCode = new HashMap<>();
+    private final Map<String, String> endUseDescriptionByCode = new HashMap<>();
     private final Map<String, String> speciesDescriptionByCode = new HashMap<>();
     private final Map<String, String> gradeDescriptionByCode = new HashMap<>();
     private final Map<Long, String> applicationEndUseByNumber = new HashMap<>();

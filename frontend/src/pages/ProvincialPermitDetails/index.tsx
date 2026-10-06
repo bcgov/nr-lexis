@@ -362,7 +362,7 @@ const validateBlanketOicPackage = (form: BlanketOicPackageForm): BlanketOicPacka
     ageClass: requiredFieldError(form.ageClass, 'Age class') ?? undefined,
     productType: requiredFieldError(form.productType, 'Product type') ?? undefined,
     endUseCode: requiredFieldError(form.endUseCode, 'End use') ?? undefined,
-    speciesCodes: speciesCodes.length > 0 ? undefined : 'Species is required.',
+    speciesCodes: speciesCodes.length > 0 ? undefined : 'Species list is required.',
     comments: firstValidationError(
       () =>
         ASCII_PATTERN.test(form.comments)
@@ -7659,7 +7659,11 @@ const ProvincialPermitDetailsPage = () => {
                                   },
                                   {
                                     label: 'End use',
-                                    value: selectedBlanketOicPackage.endUseCodes?.join(', ') || '—',
+                                    value:
+                                      (selectedBlanketOicPackage.endUseDescriptions?.length
+                                        ? selectedBlanketOicPackage.endUseDescriptions
+                                        : selectedBlanketOicPackage.endUseCodes
+                                      )?.join(', ') || '—',
                                   },
                                   {
                                     label: 'Age class',
@@ -8561,6 +8565,7 @@ const ProvincialPermitDetailsPage = () => {
           ]}
         >
           <div className="permit-package-panel__form">
+            <p className="application-detail-required">{requiredLabel('Required fields')}</p>
             {!!boicPackageErrorMessage && (
               <div tabIndex={-1} data-package-error>
                 <InlineNotification
@@ -8603,7 +8608,7 @@ const ProvincialPermitDetailsPage = () => {
             <div className="legacy-search-grid">
               <TextInput
                 id="boicPackageVolume"
-                labelText={requiredLabel('Package volume (m³)')}
+                labelText={requiredLabel('Volume (m³)')}
                 aria-required="true"
                 value={boicPackageForm.volume}
                 invalid={!!boicPackageFieldErrors.volume}

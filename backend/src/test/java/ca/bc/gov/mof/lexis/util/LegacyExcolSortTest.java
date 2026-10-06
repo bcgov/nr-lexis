@@ -18,6 +18,17 @@ class LegacyExcolSortTest {
   }
 
   @Test
+  void candidatePatternMatchesExactCodesAndDoubleEndUses() {
+    assertThat(LegacyExcolSort.matchesCandidatePattern("HE/BA/PL", 2)).isTrue();
+    assertThat(LegacyExcolSort.matchesCandidatePattern("CE/UT SH", 1)).isTrue();
+    assertThat(LegacyExcolSort.matchesCandidatePattern("FI/PL (LG)", 1)).isTrue();
+    assertThat(LegacyExcolSort.matchesCandidatePattern("HE/BA/SP/CS", 2)).isFalse();
+    assertThat(LegacyExcolSort.matchesCandidatePattern("HE/PL", 2)).isFalse();
+    assertThat(LegacyExcolSort.matchesCandidatePattern(null, 1)).isFalse();
+    assertThat(LegacyExcolSort.matchesCandidatePattern("HE/PL", 0)).isFalse();
+  }
+
+  @Test
   void singleCandidateWinsOutright() {
     assertThat(LegacyExcolSort.select("H", List.of("CE"), "LU", List.of(" FI/SA ")))
         .contains("FI/SA");
