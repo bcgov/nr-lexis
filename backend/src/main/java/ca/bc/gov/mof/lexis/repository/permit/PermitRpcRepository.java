@@ -1952,6 +1952,10 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         LexisCodeQueries.PACKAGE_STATUS_BY_CODE, FIND_PACKAGE_STATUS_CODE, packageStatusCode);
   }
 
+  public Optional<String> findEndUseDescription(String endUseCode) {
+    return findCodeDescriptionDirect(LexisCodeQueries.END_USE_BY_CODE, null, endUseCode);
+  }
+
   public Optional<String> findProductTypeDescription(String productTypeCode) {
     return findCodeDescriptionDirect(
         LexisCodeQueries.PRODUCT_TYPE_BY_CODE, FIND_PRODUCT_TYPE_CODE, productTypeCode);

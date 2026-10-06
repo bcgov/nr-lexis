@@ -1021,16 +1021,21 @@ public class ApplicationDetailsRpcController {
   public ResponseEntity<List<ApplicationCodeResponseDto>> getEndUseForSpeciesRegion(
       @RequestParam(name = "speciesJSON", required = false) String speciesJson,
       @RequestParam(name = "region", required = false) String region,
-      @RequestParam(name = "orgUnitNumber", required = false) String orgUnitNumber) {
+      @RequestParam(name = "orgUnitNumber", required = false) String orgUnitNumber,
+      @RequestParam(name = "completeSortOnly", required = false, defaultValue = "false")
+          boolean completeSortOnly) {
     ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
     if (service == null) {
       LOGGER.warn("Application details RPC service unavailable - returning no content for end uses");
       return ResponseEntity.noContent().build();
     }
 
+    String resolvedRegion = firstTrimmedNonBlank(region, orgUnitNumber);
+    List<String> speciesCodes = parseSpeciesJson(speciesJson);
     return ResponseEntity.ok(
-        service.getEndUsesForSpeciesRegion(
-            firstTrimmedNonBlank(region, orgUnitNumber), parseSpeciesJson(speciesJson))
+        (completeSortOnly
+                ? service.getEndUsesCompletingSpeciesSort(resolvedRegion, speciesCodes)
+                : service.getEndUsesForSpeciesRegion(resolvedRegion, speciesCodes))
             .stream()
             .map(this::toCodeResponse)
             .toList());
@@ -1043,7 +1048,7 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "speciesJSON", required = false) String speciesJson,
       @RequestParam(name = "region", required = false) String region,
       @RequestParam(name = "orgUnitNumber", required = false) String orgUnitNumber) {
-    return getEndUseForSpeciesRegion(speciesJson, region, orgUnitNumber);
+    return getEndUseForSpeciesRegion(speciesJson, region, orgUnitNumber, false);
   }
 
   @GetMapping("/rpc/application-details/remaining-species")

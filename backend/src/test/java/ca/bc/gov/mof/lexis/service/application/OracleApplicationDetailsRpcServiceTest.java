@@ -1485,6 +1485,46 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void getEndUsesCompletingSpeciesSortShouldOfferOnlyEndUsesOfAnExactRegionalSort() {
+    when(repository.findSpeciesEndUsesByRegionSpeciesRequired("1909", "HE"))
+        .thenReturn(
+            List.of(
+                xrefRow("HE", "PL", "HE/BA/PL"),
+                xrefRow("HE", "SL", "HE/BA/SL"),
+                xrefRow("HE", "CS", "HE/BA/SP/CS"),
+                xrefRow("HE", "PL", "HE/PL"),
+                xrefRow("HE", "UT", "HE/BA/UT SH")));
+    when(repository.findEndUseCodeRequired("PL"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("PL", "Peeler", 1L, 1L)));
+    when(repository.findEndUseCodeRequired("SL"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("SL", "Sawlog", 1L, 2L)));
+    when(repository.findEndUseCodeRequired("UT"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("UT", "Utility", 1L, 3L)));
+
+    assertThat(service.getEndUsesCompletingSpeciesSort("1909", List.of(" HE ", "BA")))
+        .extracting(ApplicationDetailsRpcService.CodeItem::code)
+        .containsExactly("PL", "SL", "UT");
+  }
+
+  @Test
+  void getEndUsesCompletingSpeciesSortShouldOfferNothingForAPartialCombination() {
+    when(repository.findSpeciesEndUsesByRegionSpeciesRequired("1909", "HE"))
+        .thenReturn(
+            List.of(xrefRow("HE", "PL", "HE/BA/PL"), xrefRow("HE", "CS", "HE/BA/SP/CS")));
+
+    assertThat(service.getEndUsesCompletingSpeciesSort("1909", List.of("HE", "SP"))).isEmpty();
+    assertThat(service.getEndUsesCompletingSpeciesSort("1909", List.of())).isEmpty();
+    assertThat(service.getEndUsesCompletingSpeciesSort("x", List.of("HE"))).isEmpty();
+    verify(repository, never()).findEndUseCodeRequired(any());
+  }
+
+  private static ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow xrefRow(
+      String speciesCode, String endUseCode, String excolCode) {
+    return new ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow(
+        speciesCode, "U", endUseCode, excolCode, 1909L);
+  }
+
+  @Test
   void getRemainingSpeciesShouldReturnRegionSpeciesWhenNoneSelected() {
     when(repository.findSpeciesEndUsesByRegionRequired("11"))
         .thenReturn(

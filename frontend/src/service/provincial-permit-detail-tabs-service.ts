@@ -28,6 +28,8 @@ type ProvincialPermitPackageInfoRow = {
   speciesEndUseSort: string
   speciesCodes?: string[]
   endUseCodes?: string[]
+  endUseDescriptions?: string[]
+  productTypeCode?: string
   ageClass: string
   packageVolume: string
   averageLength: string
@@ -346,6 +348,10 @@ const normalizePackageInfoRow = (
     endUseCodes: Array.isArray(source.endUseCodes)
       ? source.endUseCodes.map(asString).filter(Boolean)
       : [],
+    endUseDescriptions: Array.isArray(source.endUseDescriptions)
+      ? source.endUseDescriptions.map(asString).filter(Boolean)
+      : [],
+    productTypeCode: asString(source.productTypeCode),
     ageClass: asString(source.ageclass || source.ageClass),
     packageVolume: asString(source.volume || source.packageVolume),
     averageLength: asString(source.length || source.averageLength),
