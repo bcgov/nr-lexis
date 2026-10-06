@@ -4150,7 +4150,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
           packageVolume: '120.5',
           averageLength: '7.1',
           averageTopDiameter: '16.2',
-          productType: 'Unmanufactured',
+          productType: 'Harvested Timber',
+          productTypeCode: 'H',
           currentPackageVolume: '118.5',
           status: 'APP - Approved',
           reprocessed: 'N',
@@ -4195,21 +4196,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     for (const [label, value] of [
       ['Species list', 'AL, HE, PL'],
       ['End use', 'Lumber'],
+      ['Product type', 'Harvested'],
     ]) {
       const field = within(packageCard)
         .getByText(label)
         .closest('.detail-field-item') as HTMLElement
       expect(within(field).getByText(value)).toBeInTheDocument()
     }
-    const commentsField = within(packageCard)
-      .getByText('Comments')
-      .closest('.detail-field-item') as HTMLElement
-    expect(
-      within(commentsField).getByText(
-        (_, element) =>
-          element?.tagName === 'SPAN' && element.textContent === 'Current OIC package\nSecond line',
-      ),
-    ).toHaveStyle({ whiteSpace: 'pre-wrap' })
+    expect(within(packageCard).queryByText('Comments')).not.toBeInTheDocument()
     expect(within(packageCard).getByText('Current package pieces')).toBeInTheDocument()
     expect(within(packageCard).getByText('Current package volume (m³)')).toBeInTheDocument()
     for (const [label, value] of [
@@ -4457,7 +4451,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       const loadError = 'Unable to load the Blanket OIC package for editing.'
       expect(await screen.findByText(loadError)).toBeVisible()
-      expect(screen.queryByRole('heading', { name: 'Edit BOIC-9' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Edit package' })).not.toBeInTheDocument()
       expect(screen.getByText('Unable to open permit document.')).toBeVisible()
       expect(mockedFetchBlanketOicPackageEditContext).toHaveBeenCalledWith('BOIC-9')
 
@@ -4471,9 +4465,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
         expect(within(packageEditor).getByLabelText('Comments')).toHaveValue('')
       } else {
         await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
-        const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
-          '.application-detail-edit-section',
-        ) as HTMLElement
+        const packageEditor = (
+          await screen.findByRole('heading', { name: 'Edit package' })
+        ).closest('.application-detail-edit-section') as HTMLElement
         await waitFor(() =>
           expect(within(packageEditor).getByRole('button', { name: 'Save package' })).toBeEnabled(),
         )
@@ -4553,7 +4547,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Items')
     expect(screen.queryByRole('textbox', { name: 'Package number' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create package' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Edit BOIC-9' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Edit package' })).not.toBeInTheDocument()
   })
 
   it.each(['loaded', 'failed'])(
@@ -4641,7 +4635,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const row = await findBlanketOicPackageCard()
     await userEvent.click(within(row).getByRole('button', { name: 'Edit package' }))
     expect(await screen.findByText('Loading package…')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel edit' }))
+    await userEvent.click(
+      within(screen.getByRole('complementary', { name: 'Edit package' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
     const editor = screen
       .getByRole('heading', { name: 'Create package' })
@@ -4666,7 +4664,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       }),
     )
     expect(screen.getByRole('heading', { name: 'Create package' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Edit BOIC-9' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Edit package' })).not.toBeInTheDocument()
     expect(within(editor as HTMLElement).getByLabelText('Package number')).toHaveValue('NEW-DRAFT')
     expect(screen.queryByText('Loading package…')).not.toBeInTheDocument()
     expect(mockedUpdateBlanketOicPackage).not.toHaveBeenCalled()
@@ -4693,7 +4691,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Items')
     const row = await findBlanketOicPackageCard()
     await userEvent.click(within(row).getByRole('button', { name: 'Edit package' }))
-    const editor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+    const editor = (await screen.findByRole('heading', { name: 'Edit package' })).closest(
       '.application-detail-edit-section',
     ) as HTMLElement
     await waitFor(() => expect(within(editor).getByLabelText('Package number')).toBeEnabled())
@@ -4714,7 +4712,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.getByRole('combobox', { name: 'Package number' })).toHaveValue('BOIC-NEW'),
     )
     expect(await screen.findByRole('heading', { name: 'Package BOIC-NEW' })).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Edit BOIC-9' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Edit package' })).not.toBeInTheDocument()
   })
 
   it.each([true, false])(
@@ -4884,6 +4882,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       await userEvent.type(within(packageEditor).getByLabelText('Package number'), 'boic-new')
       expect(within(packageEditor).getByText('Required fields')).toBeInTheDocument()
+      expect(within(packageEditor).getByRole('combobox', { name: 'Age class' })).toHaveValue('')
       const speciesList = within(packageEditor).getByRole('combobox', { name: /^Species list/ })
       await userEvent.click(speciesList)
       await userEvent.click(await within(packageEditor).findByRole('option', { name: /FI - Fir/ }))
@@ -4896,6 +4895,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await chooseComboBoxOption(
         within(packageEditor).getByRole('combobox', { name: 'End use' }),
         'LU - Lumber',
+      )
+      await chooseComboBoxOption(
+        within(packageEditor).getByRole('combobox', { name: 'Age class' }),
+        'Old growth',
       )
       await userEvent.clear(within(packageEditor).getByLabelText('Volume (m³)'))
       await userEvent.type(within(packageEditor).getByLabelText('Volume (m³)'), '100.0')
@@ -4985,7 +4988,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(packageRow).queryByText('Y')).not.toBeInTheDocument()
 
     await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
-    const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+    const packageEditor = (await screen.findByRole('heading', { name: 'Edit package' })).closest(
       '.application-detail-edit-section',
     ) as HTMLElement
     expect(
@@ -5030,7 +5033,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Items')
     const packageRow = await findBlanketOicPackageCard()
     await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
-    const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+    const packageEditor = (await screen.findByRole('heading', { name: 'Edit package' })).closest(
       '.application-detail-edit-section',
     ) as HTMLElement
     const field = within(packageEditor).getByLabelText(fieldLabel)
@@ -5058,7 +5061,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await selectPermitDetailTab('Items')
       const packageRow = await findBlanketOicPackageCard()
       await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
-      const editor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+      const editor = (await screen.findByRole('heading', { name: 'Edit package' })).closest(
         '.application-detail-edit-section',
       ) as HTMLElement
       const field = within(editor).getByLabelText('Comments')
@@ -5140,7 +5143,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const firstPackageRow = await findBlanketOicPackageCard()
     await userEvent.click(within(firstPackageRow).getByRole('button', { name: 'Edit package' }))
     const firstPackageEditor = (
-      await screen.findByRole('heading', { name: 'Edit BOIC-9' })
+      await screen.findByRole('heading', { name: 'Edit package' })
     ).closest('.application-detail-edit-section') as HTMLElement
     const averageLength = within(firstPackageEditor).getByLabelText('Average length (m)')
     await userEvent.clear(averageLength)
@@ -5152,7 +5155,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const packageSelect = screen.getByRole('combobox', { name: 'Package number' })
     expect(packageSelect).toBeDisabled()
 
-    await userEvent.click(within(firstPackageEditor).getByRole('button', { name: 'Cancel edit' }))
+    await userEvent.click(within(firstPackageEditor).getByRole('button', { name: 'Cancel' }))
     expect(screen.queryByText(validationMessage)).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
@@ -5167,8 +5170,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const secondPackageRow = await findBlanketOicPackageCard('BOIC-10')
     await userEvent.click(within(secondPackageRow).getByRole('button', { name: 'Edit package' }))
     const secondPackageEditor = (
-      await screen.findByRole('heading', { name: 'Edit BOIC-10' })
+      await screen.findByRole('heading', { name: 'Edit package' })
     ).closest('.application-detail-edit-section') as HTMLElement
+    expect(within(secondPackageEditor).getByLabelText('Package number')).toHaveValue('BOIC-10')
     expect(within(secondPackageEditor).getByLabelText('Average length (m)')).toHaveValue('7.1')
     expect(within(secondPackageEditor).queryByText(validationMessage)).not.toBeInTheDocument()
   })
@@ -5180,7 +5184,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Items')
     const packageRow = await findBlanketOicPackageCard()
     await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
-    const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+    const packageEditor = (await screen.findByRole('heading', { name: 'Edit package' })).closest(
       '.application-detail-edit-section',
     ) as HTMLElement
     const volume = within(packageEditor).getByLabelText('Volume (m³)')
@@ -5216,7 +5220,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await selectPermitDetailTab('Items')
       const packageRow = await findBlanketOicPackageCard()
       await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
-      const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+      const packageEditor = (await screen.findByRole('heading', { name: 'Edit package' })).closest(
         '.application-detail-edit-section',
       ) as HTMLElement
       await userEvent.type(within(packageEditor).getByLabelText('Comments'), ' updated')
@@ -5330,6 +5334,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await chooseComboBoxOption(
       within(packageEditor).getByRole('combobox', { name: 'End use' }),
       'LU - Lumber',
+    )
+    await chooseComboBoxOption(
+      within(packageEditor).getByRole('combobox', { name: 'Age class' }),
+      'Old growth',
     )
     await userEvent.clear(within(packageEditor).getByLabelText('Volume (m³)'))
     await userEvent.type(within(packageEditor).getByLabelText('Volume (m³)'), '100.0')
@@ -5684,9 +5692,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() => {
       expect(mockedFetchBlanketOicPackageEditContext).toHaveBeenCalledWith('PKG-1 ')
     })
-    const packageEditor = (
-      await screen.findByRole('heading', { name: 'Edit PKG-1 (1 trailing space)' })
-    ).closest('.application-detail-edit-section') as HTMLElement
+    const packageEditor = (await screen.findByRole('heading', { name: 'Edit package' })).closest(
+      '.application-detail-edit-section',
+    ) as HTMLElement
     expect(within(packageEditor).getByLabelText('Package number')).toHaveValue('PKG-1 ')
     await userEvent.type(within(packageEditor).getByLabelText('Comments'), ' updated')
     await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
@@ -8729,7 +8737,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await selectPermitDetailTab('Items')
       const packageRow = await findBlanketOicPackageCard()
       await userEvent.click(within(packageRow).getByRole('button', { name: 'Edit package' }))
-      const packageEditor = (await screen.findByRole('heading', { name: 'Edit BOIC-9' })).closest(
+      const packageEditor = (await screen.findByRole('heading', { name: 'Edit package' })).closest(
         '.application-detail-edit-section',
       ) as HTMLElement
       const saveButton = within(packageEditor).getByRole('button', { name: 'Save package' })
@@ -8757,7 +8765,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.getByText('Action failed')).toBeVisible()
       expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledOnce()
 
-      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Cancel edit' }))
+      await userEvent.click(within(packageEditor).getByRole('button', { name: 'Cancel' }))
       expect(screen.getByText('Unable to open permit document.')).toBeVisible()
       await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
       expect(screen.getByText('Unable to open permit document.')).toBeVisible()

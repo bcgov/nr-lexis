@@ -3333,7 +3333,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private PermitPackageInfoRpcResponseDto emptyPackageInfo() {
     return new PermitPackageInfoRpcResponseDto(
-        "", "", "", "", "", "", "", List.of(), List.of(), List.of());
+        "", "", "", "", "", "", "", List.of(), List.of(), List.of(), "");
   }
 
   private PermitPackageDetailsRpcResponseDto emptyPackageDetails() {
@@ -3360,7 +3360,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           "",
           List.of(),
           List.of(),
-          List.of());
+          List.of(),
+          "");
     }
 
     boolean blanketOic =
@@ -3409,7 +3410,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         packageEndUseCodes,
         packageEndUseCodes.stream()
             .map(code -> resolveEndUseDescription(code, lookupContext))
-            .toList());
+            .toList(),
+        nonNull(productTypeCode));
   }
 
   private List<EndUsePairRow> getCorePackageEndUses(

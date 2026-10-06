@@ -185,6 +185,23 @@
   }
 }
 
+// Figma's saved package card groups its values in rows, as the exemption client card does.
+.boic-package-field-groups {
+  display: grid;
+  gap: 1.75rem;
+
+  .detail-field-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem 2rem;
+    margin: 0;
+  }
+
+  .detail-field-item {
+    min-inline-size: 7rem;
+  }
+}
+
 .ministerial-permit-details__remarks .cds--text-area__wrapper,
 .ministerial-permit-details__remarks .cds--text-area,
 .boic-permit-details__remarks .cds--text-area__wrapper,

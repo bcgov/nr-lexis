@@ -610,7 +610,8 @@ class PermitDetailsRpcControllerTest {
             "Unmanufactured",
             List.of("HE"),
             List.of("UT"),
-            List.of("Utility"));
+            List.of("Utility"),
+            "U");
     when(service.getPackageInfo("PKG-903")).thenReturn(dto);
     when(service.packageBelongsToPermit("PKG-903", 7000123L)).thenReturn(true);
 

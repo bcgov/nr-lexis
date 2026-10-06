@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react'
 import {
+  Add,
   Box,
   Certificate,
   Currency,
@@ -69,7 +70,7 @@ import { ActionResultNotification } from '../../components/ActionResultNotificat
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldTile } from '../shared/DetailSections'
+import { DetailFieldGrid, DetailFieldTile } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { displayTableValue } from '@/utils/text'
 import { formatIsoDateLabel } from '@/utils/date'
@@ -99,6 +100,7 @@ import {
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
 import BlanketOicPackageCodeFields from './BlanketOicPackageCodeFields'
+import { blanketOicProductTypeLabel } from './blanket-oic-package-options'
 import BlanketOicScaleCodeFields from './BlanketOicScaleCodeFields'
 import { resolveBlanketOicRegionContext } from '../ProvincialBlanketOicPermitCreate/region-context'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -323,7 +325,7 @@ const EMPTY_BLANKET_OIC_PACKAGE_FORM: BlanketOicPackageForm = {
   status: 'ACT',
   comments: '',
   reprocessed: 'N',
-  ageClass: 'O',
+  ageClass: '',
   productType: 'H',
   endUseCode: '',
   speciesCodes: '',
@@ -5400,6 +5402,7 @@ const ProvincialPermitDetailsPage = () => {
             id="add-boic-scale"
             kind="tertiary"
             size="md"
+            renderIcon={Add}
             disabled={blanketOicScaleActionsDisabled || isAddingBoicScale}
             onClick={(event) => startBlanketOicScale(event.currentTarget)}
           >
@@ -5808,6 +5811,7 @@ const ProvincialPermitDetailsPage = () => {
       id="create-boic-package"
       kind="tertiary"
       size="md"
+      renderIcon={Add}
       disabled={blanketOicPackageActionsDisabled}
       onClick={(event) => {
         packagePanelLauncherRef.current = event.currentTarget
@@ -7554,8 +7558,9 @@ const ProvincialPermitDetailsPage = () => {
                                   <Button
                                     id="create-boic-package"
                                     type="button"
-                                    kind="primary"
+                                    kind="tertiary"
                                     size="sm"
+                                    renderIcon={Add}
                                     disabled={blanketOicPackageActionsDisabled}
                                     onClick={(event) => {
                                       packagePanelLauncherRef.current = event.currentTarget
@@ -7612,6 +7617,7 @@ const ProvincialPermitDetailsPage = () => {
                                         type="button"
                                         kind="danger--ghost"
                                         size="sm"
+                                        renderIcon={TrashCan}
                                         disabled={
                                           blanketOicPackageActionsDisabled ||
                                           selectedBlanketOicPackageHasScaleRows
@@ -7635,7 +7641,7 @@ const ProvincialPermitDetailsPage = () => {
                                       </Button>
                                       <Button
                                         type="button"
-                                        kind="ghost"
+                                        kind="tertiary"
                                         size="sm"
                                         renderIcon={Edit}
                                         disabled={blanketOicPackageActionsDisabled}
@@ -7651,50 +7657,60 @@ const ProvincialPermitDetailsPage = () => {
                                     </div>
                                   ) : undefined
                                 }
-                                fields={[
-                                  {
-                                    label: 'Species list',
-                                    value:
-                                      selectedBlanketOicPackage.speciesCodes?.join(', ') || '—',
-                                  },
-                                  {
-                                    label: 'End use',
-                                    value:
-                                      (selectedBlanketOicPackage.endUseDescriptions?.length
-                                        ? selectedBlanketOicPackage.endUseDescriptions
-                                        : selectedBlanketOicPackage.endUseCodes
-                                      )?.join(', ') || '—',
-                                  },
-                                  {
-                                    label: 'Age class',
-                                    value: selectedBlanketOicPackage.ageClass || '—',
-                                  },
-                                  {
-                                    label: 'Product type',
-                                    value: selectedBlanketOicPackage.productType || '—',
-                                  },
-                                  {
-                                    label: 'Volume (m³)',
-                                    value: selectedBlanketOicPackage.packageVolume || '—',
-                                  },
-                                  {
-                                    label: 'Average length (m)',
-                                    value: selectedBlanketOicPackage.averageLength || '—',
-                                  },
-                                  {
-                                    label: 'Average top diameter (rads)',
-                                    value: selectedBlanketOicPackage.averageTopDiameter || '—',
-                                  },
-                                  {
-                                    label: 'Comments',
-                                    value: (
-                                      <span style={{ whiteSpace: 'pre-wrap' }}>
-                                        {selectedBlanketOicPackage.comments || '—'}
-                                      </span>
-                                    ),
-                                  },
-                                ]}
+                                fields={[]}
                               >
+                                <div className="boic-package-field-groups">
+                                  <DetailFieldGrid
+                                    fields={[
+                                      {
+                                        label: 'Species list',
+                                        value:
+                                          selectedBlanketOicPackage.speciesCodes?.join(', ') || '—',
+                                      },
+                                      {
+                                        label: 'End use',
+                                        value:
+                                          (selectedBlanketOicPackage.endUseDescriptions?.length
+                                            ? selectedBlanketOicPackage.endUseDescriptions
+                                            : selectedBlanketOicPackage.endUseCodes
+                                          )?.join(', ') || '—',
+                                      },
+                                    ]}
+                                  />
+                                  <DetailFieldGrid
+                                    fields={[
+                                      {
+                                        label: 'Age class',
+                                        value: selectedBlanketOicPackage.ageClass || '—',
+                                      },
+                                      {
+                                        label: 'Product type',
+                                        value:
+                                          blanketOicProductTypeLabel(
+                                            selectedBlanketOicPackage.productTypeCode,
+                                          ) ||
+                                          selectedBlanketOicPackage.productType ||
+                                          '—',
+                                      },
+                                    ]}
+                                  />
+                                  <DetailFieldGrid
+                                    fields={[
+                                      {
+                                        label: 'Volume (m³)',
+                                        value: selectedBlanketOicPackage.packageVolume || '—',
+                                      },
+                                      {
+                                        label: 'Average length (m)',
+                                        value: selectedBlanketOicPackage.averageLength || '—',
+                                      },
+                                      {
+                                        label: 'Average top diameter (rads)',
+                                        value: selectedBlanketOicPackage.averageTopDiameter || '—',
+                                      },
+                                    ]}
+                                  />
+                                </div>
                                 <div className="boic-package-summary__scale">
                                   {renderScaleSummary()}
                                 </div>
@@ -8521,11 +8537,7 @@ const ProvincialPermitDetailsPage = () => {
       {detail?.blanketOic && (
         <DetailSidePanel
           open={canEditBlanketOicPackages && blanketOicPackageEditorOpen}
-          title={
-            editingBoicPackageNumber
-              ? `Edit ${formatPackageNumberLabel(editingBoicPackageNumber)}`
-              : 'Create package'
-          }
+          title={editingBoicPackageNumber ? 'Edit package' : 'Create package'}
           className="permit-package-panel application-detail-edit-section"
           contentSelector="#permit-detail-content"
           initialFocusSelector="#boicPackageNumber"
@@ -8536,17 +8548,13 @@ const ProvincialPermitDetailsPage = () => {
           onClose={resetBlanketOicPackageForm}
           actions={[
             {
-              label: editingBoicPackageNumber ? 'Cancel edit' : 'Cancel',
+              label: 'Cancel',
               kind: 'tertiary',
               disabled: isSavingBoicPackage,
               onClick: resetBlanketOicPackageForm,
             },
             {
-              label: isSavingBoicPackage
-                ? 'Saving…'
-                : editingBoicPackageNumber
-                  ? 'Save package'
-                  : 'Save package',
+              label: isSavingBoicPackage ? 'Saving…' : 'Save package',
               kind: 'primary',
               disabled: isLoadingBoicPackage || isSavingBoicPackage || !boicCodeOptionsReady,
               renderIcon: isSavingBoicPackage ? PendingIcon : undefined,

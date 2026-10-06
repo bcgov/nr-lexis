@@ -1183,6 +1183,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.packageList().get(0).packageInfo().endUseCodes()).containsExactly("L", "P");
     assertThat(response.packageList().get(0).packageInfo().endUseDescriptions())
         .containsExactly("Logs", "P");
+    assertThat(response.packageList().get(0).packageInfo().productTypeCode()).isEqualTo("T");
     assertThat(response.packageList().get(1).packageInfo().enduse()).isEqualTo("FI/P\n");
     assertThat(response.packageList().get(1).packageInfo().speciesCodes()).containsExactly("FI");
     assertThat(response.packageList().get(1).packageInfo().endUseCodes()).containsExactly("P");

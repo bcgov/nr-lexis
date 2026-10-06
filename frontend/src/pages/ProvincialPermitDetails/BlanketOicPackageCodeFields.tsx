@@ -11,6 +11,7 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
+import { BLANKET_OIC_PRODUCT_TYPE_OPTIONS } from './blanket-oic-package-options'
 
 export type BlanketOicPackageCodeField = 'speciesCodes' | 'endUseCode' | 'ageClass' | 'productType'
 
@@ -41,8 +42,6 @@ type SpeciesListItem = {
   id: string
   text: string
 }
-
-const PRODUCT_TYPE_OPTIONS: SearchableOption[] = [{ value: 'H', label: 'Harvested' }]
 
 const END_USE_HELPER_TEXT = 'Available once species are selected'
 
@@ -301,7 +300,7 @@ export default function BlanketOicPackageCodeFields({
           id="boicPackageProductType"
           labelText="Product type"
           value={value.productType}
-          options={PRODUCT_TYPE_OPTIONS}
+          options={BLANKET_OIC_PRODUCT_TYPE_OPTIONS}
           placeholder="Select product type"
           disabled={disabled}
           invalid={!!fieldErrors?.productType}

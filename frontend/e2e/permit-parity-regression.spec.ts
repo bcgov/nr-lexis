@@ -1047,7 +1047,8 @@ test.describe('Provincial permit parity regressions', () => {
     const editedPackageNumber = panel.getByLabel('Package number', { exact: true })
     await expect(editedPackageNumber).toHaveValue('BOIC-A')
     await expect(editedPackageNumber).toBeFocused()
-    await panel.getByRole('button', { name: 'Cancel edit', exact: true }).click()
+    await expect(panel.getByRole('heading', { name: 'Edit package', exact: true })).toBeVisible()
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(panel).toHaveCount(0)
     await expect(editTrigger).toBeFocused()
 
@@ -1083,6 +1084,9 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(endUse).toHaveValue('')
     await chooseComboBoxOption(page, 'End use', 'LU - Lumber')
     await expect(endUse).toHaveValue('LU - Lumber')
+    const ageClass = panel.getByRole('combobox', { name: 'Age class', exact: true })
+    await expect(ageClass).toHaveValue('')
+    await chooseComboBoxOption(page, 'Age class', 'Old growth')
     await panel.getByRole('button', { name: 'Save package', exact: true }).click()
 
     await expect(panel).toHaveCount(0)
@@ -1100,6 +1104,7 @@ test.describe('Provincial permit parity regressions', () => {
           averageLength: 10,
           averageDiameter: 20,
           endUseCode: 'LU',
+          ageClass: 'O',
           speciesCodes: ['FI'],
         }),
       }),
