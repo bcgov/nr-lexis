@@ -1772,8 +1772,9 @@ const ProvincialApplicationCreatePage = () => {
                     clientData={ownerClientData}
                   />
                 </div>
-                <div className="application-create-applicant-type">
-                  {canChangeApplicantType && (
+                {/* The divider belongs to the checkbox, so users who can't change the type see neither. */}
+                {canChangeApplicantType && (
+                  <div className="application-create-applicant-type">
                     <Checkbox
                       id="applicationCreateAgentUsed"
                       labelText="I'm an agent"
@@ -1790,8 +1791,8 @@ const ProvincialApplicationCreatePage = () => {
                         }))
                       }}
                     />
-                  )}
-                </div>
+                  </div>
+                )}
 
                 {hasAgentDetails && (
                   <section
