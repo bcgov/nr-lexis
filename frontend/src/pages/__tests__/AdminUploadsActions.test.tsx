@@ -117,7 +117,7 @@ describe('Admin upload workflow smoke', () => {
     expect(screen.getByLabelText('Document File')).toHaveAttribute('aria-required', 'true')
     expect(
       screen.getByText(
-        'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, and ZIP. Maximum file size: 20 MB. Multiple files can be queued and saved together.',
+        'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML and ZIP. Maximum file size: 20 MB. Multiple files can be queued and saved together.',
       ),
     ).toBeInTheDocument()
     expect(screen.queryByText(/US-ASCII|250 bytes/i)).not.toBeInTheDocument()

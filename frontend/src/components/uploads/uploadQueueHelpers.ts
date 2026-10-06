@@ -144,7 +144,7 @@ export const DOCUMENT_UPLOAD_EXTENSIONS = [
 export const DOCUMENT_UPLOAD_ACCEPT = DOCUMENT_UPLOAD_EXTENSIONS.join(',')
 
 export const DOCUMENT_UPLOAD_GUIDANCE =
-  'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML, and ZIP. Maximum file size: 20 MB.'
+  'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML and ZIP. Maximum file size: 20 MB.'
 
 const MAX_ATTACHMENT_METADATA_BYTES = 250
 const PRINTABLE_US_ASCII_PATTERN = /^[\x20-\x7e]+$/
