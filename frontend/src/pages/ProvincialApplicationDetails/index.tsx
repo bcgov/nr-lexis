@@ -33,13 +33,10 @@ import {
   ContainerRegistry,
   DataDefinition,
   DocumentAttachment,
-  Download,
   Edit,
   Enterprise,
-  Launch,
   Stamp,
   Task,
-  TrashCan,
 } from '@carbon/icons-react'
 import { AddDocument } from '@carbon/pictograms-react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
@@ -71,11 +68,6 @@ import {
   formatIsoDateLabel,
 } from '@/utils/date'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
-import {
-  DOCUMENTS_EMPTY_DESCRIPTION,
-  formatDocumentSource,
-  savedDocumentsTitle,
-} from '@/service/document-service-utils'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { landingPageReturnTo, readDetailReturnTo } from '@/pages/shared/detail-navigation'
@@ -120,7 +112,11 @@ import {
   fetchProvincialApplicationOptions,
   type SearchOption,
 } from '@/service/search-options-service'
-import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
+import RecordDocumentsSection, {
+  DOCUMENT_DELETED_RESULT,
+  documentsSavedResult,
+} from '@/components/documents/RecordDocumentsSection'
+import { useDocumentOpener } from '@/components/documents/useDocumentOpener'
 import DetailSidePanel from '@/components/DetailSidePanel'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -154,11 +150,8 @@ import {
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
-import { triggerBrowserDownload } from '@/utils/download'
-import { openDocumentPreview } from '@/utils/document-preview'
 import { requiredLabel } from '@/utils/required-label'
 import {
-  displayTableValue,
   isValidEmail,
   normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
@@ -777,8 +770,6 @@ const ProvincialApplicationDetailsPage = () => {
   const pageActionResult = actionResult?.source ? null : actionResult
   const actionErrorMessage = pageActionResult?.kind === 'error' ? pageActionResult.message : ''
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
-  const [documentPendingDeletion, setDocumentPendingDeletion] =
-    useState<ProvincialApplicationDocumentRow | null>(null)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
@@ -794,7 +785,6 @@ const ProvincialApplicationDetailsPage = () => {
   const remarkLauncherRef = useRef<HTMLButtonElement | null>(null)
   const remarkBodyRef = useRef<HTMLTextAreaElement | null>(null)
   const [remarkDiscardConfirmationOpen, setRemarkDiscardConfirmationOpen] = useState(false)
-  const documentUploadLauncherRef = useRef<HTMLButtonElement | null>(null)
   const [summaryForm, setSummaryForm] = useState<ApplicationSummaryFormState | null>(null)
   const [summaryBaselineForm, setSummaryBaselineForm] =
     useState<ApplicationSummaryFormState | null>(null)
@@ -899,18 +889,6 @@ const ProvincialApplicationDetailsPage = () => {
     initialTab: requestedApplicationTab === 'items' ? 'items' : undefined,
   })
   const beginDetailRequest = useLatestRequestGuard()
-  const beginDocumentOpenRequest = useLatestRequestGuard()
-  const isCurrentDocumentRouteRef = useRef<() => boolean>(() => false)
-  const pendingDocumentPreviewsRef = useRef(new Set<Window>())
-  useEffect(() => {
-    isCurrentDocumentRouteRef.current = beginDocumentOpenRequest()
-    const pendingPreviews = pendingDocumentPreviewsRef.current
-    return () => {
-      beginDocumentOpenRequest()
-      pendingPreviews.forEach((target) => target.close())
-      pendingPreviews.clear()
-    }
-  }, [applicationNumber, beginDocumentOpenRequest])
   const currentApplicationNumberRef = useRef(applicationNumber)
   currentApplicationNumberRef.current = applicationNumber
   const currentDetailRef = useRef<ProvincialApplicationDetail | null>(null)
@@ -2307,51 +2285,22 @@ const ProvincialApplicationDetailsPage = () => {
     }
   }, [applicationNumber])
 
-  const onOpenDocument = useCallback(
-    async (row: ProvincialApplicationDocumentRow, preview = false) => {
-      if (!applicationNumber) return
-      const isCurrentRoute = isCurrentDocumentRouteRef.current
-      let previewTarget: Window | null = null
-      const closePendingPreview = () => {
-        if (previewTarget && pendingDocumentPreviewsRef.current.delete(previewTarget)) {
-          previewTarget.close()
-        }
-      }
-      setActionResult(null)
-      try {
-        if (preview) {
-          // Reserve the tab during the click, before the authenticated document request.
-          previewTarget = window.open('about:blank', '_blank')
-          if (previewTarget) {
-            pendingDocumentPreviewsRef.current.add(previewTarget)
-            previewTarget.opener = null
-          }
-        }
-        const result = await openApplicationDocument(row.id, row.name, applicationNumber)
-        if (!isCurrentRoute()) {
-          closePendingPreview()
-          return
-        }
-        if (preview) {
-          openDocumentPreview(result.blob, result.filename || row.name, previewTarget)
-        } else {
-          triggerBrowserDownload(result.blob, result.filename || row.name)
-        }
-      } catch {
-        closePendingPreview()
-        if (!isCurrentRoute()) return
-        setActionResult({
-          kind: 'error',
-          message: preview
-            ? 'Unable to open the selected document.'
-            : 'Unable to download the selected document.',
-        })
-      } finally {
-        if (previewTarget) pendingDocumentPreviewsRef.current.delete(previewTarget)
-      }
-    },
+  const fetchApplicationDocument = useCallback(
+    (row: ProvincialApplicationDocumentRow) =>
+      openApplicationDocument(row.id, row.name, applicationNumber ?? ''),
     [applicationNumber],
   )
+  const clearActionResult = useCallback(() => setActionResult(null), [])
+  const showDocumentOpenError = useCallback(
+    (message: string) => setActionResult({ kind: 'error', message, source: 'documents' }),
+    [],
+  )
+  const onOpenDocument = useDocumentOpener({
+    recordKey: applicationNumber,
+    fetchDocument: fetchApplicationDocument,
+    onStart: clearActionResult,
+    onError: showDocumentOpenError,
+  })
 
   const onRemoveDocument = useCallback(
     async (row: ProvincialApplicationDocumentRow) => {
@@ -2381,12 +2330,7 @@ const ProvincialApplicationDetailsPage = () => {
             setDocumentRows(documentsResult.rows)
             setDocumentLookupAvailability('available')
             setDocumentsErrorMessage('')
-            setActionResult({
-              kind: 'success',
-              title: 'Document deleted.',
-              message: '',
-              source: 'documents',
-            })
+            setActionResult({ ...DOCUMENT_DELETED_RESULT, source: 'documents' })
           }
         } catch (refreshError) {
           if (isCurrentDocumentRequest()) {
@@ -2420,7 +2364,6 @@ const ProvincialApplicationDetailsPage = () => {
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
     setIsEditingDocuments(false)
-    requestAnimationFrame(() => documentUploadLauncherRef.current?.focus())
   }, [])
 
   const onSaveRemark = useCallback(
@@ -3688,19 +3631,6 @@ const ProvincialApplicationDetailsPage = () => {
     </div>
   )
 
-  const addApplicationDocumentsButton =
-    canAddApplicationDocuments && !isEditingDocuments ? (
-      <Button
-        kind="tertiary"
-        size="md"
-        className="detail-documents-add-button"
-        renderIcon={Add}
-        ref={documentUploadLauncherRef}
-        onClick={() => setIsEditingDocuments(true)}
-      >
-        Add documents
-      </Button>
-    ) : null
   const hasApplicationRemarks = (detail?.remarks?.length ?? 0) > 0
   const addApplicationRemarkButton = canManageRemarks ? (
     <Button
@@ -4804,50 +4734,22 @@ const ProvincialApplicationDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       {/* Figma shows the documents table on the page, with no card or title. */}
-                      <section
+                      <RecordDocumentsSection
                         id="application-documents"
-                        className="application-detail-section application-detail-documents detail-documents-section"
-                        aria-label="Documents"
-                      >
-                        {documentActionResult && (
-                          <ActionResultNotification
-                            result={documentActionResult}
-                            onClose={() => setActionResult(null)}
-                          />
-                        )}
-                        <div className="detail-section-card__header detail-section-card__header--actions-only">
-                          {!showsEmptyApplicationDocuments && addApplicationDocumentsButton}
-                          {isEditingDocuments && canAddApplicationDocuments && (
-                            <DetailDocumentUploadPanel
-                              key={`application-document-upload-${applicationNumber}-${documentUploadResetKey}`}
-                              workflowType="application"
-                              targetNumber={String(detail.applicationNumber ?? '')}
-                              inputId="applicationDocumentUpload"
-                              disabled={!detail.applicationNumber}
-                              presentation="side-panel"
-                              drawer={{
-                                contentSelector: '.provincial-application-detail',
-                                fallbackFocusSelector: '#application-documents button',
-                                launcherRef: documentUploadLauncherRef,
-                              }}
-                              initiallyOpen
-                              onClose={onCancelDocumentEditing}
-                              onDirtyChange={setDocumentUploadDirty}
-                              onBusyChange={setDocumentUploadBusy}
-                              onUploadComplete={refreshApplicationDocuments}
-                              onUploadSuccess={(_, savedCount) =>
-                                setActionResult({
-                                  kind: 'success',
-                                  title: savedDocumentsTitle(savedCount),
-                                  message: '',
-                                  source: 'documents',
-                                })
-                              }
-                            />
-                          )}
-                        </div>
-                        {selectedApplicationTab === 'documents' &&
-                          !!showDocumentUploadUnavailableMessage &&
+                        recordType="application"
+                        rows={documentRows}
+                        loading={documentLookupAvailability === 'loading'}
+                        errorMessage={
+                          documentLookupAvailability === 'unavailable'
+                            ? documentsErrorMessage ||
+                              'Document information could not be retrieved for this application.'
+                            : ''
+                        }
+                        result={documentActionResult}
+                        onDismissResult={clearActionResult}
+                        notices={
+                          selectedApplicationTab === 'documents' &&
+                          showDocumentUploadUnavailableMessage &&
                           canUploadApplicationDocuments && (
                             <InlineNotification
                               className="detail-context-notification"
@@ -4861,104 +4763,33 @@ const ProvincialApplicationDetailsPage = () => {
                                 )
                               }
                             />
-                          )}
-                        {documentLookupAvailability === 'unavailable' && (
-                          <EmptyState
-                            title="Documents unavailable"
-                            description={
-                              documentsErrorMessage ||
-                              'Document information could not be retrieved for this application.'
-                            }
-                            headingLevel={2}
-                            role="alert"
-                          />
-                        )}
-                        {documentLookupAvailability === 'loading' && (
-                          <InlineLoading description="Loading application documents…" />
-                        )}
-                        {showsEmptyApplicationDocuments && (
-                          <EmptyState
-                            title="No documents for this application"
-                            description={DOCUMENTS_EMPTY_DESCRIPTION}
-                            icon={<AddDocument width={48} height={48} />}
-                            action={addApplicationDocumentsButton}
-                            headingLevel={2}
-                          />
-                        )}
-                        {hasApplicationDocuments && (
-                          <section
-                            className="application-documents-list"
-                            aria-label="Application documents"
-                          >
-                            <TableFrame ariaLabel="Application document rows">
-                              <Table size="md" useZebraStyles>
-                                <TableHead>
-                                  <TableRow>
-                                    <TableHeader>File name</TableHeader>
-                                    <TableHeader>Description</TableHeader>
-                                    <TableHeader>Type</TableHeader>
-                                    <TableHeader>Actions</TableHeader>
-                                  </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {documentRows.map((row) => (
-                                    <TableRow key={row.id}>
-                                      <TableCell>{row.name || '-'}</TableCell>
-                                      <TableCell>{displayTableValue(row.description)}</TableCell>
-                                      <TableCell>{formatDocumentSource(row.source)}</TableCell>
-                                      <TableCell>
-                                        <div className="legacy-search-actions">
-                                          <Button
-                                            kind="ghost"
-                                            size="sm"
-                                            renderIcon={Launch}
-                                            onClick={() => void onOpenDocument(row, true)}
-                                          >
-                                            Open
-                                          </Button>
-                                          <Button
-                                            kind="ghost"
-                                            size="sm"
-                                            renderIcon={Download}
-                                            onClick={() => void onOpenDocument(row)}
-                                          >
-                                            Download
-                                          </Button>
-                                          {canDeleteDocuments && (
-                                            <Button
-                                              kind="danger--ghost"
-                                              size="sm"
-                                              disabled={
-                                                !canDeleteDocuments ||
-                                                row.deletable === false ||
-                                                isRemovingDocumentId === row.id
-                                              }
-                                              title={
-                                                row.deletable === false
-                                                  ? `Delete this document from its ${row.source || 'source'} details page.`
-                                                  : undefined
-                                              }
-                                              renderIcon={TrashCan}
-                                              onClick={() => {
-                                                setActionResult(null)
-                                                setDocumentPendingDeletion(row)
-                                              }}
-                                            >
-                                              {isRemovingDocumentId === row.id
-                                                ? 'Deleting…'
-                                                : 'Delete'}
-                                            </Button>
-                                          )}
-                                        </div>
-                                      </TableCell>
-                                    </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </TableFrame>
-                          </section>
-                        )}
-                      </section>
+                          )
+                        }
+                        upload={{
+                          enabled: canAddApplicationDocuments,
+                          open: isEditingDocuments,
+                          resetKey: documentUploadResetKey,
+                          targetNumber: String(detail.applicationNumber ?? ''),
+                          inputId: 'applicationDocumentUpload',
+                          contentSelector: '.provincial-application-detail',
+                          busy: documentUploadBusy,
+                          onOpen: () => setIsEditingDocuments(true),
+                          onClose: onCancelDocumentEditing,
+                          onDirtyChange: setDocumentUploadDirty,
+                          onBusyChange: setDocumentUploadBusy,
+                          onUploadComplete: refreshApplicationDocuments,
+                          onSaved: (savedCount) =>
+                            setActionResult({
+                              ...documentsSavedResult(savedCount),
+                              source: 'documents',
+                            }),
+                        }}
+                        onOpen={(row, preview) => void onOpenDocument(row, preview)}
+                        canDelete={canDeleteDocuments}
+                        removingId={isRemovingDocumentId}
+                        onDeleteStart={clearActionResult}
+                        onDelete={onRemoveDocument}
+                      />
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -5186,24 +5017,6 @@ const ProvincialApplicationDetailsPage = () => {
           launcherButtonRef={remarkBodyRef}
           onConfirm={discardRemarkEditing}
           onClose={() => setRemarkDiscardConfirmationOpen(false)}
-        />
-      )}
-      {documentPendingDeletion && (
-        <ConfirmationModal
-          open
-          danger
-          title="Are you sure you want to delete this document?"
-          description={
-            <>
-              <strong>{documentPendingDeletion.name || 'This document'}</strong> will be deleted.
-              This action cannot be undone.
-            </>
-          }
-          confirmLabel="Delete"
-          pendingLabel="Deleting…"
-          errorTitle="Failed to delete document"
-          onClose={() => setDocumentPendingDeletion(null)}
-          onConfirm={() => onRemoveDocument(documentPendingDeletion)}
         />
       )}
       <UnsavedChangesGuard

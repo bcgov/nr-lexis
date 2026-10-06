@@ -12,16 +12,13 @@ import {
   Certificate,
   Currency,
   DocumentAttachment,
-  Download,
   Edit,
   Enterprise,
-  Launch,
   Result,
   Rule,
   TrashCan,
   type CarbonIconType,
 } from '@carbon/icons-react'
-import { AddDocument } from '@carbon/pictograms-react'
 import {
   Button,
   Column,
@@ -69,13 +66,12 @@ import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
-import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
+import RecordDocumentsSection, {
+  DOCUMENT_DELETED_RESULT,
+  documentsSavedResult,
+} from '@/components/documents/RecordDocumentsSection'
+import { useDocumentOpener } from '@/components/documents/useDocumentOpener'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
-import {
-  DOCUMENTS_EMPTY_DESCRIPTION,
-  formatDocumentSource,
-  savedDocumentsTitle,
-} from '@/service/document-service-utils'
 import { DetailFieldGrid, type DetailField } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
@@ -108,9 +104,7 @@ import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { getResponseStatus, isClientErrorResponse } from '@/utils/http-error'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 import { firstStringField, isRecord } from '@/utils/record'
-import { displayTableValue } from '@/utils/text'
 import { triggerBrowserDownload } from '@/utils/download'
-import { openDocumentPreview } from '@/utils/document-preview'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
@@ -561,7 +555,6 @@ const ProvincialExemptionDetailsPage = () => {
   const [addApplicationError, setAddApplicationError] = useState('')
   const [isAddingApplication, setIsAddingApplication] = useState(false)
   const addApplicationButtonRef = useRef<HTMLButtonElement>(null)
-  const documentUploadLauncherRef = useRef<HTMLButtonElement>(null)
   const addApplicationInputRef = useRef<HTMLInputElement>(null)
   const [applicationMutationNumber, setApplicationMutationNumber] = useState<string | null>(null)
   const [applicationPendingRemoval, setApplicationPendingRemoval] = useState<string | null>(null)
@@ -595,8 +588,6 @@ const ProvincialExemptionDetailsPage = () => {
   )
   const actionErrorMessage = actionResult?.kind === 'error' ? actionResult.message : ''
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
-  const [documentPendingDeletion, setDocumentPendingDeletion] =
-    useState<ProvincialExemptionDocumentRow | null>(null)
   const [isAddingDocuments, setIsAddingDocuments] = useState(false)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
@@ -606,8 +597,6 @@ const ProvincialExemptionDetailsPage = () => {
     defaultTab: 'owner',
   })
   const beginDetailRequest = useLatestRequestGuard()
-  const beginDocumentOpenRequest = useLatestRequestGuard()
-  const pendingDocumentPreviewsRef = useRef(new Set<Window>())
   const currentDetail = detail && String(detail.exemptionNumber) === exemptionNumber ? detail : null
   // Pages opened from this one name it by its title in their back link or breadcrumb.
   const exemptionPageTitle =
@@ -621,14 +610,6 @@ const ProvincialExemptionDetailsPage = () => {
   const ownerClientLocationCode = clientContextApplication?.ownerClientLocationCode.trim() ?? ''
   const agentClientLocationCode = clientContextApplication?.agentClientLocationCode.trim() ?? ''
   const isRefreshingDetail = loading && !!currentDetail
-  useEffect(() => {
-    beginDocumentOpenRequest()
-    const pendingPreviews = pendingDocumentPreviewsRef.current
-    return () => {
-      pendingPreviews.forEach((preview) => preview.close())
-      pendingPreviews.clear()
-    }
-  }, [beginDocumentOpenRequest, exemptionNumber])
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
@@ -1366,19 +1347,6 @@ const ProvincialExemptionDetailsPage = () => {
     persistedStatusCode !== 'EXP' &&
     editContextLoaded &&
     !exemptionEditLocked
-  const addExemptionDocumentsButton =
-    canUploadExemptionDocuments && !isAddingDocuments ? (
-      <Button
-        kind="tertiary"
-        size="md"
-        className="detail-documents-add-button"
-        renderIcon={Add}
-        ref={documentUploadLauncherRef}
-        onClick={() => setIsAddingDocuments(true)}
-      >
-        Add documents
-      </Button>
-    ) : null
 
   const refreshPermitData = useCallback(
     async (currentExemptionNumber: string, blanketOic: boolean) => {
@@ -2075,57 +2043,24 @@ const ProvincialExemptionDetailsPage = () => {
     setDocumentUploadResetKey((current) => current + 1)
     setActionResult(withoutActionError)
     setIsAddingDocuments(false)
-    requestAnimationFrame(() => documentUploadLauncherRef.current?.focus())
   }, [])
 
-  const onOpenDocument = useCallback(
-    async (row: ProvincialExemptionDocumentRow, preview: boolean) => {
-      if (!exemptionNumber) {
-        return
-      }
-      const isLatestRequest = beginDocumentOpenRequest()
-      let previewTarget: Window | null = null
-      const closePendingPreview = () => {
-        if (previewTarget && pendingDocumentPreviewsRef.current.delete(previewTarget)) {
-          previewTarget.close()
-        }
-      }
-      setActionResult(null)
-      try {
-        if (preview) {
-          // Reserve a tab during the click so the asynchronous document fetch can still preview it.
-          previewTarget = window.open('about:blank', '_blank')
-          if (previewTarget) {
-            pendingDocumentPreviewsRef.current.add(previewTarget)
-            previewTarget.opener = null
-          }
-        }
-        const result = await openExemptionDocument(row.id, row.name, exemptionNumber)
-        if (!isLatestRequest()) {
-          closePendingPreview()
-          return
-        }
-        if (preview) {
-          openDocumentPreview(result.blob, result.filename || row.name, previewTarget)
-        } else {
-          triggerBrowserDownload(result.blob, result.filename || row.name)
-        }
-      } catch (error) {
-        closePendingPreview()
-        if (!isLatestRequest()) return
-        console.error(error)
-        setActionResult({
-          kind: 'error',
-          message: preview
-            ? 'Unable to open the selected document.'
-            : 'Unable to download the selected document.',
-        })
-      } finally {
-        if (previewTarget) pendingDocumentPreviewsRef.current.delete(previewTarget)
-      }
-    },
-    [beginDocumentOpenRequest, exemptionNumber],
+  const fetchExemptionDocument = useCallback(
+    (row: ProvincialExemptionDocumentRow) =>
+      openExemptionDocument(row.id, row.name, exemptionNumber ?? ''),
+    [exemptionNumber],
   )
+  const clearActionResult = useCallback(() => setActionResult(null), [])
+  const showDocumentOpenError = useCallback(
+    (message: string) => setActionResult({ kind: 'error', message, source: 'documents' }),
+    [],
+  )
+  const onOpenDocument = useDocumentOpener({
+    recordKey: exemptionNumber,
+    fetchDocument: fetchExemptionDocument,
+    onStart: clearActionResult,
+    onError: showDocumentOpenError,
+  })
 
   const onRemoveDocument = useCallback(
     async (row: ProvincialExemptionDocumentRow) => {
@@ -2151,12 +2086,7 @@ const ProvincialExemptionDetailsPage = () => {
           if (isLatestRequest()) {
             setDocumentRows(documentsResult.rows)
             setDocumentsErrorMessage('')
-            setActionResult({
-              kind: 'success',
-              title: 'Document deleted.',
-              message: '',
-              source: 'documents',
-            })
+            setActionResult({ ...DOCUMENT_DELETED_RESULT, source: 'documents' })
           }
         } catch (refreshError) {
           if (isLatestRequest()) {
@@ -3236,133 +3166,38 @@ const ProvincialExemptionDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
                       {/* Figma shows the documents table on the page, with no card or title. */}
-                      <section
+                      <RecordDocumentsSection
                         id="exemption-documents"
-                        className="application-detail-section detail-documents-section"
-                        aria-label="Documents"
-                      >
-                        {documentActionResult && (
-                          <ActionResultNotification
-                            result={documentActionResult}
-                            onClose={() => setActionResult(null)}
-                          />
-                        )}
-                        <div className="detail-section-card__header detail-section-card__header--actions-only">
-                          {(documentRows.length > 0 || Boolean(documentsErrorMessage)) &&
-                            addExemptionDocumentsButton}
-                          {isAddingDocuments && canUploadExemptionDocuments && (
-                            <DetailDocumentUploadPanel
-                              key={`exemption-document-upload-${exemptionNumber}-${documentUploadResetKey}`}
-                              workflowType="exemption"
-                              targetNumber={detail.exemptionNumber}
-                              inputId="exemptionDocumentUpload"
-                              disabled={!detail.exemptionNumber}
-                              presentation="side-panel"
-                              drawer={{
-                                contentSelector: '.application-detail-tabs-column',
-                                fallbackFocusSelector: '#exemption-documents button',
-                                launcherRef: documentUploadLauncherRef,
-                              }}
-                              initiallyOpen
-                              onClose={onCancelDocumentEditing}
-                              onDirtyChange={setDocumentUploadDirty}
-                              onBusyChange={setDocumentUploadBusy}
-                              onUploadComplete={refreshExemptionDocuments}
-                              onUploadSuccess={(_, savedCount) =>
-                                setActionResult({
-                                  kind: 'success',
-                                  title: savedDocumentsTitle(savedCount),
-                                  message: '',
-                                  source: 'documents',
-                                })
-                              }
-                            />
-                          )}
-                        </div>
-                        {documentsErrorMessage ? (
-                          <EmptyState
-                            title="Documents unavailable"
-                            description={documentsErrorMessage}
-                            headingLevel={2}
-                            role="alert"
-                          />
-                        ) : documentRows.length > 0 ? (
-                          <TableFrame ariaLabel="Exemption document rows">
-                            <Table size="md" useZebraStyles>
-                              <TableHead>
-                                <TableRow>
-                                  <TableHeader>File name</TableHeader>
-                                  <TableHeader>Description</TableHeader>
-                                  <TableHeader>Type</TableHeader>
-                                  <TableHeader>Actions</TableHeader>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {documentRows.map((row) => (
-                                  <TableRow key={row.id}>
-                                    <TableCell>{row.name || '-'}</TableCell>
-                                    <TableCell>{displayTableValue(row.description)}</TableCell>
-                                    <TableCell>{formatDocumentSource(row.source)}</TableCell>
-                                    <TableCell>
-                                      <div className="legacy-search-actions">
-                                        <Button
-                                          kind="ghost"
-                                          size="sm"
-                                          renderIcon={Launch}
-                                          onClick={() => void onOpenDocument(row, true)}
-                                        >
-                                          Open
-                                        </Button>
-                                        <Button
-                                          kind="ghost"
-                                          size="sm"
-                                          renderIcon={Download}
-                                          onClick={() => void onOpenDocument(row, false)}
-                                        >
-                                          Download
-                                        </Button>
-                                        {canDeleteExemptionDocuments && (
-                                          <Button
-                                            kind="danger--ghost"
-                                            size="sm"
-                                            disabled={
-                                              !canDeleteExemptionDocuments ||
-                                              row.deletable === false ||
-                                              isRemovingDocumentId === row.id
-                                            }
-                                            title={
-                                              row.deletable === false
-                                                ? `Delete this document from its ${row.source || 'source'} details page.`
-                                                : undefined
-                                            }
-                                            renderIcon={TrashCan}
-                                            onClick={() => {
-                                              setActionResult(null)
-                                              setDocumentPendingDeletion(row)
-                                            }}
-                                          >
-                                            {isRemovingDocumentId === row.id
-                                              ? 'Deleting…'
-                                              : 'Delete'}
-                                          </Button>
-                                        )}
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableFrame>
-                        ) : (
-                          <EmptyState
-                            title="No documents for this exemption"
-                            description={DOCUMENTS_EMPTY_DESCRIPTION}
-                            icon={<AddDocument width={48} height={48} />}
-                            action={addExemptionDocumentsButton}
-                            headingLevel={2}
-                          />
-                        )}
-                      </section>
+                        recordType="exemption"
+                        rows={documentRows}
+                        errorMessage={documentsErrorMessage}
+                        result={documentActionResult}
+                        onDismissResult={clearActionResult}
+                        upload={{
+                          enabled: canUploadExemptionDocuments,
+                          open: isAddingDocuments,
+                          resetKey: documentUploadResetKey,
+                          targetNumber: detail.exemptionNumber,
+                          inputId: 'exemptionDocumentUpload',
+                          contentSelector: '.application-detail-tabs-column',
+                          busy: documentUploadBusy,
+                          onOpen: () => setIsAddingDocuments(true),
+                          onClose: onCancelDocumentEditing,
+                          onDirtyChange: setDocumentUploadDirty,
+                          onBusyChange: setDocumentUploadBusy,
+                          onUploadComplete: refreshExemptionDocuments,
+                          onSaved: (savedCount) =>
+                            setActionResult({
+                              ...documentsSavedResult(savedCount),
+                              source: 'documents',
+                            }),
+                        }}
+                        onOpen={(row, preview) => void onOpenDocument(row, preview)}
+                        canDelete={canDeleteExemptionDocuments}
+                        removingId={isRemovingDocumentId}
+                        onDeleteStart={clearActionResult}
+                        onDelete={onRemoveDocument}
+                      />
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -3387,24 +3222,6 @@ const ProvincialExemptionDetailsPage = () => {
           errorTitle="Failed to remove application"
           onClose={() => setApplicationPendingRemoval(null)}
           onConfirm={() => onRemoveApplication(applicationPendingRemoval)}
-        />
-      )}
-      {documentPendingDeletion && (
-        <ConfirmationModal
-          open
-          danger
-          title="Are you sure you want to delete this document?"
-          description={
-            <>
-              <strong>{documentPendingDeletion.name || 'This document'}</strong> will be deleted.
-              This action cannot be undone.
-            </>
-          }
-          confirmLabel="Delete"
-          pendingLabel="Deleting…"
-          errorTitle="Failed to delete document"
-          onClose={() => setDocumentPendingDeletion(null)}
-          onConfirm={() => onRemoveDocument(documentPendingDeletion)}
         />
       )}
       {approvalConfirmationOpen &&

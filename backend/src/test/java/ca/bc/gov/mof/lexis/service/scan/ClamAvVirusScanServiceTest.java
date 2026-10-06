@@ -51,7 +51,11 @@ class ClamAvVirusScanServiceTest {
 
     assertThatThrownBy(() -> service.assertClean(file))
         .isInstanceOf(VirusScanException.class)
-        .hasMessageContaining("Private-Signature-Value");
+        .hasMessageContaining("Private-Signature-Value")
+        .extracting(error -> ((VirusScanException) error).userMessage())
+        .isEqualTo(
+            "File did not pass the security scan. "
+                + "Check it with your own antivirus software, or upload a different copy.");
 
     assertThat(readStreamedPayload(socket.requestBytes()))
         .isEqualTo("infected".getBytes(StandardCharsets.UTF_8));

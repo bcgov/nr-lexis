@@ -11,7 +11,6 @@ import {
   Box,
   Certificate,
   Currency,
-  DocumentAdd,
   DocumentAttachment,
   EarthFilled,
   Edit,
@@ -67,6 +66,11 @@ import TableFrame from '@/components/TableFrame'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
+import RecordDocumentsSection, {
+  DOCUMENT_DELETED_RESULT,
+  documentsSavedResult,
+} from '@/components/documents/RecordDocumentsSection'
+import { useDocumentOpener } from '@/components/documents/useDocumentOpener'
 import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
@@ -179,7 +183,6 @@ import {
 } from '@/service/shipping-reference-service'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { triggerBrowserDownload } from '@/utils/download'
-import { openDocumentPreview } from '@/utils/document-preview'
 import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
 import { formatPackageNumberLabel, isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
@@ -191,6 +194,9 @@ const formatAmount = (value: number): string => {
     maximumFractionDigits: 2,
   })
 }
+
+// Documents results show in the Documents tab; every other result stays at page level.
+type PermitActionResult = ActionResult & { source?: 'documents' }
 
 const isInvoiceDocumentRow = (row: PermitDocumentRow): boolean => {
   if (row.source?.trim().toLowerCase() === 'invoice') {
@@ -949,16 +955,15 @@ const ProvincialPermitDetailsPage = () => {
   const [deferredPermitTabLoading, setDeferredPermitTabLoading] = useState(
     EMPTY_DEFERRED_PERMIT_TAB_STATE,
   )
-  const [actionResult, setActionResult] = useState<ActionResult | null>(null)
+  const [actionResult, setActionResult] = useState<PermitActionResult | null>(null)
+  const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
+  const pageActionResult = actionResult?.source === 'documents' ? null : actionResult
   const [permitApprovalEmailErrorMessage, setPermitApprovalEmailErrorMessage] = useState('')
   const clearActionNotifications = useCallback(() => {
     setActionResult(null)
     setPermitApprovalEmailErrorMessage('')
   }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
-  const [documentPendingDeletion, setDocumentPendingDeletion] = useState<PermitDocumentRow | null>(
-    null,
-  )
   // INTENTIONAL_LEGACY_DIVERGENCE(MINISTERIAL_SCALE_SELECTION_EDIT): selection stays local until Save changes.
   const [ministerialScaleSelectionDraft, setMinisterialScaleSelectionDraft] = useState<Record<
     string,
@@ -1061,9 +1066,6 @@ const ProvincialPermitDetailsPage = () => {
   const [permitOptionsErrorMessage, setPermitOptionsErrorMessage] = useState('')
   const beginDetailRequest = useLatestRequestGuard()
   const beginDocumentRefreshRequest = useLatestRequestGuard()
-  const beginDocumentOpenRequest = useLatestRequestGuard()
-  const isCurrentDocumentRouteRef = useRef<() => boolean>(() => false)
-  const pendingDocumentPreviewsRef = useRef(new Set<Window>())
   const beginPermitFeesRequest = useLatestRequestGuard()
   const beginPermitDocumentsRequest = useLatestRequestGuard()
   const beginPermitInvoicesRequest = useLatestRequestGuard()
@@ -1078,7 +1080,6 @@ const ProvincialPermitDetailsPage = () => {
   const loadedDeferredPermitTabsRef = useRef(new Set<DeferredPermitTabId>())
   const permitMutationInFlightRef = useRef(false)
   const packagePanelLauncherRef = useRef<HTMLButtonElement | null>(null)
-  const permitDocumentUploadLauncherRef = useRef<HTMLButtonElement | null>(null)
   const tryBeginPermitMutation = useCallback(() => {
     if (permitMutationInFlightRef.current) return null
     permitMutationInFlightRef.current = true
@@ -1088,16 +1089,7 @@ const ProvincialPermitDetailsPage = () => {
     permitMutationInFlightRef.current = false
   }, [])
 
-  useEffect(() => {
-    const pendingPreviews = pendingDocumentPreviewsRef.current
-    return () => {
-      pendingPreviews.forEach((previewTarget) => previewTarget.close())
-      pendingPreviews.clear()
-    }
-  }, [permitNumber])
-
   const resetPermitRouteDrafts = useCallback(() => {
-    isCurrentDocumentRouteRef.current = beginDocumentOpenRequest()
     beginPermitFeesRequest()
     beginPermitDocumentsRequest()
     beginPermitInvoicesRequest()
@@ -1175,7 +1167,6 @@ const ProvincialPermitDetailsPage = () => {
   }, [
     beginAvailablePermitApplicationsRequest,
     beginBoicPackageEditRequest,
-    beginDocumentOpenRequest,
     beginPermitDocumentsRequest,
     beginPermitFeesRequest,
     beginPermitGbmsRequest,
@@ -2069,7 +2060,6 @@ const ProvincialPermitDetailsPage = () => {
     hasDocumentActorRole &&
     (adminUser || !readOnlyUser) &&
     permitStatusCode === 'ACT'
-  const canEditPermitDocuments = canUploadPermitDocuments || canDeletePermitDocuments
   const canEditInvoiceDocuments = canUploadInvoiceDocuments
   const scaleAttachmentLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
   const feeOverrideLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
@@ -4149,11 +4139,7 @@ const ProvincialPermitDetailsPage = () => {
     setPermitDocumentUploadResetKey((current) => current + 1)
     setActionResult(withoutActionError)
     setIsEditingPermitDocuments(false)
-    if (usesReviewedPermitFlow) {
-      // The Ministerial launcher remounts when the document editor closes.
-      window.setTimeout(() => permitDocumentUploadLauncherRef.current?.focus())
-    }
-  }, [usesReviewedPermitFlow])
+  }, [])
 
   const onCancelInvoiceDocumentEditing = useCallback(() => {
     setInvoiceDocumentUploadDirty(false)
@@ -4163,55 +4149,25 @@ const ProvincialPermitDetailsPage = () => {
     setIsEditingInvoiceDocuments(false)
   }, [])
 
-  const onOpenDocument = useCallback(
-    async (row: PermitDocumentRow, preview = false) => {
-      const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-      if (!resolvedPermitNumber || !canPerform('/permitDetails')) {
-        return
-      }
-      const isLatestRequest = isCurrentDocumentRouteRef.current
-      let previewTarget: Window | null = null
-      const closePendingPreview = () => {
-        if (previewTarget && pendingDocumentPreviewsRef.current.delete(previewTarget)) {
-          previewTarget.close()
-        }
-      }
-      setActionResult(null)
-      try {
-        if (preview) {
-          // Reserve the tab during the click so slow document reads cannot lose popup permission.
-          previewTarget = window.open('about:blank', '_blank')
-          if (previewTarget) {
-            pendingDocumentPreviewsRef.current.add(previewTarget)
-            previewTarget.opener = null
-          }
-        }
-        const result = await openPermitDocument(row.id, row.name, resolvedPermitNumber)
-        if (!isLatestRequest()) {
-          closePendingPreview()
-          return
-        }
-        if (preview) {
-          openDocumentPreview(result.blob, result.filename, previewTarget)
-        } else {
-          triggerBrowserDownload(result.blob, result.filename)
-        }
-      } catch (error) {
-        closePendingPreview()
-        if (!isLatestRequest()) return
-        console.error(error)
-        setActionResult({
-          kind: 'error',
-          message: preview
-            ? 'Unable to open permit document.'
-            : 'Unable to download permit document.',
-        })
-      } finally {
-        if (previewTarget) pendingDocumentPreviewsRef.current.delete(previewTarget)
-      }
-    },
-    [canPerform, detail?.permitNumber, permitNumber],
+  const fetchPermitDocument = useCallback(
+    (row: PermitDocumentRow) =>
+      openPermitDocument(
+        row.id,
+        row.name,
+        String(detail?.permitNumber ?? permitNumber ?? '').trim(),
+      ),
+    [detail?.permitNumber, permitNumber],
   )
+  const showDocumentOpenError = useCallback(
+    (message: string) => setActionResult({ kind: 'error', message, source: 'documents' }),
+    [],
+  )
+  const onOpenDocument = useDocumentOpener({
+    recordKey: permitNumber,
+    fetchDocument: fetchPermitDocument,
+    onStart: clearActionNotifications,
+    onError: showDocumentOpenError,
+  })
 
   const onOpenPermitReport = useCallback(async () => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
@@ -4370,11 +4326,7 @@ const ProvincialPermitDetailsPage = () => {
         try {
           await refreshPermitDocuments()
           if (isLatestRequest()) {
-            setActionResult({
-              kind: 'success',
-              title: 'Document deleted',
-              message: `${row.name || 'Document'} was deleted.`,
-            })
+            setActionResult({ ...DOCUMENT_DELETED_RESULT, source: 'documents' })
           }
         } catch (refreshError) {
           if (isLatestRequest()) {
@@ -5778,7 +5730,6 @@ const ProvincialPermitDetailsPage = () => {
   }
 
   const emptyPermitDocuments =
-    usesReviewedPermitFlow &&
     deferredPermitTabLoaded.documents &&
     !deferredPermitTabLoading.documents &&
     !documentsErrorMessage &&
@@ -5786,23 +5737,6 @@ const ProvincialPermitDetailsPage = () => {
   const emptyPermitScale = ministerialScaleEmpty || blanketOicPackageCreationRequired
   const ScaleContainer = detail?.blanketOic || ministerialScaleEmpty ? 'section' : Tile
   const FeesContainer = ministerialFeeShellEmpty ? 'section' : Tile
-  const DocumentsContainer = usesReviewedPermitFlow ? 'section' : Tile
-  const addPermitDocumentsButton =
-    canUploadPermitDocuments && !isEditingPermitDocuments ? (
-      <Button
-        kind="tertiary"
-        size="md"
-        className="detail-documents-add-button"
-        ref={permitDocumentUploadLauncherRef}
-        disabled={permitDocumentUploadBusy}
-        onClick={() => {
-          setPermitDocumentUploadResetKey((current) => current + 1)
-          setIsEditingPermitDocuments(true)
-        }}
-      >
-        Add document
-      </Button>
-    ) : null
   const createBlanketOicPackageButton = canEditBlanketOicPackages ? (
     <Button
       id="create-boic-package"
@@ -6001,10 +5935,10 @@ const ProvincialPermitDetailsPage = () => {
               />
             </Column>
           )}
-          {!!actionResult && (
+          {!!pageActionResult && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
               <ActionResultNotification
-                result={actionResult}
+                result={pageActionResult}
                 onClose={() => setActionResult(null)}
               />
             </Column>
@@ -8034,176 +7968,52 @@ const ProvincialPermitDetailsPage = () => {
                 >
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <DocumentsContainer
-                        className={usesReviewedPermitFlow ? 'detail-documents-section' : undefined}
-                        aria-label="Documents"
-                      >
-                        {usesReviewedPermitFlow ? (
-                          !emptyPermitDocuments && (
-                            <div className="detail-section-card__header detail-section-card__header--actions-only">
-                              {addPermitDocumentsButton}
-                            </div>
-                          )
-                        ) : (
-                          <div className="detail-section-card__header">
-                            <h2 className="detail-tile-title">Permit documents</h2>
-                            {canEditPermitDocuments &&
-                              (isEditingPermitDocuments ? (
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  disabled={
-                                    permitDocumentUploadBusy || isRemovingDocumentId !== null
-                                  }
-                                  onClick={onCancelPermitDocumentEditing}
-                                >
-                                  Cancel
-                                </Button>
-                              ) : (
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  renderIcon={Edit}
-                                  onClick={() => setIsEditingPermitDocuments(true)}
-                                >
-                                  Edit permit documents
-                                </Button>
-                              ))}
-                          </div>
-                        )}
-                        {isEditingPermitDocuments && canUploadPermitDocuments && (
-                          <DetailDocumentUploadPanel
-                            key={`permit-document-upload-${permitNumber}-${permitDocumentUploadResetKey}`}
-                            workflowType="permit"
-                            targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
-                            inputId="permitDocumentUpload"
-                            disabled={!detail.permitNumber}
-                            presentation={detail.blanketOic ? 'side-panel' : 'modal'}
-                            initiallyOpen={usesReviewedPermitFlow}
-                            onClose={
-                              usesReviewedPermitFlow ? onCancelPermitDocumentEditing : undefined
-                            }
-                            onDirtyChange={setPermitDocumentUploadDirty}
-                            onBusyChange={setPermitDocumentUploadBusy}
-                            onUploadComplete={refreshPermitDocuments}
-                            onUploadSuccess={(message) =>
-                              setActionResult({
-                                kind: 'success',
-                                title: 'Document uploaded',
-                                message,
-                              })
-                            }
-                          />
-                        )}
-                        {deferredPermitTabLoading.documents ? (
-                          <InlineLoading description="Loading permit documents…" />
-                        ) : documentsErrorMessage ? (
-                          <EmptyState
-                            title="Permit documents unavailable"
-                            description={documentsErrorMessage}
-                            headingLevel={3}
-                            role="alert"
-                          />
-                        ) : documentRows.length > 0 ? (
-                          <TableFrame ariaLabel="Permit document rows">
-                            <Table size="md" useZebraStyles>
-                              <TableHead>
-                                <TableRow>
-                                  <TableHeader>File name</TableHeader>
-                                  <TableHeader>Description</TableHeader>
-                                  <TableHeader>Type</TableHeader>
-                                  <TableHeader>Actions</TableHeader>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {documentRows.map((row) => {
-                                  const invoiceDocument = isInvoiceDocumentRow(row)
-                                  const canDeleteRow =
-                                    canDeletePermitDocuments &&
-                                    (!invoiceDocument || canDeleteInvoiceDocuments)
-                                  return (
-                                    <TableRow key={row.id}>
-                                      <TableCell>{row.name || '-'}</TableCell>
-                                      <TableCell>{row.description || '-'}</TableCell>
-                                      <TableCell>{row.type || row.typeCode || '-'}</TableCell>
-                                      <TableCell>
-                                        <div className="legacy-search-actions">
-                                          {usesReviewedPermitFlow && (
-                                            <Button
-                                              kind="ghost"
-                                              size="sm"
-                                              disabled={!canPerform('/permitDetails')}
-                                              title="Open supported files in a new tab; other formats download."
-                                              onClick={() => void onOpenDocument(row, true)}
-                                            >
-                                              Open
-                                            </Button>
-                                          )}
-                                          <Button
-                                            kind="ghost"
-                                            size="sm"
-                                            disabled={!canPerform('/permitDetails')}
-                                            onClick={() => void onOpenDocument(row)}
-                                          >
-                                            Download
-                                          </Button>
-                                          {(isEditingPermitDocuments ||
-                                            ((detail.blanketOic || usesReviewedPermitFlow) &&
-                                              canDeletePermitDocuments)) && (
-                                            <Button
-                                              kind="danger--ghost"
-                                              size="sm"
-                                              disabled={
-                                                !canDeleteRow ||
-                                                row.deletable === false ||
-                                                isRemovingDocumentId === row.id
-                                              }
-                                              title={
-                                                row.deletable === false
-                                                  ? 'The document source is not safe to delete from this page.'
-                                                  : undefined
-                                              }
-                                              renderIcon={TrashCan}
-                                              onClick={() => {
-                                                clearActionNotifications()
-                                                setDocumentPendingDeletion(row)
-                                              }}
-                                            >
-                                              {isRemovingDocumentId === row.id
-                                                ? 'Deleting…'
-                                                : 'Delete'}
-                                            </Button>
-                                          )}
-                                        </div>
-                                      </TableCell>
-                                    </TableRow>
-                                  )
-                                })}
-                              </TableBody>
-                            </Table>
-                          </TableFrame>
-                        ) : (
-                          <EmptyState
-                            icon={
-                              usesReviewedPermitFlow ? (
-                                <DocumentAdd size={48} aria-hidden="true" />
-                              ) : undefined
-                            }
-                            title={
-                              usesReviewedPermitFlow
-                                ? 'No documents for this permit'
-                                : 'No permit documents available'
-                            }
-                            description={
-                              usesReviewedPermitFlow
-                                ? 'Documents stay with the record as it moves through the application, exemption and permit stages.'
-                                : 'No documents are available for this permit.'
-                            }
-                            action={usesReviewedPermitFlow ? addPermitDocumentsButton : undefined}
-                            headingLevel={3}
-                          />
-                        )}
-                      </DocumentsContainer>
+                      {/* Figma shows the documents table on the page, with no card or title. */}
+                      <RecordDocumentsSection
+                        id="permit-documents"
+                        recordType="permit"
+                        rows={documentRows}
+                        loading={deferredPermitTabLoading.documents}
+                        errorMessage={documentsErrorMessage}
+                        result={documentActionResult}
+                        onDismissResult={() => setActionResult(null)}
+                        upload={{
+                          enabled: canUploadPermitDocuments,
+                          open: isEditingPermitDocuments,
+                          resetKey: permitDocumentUploadResetKey,
+                          targetNumber: String(detail.permitNumber ?? permitNumber ?? ''),
+                          inputId: 'permitDocumentUpload',
+                          contentSelector: '#permit-detail-content',
+                          busy: permitDocumentUploadBusy,
+                          onOpen: () => {
+                            setPermitDocumentUploadResetKey((current) => current + 1)
+                            setIsEditingPermitDocuments(true)
+                          },
+                          onClose: onCancelPermitDocumentEditing,
+                          onDirtyChange: setPermitDocumentUploadDirty,
+                          onBusyChange: setPermitDocumentUploadBusy,
+                          onUploadComplete: refreshPermitDocuments,
+                          onSaved: (savedCount) =>
+                            setActionResult({
+                              ...documentsSavedResult(savedCount),
+                              source: 'documents',
+                            }),
+                        }}
+                        openDisabled={!canPerform('/permitDetails')}
+                        onOpen={(row, preview) => void onOpenDocument(row, preview)}
+                        canDelete={canDeletePermitDocuments}
+                        canDeleteRow={(row) =>
+                          !isInvoiceDocumentRow(row) || canDeleteInvoiceDocuments
+                        }
+                        deleteConsequence={(row) =>
+                          isInvoiceDocumentRow(row)
+                            ? 'This also deletes the associated invoice record, including its value, conversion rate, and fee.'
+                            : undefined
+                        }
+                        removingId={isRemovingDocumentId}
+                        onDeleteStart={clearActionNotifications}
+                        onDelete={onRemoveDocument}
+                      />
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -8357,34 +8167,6 @@ const ProvincialPermitDetailsPage = () => {
           errorTitle="Failed to remove application"
           onClose={() => setPermitApplicationPendingRemoval(null)}
           onConfirm={() => onRemovePermitApplication(permitApplicationPendingRemoval)}
-        />
-      )}
-      {documentPendingDeletion && (
-        <ConfirmationModal
-          open
-          danger
-          title={
-            isInvoiceDocumentRow(documentPendingDeletion)
-              ? 'Delete invoice and document'
-              : 'Delete document'
-          }
-          description={
-            <>
-              Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
-              {isInvoiceDocumentRow(documentPendingDeletion) &&
-                ' This also deletes the associated invoice record, including its value, conversion rate, and fee.'}{' '}
-              This cannot be undone.
-            </>
-          }
-          confirmLabel="Delete"
-          pendingLabel="Deleting…"
-          errorTitle={
-            isInvoiceDocumentRow(documentPendingDeletion)
-              ? 'Failed to delete invoice and document'
-              : 'Failed to delete document'
-          }
-          onClose={() => setDocumentPendingDeletion(null)}
-          onConfirm={() => onRemoveDocument(documentPendingDeletion)}
         />
       )}
       {boicScalePendingRemoval && (

@@ -12,16 +12,15 @@
   gap: 1rem;
   min-inline-size: 0;
 
-  .admin-upload-file-chip {
-    max-inline-size: 100%;
-    margin: 0;
-    background: var(--cds-field);
-    border-color: transparent;
+  // Figma separates each file and its description with a divider.
+  & + & {
+    padding-block-start: 1.5rem;
+    border-block-start: 1px solid var(--cds-border-subtle-01);
   }
 
-  .admin-upload-application-file-list__message {
-    margin-block-start: -0.5rem;
-    color: var(--cds-text-error);
+  .cds--file__selected-file {
+    max-inline-size: 100%;
+    margin: 0;
   }
 }
 

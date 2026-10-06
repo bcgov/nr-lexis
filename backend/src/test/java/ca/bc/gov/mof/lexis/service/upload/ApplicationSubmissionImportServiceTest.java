@@ -1816,7 +1816,7 @@ class ApplicationSubmissionImportServiceTest {
     ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(file, "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).containsExactly("The uploaded file failed virus scanning.");
+    assertThat(result.errors()).containsExactly(VirusScanException.INFECTED_MESSAGE);
     verify(virusScanService).assertClean(file);
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
@@ -1831,7 +1831,7 @@ class ApplicationSubmissionImportServiceTest {
     ApplicationSubmissionImportResultDto result = service().validateApplicationSubmission(file);
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).containsExactly("The uploaded file failed virus scanning.");
+    assertThat(result.errors()).containsExactly(VirusScanException.INFECTED_MESSAGE);
     verify(virusScanService).assertClean(file);
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
@@ -1851,7 +1851,7 @@ class ApplicationSubmissionImportServiceTest {
                 "FED-REF-EICAR");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).containsExactly("The uploaded file failed virus scanning.");
+    assertThat(result.errors()).containsExactly(VirusScanException.INFECTED_MESSAGE);
     assertThat(result.fileName()).isEqualTo(fileName);
     assertThat(result.userReference()).isEqualTo("FED-REF-EICAR");
     ArgumentCaptor<MultipartFile> scannedFile = ArgumentCaptor.forClass(MultipartFile.class);
@@ -1876,7 +1876,7 @@ class ApplicationSubmissionImportServiceTest {
                 "FED-REF-EICAR");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).containsExactly("The uploaded file failed virus scanning.");
+    assertThat(result.errors()).containsExactly(VirusScanException.INFECTED_MESSAGE);
     assertThat(result.fileName()).isEqualTo(fileName);
     assertThat(result.userReference()).isEqualTo("FED-REF-EICAR");
     ArgumentCaptor<MultipartFile> scannedFile = ArgumentCaptor.forClass(MultipartFile.class);

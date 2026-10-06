@@ -1,0 +1,20 @@
+// Figma's Documents table: fixed column shares, with long file names and descriptions wrapping
+// inside their column instead of pushing the actions off the row.
+.detail-documents-table.cds--data-table {
+  min-inline-size: 48rem;
+  table-layout: fixed;
+
+  th:nth-child(1),
+  th:nth-child(2),
+  th:nth-child(4) {
+    inline-size: 30%;
+  }
+
+  th:nth-child(3) {
+    inline-size: 10%;
+  }
+
+  .detail-documents-table__text {
+    overflow-wrap: anywhere;
+  }
+}

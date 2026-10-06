@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react'
-import { Button, TextArea, TextInput } from '@carbon/react'
-import { Add, ArrowRight, Close } from '@carbon/icons-react'
+import { Button, FileUploaderItem, TextArea, TextInput } from '@carbon/react'
+import { Add, ArrowRight } from '@carbon/icons-react'
 import { ActionResultNotifications } from '../ActionResultNotification'
 import Modal from '@/components/Modal'
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -16,7 +16,6 @@ import {
   extractUploadErrorDetails,
   GENERIC_UPLOAD_FAILURE_MESSAGE,
   uploadQueueFileKey,
-  uploadQueueStatusLabel,
   validateDocumentUploadFile,
   validateDocumentUploadDescription,
 } from './uploadQueueHelpers'
@@ -106,6 +105,29 @@ const uploadTargetSummary = (copy: UploadCopy, targetNumber: string): string =>
   targetNumber.trim() ? `${copy.targetLabel} ${targetNumber.trim()}` : `${copy.targetLabel} missing`
 
 const DOCUMENT_UPLOAD_VALIDATED_MESSAGE = 'File passed validation and virus scanning.'
+
+// Figma's file items: a spinner while the file is checked or saved, then remove (×), and a
+// failed file keeps its first sentence as the error title and the rest as guidance.
+const drawerFileStatus = (status: UploadQueueStatus): 'uploading' | 'edit' | 'complete' =>
+  status === 'queued' || status === 'validating' || status === 'uploading'
+    ? 'uploading'
+    : status === 'complete'
+      ? 'complete'
+      : 'edit'
+
+const drawerFileIconDescription = (status: UploadQueueStatus): string =>
+  status === 'uploading'
+    ? 'Saving file'
+    : status === 'queued' || status === 'validating'
+      ? 'Checking file'
+      : status === 'complete'
+        ? 'Saved'
+        : 'Remove'
+
+const splitFileErrorMessage = (message: string): [string, string | undefined] => {
+  const match = /^(.+?[.!?])\s+(\S.*)$/s.exec(message.trim())
+  return match ? [match[1], match[2]] : [message.trim(), undefined]
+}
 const DOCUMENT_LIST_REFRESH_FAILED_MESSAGE =
   'The document list could not refresh. Reload before changing documents again.'
 const UPLOAD_RESULT_TITLES = {
@@ -250,7 +272,7 @@ const DetailDocumentUploadPanel = ({
       item.status !== 'complete' && !!validateDocumentUploadDescription(item.fileDescription ?? ''),
   )
   const uploadInvalidText =
-    invalidUploadCount > 0
+    invalidUploadCount > 0 && !isDrawerPanel
       ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention and will be excluded from ${isDrawerPanel ? 'saving' : 'review'}.`
       : showFileValidationError && uploadQueue.length === 0
         ? 'Choose at least one file to upload.'
@@ -412,7 +434,10 @@ const DetailDocumentUploadPanel = ({
       }
       const uploadError = extractUploadErrorDetails(error, GENERIC_UPLOAD_FAILURE_MESSAGE)
       setQueueItemStatus(id, 'failed', uploadError.message, targetSummary, uploadError.details)
-      setErrorMessage('1 file failed validation. Review the queue for details.')
+      if (!isDrawerPanel) {
+        // The drawer shows the failure on the file item itself.
+        setErrorMessage('1 file failed validation. Review the queue for details.')
+      }
     }
   }
 
@@ -890,33 +915,25 @@ const DetailDocumentUploadPanel = ({
             const description = item.fileDescription ?? ''
             const descriptionError = validateDocumentUploadDescription(description)
             const needsAttention = item.status === 'invalid' || item.status === 'failed'
+            const [errorSubject, errorBody] = splitFileErrorMessage(
+              item.message || GENERIC_UPLOAD_FAILURE_MESSAGE,
+            )
             return (
               <li key={item.id} className="detail-document-upload-queue__item">
-                <div className="admin-upload-file-chip">
-                  <span className="admin-upload-file-chip__name">{item.file.name}</span>
-                  <span
-                    className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
-                  >
-                    {uploadQueueStatusLabel(item.status)}
-                  </span>
-                  {item.status !== 'complete' && (
-                    <button
-                      type="button"
-                      className="admin-upload-file-chip__remove"
-                      aria-label={`Remove ${item.file.name}`}
-                      disabled={isSubmitting}
-                      onClick={() => removeQueuedFile(item.id)}
-                    >
-                      <Close size={16} aria-hidden="true" />
-                    </button>
-                  )}
-                </div>
-                {needsAttention && item.message && (
-                  <p className="admin-upload-application-file-list__message" role="alert">
-                    {item.message}
-                  </p>
-                )}
-                {item.status !== 'invalid' && (
+                <FileUploaderItem
+                  uuid={item.id}
+                  name={item.file.name}
+                  size="md"
+                  status={drawerFileStatus(item.status)}
+                  iconDescription={drawerFileIconDescription(item.status)}
+                  invalid={needsAttention}
+                  errorSubject={needsAttention ? errorSubject : undefined}
+                  errorBody={needsAttention ? errorBody : undefined}
+                  disabled={isSubmitting}
+                  onDelete={() => removeQueuedFile(item.id)}
+                />
+                {/* A file that failed its check can't be saved, so it has no description. */}
+                {!(item.status === 'invalid' || (item.status === 'failed' && !item.submitted)) && (
                   <TextInput
                     id={`${inputId}Description-${encodeURIComponent(item.id)}`}
                     labelText="Description"

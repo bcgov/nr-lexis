@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Edit, TrashCan } from '@carbon/icons-react'
+import { Edit } from '@carbon/icons-react'
 import {
   Button,
   Column,
@@ -25,7 +25,6 @@ import {
 } from '@carbon/react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
-import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailLoadError from '@/components/DetailLoadError'
@@ -39,7 +38,11 @@ import { useAuth } from '@/context/auth/useAuth'
 import { allowedRegions, withinRegions } from '@/context/auth/region-utils'
 import { hasRole } from '@/context/auth/role-utils'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
-import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
+import RecordDocumentsSection, {
+  DOCUMENT_DELETED_RESULT,
+  documentsSavedResult,
+} from '@/components/documents/RecordDocumentsSection'
+import { useDocumentOpener } from '@/components/documents/useDocumentOpener'
 import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
@@ -62,7 +65,6 @@ import {
   type FederalApplicationDocumentRow,
 } from '@/service/federal-application-documents-service'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
-import { triggerBrowserDownload } from '@/utils/download'
 import {
   saveFederalPermit,
   updateFederalApplicationStatus,
@@ -184,7 +186,12 @@ const FederalApplicationDetailsPage = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [remarksErrorMessage, setRemarksErrorMessage] = useState('')
-  const [actionResult, setActionResult] = useState<ActionResult | null>(null)
+  // Documents results show in the Documents tab; every other result stays at page level.
+  const [actionResult, setActionResult] = useState<
+    (ActionResult & { source?: 'documents' }) | null
+  >(null)
+  const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
+  const pageActionResult = actionResult?.source === 'documents' ? null : actionResult
   const [statusCode, setStatusCode] = useState('')
   const [statusRemark, setStatusRemark] = useState('')
   const [remarkDraft, setRemarkDraft] = useState('')
@@ -198,8 +205,6 @@ const FederalApplicationDetailsPage = () => {
   const [isSavingMutation, setIsSavingMutation] = useState(false)
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
-  const [documentPendingDeletion, setDocumentPendingDeletion] =
-    useState<FederalApplicationDocumentRow | null>(null)
   const [documentUploadDirty, setDocumentUploadDirty] = useState(false)
   const [documentUploadBusy, setDocumentUploadBusy] = useState(false)
   const [documentUploadResetKey, setDocumentUploadResetKey] = useState(0)
@@ -266,7 +271,6 @@ const FederalApplicationDetailsPage = () => {
   }, [statusDraftDirty, permitDraftDirty, statusCode])
   const canDeleteApplicationDocuments =
     canMaintainApplicationDocuments && applicationStatusCode.length > 0 && applicationDocumentEditor
-  const canEditApplicationDocuments = canUploadApplicationDocuments || canDeleteApplicationDocuments
   const hasAgent = currentDetail?.ownerApplicantType?.trim().toUpperCase() === 'A'
   const federalApplicationDetailTabs: FederalApplicationDetailTabKey[] = [
     'owner',
@@ -784,24 +788,22 @@ const FederalApplicationDetailsPage = () => {
     setIsEditingFederalDocuments(false)
   }, [])
 
-  const onOpenDocument = useCallback(
-    async (row: FederalApplicationDocumentRow) => {
-      if (!applicationNumber) {
-        return
-      }
-
-      setActionResult(null)
-
-      try {
-        const result = await openFederalApplicationDocument(row.id, row.name, applicationNumber)
-        triggerBrowserDownload(result.blob, result.filename || row.name)
-      } catch (error) {
-        console.error(error)
-        setActionResult({ kind: 'error', message: 'Unable to open the selected document.' })
-      }
-    },
+  const fetchFederalApplicationDocument = useCallback(
+    (row: FederalApplicationDocumentRow) =>
+      openFederalApplicationDocument(row.id, row.name, applicationNumber ?? ''),
     [applicationNumber],
   )
+  const clearActionResult = useCallback(() => setActionResult(null), [])
+  const showDocumentOpenError = useCallback(
+    (message: string) => setActionResult({ kind: 'error', message, source: 'documents' }),
+    [],
+  )
+  const onOpenDocument = useDocumentOpener({
+    recordKey: applicationNumber,
+    fetchDocument: fetchFederalApplicationDocument,
+    onStart: clearActionResult,
+    onError: showDocumentOpenError,
+  })
 
   const onRemoveDocument = useCallback(
     async (row: FederalApplicationDocumentRow) => {
@@ -827,10 +829,7 @@ const FederalApplicationDetailsPage = () => {
           if (isLatestRequest()) {
             setDocumentRows(documentsResult.rows)
             setDocumentsErrorMessage('')
-            setActionResult({
-              kind: 'success',
-              message: `${row.name || 'Document'} was deleted.`,
-            })
+            setActionResult({ ...DOCUMENT_DELETED_RESULT, source: 'documents' })
           }
         } catch (refreshError) {
           if (isLatestRequest()) {
@@ -969,15 +968,15 @@ const FederalApplicationDetailsPage = () => {
 
       {detail && currentDetail && (
         <>
-          {!!actionResult && (
+          {!!pageActionResult && (
             <Column
               sm={4}
               md={8}
               lg={16}
-              className={actionResult.kind === 'error' ? 'detail-page-error' : undefined}
+              className={pageActionResult.kind === 'error' ? 'detail-page-error' : undefined}
             >
               <ActionResultNotification
-                result={actionResult}
+                result={pageActionResult}
                 onClose={() => setActionResult(null)}
               />
             </Column>
@@ -1612,123 +1611,48 @@ const FederalApplicationDetailsPage = () => {
                   </TabPanel>
                 )}
 
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel
+                  className={`application-detail-tab-panel detail-documents-tab-panel${
+                    !documentsErrorMessage && documentRows.length === 0
+                      ? ' application-detail-tab-panel--empty'
+                      : ''
+                  }`}
+                >
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">Documents</h2>
-                          {canEditApplicationDocuments &&
-                            (isEditingFederalDocuments ? (
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                disabled={documentUploadBusy || isRemovingDocumentId !== null}
-                                onClick={onCancelFederalDocumentEdit}
-                              >
-                                Cancel
-                              </Button>
-                            ) : (
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                renderIcon={Edit}
-                                onClick={() => setIsEditingFederalDocuments(true)}
-                              >
-                                Edit documents
-                              </Button>
-                            ))}
-                        </div>
-                        {isEditingFederalDocuments && canUploadApplicationDocuments && (
-                          <DetailDocumentUploadPanel
-                            key={`federal-application-document-upload-${applicationNumber}-${documentUploadResetKey}`}
-                            workflowType="application"
-                            targetNumber={String(
-                              detail.applicationNumber ?? applicationNumber ?? '',
-                            )}
-                            inputId="federalApplicationDocumentUpload"
-                            disabled={!detail.applicationNumber && !applicationNumber}
-                            onDirtyChange={setDocumentUploadDirty}
-                            onBusyChange={setDocumentUploadBusy}
-                            onUploadComplete={refreshFederalApplicationDocuments}
-                            onUploadSuccess={(message) =>
-                              setActionResult({
-                                kind: 'success',
-                                title: 'Document uploaded',
-                                message,
-                              })
-                            }
-                          />
-                        )}
-                        {documentsErrorMessage ? (
-                          <EmptyState
-                            title="Documents unavailable"
-                            description={documentsErrorMessage}
-                            headingLevel={3}
-                            role="alert"
-                          />
-                        ) : documentRows.length > 0 ? (
-                          <TableFrame ariaLabel="Federal application documents">
-                            <Table size="md" useZebraStyles>
-                              <TableHead>
-                                <TableRow>
-                                  <TableHeader>File name</TableHeader>
-                                  <TableHeader>Description</TableHeader>
-                                  <TableHeader>Type</TableHeader>
-                                  <TableHeader>Actions</TableHeader>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {documentRows.map((row) => (
-                                  <TableRow key={row.id}>
-                                    <TableCell>{row.name || '-'}</TableCell>
-                                    <TableCell>{row.description || '-'}</TableCell>
-                                    <TableCell>{row.type || '-'}</TableCell>
-                                    <TableCell>
-                                      <div className="legacy-search-actions">
-                                        <Button
-                                          kind="ghost"
-                                          size="sm"
-                                          onClick={() => void onOpenDocument(row)}
-                                        >
-                                          Open
-                                        </Button>
-                                        {isEditingFederalDocuments &&
-                                          !federalApplicationLocked &&
-                                          row.deletable !== false && (
-                                            <Button
-                                              kind="danger--ghost"
-                                              size="sm"
-                                              disabled={
-                                                !canDeleteApplicationDocuments ||
-                                                isRemovingDocumentId === row.id
-                                              }
-                                              renderIcon={TrashCan}
-                                              onClick={() => {
-                                                setActionResult(null)
-                                                setDocumentPendingDeletion(row)
-                                              }}
-                                            >
-                                              {isRemovingDocumentId === row.id
-                                                ? 'Deleting…'
-                                                : 'Delete'}
-                                            </Button>
-                                          )}
-                                      </div>
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableFrame>
-                        ) : (
-                          <EmptyState
-                            title="No documents found"
-                            description="No documents have been uploaded for this federal application."
-                            headingLevel={3}
-                          />
-                        )}
-                      </Tile>
+                      {/* Figma shows the documents table on the page, with no card or title. */}
+                      <RecordDocumentsSection
+                        id="federal-application-documents"
+                        recordType="application"
+                        rows={documentRows}
+                        errorMessage={documentsErrorMessage}
+                        result={documentActionResult}
+                        onDismissResult={clearActionResult}
+                        upload={{
+                          enabled: canUploadApplicationDocuments,
+                          open: isEditingFederalDocuments,
+                          resetKey: documentUploadResetKey,
+                          targetNumber: String(detail.applicationNumber ?? applicationNumber ?? ''),
+                          inputId: 'federalApplicationDocumentUpload',
+                          contentSelector: '.application-detail-tabs-column',
+                          busy: documentUploadBusy,
+                          onOpen: () => setIsEditingFederalDocuments(true),
+                          onClose: onCancelFederalDocumentEdit,
+                          onDirtyChange: setDocumentUploadDirty,
+                          onBusyChange: setDocumentUploadBusy,
+                          onUploadComplete: refreshFederalApplicationDocuments,
+                          onSaved: (savedCount) =>
+                            setActionResult({
+                              ...documentsSavedResult(savedCount),
+                              source: 'documents',
+                            }),
+                        }}
+                        onOpen={(row, preview) => void onOpenDocument(row, preview)}
+                        canDelete={canDeleteApplicationDocuments}
+                        removingId={isRemovingDocumentId}
+                        onDeleteStart={clearActionResult}
+                        onDelete={onRemoveDocument}
+                      />
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -2003,24 +1927,6 @@ const FederalApplicationDetailsPage = () => {
             </Tabs>
           </Column>
         </>
-      )}
-      {documentPendingDeletion && (
-        <ConfirmationModal
-          open
-          danger
-          title="Delete document"
-          description={
-            <>
-              Permanently delete <strong>{documentPendingDeletion.name || 'this document'}</strong>?
-              This cannot be undone.
-            </>
-          }
-          confirmLabel="Delete"
-          pendingLabel="Deleting…"
-          errorTitle="Failed to delete document"
-          onClose={() => setDocumentPendingDeletion(null)}
-          onConfirm={() => onRemoveDocument(documentPendingDeletion)}
-        />
       )}
       <UnsavedChangesGuard
         isDirty={isFederalApplicationDirty}
