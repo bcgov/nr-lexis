@@ -26,6 +26,7 @@ import {
   Grid,
   InlineLoading,
   InlineNotification,
+  Layer,
   Loading,
   RadioButton,
   RadioButtonGroup,
@@ -8583,7 +8584,9 @@ const ProvincialPermitDetailsPage = () => {
             },
           ]}
         >
-          <div className="permit-package-panel__form">
+          {/* The mockup sets the form on Carbon's first layer, so fields and menus are grey on the
+              white panel. */}
+          <Layer level={0} className="permit-package-panel__form">
             <p className="application-detail-required">{requiredLabel('Required fields')}</p>
             {/* Field errors show on their fields; this notification is only for errors that don't
                 belong to a field. */}
@@ -8673,7 +8676,7 @@ const ProvincialPermitDetailsPage = () => {
               disabled={isLoadingBoicPackage || isSavingBoicPackage}
               onChange={(event) => setBlanketOicPackageFormField('comments', event.target.value)}
             />
-          </div>
+          </Layer>
         </DetailSidePanel>
       )}
       <UnsavedChangesGuard
