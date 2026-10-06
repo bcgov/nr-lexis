@@ -1047,7 +1047,8 @@ test.describe('Provincial permit parity regressions', () => {
     const editedPackageNumber = panel.getByLabel('Package number', { exact: true })
     await expect(editedPackageNumber).toHaveValue('BOIC-A')
     await expect(editedPackageNumber).toBeFocused()
-    await panel.getByRole('button', { name: 'Cancel edit', exact: true }).click()
+    await expect(panel.getByRole('heading', { name: 'Edit package', exact: true })).toBeVisible()
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(panel).toHaveCount(0)
     await expect(editTrigger).toBeFocused()
 
@@ -1073,13 +1074,20 @@ test.describe('Provincial permit parity regressions', () => {
     const panel = page.locator('.permit-package-panel')
     await expect(panel).toBeVisible()
     await panel.getByLabel('Package number', { exact: true }).fill('BOIC-NEW')
-    await panel.getByLabel('Package volume (m³)', { exact: true }).fill('100.0')
+    await panel.getByLabel('Volume (m³)', { exact: true }).fill('100.0')
     await panel.getByLabel('Average length (m)', { exact: true }).fill('10.0')
     await panel.getByLabel('Average top diameter (rads)', { exact: true }).fill('20.0')
-    await chooseComboBoxOption(page, 'Species', 'FI - Fir')
-    await panel.getByRole('button', { name: 'Add species', exact: true }).click()
-    await expect(panel.getByRole('combobox', { name: 'End use', exact: true })).toHaveValue(
-      'LU - Lumber',
+    await panel.getByRole('combobox', { name: /^Species list/ }).click()
+    await panel.getByRole('option', { name: /FI - Fir/ }).click()
+    await expect(panel.getByRole('button', { name: 'Remove FI', exact: true })).toBeVisible()
+    const endUse = panel.getByRole('combobox', { name: 'End use', exact: true })
+    await expect(endUse).toBeEnabled()
+    await expect(endUse).toHaveText(/Choose an option/)
+    await endUse.click()
+    await panel.getByRole('option', { name: 'Lumber', exact: true }).click()
+    await expect(endUse).toHaveText(/Lumber/)
+    await expect(panel.getByRole('combobox', { name: 'Age class', exact: true })).toHaveText(
+      /Old growth/,
     )
     await panel.getByRole('button', { name: 'Save package', exact: true }).click()
 
@@ -1098,6 +1106,7 @@ test.describe('Provincial permit parity regressions', () => {
           averageLength: 10,
           averageDiameter: 20,
           endUseCode: 'LU',
+          ageClass: 'O',
           speciesCodes: ['FI'],
         }),
       }),
@@ -1127,7 +1136,7 @@ test.describe('Provincial permit parity regressions', () => {
       const panel = page.locator('.permit-package-panel')
       const packageNumber = panel.getByLabel('Package number', { exact: true })
       await packageNumber.fill('DRAFT-ESCAPE')
-      const species = panel.getByRole('combobox', { name: 'Species', exact: true })
+      const species = panel.getByRole('combobox', { name: /^Species list/ })
       await expect(species).toBeEnabled()
       await species.click()
       await expect(page.getByRole('listbox')).toBeVisible()

@@ -736,7 +736,38 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         endUseCodes.add(endUseCode);
       }
     }
+    return toEndUseCodeItems(endUseCodes);
+  }
 
+  // INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_SPECIES_LIST): legacy offered end uses from any
+  // code sharing the first species; this mirrors validatePackageReferenceCodes instead.
+  @Override
+  public List<CodeItem> getEndUsesCompletingSpeciesSort(
+      String orgUnitNumber, List<String> speciesCodes) {
+    List<String> normalizedSpeciesCodes = normalizeCodes(speciesCodes);
+    Long parsedOrgUnitNumber = parsePositiveLong(trimToNull(orgUnitNumber));
+    if (normalizedSpeciesCodes.isEmpty() || parsedOrgUnitNumber == null) {
+      return List.of();
+    }
+
+    TreeSet<String> endUseCodes = new TreeSet<>();
+    for (ApplicationDetailsRpcRepository.SpeciesGradeEndUseRow row :
+        repository.findSpeciesEndUsesByRegionSpeciesRequired(
+            parsedOrgUnitNumber.toString(), normalizedSpeciesCodes.get(0))) {
+      String excolCode = trimToNull(row.excolTranslationValue());
+      String endUseCode = trimToNull(row.endUseCode());
+      if (excolCode != null
+          && endUseCode != null
+          && LegacyExcolSort.matchesCandidatePattern(excolCode, normalizedSpeciesCodes.size())
+          && containsAllLegacy(excolCode, normalizedSpeciesCodes)
+          && excolCode.contains(endUseCode)) {
+        endUseCodes.add(endUseCode);
+      }
+    }
+    return toEndUseCodeItems(endUseCodes);
+  }
+
+  private List<CodeItem> toEndUseCodeItems(TreeSet<String> endUseCodes) {
     List<CodeItem> response = new ArrayList<>();
     for (String endUseCode : endUseCodes) {
       repository.findEndUseCodeRequired(endUseCode).map(this::toCodeItem).ifPresent(response::add);

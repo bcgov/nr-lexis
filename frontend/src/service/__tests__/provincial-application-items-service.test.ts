@@ -10,6 +10,7 @@ import {
   fetchApplicationPackageStatusCodes,
   fetchApplicationSummarySnapshot,
   fetchApplicationRemainingSpecies,
+  fetchApplicationEndUsesForSpeciesRegion,
   fetchApplicationUniqueScales,
   saveApplicationRemark,
   updateApplicationSummary,
@@ -58,6 +59,26 @@ describe('provincial-application-items-service', () => {
           speciesJSON: '["FI"]',
         },
       },
+      { ttlMs: 30000 },
+    )
+  })
+
+  it('asks for end uses that complete a sort only when requested', async () => {
+    getCachedResponseMock.mockResolvedValue({ data: [{ code: 'PL', description: 'Peeler' }] })
+
+    await fetchApplicationEndUsesForSpeciesRegion('1909', ['HE', 'BA'])
+    await fetchApplicationEndUsesForSpeciesRegion('1909', ['HE', 'BA'], { completeSortOnly: true })
+
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      1,
+      '/lexis/rpc/application-details/end-uses-for-species-region',
+      { params: { orgUnitNumber: '1909', speciesJSON: '["HE","BA"]' } },
+      { ttlMs: 30000 },
+    )
+    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
+      2,
+      '/lexis/rpc/application-details/end-uses-for-species-region',
+      { params: { orgUnitNumber: '1909', speciesJSON: '["HE","BA"]', completeSortOnly: true } },
       { ttlMs: 30000 },
     )
   })

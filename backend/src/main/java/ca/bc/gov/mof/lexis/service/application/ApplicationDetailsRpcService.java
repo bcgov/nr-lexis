@@ -142,6 +142,12 @@ public interface ApplicationDetailsRpcService {
 
   List<CodeItem> getEndUsesForSpeciesRegion(String orgUnitNumber, List<String> speciesCodes);
 
+  /**
+   * Returns only the end uses that complete a regional species/end-use sort with exactly these
+   * species, using the same candidate rule as package save validation.
+   */
+  List<CodeItem> getEndUsesCompletingSpeciesSort(String orgUnitNumber, List<String> speciesCodes);
+
   List<SpeciesCodeItem> getRemainingSpecies(
       String orgUnitNumber, String productTypeCode, List<String> selectedSpeciesCodes);
 

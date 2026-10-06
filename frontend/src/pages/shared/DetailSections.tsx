@@ -48,7 +48,7 @@ export function DetailFieldTile({
         </h2>
         {headerAction}
       </div>
-      <DetailFieldGrid fields={fields} />
+      {fields.length > 0 && <DetailFieldGrid fields={fields} />}
       {children}
     </Tile>
   )

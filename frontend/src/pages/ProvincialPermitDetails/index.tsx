@@ -8,6 +8,7 @@ import {
   useState,
 } from 'react'
 import {
+  Add,
   Box,
   Certificate,
   Currency,
@@ -25,6 +26,7 @@ import {
   Grid,
   InlineLoading,
   InlineNotification,
+  Layer,
   Loading,
   RadioButton,
   RadioButtonGroup,
@@ -69,7 +71,7 @@ import { ActionResultNotification } from '../../components/ActionResultNotificat
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldTile } from '../shared/DetailSections'
+import { DetailFieldGrid, DetailFieldTile } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { displayTableValue } from '@/utils/text'
 import { formatIsoDateLabel } from '@/utils/date'
@@ -84,7 +86,6 @@ import {
   formatRoundedNumericFieldValue,
   getVisibleFieldError,
   greaterThanFieldError,
-  greaterThanOrEqualFieldError,
   integerFieldError,
   isoDateFieldError,
   lessThanOrEqualFieldError,
@@ -98,7 +99,10 @@ import {
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
-import BlanketOicPackageCodeFields from './BlanketOicPackageCodeFields'
+import BlanketOicPackageCodeFields, {
+  type BlanketOicPackageOptionsStatus,
+} from './BlanketOicPackageCodeFields'
+import { blanketOicProductTypeLabel } from './blanket-oic-package-options'
 import BlanketOicScaleCodeFields from './BlanketOicScaleCodeFields'
 import { resolveBlanketOicRegionContext } from '../ProvincialBlanketOicPermitCreate/region-context'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -317,7 +321,7 @@ const EMPTY_BLANKET_OIC_SCALE_FORM: BlanketOicScaleForm = {
 // INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_STATUS_DEFAULTS): hidden fields default only on create; edits preserve saved values.
 const EMPTY_BLANKET_OIC_PACKAGE_FORM: BlanketOicPackageForm = {
   packageNumber: '',
-  volume: '0.0',
+  volume: '',
   averageLength: '',
   averageDiameter: '',
   status: 'ACT',
@@ -339,30 +343,78 @@ const parseBlanketOicSpeciesCodes = (value: string): string[] =>
     ),
   )
 
-const validateBlanketOicPackage = (form: BlanketOicPackageForm): BlanketOicPackageFieldErrors => {
+// Read ".1" and "0,1" as 0.1 in the package measurements.
+const normalizeBlanketOicPackageMeasurements = (
+  form: BlanketOicPackageForm,
+): BlanketOicPackageForm => {
+  const normalize = (value: string) => value.trim().replace(',', '.').replace(/^\./, '0.')
+  return {
+    ...form,
+    volume: normalize(form.volume),
+    averageLength: normalize(form.averageLength),
+    averageDiameter: normalize(form.averageDiameter),
+  }
+}
+
+// Server errors that belong to a field show on that field.
+const blanketOicPackageServerFieldErrors = (message: string): BlanketOicPackageFieldErrors => {
+  if (/^Package .+ already exists\.$/.test(message)) return { packageNumber: message }
+  if (message.startsWith('The total package volume must not exceed')) return { volume: message }
+  return {}
+}
+
+const formatBlanketOicPackageVolume = (value: string): string => {
+  const volume = Number(value.trim())
+  return value.trim() && Number.isFinite(volume) ? volume.toFixed(1) : value
+}
+
+// Greater than 0 and no more than the permit request volume. The server checks the total of all
+// the permit's packages.
+const blanketOicPackageVolumeError = (
+  value: string,
+  maxVolume: number | null,
+): string | undefined => {
+  const outOfRange = firstValidationError(
+    () => requiredNumericFieldError(value, 'Package volume'),
+    () => greaterThanFieldError(value, 'Package volume', 0),
+    () =>
+      maxVolume === null ? null : lessThanOrEqualFieldError(value, 'Package volume', maxVolume),
+  )
+  if (outOfRange) {
+    return maxVolume === null
+      ? 'Enter a volume greater than 0.'
+      : `Enter a volume greater than 0 and no more than ${maxVolume.toFixed(1)}.`
+  }
+  return atMostOneDecimalFieldError(value, 'Package volume') ?? undefined
+}
+
+const validateBlanketOicPackage = (
+  form: BlanketOicPackageForm,
+  maxVolume: number | null,
+): BlanketOicPackageFieldErrors => {
   const speciesCodes = parseBlanketOicSpeciesCodes(form.speciesCodes)
+  const outOfRange = (value: string, label: string, max: number) =>
+    !!firstValidationError(
+      () => requiredNumericFieldError(value, label),
+      () => greaterThanFieldError(value, label, 0),
+      () => lessThanOrEqualFieldError(value, label, max),
+    )
 
   return {
-    packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
-    volume: firstValidationError(
-      () => requiredNumericFieldError(form.volume, 'Package volume'),
-      () => greaterThanOrEqualFieldError(form.volume, 'Package volume', 0),
-      () => atMostOneDecimalFieldError(form.volume, 'Package volume'),
-    ),
-    averageLength: firstValidationError(
-      () => requiredNumericFieldError(form.averageLength, 'Average length'),
-      () => greaterThanFieldError(form.averageLength, 'Average length', 0),
-      () => lessThanOrEqualFieldError(form.averageLength, 'Average length', 99),
-    ),
-    averageDiameter: firstValidationError(
-      () => requiredNumericFieldError(form.averageDiameter, 'Average top diameter'),
-      () => greaterThanFieldError(form.averageDiameter, 'Average top diameter', 0),
-      () => lessThanOrEqualFieldError(form.averageDiameter, 'Average top diameter', 99.99),
-    ),
-    ageClass: requiredFieldError(form.ageClass, 'Age class') ?? undefined,
+    packageNumber: form.packageNumber.trim() ? undefined : 'Enter a package number.',
+    volume: blanketOicPackageVolumeError(form.volume, maxVolume),
+    averageLength: outOfRange(form.averageLength, 'Average length', 99)
+      ? 'Enter a length greater than 0 and no more than 99.'
+      : undefined,
+    averageDiameter: outOfRange(form.averageDiameter, 'Average top diameter', 99.99)
+      ? 'Enter a diameter greater than 0 and no more than 99.99.'
+      : undefined,
+    ageClass: form.ageClass.trim() ? undefined : 'Select an age class.',
     productType: requiredFieldError(form.productType, 'Product type') ?? undefined,
-    endUseCode: requiredFieldError(form.endUseCode, 'End use') ?? undefined,
-    speciesCodes: speciesCodes.length > 0 ? undefined : 'Species is required.',
+    // End use only becomes available, and required, once species are chosen.
+    endUseCode:
+      speciesCodes.length > 0 && !form.endUseCode.trim() ? 'Select an end use.' : undefined,
+    speciesCodes: speciesCodes.length > 0 ? undefined : 'Select at least one species.',
     comments: firstValidationError(
       () =>
         ASCII_PATTERN.test(form.comments)
@@ -986,7 +1038,8 @@ const ProvincialPermitDetailsPage = () => {
   const [boicPackageErrorMessage, setBoicPackageErrorMessage] = useState('')
   const [editingBoicPackageNumber, setEditingBoicPackageNumber] = useState<string | null>(null)
   const [isCreatingBoicPackage, setIsCreatingBoicPackage] = useState(false)
-  const [boicCodeOptionsReady, setBoicCodeOptionsReady] = useState(false)
+  const [boicCodeOptionsStatus, setBoicCodeOptionsStatus] =
+    useState<BlanketOicPackageOptionsStatus>('loading')
   const [boicScaleCodeOptionsReady, setBoicScaleCodeOptionsReady] = useState(false)
   const [isLoadingBoicPackage, setIsLoadingBoicPackage] = useState(false)
   const [isSavingBoicPackage, setIsSavingBoicPackage] = useState(false)
@@ -1110,7 +1163,7 @@ const ProvincialPermitDetailsPage = () => {
     setGbmsErrorMessage('')
     void beginBoicPackageEditRequest()
     setIsCreatingBoicPackage(false)
-    setBoicCodeOptionsReady(false)
+    setBoicCodeOptionsStatus('loading')
     setBoicScaleCodeOptionsReady(false)
     setIsAddingBoicScale(false)
     setDiscardBoicScaleOpen(false)
@@ -3692,7 +3745,7 @@ const ProvincialPermitDetailsPage = () => {
     beginBoicPackageEditRequest()
     setBoicPackageErrorMessage('')
     setIsLoadingBoicPackage(false)
-    setBoicCodeOptionsReady(false)
+    setBoicCodeOptionsStatus('loading')
     setIsCreatingBoicPackage(false)
     setEditingBoicPackageNumber(null)
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
@@ -3722,7 +3775,7 @@ const ProvincialPermitDetailsPage = () => {
         setEditingBoicPackageNumber(packageNumberToEdit)
         const loadedPackageForm: BlanketOicPackageForm = {
           packageNumber: context.packageNumber,
-          volume: context.volume,
+          volume: formatBlanketOicPackageVolume(context.volume),
           averageLength: context.averageLength,
           averageDiameter: context.averageDiameter,
           status: context.status,
@@ -3731,7 +3784,8 @@ const ProvincialPermitDetailsPage = () => {
           ageClass: context.ageClass || 'O',
           productType: context.productType || 'H',
           endUseCode: context.endUseCode,
-          speciesCodes: context.speciesCodes.join(', '),
+          // Sorted, as the package card lists them.
+          speciesCodes: [...context.speciesCodes].sort().join(', '),
         }
         setBoicPackageForm(loadedPackageForm)
         setBoicPackageBaselineForm(loadedPackageForm)
@@ -3754,6 +3808,11 @@ const ProvincialPermitDetailsPage = () => {
     ],
   )
 
+  const boicPackageVolumeLimit =
+    detail?.oicRequestVolume === null || detail?.oicRequestVolume === undefined
+      ? null
+      : Number(detail.oicRequestVolume)
+
   const onSaveBlanketOicPackage = useCallback(async (): Promise<boolean> => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
     if (
@@ -3761,7 +3820,6 @@ const ProvincialPermitDetailsPage = () => {
       !resolvedPermitNumber ||
       isSavingBoicPackage ||
       isLoadingBoicPackage ||
-      !boicCodeOptionsReady ||
       blanketOicScaleDirty
     ) {
       return false
@@ -3774,13 +3832,13 @@ const ProvincialPermitDetailsPage = () => {
       setBoicPackageErrorMessage('Save or discard the Region change before saving a package.')
       return false
     }
-    const fieldErrors = validateBlanketOicPackage(boicPackageForm)
+    const packageForm = normalizeBlanketOicPackageMeasurements(boicPackageForm)
+    setBoicPackageForm(packageForm)
+    const fieldErrors = validateBlanketOicPackage(packageForm, boicPackageVolumeLimit)
     if (Object.values(fieldErrors).some(Boolean)) {
       setBoicPackageFieldErrors(fieldErrors)
-      setBoicPackageErrorMessage(
-        Object.values(fieldErrors).find((error): error is string => !!error) ??
-          'Please fix validation errors before saving the Blanket OIC package.',
-      )
+      // The errors show on their fields, so there is no panel notification to go stale.
+      setBoicPackageErrorMessage('')
       return false
     }
     const speciesCodes = parseBlanketOicSpeciesCodes(boicPackageForm.speciesCodes)
@@ -3797,9 +3855,9 @@ const ProvincialPermitDetailsPage = () => {
       permitNumber: resolvedPermitNumber,
       packageNumber,
       newPackageNumber,
-      volume: boicPackageForm.volume.trim(),
-      averageLength: boicPackageForm.averageLength.trim(),
-      averageDiameter: boicPackageForm.averageDiameter.trim(),
+      volume: packageForm.volume,
+      averageLength: packageForm.averageLength,
+      averageDiameter: packageForm.averageDiameter,
       status: editingBoicPackageNumber ? boicPackageForm.status.trim().toUpperCase() : 'ACT',
       comments: boicPackageForm.comments,
       reprocessed: editingBoicPackageNumber
@@ -3819,9 +3877,11 @@ const ProvincialPermitDetailsPage = () => {
         ? await updateBlanketOicPackage(request)
         : await addBlanketOicPackage(request)
       if (!result.success) {
-        setBoicPackageErrorMessage(
-          result.errors[0] || result.message || 'Unable to save the Blanket OIC package.',
-        )
+        const message =
+          result.errors[0] || result.message || 'Unable to save the Blanket OIC package.'
+        const serverFieldErrors = blanketOicPackageServerFieldErrors(message)
+        setBoicPackageFieldErrors(serverFieldErrors)
+        setBoicPackageErrorMessage(Object.keys(serverFieldErrors).length > 0 ? '' : message)
         return false
       }
       if (result.applicationNumber) {
@@ -3863,7 +3923,7 @@ const ProvincialPermitDetailsPage = () => {
     }
   }, [
     boicPackageForm,
-    boicCodeOptionsReady,
+    boicPackageVolumeLimit,
     blanketOicScaleDirty,
     isLoadingBoicPackage,
     canEditBlanketOicPackages,
@@ -5400,6 +5460,7 @@ const ProvincialPermitDetailsPage = () => {
             id="add-boic-scale"
             kind="tertiary"
             size="md"
+            renderIcon={Add}
             disabled={blanketOicScaleActionsDisabled || isAddingBoicScale}
             onClick={(event) => startBlanketOicScale(event.currentTarget)}
           >
@@ -5808,6 +5869,7 @@ const ProvincialPermitDetailsPage = () => {
       id="create-boic-package"
       kind="tertiary"
       size="md"
+      renderIcon={Add}
       disabled={blanketOicPackageActionsDisabled}
       onClick={(event) => {
         packagePanelLauncherRef.current = event.currentTarget
@@ -7554,8 +7616,9 @@ const ProvincialPermitDetailsPage = () => {
                                   <Button
                                     id="create-boic-package"
                                     type="button"
-                                    kind="primary"
+                                    kind="tertiary"
                                     size="sm"
+                                    renderIcon={Add}
                                     disabled={blanketOicPackageActionsDisabled}
                                     onClick={(event) => {
                                       packagePanelLauncherRef.current = event.currentTarget
@@ -7612,6 +7675,7 @@ const ProvincialPermitDetailsPage = () => {
                                         type="button"
                                         kind="danger--ghost"
                                         size="sm"
+                                        renderIcon={TrashCan}
                                         disabled={
                                           blanketOicPackageActionsDisabled ||
                                           selectedBlanketOicPackageHasScaleRows
@@ -7635,7 +7699,7 @@ const ProvincialPermitDetailsPage = () => {
                                       </Button>
                                       <Button
                                         type="button"
-                                        kind="ghost"
+                                        kind="tertiary"
                                         size="sm"
                                         renderIcon={Edit}
                                         disabled={blanketOicPackageActionsDisabled}
@@ -7651,46 +7715,60 @@ const ProvincialPermitDetailsPage = () => {
                                     </div>
                                   ) : undefined
                                 }
-                                fields={[
-                                  {
-                                    label: 'Species list',
-                                    value:
-                                      selectedBlanketOicPackage.speciesCodes?.join(', ') || '—',
-                                  },
-                                  {
-                                    label: 'End use',
-                                    value: selectedBlanketOicPackage.endUseCodes?.join(', ') || '—',
-                                  },
-                                  {
-                                    label: 'Age class',
-                                    value: selectedBlanketOicPackage.ageClass || '—',
-                                  },
-                                  {
-                                    label: 'Product type',
-                                    value: selectedBlanketOicPackage.productType || '—',
-                                  },
-                                  {
-                                    label: 'Volume (m³)',
-                                    value: selectedBlanketOicPackage.packageVolume || '—',
-                                  },
-                                  {
-                                    label: 'Average length (m)',
-                                    value: selectedBlanketOicPackage.averageLength || '—',
-                                  },
-                                  {
-                                    label: 'Average top diameter (rads)',
-                                    value: selectedBlanketOicPackage.averageTopDiameter || '—',
-                                  },
-                                  {
-                                    label: 'Comments',
-                                    value: (
-                                      <span style={{ whiteSpace: 'pre-wrap' }}>
-                                        {selectedBlanketOicPackage.comments || '—'}
-                                      </span>
-                                    ),
-                                  },
-                                ]}
+                                fields={[]}
                               >
+                                <div className="boic-package-field-groups">
+                                  <DetailFieldGrid
+                                    fields={[
+                                      {
+                                        label: 'Species list',
+                                        value:
+                                          selectedBlanketOicPackage.speciesCodes?.join(', ') || '—',
+                                      },
+                                      {
+                                        label: 'End use',
+                                        value:
+                                          (selectedBlanketOicPackage.endUseDescriptions?.length
+                                            ? selectedBlanketOicPackage.endUseDescriptions
+                                            : selectedBlanketOicPackage.endUseCodes
+                                          )?.join(', ') || '—',
+                                      },
+                                    ]}
+                                  />
+                                  <DetailFieldGrid
+                                    fields={[
+                                      {
+                                        label: 'Age class',
+                                        value: selectedBlanketOicPackage.ageClass || '—',
+                                      },
+                                      {
+                                        label: 'Product type',
+                                        value:
+                                          blanketOicProductTypeLabel(
+                                            selectedBlanketOicPackage.productTypeCode,
+                                          ) ||
+                                          selectedBlanketOicPackage.productType ||
+                                          '—',
+                                      },
+                                    ]}
+                                  />
+                                  <DetailFieldGrid
+                                    fields={[
+                                      {
+                                        label: 'Volume (m³)',
+                                        value: selectedBlanketOicPackage.packageVolume || '—',
+                                      },
+                                      {
+                                        label: 'Average length (m)',
+                                        value: selectedBlanketOicPackage.averageLength || '—',
+                                      },
+                                      {
+                                        label: 'Average top diameter (rads)',
+                                        value: selectedBlanketOicPackage.averageTopDiameter || '—',
+                                      },
+                                    ]}
+                                  />
+                                </div>
                                 <div className="boic-package-summary__scale">
                                   {renderScaleSummary()}
                                 </div>
@@ -8517,11 +8595,7 @@ const ProvincialPermitDetailsPage = () => {
       {detail?.blanketOic && (
         <DetailSidePanel
           open={canEditBlanketOicPackages && blanketOicPackageEditorOpen}
-          title={
-            editingBoicPackageNumber
-              ? `Edit ${formatPackageNumberLabel(editingBoicPackageNumber)}`
-              : 'Create package'
-          }
+          title={editingBoicPackageNumber ? 'Edit package' : 'Create package'}
           className="permit-package-panel application-detail-edit-section"
           contentSelector="#permit-detail-content"
           initialFocusSelector="#boicPackageNumber"
@@ -8532,27 +8606,30 @@ const ProvincialPermitDetailsPage = () => {
           onClose={resetBlanketOicPackageForm}
           actions={[
             {
-              label: editingBoicPackageNumber ? 'Cancel edit' : 'Cancel',
+              label: 'Cancel',
               kind: 'tertiary',
               disabled: isSavingBoicPackage,
               onClick: resetBlanketOicPackageForm,
             },
             {
-              label: isSavingBoicPackage
-                ? 'Saving…'
-                : editingBoicPackageNumber
-                  ? 'Save package'
-                  : 'Save package',
+              label: isSavingBoicPackage ? 'Saving…' : 'Save package',
               kind: 'primary',
-              disabled: isLoadingBoicPackage || isSavingBoicPackage || !boicCodeOptionsReady,
+              // Save validates on click, so it is only disabled while busy.
+              disabled: isLoadingBoicPackage || isSavingBoicPackage,
               renderIcon: isSavingBoicPackage ? PendingIcon : undefined,
               onClick: async () => {
                 if (await onSaveBlanketOicPackage()) return
                 requestAnimationFrame(() => {
                   const panel = document.querySelector('.permit-package-panel')
-                  const invalid = panel?.querySelector<HTMLElement>('[aria-invalid="true"]')
+                  // Carbon marks invalid dropdowns on their list box, so focus the control inside.
+                  const invalid = panel?.querySelector<HTMLElement>(
+                    '[aria-invalid="true"], [data-invalid="true"]',
+                  )
+                  const invalidControl = invalid?.matches('input, textarea, button')
+                    ? invalid
+                    : invalid?.querySelector<HTMLElement>('input, textarea, button')
                   const target =
-                    invalid ?? panel?.querySelector<HTMLElement>('[data-package-error]')
+                    invalidControl ?? panel?.querySelector<HTMLElement>('[data-package-error]')
                   target?.focus()
                   target?.scrollIntoView({ block: 'nearest' })
                 })
@@ -8560,23 +8637,35 @@ const ProvincialPermitDetailsPage = () => {
             },
           ]}
         >
-          <div className="permit-package-panel__form">
-            {!!boicPackageErrorMessage && (
+          {/* Carbon's first layer gives grey fields and menus on the white panel. */}
+          <Layer level={0} className="permit-package-panel__form">
+            <p className="application-detail-required">{requiredLabel('Required fields')}</p>
+            {/* Field errors show on their fields; this notification is only for errors that don't
+                belong to a field. */}
+            {!!boicPackageErrorMessage && !Object.values(boicPackageFieldErrors).some(Boolean) && (
               <div tabIndex={-1} data-package-error>
                 <InlineNotification
                   kind="error"
                   title="Package needs attention"
-                  subtitle={
-                    Object.values(boicPackageFieldErrors).some(Boolean)
-                      ? 'Check the highlighted fields and try again.'
-                      : boicPackageErrorMessage
-                  }
+                  subtitle={boicPackageErrorMessage}
                   lowContrast
                   hideCloseButton
                 />
               </div>
             )}
+            {boicCodeOptionsStatus === 'unavailable' && (
+              <InlineNotification
+                kind="warning"
+                title="Package options unavailable"
+                subtitle="Package options could not be loaded. Reload the page to try again."
+                lowContrast
+                hideCloseButton
+              />
+            )}
             {isLoadingBoicPackage && <InlineLoading description="Loading package…" />}
+            {!isLoadingBoicPackage && boicCodeOptionsStatus === 'loading' && (
+              <InlineLoading description="Loading package options…" />
+            )}
             <div className="legacy-search-grid">
               <TextInput
                 id="boicPackageNumber"
@@ -8597,13 +8686,14 @@ const ProvincialPermitDetailsPage = () => {
               value={boicPackageForm}
               onChange={setBlanketOicPackageFormField}
               disabled={isLoadingBoicPackage || isSavingBoicPackage}
-              onAvailabilityChange={setBoicCodeOptionsReady}
+              onAvailabilityChange={setBoicCodeOptionsStatus}
               fieldErrors={boicPackageFieldErrors}
             />
             <div className="legacy-search-grid">
               <TextInput
                 id="boicPackageVolume"
-                labelText={requiredLabel('Package volume (m³)')}
+                helperText="Must be less than or equal to permit request volume. Must be greater than 0"
+                labelText={requiredLabel('Volume (m³)')}
                 aria-required="true"
                 value={boicPackageForm.volume}
                 invalid={!!boicPackageFieldErrors.volume}
@@ -8644,14 +8734,13 @@ const ProvincialPermitDetailsPage = () => {
               enableCounter
               maxCount={PACKAGE_COMMENTS_MAX_LENGTH}
               maxLength={PACKAGE_COMMENTS_MAX_LENGTH}
-              helperText="Use unaccented letters, numbers, spaces, or standard punctuation."
               value={boicPackageForm.comments}
               invalid={!!boicPackageFieldErrors.comments}
               invalidText={boicPackageFieldErrors.comments}
               disabled={isLoadingBoicPackage || isSavingBoicPackage}
               onChange={(event) => setBlanketOicPackageFormField('comments', event.target.value)}
             />
-          </div>
+          </Layer>
         </DetailSidePanel>
       )}
       <UnsavedChangesGuard

@@ -24,6 +24,20 @@ public final class LegacyExcolSort {
   }
 
   /**
+   * Matches an EXCOL code the way {@code LEXIS.FIND_CANDIDATE_EXCOL_VALUES} does: the candidate
+   * pattern exactly, or the pattern followed by a space for double end uses such as
+   * {@code CE/UT SH}.
+   */
+  public static boolean matchesCandidatePattern(String excolCode, int speciesCount) {
+    String pattern = candidatePattern(speciesCount);
+    if (excolCode == null || pattern == null) {
+      return false;
+    }
+    String regex = pattern.replace('_', '.');
+    return excolCode.matches(regex) || excolCode.matches(regex + " .*");
+  }
+
+  /**
    * Picks the sort code the way legacy LEXIS did: a single candidate wins outright; otherwise the
    * first candidate that contains every species code and, unless the product is unmanufactured
    * timber (which has no end use), the first end-use code.

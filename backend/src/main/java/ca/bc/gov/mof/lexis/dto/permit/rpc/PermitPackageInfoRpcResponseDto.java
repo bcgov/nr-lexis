@@ -11,4 +11,6 @@ public record PermitPackageInfoRpcResponseDto(
     String diameter,
     String productType,
     List<String> speciesCodes,
-    List<String> endUseCodes) {}
+    List<String> endUseCodes,
+    List<String> endUseDescriptions,
+    String productTypeCode) {}

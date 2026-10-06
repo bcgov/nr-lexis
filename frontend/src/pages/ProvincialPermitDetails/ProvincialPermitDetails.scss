@@ -159,17 +159,108 @@
   color: var(--cds-text-secondary);
 }
 
+// A white panel with grey fields. c4p paints the panel with layer-01 and forces side-panel fields
+// to field-02, so swap that token for this panel.
+.permit-package-panel.c4p--side-panel {
+  --cds-field-02: var(--cds-field-01);
+  --cds-field-hover-02: var(--cds-field-hover-01);
+
+  &,
+  .c4p--side-panel__header,
+  .c4p--side-panel__title {
+    background-color: var(--cds-layer-02);
+  }
+
+  // c4p's field background also covers read-only dropdowns, which Carbon leaves transparent.
+  .cds--dropdown--readonly {
+    background-color: transparent;
+  }
+}
+
 .permit-package-panel__form {
   display: grid;
   gap: 1.5rem;
+  padding-block: 0.5rem 1rem;
 
   .legacy-search-grid {
     grid-template-columns: minmax(0, 1fr);
+    row-gap: 1.5rem;
   }
 
   .cds--inline-notification {
     inline-size: 100%;
     max-inline-size: none;
+  }
+
+  .blanket-oic-package-code-fields {
+    display: grid;
+    gap: 1.5rem;
+  }
+
+  // Two columns at every panel width.
+  .legacy-search-grid.permit-package-panel__pair {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .application-detail-required {
+    margin: 0;
+    color: var(--cds-text-primary);
+    font-size: 0.875rem;
+    line-height: 1.125rem;
+  }
+
+  .cds--label {
+    font-size: 0.875rem;
+    line-height: 1.125rem;
+  }
+
+  // List-box labels are inline-block, so the app's taller body line height would add space above
+  // them.
+  .cds--list-box__wrapper,
+  .cds--multi-select__wrapper {
+    line-height: 1.125rem;
+  }
+
+  // A disabled field's helper explains why it is disabled, so keep it readable.
+  .cds--form__helper-text--disabled {
+    color: var(--cds-text-secondary);
+  }
+
+  // End use's required marker stays red while the field waits for species.
+  .cds--label--disabled .required-label__marker {
+    color: var(--cds-text-error, #da1e28);
+  }
+
+  // Chosen species show as removable tags below the Species list.
+  .boic-package-species__tags {
+    display: flex;
+    flex-wrap: wrap;
+    margin-block-start: 0.5rem;
+
+    &:empty {
+      display: none;
+    }
+
+    .cds--tag {
+      margin: 0 0.5rem 0.5rem 0;
+    }
+  }
+}
+
+// The saved package card groups its values in rows, as the exemption client card does.
+.boic-package-field-groups {
+  display: grid;
+  gap: 1.75rem;
+
+  .detail-field-grid {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1.5rem 2rem;
+    margin: 0;
+  }
+
+  .detail-field-item {
+    min-inline-size: 7rem;
   }
 }
 
