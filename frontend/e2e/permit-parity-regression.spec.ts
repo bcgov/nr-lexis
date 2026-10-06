@@ -1079,14 +1079,16 @@ test.describe('Provincial permit parity regressions', () => {
     await panel.getByLabel('Average top diameter (rads)', { exact: true }).fill('20.0')
     await panel.getByRole('combobox', { name: /^Species list/ }).click()
     await panel.getByRole('option', { name: /FI - Fir/ }).click()
+    await expect(panel.getByRole('button', { name: 'Remove FI', exact: true })).toBeVisible()
     const endUse = panel.getByRole('combobox', { name: 'End use', exact: true })
     await expect(endUse).toBeEnabled()
-    await expect(endUse).toHaveValue('')
-    await chooseComboBoxOption(page, 'End use', 'LU - Lumber')
-    await expect(endUse).toHaveValue('LU - Lumber')
-    const ageClass = panel.getByRole('combobox', { name: 'Age class', exact: true })
-    await expect(ageClass).toHaveValue('')
-    await chooseComboBoxOption(page, 'Age class', 'Old growth')
+    await expect(endUse).toHaveText(/Choose an option/)
+    await endUse.click()
+    await panel.getByRole('option', { name: 'Lumber', exact: true }).click()
+    await expect(endUse).toHaveText(/Lumber/)
+    await expect(panel.getByRole('combobox', { name: 'Age class', exact: true })).toHaveText(
+      /Old growth/,
+    )
     await panel.getByRole('button', { name: 'Save package', exact: true }).click()
 
     await expect(panel).toHaveCount(0)

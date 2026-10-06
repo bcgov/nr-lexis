@@ -1,6 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { FilterableMultiSelect, InlineLoading, InlineNotification } from '@carbon/react'
-import SearchableSelect from '@/components/SearchableSelect'
+import {
+  DismissibleTag,
+  Dropdown,
+  FilterableMultiSelect,
+  InlineLoading,
+  InlineNotification,
+} from '@carbon/react'
 import { requiredLabel } from '@/utils/required-label'
 import {
   fetchApplicationEndUsesForSpeciesRegion,
@@ -33,11 +38,6 @@ export type BlanketOicPackageCodeFieldsProps = {
 
 type ReferenceAvailability = 'loading' | 'available' | 'unavailable' | 'idle'
 
-type SearchableOption = {
-  value: string
-  label: string
-}
-
 type SpeciesListItem = {
   id: string
   text: string
@@ -62,16 +62,14 @@ const optionLabel = (option: ApplicationCodeOption): string =>
     ? `${option.code} - ${option.description}`
     : option.code
 
-const toSearchableOption = (option: ApplicationCodeOption): SearchableOption => ({
-  value: option.code,
-  label: optionLabel(option),
-})
+// The designer's Create package mockup shows end uses by name only ("Peeler").
+const endUseName = (option: ApplicationCodeOption | null): string =>
+  option ? option.description || option.code : ''
 
-const toSearchableOptions = (options: SearchOption[]): SearchableOption[] =>
-  options.map((option) => ({ value: option.value, label: option.label }))
+const optionLabelOf = (option: SearchOption | null): string => option?.label ?? ''
 
-// INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_SPECIES_LIST): Figma's Species list multi-select
-// replaces legacy's one-at-a-time species dialog; End use lists only sorts that will save.
+// INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_SPECIES_LIST): the designer's Species list
+// multi-select replaces legacy's one-at-a-time species dialog; End use lists only sorts that save.
 export default function BlanketOicPackageCodeFields({
   region,
   value,
@@ -87,6 +85,7 @@ export default function BlanketOicPackageCodeFields({
   const [endUseAvailability, setEndUseAvailability] = useState<ReferenceAvailability>('idle')
   const [ageClassAvailability, setAgeClassAvailability] = useState<ReferenceAvailability>('loading')
   const lastAvailabilityRef = useRef<boolean | null>(null)
+  const speciesFieldRef = useRef<HTMLDivElement>(null)
   const availabilityChangeRef = useRef(onAvailabilityChange)
   const onChangeRef = useRef(onChange)
   const valueRef = useRef(value)
@@ -241,6 +240,32 @@ export default function BlanketOicPackageCodeFields({
     [selectedSpeciesCodes, speciesListItems],
   )
 
+  const selectedEndUse =
+    endUseOptions.find(
+      (option) => normalizeCode(option.code) === normalizeCode(value.endUseCode),
+    ) ?? (value.endUseCode ? { code: value.endUseCode, description: value.endUseCode } : null)
+  const selectedAgeClass =
+    ageClassOptions.find((option) => option.value === value.ageClass) ??
+    (value.ageClass ? { value: value.ageClass, label: value.ageClass } : null)
+  const selectedProductType =
+    BLANKET_OIC_PRODUCT_TYPE_OPTIONS.find((option) => option.value === value.productType) ??
+    (value.productType ? { value: value.productType, label: value.productType } : null)
+
+  const removeSpecies = (speciesCode: string) => {
+    const index = selectedSpeciesCodes.indexOf(speciesCode)
+    const remaining = selectedSpeciesCodes.filter((code) => code !== speciesCode)
+    onChange('speciesCodes', remaining.join(', '))
+    // Keep keyboard users in place: the next tag, or the field once no tags remain.
+    requestAnimationFrame(() => {
+      const field = speciesFieldRef.current
+      const tagButtons = field?.querySelectorAll<HTMLButtonElement>(
+        '.boic-package-species__tags button',
+      )
+      const next = tagButtons?.[Math.min(index, tagButtons.length - 1)]
+      ;(next ?? field?.querySelector<HTMLInputElement>('input'))?.focus()
+    })
+  }
+
   return (
     <div className="blanket-oic-package-code-fields">
       {referenceOptionsLoading && <InlineLoading description="Loading package options…" />}
@@ -254,58 +279,78 @@ export default function BlanketOicPackageCodeFields({
         />
       )}
       <div className="legacy-search-grid permit-package-panel__pair">
-        <FilterableMultiSelect<SpeciesListItem>
-          id="boicPackageSpeciesList"
-          titleText={requiredLabel('Species list')}
-          items={speciesListItems}
-          itemToString={(item) => item?.text ?? ''}
-          selectedItems={selectedSpeciesItems}
-          placeholder="Select species"
-          inputProps={{ 'aria-required': true }}
-          disabled={disabled || speciesAvailability !== 'available'}
-          invalid={!!fieldErrors?.speciesCodes}
-          invalidText={fieldErrors?.speciesCodes}
-          onChange={({ selectedItems }) =>
-            onChange('speciesCodes', selectedItems.map((item) => item.id).join(', '))
-          }
-        />
-        <SearchableSelect
+        <div className="boic-package-species" ref={speciesFieldRef}>
+          <FilterableMultiSelect<SpeciesListItem>
+            id="boicPackageSpeciesList"
+            titleText={requiredLabel('Species list')}
+            items={speciesListItems}
+            itemToString={(item) => item?.text ?? ''}
+            selectedItems={selectedSpeciesItems}
+            placeholder="Choose"
+            inputProps={{ 'aria-required': true }}
+            disabled={disabled || speciesAvailability !== 'available'}
+            invalid={!!fieldErrors?.speciesCodes}
+            invalidText={fieldErrors?.speciesCodes}
+            onChange={({ selectedItems }) =>
+              onChange('speciesCodes', selectedItems.map((item) => item.id).join(', '))
+            }
+          />
+          <div className="boic-package-species__tags" aria-live="polite">
+            {selectedSpeciesCodes.map((speciesCode) => (
+              <DismissibleTag
+                key={speciesCode}
+                type="gray"
+                text={speciesCode}
+                title={`Remove ${speciesCode}`}
+                disabled={disabled}
+                onClose={() => removeSpecies(speciesCode)}
+              />
+            ))}
+          </div>
+        </div>
+        <Dropdown<ApplicationCodeOption | null>
           id="boicPackageEndUse"
-          labelText={requiredLabel('End use')}
-          required
-          value={value.endUseCode}
-          options={endUseOptions.map(toSearchableOption)}
-          placeholder="Select end use"
+          titleText={requiredLabel('End use')}
+          label="Choose an option"
+          items={endUseOptions}
+          itemToString={endUseName}
+          selectedItem={selectedEndUse}
           disabled={endUseDisabled}
           invalid={!!fieldErrors?.endUseCode}
           invalidText={fieldErrors?.endUseCode}
           helperText={endUseAwaitsSpecies ? END_USE_HELPER_TEXT : undefined}
-          onChange={(nextValue) => onChange('endUseCode', normalizeCode(nextValue))}
+          onChange={({ selectedItem }) =>
+            onChange('endUseCode', selectedItem ? normalizeCode(selectedItem.code) : '')
+          }
         />
       </div>
       <div className="legacy-search-grid permit-package-panel__pair">
-        <SearchableSelect
+        <Dropdown<SearchOption | null>
           id="boicPackageAgeClass"
-          labelText={requiredLabel('Age class')}
-          required
-          value={value.ageClass}
-          options={toSearchableOptions(ageClassOptions)}
-          placeholder="Select age class"
+          titleText={requiredLabel('Age class')}
+          label="Choose an option"
+          items={ageClassOptions}
+          itemToString={optionLabelOf}
+          selectedItem={selectedAgeClass}
           disabled={disabled || ageClassAvailability !== 'available'}
           invalid={!!fieldErrors?.ageClass}
           invalidText={fieldErrors?.ageClass}
-          onChange={(nextValue) => onChange('ageClass', normalizeCode(nextValue))}
+          onChange={({ selectedItem }) =>
+            onChange('ageClass', selectedItem ? normalizeCode(selectedItem.value) : '')
+          }
         />
-        <SearchableSelect
+        {/* Blanket OIC packages are harvested only, so the mockup shows the type read-only. */}
+        <Dropdown<SearchOption | null>
           id="boicPackageProductType"
-          labelText="Product type"
-          value={value.productType}
-          options={BLANKET_OIC_PRODUCT_TYPE_OPTIONS}
-          placeholder="Select product type"
-          disabled={disabled}
+          titleText="Product type"
+          label="Choose an option"
+          items={BLANKET_OIC_PRODUCT_TYPE_OPTIONS}
+          itemToString={optionLabelOf}
+          selectedItem={selectedProductType}
+          readOnly
           invalid={!!fieldErrors?.productType}
           invalidText={fieldErrors?.productType}
-          onChange={(nextValue) => onChange('productType', normalizeCode(nextValue))}
+          onChange={() => undefined}
         />
       </div>
     </div>

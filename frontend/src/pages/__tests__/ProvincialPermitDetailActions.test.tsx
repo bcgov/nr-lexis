@@ -383,6 +383,12 @@ const enterPermitDocumentEditMode = async (): Promise<void> => {
   await userEvent.click(await screen.findByRole('button', { name: 'Edit permit documents' }))
 }
 
+// The package panel's End use and Age class are Dropdowns: click, then choose the option.
+const chooseDropdownOption = async (dropdown: HTMLElement, optionName: string) => {
+  await userEvent.click(dropdown)
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+}
+
 const chooseComboBoxOption = async (combobox: HTMLElement, optionName: string) => {
   await userEvent.click(combobox)
   await userEvent.clear(combobox)
@@ -4882,7 +4888,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       await userEvent.type(within(packageEditor).getByLabelText('Package number'), 'boic-new')
       expect(within(packageEditor).getByText('Required fields')).toBeInTheDocument()
-      expect(within(packageEditor).getByRole('combobox', { name: 'Age class' })).toHaveValue('')
+      expect(within(packageEditor).getByRole('combobox', { name: 'Age class' })).toHaveTextContent(
+        'Old growth',
+      )
+      expect(within(packageEditor).getByLabelText('Volume (m³)')).toHaveValue('')
       const speciesList = within(packageEditor).getByRole('combobox', { name: /^Species list/ })
       await userEvent.click(speciesList)
       await userEvent.click(await within(packageEditor).findByRole('option', { name: /FI - Fir/ }))
@@ -4892,13 +4901,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await waitFor(() =>
         expect(within(packageEditor).getByRole('combobox', { name: 'End use' })).toBeEnabled(),
       )
-      await chooseComboBoxOption(
+      await chooseDropdownOption(
         within(packageEditor).getByRole('combobox', { name: 'End use' }),
-        'LU - Lumber',
-      )
-      await chooseComboBoxOption(
-        within(packageEditor).getByRole('combobox', { name: 'Age class' }),
-        'Old growth',
+        'Lumber',
       )
       await userEvent.clear(within(packageEditor).getByLabelText('Volume (m³)'))
       await userEvent.type(within(packageEditor).getByLabelText('Volume (m³)'), '100.0')
@@ -4911,7 +4916,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
 
       expect(
-        await within(packageEditor).findByText('Average length must be greater than 0.'),
+        await within(packageEditor).findByText(
+          'Enter a length greater than 0 and no more than 99.',
+        ),
       ).toBeInTheDocument()
       expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
 
@@ -5021,11 +5028,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it.each([
     ['Volume (m³)', '10.25', 'Package volume must have no more than one decimal place.'],
-    ['Average length (m)', '0', 'Average length must be greater than 0.'],
-    ['Average length (m)', '-1', 'Average length must be numeric.'],
-    ['Average top diameter (rads)', '0', 'Average top diameter must be greater than 0.'],
-    ['Average top diameter (rads)', '-1', 'Average top diameter must be numeric.'],
-    ['Average top diameter (rads)', '100', 'Average top diameter must be 99.99 or less.'],
+    ['Average length (m)', '0', 'Enter a length greater than 0 and no more than 99.'],
+    ['Average length (m)', '-1', 'Enter a length greater than 0 and no more than 99.'],
+    ['Average top diameter (rads)', '0', 'Enter a diameter greater than 0 and no more than 99.99.'],
+    [
+      'Average top diameter (rads)',
+      '-1',
+      'Enter a diameter greater than 0 and no more than 99.99.',
+    ],
+    [
+      'Average top diameter (rads)',
+      '100',
+      'Enter a diameter greater than 0 and no more than 99.99.',
+    ],
   ])('keeps invalid Blanket OIC %s out of the save request', async (fieldLabel, value, error) => {
     configureEditableBlanketOicPackage()
     renderPermitDetails()
@@ -5150,7 +5165,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(averageLength, '0')
     await userEvent.click(within(firstPackageEditor).getByRole('button', { name: 'Save package' }))
 
-    const validationMessage = 'Average length must be greater than 0.'
+    const validationMessage = 'Enter a length greater than 0 and no more than 99.'
     expect(await within(firstPackageEditor).findByText(validationMessage)).toBeInTheDocument()
     const packageSelect = screen.getByRole('combobox', { name: 'Package number' })
     expect(packageSelect).toBeDisabled()
@@ -5304,6 +5319,47 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
   })
 
+  it('shows Create package errors on their fields and focuses the first one', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+      oicApplicationNumber: null,
+    })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue(tabsResult)
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Items')
+    await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
+    const packageEditor = (await screen.findByRole('heading', { name: 'Create package' })).closest(
+      '.application-detail-edit-section',
+    ) as HTMLElement
+    const save = within(packageEditor).getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await userEvent.click(save)
+
+    expect(await within(packageEditor).findByText('Enter a package number.')).toBeVisible()
+    expect(within(packageEditor).getByText('Select at least one species.')).toBeVisible()
+    expect(within(packageEditor).queryByText('Select an end use.')).not.toBeInTheDocument()
+    expect(within(packageEditor).queryByText('Package needs attention')).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(within(packageEditor).getByLabelText('Package number')).toHaveFocus(),
+    )
+
+    await userEvent.type(within(packageEditor).getByLabelText('Package number'), 'boic-new')
+    await userEvent.click(within(packageEditor).getByRole('combobox', { name: /^Species list/ }))
+    await userEvent.click(await within(packageEditor).findByRole('option', { name: /FI - Fir/ }))
+    const endUse = within(packageEditor).getByRole('combobox', { name: 'End use' })
+    await waitFor(() => expect(endUse).toBeEnabled())
+    await userEvent.click(save)
+
+    expect(await within(packageEditor).findByText('Select an end use.')).toBeVisible()
+    await waitFor(() => expect(endUse).toHaveFocus())
+    expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
+  })
+
   it('clears a committed Blanket OIC package draft when table refresh fails', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
@@ -5331,13 +5387,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() =>
       expect(within(packageEditor).getByRole('combobox', { name: 'End use' })).toBeEnabled(),
     )
-    await chooseComboBoxOption(
+    await chooseDropdownOption(
       within(packageEditor).getByRole('combobox', { name: 'End use' }),
-      'LU - Lumber',
-    )
-    await chooseComboBoxOption(
-      within(packageEditor).getByRole('combobox', { name: 'Age class' }),
-      'Old growth',
+      'Lumber',
     )
     await userEvent.clear(within(packageEditor).getByLabelText('Volume (m³)'))
     await userEvent.type(within(packageEditor).getByLabelText('Volume (m³)'), '100.0')

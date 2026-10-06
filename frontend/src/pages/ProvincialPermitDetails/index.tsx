@@ -319,13 +319,13 @@ const EMPTY_BLANKET_OIC_SCALE_FORM: BlanketOicScaleForm = {
 // INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_STATUS_DEFAULTS): hidden fields default only on create; edits preserve saved values.
 const EMPTY_BLANKET_OIC_PACKAGE_FORM: BlanketOicPackageForm = {
   packageNumber: '',
-  volume: '0.0',
+  volume: '',
   averageLength: '',
   averageDiameter: '',
   status: 'ACT',
   comments: '',
   reprocessed: 'N',
-  ageClass: '',
+  ageClass: 'O',
   productType: 'H',
   endUseCode: '',
   speciesCodes: '',
@@ -341,30 +341,35 @@ const parseBlanketOicSpeciesCodes = (value: string): string[] =>
     ),
   )
 
+// Error copy follows the designer's Create package mockup; the volume rule is unchanged.
 const validateBlanketOicPackage = (form: BlanketOicPackageForm): BlanketOicPackageFieldErrors => {
   const speciesCodes = parseBlanketOicSpeciesCodes(form.speciesCodes)
+  const outOfRange = (value: string, label: string, max: number) =>
+    !!firstValidationError(
+      () => requiredNumericFieldError(value, label),
+      () => greaterThanFieldError(value, label, 0),
+      () => lessThanOrEqualFieldError(value, label, max),
+    )
 
   return {
-    packageNumber: requiredFieldError(form.packageNumber, 'Package number') ?? undefined,
+    packageNumber: form.packageNumber.trim() ? undefined : 'Enter a package number.',
     volume: firstValidationError(
       () => requiredNumericFieldError(form.volume, 'Package volume'),
       () => greaterThanOrEqualFieldError(form.volume, 'Package volume', 0),
       () => atMostOneDecimalFieldError(form.volume, 'Package volume'),
     ),
-    averageLength: firstValidationError(
-      () => requiredNumericFieldError(form.averageLength, 'Average length'),
-      () => greaterThanFieldError(form.averageLength, 'Average length', 0),
-      () => lessThanOrEqualFieldError(form.averageLength, 'Average length', 99),
-    ),
-    averageDiameter: firstValidationError(
-      () => requiredNumericFieldError(form.averageDiameter, 'Average top diameter'),
-      () => greaterThanFieldError(form.averageDiameter, 'Average top diameter', 0),
-      () => lessThanOrEqualFieldError(form.averageDiameter, 'Average top diameter', 99.99),
-    ),
-    ageClass: requiredFieldError(form.ageClass, 'Age class') ?? undefined,
+    averageLength: outOfRange(form.averageLength, 'Average length', 99)
+      ? 'Enter a length greater than 0 and no more than 99.'
+      : undefined,
+    averageDiameter: outOfRange(form.averageDiameter, 'Average top diameter', 99.99)
+      ? 'Enter a diameter greater than 0 and no more than 99.99.'
+      : undefined,
+    ageClass: form.ageClass.trim() ? undefined : 'Select an age class.',
     productType: requiredFieldError(form.productType, 'Product type') ?? undefined,
-    endUseCode: requiredFieldError(form.endUseCode, 'End use') ?? undefined,
-    speciesCodes: speciesCodes.length > 0 ? undefined : 'Species list is required.',
+    // End use only becomes available, and required, once species are chosen.
+    endUseCode:
+      speciesCodes.length > 0 && !form.endUseCode.trim() ? 'Select an end use.' : undefined,
+    speciesCodes: speciesCodes.length > 0 ? undefined : 'Select at least one species.',
     comments: firstValidationError(
       () =>
         ASCII_PATTERN.test(form.comments)
@@ -8562,9 +8567,15 @@ const ProvincialPermitDetailsPage = () => {
                 if (await onSaveBlanketOicPackage()) return
                 requestAnimationFrame(() => {
                   const panel = document.querySelector('.permit-package-panel')
-                  const invalid = panel?.querySelector<HTMLElement>('[aria-invalid="true"]')
+                  // Carbon marks invalid dropdowns on their list box, so focus the control inside.
+                  const invalid = panel?.querySelector<HTMLElement>(
+                    '[aria-invalid="true"], [data-invalid="true"]',
+                  )
+                  const invalidControl = invalid?.matches('input, textarea, button')
+                    ? invalid
+                    : invalid?.querySelector<HTMLElement>('input, textarea, button')
                   const target =
-                    invalid ?? panel?.querySelector<HTMLElement>('[data-package-error]')
+                    invalidControl ?? panel?.querySelector<HTMLElement>('[data-package-error]')
                   target?.focus()
                   target?.scrollIntoView({ block: 'nearest' })
                 })
@@ -8574,16 +8585,14 @@ const ProvincialPermitDetailsPage = () => {
         >
           <div className="permit-package-panel__form">
             <p className="application-detail-required">{requiredLabel('Required fields')}</p>
-            {!!boicPackageErrorMessage && (
+            {/* Field errors show on their fields; this notification is only for errors that don't
+                belong to a field. */}
+            {!!boicPackageErrorMessage && !Object.values(boicPackageFieldErrors).some(Boolean) && (
               <div tabIndex={-1} data-package-error>
                 <InlineNotification
                   kind="error"
                   title="Package needs attention"
-                  subtitle={
-                    Object.values(boicPackageFieldErrors).some(Boolean)
-                      ? 'Check the highlighted fields and try again.'
-                      : boicPackageErrorMessage
-                  }
+                  subtitle={boicPackageErrorMessage}
                   lowContrast
                   hideCloseButton
                 />
@@ -8616,6 +8625,7 @@ const ProvincialPermitDetailsPage = () => {
             <div className="legacy-search-grid">
               <TextInput
                 id="boicPackageVolume"
+                helperText="Must be less than or equal to permit request volume."
                 labelText={requiredLabel('Volume (m³)')}
                 aria-required="true"
                 value={boicPackageForm.volume}
@@ -8657,7 +8667,6 @@ const ProvincialPermitDetailsPage = () => {
               enableCounter
               maxCount={PACKAGE_COMMENTS_MAX_LENGTH}
               maxLength={PACKAGE_COMMENTS_MAX_LENGTH}
-              helperText="Use unaccented letters, numbers, spaces, or standard punctuation."
               value={boicPackageForm.comments}
               invalid={!!boicPackageFieldErrors.comments}
               invalidText={boicPackageFieldErrors.comments}

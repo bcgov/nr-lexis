@@ -19,7 +19,6 @@ type SearchableSelectProps = {
   readOnly?: boolean
   invalid?: boolean
   invalidText?: ReactNode
-  helperText?: ReactNode
   onBlur?: () => void
   onFocus?: () => void
   onChange: (value: string) => void
@@ -40,7 +39,6 @@ export default function SearchableSelect({
   readOnly = false,
   invalid = false,
   invalidText,
-  helperText,
   onBlur,
   onFocus,
   onChange,
@@ -65,7 +63,6 @@ export default function SearchableSelect({
       readOnly={readOnly}
       invalid={invalid}
       invalidText={invalidText}
-      helperText={helperText}
       onBlur={onBlur}
       onFocus={() => onFocus?.()}
       onInputChange={(inputValue) => {
