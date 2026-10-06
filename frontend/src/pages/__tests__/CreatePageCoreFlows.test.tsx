@@ -1503,6 +1503,8 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByLabelText('Applicant type')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox', { name: "I'm an agent" })).not.toBeInTheDocument()
+    // No empty divider is left where the checkbox would be.
+    expect(document.querySelector('.application-create-applicant-type')).toBeNull()
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033333', 'agent')
   })
 
