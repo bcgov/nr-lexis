@@ -343,16 +343,16 @@ const parseBlanketOicSpeciesCodes = (value: string): string[] =>
     ),
   )
 
-// Accept ".1" as 0.1 in the package measurements.
+// Read ".1" and "0,1" as 0.1 in the package measurements.
 const normalizeBlanketOicPackageMeasurements = (
   form: BlanketOicPackageForm,
 ): BlanketOicPackageForm => {
-  const withLeadingZero = (value: string) => value.trim().replace(/^\./, '0.')
+  const normalize = (value: string) => value.trim().replace(',', '.').replace(/^\./, '0.')
   return {
     ...form,
-    volume: withLeadingZero(form.volume),
-    averageLength: withLeadingZero(form.averageLength),
-    averageDiameter: withLeadingZero(form.averageDiameter),
+    volume: normalize(form.volume),
+    averageLength: normalize(form.averageLength),
+    averageDiameter: normalize(form.averageDiameter),
   }
 }
 
@@ -368,7 +368,8 @@ const formatBlanketOicPackageVolume = (value: string): string => {
   return value.trim() && Number.isFinite(volume) ? volume.toFixed(1) : value
 }
 
-// Greater than 0 and no more than the permit request volume the other packages leave.
+// Greater than 0 and no more than the permit request volume. The server checks the total of all
+// the permit's packages.
 const blanketOicPackageVolumeError = (
   value: string,
   maxVolume: number | null,
@@ -3807,16 +3808,10 @@ const ProvincialPermitDetailsPage = () => {
     ],
   )
 
-  // The server applies the same limit across all of the permit's packages when saving.
-  const boicPackageVolumeLimit = useMemo(() => {
-    const requestVolume = detail?.oicRequestVolume
-    if (requestVolume === null || requestVolume === undefined) return null
-    const editingPackage = editingBoicPackageNumber?.trim().toUpperCase()
-    const otherPackagesVolume = (tabsData?.packages ?? [])
-      .filter((row) => row.packageNumber.trim().toUpperCase() !== editingPackage)
-      .reduce((total, row) => total + (Number(row.packageVolume) || 0), 0)
-    return Math.max(0, Math.round((Number(requestVolume) - otherPackagesVolume) * 10) / 10)
-  }, [detail?.oicRequestVolume, editingBoicPackageNumber, tabsData?.packages])
+  const boicPackageVolumeLimit =
+    detail?.oicRequestVolume === null || detail?.oicRequestVolume === undefined
+      ? null
+      : Number(detail.oicRequestVolume)
 
   const onSaveBlanketOicPackage = useCallback(async (): Promise<boolean> => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
@@ -8697,7 +8692,7 @@ const ProvincialPermitDetailsPage = () => {
             <div className="legacy-search-grid">
               <TextInput
                 id="boicPackageVolume"
-                helperText="Must be less than or equal to permit request volume. Must be greater than 0."
+                helperText="Must be less than or equal to permit request volume. Must be greater than 0"
                 labelText={requiredLabel('Volume (m³)')}
                 aria-required="true"
                 value={boicPackageForm.volume}
