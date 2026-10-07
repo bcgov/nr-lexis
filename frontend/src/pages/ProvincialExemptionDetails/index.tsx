@@ -104,6 +104,8 @@ import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { getResponseStatus, isClientErrorResponse } from '@/utils/http-error'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 import { firstStringField, isRecord } from '@/utils/record'
+import { displayValueText } from '@/utils/text'
+import { displayVolume, formatVolumeInput } from '@/utils/volume'
 import { triggerBrowserDownload } from '@/utils/download'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import SearchableSelect from '../../components/SearchableSelect'
@@ -142,6 +144,7 @@ import { ReportRequestError, runReport } from '@/service/report-service'
 import { requiredLabel } from '@/utils/required-label'
 import { formatIsoDateLabel } from '@/utils/date'
 import './ProvincialExemptionDetails.scss'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
 type ExemptionActionResult = ActionResult & {
   source?: 'documents' | 'summary' | 'applications' | 'fees' | 'approval'
@@ -237,7 +240,7 @@ const toEditForm = (
   exemptionStatusCode: detail.exemptionStatusCode ?? '',
   approvalDate: detail.approvalDate ?? '',
   expiryDate: detail.expiryDate ?? '',
-  approvedVolume: detail.approvedVolume == null ? '' : String(detail.approvedVolume),
+  approvedVolume: formatVolumeInput(detail.approvedVolume),
   otherConditions: detail.otherConditions ?? '',
   enableRateOverride: context.rateOverrideEnabled,
   feeRate: context.fixedFeeRate,
@@ -381,13 +384,7 @@ const findAssignedExemptionNumber = async (applicationNumber: string): Promise<s
   }
 }
 
-const formatExemptionVolume = (value: number | string | null | undefined): string => {
-  if (value == null || (typeof value === 'string' && !value.trim())) {
-    return displayValue(value)
-  }
-  const numericValue = Number(value)
-  return Number.isFinite(numericValue) ? numericValue.toFixed(1) : displayValue(value)
-}
+const formatExemptionVolume = displayVolume
 
 const applicantTypeLabel = (value: string): string => {
   switch (value.trim().toUpperCase()) {
@@ -2151,7 +2148,7 @@ const ProvincialExemptionDetailsPage = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={exemptionPageTitle}
-          subtitle={`Author: ${displayValue(currentDetail?.author)}`}
+          subtitle={`Author: ${displayValueText(currentDetail?.author)}`}
           status={
             currentDetail ? (
               <StatusTag
@@ -2339,9 +2336,7 @@ const ProvincialExemptionDetailsPage = () => {
                               Exemption details
                             </h2>
                             {sectionResult('summary')}
-                            <p className="application-detail-required">
-                              {requiredLabel('Required fields')}
-                            </p>
+                            <RequiredFieldsLegend className="application-detail-required" />
                             <div className="legacy-search-grid">
                               {currentTypeCode === 'O' && (
                                 <TextInput
@@ -3033,9 +3028,7 @@ const ProvincialExemptionDetailsPage = () => {
                               Fees
                             </h2>
                             {sectionResult('fees')}
-                            <p className="application-detail-required">
-                              {requiredLabel('Required fields')}
-                            </p>
+                            <RequiredFieldsLegend className="application-detail-required" />
                             <div className="legacy-search-grid">
                               <RadioButtonGroup
                                 legendText="Override fee rate?"

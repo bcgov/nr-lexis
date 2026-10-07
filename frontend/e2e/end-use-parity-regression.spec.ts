@@ -283,11 +283,11 @@ test('keeps create-package End Use authoritative while options load', async ({
   await page.getByRole('button', { name: 'Create package', exact: true }).click()
 
   const createPackageSection = page.locator('.application-items-drawer')
-  await expect(createPackageSection.getByLabel('Package Number', { exact: true })).toBeVisible()
-  await chooseComboBoxOption(page, 'Create Package Species', 'CE - Cedar')
+  await expect(createPackageSection.getByLabel('Package number', { exact: true })).toBeVisible()
+  await chooseComboBoxOption(page, 'Create package species', 'CE - Cedar')
   await page.getByRole('button', { name: 'Add species to new package', exact: true }).click()
 
-  const endUse = createPackageSection.getByRole('combobox', { name: 'End Use', exact: true })
+  const endUse = createPackageSection.getByRole('combobox', { name: 'End use', exact: true })
   await fixture.endUseRequest
   await expect(endUse).toBeDisabled()
   await expect(page.getByRole('button', { name: 'Save package', exact: true })).toBeDisabled()
@@ -298,15 +298,15 @@ test('keeps create-package End Use authoritative while options load', async ({
   ])
   await expect(endUse).toHaveValue('PL - Pulp')
   await expect(endUse).toBeEnabled()
-  await chooseComboBoxOption(page, 'End Use', 'SL - Sawn logs')
+  await chooseComboBoxOption(page, 'End use', 'SL - Sawn logs')
 
-  await createPackageSection.getByLabel('Package Number', { exact: true }).fill('PKG-DELAYED')
-  await createPackageSection.getByLabel('Package Volume (m³)', { exact: true }).fill('25.0')
-  await createPackageSection.getByLabel('Average Length (m)', { exact: true }).fill('12.0')
+  await createPackageSection.getByLabel('Package number', { exact: true }).fill('PKG-DELAYED')
+  await createPackageSection.getByLabel('Package volume (m³)', { exact: true }).fill('25.0')
+  await createPackageSection.getByLabel('Average length (m)', { exact: true }).fill('12.0')
   await createPackageSection.getByLabel('Average top diameter (rads)', { exact: true }).fill('24.0')
-  await chooseComboBoxOption(createPackageSection, 'Status Code', 'ACT - Active')
-  await chooseComboBoxOption(createPackageSection, 'Product Type', 'H - Harvested Timber')
-  await chooseComboBoxOption(createPackageSection, 'Age Class', 'S - Second Growth')
+  await chooseComboBoxOption(createPackageSection, 'Status code', 'ACT - Active')
+  await chooseComboBoxOption(createPackageSection, 'Product type', 'H - Harvested Timber')
+  await chooseComboBoxOption(createPackageSection, 'Age class', 'S - Second Growth')
   for (const width of [1440, 390]) {
     await page.setViewportSize({ width, height: 1000 })
     await expect(
@@ -325,10 +325,10 @@ test('keeps create-package End Use authoritative while options load', async ({
   await createPackageSection.getByRole('button', { name: 'Save package', exact: true }).click()
 
   await expect(page.getByText('Package PKG-DELAYED created.', { exact: true })).toBeVisible()
-  await expect(page.getByRole('combobox', { name: 'Selected Package', exact: true })).toBeFocused()
+  await expect(page.getByRole('combobox', { name: 'Selected package', exact: true })).toBeFocused()
   const addScale = page.getByRole('button', { name: 'Add scale', exact: true })
   await addScale.click()
-  await expect(page.getByRole('textbox', { name: 'Timber Mark', exact: true })).toBeFocused()
+  await expect(page.getByRole('textbox', { name: 'Timber mark', exact: true })).toBeFocused()
   await page
     .locator('.application-items-drawer')
     .getByRole('button', { name: 'Cancel', exact: true })

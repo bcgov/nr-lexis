@@ -2648,7 +2648,7 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .contains("A scale with the same Timber Mark/Species/Grade combination already exists.");
+        .contains("A scale with the same timber mark/species/grade combination already exists.");
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 

@@ -78,6 +78,7 @@ import {
 import { clientLocationLabel, isAgentApplicant } from '@/pages/shared/application-form-utils'
 import { requiredLabel } from '@/utils/required-label'
 import { displayAuditIdentity, displayValue } from '@/utils/text'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
 type ProvincialExemptionCreateForm = {
   applicationNumber: string
@@ -286,6 +287,17 @@ type ExemptionCreateClientSummaryProps = {
   clientData: ApplicationClientData | null
 }
 
+const clientDisplayName = (
+  clientData: ApplicationClientData | null,
+  clientNumber: string,
+): string => {
+  const name = clientData?.companyName.trim() ?? ''
+  const acronym = clientData?.clientAcronym.trim() ?? ''
+  const number = clientNumber.trim()
+  const label = name && acronym ? `${name} (${acronym})` : name
+  return label && number ? `${label} · ${number}` : label || number
+}
+
 const ExemptionCreateClientSummary = ({ title, clientData }: ExemptionCreateClientSummaryProps) => {
   if (!clientData) {
     return null
@@ -296,17 +308,16 @@ const ExemptionCreateClientSummary = ({ title, clientData }: ExemptionCreateClie
       <h3 className="application-client-summary__title">{title}</h3>
       <dl className="detail-field-grid">
         {[
-          ['Company name', displayValue(clientData.companyName)],
           ['Address', displayValue(clientData.address)],
           ['City', displayValue(clientData.city)],
           ['Province', displayValue(clientData.province)],
           ['Postal code', displayValue(clientData.postalCode)],
           ['Country', displayValue(clientData.country)],
-          ['Phone', displayValue(clientData.phone)],
-          ['Fax', displayValue(clientData.fax)],
-          ['Email', displayValue(clientData.email)],
+          ['Phone number', displayValue(clientData.phone)],
+          ['Fax number', displayValue(clientData.fax)],
+          ['Email address', displayValue(clientData.email)],
         ].map(([label, value]) => (
-          <div key={label} className="detail-field-item">
+          <div key={String(label)} className="detail-field-item">
             <dt className="detail-field-label">{label}</dt>
             <dd className="detail-field-value">{value}</dd>
           </div>
@@ -918,7 +929,7 @@ const ProvincialExemptionCreatePage = () => {
       markFieldTouched('applicationNumber')
       setStatus({
         kind: 'error',
-        title: 'Application Not Added',
+        title: 'Application not added',
         message: 'Add or clear the pending application number before saving.',
         placement: 'inline',
       })
@@ -928,7 +939,7 @@ const ProvincialExemptionCreatePage = () => {
       setSelectedExemptionTab('applications')
       setStatus({
         kind: 'error',
-        title: 'Exemption Preview Required',
+        title: 'Exemption preview required',
         message:
           previewError ?? 'Wait for LEXIS to validate the selected applications before saving.',
         placement: 'inline',
@@ -978,7 +989,7 @@ const ProvincialExemptionCreatePage = () => {
         }
         setStatus({
           kind: 'success',
-          title: 'Exemption Saved',
+          title: 'Exemption saved',
           message: 'Exemption saved successfully.',
         })
         return true
@@ -986,7 +997,7 @@ const ProvincialExemptionCreatePage = () => {
 
       setStatus({
         kind: 'error',
-        title: 'Save Failed',
+        title: 'Save failed',
         message:
           result.errors[0] ||
           result.message ||
@@ -997,7 +1008,7 @@ const ProvincialExemptionCreatePage = () => {
       console.error(error)
       setStatus({
         kind: 'error',
-        title: 'Save Failed',
+        title: 'Save failed',
         message:
           'Exemption save failed. Please review the form and try again. If the problem persists, contact support.',
       })
@@ -1201,9 +1212,7 @@ const ProvincialExemptionCreatePage = () => {
                       <Rule size={24} aria-hidden="true" />
                       Exemption details
                     </legend>
-                    <p className="application-detail-required">
-                      {requiredLabel('Required fields')}
-                    </p>
+                    <RequiredFieldsLegend className="application-detail-required" />
                     <div className="legacy-search-grid create-form-grid">
                       <RadioButtonGroup
                         className="provincial-exemption-type-group"
@@ -1352,8 +1361,8 @@ const ProvincialExemptionCreatePage = () => {
                     <div className="legacy-search-grid create-form-grid">
                       <TextInput
                         id="ownerClientNumber"
-                        labelText="Client number"
-                        value={ownerClientNumber}
+                        labelText="Client"
+                        value={clientDisplayName(ownerClientData, ownerClientNumber)}
                         readOnly
                         helperText={
                           ownerContextState === 'loading'
@@ -1419,8 +1428,8 @@ const ProvincialExemptionCreatePage = () => {
                         <div className="legacy-search-grid create-form-grid">
                           <TextInput
                             id="agentClientNumber"
-                            labelText="Agent number"
-                            value={agentClientNumber}
+                            labelText="Client"
+                            value={clientDisplayName(agentClientData, agentClientNumber)}
                             readOnly
                           />
                           <TextInput
@@ -1431,7 +1440,7 @@ const ProvincialExemptionCreatePage = () => {
                           />
                           <TextInput
                             id="agentClientLocation"
-                            labelText="Contact location"
+                            labelText="Client location"
                             value={agentClientLocationDisplay}
                             readOnly
                           />

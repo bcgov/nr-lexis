@@ -1158,7 +1158,7 @@ class PurchaseOfferOracleServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly("Offer Received Date can't be before 7 days from now.");
+        .containsExactly("Offer received date can't be before 7 days from now.");
     verify(repository, never()).updateOffer(any());
   }
 
@@ -1173,7 +1173,7 @@ class PurchaseOfferOracleServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly("Offer Received Date can't be in the future.");
+        .containsExactly("Offer received date can't be in the future.");
     verify(repository, never()).updateOffer(any());
   }
 

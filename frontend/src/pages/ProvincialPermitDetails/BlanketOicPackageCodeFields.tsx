@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DismissibleTag, Dropdown, FilterableMultiSelect } from '@carbon/react'
-import { requiredLabel } from '@/utils/required-label'
+import { markRequired, requiredLabel } from '@/utils/required-label'
 import {
   fetchApplicationEndUsesForSpeciesRegion,
   fetchApplicationRemainingSpecies,
@@ -63,10 +63,6 @@ const endUseName = (option: ApplicationCodeOption | null): string =>
   option ? option.description || option.code : ''
 
 const optionLabelOf = (option: SearchOption | null): string => option?.label ?? ''
-
-// Carbon's Dropdown doesn't forward aria-required, but its ref is the combobox button.
-const markRequired = (button: HTMLButtonElement | null) =>
-  button?.setAttribute('aria-required', 'true')
 
 // INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_SPECIES_LIST): one Species list multi-select replaces
 // legacy's one-at-a-time species dialog; End use lists only sorts that save.

@@ -1,8 +1,10 @@
+import { render } from '@testing-library/react'
 import { describe, expect, it } from 'vitest'
 import {
   displayAuditIdentity,
   displayTableValue,
   displayValue,
+  displayValueText,
   formatPackageNumberLabel,
   isValidEmail,
   joinNonBlankText,
@@ -34,28 +36,30 @@ describe('text utilities', () => {
     )
   })
 
-  it('formats display fallback values', () => {
-    expect(displayValue(null)).toBe('Not provided')
-    expect(displayValue(undefined)).toBe('Not provided')
-    expect(displayValue('')).toBe('Not provided')
+  it('shows an em dash for blank read-only values', () => {
+    for (const blank of [null, undefined, '', '   ']) {
+      const { container, unmount } = render(<p>{displayValue(blank)}</p>)
+      expect(container.querySelector('[aria-hidden="true"]')).toHaveTextContent('—')
+      expect(container.querySelector('.cds--visually-hidden')).toHaveTextContent('Not provided')
+      unmount()
+    }
     expect(displayValue(0)).toBe('0')
     expect(displayValue('DAR')).toBe('DAR')
+    expect(displayTableValue).toBe(displayValue)
   })
 
-  it('formats compact table fallback values', () => {
-    expect(displayTableValue(null)).toBe('—')
-    expect(displayTableValue(undefined)).toBe('—')
-    expect(displayTableValue('')).toBe('—')
-    expect(displayTableValue('   ')).toBe('—')
-    expect(displayTableValue(0)).toBe('0')
-    expect(displayTableValue('DAR')).toBe('DAR')
+  it('gives plain text an em dash for blank values', () => {
+    expect(displayValueText(null)).toBe('—')
+    expect(displayValueText('   ')).toBe('—')
+    expect(displayValueText(0)).toBe('0')
+    expect(displayValueText('DAR')).toBe('DAR')
   })
 
   it('does not expose opaque audit identifiers as authors', () => {
     expect(displayAuditIdentity('IDIR\\JSMITH')).toBe('IDIR\\JSMITH')
     expect(displayAuditIdentity('00000000-0000-4000-8000-000000000001')).toBe('Not available')
     expect(displayAuditIdentity('BCSC\\00000000-0000-4000-8000-000000000002')).toBe('BCSC user')
-    expect(displayAuditIdentity(null)).toBe('Not provided')
+    expect(displayAuditIdentity(null)).toBe('—')
   })
 
   it.each([

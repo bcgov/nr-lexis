@@ -179,12 +179,12 @@ describe('Provincial Summary', () => {
     expect(mockedFetchSummaryOffersPlaced).toHaveBeenCalledWith(0, 10, 'offerNumber DESC')
     expect(mockedFetchSummaryFees).not.toHaveBeenCalled()
 
-    expect(screen.getByRole('heading', { name: 'My Applications' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'My Offers' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'My Exemptions' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'My Permits' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'My Fees' })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'Offers Placed' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My applications' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My offers' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My exemptions' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My permits' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My fees' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Offers placed' })).toBeInTheDocument()
 
     expect(screen.getAllByRole('link', { name: '12345' })[0]).toHaveAttribute(
       'href',
@@ -322,7 +322,7 @@ describe('Provincial Summary', () => {
 
   it.each([
     [
-      'My Applications',
+      'My applications',
       mockedFetchSummaryApplications,
       [
         ['Application', 'applicationNumber'],
@@ -332,7 +332,7 @@ describe('Provincial Summary', () => {
       ],
     ],
     [
-      'My Offers',
+      'My offers',
       mockedFetchSummaryOffers,
       [
         ['Application', 'applicationNumber'],
@@ -341,7 +341,7 @@ describe('Provincial Summary', () => {
       ],
     ],
     [
-      'My Exemptions',
+      'My exemptions',
       mockedFetchSummaryExemptions,
       [
         ['Exemption', 'exemptionNumber'],
@@ -349,16 +349,16 @@ describe('Provincial Summary', () => {
       ],
     ],
     [
-      'My Permits',
+      'My permits',
       mockedFetchSummaryPermits,
       [
         ['Permit', 'permitNumber'],
         ['Exemption', 'exemptionNumber'],
       ],
     ],
-    ['My Fees', mockedFetchSummaryFees, [['Permit number', 'permitNumber']]],
+    ['My fees', mockedFetchSummaryFees, [['Permit number', 'permitNumber']]],
     [
-      'Offers Placed',
+      'Offers placed',
       mockedFetchSummaryOffersPlaced,
       [
         ['Application', 'applicationNumber'],
@@ -382,7 +382,7 @@ describe('Provincial Summary', () => {
     })
     renderPage()
     const section = screen.getByRole('region', { name: title })
-    if (title === 'My Fees')
+    if (title === 'My fees')
       await userEvent.click(within(section).getByRole('button', { name: 'Display fees' }))
     await within(section).findByRole('table')
     expect(within(within(section).getByRole('table')).getAllByRole('button')).toHaveLength(
@@ -438,8 +438,8 @@ describe('Provincial Summary', () => {
       size: 10,
     }))
     renderPage()
-    const applications = screen.getByRole('region', { name: 'My Applications' })
-    const permits = screen.getByRole('region', { name: 'My Permits' })
+    const applications = screen.getByRole('region', { name: 'My applications' })
+    const permits = screen.getByRole('region', { name: 'My permits' })
     await within(applications).findByRole('table')
     await within(permits).findByRole('table')
     await userEvent.click(within(applications).getByRole('button', { name: 'Next page' }))
@@ -450,7 +450,7 @@ describe('Provincial Summary', () => {
 
     mockedFetchSummaryApplications.mockRejectedValueOnce(new Error('offline'))
     await userEvent.click(within(applications).getByRole('button', { name: 'Received date' }))
-    await within(applications).findByRole('heading', { name: 'My Applications unavailable' })
+    await within(applications).findByRole('heading', { name: 'My applications unavailable' })
     await userEvent.click(within(applications).getByRole('button', { name: 'Try again' }))
     await within(applications).findByRole('table')
     expect(mockedFetchSummaryApplications).toHaveBeenLastCalledWith(0, 10, 'receivedDate ASC')
@@ -474,9 +474,9 @@ describe('Provincial Summary', () => {
     renderPage()
 
     expect(
-      await screen.findByRole('heading', { name: 'My Applications unavailable' }),
+      await screen.findByRole('heading', { name: 'My applications unavailable' }),
     ).toBeInTheDocument()
-    expect(screen.getByRole('heading', { name: 'My Offers' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'My offers' })).toBeInTheDocument()
 
     mockedFetchSummaryApplications.mockResolvedValue({
       results: [],
@@ -503,7 +503,7 @@ describe('Provincial Summary', () => {
     expect(
       screen.getByText('Client details could not be retrieved. Please try again.'),
     ).toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: 'My Applications' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'My applications' })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
 

@@ -583,7 +583,7 @@ describe('Provincial Offer Detail Actions', () => {
       'href',
       '/provincial/application/1000456',
     )
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     const dialog = await screen.findByRole('dialog', { name: 'Scale Detail' })
     expect(await within(dialog).findByText('TM-903')).toBeInTheDocument()
     expect(mockedFetchOfferScaleDetails).toHaveBeenCalledWith(
@@ -610,7 +610,7 @@ describe('Provincial Offer Detail Actions', () => {
       'href',
       '/federal/application/1000456',
     )
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
 
     expect(await screen.findByText('TM-903')).toBeInTheDocument()
     expect(mockedFetchOfferScaleDetails).toHaveBeenCalledWith(

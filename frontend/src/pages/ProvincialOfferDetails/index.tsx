@@ -57,6 +57,7 @@ import {
   offerVolumeContextFieldError,
 } from '@/pages/shared/offer-storage-validation'
 import { requiredLabel } from '@/utils/required-label'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
 type ProvincialOfferDetailField = keyof ProvincialOfferUpdateSubmission & string
 
@@ -524,6 +525,7 @@ const ProvincialOfferDetailsPage = () => {
             />
           )}
           <Tile className="provincial-offer-create provincial-offer-sections">
+            {isEditing && <RequiredFieldsLegend />}
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Application details</legend>
               <div className="legacy-search-grid">

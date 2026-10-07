@@ -2361,7 +2361,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactlyInAnyOrder(
-            "Permit Request Pieces is required.", "Permit Request Volume is required.");
+            "Permit request pieces is required.", "Permit request volume is required.");
     verify(repository, never()).insertPermitDetail(any(), any());
   }
 
@@ -2375,7 +2375,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactlyInAnyOrder(
-            "Permit Request Pieces is required.", "Permit Request Volume is required.");
+            "Permit request pieces is required.", "Permit request volume is required.");
     verify(repository, never()).insertPermitDetail(any(), any());
   }
 
@@ -3586,7 +3586,7 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly("A valid Permit Request Volume is required.");
+        .containsExactly("A valid permit request volume is required.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -3656,8 +3656,8 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactlyInAnyOrder(
-            "Permit Request Pieces must be a nonnegative whole number no greater than 9999999999.",
-            "Permit Request Volume must be a nonnegative number of 9 characters or fewer with no more than 2 decimal places.");
+            "Permit request pieces must be a nonnegative whole number no greater than 9999999999.",
+            "Permit request volume must be a nonnegative number of 9 characters or fewer with no more than 2 decimal places.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -3763,7 +3763,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactlyInAnyOrder(
-            "Permit Request Pieces is required.", "Permit Request Volume is required.");
+            "Permit request pieces is required.", "Permit request volume is required.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -3844,8 +3844,8 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactlyInAnyOrder(
-            "Permit Request Pieces must be greater than 0 to complete a permit.",
-            "Permit Request Volume must be greater than 0 to complete a permit.");
+            "Permit request pieces must be greater than 0 to complete a permit.",
+            "Permit request volume must be greater than 0 to complete a permit.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -5056,7 +5056,7 @@ class OraclePermitDetailsRpcServiceTest {
             invoiceMaterialChangeRequest("COM", "CA"), "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors()).contains("Submit Date can't be in the future.");
+    assertThat(response.errors()).contains("Submit date can't be in the future.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
     verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
   }
@@ -5791,7 +5791,7 @@ class OraclePermitDetailsRpcServiceTest {
     PermitMutationRpcResponseDto response = service.updateShipping(request, "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors()).containsExactly("Invalid Date Format");
+    assertThat(response.errors()).containsExactly("Invalid date format.");
   }
 
   @Test
@@ -8020,7 +8020,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .contains(
-            "A scale with the same Timber Mark/Species/Grade combination already exists.",
+            "A scale with the same timber mark/species/grade combination already exists.",
             "The total scale volume exceeds the package volume.",
             "The total scale pieces exceed the permit request pieces.",
             "The total scale volume exceeds the permit request volume.");

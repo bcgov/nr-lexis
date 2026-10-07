@@ -61,6 +61,9 @@ import { requiredLabel } from '@/utils/required-label'
 import { resolveBlanketOicRegionContext } from './region-context'
 
 import './BlanketOicPermitCreateForm.scss'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
+import { displayValue } from '@/utils/display-value'
+import { formatVolume } from '@/utils/volume'
 
 type BlanketOicPermitForm = {
   permitSubmitDate: string
@@ -246,10 +249,10 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
     permitIssueDate: optionalDateError(form.permitIssueDate, 'Issued date'),
     permitExpiryDate: optionalDateError(form.permitExpiryDate, 'Expiry date'),
     orgUnitNumber: form.orgUnitNumber.trim() ? undefined : 'Region is required.',
-    ownerClientNumber: clientNumberError(form.ownerClientNumber, 'Applicant client number'),
+    ownerClientNumber: clientNumberError(form.ownerClientNumber, 'Client number'),
     ownerClientLocation: form.ownerClientLocation.trim()
       ? undefined
-      : 'Applicant location is required.',
+      : 'Client location is required.',
     destinationCompanyName: requiredTextError(form.destinationCompanyName, 'Purchaser', 52),
     destinationCountry:
       form.destinationCountry.trim().length === 2
@@ -314,10 +317,10 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
   }
 
   if (agentUsed) {
-    errors.agentClientNumber = clientNumberError(form.agentClientNumber, 'Agent client number')
+    errors.agentClientNumber = clientNumberError(form.agentClientNumber, 'Client number')
     errors.agentClientLocation = form.agentClientLocation.trim()
       ? undefined
-      : 'Agent location is required.'
+      : 'Client location is required.'
   }
 
   return Object.fromEntries(Object.entries(errors).filter(([, error]) => Boolean(error)))
@@ -688,19 +691,18 @@ const BlanketOicPermitCreateForm = ({
       <section aria-label={title} className="application-client-summary">
         <dl className="detail-field-grid">
           {[
-            ['Company name', clientData.companyName],
             ['Address', clientData.address],
             ['City', clientData.city],
             ['Province', clientData.province],
             ['Postal code', clientData.postalCode],
             ['Country', clientData.country],
-            ['Phone', clientData.phone],
-            ['Fax', clientData.fax],
-            ['Email', clientData.email],
+            ['Phone number', clientData.phone],
+            ['Fax number', clientData.fax],
+            ['Email address', clientData.email],
           ].map(([label, value]) => (
             <div key={label} className="detail-field-item">
               <dt className="detail-field-label">{label}</dt>
-              <dd className="detail-field-value">{value || '—'}</dd>
+              <dd className="detail-field-value">{displayValue(value)}</dd>
             </div>
           ))}
         </dl>
@@ -881,7 +883,8 @@ const BlanketOicPermitCreateForm = ({
       ) : (
         <InlineNotification
           kind="info"
-          title="The permit number is assigned after a successful save. The Scale, Documents and Fees tabs become available afterwards."
+          title="The permit number is assigned when you save."
+          subtitle="Scale, Documents and Fees can be added after that."
           lowContrast
           hideCloseButton
         />
@@ -946,7 +949,7 @@ const BlanketOicPermitCreateForm = ({
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Permit">
               <h2 className="detail-tile-title">Permit details</h2>
-              <p className="boic-permit-required-hint">{requiredLabel('Required fields')}</p>
+              <RequiredFieldsLegend className="boic-permit-required-hint" />
               <fieldset className="legacy-form-fieldset boic-permit-details">
                 <legend className="cds--visually-hidden">Permit details</legend>
                 <dl className="detail-field-grid boic-permit-details__status">
@@ -1049,7 +1052,7 @@ const BlanketOicPermitCreateForm = ({
                   </div>
                   <div className="detail-field-item">
                     <dt className="detail-field-label">Current permit volume (m³)</dt>
-                    <dd className="detail-field-value">0</dd>
+                    <dd className="detail-field-value">{formatVolume(0)}</dd>
                   </div>
                 </dl>
                 <div className="boic-permit-details__remarks">
@@ -1071,13 +1074,13 @@ const BlanketOicPermitCreateForm = ({
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Applicant">
               <h2 className="detail-tile-title">Applicant details</h2>
-              <p className="boic-permit-required-hint">{requiredLabel('Required fields')}</p>
+              <RequiredFieldsLegend className="boic-permit-required-hint" />
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Applicant</legend>
                 <div className="legacy-search-grid">
                   <ForestClientComboBox
                     id="boic-permit-owner-client"
-                    labelText={requiredLabel('Applicant client number')}
+                    labelText={requiredLabel('Client')}
                     value={form.ownerClientNumber}
                     resetKey={clientSearchResetKey}
                     counterpartyClientNumber={form.agentClientNumber}
@@ -1101,7 +1104,7 @@ const BlanketOicPermitCreateForm = ({
                   />
                   <Select
                     id="boic-permit-owner-location"
-                    labelText={requiredLabel('Applicant location')}
+                    labelText={requiredLabel('Client location')}
                     aria-required="true"
                     value={form.ownerClientLocation}
                     invalid={!!fieldError('ownerClientLocation')}
@@ -1113,9 +1116,7 @@ const BlanketOicPermitCreateForm = ({
                   >
                     <SelectItem
                       value=""
-                      text={
-                        ownerLookupLoading ? 'Loading locations' : 'Select an applicant location'
-                      }
+                      text={ownerLookupLoading ? 'Loading locations' : 'Select a client location'}
                     />
                     {ownerLocations.filter(isSelectableClientLocation).map((location) => (
                       <SelectItem
@@ -1158,7 +1159,7 @@ const BlanketOicPermitCreateForm = ({
                     <div className="legacy-search-grid">
                       <ForestClientComboBox
                         id="boic-permit-agent-client"
-                        labelText={requiredLabel('Agent client number')}
+                        labelText={requiredLabel('Client')}
                         value={form.agentClientNumber}
                         resetKey={clientSearchResetKey}
                         counterpartyClientNumber={form.ownerClientNumber}
@@ -1182,7 +1183,7 @@ const BlanketOicPermitCreateForm = ({
                       />
                       <Select
                         id="boic-permit-agent-location"
-                        labelText={requiredLabel('Agent location')}
+                        labelText={requiredLabel('Client location')}
                         aria-required="true"
                         value={form.agentClientLocation}
                         invalid={!!fieldError('agentClientLocation')}
@@ -1195,7 +1196,7 @@ const BlanketOicPermitCreateForm = ({
                         <SelectItem
                           value=""
                           text={
-                            agentLookupLoading ? 'Loading locations' : 'Select an agent location'
+                            agentLookupLoading ? 'Loading locations' : 'Select a client location'
                           }
                         />
                         {agentLocations.filter(isSelectableClientLocation).map((location) => (
@@ -1216,7 +1217,7 @@ const BlanketOicPermitCreateForm = ({
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Shipping">
               <h2 className="detail-tile-title">Shipping details</h2>
-              <p className="boic-permit-required-hint">{requiredLabel('Required fields')}</p>
+              <RequiredFieldsLegend className="boic-permit-required-hint" />
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Shipping</legend>
                 <div className="legacy-search-grid">

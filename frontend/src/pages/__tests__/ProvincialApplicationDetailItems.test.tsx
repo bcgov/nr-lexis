@@ -58,14 +58,14 @@ Element.prototype.scrollIntoView = vi.fn()
 const openCreatePackageControls = async () => {
   await selectApplicationDetailTab('Scale')
   await userEvent.click(await screen.findByRole('button', { name: 'Create package' }))
-  const packageNumber = await screen.findByLabelText('Package Number')
+  const packageNumber = await screen.findByLabelText('Package number')
   return within(packageNumber.closest('.application-items-drawer') as HTMLElement)
 }
 
 const openScaleControls = async () => {
   await selectApplicationDetailTab('Scale')
   await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
-  const timberMark = await screen.findByLabelText('Timber Mark')
+  const timberMark = await screen.findByLabelText('Timber mark')
   return within(timberMark.closest('.application-items-drawer') as HTMLElement)
 }
 
@@ -163,7 +163,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
     })
     expect(screen.getByRole('heading', { name: 'Package PKG-2' })).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-2')
+    expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue('PKG-2')
     expect(screen.getByRole('heading', { name: 'Summary of scale' })).toBeInTheDocument()
     expect(document.getElementById('application-items-scales')).toBeInTheDocument()
     await waitFor(() => {
@@ -253,30 +253,30 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       const packageDetailsControls = within(packageDetailsSection as HTMLElement)
 
       await waitFor(() => {
-        expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue(
+        expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue(
           storedPackageLabel,
         )
-        expect(packageDetailsControls.getByLabelText('Package Number')).toHaveValue(
+        expect(packageDetailsControls.getByLabelText('Package number')).toHaveValue(
           storedPackageNumber,
         )
         expect(packageDetailsControls.getByRole('button', { name: 'Save package' })).toBeEnabled()
       })
 
-      const packageSelector = screen.getByRole('combobox', { name: 'Selected Package' })
+      const packageSelector = screen.getByRole('combobox', { name: 'Selected package' })
       await chooseComboBoxOption(packageSelector, plainPackageNumber)
       await waitFor(() => {
         expect(mockedFetchApplicationPackageDetails).toHaveBeenLastCalledWith(plainPackageNumber)
-        expect(packageDetailsControls.getByLabelText('Package Volume (m³)')).toHaveValue('100.0')
+        expect(packageDetailsControls.getByLabelText('Package volume (m³)')).toHaveValue('100.0')
         expect(packageDetailsControls.getByRole('button', { name: 'Save package' })).toBeEnabled()
       })
       await chooseComboBoxOption(packageSelector, storedPackageLabel)
       await waitFor(() => {
         expect(mockedFetchApplicationPackageDetails).toHaveBeenLastCalledWith(storedPackageNumber)
-        expect(packageDetailsControls.getByLabelText('Package Volume (m³)')).toHaveValue('50.0')
+        expect(packageDetailsControls.getByLabelText('Package volume (m³)')).toHaveValue('50.0')
         expect(packageDetailsControls.getByRole('button', { name: 'Save package' })).toBeEnabled()
       })
 
-      fireEvent.change(packageDetailsControls.getByLabelText('Package Comments'), {
+      fireEvent.change(packageDetailsControls.getByLabelText('Package comments'), {
         target: { value: 'Updated stored package' },
       })
       await userEvent.click(packageDetailsControls.getByRole('button', { name: 'Save package' }))
@@ -348,8 +348,8 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       await waitFor(() =>
         expect(controls.getByRole('button', { name: 'Save package' })).toBeEnabled(),
       )
-      expect(controls.getByRole('combobox', { name: 'Age Class' })).toHaveValue('')
-      fireEvent.change(controls.getByLabelText('Package Comments'), {
+      expect(controls.getByRole('combobox', { name: 'Age class' })).toHaveValue('')
+      fireEvent.change(controls.getByLabelText('Package comments'), {
         target: { value: 'Comment edit' },
       })
       await userEvent.click(controls.getByRole('button', { name: 'Save package' }))
@@ -438,12 +438,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       within(packageDetailsSection as HTMLElement).getByText('Average top diameter (rads)'),
     ).toBeInTheDocument()
     const selectedPackageTotalPieces = () => {
-      const label = within(packageDetailsSection as HTMLElement).getByText('Total Pieces')
+      const label = within(packageDetailsSection as HTMLElement).getByText('Total pieces')
       return label.parentElement?.querySelector('dd')
     }
     await waitFor(() => expect(selectedPackageTotalPieces()).toHaveTextContent('5'))
 
-    const packageSelector = screen.getByRole('combobox', { name: 'Selected Package' })
+    const packageSelector = screen.getByRole('combobox', { name: 'Selected package' })
     await chooseComboBoxOption(packageSelector, 'PKG-2')
     await waitFor(() => {
       expect(packageSelector).toHaveValue('PKG-2')
@@ -458,6 +458,36 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(applicationItemDetails.getAllByText('Total pieces')).toHaveLength(1)
       expect(applicationTotalPieces()).toHaveTextContent('8')
     })
+  })
+
+  it.each([
+    [10, '10.0'],
+    [12.25, '12.25'],
+  ])('loads stored application volume %s into the scale editor as %s', async (volume, expected) => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationVolume: volume,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicationVolume: String(volume),
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const details = within(await selectApplicationItemDetailsTile(false))
+    await userEvent.click(details.getByRole('button', { name: 'Edit scale details' }))
+    const input = await details.findByLabelText('Application volume (m³)')
+    await waitFor(() => expect(input).toHaveProperty('value', expected))
+    expect((input as HTMLInputElement).validity.stepMismatch).toBe(false)
   })
 
   it('opens package editing in a drawer while keeping scale rows visible', async () => {
@@ -484,11 +514,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         .getAllByRole('columnheader')
         .map((header) => header.textContent),
     ).toEqual(['Timber mark', 'Scale type', 'Pieces', 'Species', 'Grade', 'Volume (m³)', 'Delete'])
-    expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Package comments')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save package' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit package' }))
-    expect(await screen.findByLabelText('Package Comments')).toBeInTheDocument()
+    expect(await screen.findByLabelText('Package comments')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save package' })).toBeInTheDocument()
     expect(
       within(summaryOfScale as HTMLElement)
@@ -502,7 +532,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         { name: 'Cancel' },
       ),
     )
-    expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Package comments')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit package' })).toBeInTheDocument()
   })
 
@@ -524,7 +554,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     ).toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
-    const packageComments = await screen.findByLabelText('Package Comments')
+    const packageComments = await screen.findByLabelText('Package comments')
     fireEvent.change(packageComments, { target: { value: 'Unsaved package draft' } })
     expect(packageComments).toHaveValue('Unsaved package draft')
     await waitFor(() => {
@@ -574,7 +604,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.queryByRole('heading', { name: 'Summary of scale' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
-    const packageNumber = await screen.findByLabelText('Package Number')
+    const packageNumber = await screen.findByLabelText('Package number')
     const drawer = packageNumber.closest('.application-items-drawer') as HTMLElement
     expect(drawer).toBeInTheDocument()
     expect(within(drawer).getByLabelText('Comments')).toHaveAttribute('maxlength', '180')
@@ -594,7 +624,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
-    const volume = await screen.findByLabelText('Package Volume (m³)')
+    const volume = await screen.findByLabelText('Package volume (m³)')
     const drawer = volume.closest('.application-items-drawer') as HTMLElement
     await userEvent.clear(volume)
     await userEvent.type(volume, '75')
@@ -604,14 +634,14 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(volume).toHaveValue('75')
     await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
     await waitFor(() =>
-      expect(screen.queryByLabelText('Package Volume (m³)')).not.toBeInTheDocument(),
+      expect(screen.queryByLabelText('Package volume (m³)')).not.toBeInTheDocument(),
     )
   })
 
   it.each([
-    { launcher: 'Edit package', field: 'Package Number' },
-    { launcher: 'Create package', field: 'Package Number' },
-    { launcher: 'Add scale', field: 'Timber Mark' },
+    { launcher: 'Edit package', field: 'Package number' },
+    { launcher: 'Create package', field: 'Package number' },
+    { launcher: 'Add scale', field: 'Timber mark' },
   ])('returns focus to $launcher after cancelling its drawer', async ({ launcher, field }) => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321?tab=items']}>
@@ -647,9 +677,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const launcherButton = await screen.findByRole('button', { name: 'Edit package' })
     await userEvent.click(launcherButton)
-    const comments = await screen.findByLabelText('Package Comments')
+    const comments = await screen.findByLabelText('Package comments')
     const drawer = comments.closest('.application-items-drawer') as HTMLElement
-    await waitFor(() => expect(within(drawer).getByLabelText('Package Number')).toHaveFocus())
+    await waitFor(() => expect(within(drawer).getByLabelText('Package number')).toHaveFocus())
     fireEvent.change(comments, { target: { value: 'Focus restored' } })
     await userEvent.click(within(drawer).getByRole('button', { name: 'Save package' }))
 
@@ -671,7 +701,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const launcherButton = await screen.findByRole('button', { name: 'Edit package' })
     await userEvent.click(launcherButton)
-    const packageNumber = await screen.findByLabelText('Package Number')
+    const packageNumber = await screen.findByLabelText('Package number')
     await waitFor(() => expect(packageNumber).toHaveFocus())
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(launcherButton).toHaveFocus())
@@ -690,7 +720,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
-    const comments = await screen.findByLabelText('Package Comments')
+    const comments = await screen.findByLabelText('Package comments')
     await userEvent.clear(comments)
     await userEvent.type(comments, 'Keep this draft')
     const createPackage = screen.getByRole('button', { name: 'Create package' })
@@ -732,25 +762,25 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     const drawer = await openCreatePackageControls()
-    fireEvent.change(drawer.getByLabelText('Package Number'), { target: { value: 'PKG-NEW' } })
-    fireEvent.change(drawer.getByLabelText('Package Volume (m³)'), { target: { value: '25.0' } })
-    fireEvent.change(drawer.getByLabelText('Average Length (m)'), { target: { value: '12.0' } })
+    fireEvent.change(drawer.getByLabelText('Package number'), { target: { value: 'PKG-NEW' } })
+    fireEvent.change(drawer.getByLabelText('Package volume (m³)'), { target: { value: '25.0' } })
+    fireEvent.change(drawer.getByLabelText('Average length (m)'), { target: { value: '12.0' } })
     fireEvent.change(drawer.getByLabelText('Average top diameter (rads)'), {
       target: { value: '24.0' },
     })
     await chooseComboBoxOption(
-      drawer.getByRole('combobox', { name: 'Status Code' }),
+      drawer.getByRole('combobox', { name: 'Status code' }),
       'ACT - Active',
     )
     await chooseComboBoxOption(
-      drawer.getByRole('combobox', { name: 'Product Type' }),
+      drawer.getByRole('combobox', { name: 'Product type' }),
       'H - Harvested Timber',
     )
     await chooseComboBoxOption(
-      drawer.getByRole('combobox', { name: 'Age Class' }),
+      drawer.getByRole('combobox', { name: 'Age class' }),
       'S - Second Growth',
     )
-    await waitFor(() => expect(drawer.getByRole('combobox', { name: 'End Use' })).toBeEnabled())
+    await waitFor(() => expect(drawer.getByRole('combobox', { name: 'End use' })).toBeEnabled())
     const save = drawer.getByRole('button', { name: 'Save package' })
     await userEvent.click(save)
     await waitFor(() => expect(mockedAddApplicationPackage).toHaveBeenCalledTimes(1))
@@ -791,14 +821,14 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     const drawer = await openScaleControls()
-    fireEvent.change(drawer.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
+    fireEvent.change(drawer.getByLabelText('Timber mark'), { target: { value: 'TM002' } })
     await chooseComboBoxOption(
       drawer.getByRole('combobox', { name: 'Species' }),
       'FI - Douglas-fir',
     )
     await chooseComboBoxOption(drawer.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
     fireEvent.change(drawer.getByLabelText('Pieces'), { target: { value: '2' } })
-    fireEvent.change(drawer.getByLabelText('Scale Volume (m³)'), { target: { value: '8.0' } })
+    fireEvent.change(drawer.getByLabelText('Scale volume (m³)'), { target: { value: '8.0' } })
     const save = drawer.getByRole('button', { name: 'Save scale' })
     await userEvent.click(save)
     await waitFor(() => expect(mockedAddApplicationScaleToPackage).toHaveBeenCalledTimes(1))
@@ -848,7 +878,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    const packageSelector = await screen.findByRole('combobox', { name: 'Selected Package' })
+    const packageSelector = await screen.findByRole('combobox', { name: 'Selected package' })
     await waitFor(() => {
       expect(packageSelector).toHaveValue('PKG-1')
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
@@ -858,7 +888,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await chooseComboBoxOption(packageSelector, 'PKG-2')
     await waitFor(() => {
       expect(packageSelector).toHaveValue('PKG-2')
-      expect(screen.getByLabelText('Package Comments')).toHaveValue('Second package')
+      expect(screen.getByLabelText('Package comments')).toHaveValue('Second package')
     })
     await act(async () => {
       await Promise.resolve()
@@ -1068,9 +1098,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await selectApplicationDetailTab('Scale')
     expect(await screen.findByRole('heading', { name: 'Scale details' })).toBeVisible()
-    expect(await screen.findByRole('heading', { name: 'Timber Marks' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Timber marks' })).toBeVisible()
     expect(screen.queryByRole('heading', { name: /^Package PKG-/ })).not.toBeInTheDocument()
-    expect(screen.queryByText('Summary of Scale')).not.toBeInTheDocument()
+    expect(screen.queryByText('Summary of scale')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Delete package' })).not.toBeInTheDocument()
@@ -1116,7 +1146,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.queryByRole('button', { name: 'Edit package' })).not.toBeInTheDocument()
   })
 
-  it('shows package details without Summary of Scale for Timber applications', async () => {
+  it('shows package details without Summary of scale for Timber applications', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       productTypeCode: 'T',
@@ -1144,7 +1174,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await selectApplicationDetailTab('Scale')
     expect(await screen.findByRole('heading', { name: /^Package PKG-/ })).toBeVisible()
     expect(screen.queryByRole('heading', { name: 'Summary of scale' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Timber Marks' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Timber marks' })).not.toBeInTheDocument()
     expect(await screen.findByRole('button', { name: 'Edit package' })).toBeInTheDocument()
   })
 
@@ -1179,7 +1209,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
     const createPackageControls = await openCreatePackageControls()
     const createSpecies = createPackageControls.getByRole('combobox', {
-      name: 'Create Package Species',
+      name: 'Create package species',
     })
     await userEvent.click(createSpecies)
     expect(screen.queryByRole('option', { name: 'CE - Cedar' })).not.toBeInTheDocument()
@@ -1209,11 +1239,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(packageDetailsSection).toBeTruthy()
     expect(packageDetailsSection).toHaveClass('application-items-card')
     expect(
-      within(packageDetailsSection as HTMLElement).getByText('Total Scale Volume (m³)'),
+      within(packageDetailsSection as HTMLElement).getByText('Total scale volume (m³)'),
     ).toBeInTheDocument()
-    expect(within(packageDetailsSection as HTMLElement).getByText('20')).toBeInTheDocument()
+    expect(within(packageDetailsSection as HTMLElement).getByText('20.0')).toBeInTheDocument()
     expect(
-      within(packageDetailsSection as HTMLElement).getByText('Total Pieces'),
+      within(packageDetailsSection as HTMLElement).getByText('Total pieces'),
     ).toBeInTheDocument()
     expect(within(packageDetailsSection as HTMLElement).getByText('5')).toBeInTheDocument()
     expect(
@@ -1231,7 +1261,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       )
     })
 
-    fireEvent.change(screen.getByLabelText('Package Comments'), {
+    fireEvent.change(screen.getByLabelText('Package comments'), {
       target: { value: 'Updated package' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save package' }))
@@ -1263,7 +1293,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await selectApplicationItemsForEditing()
-    const comments = await screen.findByLabelText('Package Comments')
+    const comments = await screen.findByLabelText('Package comments')
     expect(comments).toHaveAttribute('maxlength', '180')
     // Typing each character re-renders the whole detail page, so only type across the limit.
     fireEvent.change(comments, { target: { value: 'A'.repeat(179) } })
@@ -1292,7 +1322,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await selectApplicationItemsForEditing()
-    const comments = await screen.findByLabelText('Package Comments')
+    const comments = await screen.findByLabelText('Package comments')
     await act(async () => {
       fireEvent.change(comments, {
         target: { value: 'A'.repeat(181) },
@@ -1320,7 +1350,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await selectApplicationItemsForEditing()
-    const comments = await screen.findByLabelText('Package Comments')
+    const comments = await screen.findByLabelText('Package comments')
     await act(async () => {
       fireEvent.change(comments, {
         target: { value: 'Réview' },
@@ -1366,7 +1396,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await selectApplicationItemsForEditing()
-    expect(await screen.findByLabelText('Package Comments')).toHaveValue(historicalComment)
+    expect(await screen.findByLabelText('Package comments')).toHaveValue(historicalComment)
   })
 
   it('keeps end use authoritative while dependent options are loading', async () => {
@@ -1393,11 +1423,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await selectApplicationDetailTab('Scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Create package' }))
-    const packageNumber = await screen.findByLabelText('Package Number')
+    const packageNumber = await screen.findByLabelText('Package number')
     const drawer = packageNumber.closest('.application-items-drawer') as HTMLElement
     const createPackageControls = within(drawer)
     const createSpecies = createPackageControls.getByRole('combobox', {
-      name: 'Create Package Species',
+      name: 'Create package species',
     })
     await waitFor(() => expect(createSpecies).toBeEnabled())
     await chooseComboBoxOption(createSpecies, 'CE - Cedar')
@@ -1408,7 +1438,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     const endUse = createPackageControls.getByRole('combobox', {
-      name: 'End Use',
+      name: 'End use',
     })
 
     await waitFor(() => {
@@ -1417,7 +1447,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(createPackageControls.getByRole('button', { name: 'Save package' })).toBeDisabled()
     })
     expect(
-      createPackageControls.queryByRole('textbox', { name: 'End Use' }),
+      createPackageControls.queryByRole('textbox', { name: 'End use' }),
     ).not.toBeInTheDocument()
     expect(screen.getByText('Loading authoritative item options…')).toBeInTheDocument()
 
@@ -1437,28 +1467,28 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await chooseComboBoxOption(endUse, 'SL - Sawn logs')
     expect(endUse).toHaveValue('SL - Sawn logs')
 
-    fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package number'), {
       target: { value: 'PKG-DELAYED' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Package Volume (m³)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
       target: { value: '25.0' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
       target: { value: '12.0' },
     })
     fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
       target: { value: '24.0' },
     })
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Status Code' }),
+      createPackageControls.getByRole('combobox', { name: 'Status code' }),
       'ACT - Active',
     )
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Product Type' }),
+      createPackageControls.getByRole('combobox', { name: 'Product type' }),
       'H - Harvested Timber',
     )
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Age Class' }),
+      createPackageControls.getByRole('combobox', { name: 'Age class' }),
       'S - Second Growth',
     )
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Save package' }))
@@ -1502,7 +1532,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     let createPackageControls = await openCreatePackageControls()
     let createSpecies = createPackageControls.getByRole('combobox', {
-      name: 'Create Package Species',
+      name: 'Create package species',
     })
     let createPackage = createPackageControls.getByRole('button', { name: 'Save package' })
     await waitFor(() => expect(createSpecies).toBeEnabled())
@@ -1512,14 +1542,14 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       createPackageControls.getByRole('button', { name: 'Add species to new package' }),
     )
 
-    const createEndUse = createPackageControls.getByRole('combobox', { name: 'End Use' })
+    const createEndUse = createPackageControls.getByRole('combobox', { name: 'End use' })
     await waitFor(() => {
       expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI', 'CE'])
       expect(createEndUse).toBeDisabled()
       expect(createPackage).toBeDisabled()
       expect(
         screen.getByText(
-          'Package creation is disabled because End Use options could not be loaded.',
+          'Package creation is disabled because end use options could not be loaded.',
         ),
       ).toBeInTheDocument()
     })
@@ -1530,7 +1560,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Cancel' }))
     await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
     createPackageControls = await openCreatePackageControls()
-    createSpecies = createPackageControls.getByRole('combobox', { name: 'Create Package Species' })
+    createSpecies = createPackageControls.getByRole('combobox', { name: 'Create package species' })
     createPackage = createPackageControls.getByRole('button', { name: 'Save package' })
     await waitFor(() => expect(createSpecies).toBeEnabled())
 
@@ -1538,7 +1568,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await userEvent.click(
       createPackageControls.getByRole('button', { name: 'Add species to new package' }),
     )
-    const recoveredEndUse = createPackageControls.getByRole('combobox', { name: 'End Use' })
+    const recoveredEndUse = createPackageControls.getByRole('combobox', { name: 'End use' })
 
     await waitFor(() => {
       expect(recoveredEndUse).toHaveValue('SL - Sawn logs')
@@ -1546,28 +1576,28 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(createPackage).toBeEnabled()
     })
 
-    fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package number'), {
       target: { value: 'PKG-RECOVERED' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Package Volume (m³)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
       target: { value: '25.0' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
       target: { value: '12.0' },
     })
     fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
       target: { value: '24.0' },
     })
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Status Code' }),
+      createPackageControls.getByRole('combobox', { name: 'Status code' }),
       'ACT - Active',
     )
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Product Type' }),
+      createPackageControls.getByRole('combobox', { name: 'Product type' }),
       'H - Harvested Timber',
     )
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Age Class' }),
+      createPackageControls.getByRole('combobox', { name: 'Age class' }),
       'S - Second Growth',
     )
     await userEvent.click(createPackage)
@@ -1640,22 +1670,22 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await waitFor(() => {
       expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI'])
-      expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toBeEnabled()
+      expect(packageDetailsControls.getByRole('combobox', { name: 'End use' })).toBeEnabled()
       expect(savePackage).toBeEnabled()
       expect(addScale).toBeDisabled()
     })
 
-    const packageSelector = screen.getByRole('combobox', { name: 'Selected Package' })
+    const packageSelector = screen.getByRole('combobox', { name: 'Selected package' })
     failNextSelectedEndUseLookup = true
     await chooseComboBoxOption(packageSelector, 'PKG-2')
 
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
-      expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toBeDisabled()
+      expect(packageDetailsControls.getByRole('combobox', { name: 'End use' })).toBeDisabled()
       expect(savePackage).toBeDisabled()
       expect(addScale).toBeDisabled()
       expect(
-        screen.getByText('Package saves are disabled because End Use options could not be loaded.'),
+        screen.getByText('Package saves are disabled because end use options could not be loaded.'),
       ).toBeInTheDocument()
     })
 
@@ -1666,10 +1696,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     // Package reload and Carbon's selected-label effect can exceed 1s under CI coverage.
     await waitFor(
       () => {
-        expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toHaveValue(
+        expect(packageDetailsControls.getByRole('combobox', { name: 'End use' })).toHaveValue(
           'LU - Lumber',
         )
-        expect(packageDetailsControls.getByRole('combobox', { name: 'End Use' })).toBeEnabled()
+        expect(packageDetailsControls.getByRole('combobox', { name: 'End use' })).toBeEnabled()
         expect(savePackage).toBeEnabled()
         expect(addScale).toBeDisabled()
       },
@@ -1704,7 +1734,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.getByRole('heading', { name: 'Package PKG-1' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit package' })).toBeDisabled()
     const createSpecies = createPackageControls.getByRole('combobox', {
-      name: 'Create Package Species',
+      name: 'Create package species',
     })
     await chooseComboBoxOption(createSpecies, 'CE - Cedar')
     await userEvent.click(
@@ -1715,7 +1745,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await waitFor(() => {
       expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI', 'CE'])
-      expect(createPackageControls.getByRole('combobox', { name: 'End Use' })).toBeDisabled()
+      expect(createPackageControls.getByRole('combobox', { name: 'End use' })).toBeDisabled()
       expect(createPackage).toBeDisabled()
       expect(screen.getByRole('button', { name: 'Edit package' })).toBeDisabled()
     })
@@ -1753,14 +1783,14 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     ).closest('section')
     expect(packageDetailsSection).toBeTruthy()
     const packageDetailsControls = within(packageDetailsSection as HTMLElement)
-    const endUse = packageDetailsControls.getByRole('combobox', { name: 'End Use' })
+    const endUse = packageDetailsControls.getByRole('combobox', { name: 'End use' })
 
     await waitFor(() => {
       expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI'])
       expect(endUse).toBeDisabled()
       expect(screen.getByRole('button', { name: 'Save package' })).toBeDisabled()
     })
-    expect(screen.queryByRole('textbox', { name: 'End Use' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('textbox', { name: 'End use' })).not.toBeInTheDocument()
 
     await act(async () => {
       resolveSelectedEndUseOptions?.([
@@ -1840,7 +1870,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     render(<RouterProvider router={router} />)
 
     await selectApplicationItemsForEditing()
-    const comments = await screen.findByLabelText('Package Comments')
+    const comments = await screen.findByLabelText('Package comments')
     fireEvent.change(comments, { target: { value: 'Unsaved package draft' } })
     await userEvent.click(screen.getByRole('link', { name: 'Leave application' }))
 
@@ -1858,7 +1888,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
     await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
 
-    expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Package comments')).not.toBeInTheDocument()
     const unload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(unload)
     expect(unload.defaultPrevented).toBe(false)
@@ -1914,7 +1944,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     ).not.toBeInTheDocument()
     expect(
       within(packageDetailsSection as HTMLElement)
-        .getByText('End Use', { selector: 'dt' })
+        .getByText('End use', { selector: 'dt' })
         .parentElement?.querySelector('dd'),
     ).toHaveTextContent('Not available')
     expect(screen.getByRole('button', { name: 'Edit package' })).toBeDisabled()
@@ -1951,28 +1981,28 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByText('Selected package data unavailable')).toBeInTheDocument()
 
     const createPackageControls = await openCreatePackageControls()
-    fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package number'), {
       target: { value: 'PKG-NEW' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Package Volume (m³)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
       target: { value: '25.0' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
       target: { value: '12.0' },
     })
     fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
       target: { value: '24.0' },
     })
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Status Code' }),
+      createPackageControls.getByRole('combobox', { name: 'Status code' }),
       'ACT - Active',
     )
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Product Type' }),
+      createPackageControls.getByRole('combobox', { name: 'Product type' }),
       'H - Harvested Timber',
     )
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Age Class' }),
+      createPackageControls.getByRole('combobox', { name: 'Age class' }),
       'S - Second Growth',
     )
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Save package' }))
@@ -2029,7 +2059,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     ).not.toBeInTheDocument()
     expect(
       within(packageDetailsSection as HTMLElement)
-        .getByText('Total Pieces')
+        .getByText('Total pieces')
         .parentElement?.querySelector('dd'),
     ).toHaveTextContent('Not available')
     expect(screen.getByRole('button', { name: 'Edit package' })).toBeDisabled()
@@ -2058,7 +2088,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(
       await screen.findByText('Unable to retrieve application item details.'),
     ).toBeInTheDocument()
-    expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Package comments')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit package' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Delete package' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add scale' })).toBeDisabled()
@@ -2145,7 +2175,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const createPackageControls = await openCreatePackageControls()
     const packageNumberInput = createPackageControls.getByLabelText(
-      'Package Number',
+      'Package number',
     ) as HTMLInputElement
 
     fireEvent.change(packageNumberInput, { target: { value: 'pkg-1' } })
@@ -2170,13 +2200,13 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const createPackageControls = await openCreatePackageControls()
 
-    fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package number'), {
       target: { value: 'pkg-new' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Package Volume (m³)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
       target: { value: '25.55' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
       target: { value: '100' },
     })
     fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
@@ -2211,25 +2241,25 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const createPackageControls = await openCreatePackageControls()
 
-    fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package number'), {
       target: { value: 'PKG-NEW' },
     })
-    fireEvent.blur(createPackageControls.getByLabelText('Package Number'))
-    fireEvent.change(createPackageControls.getByLabelText('Package Volume (m³)'), {
+    fireEvent.blur(createPackageControls.getByLabelText('Package number'))
+    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
       target: { value: '25.0' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
       target: { value: '12.0' },
     })
     fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
       target: { value: '24.0' },
     })
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Status Code' }),
+      createPackageControls.getByRole('combobox', { name: 'Status code' }),
       'ACT - Active',
     )
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Product Type' }),
+      createPackageControls.getByRole('combobox', { name: 'Product type' }),
       'H - Harvested Timber',
     )
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Save package' }))
@@ -2260,13 +2290,13 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
     await selectApplicationDetailTab('Scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Create package' }))
-    const packageNumber = await screen.findByLabelText('Package Number')
+    const packageNumber = await screen.findByLabelText('Package number')
     const drawer = packageNumber.closest('.application-items-drawer') as HTMLElement
     const createPackageControls = within(drawer)
 
     await chooseComboBoxOption(
       createPackageControls.getByRole('combobox', {
-        name: 'Create Package Species',
+        name: 'Create package species',
       }),
       'CE - Cedar',
     )
@@ -2279,34 +2309,34 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(createPackageControls.getByText('CE - Cedar')).toBeInTheDocument()
     })
 
-    fireEvent.change(createPackageControls.getByLabelText('Package Number'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package number'), {
       target: { value: 'PKG-NEW' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Package Volume (m³)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
       target: { value: '25.0' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Average Length (m)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
       target: { value: '12.0' },
     })
     fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
       target: { value: '24.0' },
     })
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Status Code' }),
+      createPackageControls.getByRole('combobox', { name: 'Status code' }),
       'ACT - Active',
     )
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Product Type' }),
+      createPackageControls.getByRole('combobox', { name: 'Product type' }),
       'H - Harvested Timber',
     )
     await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Age Class' }),
+      createPackageControls.getByRole('combobox', { name: 'Age class' }),
       'S - Second Growth',
     )
     await waitFor(() => {
       expect(
         createPackageControls.getByRole('combobox', {
-          name: 'End Use',
+          name: 'End use',
         }),
       ).toHaveValue('LU - Lumber')
     })
@@ -2357,7 +2387,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await selectApplicationItemsForEditing()
-    fireEvent.change(await screen.findByLabelText('Package Comments'), {
+    fireEvent.change(await screen.findByLabelText('Package comments'), {
       target: { value: 'Updated comments' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save package' }))
@@ -2405,12 +2435,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     ).closest('section')
     expect(packageDetailsSection).toBeTruthy()
     expect(
-      within(packageDetailsSection as HTMLElement).getAllByText('Package Number').length,
+      within(packageDetailsSection as HTMLElement).getAllByText('Package number').length,
     ).toBeGreaterThan(0)
     expect(within(packageDetailsSection as HTMLElement).getByText('PKG-1')).toBeInTheDocument()
     expect(
       within(packageDetailsSection as HTMLElement)
-        .getByText('Total Pieces')
+        .getByText('Total pieces')
         .parentElement?.querySelector('dd'),
     ).toHaveTextContent('0')
 
@@ -2500,7 +2530,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(screen.getByRole('button', { name: 'Edit package' })).toBeDisabled()
       expect(screen.queryByRole('button', { name: 'Delete package' })).not.toBeInTheDocument()
     })
-    expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Package comments')).not.toBeInTheDocument()
   })
 
   it('ignores stale package item responses after selecting another package', async () => {
@@ -2582,7 +2612,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       .getByText('PKG-2')
       .closest('tr')
     expect(secondPackageRow).toBeTruthy()
-    expect(within(secondPackageRow as HTMLElement).getByText('200')).toBeInTheDocument()
+    expect(within(secondPackageRow as HTMLElement).getByText('200.0')).toBeInTheDocument()
     expect(within(secondPackageRow as HTMLElement).getByText('8')).toBeInTheDocument()
 
     const secondPackageRadio = within(secondPackageRow as HTMLElement).getByRole('radio', {
@@ -2618,7 +2648,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       })
     })
 
-    expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-2')
+    expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue('PKG-2')
     expect(screen.getByText('Comments').parentElement?.querySelector('dd')).toHaveTextContent(
       'Second package',
     )
@@ -2666,7 +2696,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await openScaleControls()
-    fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'DRAFT-A' } })
+    fireEvent.change(screen.getByLabelText('Timber mark'), { target: { value: 'DRAFT-A' } })
     const packagesSection = (await screen.findByRole('heading', { name: 'Packages' })).closest(
       '.cds--tile',
     )
@@ -2681,20 +2711,20 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
     expect(confirmation).toHaveAccessibleDescription(/discard unsaved package, species, and scale/)
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-1')
+    expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue('PKG-1')
     expect(
       within(packagesSection as HTMLElement).getByRole('radio', {
         name: 'Select package PKG-1',
       }),
     ).toBeChecked()
     expect(secondPackageRadio).not.toBeChecked()
-    expect(screen.getByLabelText('Timber Mark')).toHaveValue('DRAFT-A')
+    expect(screen.getByLabelText('Timber mark')).toHaveValue('DRAFT-A')
 
     fireEvent.click(secondPackageRadio)
     await userEvent.click(screen.getByRole('button', { name: 'Discard and switch' }))
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: 'Selected Package' })).toHaveValue('PKG-2')
-      expect(screen.getByLabelText('Timber Mark')).toHaveValue('')
+      expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue('PKG-2')
+      expect(screen.getByLabelText('Timber mark')).toHaveValue('')
     })
     expect(secondPackageRadio).toBeChecked()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
@@ -2721,7 +2751,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await selectApplicationDetailTab('Scale')
     const timberMarksSection = (
-      await screen.findByRole('heading', { name: 'Timber Marks' })
+      await screen.findByRole('heading', { name: 'Timber marks' })
     ).closest('div')
     expect(timberMarksSection).toBeTruthy()
     expect(
@@ -2762,10 +2792,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const detailFetchCountAfterInitialLoad =
       mockedFetchProvincialApplicationDetail.mock.calls.length
     await userEvent.click(screen.getByRole('button', { name: 'Add scale' }))
-    fireEvent.change(screen.getByLabelText('Timber Mark'), {
+    fireEvent.change(screen.getByLabelText('Timber mark'), {
       target: { value: 'TM002' },
     })
-    fireEvent.blur(screen.getByLabelText('Timber Mark'))
+    fireEvent.blur(screen.getByLabelText('Timber mark'))
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Species' }),
       'FI - Douglas-fir',
@@ -2777,7 +2807,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(screen.getByLabelText('Pieces'), {
       target: { value: '2' },
     })
-    fireEvent.change(screen.getByLabelText('Scale Volume (m³)'), {
+    fireEvent.change(screen.getByLabelText('Scale volume (m³)'), {
       target: { value: '8.0' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save scale' }))
@@ -2865,19 +2895,19 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       )
 
       await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
-      fireEvent.change(screen.getByLabelText('Timber Mark'), { target: { value: 'TM002' } })
+      fireEvent.change(screen.getByLabelText('Timber mark'), { target: { value: 'TM002' } })
       await chooseComboBoxOption(
         screen.getByRole('combobox', { name: 'Species' }),
         'FI - Douglas-fir',
       )
       await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
       fireEvent.change(screen.getByLabelText('Pieces'), { target: { value: '2' } })
-      fireEvent.change(screen.getByLabelText('Scale Volume (m³)'), { target: { value: volume } })
+      fireEvent.change(screen.getByLabelText('Scale volume (m³)'), { target: { value: volume } })
       await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
 
       if (exceedsPackage) {
         expect(screen.getAllByText('Scale volume must be 1.0 or less.').length).toBeGreaterThan(0)
-        expect(screen.getByLabelText('Scale Volume (m³)')).toHaveValue(roundedVolume)
+        expect(screen.getByLabelText('Scale volume (m³)')).toHaveValue(roundedVolume)
         expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
       } else {
         await waitFor(() => {
@@ -2915,41 +2945,41 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         }),
       )
       if (operation === 'save') {
-        fireEvent.change(screen.getByLabelText('Package Comments'), {
+        fireEvent.change(screen.getByLabelText('Package comments'), {
           target: { value: 'Saved before refresh failure' },
         })
         await userEvent.click(screen.getByRole('button', { name: 'Save package' }))
       } else {
         const section = within(document.querySelector('.application-items-drawer') as HTMLElement)
         await chooseComboBoxOption(
-          section.getByRole('combobox', { name: 'Create Package Species' }),
+          section.getByRole('combobox', { name: 'Create package species' }),
           'CE - Cedar',
         )
         await userEvent.click(section.getByRole('button', { name: 'Add species to new package' }))
-        fireEvent.change(section.getByLabelText('Package Number'), { target: { value: 'PKG-NEW' } })
-        fireEvent.change(section.getByLabelText('Package Volume (m³)'), {
+        fireEvent.change(section.getByLabelText('Package number'), { target: { value: 'PKG-NEW' } })
+        fireEvent.change(section.getByLabelText('Package volume (m³)'), {
           target: { value: '25.0' },
         })
-        fireEvent.change(section.getByLabelText('Average Length (m)'), {
+        fireEvent.change(section.getByLabelText('Average length (m)'), {
           target: { value: '12.0' },
         })
         fireEvent.change(section.getByLabelText('Average top diameter (rads)'), {
           target: { value: '24.0' },
         })
         await chooseComboBoxOption(
-          section.getByRole('combobox', { name: 'Status Code' }),
+          section.getByRole('combobox', { name: 'Status code' }),
           'ACT - Active',
         )
         await chooseComboBoxOption(
-          section.getByRole('combobox', { name: 'Product Type' }),
+          section.getByRole('combobox', { name: 'Product type' }),
           'H - Harvested Timber',
         )
         await chooseComboBoxOption(
-          section.getByRole('combobox', { name: 'Age Class' }),
+          section.getByRole('combobox', { name: 'Age class' }),
           'S - Second Growth',
         )
         await waitFor(() =>
-          expect(section.getByRole('combobox', { name: 'End Use' })).toHaveValue('LU - Lumber'),
+          expect(section.getByRole('combobox', { name: 'End use' })).toHaveValue('LU - Lumber'),
         )
         await userEvent.click(section.getByRole('button', { name: 'Save package' }))
       }
@@ -2995,7 +3025,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const editPackage = await screen.findByRole('button', { name: 'Edit package' })
     await waitFor(() => expect(editPackage).toBeEnabled())
     await userEvent.click(editPackage)
-    const comments = await screen.findByLabelText('Package Comments')
+    const comments = await screen.findByLabelText('Package comments')
     const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
     fireEvent.change(comments, { target: { value: 'Café delivery' } })
     await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
@@ -3006,7 +3036,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await userEvent.click(drawer.getByRole('button', { name: 'Cancel' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
-    await waitFor(() => expect(screen.queryByLabelText('Package Comments')).not.toBeInTheDocument())
+    await waitFor(() => expect(screen.queryByLabelText('Package comments')).not.toBeInTheDocument())
     expect(screen.getByRole('button', { name: 'Edit package' })).toBeInTheDocument()
     expect(screen.queryByText('Package save failed')).not.toBeInTheDocument()
     expect(screen.queryByText('Item action failed')).not.toBeInTheDocument()
@@ -3034,10 +3064,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     expect(await screen.findByText('TM001')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Timber Mark'), {
+    fireEvent.change(screen.getByLabelText('Timber mark'), {
       target: { value: 'TM002' },
     })
-    fireEvent.blur(screen.getByLabelText('Timber Mark'))
+    fireEvent.blur(screen.getByLabelText('Timber mark'))
     await chooseComboBoxOption(
       screen.getByRole('combobox', { name: 'Species' }),
       'FI - Douglas-fir',
@@ -3049,7 +3079,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(screen.getByLabelText('Pieces'), {
       target: { value: '2' },
     })
-    fireEvent.change(screen.getByLabelText('Scale Volume (m³)'), {
+    fireEvent.change(screen.getByLabelText('Scale volume (m³)'), {
       target: { value: '8.0' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
@@ -3158,7 +3188,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await openScaleControls()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Timber Mark'), {
+    fireEvent.change(screen.getByLabelText('Timber mark'), {
       target: { value: 'TM002' },
     })
     await chooseComboBoxOption(
@@ -3169,7 +3199,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(screen.getByLabelText('Pieces'), {
       target: { value: '1.5' },
     })
-    fireEvent.change(screen.getByLabelText('Scale Volume (m³)'), {
+    fireEvent.change(screen.getByLabelText('Scale volume (m³)'), {
       target: { value: '100000' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
@@ -3193,7 +3223,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await openScaleControls()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Timber Mark'), {
+    fireEvent.change(screen.getByLabelText('Timber mark'), {
       target: { value: 'TM002' },
     })
     await chooseComboBoxOption(
@@ -3204,7 +3234,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(screen.getByLabelText('Pieces'), {
       target: { value: '1' },
     })
-    fireEvent.change(screen.getByLabelText('Scale Volume (m³)'), {
+    fireEvent.change(screen.getByLabelText('Scale volume (m³)'), {
       target: { value: '80.1' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))

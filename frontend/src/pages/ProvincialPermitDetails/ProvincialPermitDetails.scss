@@ -226,11 +226,6 @@
     color: var(--cds-text-secondary);
   }
 
-  // End use's required marker stays red while the field waits for species.
-  .cds--label--disabled .required-label__marker {
-    color: var(--cds-text-error, #da1e28);
-  }
-
   // Chosen species show as removable tags below the Species list.
   .boic-package-species__tags {
     display: flex;

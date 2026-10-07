@@ -48,7 +48,7 @@ export const fetchShippingReferenceOptions = async (): Promise<ShippingReference
 }
 
 export const formatShippingReferenceOption = (option: ShippingReferenceOption): string =>
-  `${option.name} (${option.code})`
+  option.name.replace(/\bOf\b/g, 'of')
 
 export const shippingReferenceLabel = (
   options: ShippingReferenceOption[] | undefined,

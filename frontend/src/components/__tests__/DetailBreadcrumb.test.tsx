@@ -79,7 +79,7 @@ describe('DetailBreadcrumb', () => {
   it('renders a Carbon breadcrumb for nested detail navigation', async () => {
     const summaryState = {
       returnTo: {
-        label: 'My Applications',
+        label: 'My applications',
         to: '/provincial/summary?page=2&pageSize=25',
       },
     }
@@ -109,7 +109,7 @@ describe('DetailBreadcrumb', () => {
     )
 
     const breadcrumb = screen.getByRole('navigation', { name: /breadcrumb/i })
-    expect(within(breadcrumb).getByRole('link', { name: 'My Applications' })).toHaveAttribute(
+    expect(within(breadcrumb).getByRole('link', { name: 'My applications' })).toHaveAttribute(
       'href',
       '/provincial/summary?page=2&pageSize=25',
     )
@@ -122,7 +122,7 @@ describe('DetailBreadcrumb', () => {
     )
     expect(screen.getByTestId('location-state')).toHaveTextContent(JSON.stringify(summaryState))
 
-    const summaryLink = screen.getByRole('link', { name: 'Back to My Applications' })
+    const summaryLink = screen.getByRole('link', { name: 'Back to My applications' })
     await userEvent.click(summaryLink)
     expect(screen.getByTestId('location')).toHaveTextContent(
       '/provincial/summary?page=2&pageSize=25',
@@ -157,7 +157,7 @@ describe('DetailBreadcrumb', () => {
                 to: '/provincial/application/321?tab=items',
                 state: {
                   returnTo: {
-                    label: 'My Applications',
+                    label: 'My applications',
                     to: '/provincial/summary?page=2',
                   },
                 },
@@ -169,7 +169,7 @@ describe('DetailBreadcrumb', () => {
     )
 
     const breadcrumb = screen.getByRole('navigation', { name: /breadcrumb/i })
-    expect(within(breadcrumb).getByRole('link', { name: 'My Applications' })).toBeVisible()
+    expect(within(breadcrumb).getByRole('link', { name: 'My applications' })).toBeVisible()
     expect(within(breadcrumb).getByRole('link', { name: 'Offer 81001' })).toBeVisible()
     expect(
       within(breadcrumb).queryByRole('link', { name: 'Application 321' }),

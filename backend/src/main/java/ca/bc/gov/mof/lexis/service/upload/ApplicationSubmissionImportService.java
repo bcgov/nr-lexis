@@ -2522,7 +2522,7 @@ public class ApplicationSubmissionImportService {
     for (ScaleLine row : rows) {
       String combinationKey = row.timberMark() + "\u0000" + row.speciesCode() + "\u0000" + row.gradeCode();
       if (rowsByCombination.putIfAbsent(combinationKey, row) != null) {
-        errors.add("A scale with the same Timber Mark/Species/Grade combination already exists.");
+        errors.add("A scale with the same timber mark/species/grade combination already exists.");
       }
     }
   }

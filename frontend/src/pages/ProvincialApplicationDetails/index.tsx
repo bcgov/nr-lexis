@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type SetStateAction } from 'react'
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+  type SetStateAction,
+} from 'react'
 import {
   Button,
   Checkbox,
@@ -152,6 +160,8 @@ import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { requiredLabel } from '@/utils/required-label'
 import {
+  displayTableValue,
+  displayValueText,
   isValidEmail,
   normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
@@ -159,6 +169,8 @@ import {
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
+import { displayVolume, formatVolume, formatVolumeInput } from '@/utils/volume'
 
 const APPLICATION_WRITE_ACTIONS = [
   'createApplication',
@@ -278,9 +290,7 @@ type ClientDataSummaryProps = {
   showTitle?: boolean
   clientData: ApplicationClientData | null
   isLoading: boolean
-  detailFields?: Array<[string, string]>
-  // Editors confirm a client lookup by name; saved views show the name in their Client field.
-  showCompanyName?: boolean
+  detailFields?: Array<[string, ReactNode]>
 }
 
 function ClientDataSummary({
@@ -289,7 +299,6 @@ function ClientDataSummary({
   clientData,
   isLoading,
   detailFields,
-  showCompanyName = false,
 }: ClientDataSummaryProps) {
   const clientLookupMessage = clientData?.notfound ?? ''
   const clientLookupMessageKey = `${clientData?.clientNumber ?? ''}:${clientLookupMessage}`
@@ -318,12 +327,7 @@ function ClientDataSummary({
       <div className="application-client-summary__groups">
         {[
           persistedDetailFields.slice(0, 1),
-          [
-            ...persistedDetailFields.slice(1),
-            ...(clientData && showCompanyName
-              ? [['Company name', displayValue(clientData.companyName)] as [string, string]]
-              : []),
-          ],
+          persistedDetailFields.slice(1),
           clientData
             ? ([
                 ['Address', displayValue(clientData.address)],
@@ -499,8 +503,8 @@ const toSummaryFormState = (detail: ProvincialApplicationDetail): ApplicationSum
   applicationDate: detail.applicationDate ?? '',
   receivedDate: detail.receivedDate ?? '',
   termDays: detail.termDays === null ? '' : String(detail.termDays),
-  applicationVolume: detail.applicationVolume === null ? '' : String(detail.applicationVolume),
-  averageLogVolume: detail.averageLogVolume === null ? '' : String(detail.averageLogVolume),
+  applicationVolume: formatVolumeInput(detail.applicationVolume),
+  averageLogVolume: formatVolumeInput(detail.averageLogVolume),
   exemptionReasonCode: detail.exemptionReasonCode ?? '',
   productLocation: '',
   exportScheduleId: '',
@@ -527,8 +531,8 @@ const toSummarySnapshotFormState = (
   applicationDate: snapshot.applicationDate,
   receivedDate: snapshot.receivedDate,
   termDays: snapshot.termDays,
-  applicationVolume: snapshot.applicationVolume,
-  averageLogVolume: snapshot.averageLogVolume,
+  applicationVolume: formatVolumeInput(snapshot.applicationVolume),
+  averageLogVolume: formatVolumeInput(snapshot.averageLogVolume),
   exemptionReasonCode: snapshot.exemptionReasonCode,
   productLocation: snapshot.productLocation,
   exportScheduleId: snapshot.exportScheduleId,
@@ -3426,7 +3430,7 @@ const ProvincialApplicationDetailsPage = () => {
   const savedEndUseDescription =
     applicationEndUseOptions.find((option) => option.code === savedEndUseCode)?.description ??
     savedEndUseCode
-  const ownerClientDetailFields: Array<[string, string]> = [
+  const ownerClientDetailFields: Array<[string, ReactNode]> = [
     ['Contact name', displayValue(summaryForm?.ownerContactName)],
     [
       'Client',
@@ -3448,7 +3452,7 @@ const ProvincialApplicationDetailsPage = () => {
       detailFields={ownerClientDetailFields}
     />
   )
-  const agentClientDetailFields: Array<[string, string]> = [
+  const agentClientDetailFields: Array<[string, ReactNode]> = [
     ['Contact name', displayValue(summaryForm?.agentContactName)],
     [
       'Agent client',
@@ -3495,7 +3499,7 @@ const ProvincialApplicationDetailsPage = () => {
             <TableBody>
               {detail.offers.map((item) => (
                 <TableRow key={item.offerNumber}>
-                  <TableCell>{item.companyName ?? '-'}</TableCell>
+                  <TableCell>{displayTableValue(item.companyName)}</TableCell>
                   <TableCell>
                     {item.receivedTimestamp
                       ? formatBusinessDateTimeLabel(item.receivedTimestamp)
@@ -3573,7 +3577,7 @@ const ProvincialApplicationDetailsPage = () => {
         aria-required="true"
         type="number"
         min={0}
-        step="0.1"
+        step="0.01"
         value={summaryForm.applicationVolume}
         invalid={Boolean(visibleSummaryFieldError('applicationVolume'))}
         invalidText={visibleSummaryFieldError('applicationVolume')}
@@ -3703,9 +3707,10 @@ const ProvincialApplicationDetailsPage = () => {
         )}
         {isEditingReview ? (
           <div className="application-detail-review__form">
-            <p className="application-detail-required">{requiredLabel('Required fields')}</p>
+            <RequiredFieldsLegend className="application-detail-required" />
             <RadioButtonGroup
               legendText={requiredLabel('Application status')}
+              required
               name="applicationDetailReviewStatus"
               valueSelected={reviewStatusCode}
               disabled={
@@ -3782,6 +3787,7 @@ const ProvincialApplicationDetailsPage = () => {
                   <TextInput
                     id="applicationDetailReviewEmail"
                     labelText={requiredLabel('Client email address')}
+                    required
                     helperText={REVIEW_EMAIL_PREVIEW_HELPER}
                     value={reviewStatusEmailAddress}
                     invalid={reviewValidationMessage === REVIEW_EMAIL_REQUIRED_MESSAGE}
@@ -3870,7 +3876,7 @@ const ProvincialApplicationDetailsPage = () => {
                 ? [['Client email address', sentReviewEmail.address]]
                 : []),
             ].map(([label, value]) => (
-              <div key={label} className="detail-field-item">
+              <div key={String(label)} className="detail-field-item">
                 <dt className="detail-field-label">{label}</dt>
                 <dd className="detail-field-value">{value}</dd>
               </div>
@@ -3929,7 +3935,7 @@ const ProvincialApplicationDetailsPage = () => {
           }`.trim()}
           subtitle={
             detail && detailMatchesRoute
-              ? `Author: ${displayValue(detail.author)}`
+              ? `Author: ${displayValueText(detail.author)}`
               : 'Check and manage this provincial application'
           }
           status={
@@ -4089,9 +4095,7 @@ const ProvincialApplicationDetailsPage = () => {
                         </div>
                         {isEditingOwnerDetails && summaryForm ? (
                           <>
-                            <p className="application-detail-required">
-                              {requiredLabel('Required fields')}
-                            </p>
+                            <RequiredFieldsLegend className="application-detail-required" />
                             <h3 className="detail-tile-title">{ownerSectionTitle}</h3>
                             <div className="legacy-search-grid application-client-edit-grid application-client-edit-grid--fixed-client">
                               <TextInput
@@ -4324,9 +4328,7 @@ const ProvincialApplicationDetailsPage = () => {
                         </div>
                         {isEditingSummary && canEditSummary && summaryForm ? (
                           <>
-                            <p className="application-detail-required">
-                              {requiredLabel('Required fields')}
-                            </p>
+                            <RequiredFieldsLegend className="application-detail-required" />
                             <div className="legacy-search-grid">
                               <SearchableSelect
                                 id="applicationSummaryRegion"
@@ -4508,11 +4510,11 @@ const ProvincialApplicationDetailsPage = () => {
                             [['Exemption term (days)', displayValue(detail.termDays)]],
                           ].map((row) => (
                             <dl
-                              key={row[0][0]}
+                              key={String(row[0][0])}
                               className="detail-field-grid application-summary-fields"
                             >
                               {row.map(([label, value]) => (
-                                <div key={label} className="detail-field-item">
+                                <div key={String(label)} className="detail-field-item">
                                   <dt className="detail-field-label">{label}</dt>
                                   <dd className="detail-field-value">{value}</dd>
                                 </div>
@@ -4559,9 +4561,7 @@ const ProvincialApplicationDetailsPage = () => {
                         </div>
                         {isEditingApplicationItems && canEditSummary && summaryForm ? (
                           <>
-                            <p className="application-detail-required">
-                              {requiredLabel('Required fields')}
-                            </p>
+                            <RequiredFieldsLegend className="application-detail-required" />
                             {applicationScaleForm}
                             <div className="legacy-search-actions">
                               <Button
@@ -4608,13 +4608,13 @@ const ProvincialApplicationDetailsPage = () => {
                                 ? [
                                     [
                                       'Average log volume (m³)',
-                                      displayValue(savedScaleForm?.averageLogVolume),
+                                      displayVolume(savedScaleForm?.averageLogVolume),
                                     ],
                                   ]
                                 : []),
                               [
                                 'Application volume (m³)',
-                                displayValue(savedScaleForm?.applicationVolume),
+                                displayVolume(savedScaleForm?.applicationVolume),
                               ],
                             ],
                             [
@@ -4633,11 +4633,11 @@ const ProvincialApplicationDetailsPage = () => {
                             .filter((row) => row.length > 0)
                             .map((row) => (
                               <dl
-                                key={row[0][0]}
+                                key={String(row[0][0])}
                                 className="detail-field-grid application-scale-fields"
                               >
                                 {row.map(([label, value]) => (
-                                  <div key={label} className="detail-field-item">
+                                  <div key={String(label)} className="detail-field-item">
                                     <dt className="detail-field-label">{label}</dt>
                                     <dd className="detail-field-value">{value}</dd>
                                   </div>
@@ -4679,7 +4679,7 @@ const ProvincialApplicationDetailsPage = () => {
                                       onSelect={() => focusPackageInItems(item.packageNumber)}
                                     />
                                     <TableCell>{item.packageNumber}</TableCell>
-                                    <TableCell>{item.volume.toLocaleString()}</TableCell>
+                                    <TableCell>{formatVolume(item.volume)}</TableCell>
                                     <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
                                   </TableRow>
                                 ))}
@@ -4922,6 +4922,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 },
                               ]}
                             >
+                              <RequiredFieldsLegend />
                               <TextArea
                                 ref={remarkBodyRef}
                                 id="applicationRemarkBody"

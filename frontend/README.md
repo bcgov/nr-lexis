@@ -128,3 +128,21 @@ The application uses [Carbon Design System](https://carbondesignsystem.com/) com
 - `@carbon/pictograms-react` - Pictograms for empty states
 
 Use Carbon icons and pictograms for all UI glyphs. Don't hand-draw SVG or CSS icons.
+
+Mark required fields with `requiredLabel()`. Its stylesheet draws a plain red `*` before the label, hidden from screen readers, so the input must also set `required` or `aria-required` (a unit test checks every call site).
+
+Show read-only values with `displayValue()`. A blank value renders `—`, announced as "Not provided". Where a string is needed (template literals, `aria-label`, input values), use `displayValueText()`; a unit test rejects `displayValue()` in string contexts.
+
+Show volumes with `displayVolume()` or `formatVolume()` from `@/utils/volume`: one decimal, or two when the stored value has them (`0.0`, `1,234.5`, `12.25`). Fill volume inputs with `formatVolumeInput()`, which drops the thousands separator.
+
+Format volume values when loading an editor, including its saved snapshot, rather than on every
+keystroke. Application volume accepts two decimal places. OIC request-volume editors retain their
+existing text representation because the storage field is `VARCHAR2(9)`; format only their read-only
+display.
+
+Use Client and Client location labels in both owner and agent sections. Read-only Client values
+combine the company name and client number, with the acronym where available; do not repeat the
+company name in a separate row.
+
+Shipping reference labels lowercase the connector "Of" to "of" for display. Option codes and the
+returned reference names remain unchanged.

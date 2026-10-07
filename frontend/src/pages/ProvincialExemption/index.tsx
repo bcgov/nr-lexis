@@ -113,6 +113,7 @@ import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { displayTableValue } from '@/utils/text'
 import { formatIsoDateLabel } from '@/utils/date'
 import './ProvincialExemption.scss'
+import { formatVolume } from '@/utils/volume'
 
 const APPROVAL_REQUEST_FAILED_MESSAGE = 'The approval request could not be completed.'
 
@@ -1185,7 +1186,7 @@ const ProvincialExemptionPage = () => {
                         </TableCell>
                         <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
                         <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
-                        <TableCell>{row.approvedVolume.toFixed(1)}</TableCell>
+                        <TableCell>{formatVolume(row.approvedVolume)}</TableCell>
                         <TableCell>{row.balanceRemaining.toFixed(1)}</TableCell>
                         <TableCell className="legacy-search-table-date">
                           {displayTableValue(formatIsoDateLabel(row.listingDate))}

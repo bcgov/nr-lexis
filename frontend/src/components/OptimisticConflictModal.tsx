@@ -9,6 +9,7 @@ import {
 import { LEXIS_BUSINESS_TIME_ZONE } from '@/utils/date'
 
 import './OptimisticConflictModal.scss'
+import { EMPTY_VALUE_TEXT } from '@/utils/display-value'
 
 type ChangedField = {
   label: string
@@ -24,8 +25,8 @@ const humanizeFieldName = (value: string): string => {
 }
 
 const formatValue = (value: unknown): string | undefined => {
-  if (value === null) return 'Not provided'
-  if (typeof value === 'string') return value.trim() || 'Not provided'
+  if (value === null) return EMPTY_VALUE_TEXT
+  if (typeof value === 'string') return value.trim() || EMPTY_VALUE_TEXT
   if (typeof value === 'number' || typeof value === 'boolean') return String(value)
   if (value === undefined) return undefined
 

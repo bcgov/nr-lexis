@@ -530,7 +530,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByRole('region', { name: 'Scale' })).toBeVisible()
     expect(screen.getByText('Total pieces')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /Create package/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('combobox', { name: 'Selected Package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Selected package' })).not.toBeInTheDocument()
     for (const name of ['Documents', 'Remarks', 'Offers', 'Review']) {
       await selectApplicationCreateTab(name)
       expect(
@@ -798,7 +798,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(postSaveAcknowledgement)
     await userEvent.click(within(postSaveDialog).getByRole('button', { name: 'Save application' }))
 
-    expect(await screen.findByText('Save Failed')).toBeVisible()
+    expect(await screen.findByText('Save failed')).toBeVisible()
     expect(screen.getByText('Application agent location does not exist.')).toBeVisible()
     expect(postSaveDialog).toBeVisible()
     expect(within(postSaveDialog).getByRole('button', { name: 'Save application' })).toBeEnabled()
@@ -1002,7 +1002,8 @@ describe('Create Page Core Flows', () => {
 
     await selectApplicationCreateTab('Applicant')
     const ownerDetails = await screen.findByRole('region', { name: 'Applicant client details' })
-    expect(within(ownerDetails).getByText('Owner Forestry Ltd.')).toBeInTheDocument()
+    // The Client field already names the company, so the details don't repeat it.
+    expect(within(ownerDetails).queryByText('Owner Forestry Ltd.')).not.toBeInTheDocument()
     expect(within(ownerDetails).getByText('123 Timber Road')).toBeInTheDocument()
     expect(within(ownerDetails).getByText('owner@example.test')).toBeInTheDocument()
     expect(
@@ -1015,7 +1016,7 @@ describe('Create Page Core Flows', () => {
 
     await selectApplicationCreateTab('Applicant')
     const agentDetails = await screen.findByRole('region', { name: 'Agent client details' })
-    expect(within(agentDetails).getByText('Agent Export Services')).toBeInTheDocument()
+    expect(within(agentDetails).queryByText('Agent Export Services')).not.toBeInTheDocument()
     expect(within(agentDetails).getByText('456 Export Road')).toBeInTheDocument()
     expect(within(agentDetails).getByText('agent@example.test')).toBeInTheDocument()
     expect(
@@ -2058,7 +2059,9 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByRole('button', { name: 'Add document' })).toBeDisabled()
     await selectExemptionCreateTab('Applicant')
     await waitFor(() =>
-      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00011111'),
+      expect(screen.getByLabelText('Client', { selector: '#ownerClientNumber' })).toHaveValue(
+        'Owner Forestry Ltd. · 00011111',
+      ),
     )
     expect(screen.getByRole('textbox', { name: 'Applicant type' })).toHaveValue('Owner')
     expect(screen.getByRole('textbox', { name: "I'm an agent" })).toHaveValue('No')
@@ -2170,7 +2173,9 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     expect(screen.getByRole('region', { name: 'Agent information' })).toBeInTheDocument()
     await waitFor(() =>
-      expect(screen.getByRole('textbox', { name: 'Agent number' })).toHaveValue('00002176'),
+      expect(screen.getByLabelText('Client', { selector: '#agentClientNumber' })).toHaveValue(
+        'Agent Export Services · 00002176',
+      ),
     )
     expect(
       within(screen.getByRole('region', { name: 'Agent information' })).getByRole('textbox', {
@@ -2211,7 +2216,7 @@ describe('Create Page Core Flows', () => {
       await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
       await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('321'))
       await selectExemptionCreateTab('Applicant')
-      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(screen.getByLabelText('Client', { selector: '#ownerClientNumber' })).toHaveValue('')
       expect(screen.getByText('Loading applicant details…')).toBeInTheDocument()
 
       await selectExemptionCreateTab('Applications')
@@ -2222,7 +2227,7 @@ describe('Create Page Core Flows', () => {
         }),
       )
       await selectExemptionCreateTab('Applicant')
-      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(screen.getByLabelText('Client', { selector: '#ownerClientNumber' })).toHaveValue('')
       expect(
         screen.getByText(/A standalone Ministerial exemption has no linked applicant details/),
       ).toBeInTheDocument()
@@ -2237,7 +2242,7 @@ describe('Create Page Core Flows', () => {
       expect(mockedFetchApplicationSummarySnapshot).toHaveBeenLastCalledWith(nextApplicationNumber)
 
       await selectExemptionCreateTab('Applicant')
-      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(screen.getByLabelText('Client', { selector: '#ownerClientNumber' })).toHaveValue('')
       expect(screen.getByText('Loading applicant details…')).toBeInTheDocument()
 
       await act(async () => {
@@ -2248,7 +2253,7 @@ describe('Create Page Core Flows', () => {
           }),
         )
       })
-      expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('')
+      expect(screen.getByLabelText('Client', { selector: '#ownerClientNumber' })).toHaveValue('')
       expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
 
       await act(async () => {
@@ -2260,9 +2265,13 @@ describe('Create Page Core Flows', () => {
         )
       })
       await waitFor(() =>
-        expect(screen.getByRole('textbox', { name: 'Client number' })).toHaveValue('00022222'),
+        expect(screen.getByLabelText('Client', { selector: '#ownerClientNumber' })).toHaveValue(
+          'Owner Forestry Ltd. · 00022222',
+        ),
       )
-      expect(screen.getByRole('textbox', { name: 'Client number' })).not.toHaveValue('00011111')
+      expect(screen.getByLabelText('Client', { selector: '#ownerClientNumber' })).not.toHaveValue(
+        'Owner Forestry Ltd. · 00011111',
+      )
     },
   )
 
@@ -3180,9 +3189,9 @@ describe('Create Page Core Flows', () => {
       expect(section.parentElement).toBe(offerSectionStack)
       expect(section.querySelector('.legacy-search-grid')).toHaveClass('create-form-grid')
     }
-    expect(screen.getByRole('button', { name: 'See Scale Detail' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'See scale detail' })).toBeEnabled()
     expect(await screen.findByDisplayValue('PKG-9')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     const scaleDialog = await screen.findByRole('dialog', { name: 'Scale Detail' })
     expect(await within(scaleDialog).findByText('TM-9')).toBeInTheDocument()
     expect(within(scaleDialog).getByRole('cell', { name: 'I' })).toBeInTheDocument()
@@ -3294,7 +3303,7 @@ describe('Create Page Core Flows', () => {
       expect(mockedFetchOfferPackageVolume).toHaveBeenLastCalledWith(storedPackageNumber),
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     const scaleDialog = await screen.findByRole('dialog', { name: 'Scale Detail' })
     expect(mockedFetchOfferScaleDetails).toHaveBeenCalledWith(
       { packageNumber: storedPackageNumber },
@@ -3887,7 +3896,7 @@ describe('Create Page Core Flows', () => {
 
     await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
     expect(await screen.findByDisplayValue('No Packages')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'See Scale Detail' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'See scale detail' })).toBeDisabled()
     expect(screen.getByDisplayValue('100.0')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')

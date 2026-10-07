@@ -12,23 +12,22 @@
 // into a lazy chunk that loads after this file and overrides the page grid padding below.
 @use '@carbon/ibm-products/scss/components/SidePanel';
 
+// The required marker: a plain 14px asterisk in the error text colour, then a space.
 .required-label__marker {
   color: var(--cds-text-error, #da1e28);
-  display: inline-block;
-  height: 1em;
-  margin-inline-end: 0.125rem;
-  vertical-align: -0.125em;
-  width: 1em;
+  font-size: 0.875rem;
+  font-weight: 400;
+  margin-inline-end: 0.25em;
 }
 
-.required-label__marker svg {
-  display: block;
-  height: 100%;
-  width: 100%;
+.required-label__marker::before {
+  content: '*';
+  content: '*' / '';
 }
 
-.cds--label--disabled .required-label__marker {
-  color: inherit;
+// The "* Required fields" line. Zero specificity, so a page's own spacing wins.
+:where(.required-fields-legend) {
+  margin: 0 0 1rem;
 }
 
 @font-face {
@@ -1114,6 +1113,15 @@ div.cds--inline-notification--low-contrast::before {
 
 $notification-types: 'error', 'info', 'success', 'warning';
 
+// Carbon outlines low-contrast notifications in the support colour at 40%. Without the border
+// tokens, the outline would fall back to the text colour.
+@function notification-border($notification-type) {
+  @return var(
+    --cds-notification-border-#{$notification-type},
+    color-mix(in srgb, var(--cds-support-#{$notification-type}) 40%, transparent)
+  );
+}
+
 .application-scale-form__location {
   grid-column: 1 / -1;
 }
@@ -1138,13 +1146,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
   }
 
   div.cds--toast-notification--low-contrast.cds--toast-notification--#{$notification-type} {
-    border-top-color: var(--cds-notification-border-#{$notification-type});
-    border-right-color: var(--cds-notification-border-#{$notification-type});
-    border-bottom-color: var(--cds-notification-border-#{$notification-type});
+    border-top-color: notification-border($notification-type);
+    border-right-color: notification-border($notification-type);
+    border-bottom-color: notification-border($notification-type);
   }
 
   div.cds--inline-notification--low-contrast.cds--inline-notification--#{$notification-type}::before {
-    border-color: var(--cds-notification-border-#{$notification-type});
+    border-color: notification-border($notification-type);
   }
 }
 

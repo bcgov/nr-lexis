@@ -51,6 +51,7 @@ import {
 } from '@/service/rtm-emslogamv-service'
 import { validateUploadFileSize } from '@/components/uploads/uploadQueueHelpers'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { displayValue } from '@/utils/display-value'
 
 type PendingUploadValidation = {
   fileName: string
@@ -672,7 +673,7 @@ const SpeciesReviewTable = ({
               >
                 <th scope="row">{row.grade}</th>
                 <td className="rtm-amv-species-table__current-value">
-                  {formatReviewCell(row.currentValues) || '—'}
+                  {formatReviewCell(row.currentValues) || displayValue('')}
                 </td>
                 <td>
                   <div className="rtm-amv-species-table__review-value">

@@ -1676,7 +1676,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     if (blanketOic
         && isInvalidSubmittedDouble(request.oicPermitTotalVolume(), oicRequestVolume)) {
-      errors.add("A valid Permit Request Volume is required.");
+      errors.add("A valid permit request volume is required.");
     }
     validateSubmittedOicRequestLimits(request, blanketOic, errors);
     validateRequiredBlanketOicRequestLimitsOnCreate(request, blanketOic, errors);
@@ -1897,7 +1897,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (targetBlanketOic
         && isInvalidSubmittedDouble(
             request.oicPermitTotalVolume(), submittedOicRequestVolume)) {
-      numericErrors.add("A valid Permit Request Volume is required.");
+      numericErrors.add("A valid permit request volume is required.");
     }
     if (targetBlanketOic && !isInvoicedPermitStatus(current.permitStatusCode())) {
       validateExplicitBlanketOicRequestLimitClears(request, numericErrors);
@@ -2180,7 +2180,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     String rawShippingDate = trimToNull(request.estimatedShippingDate());
     LocalDate parsedShippingDate = parseDate(rawShippingDate);
     if (rawShippingDate != null && parsedShippingDate == null) {
-      return failureMutationResponse(List.of("Invalid Date Format"), permitNumber);
+      return failureMutationResponse(List.of("Invalid date format."), permitNumber);
     }
 
     PermitMutationRow current = existing.get();
@@ -2927,7 +2927,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
     if (ScaleDomainValidator.containsCombination(packageScales, candidate)) {
       errors.add(
-          "A scale with the same Timber Mark/Species/Grade combination already exists.");
+          "A scale with the same timber mark/species/grade combination already exists.");
     }
 
     Optional<PackageDetailsRow> packageDetails =
@@ -5201,10 +5201,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return;
     }
     if (trimToNull(request.oicPermitTotalPieces()) == null) {
-      errors.add("Permit Request Pieces is required.");
+      errors.add("Permit request pieces is required.");
     }
     if (trimToNull(request.oicPermitTotalVolume()) == null) {
-      errors.add("Permit Request Volume is required.");
+      errors.add("Permit request volume is required.");
     }
   }
 
@@ -5241,11 +5241,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     if (request.oicPermitTotalPieces() != null
         && trimToNull(request.oicPermitTotalPieces()) == null) {
-      errors.add("Permit Request Pieces is required.");
+      errors.add("Permit request pieces is required.");
     }
     if (request.oicPermitTotalVolume() != null
         && trimToNull(request.oicPermitTotalVolume()) == null) {
-      errors.add("Permit Request Volume is required.");
+      errors.add("Permit request volume is required.");
     }
   }
 
@@ -5269,7 +5269,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       Long pieces = parseNonNegativeLong(submittedPieces);
       if (pieces == null || pieces > MAX_OIC_REQUEST_PIECES) {
         errors.add(
-            "Permit Request Pieces must be a nonnegative whole number no greater than 9999999999.");
+            "Permit request pieces must be a nonnegative whole number no greater than 9999999999.");
       }
     }
 
@@ -5281,7 +5281,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         || submittedVolume.length() > MAX_OIC_REQUEST_VOLUME_LENGTH
         || !OIC_REQUEST_VOLUME_PATTERN.matcher(submittedVolume).matches()) {
       errors.add(
-          "Permit Request Volume must be a nonnegative number of 9 characters or fewer with no more than 2 decimal places.");
+          "Permit request volume must be a nonnegative number of 9 characters or fewer with no more than 2 decimal places.");
     }
   }
 

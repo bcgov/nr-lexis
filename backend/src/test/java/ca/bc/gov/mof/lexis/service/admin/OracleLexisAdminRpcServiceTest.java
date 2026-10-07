@@ -391,7 +391,7 @@ class OracleLexisAdminRpcServiceTest {
     Map<String, Object> payload = (Map<String, Object>) response;
     assertThat(payload).containsEntry("success", false);
     assertThat((List<String>) payload.get("errors"))
-        .contains("Effective Date already exists.");
+        .contains("Effective date already exists.");
   }
 
   @Test
@@ -421,7 +421,7 @@ class OracleLexisAdminRpcServiceTest {
     Map<String, Object> payload = (Map<String, Object>) response;
     assertThat(payload).containsEntry("success", false);
     assertThat((List<String>) payload.get("errors"))
-        .contains("Effective Date and region combination already exists.");
+        .contains("Effective date and region combination already exists.");
     verify(repository, never())
         .updateFeePolicy(eq(8L), eq(effectiveDate), eq(30L), eq(12), nullable(String.class));
   }
@@ -814,7 +814,7 @@ class OracleLexisAdminRpcServiceTest {
     Map<String, Object> payload = (Map<String, Object>) response;
     assertThat(payload).containsEntry("success", false);
     assertThat((List<String>) payload.get("errors"))
-        .containsExactly("Effective Date already exists.");
+        .containsExactly("Effective date already exists.");
   }
 
   @Test

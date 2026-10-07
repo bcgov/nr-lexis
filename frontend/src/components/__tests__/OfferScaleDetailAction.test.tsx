@@ -46,11 +46,11 @@ describe('Offer scale details', () => {
 
   it('shows an empty result and closes using the keyboard', async () => {
     render(<OfferScaleDetailAction target={{ packageNumber: 'PKG-1' }} />)
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     expect(await screen.findByText('No scale details found for this package.')).toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'See Scale Detail' })).toHaveFocus()
+    expect(screen.getByRole('button', { name: 'See scale detail' })).toHaveFocus()
   })
 
   it.each(['Escape', 'Close', 'Close scale details'])(
@@ -62,7 +62,7 @@ describe('Offer scale details', () => {
           <OfferScaleDetailAction target={{ packageNumber: 'PKG-2' }} />
         </>,
       )
-      const launchers = screen.getAllByRole('button', { name: 'See Scale Detail' })
+      const launchers = screen.getAllByRole('button', { name: 'See scale detail' })
       await userEvent.click(launchers[1])
       expect(
         await screen.findByText('No scale details found for this package.'),
@@ -83,7 +83,7 @@ describe('Offer scale details', () => {
     const storedPackageNumber = 'PKG-EXISTING  '
     render(<OfferScaleDetailAction target={{ packageNumber: storedPackageNumber }} />)
 
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
 
     expect(mockedFetchOfferScaleDetails).toHaveBeenCalledWith(
       { packageNumber: storedPackageNumber },
@@ -94,12 +94,12 @@ describe('Offer scale details', () => {
   it('shows a load failure and fetches again when reopened', async () => {
     mockedFetchOfferScaleDetails.mockRejectedValueOnce(new Error('Access denied'))
     render(<OfferScaleDetailAction target={{ offerNumber: '81001' }} />)
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     expect(await screen.findByText('Unable to load scale details')).toBeInTheDocument()
     expect(screen.queryByRole('table')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Close' }))
     mockedFetchOfferScaleDetails.mockResolvedValue([scale])
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     expect(await screen.findByText('TM-1')).toBeInTheDocument()
     expect(mockedFetchOfferScaleDetails).toHaveBeenCalledTimes(2)
   })
@@ -112,12 +112,12 @@ describe('Offer scale details', () => {
       }),
     )
     render(<OfferScaleDetailAction target={{ offerNumber: '81001' }} />)
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     expect(screen.getByText('Loading scale details…')).toBeInTheDocument()
     const oldSignal = mockedFetchOfferScaleDetails.mock.calls[0][1]
     await userEvent.click(screen.getByRole('button', { name: 'Close scale details' }))
     expect(oldSignal.aborted).toBe(true)
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     expect(await screen.findByText('No scale details found for this package.')).toBeInTheDocument()
     await act(async () => {
       finishFirstRequest([scale])
@@ -133,12 +133,12 @@ describe('Offer scale details', () => {
       }),
     )
     const { rerender } = render(<OfferScaleDetailAction target={{ packageNumber: 'PKG-1' }} />)
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     const oldSignal = mockedFetchOfferScaleDetails.mock.calls[0][1]
     rerender(<OfferScaleDetailAction target={{ packageNumber: 'PKG-2' }} />)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(oldSignal.aborted).toBe(true)
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     expect(await screen.findByText('No scale details found for this package.')).toBeInTheDocument()
     await act(async () => {
       finishFirstRequest([scale])
@@ -161,7 +161,7 @@ describe('Offer scale details', () => {
       }),
     )
     const { rerender } = render(<OfferScaleDetailAction target={{ offerNumber: '81001' }} />)
-    await userEvent.click(screen.getByRole('button', { name: 'See Scale Detail' }))
+    await userEvent.click(screen.getByRole('button', { name: 'See scale detail' }))
     const dialog = await screen.findByRole('dialog', { name: 'Scale Detail' })
     expect(await within(dialog).findByText('TM-1')).toBeInTheDocument()
     mockedUseAuth.mockReturnValue(

@@ -77,7 +77,8 @@ import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldGrid, DetailFieldTile } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
-import { displayTableValue } from '@/utils/text'
+import { displayTableValue, displayValueText } from '@/utils/text'
+import { displayVolume, displayVolumeText, formatVolume, formatVolumeInput } from '@/utils/volume'
 import { formatIsoDateLabel } from '@/utils/date'
 import {
   locationPath,
@@ -191,6 +192,7 @@ import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
 import { formatPackageNumberLabel, isValidEmail, normalizeTrimmedText } from '@/utils/text'
 
 import './ProvincialPermitDetails.scss'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
 const formatAmount = (value: number): string => {
   return value.toLocaleString(undefined, {
@@ -367,11 +369,6 @@ const blanketOicPackageServerFieldErrors = (message: string): BlanketOicPackageF
   if (/^Package .+ already exists\.$/.test(message)) return { packageNumber: message }
   if (message.startsWith('The total package volume must not exceed')) return { volume: message }
   return {}
-}
-
-const formatBlanketOicPackageVolume = (value: string): string => {
-  const volume = Number(value.trim())
-  return value.trim() && Number.isFinite(volume) ? volume.toFixed(1) : value
 }
 
 // Greater than 0 and no more than the permit request volume. The server checks the total of all
@@ -554,7 +551,7 @@ const PermitClientTile = ({
         headerAction={headerAction}
         fields={[
           { label: 'Client number', value: displayValue(clientNumber) },
-          { label: 'Location', value: displayValue(locationCode) },
+          { label: 'Client location', value: displayValue(locationCode) },
           {
             label: 'Company name',
             value: isLoading ? 'Loading…' : displayValue(clientData?.companyName),
@@ -567,9 +564,15 @@ const PermitClientTile = ({
             value: isLoading ? 'Loading…' : displayValue(clientData?.postalCode),
           },
           { label: 'Country', value: isLoading ? 'Loading…' : displayValue(clientData?.country) },
-          { label: 'Phone', value: isLoading ? 'Loading…' : displayValue(clientData?.phone) },
-          { label: 'Fax', value: isLoading ? 'Loading…' : displayValue(clientData?.fax) },
-          { label: 'Email', value: isLoading ? 'Loading…' : displayValue(clientData?.email) },
+          {
+            label: 'Phone number',
+            value: isLoading ? 'Loading…' : displayValue(clientData?.phone),
+          },
+          { label: 'Fax number', value: isLoading ? 'Loading…' : displayValue(clientData?.fax) },
+          {
+            label: 'Email address',
+            value: isLoading ? 'Loading…' : displayValue(clientData?.email),
+          },
         ]}
       />
     )}
@@ -652,7 +655,7 @@ const oicRequestVolumePrecisionError = (value: string): string | null => {
   }
   return /^\d+(\.\d{1,2})?$/.test(value.trim())
     ? null
-    : 'Permit Request Volume must have no more than 2 decimal places.'
+    : 'Permit request volume must have no more than 2 decimal places.'
 }
 
 const requiredExactLengthFieldError = (
@@ -746,9 +749,10 @@ const buildPermitDetailForm = (permitDetail: ProvincialPermitDetail): PermitDeta
   exemptionNumber: detailValue(permitDetail.exemptionNumber),
   permitReceiptNo: detailValue(permitDetail.receiptNumber),
   permitRemarks: detailValue(permitDetail.remarks),
-  permitTotalVolume: numericDetailValue(permitDetail.permitVolume),
+  permitTotalVolume: formatVolumeInput(permitDetail.permitVolume),
   permitNumberOfPieces: numericDetailValue(permitDetail.numberOfPieces),
   oicPermitTotalPieces: numericDetailValue(permitDetail.oicRequestPieces),
+  // OIC_REQUEST_VOLUME is stored as text (VARCHAR2(9)), so the editor keeps the saved text.
   oicPermitTotalVolume: numericDetailValue(permitDetail.oicRequestVolume),
   orgUnitNumber: detailValue(permitDetail.orgUnitNumber),
   ownerClientNumber: detailValue(permitDetail.ownerClientNumber),
@@ -2142,7 +2146,7 @@ const ProvincialPermitDetailsPage = () => {
     canSavePermit &&
     !!detail?.blanketOic &&
     !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '')
-  // INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW): Blanket OIC Summary of Scale
+  // INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW): Blanket OIC Summary of scale
   // entry remains hidden until its prerequisite package exists.
   const blanketOicPackageCreationRequired =
     permitTablesAvailable && !!detail?.blanketOic && (tabsData?.packages ?? []).length === 0
@@ -2344,7 +2348,7 @@ const ProvincialPermitDetailsPage = () => {
       current
         ? {
             ...current,
-            permitTotalVolume: numericDetailValue(refreshedDetail.permitVolume),
+            permitTotalVolume: formatVolumeInput(refreshedDetail.permitVolume),
             permitNumberOfPieces: numericDetailValue(refreshedDetail.numberOfPieces),
           }
         : buildPermitDetailForm(refreshedDetail),
@@ -2555,8 +2559,8 @@ const ProvincialPermitDetailsPage = () => {
         : undefined,
       oicPermitTotalPieces: requiresOicRequestLimits
         ? firstValidationError(
-            () => requiredFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces'),
-            () => integerFieldError(permitForm.oicPermitTotalPieces, 'Permit Request Pieces'),
+            () => requiredFieldError(permitForm.oicPermitTotalPieces, 'Permit request pieces'),
+            () => integerFieldError(permitForm.oicPermitTotalPieces, 'Permit request pieces'),
             () =>
               requiresPositiveOicRequestLimits
                 ? positiveNumericFieldError(permitForm.oicPermitTotalPieces)
@@ -2565,14 +2569,14 @@ const ProvincialPermitDetailsPage = () => {
               maxNumericValueFieldError(
                 permitForm.oicPermitTotalPieces,
                 MAX_OIC_REQUEST_PIECES,
-                'Permit Request Pieces',
+                'Permit request pieces',
               ),
           )
         : undefined,
       oicPermitTotalVolume: requiresOicRequestLimits
         ? firstValidationError(
-            () => requiredFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume'),
-            () => numericFieldError(permitForm.oicPermitTotalVolume, 'Permit Request Volume'),
+            () => requiredFieldError(permitForm.oicPermitTotalVolume, 'Permit request volume'),
+            () => numericFieldError(permitForm.oicPermitTotalVolume, 'Permit request volume'),
             () =>
               requiresPositiveOicRequestLimits
                 ? positiveNumericFieldError(permitForm.oicPermitTotalVolume)
@@ -2582,7 +2586,7 @@ const ProvincialPermitDetailsPage = () => {
               maxLengthFieldError(
                 permitForm.oicPermitTotalVolume,
                 MAX_OIC_REQUEST_VOLUME_LENGTH,
-                'Permit Request Volume',
+                'Permit request volume',
               ),
           )
         : undefined,
@@ -3765,7 +3769,7 @@ const ProvincialPermitDetailsPage = () => {
         setEditingBoicPackageNumber(packageNumberToEdit)
         const loadedPackageForm: BlanketOicPackageForm = {
           packageNumber: context.packageNumber,
-          volume: formatBlanketOicPackageVolume(context.volume),
+          volume: formatVolumeInput(context.volume),
           averageLength: context.averageLength,
           averageDiameter: context.averageDiameter,
           status: context.status,
@@ -4592,7 +4596,6 @@ const ProvincialPermitDetailsPage = () => {
                 ? `${isOwner ? 'Client' : 'Agent client'} location`
                 : `${label} location`,
             )}
-            aria-label={`${label} location`}
             aria-required="true"
             value={locationCode}
             disabled={
@@ -4824,8 +4827,8 @@ const ProvincialPermitDetailsPage = () => {
                           {item.applicationNumber}
                         </Link>
                       </TableCell>
-                      <TableCell>{item.unassignedPieces?.toLocaleString() ?? '—'}</TableCell>
-                      <TableCell>{item.unassignedVolume?.toLocaleString() ?? '—'}</TableCell>
+                      <TableCell>{displayValue(item.unassignedPieces?.toLocaleString())}</TableCell>
+                      <TableCell>{displayVolume(item.unassignedVolume)}</TableCell>
                     </TableRow>
                   )
                 })}
@@ -4931,27 +4934,27 @@ const ProvincialPermitDetailsPage = () => {
     ? [
         {
           label: 'Total exemption volume (m³)',
-          value: displayValue(detail.approvedExemptionVolume),
+          value: displayVolume(detail.approvedExemptionVolume),
         },
         {
           label: 'Total volume remaining (m³)',
-          value: displayValue(detail.exemptionVolumeRemaining),
+          value: displayVolume(detail.exemptionVolumeRemaining),
         },
         ...(detail.blanketOic
           ? [
               {
-                label: 'Permit Request Pieces',
+                label: 'Permit request pieces',
                 value: displayValue(detail.oicRequestPieces),
               },
               {
-                label: 'Permit Request Volume (m³)',
-                value: displayValue(detail.oicRequestVolume),
+                label: 'Permit request volume (m³)',
+                value: displayVolume(detail.oicRequestVolume),
               },
             ]
           : []),
         {
           label: 'Current permit volume (m³)',
-          value: displayValue(detail.permitVolume),
+          value: displayVolume(detail.permitVolume),
         },
         {
           label: 'Current permit pieces',
@@ -4969,14 +4972,14 @@ const ProvincialPermitDetailsPage = () => {
           <div className="legacy-search-grid">
             {renderPermitTextInput(
               'oicPermitTotalPieces',
-              'Permit Request Pieces',
+              'Permit request pieces',
               invoiceMaterialLocked,
               undefined,
               requiresOicRequestLimits,
             )}
             {renderPermitTextInput(
               'oicPermitTotalVolume',
-              'Permit Request Volume (m³)',
+              'Permit request volume (m³)',
               invoiceMaterialLocked,
               undefined,
               requiresOicRequestLimits,
@@ -4985,7 +4988,7 @@ const ProvincialPermitDetailsPage = () => {
           <dl className="boic-permit-details__totals">
             {[
               ['Current permit pieces', detail.numberOfPieces],
-              ['Current permit volume (m³)', detail.permitVolume],
+              ['Current permit volume (m³)', formatVolume(detail.permitVolume)],
             ].map(([label, value]) => (
               <div key={label} className="detail-field-item">
                 <dt className="detail-field-label">{label}</dt>
@@ -5010,19 +5013,19 @@ const ProvincialPermitDetailsPage = () => {
           <TextInput
             id="permit-approvedExemptionVolume"
             labelText="Total exemption volume (m³)"
-            value={displayValue(detail.approvedExemptionVolume)}
+            value={displayVolumeText(detail.approvedExemptionVolume)}
             disabled
           />
           <TextInput
             id="permit-exemptionVolumeRemaining"
             labelText="Total volume remaining (m³)"
-            value={displayValue(detail.exemptionVolumeRemaining)}
+            value={displayVolumeText(detail.exemptionVolumeRemaining)}
             disabled
           />
           {detail.blanketOic &&
             renderPermitTextInput(
               'oicPermitTotalPieces',
-              'Permit Request Pieces',
+              'Permit request pieces',
               invoiceMaterialLocked,
               undefined,
               requiresOicRequestLimits,
@@ -5030,7 +5033,7 @@ const ProvincialPermitDetailsPage = () => {
           {detail.blanketOic &&
             renderPermitTextInput(
               'oicPermitTotalVolume',
-              'Permit Request Volume (m³)',
+              'Permit request volume (m³)',
               invoiceMaterialLocked,
               undefined,
               requiresOicRequestLimits,
@@ -5063,12 +5066,7 @@ const ProvincialPermitDetailsPage = () => {
             {[
               [
                 'Total volume (m³)',
-                feeSummaryStatus ??
-                  totalFeeVolume?.toLocaleString(undefined, {
-                    minimumFractionDigits: 1,
-                    maximumFractionDigits: 1,
-                  }) ??
-                  'Unavailable',
+                feeSummaryStatus ?? (formatVolume(totalFeeVolume) || 'Unavailable'),
               ],
               [
                 'Total fees (CAD)',
@@ -5115,21 +5113,14 @@ const ProvincialPermitDetailsPage = () => {
               <TextInput
                 id="permitFeeReceiptNumber"
                 labelText="Receipt number"
-                value={displayValue(detail.receiptNumber)}
+                value={displayValueText(detail.receiptNumber)}
                 disabled
               />
             )}
             <TextInput
               id="permitFeeTotalVolume"
               labelText="Total volume (m³)"
-              value={
-                feeSummaryStatus ??
-                totalFeeVolume?.toLocaleString(undefined, {
-                  minimumFractionDigits: 1,
-                  maximumFractionDigits: 1,
-                }) ??
-                'Unavailable'
-              }
+              value={feeSummaryStatus ?? (formatVolume(totalFeeVolume) || 'Unavailable')}
               disabled
             />
             <TextInput
@@ -5225,6 +5216,7 @@ const ProvincialPermitDetailsPage = () => {
             </p>
           ) : isEditingFeeOverride ? (
             <>
+              {feeOverrideForm.overrideEnabled && <RequiredFieldsLegend />}
               <RadioButtonGroup
                 legendText="Override fees?"
                 name="permit-override-enabled"
@@ -5389,11 +5381,11 @@ const ProvincialPermitDetailsPage = () => {
             <div className="detail-field-item">
               <dt className="detail-field-label">Current package volume (m³)</dt>
               <dd className="detail-field-value">
-                {selectedBlanketOicPackage.currentPackageVolume ||
-                  (
+                {formatVolume(selectedBlanketOicPackage.currentPackageVolume) ||
+                  formatVolume(
                     selectedPermitScaleTotalsByPackage.get(selectedBlanketOicPackage.packageNumber)
-                      ?.volume ?? 0
-                  ).toLocaleString()}
+                      ?.volume ?? 0,
+                  )}
               </dd>
             </div>
             <div className="detail-field-item">
@@ -5477,18 +5469,18 @@ const ProvincialPermitDetailsPage = () => {
                           />
                         </TableCell>
                       )}
-                      <TableCell>{row.timberMark || '-'}</TableCell>
-                      <TableCell>{row.scaleType || '-'}</TableCell>
+                      <TableCell>{displayTableValue(row.timberMark)}</TableCell>
+                      <TableCell>{displayTableValue(row.scaleType)}</TableCell>
                       {canDisplayNormalPermitScaleMembership && (
-                        <TableCell>{row.permitNumber || '-'}</TableCell>
+                        <TableCell>{displayTableValue(row.permitNumber)}</TableCell>
                       )}
                       {canDisplayNormalPermitScaleMembership && !ministerialPermit && (
-                        <TableCell>{row.packageNumber || '-'}</TableCell>
+                        <TableCell>{displayTableValue(row.packageNumber)}</TableCell>
                       )}
                       <TableCell>{row.pieces.toLocaleString()}</TableCell>
-                      <TableCell>{row.species || '-'}</TableCell>
-                      <TableCell>{row.grade || '-'}</TableCell>
-                      <TableCell>{row.volume.toLocaleString()}</TableCell>
+                      <TableCell>{displayTableValue(row.species)}</TableCell>
+                      <TableCell>{displayTableValue(row.grade)}</TableCell>
+                      <TableCell>{formatVolume(row.volume)}</TableCell>
                       {canEditBlanketOicScaleRows && (
                         <TableCell>
                           {row.includedInPermit ? (
@@ -5610,8 +5602,10 @@ const ProvincialPermitDetailsPage = () => {
                 <div className="detail-field-item">
                   <dt className="detail-field-label">Age class</dt>
                   <dd className="detail-field-value">
-                    {(ministerialPermit ? selectedMinisterialPackage : selectedBlanketOicPackage)
-                      ?.ageClass || '—'}
+                    {displayValue(
+                      (ministerialPermit ? selectedMinisterialPackage : selectedBlanketOicPackage)
+                        ?.ageClass,
+                    )}
                   </dd>
                 </div>
                 <div className="detail-field-item">
@@ -5632,7 +5626,7 @@ const ProvincialPermitDetailsPage = () => {
                         {detail.exemptionNumber}
                       </Link>
                     ) : (
-                      '—'
+                      displayValue('')
                     )}
                   </dd>
                 </div>
@@ -5671,9 +5665,9 @@ const ProvincialPermitDetailsPage = () => {
                         <TableCell>
                           {summary.packageNumber
                             ? formatPackageNumberLabel(summary.packageNumber)
-                            : '-'}
+                            : displayTableValue('')}
                         </TableCell>
-                        <TableCell>{summary.growthType || '-'}</TableCell>
+                        <TableCell>{displayTableValue(summary.growthType)}</TableCell>
                         <TableCell>
                           {detail.exemptionNumber ? (
                             <Link
@@ -5743,17 +5737,21 @@ const ProvincialPermitDetailsPage = () => {
                   <TableRow key={row.id}>
                     {!ministerialPermit && !detail.blanketOic && (
                       <TableCell>
-                        {row.packageNumber ? formatPackageNumberLabel(row.packageNumber) : '-'}
+                        {row.packageNumber
+                          ? formatPackageNumberLabel(row.packageNumber)
+                          : displayTableValue('')}
                       </TableCell>
                     )}
-                    <TableCell>{row.timberMark || '-'}</TableCell>
-                    <TableCell>{row.species || '-'}</TableCell>
-                    <TableCell>{row.grade || '-'}</TableCell>
-                    <TableCell>{row.amv || '-'}</TableCell>
-                    <TableCell>{row.volume.toLocaleString()}</TableCell>
-                    {showDisplayedMinistryFeeColumn && <TableCell>{row.ewb || '-'}</TableCell>}
-                    <TableCell>{row.filPercent || '-'}</TableCell>
-                    <TableCell>{row.mfPercent || '-'}</TableCell>
+                    <TableCell>{displayTableValue(row.timberMark)}</TableCell>
+                    <TableCell>{displayTableValue(row.species)}</TableCell>
+                    <TableCell>{displayTableValue(row.grade)}</TableCell>
+                    <TableCell>{displayTableValue(row.amv)}</TableCell>
+                    <TableCell>{formatVolume(row.volume)}</TableCell>
+                    {showDisplayedMinistryFeeColumn && (
+                      <TableCell>{displayTableValue(row.ewb)}</TableCell>
+                    )}
+                    <TableCell>{displayTableValue(row.filPercent)}</TableCell>
+                    <TableCell>{displayTableValue(row.mfPercent)}</TableCell>
                     <TableCell>
                       {row.amountDisplay.trim() === '$' ? '$' : `$${formatAmount(row.amount)}`}
                     </TableCell>
@@ -5768,7 +5766,7 @@ const ProvincialPermitDetailsPage = () => {
             description={
               ministerialFeeShellEmpty ? (
                 <>
-                  Fees are calculated from the permit&apos;s Summary of Scale. They appear once an
+                  Fees are calculated from the permit&apos;s Summary of scale. They appear once an
                   application is selected on the{' '}
                   <button
                     type="button"
@@ -5838,17 +5836,7 @@ const ProvincialPermitDetailsPage = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={permitPageTitle}
-          subtitle={
-            <>
-              <span>Check and manage this provincial permit</span>
-              {detailMatchesRoute && (
-                <span className="permit-detail-header__author">
-                  {' · Author: '}
-                  {displayValue(detail.author)}
-                </span>
-              )}
-            </>
-          }
+          subtitle={detailMatchesRoute ? `Author: ${displayValueText(detail.author)}` : undefined}
           status={
             detail && detailMatchesRoute ? (
               <StatusTag
@@ -6064,6 +6052,7 @@ const ProvincialPermitDetailsPage = () => {
                             <Certificate size={24} aria-hidden="true" />
                             Permit details
                           </h2>
+                          <RequiredFieldsLegend />
                           <div className="ministerial-permit-details__status">
                             <Select
                               id="permit-permitStatus"
@@ -6087,7 +6076,7 @@ const ProvincialPermitDetailsPage = () => {
                                 <SelectItem
                                   key={option.value}
                                   value={option.value}
-                                  text={`${option.label} (${option.value})`}
+                                  text={option.label}
                                 />
                               ))}
                             </Select>
@@ -6142,7 +6131,7 @@ const ProvincialPermitDetailsPage = () => {
                                       <SelectItem
                                         key={option.value}
                                         value={option.value}
-                                        text={`${option.label} (${option.value})`}
+                                        text={option.label}
                                       />
                                     ))}
                                   </Select>
@@ -6192,7 +6181,7 @@ const ProvincialPermitDetailsPage = () => {
                                     Total exemption volume (m³)
                                   </dt>
                                   <dd className="detail-field-value">
-                                    {displayTableValue(detail.approvedExemptionVolume)}
+                                    {displayVolume(detail.approvedExemptionVolume)}
                                   </dd>
                                 </div>
                                 <div className="detail-field-item">
@@ -6200,7 +6189,7 @@ const ProvincialPermitDetailsPage = () => {
                                     Total volume remaining (m³)
                                   </dt>
                                   <dd className="detail-field-value">
-                                    {displayTableValue(detail.exemptionVolumeRemaining)}
+                                    {displayVolume(detail.exemptionVolumeRemaining)}
                                   </dd>
                                 </div>
                                 <div className="detail-field-item">
@@ -6212,7 +6201,7 @@ const ProvincialPermitDetailsPage = () => {
                                 <div className="detail-field-item">
                                   <dt className="detail-field-label">Current permit volume (m³)</dt>
                                   <dd className="detail-field-value">
-                                    {displayTableValue(detail.permitVolume)}
+                                    {displayVolume(detail.permitVolume)}
                                   </dd>
                                 </div>
                               </dl>
@@ -6238,6 +6227,7 @@ const ProvincialPermitDetailsPage = () => {
                           <h2 className="detail-tile-title">
                             {usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
                           </h2>
+                          <RequiredFieldsLegend />
                           {usesReviewedPermitFlow && (
                             <dl className="ministerial-permit-details__static-fields">
                               <div className="detail-field-item">
@@ -6267,13 +6257,13 @@ const ProvincialPermitDetailsPage = () => {
                                 <TextInput
                                   id="permit-applicationNumber"
                                   labelText="Application number(s)"
-                                  value={displayValue(permitApplicationNumberSummary)}
+                                  value={displayValueText(permitApplicationNumberSummary)}
                                   disabled
                                 />
                                 <TextInput
                                   id="permit-packageNumber"
                                   labelText="Package number(s)"
-                                  value={displayValue(permitPackageNumberSummary)}
+                                  value={displayValueText(permitPackageNumberSummary)}
                                   disabled
                                 />
                                 {renderPermitTextInput('exemptionNumber', 'Exemption number', true)}
@@ -6283,7 +6273,7 @@ const ProvincialPermitDetailsPage = () => {
                               <TextInput
                                 id="permit-exemptionType"
                                 labelText="Exemption type"
-                                value={displayValue(detail.exemptionTypeDescription)}
+                                value={displayValueText(detail.exemptionTypeDescription)}
                                 disabled
                               />
                             )}
@@ -6311,7 +6301,7 @@ const ProvincialPermitDetailsPage = () => {
                                 <SelectItem
                                   key={option.value}
                                   value={option.value}
-                                  text={`${option.label} (${option.value})`}
+                                  text={option.label}
                                 />
                               ))}
                             </Select>
@@ -6372,7 +6362,7 @@ const ProvincialPermitDetailsPage = () => {
                                   <SelectItem
                                     key={option.value}
                                     value={option.value}
-                                    text={`${option.label} (${option.value})`}
+                                    text={option.label}
                                   />
                                 ))}
                               </Select>
@@ -6382,7 +6372,8 @@ const ProvincialPermitDetailsPage = () => {
                                 labelText={
                                   usesReviewedPermitFlow ? requiredLabel('Region') : 'Region'
                                 }
-                                value={displayValue(detail.region ?? detail.orgUnitNumber)}
+                                value={displayValueText(detail.region ?? detail.orgUnitNumber)}
+                                aria-required={usesReviewedPermitFlow || undefined}
                                 disabled
                               />
                             )}
@@ -6476,10 +6467,16 @@ const ProvincialPermitDetailsPage = () => {
                           </dl>
                           <dl className="ministerial-permit-details__totals">
                             {[
-                              ['Total exemption volume (m³)', detail.approvedExemptionVolume],
-                              ['Total volume remaining (m³)', detail.exemptionVolumeRemaining],
+                              [
+                                'Total exemption volume (m³)',
+                                formatVolume(detail.approvedExemptionVolume),
+                              ],
+                              [
+                                'Total volume remaining (m³)',
+                                formatVolume(detail.exemptionVolumeRemaining),
+                              ],
                               ['Current permit pieces', detail.numberOfPieces],
-                              ['Current permit volume (m³)', detail.permitVolume],
+                              ['Current permit volume (m³)', formatVolume(detail.permitVolume)],
                             ].map(([label, value]) => (
                               <div key={label} className="detail-field-item">
                                 <dt className="detail-field-label">{label}</dt>
@@ -6585,10 +6582,16 @@ const ProvincialPermitDetailsPage = () => {
                           </dl>
                           <dl className="boic-permit-details__totals">
                             {[
-                              ['Total exemption volume (m³)', detail.approvedExemptionVolume],
-                              ['Total volume remaining (m³)', detail.exemptionVolumeRemaining],
+                              [
+                                'Total exemption volume (m³)',
+                                formatVolume(detail.approvedExemptionVolume),
+                              ],
+                              [
+                                'Total volume remaining (m³)',
+                                formatVolume(detail.exemptionVolumeRemaining),
+                              ],
                               ['Current permit pieces', detail.numberOfPieces],
-                              ['Current permit volume (m³)', detail.permitVolume],
+                              ['Current permit volume (m³)', formatVolume(detail.permitVolume)],
                             ].map(([label, value]) => (
                               <div key={label} className="detail-field-item">
                                 <dt className="detail-field-label">{label}</dt>
@@ -6598,8 +6601,8 @@ const ProvincialPermitDetailsPage = () => {
                           </dl>
                           <dl className="boic-permit-details__request-totals">
                             {[
-                              ['Permit Request Pieces', detail.oicRequestPieces],
-                              ['Permit Request Volume (m³)', detail.oicRequestVolume],
+                              ['Permit request pieces', detail.oicRequestPieces],
+                              ['Permit request volume (m³)', formatVolume(detail.oicRequestVolume)],
                             ].map(([label, value]) => (
                               <div key={label} className="detail-field-item">
                                 <dt className="detail-field-label">{label}</dt>
@@ -7006,11 +7009,7 @@ const ProvincialPermitDetailsPage = () => {
                             {usesReviewedPermitFlow && <Enterprise size={24} aria-hidden="true" />}
                             Applicant details
                           </h2>
-                          {usesReviewedPermitFlow && (
-                            <p className="permit-client-editor__required-hint">
-                              {requiredLabel('Required fields')}
-                            </p>
-                          )}
+                          <RequiredFieldsLegend className="permit-client-editor__required-hint" />
                           {usesReviewedPermitFlow && (
                             <h3 className="permit-client-subheading">Owner</h3>
                           )}
@@ -7115,6 +7114,7 @@ const ProvincialPermitDetailsPage = () => {
                         <Column sm={4} md={8} lg={16}>
                           <Tile>
                             <h2 className="detail-tile-title">Edit agent</h2>
+                            <RequiredFieldsLegend />
                             {renderPermitClientEditor('agent', invoiceMaterialLocked)}
                           </Tile>
                         </Column>
@@ -7183,6 +7183,7 @@ const ProvincialPermitDetailsPage = () => {
                             {usesReviewedPermitFlow && <EarthFilled size={24} aria-hidden="true" />}
                             {usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
                           </h2>
+                          <RequiredFieldsLegend />
                           {shippingReferencesErrorMessage && (
                             <InlineNotification
                               className="detail-context-notification"
@@ -7656,16 +7657,18 @@ const ProvincialPermitDetailsPage = () => {
                                     fields={[
                                       {
                                         label: 'Species list',
-                                        value:
-                                          selectedBlanketOicPackage.speciesCodes?.join(', ') || '—',
+                                        value: displayValue(
+                                          selectedBlanketOicPackage.speciesCodes?.join(', '),
+                                        ),
                                       },
                                       {
                                         label: 'End use',
-                                        value:
+                                        value: displayValue(
                                           (selectedBlanketOicPackage.endUseDescriptions?.length
                                             ? selectedBlanketOicPackage.endUseDescriptions
                                             : selectedBlanketOicPackage.endUseCodes
-                                          )?.join(', ') || '—',
+                                          )?.join(', '),
+                                        ),
                                       },
                                     ]}
                                   />
@@ -7673,16 +7676,15 @@ const ProvincialPermitDetailsPage = () => {
                                     fields={[
                                       {
                                         label: 'Age class',
-                                        value: selectedBlanketOicPackage.ageClass || '—',
+                                        value: displayValue(selectedBlanketOicPackage.ageClass),
                                       },
                                       {
                                         label: 'Product type',
-                                        value:
+                                        value: displayValue(
                                           blanketOicProductTypeLabel(
                                             selectedBlanketOicPackage.productTypeCode,
-                                          ) ||
-                                          selectedBlanketOicPackage.productType ||
-                                          '—',
+                                          ) || selectedBlanketOicPackage.productType,
+                                        ),
                                       },
                                     ]}
                                   />
@@ -7690,15 +7692,21 @@ const ProvincialPermitDetailsPage = () => {
                                     fields={[
                                       {
                                         label: 'Volume (m³)',
-                                        value: selectedBlanketOicPackage.packageVolume || '—',
+                                        value: displayVolume(
+                                          selectedBlanketOicPackage.packageVolume,
+                                        ),
                                       },
                                       {
                                         label: 'Average length (m)',
-                                        value: selectedBlanketOicPackage.averageLength || '—',
+                                        value: displayValue(
+                                          selectedBlanketOicPackage.averageLength,
+                                        ),
                                       },
                                       {
                                         label: 'Average top diameter (rads)',
-                                        value: selectedBlanketOicPackage.averageTopDiameter || '—',
+                                        value: displayValue(
+                                          selectedBlanketOicPackage.averageTopDiameter,
+                                        ),
                                       },
                                     ]}
                                   />
@@ -7719,11 +7727,11 @@ const ProvincialPermitDetailsPage = () => {
                                   ['Product type', selectedMinisterialPackage.productType],
                                   [
                                     'Package volume (m³)',
-                                    (
+                                    formatVolume(
                                       selectedPermitScaleTotalsByPackage.get(
                                         selectedMinisterialPackage.packageNumber,
-                                      )?.volume ?? 0
-                                    ).toLocaleString(),
+                                      )?.volume ?? 0,
+                                    ),
                                   ],
                                   [
                                     'Package pieces',
@@ -7741,7 +7749,7 @@ const ProvincialPermitDetailsPage = () => {
                                 ].map(([label, value]) => (
                                   <div key={label} className="detail-field-item">
                                     <dt className="detail-field-label">{label}</dt>
-                                    <dd className="detail-field-value">{value || '—'}</dd>
+                                    <dd className="detail-field-value">{displayValue(value)}</dd>
                                   </div>
                                 ))}
                               </dl>
@@ -7778,13 +7786,13 @@ const ProvincialPermitDetailsPage = () => {
                                         <TableCell>
                                           {row.packageNumber
                                             ? formatPackageNumberLabel(row.packageNumber)
-                                            : '-'}
+                                            : displayTableValue('')}
                                         </TableCell>
-                                        <TableCell>{row.region || '-'}</TableCell>
+                                        <TableCell>{displayTableValue(row.region)}</TableCell>
                                         <TableCell style={{ whiteSpace: 'pre-line' }}>
-                                          {row.speciesEndUseSort || '-'}
+                                          {displayTableValue(row.speciesEndUseSort)}
                                         </TableCell>
-                                        <TableCell>{row.ageClass || '-'}</TableCell>
+                                        <TableCell>{displayTableValue(row.ageClass)}</TableCell>
                                         {usesReviewedPermitFlow && (
                                           <TableCell>
                                             {(
@@ -7796,20 +7804,26 @@ const ProvincialPermitDetailsPage = () => {
                                         )}
                                         <TableCell>
                                           {ministerialPermit
-                                            ? (
+                                            ? formatVolume(
                                                 selectedPermitScaleTotalsByPackage.get(
                                                   row.packageNumber,
-                                                )?.volume ?? 0
-                                              ).toLocaleString()
-                                            : row.packageVolume || '-'}
+                                                )?.volume ?? 0,
+                                              )
+                                            : displayVolume(row.packageVolume)}
                                         </TableCell>
-                                        <TableCell>{row.averageLength || '-'}</TableCell>
-                                        <TableCell>{row.averageTopDiameter || '-'}</TableCell>
-                                        <TableCell>{row.productType || '-'}</TableCell>
+                                        <TableCell>
+                                          {displayTableValue(row.averageLength)}
+                                        </TableCell>
+                                        <TableCell>
+                                          {displayTableValue(row.averageTopDiameter)}
+                                        </TableCell>
+                                        <TableCell>{displayTableValue(row.productType)}</TableCell>
                                         {detail.blanketOic && (
                                           <>
-                                            <TableCell>{row.currentPackageVolume || '-'}</TableCell>
-                                            <TableCell>{row.comments || '-'}</TableCell>
+                                            <TableCell>
+                                              {displayVolume(row.currentPackageVolume)}
+                                            </TableCell>
+                                            <TableCell>{displayTableValue(row.comments)}</TableCell>
                                           </>
                                         )}
                                         {canEditBlanketOicPackages && (
@@ -8164,10 +8178,10 @@ const ProvincialPermitDetailsPage = () => {
                               <TableBody>
                                 {invoiceRows.map((row) => (
                                   <TableRow key={row.id}>
-                                    <TableCell>{row.invoiceNumber || '-'}</TableCell>
-                                    <TableCell>{row.exportValueCad || '-'}</TableCell>
-                                    <TableCell>{row.conversionRate || '-'}</TableCell>
-                                    <TableCell>{row.feeInLieu || '-'}</TableCell>
+                                    <TableCell>{displayTableValue(row.invoiceNumber)}</TableCell>
+                                    <TableCell>{displayTableValue(row.exportValueCad)}</TableCell>
+                                    <TableCell>{displayTableValue(row.conversionRate)}</TableCell>
+                                    <TableCell>{displayTableValue(row.feeInLieu)}</TableCell>
                                     <TableCell>
                                       <StatusTag
                                         status={row.invoiceFound ? 'Found' : 'Missing'}
@@ -8314,7 +8328,7 @@ const ProvincialPermitDetailsPage = () => {
             },
           ]}
         >
-          <p className="application-detail-required">{requiredLabel('Required fields')}</p>
+          <RequiredFieldsLegend className="application-detail-required" />
           {!!boicScaleErrorMessage && (
             <div tabIndex={-1} data-scale-error>
               <InlineNotification
@@ -8420,7 +8434,7 @@ const ProvincialPermitDetailsPage = () => {
         >
           {/* Carbon's first layer gives grey fields and menus on the white panel. */}
           <Layer level={0} className="permit-package-panel__form">
-            <p className="application-detail-required">{requiredLabel('Required fields')}</p>
+            <RequiredFieldsLegend className="application-detail-required" />
             {/* Field errors show on their fields; this notification is only for errors that don't
                 belong to a field. */}
             {!!boicPackageErrorMessage && !Object.values(boicPackageFieldErrors).some(Boolean) && (

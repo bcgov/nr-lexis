@@ -94,7 +94,7 @@ const RECORD_TYPE_LABELS: Record<DocumentsRecordType, string> = {
   permit: 'Permit',
 }
 
-const documentTypeLabel = (row: DocumentRowBase): string =>
+const documentTypeLabel = (row: DocumentRowBase): ReactNode =>
   row.source?.trim() ? formatDocumentSource(row.source) : displayTableValue(row.type)
 
 /**

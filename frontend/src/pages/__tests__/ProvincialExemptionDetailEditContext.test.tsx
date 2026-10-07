@@ -358,7 +358,7 @@ describe('Provincial exemption edit context', () => {
     expect(vi.mocked(updateExemption)).toHaveBeenCalledWith({
       exemptionNumber: 'BOIC-205',
       previousExemptionNumber: 'BOIC-205',
-      approvedVolume: '500',
+      approvedVolume: '500.0',
       approvalDate: '2026-02-01',
       expiryDate: '2026-12-31',
       otherConditions: 'Existing conditions',
@@ -2383,7 +2383,7 @@ describe('Provincial exemption edit context', () => {
             exemptionTypeCode: type,
             approvalDate: cancelledDetail.approvalDate ?? '',
             expiryDate: cancelledDetail.expiryDate ?? '',
-            approvedVolume: '500',
+            approvedVolume: '500.0',
             otherConditions: 'Existing conditions',
           }),
         ),
