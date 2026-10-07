@@ -204,6 +204,7 @@ const sanitizeCapabilities = (
     availableForestClientNumbers,
     forestClientSelectionRequired: Boolean(payload.forestClientSelectionRequired),
     actionRegions: normalizeActionRegions(payload.actionRegions),
+    accessDeniedReason: payload.accessDeniedReason ?? null,
   }
 }
 

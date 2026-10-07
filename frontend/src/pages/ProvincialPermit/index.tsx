@@ -31,7 +31,7 @@ import type {
 } from '@/interfaces/ProvincialPermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
-import { hasProvincialStaffRole } from '@/context/auth/role-utils'
+import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   DEFAULT_SEARCH_PAGE,
@@ -148,7 +148,7 @@ const ProvincialPermitPage = () => {
   const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
   const regionOptions = useAllowedRegionOptions(allRegionOptions, '/permitSearch', 'id')
   const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
-    hasProvincialStaffRole(capabilities.roles),
+    canUseDefaultRegionPreference(capabilities),
   )
   const [permitStatusOptions, setPermitStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)

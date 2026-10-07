@@ -29,7 +29,11 @@ const UnauthorizedPage = () => {
 
             <div className="landing-title-group">
               <h1 className="landing-title">Access not granted</h1>
-              <p className="landing-subtitle">{signedInDescription}</p>
+              <p className="landing-subtitle">
+                {capabilities.accessDeniedReason === 'INCOMPATIBLE_APPROVER_ROLES'
+                  ? 'Your account has both Application Approver and Exemption Approver roles. These roles cannot be held together. Contact your administrator to remove one role before signing in again.'
+                  : signedInDescription}
+              </p>
             </div>
 
             <div className="landing-actions">

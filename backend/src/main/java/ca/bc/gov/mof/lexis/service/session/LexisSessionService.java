@@ -21,6 +21,9 @@ import org.springframework.stereotype.Service;
 @Service
 public class LexisSessionService {
 
+  // A denied token retains only this diagnostic authority, never an application role.
+  public static final String APPROVER_CONFLICT_AUTHORITY = "LEXIS_APPROVER_ROLE_CONFLICT";
+
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
   private static final String ROLE_FEDERAL_READ_ONLY = "LEXIS_FEDERAL_READ_ONLY";
@@ -29,7 +32,7 @@ public class LexisSessionService {
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
   private static final String SCOPE_AUTHORITY_PREFIX = "SCOPE_";
   private static final Set<String> NON_LEXIS_FAM_AUTHORITIES =
-      Set.of("DELEGATED_ADMIN", "LEXIS_DELEGATED_ADMIN");
+      Set.of("DELEGATED_ADMIN", "LEXIS_DELEGATED_ADMIN", APPROVER_CONFLICT_AUTHORITY);
 
   private static final Set<String> CANONICAL_ROLES =
       Set.of(
@@ -95,6 +98,11 @@ public class LexisSessionService {
       return List.of();
     }
     return normalizeRoles(Arrays.asList(roleHeader.split(",")));
+  }
+
+  public boolean hasConflictingApproverRoles(List<String> rawRoles) {
+    List<String> roles = normalizeRoles(rawRoles);
+    return roles.contains(ROLE_APPLICATION_APPROVER) && roles.contains(ROLE_EXEMPTION_APPROVER);
   }
 
   /**

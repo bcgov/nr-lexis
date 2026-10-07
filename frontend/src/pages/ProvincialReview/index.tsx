@@ -42,7 +42,7 @@ import type {
 } from '@/interfaces/ApplicationReviewSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
-import { hasProvincialStaffRole } from '@/context/auth/role-utils'
+import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
 import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
@@ -264,7 +264,7 @@ const ProvincialReviewPage = () => {
   const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
   const regionOptions = useAllowedRegionOptions(allRegionOptions, '/applicationsReview', 'id')
   const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
-    hasProvincialStaffRole(capabilities.roles),
+    canUseDefaultRegionPreference(capabilities),
   )
   const [reviewStatusOptions, setReviewStatusOptions] = useState<SearchOption[]>([])
   const [optionsLoading, setOptionsLoading] = useState(true)

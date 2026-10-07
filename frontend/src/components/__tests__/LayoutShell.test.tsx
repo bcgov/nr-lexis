@@ -1104,6 +1104,35 @@ describe('Layout shell', () => {
     expect(mockedFetchUserPreferences).not.toHaveBeenCalled()
   })
 
+  it.each([
+    { regions: ['1903'], visible: false },
+    { regions: ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910'], visible: true },
+  ])(
+    'offers staff zone preferences only with all eight regions: $visible',
+    async ({ regions, visible }) => {
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          capabilities: createTestCapabilities({
+            roles: ['LEXIS_READ_ONLY'],
+            grantedActions: ['/applicationSearch'],
+            actionRegions: { applicationsearch: regions },
+          }),
+        }),
+      )
+
+      renderLayout('/provincial/application')
+      await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
+
+      if (visible) {
+        expect(await screen.findByRole('combobox', { name: 'Default zone' })).toBeVisible()
+        await waitFor(() => expect(mockedFetchUserPreferences).toHaveBeenCalledOnce())
+      } else {
+        expect(screen.queryByRole('combobox', { name: 'Default zone' })).not.toBeInTheDocument()
+        expect(mockedFetchUserPreferences).not.toHaveBeenCalled()
+      }
+    },
+  )
+
   it('returns focus to the profile toggle when the panel is dismissed by keyboard', async () => {
     renderLayout('/admin/rtm/emslogamv')
 

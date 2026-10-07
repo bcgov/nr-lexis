@@ -61,4 +61,21 @@ describe('Unauthorized page actions', () => {
     expect(logout).toHaveBeenCalledWith()
     expect(screen.getByRole('heading', { name: 'Access not granted' })).toBeInTheDocument()
   })
+
+  it('explains the conflicting approver roles and directs the user to their administrator', () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          roles: [],
+          accessDeniedReason: 'INCOMPATIBLE_APPROVER_ROLES',
+        }),
+      }),
+    )
+
+    renderPage()
+
+    expect(screen.getByText(/both Application Approver and Exemption Approver roles/)).toBeVisible()
+    expect(screen.getByText(/Contact your administrator to remove one role/)).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible()
+  })
 })

@@ -108,7 +108,12 @@ public class LexisSessionController {
             forestClientScope.availableClientNumbers(),
             forestClientSelectionRequired,
             orgUnitNo,
-            actionRegions));
+            actionRegions,
+            principal instanceof Authentication authentication
+                    && sessionService.authorityNames(authentication)
+                        .contains(LexisSessionService.APPROVER_CONFLICT_AUTHORITY)
+                ? "INCOMPATIBLE_APPROVER_ROLES"
+                : null));
   }
 
   @GetMapping("/canPerformAction")

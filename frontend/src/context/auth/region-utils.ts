@@ -1,4 +1,5 @@
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
+import { hasProvincialStaffRole, hasRole } from '@/context/auth/role-utils'
 
 /** A record's organization units, as detail pages hold them. */
 export type RecordOrgUnits =
@@ -58,6 +59,29 @@ export const allowedRegions = (
     limited.forEach((region) => regions.add(region))
   }
   return regions
+}
+
+/** Zone preferences are useful for Administrators and staff assigned all eight current regions. */
+export const canUseDefaultRegionPreference = (capabilities: LexisSessionCapabilities): boolean => {
+  if (hasRole(capabilities.roles, 'ADMIN')) {
+    return true
+  }
+  if (!hasProvincialStaffRole(capabilities.roles)) {
+    return false
+  }
+  const regions = allowedRegions(capabilities, [
+    '/applicationSearch',
+    '/applicationsReview',
+    '/exemptionSearch',
+    '/offersSearch',
+    '/permitSearch',
+  ])
+  return (
+    regions !== null &&
+    ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910'].every((region) =>
+      regions.has(region),
+    )
+  )
 }
 
 /** Every organization unit of the record must be allowed; a record without one is outside. */
