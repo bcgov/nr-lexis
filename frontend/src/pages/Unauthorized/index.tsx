@@ -10,9 +10,12 @@ const UnauthorizedPage = () => {
   const { capabilities, logout } = useAuth()
   const { theme } = useTheme()
   const logoSource = theme === 'g100' ? reverseLogo : logo
-  const signedInDescription = capabilities.principal
-    ? `You’re signed in as ${capabilities.principal}, but your account is not authorized to use LEXIS.`
-    : 'Your account is signed in, but it is not authorized to use LEXIS.'
+  const description =
+    capabilities.accessDeniedReason === 'INCOMPATIBLE_APPROVER_ROLES'
+      ? 'Your account has both Application Approver and Exemption Approver roles. These roles cannot be held together. Contact your administrator to remove one role before signing in again.'
+      : capabilities.principal
+        ? `You’re signed in as ${capabilities.principal}, but your account is not authorized to use LEXIS.`
+        : 'Your account is signed in, but it is not authorized to use LEXIS.'
 
   return (
     <main
@@ -29,11 +32,7 @@ const UnauthorizedPage = () => {
 
             <div className="landing-title-group">
               <h1 className="landing-title">Access not granted</h1>
-              <p className="landing-subtitle">
-                {capabilities.accessDeniedReason === 'INCOMPATIBLE_APPROVER_ROLES'
-                  ? 'Your account has both Application Approver and Exemption Approver roles. These roles cannot be held together. Contact your administrator to remove one role before signing in again.'
-                  : signedInDescription}
-              </p>
+              <p className="landing-subtitle">{description}</p>
             </div>
 
             <div className="landing-actions">

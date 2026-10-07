@@ -94,15 +94,17 @@ Business BCeID roles are never regional. Session capabilities list each region-l
 records outside them; out-of-region federal applications open read-only and offers are not
 editable.
 
-Default zone preferences are offered to Administrators and staff whose search grants cover all
-eight current regions. For other regional staff, searches use their assigned regions without a
+Default zone preferences are offered to Administrators and staff whose every granted search covers
+all eight current regions. For other regional staff, searches use their assigned regions without a
 saved zone preference. Selecting all eight never grants access to retired regions or records
 without a current region.
 
 ### Mixed grants
 
 Application Approver and Exemption Approver cannot be held together, even for different regions
-or alongside Administrator. Interactive token conversion removes all application authorities
+or alongside Administrator. The check counts every variant of both roles, including obsolete
+unscoped assignments that otherwise grant nothing, so accounts holding both must be resolved in FAM
+before the regional-only contract is deployed. Interactive token conversion removes all application authorities
 from such an account. Its capabilities response contains no roles or actions and includes
 `accessDeniedReason: INCOMPATIBLE_APPROVER_ROLES`, so the signed-in user sees the no-access page
 and an instruction to ask their administrator to remove one role. Business and administration
@@ -113,7 +115,7 @@ assigned all eight can read current-region records while Cariboo Application App
 only in Cariboo. Capabilities tied to a role also stay within that role's regions. For example,
 Read Only in Cariboo plus Exemption Approver in Skeena sees Ministerial exemptions in both,
 approves only in Skeena, and sees other exemption types only in Cariboo. Multiple regional
-grants for the same role combine; obsolete unscoped grants are ignored.
+grants for the same role combine; obsolete unscoped grants are otherwise ignored.
 
 Legacy LEXIS offers no precedent: WebADE gave each user one set of organizations that limited the
 search lists of every non-administrator role alike, and detail pages and actions never checked

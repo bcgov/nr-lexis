@@ -16,6 +16,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -370,7 +371,7 @@ class Oauth2SecurityCustomizerTest {
     "LEXIS_READ_ONLY"
   })
   void allEightRegionsRemainConcreteGrants(String role) {
-    List<String> roles = java.util.Arrays.stream(FamRegionGrant.Region.values())
+    List<String> roles = Arrays.stream(FamRegionGrant.Region.values())
         .map(region -> role + "_REGION_REGION-" + region.name())
         .toList();
     assertThat(authorities(Map.of("client_roles", roles))).containsExactlyElementsOf(roles);

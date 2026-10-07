@@ -103,6 +103,18 @@ describe('region utils', () => {
       ).toBe(false)
     }
     expect(
+      canUseDefaultRegionPreference(
+        createTestCapabilities({
+          roles: ['LEXIS_READ_ONLY', 'LEXIS_EXEMPTION_APPROVER'],
+          grantedActions: ['/applicationSearch', '/exemptionSearch'],
+          actionRegions: {
+            applicationsearch: ['1903', '1904', '1905', '1906'],
+            exemptionsearch: ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910'],
+          },
+        }),
+      ),
+    ).toBe(false)
+    expect(
       canUseDefaultRegionPreference(createTestCapabilities({ roles: ['LEXIS_READ_ONLY'] })),
     ).toBe(false)
     expect(

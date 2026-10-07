@@ -1,5 +1,6 @@
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
 import { hasProvincialStaffRole, hasRole } from '@/context/auth/role-utils'
+import { NATURAL_RESOURCE_REGION_CODES } from '@/constants/regions'
 
 /** A record's organization units, as detail pages hold them. */
 export type RecordOrgUnits =
@@ -61,7 +62,15 @@ export const allowedRegions = (
   return regions
 }
 
-/** Zone preferences are useful for Administrators and staff assigned all eight current regions. */
+const ZONE_PREFERENCE_SEARCH_ACTIONS = [
+  '/applicationSearch',
+  '/applicationsReview',
+  '/exemptionSearch',
+  '/offersSearch',
+  '/permitSearch',
+]
+
+/** Zone preferences suit Administrators and staff whose every granted search covers all eight regions. */
 export const canUseDefaultRegionPreference = (capabilities: LexisSessionCapabilities): boolean => {
   if (hasRole(capabilities.roles, 'ADMIN')) {
     return true
@@ -69,18 +78,19 @@ export const canUseDefaultRegionPreference = (capabilities: LexisSessionCapabili
   if (!hasProvincialStaffRole(capabilities.roles)) {
     return false
   }
-  const regions = allowedRegions(capabilities, [
-    '/applicationSearch',
-    '/applicationsReview',
-    '/exemptionSearch',
-    '/offersSearch',
-    '/permitSearch',
-  ])
+  const granted = new Set(capabilities.grantedActions.map(normalizeAction))
+  const searches = ZONE_PREFERENCE_SEARCH_ACTIONS.filter((action) =>
+    granted.has(normalizeAction(action)),
+  )
   return (
-    regions !== null &&
-    ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910'].every((region) =>
-      regions.has(region),
-    )
+    searches.length > 0 &&
+    searches.every((action) => {
+      const regions = allowedRegions(capabilities, action)
+      return (
+        regions !== null &&
+        Array.from(NATURAL_RESOURCE_REGION_CODES).every((region) => regions.has(region))
+      )
+    })
   )
 }
 

@@ -23,6 +23,7 @@ public class LexisSessionService {
 
   // A denied token retains only this diagnostic authority, never an application role.
   public static final String APPROVER_CONFLICT_AUTHORITY = "LEXIS_APPROVER_ROLE_CONFLICT";
+  public static final String APPROVER_CONFLICT_REASON = "INCOMPATIBLE_APPROVER_ROLES";
 
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
