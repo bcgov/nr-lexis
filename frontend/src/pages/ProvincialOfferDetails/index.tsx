@@ -449,7 +449,7 @@ const ProvincialOfferDetailsPage = () => {
           subtitle="Check and manage this provincial offer"
           actions={
             !loading && !isEditing && currentDetail && form && canEditAnyOfferField ? (
-              <Button kind="tertiary" size="sm" onClick={() => setIsEditing(true)}>
+              <Button kind="tertiary" size="md" onClick={() => setIsEditing(true)}>
                 Edit
               </Button>
             ) : undefined
@@ -805,21 +805,21 @@ const ProvincialOfferDetailsPage = () => {
                 {isEditing ? (
                   <>
                     <Button
+                      kind="tertiary"
+                      size="md"
+                      onClick={onCancelEdit}
+                      disabled={isSubmitting}
+                    >
+                      Cancel
+                    </Button>
+                    <Button
                       kind="primary"
-                      size="sm"
+                      size="md"
                       onClick={() => void onSave()}
                       disabled={isSubmitting}
                       renderIcon={isSubmitting ? PendingIcon : undefined}
                     >
                       {isSubmitting ? 'Saving…' : 'Save'}
-                    </Button>
-                    <Button
-                      kind="tertiary"
-                      size="sm"
-                      onClick={onCancelEdit}
-                      disabled={isSubmitting}
-                    >
-                      Cancel
                     </Button>
                   </>
                 ) : null}

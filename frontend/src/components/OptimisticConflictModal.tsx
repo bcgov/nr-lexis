@@ -176,7 +176,7 @@ const OptimisticConflictModal = ({ onOpenChange }: { onOpenChange?: (open: boole
         )}
 
         <div className="lexis-optimistic-conflict-modal__actions">
-          <Button id="lexis-conflict-refresh" onClick={refresh}>
+          <Button size="md" id="lexis-conflict-refresh" onClick={refresh}>
             Refresh
           </Button>
         </div>

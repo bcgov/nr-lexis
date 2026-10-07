@@ -1003,11 +1003,17 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             />
           </div>
           <div className="admin-policy-modal__actions">
-            <Button kind="tertiary" disabled={isMutatingPolicies} onClick={closePolicyEditor}>
+            <Button
+              kind="tertiary"
+              size="md"
+              disabled={isMutatingPolicies}
+              onClick={closePolicyEditor}
+            >
               Cancel
             </Button>
             <Button
               kind="primary"
+              size="md"
               renderIcon={isMutatingPolicies ? PendingIcon : editingFeePolicyId ? undefined : Add}
               disabled={
                 isLoadingPolicies ||
@@ -1084,11 +1090,17 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             />
           </div>
           <div className="admin-policy-modal__actions">
-            <Button kind="tertiary" disabled={isMutatingPolicies} onClick={closePolicyEditor}>
+            <Button
+              kind="tertiary"
+              size="md"
+              disabled={isMutatingPolicies}
+              onClick={closePolicyEditor}
+            >
               Cancel
             </Button>
             <Button
               kind="primary"
+              size="md"
               renderIcon={isMutatingPolicies ? PendingIcon : editingFilPolicyId ? undefined : Add}
               disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
               onClick={() => void upsertFilPolicy()}
@@ -1222,7 +1234,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                             <div className="admin-policy-row-actions">
                               <Button
                                 kind="ghost"
-                                size="sm"
+                                size="md"
                                 onClick={() => editFeePolicy(row)}
                                 disabled={
                                   isLoadingPolicies ||
@@ -1236,7 +1248,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                               </Button>
                               <Button
                                 kind="danger--ghost"
-                                size="sm"
+                                size="md"
                                 renderIcon={TrashCan}
                                 onClick={() =>
                                   requestDelete({
@@ -1340,7 +1352,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                             <div className="admin-policy-row-actions">
                               <Button
                                 kind="ghost"
-                                size="sm"
+                                size="md"
                                 onClick={() => editFilPolicy(row)}
                                 disabled={isLoadingPolicies || isMutatingPolicies}
                               >
@@ -1348,7 +1360,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                               </Button>
                               <Button
                                 kind="danger--ghost"
-                                size="sm"
+                                size="md"
                                 renderIcon={TrashCan}
                                 onClick={() =>
                                   requestDelete({
@@ -1546,7 +1558,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                             <div className="admin-policy-row-actions">
                               <Button
                                 kind="ghost"
-                                size="sm"
+                                size="md"
                                 onClick={() => editExportSchedule(row)}
                                 disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
                               >
@@ -1554,7 +1566,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                               </Button>
                               <Button
                                 kind="danger--ghost"
-                                size="sm"
+                                size="md"
                                 renderIcon={TrashCan}
                                 onClick={() => requestDelete({ area: 'schedule', row })}
                                 disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}

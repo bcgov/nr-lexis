@@ -1385,6 +1385,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const feesEmptyState = (await screen.findByRole('heading', { name: 'No fees yet' })).closest(
       '.lexis-empty-state',
     )
+    expect(feesEmptyState).toHaveClass('lexis-empty-state--tab')
     expect(feesEmptyState?.closest('.cds--tile')).toBeNull()
     expect(feesEmptyState).toHaveTextContent(
       "Fees are calculated from the permit's Summary of scale. They appear once an application is selected on the Permit tab.",
@@ -4848,6 +4849,78 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
+  it('keeps the reviewed permit edit actions at the bottom of the Permit details card', async () => {
+    configureEditableBlanketOicPackage()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit details' }))
+
+    const card = screen
+      .getByRole('heading', { level: 2, name: 'Permit details' })
+      .closest('.cds--tile') as HTMLElement
+    const actions = within(card)
+      .getByRole('button', { name: 'Save changes' })
+      .closest('.legacy-search-actions') as HTMLElement
+    expect(
+      within(actions)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Cancel', 'Save changes'])
+    expect(card.lastElementChild).toBe(actions)
+  })
+
+  it('keeps edit actions for other permit types at the bottom of the Financial and volume card', async () => {
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit permit' }))
+
+    const summaryCard = screen
+      .getByRole('heading', { level: 2, name: 'Permit summary' })
+      .closest('.cds--tile') as HTMLElement
+    const financialCard = screen
+      .getByRole('heading', { level: 2, name: 'Financial and volume' })
+      .closest('.cds--tile') as HTMLElement
+    expect(summaryCard).not.toBe(financialCard)
+    expect(within(summaryCard).queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+    expect(
+      within(summaryCard).queryByRole('button', { name: 'Save permit' }),
+    ).not.toBeInTheDocument()
+
+    const actions = within(financialCard)
+      .getByRole('button', { name: 'Save permit' })
+      .closest('.legacy-search-actions') as HTMLElement
+    expect(
+      within(actions)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Cancel', 'Save permit'])
+    expect(financialCard.lastElementChild).toBe(actions)
+    expect(screen.getAllByRole('button', { name: 'Save permit' })).toHaveLength(1)
+  })
+
+  it('keeps the Blanket OIC fee cards and their edit actions before any package exists', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+      oicApplicationNumber: null,
+      receiptNumber: null,
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    const permitFeesCard = (
+      await screen.findByRole('heading', { name: 'Permit fees', level: 2 })
+    ).closest('.cds--tile') as HTMLElement
+    expect(
+      await within(permitFeesCard).findByRole('button', { name: 'Edit fee override' }),
+    ).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Package fees', level: 2 })).toBeInTheDocument()
+    expect(document.querySelector('.lexis-empty-state--tab')).toBeNull()
+  })
+
   it.each([null, '00067890', '00012345'])(
     'lets staff or submitter %s create the first Blanket OIC package and hidden application',
     async (clientNumber) => {
@@ -6390,7 +6463,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Save permit' })).not.toBeInTheDocument()
   })
 
-  it('keeps reviewed shipping actions in Figma order', async () => {
+  it('keeps reviewed shipping actions inside the card, Cancel first', async () => {
     configureEditableBlanketOicPackage()
     renderPermitDetails()
 
@@ -6401,6 +6474,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       .getByRole('button', { name: 'Save changes' })
       .closest('.legacy-search-actions')
     expect(actions).toBeTruthy()
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Shipping details' }).closest('.cds--tile'),
+    ).toContainElement(actions as HTMLElement)
     expect(
       within(actions as HTMLElement)
         .getAllByRole('button')

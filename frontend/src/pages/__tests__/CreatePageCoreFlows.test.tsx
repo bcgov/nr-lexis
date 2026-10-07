@@ -2623,9 +2623,10 @@ describe('Create Page Core Flows', () => {
       await screen.findByRole('option', { name: 'Cariboo Natural Resource Region' }),
     )
     await selectExemptionCreateTab('Fees')
-    await userEvent.click(
-      within(screen.getByRole('region', { name: 'Fees' })).getByRole('radio', { name: 'Yes' }),
-    )
+    const feesCard = screen.getByRole('region', { name: 'Fees' })
+    expect(within(feesCard).queryByText('Required fields')).not.toBeInTheDocument()
+    await userEvent.click(within(feesCard).getByRole('radio', { name: 'Yes' }))
+    expect(within(feesCard).getByText('Required fields')).toBeInTheDocument()
     await selectExemptionCreateTab('Exemption details')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
@@ -3164,6 +3165,9 @@ describe('Create Page Core Flows', () => {
         .getAllByRole('button')
         .map((button) => button.textContent),
     ).toEqual(['Cancel', 'Save new offer'])
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Create provincial offer' }).closest('header'),
+    ).toContainElement(offerFormActions)
     expect(within(offerFormActions).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
       'type',
       'button',

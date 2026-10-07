@@ -1424,7 +1424,7 @@ const ProvincialExemptionCreatePage = () => {
                     />
                     {hasAgentTab && (
                       <section className="detail-subsection" aria-label="Agent information">
-                        <h3 className="detail-tile-title">Agent information</h3>
+                        <h3 className="detail-section-subtitle">Agent information</h3>
                         <div className="legacy-search-grid create-form-grid">
                           <TextInput
                             id="agentClientNumber"
@@ -1493,7 +1493,7 @@ const ProvincialExemptionCreatePage = () => {
                           <Button
                             type="button"
                             kind="tertiary"
-                            size="sm"
+                            size="md"
                             disabled={!form.applicationNumber.trim()}
                             onClick={onAddApplication}
                           >
@@ -1567,6 +1567,9 @@ const ProvincialExemptionCreatePage = () => {
                         <Currency size={24} aria-hidden="true" />
                         Fees
                       </legend>
+                      {form.enableRateOverride && (
+                        <RequiredFieldsLegend className="application-detail-required" />
+                      )}
                       <RadioButtonGroup
                         legendText="Override fee rate?"
                         name="enableExemptionRateOverride"

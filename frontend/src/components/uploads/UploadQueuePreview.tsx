@@ -348,7 +348,7 @@ function UploadQueuePreview({
                             {canRemoveItem(item) && (
                               <Button
                                 kind="ghost"
-                                size="sm"
+                                size="md"
                                 onClick={() => onRemove(item.id)}
                                 disabled={isSubmitting}
                               >

@@ -50,6 +50,7 @@ import { AddDocument } from '@carbon/pictograms-react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailCardTitle from '@/components/DetailCardTitle'
 import DetailLoadError from '@/components/DetailLoadError'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
@@ -3689,10 +3690,7 @@ const ProvincialApplicationDetailsPage = () => {
       >
         {(!isReviewNotStarted || isEditingReview) && (
           <div className="detail-section-card__header">
-            <h2 className="detail-tile-title">
-              <Stamp size={24} aria-hidden="true" />
-              Application review
-            </h2>
+            <DetailCardTitle icon={Stamp}>Application review</DetailCardTitle>
             {canEditApplicationReview &&
               !isEditingReview &&
               !isReviewNotStarted &&
@@ -3891,10 +3889,7 @@ const ProvincialApplicationDetailsPage = () => {
         role="region"
         aria-label="Application review"
       >
-        <h2 className="detail-tile-title">
-          <Stamp size={24} aria-hidden="true" />
-          Application review
-        </h2>
+        <DetailCardTitle icon={Stamp}>Application review</DetailCardTitle>
         <EmptyState
           title="Review unavailable"
           description="Review actions are not available for this application."
@@ -4071,10 +4066,7 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-clients"
                       >
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">
-                            <Enterprise size={24} aria-hidden="true" />
-                            Applicant details
-                          </h2>
+                          <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4096,7 +4088,7 @@ const ProvincialApplicationDetailsPage = () => {
                         {isEditingOwnerDetails && summaryForm ? (
                           <>
                             <RequiredFieldsLegend className="application-detail-required" />
-                            <h3 className="detail-tile-title">{ownerSectionTitle}</h3>
+                            <h3 className="detail-section-subtitle">{ownerSectionTitle}</h3>
                             <div className="legacy-search-grid application-client-edit-grid application-client-edit-grid--fixed-client">
                               <TextInput
                                 id="applicationOwnerContactNameEdit"
@@ -4177,7 +4169,7 @@ const ProvincialApplicationDetailsPage = () => {
                             />
                             {isSummaryAgentApplicant && (
                               <section aria-label="Agent information">
-                                <h3 className="detail-tile-title">Agent information</h3>
+                                <h3 className="detail-section-subtitle">Agent information</h3>
                                 <div className="legacy-search-grid application-client-edit-grid">
                                   <TextInput
                                     id="applicationAgentContactNameEdit"
@@ -4248,7 +4240,7 @@ const ProvincialApplicationDetailsPage = () => {
                             <div className="legacy-search-actions">
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 disabled={isSavingSummary}
                                 onClick={onCancelOwnerDetails}
                               >
@@ -4256,7 +4248,7 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                               <Button
                                 kind="primary"
-                                size="sm"
+                                size="md"
                                 disabled={
                                   isSavingSummary ||
                                   summaryOptionsUnavailableForSource(
@@ -4278,14 +4270,14 @@ const ProvincialApplicationDetailsPage = () => {
                         ) : (
                           <>
                             <section aria-label={ownerSectionTitle}>
-                              <h3 className="detail-tile-title">{ownerSectionTitle}</h3>
+                              <h3 className="detail-section-subtitle">{ownerSectionTitle}</h3>
                               {ownerClientSummaryContent}
                             </section>
                             {isSummaryAgentApplicant && (
                               <>
                                 <hr className="application-applicant-divider" />
                                 <section aria-label="Agent information">
-                                  <h3 className="detail-tile-title">Agent information</h3>
+                                  <h3 className="detail-section-subtitle">Agent information</h3>
                                   {agentClientSummaryContent}
                                 </section>
                               </>
@@ -4304,10 +4296,7 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-summary"
                       >
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">
-                            <Task size={24} aria-hidden="true" />
-                            Application details
-                          </h2>
+                          <DetailCardTitle icon={Task}>Application details</DetailCardTitle>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4458,7 +4447,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 className="application-product-scale-details"
                                 aria-label="Scale details for changed product type"
                               >
-                                <h3 className="detail-tile-title">Scale details</h3>
+                                <h3 className="detail-section-subtitle">Scale details</h3>
                                 <p>
                                   Review the scale details for the selected product type before
                                   saving.
@@ -4469,7 +4458,7 @@ const ProvincialApplicationDetailsPage = () => {
                             <div className="legacy-search-actions">
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 disabled={isSavingSummary}
                                 onClick={onCancelSummaryDetails}
                               >
@@ -4477,7 +4466,7 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                               <Button
                                 kind="primary"
-                                size="sm"
+                                size="md"
                                 disabled={
                                   isSavingSummary ||
                                   summaryOptionsUnavailableForSource(
@@ -4534,10 +4523,7 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-summary"
                       >
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">
-                            <ContainerRegistry size={24} aria-hidden="true" />
-                            Scale details
-                          </h2>
+                          <DetailCardTitle icon={ContainerRegistry}>Scale details</DetailCardTitle>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4566,7 +4552,7 @@ const ProvincialApplicationDetailsPage = () => {
                             <div className="legacy-search-actions">
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 disabled={isSavingSummary}
                                 onClick={onCancelApplicationItemDetails}
                               >
@@ -4574,7 +4560,7 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                               <Button
                                 kind="primary"
-                                size="sm"
+                                size="md"
                                 disabled={
                                   isSavingSummary ||
                                   summaryOptionsUnavailableForSource('items') ||
@@ -4653,10 +4639,7 @@ const ProvincialApplicationDetailsPage = () => {
                           id="application-packages"
                           className="application-detail-section application-detail-packages"
                         >
-                          <h2 className="detail-tile-title">
-                            <Box size={24} aria-hidden="true" />
-                            Packages
-                          </h2>
+                          <DetailCardTitle icon={Box}>Packages</DetailCardTitle>
                           <TableFrame ariaLabel="Application packages">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -4866,7 +4849,7 @@ const ProvincialApplicationDetailsPage = () => {
                                           <TableCell>
                                             <Button
                                               kind="ghost"
-                                              size="sm"
+                                              size="md"
                                               renderIcon={Edit}
                                               disabled={
                                                 !item.remarkId || isEditingRemarks || isSavingRemark

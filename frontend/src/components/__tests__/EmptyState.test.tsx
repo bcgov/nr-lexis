@@ -43,4 +43,19 @@ describe('EmptyState', () => {
       'documents-empty-state',
     )
   })
+
+  it('marks the tab variant so it sits on the tab background without a card', () => {
+    render(
+      <EmptyState
+        title="No fees yet"
+        description="Fees appear once scale is added."
+        variant="tab"
+      />,
+    )
+
+    expect(screen.getByRole('region', { name: 'No fees yet' })).toHaveClass(
+      'lexis-empty-state',
+      'lexis-empty-state--tab',
+    )
+  })
 })

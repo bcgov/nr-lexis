@@ -748,7 +748,7 @@ export default function NotificationsPage() {
                         <div className="notifications-page__notification-actions">
                           <Button
                             kind="ghost"
-                            size="sm"
+                            size="md"
                             renderIcon={Edit}
                             disabled={saving}
                             onClick={() => startEdit(adminNotification)}
@@ -757,7 +757,7 @@ export default function NotificationsPage() {
                           </Button>
                           <Button
                             kind="danger--ghost"
-                            size="sm"
+                            size="md"
                             renderIcon={TrashCan}
                             disabled={saving}
                             onClick={() => {

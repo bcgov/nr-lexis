@@ -197,6 +197,23 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(screen.queryByRole('group', { name: 'Permit needs attention' })).not.toBeInTheDocument()
   })
 
+  it('leads each card title with its tab icon and shows the later tabs without a card', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'Permit details' }).querySelector('svg'),
+    ).toHaveAttribute('aria-hidden', 'true')
+    for (const tab of ['Scale', 'Documents', 'Fees']) {
+      await user.click(screen.getByRole('tab', { name: tab }))
+      const emptyState = screen.getByRole('region', { name: 'Save the permit first' })
+      expect(emptyState).toHaveClass('lexis-empty-state--tab')
+      expect(emptyState).toHaveTextContent('Available after the permit is saved.')
+      expect(emptyState.closest('.cds--tile')).toBeNull()
+    }
+  })
+
   it('requires blank request totals and updates the tab as explicit zeros are entered', async () => {
     const user = userEvent.setup()
     renderForm()

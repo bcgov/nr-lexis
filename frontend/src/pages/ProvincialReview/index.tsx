@@ -1287,11 +1287,12 @@ const ProvincialReviewPage = () => {
           />
         )}
         <div className="review-reject-modal__actions">
-          <Button kind="tertiary" disabled={submittingReject} onClick={closeRejectPanel}>
+          <Button kind="tertiary" size="md" disabled={submittingReject} onClick={closeRejectPanel}>
             Cancel
           </Button>
           <Button
             kind="primary"
+            size="md"
             disabled={
               optionsUnavailable ||
               !rejectStatusAvailable ||
@@ -1358,6 +1359,7 @@ const ProvincialReviewPage = () => {
               >
                 <Button
                   kind="tertiary"
+                  size="md"
                   onClick={() => void onApproveSelectedClick()}
                   disabled={
                     loading ||
@@ -1496,7 +1498,7 @@ const ProvincialReviewPage = () => {
                         <div className="provincial-review-row-actions">
                           <Button
                             kind="ghost"
-                            size="sm"
+                            size="md"
                             disabled={
                               !canApproveApplications ||
                               !isReviewableSourceStatus(row.status) ||
@@ -1511,7 +1513,7 @@ const ProvincialReviewPage = () => {
                           </Button>
                           <Button
                             kind="ghost"
-                            size="sm"
+                            size="md"
                             disabled={
                               !canApproveApplications ||
                               !isReviewableSourceStatus(row.status) ||

@@ -152,6 +152,7 @@ const ConfirmationModal = ({
           <Button
             id={cancelButtonId}
             kind={cancelDanger ? 'danger--tertiary' : 'tertiary'}
+            size="md"
             disabled={pending}
             onClick={requestCancel}
           >
@@ -159,6 +160,7 @@ const ConfirmationModal = ({
           </Button>
           <Button
             kind={danger ? 'danger' : 'primary'}
+            size="md"
             disabled={pending || confirmDisabled}
             renderIcon={pending ? PendingIcon : undefined}
             onClick={() => void confirm()}

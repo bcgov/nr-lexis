@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Button,
   Checkbox,
@@ -16,6 +16,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { AddDocument, Cardboard, Invoice } from '@carbon/pictograms-react'
 import {
   Box,
   Certificate,
@@ -23,8 +24,10 @@ import {
   DocumentAttachment,
   EarthFilled,
   Enterprise,
+  Save,
 } from '@carbon/icons-react'
 import { Link, useLocation } from 'react-router-dom'
+import DetailCardTitle from '@/components/DetailCardTitle'
 import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
@@ -104,7 +107,16 @@ type BlanketOicPermitCreateFormProps = {
   onCancel: () => void
   onCreated: (permitNumber: string) => void
   onUnknownOutcome: (message: string) => void
+  /** Places the page actions (Cancel, Save permit) and the form; the page puts the actions on its title row. */
+  layout?: (parts: { actions: ReactNode; content: ReactNode }) => ReactNode
 }
+
+const defaultLayout = ({ actions, content }: { actions: ReactNode; content: ReactNode }) => (
+  <>
+    {actions}
+    {content}
+  </>
+)
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
@@ -333,6 +345,7 @@ const BlanketOicPermitCreateForm = ({
   onCancel,
   onCreated,
   onUnknownOutcome,
+  layout = defaultLayout,
 }: BlanketOicPermitCreateFormProps) => {
   const { canPerform } = useAuth()
   const canReviewPermits = canPerform('/permitsReview')
@@ -855,7 +868,24 @@ const BlanketOicPermitCreateForm = ({
     if (!saving) onCancel()
   }
 
-  return (
+  const actions = (
+    <>
+      <Button kind="tertiary" size="md" disabled={saving} onClick={close}>
+        Cancel
+      </Button>
+      <Button
+        kind="primary"
+        size="md"
+        disabled={saving}
+        renderIcon={saving ? PendingIcon : Save}
+        onClick={() => void createPermit()}
+      >
+        {saving ? 'Saving…' : 'Save permit'}
+      </Button>
+    </>
+  )
+
+  const content = (
     <section aria-label="Blanket OIC permit details">
       {invalidTabLabels.length > 0 || errorMessages.length > 0 ? (
         <div ref={errorSummaryRef} tabIndex={-1} role="group" aria-label="Permit needs attention">
@@ -889,24 +919,6 @@ const BlanketOicPermitCreateForm = ({
           hideCloseButton
         />
       )}
-      <div
-        className="legacy-search-actions application-create-actions"
-        role="group"
-        aria-label="Blanket OIC permit actions"
-      >
-        <Button kind="tertiary" disabled={saving} onClick={close}>
-          Cancel
-        </Button>
-        <Button
-          kind="primary"
-          disabled={saving}
-          renderIcon={saving ? PendingIcon : undefined}
-          onClick={() => void createPermit()}
-        >
-          {saving ? 'Saving…' : 'Save permit'}
-        </Button>
-      </div>
-
       <Tabs
         selectedIndex={selectedTabIndex}
         onChange={({ selectedIndex }) => setSelectedTabIndex(selectedIndex)}
@@ -948,7 +960,7 @@ const BlanketOicPermitCreateForm = ({
         <TabPanels>
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Permit">
-              <h2 className="detail-tile-title">Permit details</h2>
+              <DetailCardTitle icon={Certificate}>Permit details</DetailCardTitle>
               <RequiredFieldsLegend className="boic-permit-required-hint" />
               <fieldset className="legacy-form-fieldset boic-permit-details">
                 <legend className="cds--visually-hidden">Permit details</legend>
@@ -1073,7 +1085,7 @@ const BlanketOicPermitCreateForm = ({
           </TabPanel>
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Applicant">
-              <h2 className="detail-tile-title">Applicant details</h2>
+              <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
               <RequiredFieldsLegend className="boic-permit-required-hint" />
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Applicant</legend>
@@ -1153,9 +1165,12 @@ const BlanketOicPermitCreateForm = ({
                     className="boic-permit-agent-information"
                     aria-labelledby="boic-permit-agent-information-heading"
                   >
-                    <h2 id="boic-permit-agent-information-heading" className="detail-tile-title">
+                    <h3
+                      id="boic-permit-agent-information-heading"
+                      className="detail-section-subtitle"
+                    >
                       Agent information
-                    </h2>
+                    </h3>
                     <div className="legacy-search-grid">
                       <ForestClientComboBox
                         id="boic-permit-agent-client"
@@ -1216,7 +1231,7 @@ const BlanketOicPermitCreateForm = ({
           </TabPanel>
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Shipping">
-              <h2 className="detail-tile-title">Shipping details</h2>
+              <DetailCardTitle icon={EarthFilled}>Shipping details</DetailCardTitle>
               <RequiredFieldsLegend className="boic-permit-required-hint" />
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Shipping</legend>
@@ -1324,32 +1339,32 @@ const BlanketOicPermitCreateForm = ({
               </fieldset>
             </Tile>
           </TabPanel>
-          <TabPanel className="application-detail-tab-panel">
-            <Tile className="create-form-tile application-detail-section" aria-label="Scale">
-              <EmptyState
-                title="Save the permit first"
-                description="Scale details are available after the permit is saved."
-                headingLevel={2}
-              />
-            </Tile>
+          <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
+            <EmptyState
+              variant="tab"
+              icon={<Cardboard width={48} height={48} />}
+              title="Save the permit first"
+              description="Available after the permit is saved."
+              headingLevel={2}
+            />
           </TabPanel>
-          <TabPanel className="application-detail-tab-panel">
-            <Tile className="create-form-tile application-detail-section" aria-label="Documents">
-              <EmptyState
-                title="Save the permit first"
-                description="Documents can be added after the permit is saved."
-                headingLevel={2}
-              />
-            </Tile>
+          <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
+            <EmptyState
+              variant="tab"
+              icon={<AddDocument width={48} height={48} />}
+              title="Save the permit first"
+              description="Available after the permit is saved."
+              headingLevel={2}
+            />
           </TabPanel>
-          <TabPanel className="application-detail-tab-panel">
-            <Tile className="create-form-tile application-detail-section" aria-label="Fees">
-              <EmptyState
-                title="Save the permit first"
-                description="Fee details are available after the permit is saved."
-                headingLevel={2}
-              />
-            </Tile>
+          <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
+            <EmptyState
+              variant="tab"
+              icon={<Invoice width={48} height={48} />}
+              title="Save the permit first"
+              description="Available after the permit is saved."
+              headingLevel={2}
+            />
           </TabPanel>
         </TabPanels>
       </Tabs>
@@ -1368,6 +1383,8 @@ const BlanketOicPermitCreateForm = ({
       />
     </section>
   )
+
+  return layout({ actions, content })
 }
 
 export default BlanketOicPermitCreateForm

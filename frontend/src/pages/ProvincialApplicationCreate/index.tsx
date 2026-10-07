@@ -30,6 +30,7 @@ import {
 } from '@carbon/icons-react'
 import SearchableSelect from '../../components/SearchableSelect'
 import { AppNotification } from '../../components/AppNotification'
+import DetailCardTitle from '@/components/DetailCardTitle'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
@@ -1669,13 +1670,10 @@ const ProvincialApplicationCreatePage = () => {
                 aria-label="Applicant"
               >
                 <div className="detail-section-card__header">
-                  <h2 className="detail-tile-title">
-                    <Enterprise size={24} aria-hidden="true" />
-                    Applicant details
-                  </h2>
+                  <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
                 </div>
                 <RequiredFieldsLegend className="application-create-required" />
-                <h3 className="detail-tile-title">
+                <h3 className="detail-section-subtitle">
                   {form.applicantTypeCode === 'M' ? 'Ministerial' : 'Owner'}
                 </h3>
                 <div className="legacy-search-grid create-form-grid application-create-client-grid">
@@ -1885,10 +1883,7 @@ const ProvincialApplicationCreatePage = () => {
                 aria-label="Application"
               >
                 <div className="detail-section-card__header">
-                  <h2 className="detail-tile-title">
-                    <Task size={24} aria-hidden="true" />
-                    Application details
-                  </h2>
+                  <DetailCardTitle icon={Task}>Application details</DetailCardTitle>
                 </div>
                 <RequiredFieldsLegend className="application-create-required" />
                 <div className="legacy-search-grid create-form-grid">
@@ -2043,10 +2038,7 @@ const ProvincialApplicationCreatePage = () => {
                   aria-label="Scale"
                 >
                   <div className="detail-section-card__header">
-                    <h2 className="detail-tile-title">
-                      <ContainerRegistry size={24} aria-hidden="true" />
-                      Scale details
-                    </h2>
+                    <DetailCardTitle icon={ContainerRegistry}>Scale details</DetailCardTitle>
                   </div>
                   <RequiredFieldsLegend className="application-create-required" />
                   <div className="legacy-search-grid create-form-grid">

@@ -838,6 +838,35 @@ const ProvincialOfferCreatePage = () => {
         <PageHeader
           title="Create provincial offer"
           subtitle="Enter offer details and save a new offer."
+          actionsLabel="Offer form actions"
+          actions={
+            <>
+              <Button
+                type="button"
+                kind="tertiary"
+                size="md"
+                onClick={() => navigate('/provincial/offers')}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                kind="primary"
+                size="md"
+                onClick={() => void onSave(true)}
+                disabled={
+                  isSubmitting ||
+                  isLoadingOfferContext ||
+                  scopedClientLookupPending ||
+                  !!applicationValidationError ||
+                  !!packageVolumeError
+                }
+                renderIcon={isSubmitting ? PendingIcon : undefined}
+              >
+                {isSubmitting ? 'Saving…' : 'Save new offer'}
+              </Button>
+            </>
+          }
         />
       </Column>
 
@@ -1220,36 +1249,6 @@ const ProvincialOfferCreatePage = () => {
                 <dd className="detail-field-value">{author}</dd>
               </div>
             </dl>
-            <div
-              className="legacy-search-actions create-form-actions"
-              role="group"
-              aria-label="Offer form actions"
-            >
-              <Button
-                type="button"
-                kind="tertiary"
-                size="md"
-                onClick={() => navigate('/provincial/offers')}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="button"
-                kind="primary"
-                size="md"
-                onClick={() => void onSave(true)}
-                disabled={
-                  isSubmitting ||
-                  isLoadingOfferContext ||
-                  scopedClientLookupPending ||
-                  !!applicationValidationError ||
-                  !!packageVolumeError
-                }
-                renderIcon={isSubmitting ? PendingIcon : undefined}
-              >
-                {isSubmitting ? 'Saving…' : 'Save new offer'}
-              </Button>
-            </div>
           </div>
         </div>
       </Column>

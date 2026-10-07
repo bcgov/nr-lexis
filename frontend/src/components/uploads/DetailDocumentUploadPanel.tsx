@@ -1013,16 +1013,22 @@ const DetailDocumentUploadPanel = ({
 
       {!isDrawerPanel && (
         <div className="detail-document-upload-modal__actions">
-          <Button kind="tertiary" disabled={isSubmitting} onClick={closeUploadModal}>
+          <Button kind="tertiary" size="md" disabled={isSubmitting} onClick={closeUploadModal}>
             Cancel
           </Button>
           {uploadStep === 'review' && (
-            <Button kind="ghost" disabled={isSubmitting} onClick={() => setUploadStep('upload')}>
+            <Button
+              kind="ghost"
+              size="md"
+              disabled={isSubmitting}
+              onClick={() => setUploadStep('upload')}
+            >
               Back
             </Button>
           )}
           <Button
             kind="primary"
+            size="md"
             disabled={isSubmitting || (uploadStep === 'review' ? !canSubmit : disabled)}
             renderIcon={ArrowRight}
             onClick={() => {
@@ -1056,7 +1062,7 @@ const DetailDocumentUploadPanel = ({
         <div className="detail-document-upload__trigger">
           <Button
             kind="primary"
-            size="sm"
+            size="md"
             renderIcon={Add}
             disabled={disabled}
             title={disabled ? disabledReason : undefined}
@@ -1074,7 +1080,7 @@ const DetailDocumentUploadPanel = ({
           tabIndex={-1}
           className="detail-document-upload-inline"
         >
-          <h3 id={`${inputId}Heading`} className="detail-tile-title">
+          <h3 id={`${inputId}Heading`} className="detail-section-subtitle">
             Add invoice
           </h3>
           {uploadContent}
