@@ -331,6 +331,14 @@ describe('Provincial exemption edit context', () => {
 
     // Editing Exemption details no longer opens fee controls on the Fees tab.
     await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    // Conditions and the edit actions sit in the one Exemption details card.
+    const detailsCard = screen
+      .getByRole('heading', { level: 2, name: 'Exemption details' })
+      .closest('.cds--tile') as HTMLElement
+    expect(within(detailsCard).getByLabelText('Conditions')).toBeInTheDocument()
+    expect(within(detailsCard).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    expect(within(detailsCard).getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Conditions' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Fees' }))
     expect(screen.queryByRole('radiogroup', { name: 'Override fee rate?' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit fee override' })).not.toBeInTheDocument()

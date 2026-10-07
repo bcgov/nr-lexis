@@ -2333,6 +2333,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Application')
     await enterFederalStatusEditMode()
     const updateButton = await screen.findByRole('button', { name: 'Update status' })
+    expect(
+      within(updateButton.closest('.legacy-search-actions') as HTMLElement)
+        .getAllByRole('button')
+        .map((button) => button.textContent),
+    ).toEqual(['Cancel', 'Update status'])
     expect(screen.getByLabelText('Status')).toHaveValue('APP')
 
     await userEvent.click(updateButton)

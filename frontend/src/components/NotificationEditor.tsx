@@ -242,10 +242,10 @@ export default function NotificationEditor({
             onChange={(event) => setLinkUrl(event.currentTarget.value)}
           />
           <div className="notification-editor__link-modal-actions">
-            <Button kind="tertiary" onClick={closeLinkModal}>
+            <Button kind="tertiary" size="md" onClick={closeLinkModal}>
               Cancel
             </Button>
-            <Button kind="primary" disabled={!linkUrlIsValid} onClick={applyLink}>
+            <Button kind="primary" size="md" disabled={!linkUrlIsValid} onClick={applyLink}>
               Apply link
             </Button>
           </div>

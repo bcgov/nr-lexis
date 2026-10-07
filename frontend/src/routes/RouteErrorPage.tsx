@@ -26,7 +26,7 @@ const RouteErrorPage = ({ onReload = () => window.location.reload() }: RouteErro
             : 'LEXIS could not load this page. Reload and try again.'
         }
         action={
-          <Button kind="primary" onClick={onReload}>
+          <Button kind="primary" size="md" onClick={onReload}>
             Reload application
           </Button>
         }

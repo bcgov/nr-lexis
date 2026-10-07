@@ -18,6 +18,7 @@ import {
   Enterprise,
   TrashCan,
 } from '@carbon/icons-react'
+import { Invoice } from '@carbon/pictograms-react'
 import {
   Button,
   Checkbox,
@@ -54,6 +55,7 @@ import { hasProvincialSubmitterRole, hasRole, isPureReadOnlyRole } from '@/conte
 import ConfirmationModal from '@/components/ConfirmationModal'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailCardTitle from '@/components/DetailCardTitle'
 import DetailLoadError from '@/components/DetailLoadError'
 import DetailSidePanel from '@/components/DetailSidePanel'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
@@ -451,6 +453,7 @@ type PermitClientTileProps = {
   clientData: ApplicationClientData | null
   isLoading: boolean
   errorMessage: string
+  icon?: ReactNode
   headerAction?: ReactNode
   reviewedLayout?: boolean
 }
@@ -485,6 +488,7 @@ const PermitClientTile = ({
   clientData,
   isLoading,
   errorMessage,
+  icon,
   headerAction,
   reviewedLayout = false,
 }: PermitClientTileProps) => (
@@ -548,6 +552,7 @@ const PermitClientTile = ({
     ) : (
       <DetailFieldTile
         title={title}
+        icon={icon}
         headerAction={headerAction}
         fields={[
           { label: 'Client number', value: displayValue(clientNumber) },
@@ -4702,6 +4707,67 @@ const ProvincialPermitDetailsPage = () => {
   const isMinisterialPermitEdit = ministerialPermit && isEditingPermit && !!permitForm
   const isReviewedPermitEdit = usesReviewedPermitFlow && isEditingPermit && !!permitForm
 
+  const renderPermitClientEditActions = () => (
+    <div className="legacy-search-actions permit-client-editor__actions">
+      <Button kind="tertiary" size="md" disabled={isSavingPermit} onClick={cancelPermitClientEdit}>
+        Cancel
+      </Button>
+      <Button
+        kind="primary"
+        size="md"
+        disabled={
+          isSavingPermit ||
+          isPermitOptionsLoading ||
+          permitOptionsUnavailable ||
+          blanketOicRegionSelectionUnavailable ||
+          requiredPermitOptionsMissing ||
+          paymentPendingReceiptRequiresCompletion ||
+          !permitClientLookupCanSave
+        }
+        renderIcon={isSavingPermit ? PendingIcon : undefined}
+        onClick={() => void onSavePermit()}
+      >
+        {isSavingPermit ? 'Saving…' : usesReviewedPermitFlow ? 'Save changes' : 'Save permit'}
+      </Button>
+    </div>
+  )
+
+  const renderPermitEditActions = () =>
+    detail && canSavePermit && isEditingPermit ? (
+      <div className="legacy-search-actions">
+        <Button
+          kind="tertiary"
+          size="md"
+          disabled={isSavingPermit}
+          onClick={() => {
+            resetPermitFormSection(false)
+            setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
+            setIsEditingPermitClients(false)
+            setIsEditingPermit(false)
+          }}
+        >
+          Cancel
+        </Button>
+        <Button
+          kind="primary"
+          size="md"
+          disabled={
+            isSavingPermit ||
+            isPermitOptionsLoading ||
+            permitOptionsUnavailable ||
+            blanketOicRegionSelectionUnavailable ||
+            requiredPermitOptionsMissing ||
+            paymentPendingReceiptRequiresCompletion ||
+            !permitClientLookupCanSave
+          }
+          renderIcon={isSavingPermit ? PendingIcon : undefined}
+          onClick={() => void onSavePermit()}
+        >
+          {isSavingPermit ? 'Saving…' : usesReviewedPermitFlow ? 'Save changes' : 'Save permit'}
+        </Button>
+      </div>
+    ) : null
+
   const renderFederalPermitNotice = () => (
     <Tile className="detail-federal-permit-notice">
       <p>
@@ -4735,7 +4801,7 @@ const ProvincialPermitDetailsPage = () => {
             canEditPermitApplications ? (
               <Button
                 kind="tertiary"
-                size="sm"
+                size="md"
                 onClick={() => void reloadAvailablePermitApplications()}
               >
                 Retry
@@ -4856,7 +4922,7 @@ const ProvincialPermitDetailsPage = () => {
             >
               <Button
                 kind="primary"
-                size="sm"
+                size="md"
                 disabled={
                   isUpdatingPermitApplications || ministerialPermitApplicationsToAdd.length === 0
                 }
@@ -4874,7 +4940,7 @@ const ProvincialPermitDetailsPage = () => {
         )}
         {associatedPermitApplications.length > 0 && (
           <>
-            <h3 className="detail-tile-title">Included applications</h3>
+            <h3 className="detail-section-subtitle">Included applications</h3>
             <TableFrame ariaLabel="Included permit applications">
               <Table size="md" useZebraStyles>
                 <TableHead>
@@ -4905,7 +4971,7 @@ const ProvincialPermitDetailsPage = () => {
                         <TableCell>
                           <Button
                             kind="ghost"
-                            size="sm"
+                            size="md"
                             disabled={isUpdatingPermitApplications}
                             renderIcon={TrashCan}
                             onClick={() => {
@@ -5160,7 +5226,7 @@ const ProvincialPermitDetailsPage = () => {
                   <>
                     <Button
                       kind="tertiary"
-                      size="sm"
+                      size="md"
                       disabled={isSavingPermit}
                       onClick={() => {
                         resetPermitFormSection(false)
@@ -5172,7 +5238,7 @@ const ProvincialPermitDetailsPage = () => {
                     </Button>
                     <Button
                       kind="primary"
-                      size="sm"
+                      size="md"
                       disabled={
                         isSavingPermit ||
                         isPermitOptionsLoading ||
@@ -5195,7 +5261,7 @@ const ProvincialPermitDetailsPage = () => {
                 ) : (
                   <Button
                     kind="tertiary"
-                    size="sm"
+                    size="md"
                     onClick={() => {
                       resetPermitFormSection(false)
                       setIsEditingPermit(true)
@@ -5275,7 +5341,7 @@ const ProvincialPermitDetailsPage = () => {
               <div className="legacy-search-actions">
                 <Button
                   kind="tertiary"
-                  size="sm"
+                  size="md"
                   disabled={isSavingFeeOverride}
                   onClick={() => {
                     setFeeOverrideForm(feeOverrideContext)
@@ -5287,7 +5353,7 @@ const ProvincialPermitDetailsPage = () => {
                 </Button>
                 <Button
                   kind="primary"
-                  size="sm"
+                  size="md"
                   disabled={isSavingFeeOverride}
                   renderIcon={isSavingFeeOverride ? PendingIcon : undefined}
                   onClick={() => void onSaveFeeOverride()}
@@ -5333,7 +5399,7 @@ const ProvincialPermitDetailsPage = () => {
                 <div className="legacy-search-actions">
                   <Button
                     kind="tertiary"
-                    size="sm"
+                    size="md"
                     onClick={() => {
                       setFeeOverrideFieldErrors({})
                       setIsEditingFeeOverride(true)
@@ -5648,7 +5714,7 @@ const ProvincialPermitDetailsPage = () => {
           feeSummaryStatus === null &&
           !!tabsData?.packageFeeSummaries.length && (
             <>
-              <h3 className="detail-tile-title">Package fee summary</h3>
+              <h3 className="detail-section-subtitle">Package fee summary</h3>
               <TableFrame ariaLabel="Permit package fee summaries">
                 <Table size="md" useZebraStyles>
                   <TableHead>
@@ -5762,25 +5828,8 @@ const ProvincialPermitDetailsPage = () => {
           </TableFrame>
         ) : (
           <EmptyState
-            title={ministerialFeeShellEmpty ? 'No fees yet' : 'No fee details available'}
-            description={
-              ministerialFeeShellEmpty ? (
-                <>
-                  Fees are calculated from the permit&apos;s Summary of scale. They appear once an
-                  application is selected on the{' '}
-                  <button
-                    type="button"
-                    className="cds--link"
-                    onClick={() => selectPermitTab('permit')}
-                  >
-                    Permit tab
-                  </button>
-                  .
-                </>
-              ) : (
-                'No fee rows are available for this permit.'
-              )
-            }
+            title="No fee details available"
+            description="No fee rows are available for this permit."
             headingLevel={3}
           />
         )}
@@ -5795,7 +5844,6 @@ const ProvincialPermitDetailsPage = () => {
     documentRows.length === 0
   const emptyPermitScale = ministerialScaleEmpty || blanketOicPackageCreationRequired
   const ScaleContainer = detail?.blanketOic || ministerialScaleEmpty ? 'section' : Tile
-  const FeesContainer = ministerialFeeShellEmpty ? 'section' : Tile
   const createBlanketOicPackageButton = canEditBlanketOicPackages ? (
     <Button
       id="create-boic-package"
@@ -5852,7 +5900,7 @@ const ProvincialPermitDetailsPage = () => {
                 {canRequestPermitReview && (
                   <Button
                     kind="tertiary"
-                    size="sm"
+                    size="md"
                     disabled={isSendingPermitEmail || !permitReviewReady}
                     title={
                       permitReviewReady
@@ -5871,7 +5919,7 @@ const ProvincialPermitDetailsPage = () => {
                 {canSendPermitApproval && (
                   <Button
                     kind="tertiary"
-                    size="sm"
+                    size="md"
                     disabled={isSendingPermitEmail}
                     onClick={() => void onOpenPermitApprovalEmail()}
                   >
@@ -5881,7 +5929,7 @@ const ProvincialPermitDetailsPage = () => {
                 {canOpenPermitReport && (
                   <Button
                     kind="primary"
-                    size="sm"
+                    size="md"
                     disabled={isOpeningPermitReport}
                     renderIcon={isOpeningPermitReport ? PendingIcon : undefined}
                     onClick={() => void onOpenPermitReport()}
@@ -6048,10 +6096,7 @@ const ProvincialPermitDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       {isReviewedPermitEdit ? (
                         <Tile className="ministerial-permit-details">
-                          <h2 className="detail-tile-title">
-                            <Certificate size={24} aria-hidden="true" />
-                            Permit details
-                          </h2>
+                          <DetailCardTitle icon={Certificate}>Permit details</DetailCardTitle>
                           <RequiredFieldsLegend />
                           <div className="ministerial-permit-details__status">
                             <Select
@@ -6206,7 +6251,7 @@ const ProvincialPermitDetailsPage = () => {
                                 </div>
                               </dl>
                               <section className="ministerial-permit-details__applications">
-                                <h3 className="detail-tile-title">Applications</h3>
+                                <h3 className="detail-section-subtitle">Applications</h3>
                                 {renderMinisterialPermitApplications()}
                               </section>
                               <div className="ministerial-permit-details__remarks">
@@ -6219,14 +6264,15 @@ const ProvincialPermitDetailsPage = () => {
                               </div>
                             </>
                           )}
+                          {renderPermitEditActions()}
                         </Tile>
                       ) : isEditingPermit && permitForm ? (
                         <Tile
                           className={detail.blanketOic ? 'boic-permit-details-edit' : undefined}
                         >
-                          <h2 className="detail-tile-title">
+                          <DetailCardTitle icon={Certificate}>
                             {usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
-                          </h2>
+                          </DetailCardTitle>
                           <RequiredFieldsLegend />
                           {usesReviewedPermitFlow && (
                             <dl className="ministerial-permit-details__static-fields">
@@ -6383,14 +6429,11 @@ const ProvincialPermitDetailsPage = () => {
                       ) : ministerialPermit ? (
                         <Tile className="ministerial-permit-details">
                           <div className="detail-section-card__header">
-                            <h2 className="detail-tile-title">
-                              <Certificate size={24} aria-hidden="true" />
-                              Permit details
-                            </h2>
+                            <DetailCardTitle icon={Certificate}>Permit details</DetailCardTitle>
                             {canSavePermit && (
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 renderIcon={Edit}
                                 onClick={() => {
                                   resetPermitFormSection(false)
@@ -6485,7 +6528,7 @@ const ProvincialPermitDetailsPage = () => {
                             ))}
                           </dl>
                           <section className="ministerial-permit-details__applications">
-                            <h3 className="detail-tile-title">Applications</h3>
+                            <h3 className="detail-section-subtitle">Applications</h3>
                             {renderMinisterialPermitApplications()}
                           </section>
                           <dl className="ministerial-permit-details__remarks detail-field-grid">
@@ -6498,14 +6541,11 @@ const ProvincialPermitDetailsPage = () => {
                       ) : detail.blanketOic ? (
                         <Tile className="boic-permit-details">
                           <div className="detail-section-card__header">
-                            <h2 className="detail-tile-title">
-                              <Certificate size={24} aria-hidden="true" />
-                              Permit details
-                            </h2>
+                            <DetailCardTitle icon={Certificate}>Permit details</DetailCardTitle>
                             {canSavePermit && (
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 renderIcon={Edit}
                                 onClick={() => {
                                   resetPermitFormSection(false)
@@ -6622,11 +6662,12 @@ const ProvincialPermitDetailsPage = () => {
                       ) : (
                         <DetailFieldTile
                           title={usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
+                          icon={<Certificate size={24} aria-hidden="true" />}
                           headerAction={
                             canSavePermit ? (
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 onClick={() => {
                                   resetPermitFormSection(false)
                                   setIsEditingPermit(true)
@@ -6710,12 +6751,13 @@ const ProvincialPermitDetailsPage = () => {
                         <Column sm={4} md={8} lg={16}>
                           {isEditingPermit && permitForm ? (
                             <Tile>
-                              <h2 className="detail-tile-title">
+                              <DetailCardTitle icon={Certificate}>
                                 {usesReviewedPermitFlow
                                   ? 'Volume and remarks'
                                   : 'Financial and volume'}
-                              </h2>
+                              </DetailCardTitle>
                               {renderPermitVolumeAndRemarks()}
+                              {renderPermitEditActions()}
                             </Tile>
                           ) : (
                             <DetailFieldTile
@@ -6724,6 +6766,7 @@ const ProvincialPermitDetailsPage = () => {
                                   ? 'Volume and remarks'
                                   : 'Financial and volume'
                               }
+                              icon={<Certificate size={24} aria-hidden="true" />}
                               fields={permitVolumeAndRemarksFields}
                             />
                           )}
@@ -6732,9 +6775,9 @@ const ProvincialPermitDetailsPage = () => {
                     {!ministerialPermit && !detail.blanketOic && (
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
-                          <h2 className="detail-tile-title">
+                          <DetailCardTitle icon={Certificate}>
                             {ministerialPermit ? 'Applications' : 'Associated applications'}
-                          </h2>
+                          </DetailCardTitle>
                           {ministerialPermit ? (
                             renderMinisterialPermitApplications()
                           ) : isPermitTablesLoading ? (
@@ -6779,7 +6822,7 @@ const ProvincialPermitDetailsPage = () => {
                                         <TableCell>
                                           <Button
                                             kind="ghost"
-                                            size="sm"
+                                            size="md"
                                             disabled={
                                               isRemovingPermitApplication === applicationNumber
                                             }
@@ -6835,7 +6878,7 @@ const ProvincialPermitDetailsPage = () => {
                               <div className="legacy-search-actions">
                                 <Button
                                   kind="primary"
-                                  size="sm"
+                                  size="md"
                                   disabled={
                                     isSavingPermitApplication ||
                                     isLoadingAvailableApplications ||
@@ -6857,67 +6900,6 @@ const ProvincialPermitDetailsPage = () => {
                         {renderFederalPermitNotice()}
                       </Column>
                     )}
-                    {canSavePermit && isEditingPermit && (
-                      <Column sm={4} md={8} lg={16}>
-                        <div className="legacy-search-actions">
-                          {isEditingPermit ? (
-                            <>
-                              {usesReviewedPermitFlow && (
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  disabled={isSavingPermit}
-                                  onClick={() => {
-                                    resetPermitFormSection(false)
-                                    setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
-                                    setIsEditingPermitClients(false)
-                                    setIsEditingPermit(false)
-                                  }}
-                                >
-                                  Cancel
-                                </Button>
-                              )}
-                              <Button
-                                kind="primary"
-                                size="sm"
-                                disabled={
-                                  isSavingPermit ||
-                                  isPermitOptionsLoading ||
-                                  permitOptionsUnavailable ||
-                                  blanketOicRegionSelectionUnavailable ||
-                                  requiredPermitOptionsMissing ||
-                                  paymentPendingReceiptRequiresCompletion ||
-                                  !permitClientLookupCanSave
-                                }
-                                renderIcon={isSavingPermit ? PendingIcon : undefined}
-                                onClick={() => void onSavePermit()}
-                              >
-                                {isSavingPermit
-                                  ? 'Saving…'
-                                  : usesReviewedPermitFlow
-                                    ? 'Save changes'
-                                    : 'Save permit'}
-                              </Button>
-                              {!usesReviewedPermitFlow && (
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  disabled={isSavingPermit}
-                                  onClick={() => {
-                                    resetPermitFormSection(false)
-                                    setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
-                                    setIsEditingPermitClients(false)
-                                    setIsEditingPermit(false)
-                                  }}
-                                >
-                                  Cancel
-                                </Button>
-                              )}
-                            </>
-                          ) : null}
-                        </div>
-                      </Column>
-                    )}
                   </Grid>
                 </TabPanel>
                 <TabPanel key="owner" className="application-detail-tab-panel">
@@ -6927,10 +6909,7 @@ const ProvincialPermitDetailsPage = () => {
                         {usesReviewedPermitFlow ? (
                           <Tile className="detail-section-card permit-applicant-card">
                             <div className="detail-section-card__header">
-                              <h2 className="detail-tile-title">
-                                <Enterprise size={24} aria-hidden="true" />
-                                Applicant details
-                              </h2>
+                              <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
                               {canEditPermitClients && (
                                 <Button
                                   kind="tertiary"
@@ -6984,6 +6963,14 @@ const ProvincialPermitDetailsPage = () => {
                           <>
                             <PermitClientTile
                               title="Applicant details"
+                              icon={<Enterprise size={24} aria-hidden="true" />}
+                              headerAction={
+                                canEditPermitClients && !isEditingPermit ? (
+                                  <Button kind="tertiary" size="md" onClick={startPermitClientEdit}>
+                                    Edit applicant
+                                  </Button>
+                                ) : undefined
+                              }
                               clientNumber={detail.ownerClientNumber}
                               locationCode={detail.ownerClientLocationCode}
                               clientData={ownerClientData}
@@ -7005,10 +6992,7 @@ const ProvincialPermitDetailsPage = () => {
                     {ownerEditMode && permitForm && (
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
-                          <h2 className="detail-tile-title">
-                            {usesReviewedPermitFlow && <Enterprise size={24} aria-hidden="true" />}
-                            Applicant details
-                          </h2>
+                          <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
                           <RequiredFieldsLegend className="permit-client-editor__required-hint" />
                           {usesReviewedPermitFlow && (
                             <h3 className="permit-client-subheading">Owner</h3>
@@ -7030,79 +7014,12 @@ const ProvincialPermitDetailsPage = () => {
                           />
                           {usesReviewedPermitFlow && agentUsed && (
                             <>
-                              <h3 className="detail-tile-title">Agent information</h3>
+                              <h3 className="detail-section-subtitle">Agent information</h3>
                               {renderPermitClientEditor('agent', invoiceMaterialLocked)}
                             </>
                           )}
-                          {usesReviewedPermitFlow && (
-                            <div className="legacy-search-actions permit-client-editor__actions">
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                disabled={isSavingPermit}
-                                onClick={cancelPermitClientEdit}
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                kind="primary"
-                                size="sm"
-                                disabled={
-                                  isSavingPermit ||
-                                  isPermitOptionsLoading ||
-                                  permitOptionsUnavailable ||
-                                  blanketOicRegionSelectionUnavailable ||
-                                  requiredPermitOptionsMissing ||
-                                  paymentPendingReceiptRequiresCompletion ||
-                                  !permitClientLookupCanSave
-                                }
-                                renderIcon={isSavingPermit ? PendingIcon : undefined}
-                                onClick={() => void onSavePermit()}
-                              >
-                                {isSavingPermit ? 'Saving…' : 'Save changes'}
-                              </Button>
-                            </div>
-                          )}
+                          {renderPermitClientEditActions()}
                         </Tile>
-                      </Column>
-                    )}
-                    {canEditPermitClients && !usesReviewedPermitFlow && (
-                      <Column sm={4} md={8} lg={16}>
-                        <div className="legacy-search-actions">
-                          {isEditingPermit ? (
-                            <>
-                              <Button
-                                kind="primary"
-                                size="sm"
-                                disabled={
-                                  isSavingPermit ||
-                                  isPermitOptionsLoading ||
-                                  permitOptionsUnavailable ||
-                                  blanketOicRegionSelectionUnavailable ||
-                                  requiredPermitOptionsMissing ||
-                                  paymentPendingReceiptRequiresCompletion ||
-                                  !permitClientLookupCanSave
-                                }
-                                renderIcon={isSavingPermit ? PendingIcon : undefined}
-                                onClick={() => void onSavePermit()}
-                              >
-                                {isSavingPermit ? 'Saving…' : 'Save permit'}
-                              </Button>
-                              <Button
-                                kind="tertiary"
-                                size="sm"
-                                disabled={isSavingPermit}
-                                onClick={cancelPermitClientEdit}
-                              >
-                                Cancel
-                              </Button>
-                            </>
-                          ) : !usesReviewedPermitFlow ? (
-                            <Button kind="tertiary" size="sm" onClick={startPermitClientEdit}>
-                              Edit applicant
-                            </Button>
-                          ) : null}
-                        </div>
                       </Column>
                     )}
                   </Grid>
@@ -7113,15 +7030,23 @@ const ProvincialPermitDetailsPage = () => {
                       {ownerEditMode && permitForm ? (
                         <Column sm={4} md={8} lg={16}>
                           <Tile>
-                            <h2 className="detail-tile-title">Edit agent</h2>
+                            <DetailCardTitle>Edit agent</DetailCardTitle>
                             <RequiredFieldsLegend />
                             {renderPermitClientEditor('agent', invoiceMaterialLocked)}
+                            {renderPermitClientEditActions()}
                           </Tile>
                         </Column>
                       ) : (
                         <Column sm={4} md={8} lg={16}>
                           <PermitClientTile
                             title="Agent"
+                            headerAction={
+                              canEditPermitClients && !isEditingPermit ? (
+                                <Button kind="tertiary" size="md" onClick={startPermitClientEdit}>
+                                  Edit agent
+                                </Button>
+                              ) : undefined
+                            }
                             clientNumber={detail.applicantClientNumber}
                             locationCode={detail.agentClientLocationCode}
                             clientData={agentClientData}
@@ -7132,45 +7057,6 @@ const ProvincialPermitDetailsPage = () => {
                           />
                         </Column>
                       )}
-                      {canEditPermitClients && (
-                        <Column sm={4} md={8} lg={16}>
-                          <div className="legacy-search-actions">
-                            {isEditingPermit ? (
-                              <>
-                                <Button
-                                  kind="primary"
-                                  size="sm"
-                                  disabled={
-                                    isSavingPermit ||
-                                    isPermitOptionsLoading ||
-                                    permitOptionsUnavailable ||
-                                    blanketOicRegionSelectionUnavailable ||
-                                    requiredPermitOptionsMissing ||
-                                    paymentPendingReceiptRequiresCompletion ||
-                                    !permitClientLookupCanSave
-                                  }
-                                  renderIcon={isSavingPermit ? PendingIcon : undefined}
-                                  onClick={() => void onSavePermit()}
-                                >
-                                  {isSavingPermit ? 'Saving…' : 'Save permit'}
-                                </Button>
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  disabled={isSavingPermit}
-                                  onClick={cancelPermitClientEdit}
-                                >
-                                  Cancel
-                                </Button>
-                              </>
-                            ) : (
-                              <Button kind="tertiary" size="sm" onClick={startPermitClientEdit}>
-                                Edit agent
-                              </Button>
-                            )}
-                          </div>
-                        </Column>
-                      )}
                     </Grid>
                   </TabPanel>
                 )}
@@ -7179,10 +7065,9 @@ const ProvincialPermitDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       {isEditingShipping && permitForm ? (
                         <Tile>
-                          <h2 className="detail-tile-title">
-                            {usesReviewedPermitFlow && <EarthFilled size={24} aria-hidden="true" />}
+                          <DetailCardTitle icon={EarthFilled}>
                             {usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
-                          </h2>
+                          </DetailCardTitle>
                           <RequiredFieldsLegend />
                           {shippingReferencesErrorMessage && (
                             <InlineNotification
@@ -7337,6 +7222,39 @@ const ProvincialPermitDetailsPage = () => {
                                 true,
                               )}
                           </div>
+                          {canEditShipping && (
+                            <div className="legacy-search-actions">
+                              <Button
+                                kind="tertiary"
+                                size="md"
+                                disabled={isSavingShipping}
+                                onClick={() => {
+                                  resetPermitFormSection(true)
+                                  setIsEditingShipping(false)
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                kind="primary"
+                                size="md"
+                                disabled={
+                                  isSavingShipping ||
+                                  isShippingReferencesLoading ||
+                                  !shippingReferences ||
+                                  hasShippingValidationError
+                                }
+                                renderIcon={isSavingShipping ? PendingIcon : undefined}
+                                onClick={() => void onSaveShipping()}
+                              >
+                                {isSavingShipping
+                                  ? 'Saving…'
+                                  : usesReviewedPermitFlow
+                                    ? 'Save changes'
+                                    : 'Save shipping'}
+                              </Button>
+                            </div>
+                          )}
                         </Tile>
                       ) : (
                         <>
@@ -7352,16 +7270,12 @@ const ProvincialPermitDetailsPage = () => {
                           )}
                           <DetailFieldTile
                             title={usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
-                            icon={
-                              usesReviewedPermitFlow ? (
-                                <EarthFilled size={24} aria-hidden="true" />
-                              ) : undefined
-                            }
+                            icon={<EarthFilled size={24} aria-hidden="true" />}
                             headerAction={
                               canEditShipping ? (
                                 <Button
                                   kind="tertiary"
-                                  size="sm"
+                                  size="md"
                                   renderIcon={usesReviewedPermitFlow ? Edit : undefined}
                                   disabled={isShippingReferencesLoading || !shippingReferences}
                                   onClick={() => {
@@ -7430,60 +7344,6 @@ const ProvincialPermitDetailsPage = () => {
                         </>
                       )}
                     </Column>
-                    {canEditShipping && isEditingShipping && (
-                      <Column sm={4} md={8} lg={16}>
-                        <div className="legacy-search-actions">
-                          {isEditingShipping ? (
-                            <>
-                              {usesReviewedPermitFlow && (
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  disabled={isSavingShipping}
-                                  onClick={() => {
-                                    resetPermitFormSection(true)
-                                    setIsEditingShipping(false)
-                                  }}
-                                >
-                                  Cancel
-                                </Button>
-                              )}
-                              <Button
-                                kind="primary"
-                                size="sm"
-                                disabled={
-                                  isSavingShipping ||
-                                  isShippingReferencesLoading ||
-                                  !shippingReferences ||
-                                  hasShippingValidationError
-                                }
-                                renderIcon={isSavingShipping ? PendingIcon : undefined}
-                                onClick={() => void onSaveShipping()}
-                              >
-                                {isSavingShipping
-                                  ? 'Saving…'
-                                  : usesReviewedPermitFlow
-                                    ? 'Save changes'
-                                    : 'Save shipping'}
-                              </Button>
-                              {!usesReviewedPermitFlow && (
-                                <Button
-                                  kind="tertiary"
-                                  size="sm"
-                                  disabled={isSavingShipping}
-                                  onClick={() => {
-                                    resetPermitFormSection(true)
-                                    setIsEditingShipping(false)
-                                  }}
-                                >
-                                  Cancel
-                                </Button>
-                              )}
-                            </>
-                          ) : null}
-                        </div>
-                      </Column>
-                    )}
                   </Grid>
                 </TabPanel>
                 <TabPanel
@@ -7936,19 +7796,38 @@ const ProvincialPermitDetailsPage = () => {
                   className={`application-detail-tab-panel${ministerialFeeShellEmpty ? ' application-detail-tab-panel--empty' : ''}`}
                 >
                   <Grid fullWidth className="application-detail-tab-grid">
-                    {usesReviewedPermitFlow && !ministerialFeeShellEmpty ? (
+                    {ministerialFeeShellEmpty ? (
+                      <Column sm={4} md={8} lg={16}>
+                        <EmptyState
+                          variant="tab"
+                          icon={<Invoice width={48} height={48} />}
+                          title="No fees yet"
+                          description={
+                            <>
+                              Fees are calculated from the permit&apos;s Summary of scale. They
+                              appear once an application is selected on the{' '}
+                              <button
+                                type="button"
+                                className="cds--link"
+                                onClick={() => selectPermitTab('permit')}
+                              >
+                                Permit tab
+                              </button>
+                              .
+                            </>
+                          }
+                        />
+                      </Column>
+                    ) : usesReviewedPermitFlow ? (
                       <>
                         <Column sm={4} md={8} lg={16}>
                           <Tile>
                             <div className="detail-section-card__header">
-                              <h2 className="detail-tile-title">
-                                <Currency size={24} aria-hidden="true" />
-                                Permit fees
-                              </h2>
+                              <DetailCardTitle icon={Currency}>Permit fees</DetailCardTitle>
                               {canEditFeeOverride && !isEditingFeeOverride && (
                                 <Button
                                   kind="tertiary"
-                                  size="sm"
+                                  size="md"
                                   renderIcon={Edit}
                                   onClick={() => {
                                     setFeeOverrideFieldErrors({})
@@ -7965,14 +7844,11 @@ const ProvincialPermitDetailsPage = () => {
                         <Column sm={4} md={8} lg={16}>
                           <Tile>
                             <div className="detail-section-card__header">
-                              <h2 className="detail-tile-title">
-                                <Currency size={24} aria-hidden="true" />
-                                Package fees
-                              </h2>
+                              <DetailCardTitle icon={Currency}>Package fees</DetailCardTitle>
                               {canSavePermit && !isEditingPermit && (
                                 <Button
                                   kind="tertiary"
-                                  size="sm"
+                                  size="md"
                                   renderIcon={Edit}
                                   onClick={() => {
                                     resetPermitFormSection(false)
@@ -7989,19 +7865,11 @@ const ProvincialPermitDetailsPage = () => {
                       </>
                     ) : (
                       <Column sm={4} md={8} lg={16}>
-                        <FeesContainer
-                          className={
-                            ministerialFeeShellEmpty ? 'permit-detail-empty-section' : undefined
-                          }
-                        >
-                          {!ministerialFeeShellEmpty && (
-                            <h2 className="detail-tile-title">
-                              {usesReviewedPermitFlow ? 'Fees' : 'Fee calculation details'}
-                            </h2>
-                          )}
-                          {!ministerialFeeShellEmpty && renderPermitFeeSummary()}
+                        <Tile>
+                          <DetailCardTitle icon={Currency}>Fee calculation details</DetailCardTitle>
+                          {renderPermitFeeSummary()}
                           {renderPackageFees()}
-                        </FeesContainer>
+                        </Tile>
                       </Column>
                     )}
                   </Grid>
@@ -8011,7 +7879,7 @@ const ProvincialPermitDetailsPage = () => {
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
-                          <h2 className="detail-tile-title">GBMS invoice history</h2>
+                          <DetailCardTitle>GBMS invoice history</DetailCardTitle>
                           {gbmsErrorMessage ? (
                             <EmptyState
                               title="GBMS history unavailable"
@@ -8113,12 +7981,12 @@ const ProvincialPermitDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">Invoices</h2>
+                          <DetailCardTitle>Invoices</DetailCardTitle>
                           {canEditInvoiceDocuments &&
                             (isEditingInvoiceDocuments ? (
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 disabled={invoiceDocumentUploadBusy}
                                 onClick={onCancelInvoiceDocumentEditing}
                               >
@@ -8127,7 +7995,7 @@ const ProvincialPermitDetailsPage = () => {
                             ) : (
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 renderIcon={Edit}
                                 onClick={() => setIsEditingInvoiceDocuments(true)}
                               >

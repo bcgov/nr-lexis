@@ -48,6 +48,7 @@ import ConfirmationModal from '@/components/ConfirmationModal'
 import Modal from '@/components/Modal'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailCardTitle from '@/components/DetailCardTitle'
 import DetailLoadError from '@/components/DetailLoadError'
 import DetailSidePanel from '@/components/DetailSidePanel'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
@@ -470,14 +471,11 @@ const ExemptionClientTile = ({
   ...client
 }: ExemptionClient & { agent?: ExemptionClient }) => (
   <Tile className="detail-section-card exemption-client-card">
-    <h2 className="detail-tile-title">
-      <Enterprise size={24} aria-hidden="true" />
-      {client.title}
-    </h2>
+    <DetailCardTitle icon={Enterprise}>{client.title}</DetailCardTitle>
     <ExemptionClientFields {...client} />
     {agent && (
       <section className="detail-subsection" aria-label={agent.title}>
-        <h3 className="detail-tile-title">{agent.title}</h3>
+        <h3 className="detail-section-subtitle">{agent.title}</h3>
         <ExemptionClientFields {...agent} />
       </section>
     )}
@@ -2171,7 +2169,7 @@ const ProvincialExemptionDetailsPage = () => {
                 {canApproveExemption && (
                   <Button
                     kind="primary"
-                    size="sm"
+                    size="md"
                     disabled={approving}
                     onClick={() => {
                       setActionResult(null)
@@ -2186,7 +2184,7 @@ const ProvincialExemptionDetailsPage = () => {
                 {persistedStatusCode === 'ACT' && canPerform('/approvedExemptionReport') && (
                   <Button
                     kind="tertiary"
-                    size="sm"
+                    size="md"
                     disabled={generatingReport}
                     renderIcon={generatingReport ? PendingIcon : undefined}
                     onClick={() => void onGenerateApprovedReport()}
@@ -2329,12 +2327,9 @@ const ProvincialExemptionDetailsPage = () => {
                   <Grid fullWidth className="application-detail-tab-grid">
                     {editingSection === 'summary' && editForm ? (
                       <>
-                        <Column sm={4} md={4} lg={8}>
+                        <Column sm={4} md={8} lg={16}>
                           <Tile>
-                            <h2 className="detail-tile-title">
-                              <Rule size={24} aria-hidden="true" />
-                              Exemption details
-                            </h2>
+                            <DetailCardTitle icon={Rule}>Exemption details</DetailCardTitle>
                             {sectionResult('summary')}
                             <RequiredFieldsLegend className="application-detail-required" />
                             <div className="legacy-search-grid">
@@ -2449,96 +2444,90 @@ const ProvincialExemptionDetailsPage = () => {
                                   )
                                 }
                               />
+                              {currentTypeCode === 'B' && (
+                                <div className="detail-field-item--full">
+                                  <RegionMultiSelect
+                                    id="exemptionDetailRegions"
+                                    titleText={requiredLabel('Regions')}
+                                    required
+                                    items={regionOptions}
+                                    selectedItems={selectedRegions}
+                                    disabled={
+                                      optionsAvailability !== 'available' ||
+                                      !canEditSummaryFields ||
+                                      regionOptions.length === 0
+                                    }
+                                    onChange={(selectedItems) =>
+                                      setEditForm((current) =>
+                                        current
+                                          ? {
+                                              ...current,
+                                              regionNumbers: selectedItems.map((item) => item.id),
+                                            }
+                                          : current,
+                                      )
+                                    }
+                                  />
+                                </div>
+                              )}
+                              <div className="detail-field-item--full">
+                                <TextArea
+                                  id="exemptionDetailOtherConditions"
+                                  labelText="Conditions"
+                                  enableCounter
+                                  maxCount={250}
+                                  maxLength={250}
+                                  value={editForm.otherConditions}
+                                  disabled={!canEditSummaryFields}
+                                  onChange={(event) =>
+                                    setEditForm((current) =>
+                                      current
+                                        ? { ...current, otherConditions: event.target.value }
+                                        : current,
+                                    )
+                                  }
+                                />
+                              </div>
                             </div>
-                            {currentTypeCode === 'B' && (
-                              <RegionMultiSelect
-                                id="exemptionDetailRegions"
-                                titleText={requiredLabel('Regions')}
-                                required
-                                items={regionOptions}
-                                selectedItems={selectedRegions}
+                            <div className="legacy-search-actions">
+                              <Button
+                                kind="tertiary"
+                                size="md"
+                                disabled={saving}
+                                onClick={() => {
+                                  setEditForm(toEditForm(currentDetail, editContext))
+                                  setEditingSection(null)
+                                }}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                kind="primary"
+                                size="md"
                                 disabled={
-                                  optionsAvailability !== 'available' ||
-                                  !canEditSummaryFields ||
-                                  regionOptions.length === 0
+                                  saving ||
+                                  Boolean(formValidationMessage) ||
+                                  requiredExemptionOptionsMissing ||
+                                  optionsAvailability !== 'available'
                                 }
-                                onChange={(selectedItems) =>
-                                  setEditForm((current) =>
-                                    current
-                                      ? {
-                                          ...current,
-                                          regionNumbers: selectedItems.map((item) => item.id),
-                                        }
-                                      : current,
-                                  )
-                                }
-                              />
-                            )}
+                                renderIcon={saving ? PendingIcon : undefined}
+                                onClick={() => void onSaveExemption()}
+                              >
+                                {saving ? 'Saving…' : 'Save changes'}
+                              </Button>
+                            </div>
                           </Tile>
-                        </Column>
-                        <Column sm={4} md={4} lg={8}>
-                          <Tile>
-                            <h2 className="detail-tile-title">Conditions</h2>
-                            <TextArea
-                              id="exemptionDetailOtherConditions"
-                              labelText="Conditions"
-                              enableCounter
-                              maxCount={250}
-                              maxLength={250}
-                              value={editForm.otherConditions}
-                              disabled={!canEditSummaryFields}
-                              onChange={(event) =>
-                                setEditForm((current) =>
-                                  current
-                                    ? { ...current, otherConditions: event.target.value }
-                                    : current,
-                                )
-                              }
-                            />
-                          </Tile>
-                        </Column>
-                        <Column sm={4} md={8} lg={16}>
-                          <div className="legacy-search-actions">
-                            <Button
-                              kind="tertiary"
-                              size="sm"
-                              disabled={saving}
-                              onClick={() => {
-                                setEditForm(toEditForm(currentDetail, editContext))
-                                setEditingSection(null)
-                              }}
-                            >
-                              Cancel
-                            </Button>
-                            <Button
-                              kind="primary"
-                              size="sm"
-                              disabled={
-                                saving ||
-                                Boolean(formValidationMessage) ||
-                                requiredExemptionOptionsMissing ||
-                                optionsAvailability !== 'available'
-                              }
-                              renderIcon={saving ? PendingIcon : undefined}
-                              onClick={() => void onSaveExemption()}
-                            >
-                              {saving ? 'Saving…' : 'Save changes'}
-                            </Button>
-                          </div>
                         </Column>
                       </>
                     ) : (
                       <Column sm={4} md={8} lg={16}>
                         <Tile className="detail-section-card exemption-summary-card">
                           <div className="detail-section-card__header">
-                            <h2 className="detail-tile-title">
-                              <Rule size={24} aria-hidden="true" />
-                              Exemption details
-                            </h2>
+                            <DetailCardTitle icon={Rule}>Exemption details</DetailCardTitle>
                             {canSaveExemption && !editing && (
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 renderIcon={Edit}
                                 onClick={() => startEditingSection('summary')}
                               >
@@ -2622,14 +2611,11 @@ const ProvincialExemptionDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
                           <div className="detail-section-card__header">
-                            <h2 className="detail-tile-title">
-                              <Result size={24} aria-hidden="true" />
-                              Applications
-                            </h2>
+                            <DetailCardTitle icon={Result}>Applications</DetailCardTitle>
                             {canLinkApplications && (
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 renderIcon={Add}
                                 ref={addApplicationButtonRef}
                                 onClick={() => {
@@ -2782,7 +2768,7 @@ const ProvincialExemptionDetailsPage = () => {
                                                 >
                                                   <Button
                                                     kind="danger--ghost"
-                                                    size="sm"
+                                                    size="md"
                                                     disabled={
                                                       application.locked ||
                                                       Boolean(applicationMutationNumber)
@@ -2830,10 +2816,7 @@ const ProvincialExemptionDetailsPage = () => {
                     <Column sm={4} md={8} lg={16}>
                       <Tile>
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">
-                            <Certificate size={24} aria-hidden="true" />
-                            Permits
-                          </h2>
+                          <DetailCardTitle icon={Certificate}>Permits</DetailCardTitle>
                           {(visiblePermitRows.length > 0 || Boolean(permitsErrorMessage)) &&
                             applyForPermitButton}
                         </div>
@@ -3003,10 +2986,7 @@ const ProvincialExemptionDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         {applicationsErrorMessage || !editContextLoaded ? (
                           <Tile>
-                            <h2 className="detail-tile-title">
-                              <Currency size={24} aria-hidden="true" />
-                              Fees
-                            </h2>
+                            <DetailCardTitle icon={Currency}>Fees</DetailCardTitle>
                             {applicationsErrorMessage ? (
                               <EmptyState
                                 title="Fee eligibility unavailable"
@@ -3023,10 +3003,7 @@ const ProvincialExemptionDetailsPage = () => {
                           </Tile>
                         ) : editingSection === 'fees' && editForm ? (
                           <Tile>
-                            <h2 className="detail-tile-title">
-                              <Currency size={24} aria-hidden="true" />
-                              Fees
-                            </h2>
+                            <DetailCardTitle icon={Currency}>Fees</DetailCardTitle>
                             {sectionResult('fees')}
                             <RequiredFieldsLegend className="application-detail-required" />
                             <div className="legacy-search-grid">
@@ -3082,7 +3059,7 @@ const ProvincialExemptionDetailsPage = () => {
                             <div className="legacy-search-actions">
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 disabled={saving}
                                 onClick={() => {
                                   setEditForm(toEditForm(currentDetail, editContext))
@@ -3093,7 +3070,7 @@ const ProvincialExemptionDetailsPage = () => {
                               </Button>
                               <Button
                                 kind="primary"
-                                size="sm"
+                                size="md"
                                 disabled={
                                   saving ||
                                   Boolean(formValidationMessage) ||
@@ -3110,14 +3087,11 @@ const ProvincialExemptionDetailsPage = () => {
                         ) : (
                           <Tile>
                             <div className="detail-section-card__header">
-                              <h2 className="detail-tile-title">
-                                <Currency size={24} aria-hidden="true" />
-                                Fees
-                              </h2>
+                              <DetailCardTitle icon={Currency}>Fees</DetailCardTitle>
                               {canEditFeeOverride && !editing && (
                                 <Button
                                   kind="tertiary"
-                                  size="sm"
+                                  size="md"
                                   renderIcon={Edit}
                                   onClick={() => startEditingSection('fees')}
                                 >
@@ -3269,6 +3243,7 @@ const ProvincialExemptionDetailsPage = () => {
           <div className="lexis-unsaved-changes-modal__actions">
             <Button
               kind="tertiary"
+              size="md"
               disabled={savingPermitCreationChanges}
               onClick={closePermitCreationUnsavedChanges}
             >
@@ -3277,6 +3252,7 @@ const ProvincialExemptionDetailsPage = () => {
             {!permitCreationSavedRequiresReload && (
               <Button
                 kind="danger--tertiary"
+                size="md"
                 disabled={permitCreationActionBusy}
                 onClick={onDiscardChangesBeforePermitCreation}
               >
@@ -3286,6 +3262,7 @@ const ProvincialExemptionDetailsPage = () => {
             {!permitCreationSavedRequiresReload && !unsavedExemptionSaveUnavailableReason && (
               <Button
                 kind="primary"
+                size="md"
                 disabled={permitCreationActionBusy}
                 renderIcon={savingPermitCreationChanges ? PendingIcon : undefined}
                 onClick={() => void onSaveChangesBeforePermitCreation()}
@@ -3334,6 +3311,7 @@ const ProvincialExemptionDetailsPage = () => {
           <div className="permit-creation-confirmation-modal__actions">
             <Button
               kind="tertiary"
+              size="md"
               disabled={creatingPermit}
               onClick={closePermitCreationConfirmation}
             >
@@ -3341,6 +3319,7 @@ const ProvincialExemptionDetailsPage = () => {
             </Button>
             <Button
               kind="primary"
+              size="md"
               disabled={creatingPermit}
               renderIcon={creatingPermit ? PendingIcon : undefined}
               onClick={() => {

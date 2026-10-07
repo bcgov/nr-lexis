@@ -1720,7 +1720,7 @@ function ProvincialApplicationItemsPanel({
                 canOpenItemsEditor ? (
                   <Button
                     kind="tertiary"
-                    size="sm"
+                    size="md"
                     renderIcon={Add}
                     disabled={otherItemActionDisabled}
                     onClick={(event) => {
@@ -1796,7 +1796,7 @@ function ProvincialApplicationItemsPanel({
                 {canOpenItemsEditor && canEditPackages && selectedPackageNumber && (
                   <Button
                     kind="tertiary"
-                    size="sm"
+                    size="md"
                     renderIcon={Edit}
                     disabled={
                       otherItemActionDisabled ||
@@ -1815,7 +1815,7 @@ function ProvincialApplicationItemsPanel({
                 {canOpenItemsEditor && canDeleteSelectedPackage && (
                   <Button
                     kind="danger--ghost"
-                    size="sm"
+                    size="md"
                     renderIcon={TrashCan}
                     onClick={() => {
                       setItemsErrorMessage('')
@@ -1829,7 +1829,7 @@ function ProvincialApplicationItemsPanel({
                 {canOpenItemsEditor && canAddPackages && (
                   <Button
                     kind="tertiary"
-                    size="sm"
+                    size="md"
                     renderIcon={Add}
                     disabled={otherItemActionDisabled}
                     onClick={(event) => {
@@ -2084,7 +2084,7 @@ function ProvincialApplicationItemsPanel({
                       />
                       <Button
                         kind="tertiary"
-                        size="sm"
+                        size="md"
                         disabled={!canSaveSelectedPackage || !speciesToAdd}
                         onClick={onAddSpecies}
                       >
@@ -2125,7 +2125,7 @@ function ProvincialApplicationItemsPanel({
                                   <TableCell>
                                     <Button
                                       kind="ghost"
-                                      size="sm"
+                                      size="md"
                                       disabled={!canSaveSelectedPackage}
                                       onClick={() => onRemoveSpecies(row.code)}
                                     >
@@ -2374,7 +2374,7 @@ function ProvincialApplicationItemsPanel({
                 />
                 <Button
                   kind="tertiary"
-                  size="sm"
+                  size="md"
                   aria-label="Add species to new package"
                   disabled={!canCreatePackages || !createSpeciesToAdd}
                   onClick={onAddCreateSpecies}
@@ -2397,7 +2397,7 @@ function ProvincialApplicationItemsPanel({
                         <TableCell>
                           <Button
                             kind="ghost"
-                            size="sm"
+                            size="md"
                             disabled={!canCreatePackages}
                             onClick={() => onRemoveCreateSpecies(row.code)}
                           >
@@ -2432,7 +2432,7 @@ function ProvincialApplicationItemsPanel({
               {canOpenItemsEditor && canAddScales && selectedPackageNumber && (
                 <Button
                   kind="tertiary"
-                  size="sm"
+                  size="md"
                   renderIcon={Add}
                   disabled={otherItemActionDisabled || !packageDataLoaded}
                   onClick={(event) => {
@@ -2590,7 +2590,7 @@ function ProvincialApplicationItemsPanel({
                     <Button
                       type="button"
                       kind="ghost"
-                      size="sm"
+                      size="md"
                       onClick={() => void onLookupScale()}
                     >
                       Lookup Scale
@@ -2634,7 +2634,7 @@ function ProvincialApplicationItemsPanel({
                             <Button
                               type="button"
                               kind="danger--ghost"
-                              size="sm"
+                              size="md"
                               disabled={
                                 !canAddScales ||
                                 otherItemActionDisabled ||

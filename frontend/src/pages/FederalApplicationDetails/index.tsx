@@ -1179,7 +1179,7 @@ const FederalApplicationDetailsPage = () => {
                           !isEditingFederalStatus ? (
                             <Button
                               kind="tertiary"
-                              size="sm"
+                              size="md"
                               renderIcon={Edit}
                               onClick={() => {
                                 setStatusCode(statusTransitions[0]?.code ?? '')
@@ -1285,8 +1285,16 @@ const FederalApplicationDetailsPage = () => {
                             </div>
                             <div className="legacy-search-actions">
                               <Button
+                                kind="ghost"
+                                size="md"
+                                disabled={isSavingMutation}
+                                onClick={onCancelFederalStatusEdit}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
                                 kind="primary"
-                                size="sm"
+                                size="md"
                                 disabled={
                                   isSavingMutation ||
                                   !statusCode ||
@@ -1297,14 +1305,6 @@ const FederalApplicationDetailsPage = () => {
                                 onClick={() => void onSaveStatus()}
                               >
                                 {isSavingMutation ? 'Saving…' : 'Update status'}
-                              </Button>
-                              <Button
-                                kind="ghost"
-                                size="sm"
-                                disabled={isSavingMutation}
-                                onClick={onCancelFederalStatusEdit}
-                              >
-                                Cancel
                               </Button>
                             </div>
                           </Tile>
@@ -1447,7 +1447,7 @@ const FederalApplicationDetailsPage = () => {
                                     <TableCell>
                                       <Button
                                         kind="ghost"
-                                        size="sm"
+                                        size="md"
                                         disabled={
                                           !canPerform('/offersSearch') ||
                                           !canPerform('/offerDetails')
@@ -1500,7 +1500,7 @@ const FederalApplicationDetailsPage = () => {
                             {canMutateFederalApplication && !isEditingFederalRemarks && (
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 onClick={() => {
                                   setRemarkDraft('')
                                   setEditingRemarkId(null)
@@ -1532,8 +1532,16 @@ const FederalApplicationDetailsPage = () => {
                                 }}
                               />
                               <Button
+                                kind="ghost"
+                                size="md"
+                                disabled={isSavingRemark}
+                                onClick={onCancelFederalRemarkEdit}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
                                 kind="primary"
-                                size="sm"
+                                size="md"
                                 disabled={isSavingRemark}
                                 renderIcon={isSavingRemark ? PendingIcon : undefined}
                                 onClick={() => void onSaveRemark()}
@@ -1543,14 +1551,6 @@ const FederalApplicationDetailsPage = () => {
                                   : editingRemarkId
                                     ? 'Update remark'
                                     : 'Save remark'}
-                              </Button>
-                              <Button
-                                kind="ghost"
-                                size="sm"
-                                disabled={isSavingRemark}
-                                onClick={onCancelFederalRemarkEdit}
-                              >
-                                Cancel
                               </Button>
                             </div>
                           )}
@@ -1584,7 +1584,7 @@ const FederalApplicationDetailsPage = () => {
                                         <TableCell>
                                           <Button
                                             kind="ghost"
-                                            size="sm"
+                                            size="md"
                                             onClick={() => {
                                               setEditingRemarkId(item.remarkId)
                                               setRemarkDraft(item.remark)
@@ -1822,7 +1822,7 @@ const FederalApplicationDetailsPage = () => {
                             <div className="federal-shipping-details__actions">
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 disabled={isSavingMutation}
                                 onClick={onCancelFederalPermitEdit}
                               >
@@ -1830,7 +1830,7 @@ const FederalApplicationDetailsPage = () => {
                               </Button>
                               <Button
                                 kind="primary"
-                                size="sm"
+                                size="md"
                                 disabled={isSavingMutation || hasPermitValidationError}
                                 renderIcon={isSavingMutation ? PendingIcon : undefined}
                                 onClick={() => void onSavePermit()}
@@ -1846,7 +1846,7 @@ const FederalApplicationDetailsPage = () => {
                               {canMutateFederalApplication && (
                                 <Button
                                   kind="tertiary"
-                                  size="sm"
+                                  size="md"
                                   renderIcon={Edit}
                                   disabled={
                                     isSavingMutation ||

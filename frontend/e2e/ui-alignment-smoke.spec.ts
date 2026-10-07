@@ -2114,7 +2114,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     const editOfferButton = page.getByRole('button', { name: 'Edit', exact: true })
     await expect(editOfferButton).toHaveClass(/cds--btn--tertiary/)
-    await expect(editOfferButton).toHaveCSS('height', '32px')
+    await expect(editOfferButton).toHaveCSS('height', '40px')
 
     await expect(page.getByLabel('Offer highlights')).toHaveCount(0)
 
@@ -2210,7 +2210,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(page.locator('.application-detail-tab-panel .cds--tile').first()).toHaveCSS(
       'padding-top',
-      '20px',
+      '32px',
     )
 
     const detailCanvas = await page.evaluate(() => {

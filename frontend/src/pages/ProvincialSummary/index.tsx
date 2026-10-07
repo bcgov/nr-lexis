@@ -218,7 +218,7 @@ function SummarySection<T>({
             title={`${title} unavailable`}
             description={error}
             action={
-              <Button kind="tertiary" size="sm" onClick={() => onLoad(data.page)}>
+              <Button kind="tertiary" size="md" onClick={() => onLoad(data.page)}>
                 Try again
               </Button>
             }
@@ -361,7 +361,7 @@ const ProvincialSummaryPage = () => {
             action={
               <Button
                 kind="tertiary"
-                size="sm"
+                size="md"
                 onClick={() => {
                   setClientDetails(null)
                   setClientDetailsRetryKey((current) => current + 1)
@@ -646,7 +646,7 @@ const ProvincialSummaryPage = () => {
               searchLabel="permits"
               unrequestedMessage="Select Display fees to calculate current permit fee totals."
               headerAction={
-                <Button kind="ghost" size="sm" onClick={() => fees.load(0)}>
+                <Button kind="ghost" size="md" onClick={() => fees.load(0)}>
                   {fees.requested ? 'Refresh fees' : 'Display fees'}
                 </Button>
               }
