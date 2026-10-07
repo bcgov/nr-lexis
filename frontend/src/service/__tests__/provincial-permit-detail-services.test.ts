@@ -640,6 +640,7 @@ describe('provincial permit detail services', () => {
                   packageDetails: {
                     volume: '40.0',
                     scaledVolume: '38.5',
+                    remainingVolume: '1.45',
                     status: 'APP',
                     statusDesc: 'Approved',
                     reprocessed: 'N',
@@ -734,6 +735,7 @@ describe('provincial permit detail services', () => {
         averageTopDiameter: '18.0',
         productType: 'Unmanufactured',
         currentPackageVolume: '38.5',
+        remainingVolume: '1.45',
         status: 'APP - Approved',
         reprocessed: 'N',
         comments: 'Current OIC package',

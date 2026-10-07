@@ -126,6 +126,10 @@ describe('DetailDocumentUploadPanel', () => {
 
     const panel = screen.getByRole('complementary', { name: 'Add documents' })
     expect(panel).toHaveClass('detail-document-upload-panel')
+    // The Files drop zone is the first field.
+    await waitFor(() =>
+      expect(within(panel).getByRole('button', { name: 'Choose files for Files' })).toHaveFocus(),
+    )
     expect(within(panel).queryByRole('button', { name: 'Review upload' })).not.toBeInTheDocument()
     await userEvent.click(within(panel).getByRole('button', { name: 'Save documents' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Choose at least one file to upload.')

@@ -1814,10 +1814,28 @@ class OracleApplicationDetailsRpcServiceTest {
             ApplicationDetailsRpcService.ApplicationPackageScaleItem::id,
             ApplicationDetailsRpcService.ApplicationPackageScaleItem::cascadeSplitCode)
         .containsExactly(
-            tuple(true, "TM001", "Douglas-fir", 12L, "Grade J", "10.6", "55", "C"),
+            tuple(true, "TM001", "Douglas-fir", 12L, "Grade J", "10.55", "55", "C"),
             tuple(false, "Unmanufactured", "Hemlock", 8L, "Grade U", "6.0", "56", ""));
     verify(repository).findScaleDetailsByPackageNumber("PKG-903");
     verify(repository).findPermitStatusCodeByPermitNumber(7000123L);
+  }
+
+  @Test
+  void packageScaleDisplaysShouldKeepAStoredSecondDecimal() {
+    List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scales =
+        List.of(
+            new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                "60", "R00345", "FI", "D", 0.05d, 1L, 1000456L, null, "PKG-905", null),
+            new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                "61", "R00345", "FI", "B", 2.0d, 3L, 1000456L, null, "PKG-905", null));
+    when(repository.findScaleDetailsByPackageNumber("PKG-905")).thenReturn(scales);
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-905"))
+        .thenReturn(Optional.of(packageDetailsRow("PKG-905", 5.0d)));
+
+    assertThat(service.getScalesForPackage("PKG-905"))
+        .extracting(ApplicationDetailsRpcService.ApplicationPackageScaleItem::volume)
+        .containsExactly("0.05", "2.0");
+    assertThat(service.getPackageDetails("PKG-905").scaledVolume()).isEqualTo(2.05d);
   }
 
   @Test
@@ -1835,7 +1853,7 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.species()).isEqualTo("FIR");
     assertThat(response.pieces()).isEqualTo("12");
     assertThat(response.grade()).isEqualTo("J");
-    assertThat(response.volume()).isEqualTo("10.6");
+    assertThat(response.volume()).isEqualTo("10.55");
     assertThat(response.id()).isEqualTo("55");
     verify(repository).findScaleDetailById("55");
   }
@@ -3549,8 +3567,8 @@ class OracleApplicationDetailsRpcServiceTest {
 
     assertThat(response.success()).isTrue();
     assertThat(response.packageNumber()).isEqualTo("PKG-903");
-    assertThat(response.volume()).isEqualTo("10.3");
-    assertThat(response.scaledVolume()).isEqualTo(3.6d);
+    assertThat(response.volume()).isEqualTo("10.25");
+    assertThat(response.scaledVolume()).isEqualTo(3.59d);
     assertThat(response.length()).isEqualTo("6.0");
     assertThat(response.diameter()).isEqualTo("24.0");
     assertThat(response.status()).isEqualTo("ACT");
@@ -3563,6 +3581,22 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.productTypeDescription()).isEqualTo("Harvested");
     verify(repository).findPackageDetailsByPackageNumberRequired("PKG-903");
     verify(repository).findScaleDetailsByPackageNumber("PKG-903");
+  }
+
+  @Test
+  void getPackageDetailsShouldReturnStoredAmountsSoAnUnchangedEditKeepsThem() {
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-904"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageDetailsRow(
+                    "PKG-904", 0.05d, 12.3d, 99.99d, "ACT", null, "N", "O", "H")));
+    when(repository.findScaleDetailsByPackageNumber("PKG-904")).thenReturn(List.of());
+
+    ApplicationDetailsRpcService.PackageDetailsItem response = service.getPackageDetails("PKG-904");
+
+    assertThat(response.volume()).isEqualTo("0.05");
+    assertThat(response.length()).isEqualTo("12.3");
+    assertThat(response.diameter()).isEqualTo("99.99");
   }
 
   @Test

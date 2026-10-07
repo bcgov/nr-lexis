@@ -26,7 +26,6 @@ import {
   Grid,
   InlineLoading,
   InlineNotification,
-  Layer,
   Loading,
   RadioButton,
   RadioButtonGroup,
@@ -99,6 +98,7 @@ import {
   maxLengthFieldError,
   maxNumericValueFieldError,
   numericFieldError,
+  parseNonNegativeDecimalFieldValue,
   positiveNumericFieldError,
   requiredFieldError,
   requiredMaxLengthFieldError,
@@ -110,7 +110,9 @@ import BlanketOicPackageCodeFields, {
   type BlanketOicPackageOptionsStatus,
 } from './BlanketOicPackageCodeFields'
 import { blanketOicProductTypeLabel } from './blanket-oic-package-options'
-import BlanketOicScaleCodeFields from './BlanketOicScaleCodeFields'
+import BlanketOicScaleCodeFields, {
+  type BlanketOicScaleOptionsStatus,
+} from './BlanketOicScaleCodeFields'
 import { resolveBlanketOicRegionContext } from '../ProvincialBlanketOicPermitCreate/region-context'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
@@ -251,6 +253,9 @@ type BlanketOicPackageForm = {
 type BlanketOicPackageField = keyof BlanketOicPackageForm
 type BlanketOicPackageFieldErrors = Partial<Record<BlanketOicPackageField, string>>
 
+type BlanketOicScaleField = keyof BlanketOicScaleForm
+type BlanketOicScaleFieldErrors = Partial<Record<BlanketOicScaleField, string>>
+
 type PermitFeeOverrideForm = PermitFeeOverrideContext
 type PermitFeeOverrideField = 'overrideFee' | 'overrideComment'
 type PermitFeeOverrideFieldErrors = Partial<Record<PermitFeeOverrideField, string>>
@@ -325,15 +330,16 @@ const EMPTY_BLANKET_OIC_SCALE_FORM: BlanketOicScaleForm = {
   speciesCode: '',
   gradeCode: '',
   scalePieces: '',
-  scaleVolume: '',
+  // A new scale's volume starts at 0.0.
+  scaleVolume: '0.0',
 }
 
 // INTENTIONAL_LEGACY_DIVERGENCE(BOIC_PACKAGE_STATUS_DEFAULTS): hidden fields default only on create; edits preserve saved values.
 const EMPTY_BLANKET_OIC_PACKAGE_FORM: BlanketOicPackageForm = {
   packageNumber: '',
-  volume: '',
-  averageLength: '',
-  averageDiameter: '',
+  volume: '0.0',
+  averageLength: '0.0',
+  averageDiameter: '0.0',
   status: 'ACT',
   comments: '',
   reprocessed: 'N',
@@ -353,18 +359,18 @@ const parseBlanketOicSpeciesCodes = (value: string): string[] =>
     ),
   )
 
-// Read ".1" and "0,1" as 0.1 in the package measurements.
+// Read ".1" and "0,1" as 0.1.
+const normalizeDecimalInput = (value: string): string =>
+  value.trim().replace(',', '.').replace(/^\./, '0.')
+
 const normalizeBlanketOicPackageMeasurements = (
   form: BlanketOicPackageForm,
-): BlanketOicPackageForm => {
-  const normalize = (value: string) => value.trim().replace(',', '.').replace(/^\./, '0.')
-  return {
-    ...form,
-    volume: normalize(form.volume),
-    averageLength: normalize(form.averageLength),
-    averageDiameter: normalize(form.averageDiameter),
-  }
-}
+): BlanketOicPackageForm => ({
+  ...form,
+  volume: normalizeDecimalInput(form.volume),
+  averageLength: normalizeDecimalInput(form.averageLength),
+  averageDiameter: normalizeDecimalInput(form.averageDiameter),
+})
 
 // Server errors that belong to a field show on that field.
 const blanketOicPackageServerFieldErrors = (message: string): BlanketOicPackageFieldErrors => {
@@ -432,6 +438,86 @@ const validateBlanketOicPackage = (
     ),
   }
 }
+
+const volumeNumber = (value: string | undefined): number | null => {
+  const text = value?.replaceAll(',', '').trim() ?? ''
+  const parsed = Number(text)
+  return text && Number.isFinite(parsed) ? parsed : null
+}
+
+const blanketOicScaleVolumeLimitText = (remainingVolume: number): string =>
+  `Must be less than or equal to remaining package volume (${formatVolume(remainingVolume)} m³)`
+
+const validateBlanketOicScale = (
+  form: BlanketOicScaleForm,
+  remainingVolume: number | null,
+): BlanketOicScaleFieldErrors => {
+  const pieces = form.scalePieces.trim()
+  const volume = parseNonNegativeDecimalFieldValue(form.scaleVolume)
+  return {
+    timberMark: form.timberMark.trim() ? undefined : 'Enter a timber mark.',
+    scalePieces:
+      /^\d+$/.test(pieces) && Number(pieces) > 0
+        ? undefined
+        : 'Enter a whole number of pieces greater than 0.',
+    speciesCode: form.speciesCode.trim() ? undefined : 'Select a species.',
+    // Grade only becomes available, and required, once a species is chosen.
+    gradeCode: form.speciesCode.trim() && !form.gradeCode.trim() ? 'Select a grade.' : undefined,
+    scaleVolume:
+      volume === null || volume <= 0
+        ? 'Enter a volume greater than 0.'
+        : remainingVolume !== null && volume > remainingVolume
+          ? `${blanketOicScaleVolumeLimitText(remainingVolume)}.`
+          : undefined,
+  }
+}
+
+const BLANKET_OIC_SCALE_SERVER_FIELD_ERRORS: Array<[RegExp, BlanketOicScaleField]> = [
+  [/^A valid timber mark is required\.$/, 'timberMark'],
+  [/^Timber mark .+ is not valid for exemption .+\.$/, 'timberMark'],
+  [/^A valid species code is required\.$/, 'speciesCode'],
+  [/^Species code .+ does not exist\.$/, 'speciesCode'],
+  [/^A valid grade code is required\.$/, 'gradeCode'],
+  [/^Grade code .+ does not exist\.$/, 'gradeCode'],
+  [/^A valid pieces count is required\.$/, 'scalePieces'],
+  [/^The scale pieces must be less than .+\.$/, 'scalePieces'],
+  [/^The total scale pieces exceed the permit request pieces\.$/, 'scalePieces'],
+  [/^A valid scale volume is required\.$/, 'scaleVolume'],
+  [/^The scale volume must be less than .+\.$/, 'scaleVolume'],
+  [/^The total scale volume exceeds the (package|permit request) volume\.$/, 'scaleVolume'],
+]
+
+// Server errors that belong to a field show on that field; the rest stay for the panel.
+const blanketOicScaleServerErrors = (
+  messages: string[],
+): { fieldErrors: BlanketOicScaleFieldErrors; otherMessages: string[] } => {
+  const fieldErrors: BlanketOicScaleFieldErrors = {}
+  const otherMessages: string[] = []
+  for (const message of messages) {
+    const field = BLANKET_OIC_SCALE_SERVER_FIELD_ERRORS.find(([pattern]) =>
+      pattern.test(message),
+    )?.[1]
+    if (!field) otherMessages.push(message)
+    else fieldErrors[field] ??= message
+  }
+  return { fieldErrors, otherMessages }
+}
+
+// Focus the first invalid field, or the panel notification when the error has no field.
+const focusFirstPanelError = (panelSelector: string, notificationSelector: string) =>
+  requestAnimationFrame(() => {
+    const panel = document.querySelector(panelSelector)
+    // Carbon marks invalid dropdowns on their list box, so focus the control inside.
+    const invalid = panel?.querySelector<HTMLElement>(
+      '[aria-invalid="true"], [data-invalid="true"]',
+    )
+    const invalidControl = invalid?.matches('input, textarea, button')
+      ? invalid
+      : invalid?.querySelector<HTMLElement>('input, textarea, button')
+    const target = invalidControl ?? panel?.querySelector<HTMLElement>(notificationSelector)
+    target?.focus()
+    target?.scrollIntoView({ block: 'nearest' })
+  })
 
 const fetchPermitClientData = (
   clientNumber: string | null,
@@ -1039,7 +1125,9 @@ const ProvincialPermitDetailsPage = () => {
   const [isAddingBoicScale, setIsAddingBoicScale] = useState(false)
   const [discardBoicScaleOpen, setDiscardBoicScaleOpen] = useState(false)
   const [boicScaleErrorMessage, setBoicScaleErrorMessage] = useState('')
+  const [boicScaleFieldErrors, setBoicScaleFieldErrors] = useState<BlanketOicScaleFieldErrors>({})
   const scalePanelLauncherRef = useRef<HTMLButtonElement | null>(null)
+  const scaleDiscardLauncherRef = useRef<HTMLElement>(null)
   const scaleSaveInFlightRef = useRef(false)
   const [boicPackageForm, setBoicPackageForm] = useState<BlanketOicPackageForm>(
     EMPTY_BLANKET_OIC_PACKAGE_FORM,
@@ -1054,7 +1142,8 @@ const ProvincialPermitDetailsPage = () => {
   const [isCreatingBoicPackage, setIsCreatingBoicPackage] = useState(false)
   const [boicCodeOptionsStatus, setBoicCodeOptionsStatus] =
     useState<BlanketOicPackageOptionsStatus>('loading')
-  const [boicScaleCodeOptionsReady, setBoicScaleCodeOptionsReady] = useState(false)
+  const [boicScaleCodeOptionsStatus, setBoicScaleCodeOptionsStatus] =
+    useState<BlanketOicScaleOptionsStatus>('loading')
   const [isLoadingBoicPackage, setIsLoadingBoicPackage] = useState(false)
   const [isSavingBoicPackage, setIsSavingBoicPackage] = useState(false)
   const [isDeletingBoicPackageNumber, setIsDeletingBoicPackageNumber] = useState<string | null>(
@@ -1165,10 +1254,11 @@ const ProvincialPermitDetailsPage = () => {
     void beginBoicPackageEditRequest()
     setIsCreatingBoicPackage(false)
     setBoicCodeOptionsStatus('loading')
-    setBoicScaleCodeOptionsReady(false)
+    setBoicScaleCodeOptionsStatus('loading')
     setIsAddingBoicScale(false)
     setDiscardBoicScaleOpen(false)
     setBoicScaleErrorMessage('')
+    setBoicScaleFieldErrors({})
     setSelectedBlanketOicPackageNumberState('')
     setSelectedMinisterialPackageNumberState('')
     setMinisterialScaleSelectionDraft(null)
@@ -3752,6 +3842,9 @@ const ProvincialPermitDetailsPage = () => {
     setBoicPackageFieldErrors({})
   }, [beginBoicPackageEditRequest])
 
+  // Cancel, × and Esc all close the package panel here.
+  const closeBlanketOicPackage = () => resetBlanketOicPackageForm()
+
   const startBlanketOicPackageCreate = useCallback(() => {
     if (blanketOicPackageActionsDisabled) return
     resetBlanketOicPackageForm()
@@ -3806,6 +3899,9 @@ const ProvincialPermitDetailsPage = () => {
       resetBlanketOicPackageForm,
     ],
   )
+
+  // The server's exact remaining volume, since the save check sums unrounded scale volumes.
+  const boicScaleRemainingVolume = volumeNumber(selectedBlanketOicPackage?.remainingVolume)
 
   const boicPackageVolumeLimit =
     detail?.oicRequestVolume === null || detail?.oicRequestVolume === undefined
@@ -3989,19 +4085,31 @@ const ProvincialPermitDetailsPage = () => {
 
   const setBlanketOicScaleFormField = (field: keyof BlanketOicScaleForm, value: string): void => {
     setBoicScaleForm((current) => ({ ...current, [field]: value }))
+    setBoicScaleFieldErrors((current) => ({ ...current, [field]: undefined }))
   }
 
   const discardBlanketOicScale = () => {
     if (scaleSaveInFlightRef.current) return
+    scaleDiscardLauncherRef.current = null
     setBoicScaleForm(boicScaleBaselineForm)
     setBoicScaleErrorMessage('')
+    setBoicScaleFieldErrors({})
     setIsAddingBoicScale(false)
     setDiscardBoicScaleOpen(false)
   }
+  // Cancel, × and Esc all close the scale panel here.
   const closeBlanketOicScale = () => {
     if (scaleSaveInFlightRef.current) return
-    if (blanketOicScaleDirty) setDiscardBoicScaleOpen(true)
-    else discardBlanketOicScale()
+    if (blanketOicScaleDirty) {
+      const activeElement = document.activeElement
+      scaleDiscardLauncherRef.current =
+        activeElement instanceof HTMLElement &&
+        activeElement.closest('.permit-scale-panel') &&
+        activeElement.getAttribute('role') !== 'option'
+          ? activeElement
+          : document.querySelector<HTMLElement>('#boicScaleTimberMark')
+      setDiscardBoicScaleOpen(true)
+    } else discardBlanketOicScale()
   }
   const startBlanketOicScale = (launcher: HTMLButtonElement) => {
     if (!canEditBlanketOicScaleRows || blanketOicScaleActionsDisabled || !selectedBlanketOicPackage)
@@ -4013,7 +4121,8 @@ const ProvincialPermitDetailsPage = () => {
     setBoicScaleForm(baseline)
     setBoicScaleBaselineForm(baseline)
     setBoicScaleErrorMessage('')
-    setBoicScaleCodeOptionsReady(false)
+    setBoicScaleFieldErrors({})
+    setBoicScaleCodeOptionsStatus('loading')
     scalePanelLauncherRef.current = launcher
     setIsAddingBoicScale(true)
   }
@@ -4024,38 +4133,35 @@ const ProvincialPermitDetailsPage = () => {
       scaleSaveInFlightRef.current ||
       !canEditBlanketOicScaleRows ||
       !resolvedPermitNumber ||
-      blanketOicScaleActionsDisabled ||
-      !boicScaleCodeOptionsReady
+      blanketOicScaleActionsDisabled
     ) {
       return false
     }
     setActionResult(null)
     setBoicScaleErrorMessage('')
 
-    const request = {
-      permitNumber: resolvedPermitNumber,
-      packageNumber: boicScaleForm.packageNumber,
-      timberMark: boicScaleForm.timberMark.trim(),
-      scaleVolume: boicScaleForm.scaleVolume.trim(),
-      scalePieces: boicScaleForm.scalePieces.trim(),
-      speciesCode: boicScaleForm.speciesCode.trim(),
-      gradeCode: boicScaleForm.gradeCode.trim(),
+    const scaleForm = {
+      ...boicScaleForm,
+      scaleVolume: normalizeDecimalInput(boicScaleForm.scaleVolume),
     }
+    setBoicScaleForm(scaleForm)
+    const fieldErrors = validateBlanketOicScale(scaleForm, boicScaleRemainingVolume)
+    setBoicScaleFieldErrors(fieldErrors)
+    if (Object.values(fieldErrors).some(Boolean)) return false
 
     if (!detail?.oicApplicationNumber) {
       setBoicScaleErrorMessage('The permit does not have an OIC application number.')
       return false
     }
-    if (
-      !request.packageNumber.trim() ||
-      !request.timberMark ||
-      !request.scaleVolume ||
-      !request.scalePieces ||
-      !request.speciesCode ||
-      !request.gradeCode
-    ) {
-      setBoicScaleErrorMessage('Enter package, timber mark, species, grade, pieces, and volume.')
-      return false
+
+    const request = {
+      permitNumber: resolvedPermitNumber,
+      packageNumber: scaleForm.packageNumber,
+      timberMark: scaleForm.timberMark.trim(),
+      scaleVolume: scaleForm.scaleVolume,
+      scalePieces: scaleForm.scalePieces.trim(),
+      speciesCode: scaleForm.speciesCode.trim(),
+      gradeCode: scaleForm.gradeCode.trim(),
     }
 
     setBoicScaleErrorMessage('')
@@ -4064,9 +4170,13 @@ const ProvincialPermitDetailsPage = () => {
     try {
       const result = await addBlanketOicScale(request)
       if (!result.success) {
-        setBoicScaleErrorMessage(
-          result.errors[0] || result.message || 'Unable to add Blanket OIC scale detail.',
+        const { fieldErrors: serverFieldErrors, otherMessages } = blanketOicScaleServerErrors(
+          result.errors.length > 0
+            ? result.errors
+            : [result.message || 'Unable to add Blanket OIC scale detail.'],
         )
+        setBoicScaleFieldErrors(serverFieldErrors)
+        setBoicScaleErrorMessage(otherMessages[0] ?? '')
         return false
       }
 
@@ -4104,7 +4214,7 @@ const ProvincialPermitDetailsPage = () => {
     }
   }, [
     boicScaleForm,
-    boicScaleCodeOptionsReady,
+    boicScaleRemainingVolume,
     canEditBlanketOicScaleRows,
     detail?.oicApplicationNumber,
     detail?.permitNumber,
@@ -4503,6 +4613,7 @@ const ProvincialPermitDetailsPage = () => {
     setIsAddingBoicScale(false)
     setDiscardBoicScaleOpen(false)
     setBoicScaleErrorMessage('')
+    setBoicScaleFieldErrors({})
     setPermitDocumentUploadDirty(false)
     setPermitDocumentUploadBusy(false)
     setInvoiceDocumentUploadDirty(false)
@@ -8180,66 +8291,92 @@ const ProvincialPermitDetailsPage = () => {
               onClick: closeBlanketOicScale,
             },
             {
-              label: isSavingBoicScale ? 'Saving…' : 'Save scale',
+              label: isSavingBoicScale ? 'Saving scale' : 'Save scale',
               kind: 'primary',
-              disabled:
-                blanketOicScaleActionsDisabled ||
-                !canEditBlanketOicScaleRows ||
-                !boicScaleCodeOptionsReady,
+              // Save validates on click, so it is only disabled while busy.
+              disabled: blanketOicScaleActionsDisabled || !canEditBlanketOicScaleRows,
               renderIcon: isSavingBoicScale ? PendingIcon : undefined,
               onClick: async () => {
                 if (await onAddBlanketOicScale()) return
-                requestAnimationFrame(() =>
-                  document.querySelector<HTMLElement>('[data-scale-error]')?.focus(),
-                )
+                focusFirstPanelError('.permit-scale-panel', '[data-scale-error]')
               },
             },
           ]}
         >
-          <RequiredFieldsLegend className="application-detail-required" />
-          {!!boicScaleErrorMessage && (
-            <div tabIndex={-1} data-scale-error>
+          <div className="permit-panel-form">
+            <RequiredFieldsLegend className="application-detail-required" />
+            {/* Field errors show on their fields; this notification is only for errors that don't
+                belong to a field. */}
+            {!!boicScaleErrorMessage && (
+              <div tabIndex={-1} data-scale-error>
+                <InlineNotification
+                  kind="error"
+                  title="Scale needs attention"
+                  subtitle={boicScaleErrorMessage}
+                  lowContrast
+                  hideCloseButton
+                />
+              </div>
+            )}
+            {boicScaleCodeOptionsStatus === 'unavailable' && (
               <InlineNotification
-                kind="error"
-                title="Scale needs attention"
-                subtitle={boicScaleErrorMessage}
+                kind="warning"
+                title="Scale options unavailable"
+                subtitle="Species and grade options could not be loaded. Reload the page to try again."
                 lowContrast
                 hideCloseButton
               />
+            )}
+            {boicScaleCodeOptionsStatus === 'loading' && (
+              <InlineLoading description="Loading scale options…" />
+            )}
+            <div className="legacy-search-grid permit-panel-form__pair">
+              <TextInput
+                id="boicScaleTimberMark"
+                labelText={requiredLabel('Timber mark')}
+                aria-required="true"
+                value={boicScaleForm.timberMark}
+                invalid={!!boicScaleFieldErrors.timberMark}
+                invalidText={boicScaleFieldErrors.timberMark}
+                onChange={(event) => setBlanketOicScaleFormField('timberMark', event.target.value)}
+                disabled={blanketOicScaleActionsDisabled}
+              />
+              <TextInput
+                id="boicScalePieces"
+                labelText={requiredLabel('Pieces')}
+                aria-required="true"
+                value={boicScaleForm.scalePieces}
+                invalid={!!boicScaleFieldErrors.scalePieces}
+                invalidText={boicScaleFieldErrors.scalePieces}
+                onChange={(event) => setBlanketOicScaleFormField('scalePieces', event.target.value)}
+                disabled={blanketOicScaleActionsDisabled}
+              />
             </div>
-          )}
-          <div className="legacy-search-grid">
-            <TextInput
-              id="boicScaleTimberMark"
-              labelText={requiredLabel('Timber mark')}
-              aria-required="true"
-              value={boicScaleForm.timberMark}
-              onChange={(event) => setBlanketOicScaleFormField('timberMark', event.target.value)}
-              disabled={blanketOicScaleActionsDisabled}
-            />
-            <TextInput
-              id="boicScalePieces"
-              labelText={requiredLabel('Pieces')}
-              aria-required="true"
-              value={boicScaleForm.scalePieces}
-              onChange={(event) => setBlanketOicScaleFormField('scalePieces', event.target.value)}
-              disabled={blanketOicScaleActionsDisabled}
-            />
             <BlanketOicScaleCodeFields
               region={String(detail.orgUnitNumber ?? '')}
               value={boicScaleForm}
               onChange={setBlanketOicScaleFormField}
               disabled={blanketOicScaleActionsDisabled}
-              onAvailabilityChange={setBoicScaleCodeOptionsReady}
+              onAvailabilityChange={setBoicScaleCodeOptionsStatus}
+              fieldErrors={boicScaleFieldErrors}
             />
-            <TextInput
-              id="boicScaleVolume"
-              labelText={requiredLabel('Volume (m³)')}
-              aria-required="true"
-              value={boicScaleForm.scaleVolume}
-              onChange={(event) => setBlanketOicScaleFormField('scaleVolume', event.target.value)}
-              disabled={blanketOicScaleActionsDisabled}
-            />
+            <div className="legacy-search-grid">
+              <TextInput
+                id="boicScaleVolume"
+                labelText={requiredLabel('Volume (m³)')}
+                aria-required="true"
+                helperText={
+                  boicScaleRemainingVolume === null
+                    ? undefined
+                    : blanketOicScaleVolumeLimitText(boicScaleRemainingVolume)
+                }
+                value={boicScaleForm.scaleVolume}
+                invalid={!!boicScaleFieldErrors.scaleVolume}
+                invalidText={boicScaleFieldErrors.scaleVolume}
+                onChange={(event) => setBlanketOicScaleFormField('scaleVolume', event.target.value)}
+                disabled={blanketOicScaleActionsDisabled}
+              />
+            </div>
           </div>
         </DetailSidePanel>
       )}
@@ -8247,6 +8384,7 @@ const ProvincialPermitDetailsPage = () => {
         <ConfirmationModal
           open
           title="Discard scale changes?"
+          launcherButtonRef={scaleDiscardLauncherRef}
           description="Your unsaved scale changes will be lost."
           confirmLabel="Discard changes"
           cancelLabel="Keep editing"
@@ -8266,13 +8404,13 @@ const ProvincialPermitDetailsPage = () => {
           fallbackFocusSelector="#create-boic-package"
           loading={isLoadingBoicPackage}
           busy={isSavingBoicPackage}
-          onClose={resetBlanketOicPackageForm}
+          onClose={closeBlanketOicPackage}
           actions={[
             {
               label: 'Cancel',
               kind: 'tertiary',
               disabled: isSavingBoicPackage,
-              onClick: resetBlanketOicPackageForm,
+              onClick: closeBlanketOicPackage,
             },
             {
               label: isSavingBoicPackage ? 'Saving…' : 'Save package',
@@ -8282,26 +8420,12 @@ const ProvincialPermitDetailsPage = () => {
               renderIcon: isSavingBoicPackage ? PendingIcon : undefined,
               onClick: async () => {
                 if (await onSaveBlanketOicPackage()) return
-                requestAnimationFrame(() => {
-                  const panel = document.querySelector('.permit-package-panel')
-                  // Carbon marks invalid dropdowns on their list box, so focus the control inside.
-                  const invalid = panel?.querySelector<HTMLElement>(
-                    '[aria-invalid="true"], [data-invalid="true"]',
-                  )
-                  const invalidControl = invalid?.matches('input, textarea, button')
-                    ? invalid
-                    : invalid?.querySelector<HTMLElement>('input, textarea, button')
-                  const target =
-                    invalidControl ?? panel?.querySelector<HTMLElement>('[data-package-error]')
-                  target?.focus()
-                  target?.scrollIntoView({ block: 'nearest' })
-                })
+                focusFirstPanelError('.permit-package-panel', '[data-package-error]')
               },
             },
           ]}
         >
-          {/* Carbon's first layer gives grey fields and menus on the white panel. */}
-          <Layer level={0} className="permit-package-panel__form">
+          <div className="permit-panel-form">
             <RequiredFieldsLegend className="application-detail-required" />
             {/* Field errors show on their fields; this notification is only for errors that don't
                 belong to a field. */}
@@ -8366,7 +8490,7 @@ const ProvincialPermitDetailsPage = () => {
               />
               <TextInput
                 id="boicPackageAverageLength"
-                helperText="Enter greater than 0 and no more than 99."
+                helperText="Must be greater than 0"
                 labelText={requiredLabel('Average length (m)')}
                 aria-required="true"
                 value={boicPackageForm.averageLength}
@@ -8379,7 +8503,7 @@ const ProvincialPermitDetailsPage = () => {
               />
               <TextInput
                 id="boicPackageAverageDiameter"
-                helperText="Enter greater than 0 and no more than 99.99."
+                helperText="Must be greater than 0"
                 labelText={requiredLabel('Average top diameter (rads)')}
                 aria-required="true"
                 value={boicPackageForm.averageDiameter}
@@ -8403,7 +8527,7 @@ const ProvincialPermitDetailsPage = () => {
               disabled={isLoadingBoicPackage || isSavingBoicPackage}
               onChange={(event) => setBlanketOicPackageFormField('comments', event.target.value)}
             />
-          </Layer>
+          </div>
         </DetailSidePanel>
       )}
       <UnsavedChangesGuard

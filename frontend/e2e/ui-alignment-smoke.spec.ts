@@ -2714,7 +2714,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(dialog.locator('.app-inline-notification')).toHaveCount(0)
   })
 
-  test('places policy add actions in result toolbars and uses focused add dialogs', async ({
+  test('places policy add actions in result toolbars and uses focused add panels', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -2772,23 +2772,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(Math.abs(feeLayout.tableRight - feeLayout.buttonRight - 16)).toBeLessThanOrEqual(1)
 
     await feeAddButton.click()
-    const feeDialog = page.getByRole('dialog', { name: 'Add fee policy' })
-    await expect(feeDialog).toBeVisible()
+    const feePanel = page.getByRole('complementary', { name: 'Add fee policy' })
+    await expect(feePanel).toBeVisible()
     await expect(
-      feeDialog.getByText(
-        'Set the fee increase for one region from a given effective date onward.',
-      ),
+      feePanel.getByText('Set the fee increase for one region from a given effective date onward.'),
     ).toBeVisible()
-    await expect(feeDialog.getByLabel('Policy effective date')).toBeVisible()
-    await expect(feeDialog.getByLabel('Policy effective date')).toBeFocused()
-    await expect(feeDialog.getByLabel('Region')).toBeVisible()
-    await expect(feeDialog.getByLabel('Fee increase percentage')).toBeVisible()
-    await expect(feeDialog.getByText('Whole numbers from 0 to 100')).toBeVisible()
-    const feeDialogCancel = feeDialog.getByRole('button', { name: 'Cancel' })
-    await expect(feeDialogCancel).toHaveClass(/cds--btn--tertiary/)
-    await expect(feeDialog.locator('.admin-policy-modal__actions')).toHaveCSS('gap', '8px')
-    await feeDialogCancel.click()
-    await expect(feeDialog).toBeHidden()
+    await expect(feePanel.getByLabel('Policy effective date')).toBeVisible()
+    await expect(feePanel.getByLabel('Policy effective date')).toBeFocused()
+    await expect(feePanel.getByLabel('Region')).toBeVisible()
+    await expect(feePanel.getByLabel('Fee increase percentage')).toBeVisible()
+    await expect(feePanel.getByText('Whole numbers from 0 to 100')).toBeVisible()
+    const feePanelCancel = feePanel.getByRole('button', { name: 'Cancel' })
+    await expect(feePanelCancel).toHaveClass(/cds--btn--tertiary/)
+    await expect(feePanelCancel).toHaveCSS('height', '40px')
+    await expect(feePanel.locator('.c4p--side-panel__actions-container')).toHaveCSS('gap', '8px')
+    await feePanelCancel.click()
+    await expect(feePanel).toBeHidden()
+    await expect(feeAddButton).toBeFocused()
 
     await page.setViewportSize({ width: 390, height: 844 })
     await gotoSyntheticRoute(page, '/admin/policies/fil', {
@@ -2802,26 +2802,29 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(filAddButton).toBeEnabled()
     await expect(filAddButton).toHaveCSS('height', '40px')
     await filAddButton.click()
-    const filDialog = page.getByRole('dialog', { name: 'Add fee in lieu policy' })
-    await expect(filDialog).toBeVisible()
-    await expect(filDialog.getByLabel('Policy effective date')).toBeVisible()
-    await expect(filDialog.getByLabel('Policy effective date')).toBeFocused()
-    await expect(filDialog.getByLabel('Fee in lieu percentage')).toBeVisible()
-    await expect(filDialog.getByText('Whole numbers from 1 to 99')).toBeVisible()
+    const filPanel = page.getByRole('complementary', { name: 'Add fee in lieu policy' })
+    await expect(filPanel).toBeVisible()
+    await expect(filPanel.getByLabel('Policy effective date')).toBeVisible()
+    await expect(filPanel.getByLabel('Policy effective date')).toBeFocused()
+    await expect(filPanel.getByLabel('Fee in lieu percentage')).toBeVisible()
+    await expect(filPanel.getByText('Whole numbers from 1 to 99')).toBeVisible()
 
-    const mobileDialog = await filDialog.evaluate((dialog) => {
-      const fields = dialog.querySelector('.admin-policy-modal__fields')
+    const mobilePanel = await filPanel.evaluate((panel) => {
+      const fields = panel.querySelector('.admin-policy-modal__fields')
       if (!(fields instanceof HTMLElement)) {
         throw new Error('Fee in lieu fields not found')
       }
       return {
-        dialogClientWidth: dialog.clientWidth,
-        dialogScrollWidth: dialog.scrollWidth,
+        panelClientWidth: panel.clientWidth,
+        panelScrollWidth: panel.scrollWidth,
         gridColumns: getComputedStyle(fields).gridTemplateColumns,
       }
     })
-    expect(mobileDialog.dialogScrollWidth).toBeLessThanOrEqual(mobileDialog.dialogClientWidth)
-    expect(mobileDialog.gridColumns.split(' ')).toHaveLength(1)
+    expect(mobilePanel.panelScrollWidth).toBeLessThanOrEqual(mobilePanel.panelClientWidth)
+    expect(mobilePanel.gridColumns.split(' ')).toHaveLength(1)
+    await filPanel.getByRole('button', { name: 'Cancel' }).click()
+    await expect(filPanel).toBeHidden()
+    await expect(filAddButton).toBeFocused()
   })
 
   test('uses the FSPTS review-card layout for validated application submissions', async ({

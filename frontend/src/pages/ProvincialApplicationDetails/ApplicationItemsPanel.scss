@@ -13,9 +13,50 @@
 }
 
 .application-items-drawer {
-  .application-items-drawer-content,
   .application-items-package-edit-panel {
     display: grid;
+    gap: 1rem;
+  }
+
+  // Create package and Add scale: one field per row, or a pair of fields, 24px apart.
+  .application-items-panel-form {
+    display: grid;
+    gap: 1.5rem;
+
+    > .required-fields-legend {
+      margin: 0;
+    }
+
+    #applicationItemsCreatePackageComments {
+      min-block-size: 8.75rem;
+    }
+
+    .cds--inline-notification {
+      inline-size: 100%;
+      max-inline-size: none;
+    }
+
+    .cds--label {
+      font-size: 0.875rem;
+      line-height: 1.125rem;
+    }
+
+    // List-box labels are inline-block, so the app's taller body line height would add space
+    // above them.
+    .cds--list-box__wrapper {
+      line-height: 1.125rem;
+    }
+
+    // A disabled field's helper explains why it is disabled, so keep it readable.
+    .cds--form__helper-text--disabled {
+      color: var(--cds-text-secondary);
+    }
+  }
+
+  .application-items-panel-form__pair {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    align-items: start;
     gap: 1rem;
   }
 }

@@ -162,28 +162,10 @@
   color: var(--cds-text-secondary);
 }
 
-// A white panel with grey fields. c4p paints the panel with layer-01 and forces side-panel fields
-// to field-02, so swap that token for this panel.
-.permit-package-panel.c4p--side-panel {
-  --cds-field-02: var(--cds-field-01);
-  --cds-field-hover-02: var(--cds-field-hover-01);
-
-  &,
-  .c4p--side-panel__header,
-  .c4p--side-panel__title {
-    background-color: var(--cds-layer-02);
-  }
-
-  // c4p's field background also covers read-only dropdowns, which Carbon leaves transparent.
-  .cds--dropdown--readonly {
-    background-color: transparent;
-  }
-}
-
-.permit-package-panel__form {
+// Create package and Add scale panel forms.
+.permit-panel-form {
   display: grid;
   gap: 1.5rem;
-  padding-block: 0.5rem 1rem;
 
   .legacy-search-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -201,7 +183,7 @@
   }
 
   // Two columns at every panel width.
-  .legacy-search-grid.permit-package-panel__pair {
+  .legacy-search-grid.permit-panel-form__pair {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 

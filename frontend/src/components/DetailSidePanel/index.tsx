@@ -1,8 +1,24 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
+import {
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type KeyboardEvent,
+  type ReactNode,
+  type RefObject,
+} from 'react'
 import { SidePanel, type SidePanelProps } from '@carbon/ibm-products'
 import './DetailSidePanel.scss'
 
-const SLIDE_IN_QUERY = '(min-width: 1312px)'
+const BESIDE_PAGE_QUERY = '(min-width: 1312px)'
+// IBM slides over the page when its page content selector matches nothing it can push aside, but
+// warns about it, so narrow screens point it at an empty marker instead.
+const SLIDE_OVER_MARKER = 'data-detail-side-panel-slide-over'
+
+// An open menu's trigger keeps aria-expanded until its own Escape handler has re-rendered it.
+const closesOpenMenu = (target: Element): boolean =>
+  target.getAttribute('aria-expanded') === 'true' &&
+  (target.getAttribute('role') === 'combobox' || target.hasAttribute('aria-haspopup'))
 
 type DetailSidePanelProps = {
   open: boolean
@@ -19,7 +35,10 @@ type DetailSidePanelProps = {
   children: ReactNode
 }
 
-/** Uses IBM's slide-in panel where the page has room, and its overlay on narrower screens. */
+/**
+ * A non-modal side panel: the page stays visible and usable, with no overlay and no focus trap.
+ * Where the page has room the panel sits beside it; on narrower screens it slides over part of it.
+ */
 export default function DetailSidePanel({
   open,
   title,
@@ -34,13 +53,13 @@ export default function DetailSidePanel({
   onClose,
   children,
 }: DetailSidePanelProps) {
-  const [slideIn, setSlideIn] = useState(() => window.matchMedia(SLIDE_IN_QUERY).matches)
+  const [besidePage, setBesidePage] = useState(() => window.matchMedia(BESIDE_PAGE_QUERY).matches)
   const panelRef = useRef<HTMLDivElement>(null)
   const needsFocusReturnRef = useRef(false)
 
   useEffect(() => {
-    const query = window.matchMedia(SLIDE_IN_QUERY)
-    const update = () => setSlideIn(query.matches)
+    const query = window.matchMedia(BESIDE_PAGE_QUERY)
+    const update = () => setBesidePage(query.matches)
     query.addEventListener('change', update)
     return () => query.removeEventListener('change', update)
   }, [])
@@ -72,47 +91,83 @@ export default function DetailSidePanel({
   }, [open, busy, launcherRef, fallbackFocusSelector])
 
   useLayoutEffect(() => {
+    // IBM pushes the page aside with these inline styles. Only the panel that pushed it restores
+    // them, on close or when it moves over the page, so a closed panel can't undo an open one.
+    if (!open || !besidePage) return
     const content = document.querySelector<HTMLElement>(contentSelector)
-    // IBM applies these inline styles for slide-in. Restore them on close or breakpoint change.
     return () => {
       content?.style.removeProperty('margin-inline-end')
       content?.style.removeProperty('inline-size')
       content?.style.removeProperty('transition')
     }
-  }, [contentSelector, open, slideIn])
+  }, [contentSelector, open, besidePage])
 
   if (!open) return null
 
   const requestClose = () => {
-    // IBM's overlay closes on any window Escape, even one a dialog above the panel has handled.
-    const event = window.event
-    if (event instanceof KeyboardEvent && event.defaultPrevented) return
     if (!busy) onClose()
+  }
+
+  const panelEscapeTarget = (event: KeyboardEvent<HTMLDivElement>): Element | null => {
+    const target = event.target
+    return event.key === 'Escape' &&
+      !event.defaultPrevented &&
+      target instanceof Element &&
+      panelRef.current?.contains(target) &&
+      !target.closest('[role="dialog"], [role="alertdialog"]')
+      ? target
+      : null
+  }
+
+  // Carbon's ListBox stops native Escape from bubbling even when its menu is closed.
+  const onKeyDownCapture = (event: KeyboardEvent<HTMLDivElement>) => {
+    const target = panelEscapeTarget(event)
+    if (
+      target?.getAttribute('role') !== 'combobox' ||
+      target.getAttribute('aria-expanded') !== 'false'
+    ) {
+      return
+    }
+    event.stopPropagation()
+    requestClose()
+  }
+
+  // Escape closes the panel from its own fields, but not when it closes a menu or a dialog above
+  // the panel. Carbon's Modal handles Escape on the document, after this handler runs.
+  const onKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
+    const target = panelEscapeTarget(event)
+    if (!target || closesOpenMenu(target)) {
+      return
+    }
+    event.stopPropagation()
+    requestClose()
   }
 
   return (
     <div
       className="detail-side-panel-host"
-      onKeyDown={(event) => {
-        if (slideIn && event.key === 'Escape' && !event.defaultPrevented) {
-          event.stopPropagation()
-          requestClose()
-        }
-      }}
+      onKeyDownCapture={onKeyDownCapture}
+      onKeyDown={onKeyDown}
     >
+      {!besidePage && <span hidden {...{ [SLIDE_OVER_MARKER]: '' }} />}
       <SidePanel
         ref={panelRef}
         open
         title={title}
         size="md"
-        className={`detail-side-panel ${className ?? ''}`}
-        slideIn={slideIn}
-        selectorPageContent={contentSelector}
+        className={[
+          'detail-side-panel',
+          besidePage ? undefined : 'detail-side-panel--over-page',
+          className,
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        slideIn
+        selectorPageContent={besidePage ? contentSelector : `[${SLIDE_OVER_MARKER}]`}
         selectorPrimaryFocus={initialFocusSelector}
-        includeOverlay={!slideIn}
         preventCloseOnClickOutside
         animateTitle={false}
-        // Figma's drawer footer uses standard buttons with scoped 44px sizing and spacing.
+        // The footer uses standard buttons; the stylesheet sizes them to md.
         actions={actions?.map((action) => ({ ...action, isExpressive: false }))}
         onRequestClose={requestClose}
       >

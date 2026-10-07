@@ -623,6 +623,12 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     await selectApplicationRemarksForEditing()
     expect(await screen.findByLabelText('Remark')).toBeInTheDocument()
+    // The panel's only field marks itself required, so there is no legend.
+    expect(
+      within(screen.getByRole('complementary', { name: 'Add remark' })).queryByText(
+        'Required fields',
+      ),
+    ).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Remark'), {
       target: { value: 'New application note' },
     })

@@ -215,6 +215,7 @@ const installPermitParityFixtures = async (
             },
             packageDetails: {
               scaledVolume: '0.0',
+              remainingVolume: '120.5',
               status: 'ACT',
               statusDescription: 'Active',
               reprocessed: 'N',
@@ -503,6 +504,7 @@ const installPermitParityFixtures = async (
           },
           packageDetails: {
             scaledVolume: '0.0',
+            remainingVolume: String(payload.volume),
             status: 'ACT',
             statusDescription: 'Active',
             reprocessed: 'N',
@@ -834,7 +836,7 @@ test.describe('Provincial permit parity regressions', () => {
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
-  test('keeps BOIC scale entry disabled during delayed grade loading and submits selected codes', async ({
+  test('keeps the BOIC scale grade disabled until its options load and submits selected codes', async ({
     page,
   }) => {
     const fixture = await installPermitParityFixtures(page, 'blanket-oic', true)
@@ -843,26 +845,36 @@ test.describe('Provincial permit parity regressions', () => {
     })
     await selectTab(page, 'Scale')
     await expect(page.getByRole('group', { name: 'Summary of scale' })).toBeVisible()
+    await page.getByRole('button', { name: 'Add scale', exact: true }).click()
+    const panel = page.locator('.permit-scale-panel')
+    await expect(panel.getByLabel('Timber mark', { exact: true })).toBeFocused()
+    await expect(
+      panel.getByText('Must be less than or equal to remaining package volume (120.5 m³)', {
+        exact: true,
+      }),
+    ).toBeVisible()
 
-    const species = page.getByRole('combobox', { name: 'Species', exact: true })
-    const grade = page.getByRole('combobox', { name: 'Grade', exact: true })
-    await expect(species).toBeEnabled()
-    await chooseComboBoxOption(page, 'Species', 'AL - Alder')
+    const species = panel.getByRole('combobox', { name: 'Species', exact: true })
+    const grade = panel.getByRole('combobox', { name: 'Grade', exact: true })
     await expect(grade).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Add scale', exact: true })).toBeDisabled()
-    await expect(page.getByText('Loading scale options…', { exact: true })).toBeVisible()
+    await expect(
+      panel.getByText('Available once species are selected', { exact: true }),
+    ).toBeVisible()
+    await species.click()
+    await page.getByRole('option', { name: 'Alder', exact: true }).click()
+    await expect(grade).toBeDisabled()
+    await expect(panel.getByText('Loading scale options…', { exact: true })).toBeVisible()
 
     fixture.resolveDelayedGrade([{ code: 'W', description: 'Utility' }])
     await expect(grade).toBeEnabled()
-    await expect(grade).toHaveValue('W - Utility')
-    await chooseComboBoxOption(page, 'Grade', 'W - Utility')
-    await page.getByLabel('Timber mark', { exact: true }).fill('TM-NEW')
-    await page.getByLabel('Pieces', { exact: true }).fill('1')
-    await page.getByLabel('Volume (m³)', { exact: true }).fill('1.0')
-    const addScale = page.getByRole('button', { name: 'Add scale', exact: true })
-    await expect(addScale).toBeEnabled()
-    await addScale.click()
+    await grade.click()
+    await page.getByRole('option', { name: 'Utility', exact: true }).click()
+    await panel.getByLabel('Timber mark', { exact: true }).fill('TM-NEW')
+    await panel.getByLabel('Pieces', { exact: true }).fill('1')
+    await panel.getByLabel('Volume (m³)', { exact: true }).fill('1.0')
+    await panel.getByRole('button', { name: 'Save scale', exact: true }).click()
 
+    await expect(panel).toHaveCount(0)
     await expect(
       page.getByText('Blanket OIC scale detail was added.', { exact: true }),
     ).toBeVisible()
@@ -1108,7 +1120,7 @@ test.describe('Provincial permit parity regressions', () => {
 
   for (const [viewport, layout] of [
     [{ width: 1440, height: 1000 }, 'desktop slide-in'],
-    [{ width: 390, height: 844 }, 'narrow overlay'],
+    [{ width: 390, height: 844 }, 'narrow slide-over'],
   ] as const) {
     test(`keeps a package draft open when Escape closes the Species list in ${layout}`, async ({
       page,

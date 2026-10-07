@@ -1482,10 +1482,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   text-align: right;
 }
 
-.admin-policy-modal .cds--modal-content {
-  padding-block-end: 1rem;
-}
-
 .admin-policy-modal__description {
   margin-block-end: 1.25rem;
   color: var(--csp-text-secondary);
@@ -1524,20 +1520,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 0;
 }
 
-.admin-policy-modal__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-block-start: 1.5rem;
-}
-
 @media (max-width: 671px) {
-  .admin-policy-modal__actions .cds--btn {
-    flex: 1 1 100%;
-    max-inline-size: none;
-  }
-
   .admin-policy-modal__fields,
   .admin-policy-modal__fields--fee {
     grid-template-columns: minmax(0, 1fr);
@@ -2555,10 +2538,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   gap: 1rem;
 }
 
-.review-reject-modal .cds--modal-content {
-  padding-block-end: 1rem;
-}
-
 .review-reject-modal .cds--text-area {
   block-size: auto;
 }
@@ -2566,21 +2545,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .review-reject-modal__grid .cds--inline-notification {
   margin-block: 0;
   max-inline-size: none;
-}
-
-.review-reject-modal__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-block-start: 1.5rem;
-}
-
-@media (max-width: 671px) {
-  .review-reject-modal__actions .cds--btn {
-    flex: 1 1 100%;
-    max-inline-size: none;
-  }
 }
 
 // Action feedback participates in its owning page/form layout and never times out.
@@ -5825,20 +5789,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   padding: 0;
 }
 
-.permit-scale-panel .legacy-search-grid {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.permit-scale-panel .legacy-search-grid > :last-child {
-  grid-column: 1 / -1;
-}
-
-@media (min-width: 672px) {
-  .permit-scale-panel .legacy-search-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
 @media (max-width: 671px) {
   .provincial-application-detail .application-client-edit-grid {
     grid-template-columns: minmax(0, 1fr);
@@ -6008,13 +5958,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 8rem;
 }
 
-.application-items-inline-error {
-  color: var(--cds-text-error, #da1e28);
-  font-size: 0.75rem;
-  line-height: 1rem;
-  margin: -0.25rem 0 0.75rem;
-}
-
 .application-items-section--create-package .application-items-inline-form {
   border-block-start: 1px solid var(--csp-tile-border);
   padding-block-start: 0.75rem;
@@ -6106,10 +6049,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
   .application-items-package-edit-panel {
     grid-row: 1 / span 2;
-  }
-
-  .provincial-application-detail .application-items-section--scales .application-items-form {
-    grid-template-columns: repeat(3, minmax(180px, 1fr));
   }
 }
 

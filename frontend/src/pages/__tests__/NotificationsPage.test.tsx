@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { LexisNotification, LexisNotificationView } from '@/interfaces/LexisNotification'
@@ -295,7 +295,7 @@ describe('Notifications page', () => {
     await screen.findByText('Winter service update')
     const launcher = screen.getByRole('button', { name: 'New notification' })
     await user.click(launcher)
-    const dialog = await screen.findByRole('dialog', { name: 'New notification' })
+    const dialog = await screen.findByRole('complementary', { name: 'New notification' })
     expect(within(dialog).getByRole('heading', { name: 'New notification' })).toBeVisible()
     expect(within(dialog).getByLabelText(/^Title/)).toHaveAttribute('maxlength', '80')
     expect(within(dialog).getByLabelText(/^Title/)).toBeRequired()
@@ -354,7 +354,7 @@ describe('Notifications page', () => {
       render(<NotificationsPage />)
 
       await user.click(await screen.findByRole('button', { name: 'New notification' }))
-      const dialog = await screen.findByRole('dialog', { name: 'New notification' })
+      const dialog = await screen.findByRole('complementary', { name: 'New notification' })
       expect(within(dialog).getByLabelText(/^Start date/)).toHaveValue('2026-09-25')
       expect(within(dialog).getByLabelText(/^End date/)).toHaveValue('2026-10-02')
     } finally {
@@ -374,7 +374,7 @@ describe('Notifications page', () => {
 
     await screen.findByText('Winter service update')
     await user.click(screen.getByRole('button', { name: 'New notification' }))
-    const dialog = await screen.findByRole('dialog', { name: 'New notification' })
+    const dialog = await screen.findByRole('complementary', { name: 'New notification' })
     const allRoles = within(dialog).getByRole('checkbox', { name: 'All roles' })
     const readOnly = within(dialog).getByRole('checkbox', { name: 'Read Only' })
 
@@ -409,7 +409,7 @@ describe('Notifications page', () => {
 
     await screen.findByText('Winter service update')
     await user.click(screen.getByRole('button', { name: 'New notification' }))
-    const dialog = await screen.findByRole('dialog', { name: 'New notification' })
+    const dialog = await screen.findByRole('complementary', { name: 'New notification' })
     await user.type(within(dialog).getByLabelText(/^Title/), 'Office closure')
     await user.type(within(dialog).getByLabelText('Notification content editor'), '<p>&nbsp;</p>')
     await user.click(within(dialog).getByRole('button', { name: 'Publish' }))
@@ -431,7 +431,7 @@ describe('Notifications page', () => {
     await screen.findByText('Winter service update')
     await user.click(screen.getByRole('button', { name: 'Edit' }))
 
-    expect(screen.getByRole('dialog', { name: 'Edit notification' })).toBeVisible()
+    expect(screen.getByRole('complementary', { name: 'Edit notification' })).toBeVisible()
     expect(screen.getByLabelText(/^Start date/)).toHaveAttribute('readonly')
     expect(screen.getByLabelText(/^End date/)).not.toHaveAttribute('readonly')
   })
@@ -456,9 +456,19 @@ describe('Notifications page', () => {
     expect(screen.queryByText('Recently updated notifications')).not.toBeInTheDocument()
     await user.click(launcher)
 
-    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+    const panel = screen.getByRole('complementary', { name: 'New notification' })
+    await waitFor(() => expect(within(panel).getByLabelText(/^Title/)).toHaveFocus())
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(launcher).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
+    await user.click(within(panel).getByRole('button', { name: 'Cancel' }))
 
     await waitFor(() => expect(launcher).toHaveFocus())
+    expect(
+      screen.queryByRole('complementary', { name: 'New notification' }),
+    ).not.toBeInTheDocument()
+    expect(mockedCreateNotification).not.toHaveBeenCalled()
     expect(screen.queryByText('Recently updated notifications')).not.toBeInTheDocument()
   })
 
@@ -474,7 +484,7 @@ describe('Notifications page', () => {
 
     const launcher = await screen.findByRole('button', { name: 'New notification' })
     await user.click(launcher)
-    const editor = await screen.findByRole('dialog', { name: 'New notification' })
+    const editor = await screen.findByRole('complementary', { name: 'New notification' })
     await user.type(within(editor).getByLabelText(/^Title/), 'Unsaved notice')
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }))
 
@@ -484,6 +494,7 @@ describe('Notifications page', () => {
     expect(editor).toBeVisible()
     await user.click(within(discardDialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(within(editor).getByLabelText(/^Title/)).toHaveFocus())
+    expect(within(editor).getByLabelText(/^Title/)).toHaveValue('Unsaved notice')
 
     await user.click(within(editor).getByRole('button', { name: 'Cancel' }))
     const reopenedDiscardDialog = await screen.findByRole('dialog', {
@@ -492,7 +503,9 @@ describe('Notifications page', () => {
     await user.click(within(reopenedDiscardDialog).getByRole('button', { name: 'Discard changes' }))
 
     await waitFor(() => expect(launcher).toHaveFocus())
-    expect(screen.queryByRole('dialog', { name: 'New notification' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('complementary', { name: 'New notification' }),
+    ).not.toBeInTheDocument()
   })
 
   it('keeps the editor open and re-enables save after a publish failure', async () => {
@@ -502,13 +515,18 @@ describe('Notifications page', () => {
         capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
       }),
     )
-    mockedCreateNotification.mockRejectedValueOnce(new Error('unavailable'))
+    let rejectPublish!: (reason: Error) => void
+    mockedCreateNotification.mockReturnValueOnce(
+      new Promise((_, reject) => {
+        rejectPublish = reject
+      }),
+    )
 
     render(<NotificationsPage />)
 
     await screen.findByText('Winter service update')
     await user.click(screen.getByRole('button', { name: 'New notification' }))
-    const editor = await screen.findByRole('dialog', { name: 'New notification' })
+    const editor = await screen.findByRole('complementary', { name: 'New notification' })
     await user.type(within(editor).getByLabelText(/^Title/), 'Office closure')
     await user.type(
       within(editor).getByLabelText('Notification content editor'),
@@ -516,8 +534,22 @@ describe('Notifications page', () => {
     )
     await user.click(within(editor).getByRole('button', { name: 'Publish' }))
 
+    expect(within(editor).getByRole('button', { name: 'Saving notification…' })).toBeDisabled()
+    expect(within(editor).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    await user.click(within(editor).getByRole('button', { name: 'Close' }))
+    fireEvent.keyDown(within(editor).getByLabelText(/^Title/), {
+      key: 'Escape',
+      code: 'Escape',
+      keyCode: 27,
+      which: 27,
+    })
+    expect(editor).toBeVisible()
+    expect(mockedCreateNotification).toHaveBeenCalledTimes(1)
+    await act(async () => rejectPublish(new Error('unavailable')))
+
     expect(await within(editor).findByText('Notification could not be saved')).toBeVisible()
     expect(within(editor).getByRole('button', { name: 'Publish' })).toBeEnabled()
+    expect(within(editor).getByLabelText(/^Title/)).toHaveValue('Office closure')
   })
 
   it('asks an administrator to confirm before deleting a notification', async () => {

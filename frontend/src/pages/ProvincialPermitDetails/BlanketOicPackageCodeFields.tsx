@@ -264,7 +264,7 @@ export default function BlanketOicPackageCodeFields({
 
   return (
     <div className="blanket-oic-package-code-fields">
-      <div className="legacy-search-grid permit-package-panel__pair">
+      <div className="legacy-search-grid permit-panel-form__pair">
         <div className="boic-package-species" ref={speciesFieldRef}>
           <FilterableMultiSelect<SpeciesListItem>
             id="boicPackageSpeciesList"
@@ -311,7 +311,7 @@ export default function BlanketOicPackageCodeFields({
           }
         />
       </div>
-      <div className="legacy-search-grid permit-package-panel__pair">
+      <div className="legacy-search-grid permit-panel-form__pair">
         <Dropdown<SearchOption | null>
           id="boicPackageAgeClass"
           ref={markRequired}

@@ -11,4 +11,6 @@ public record PermitPackageDetailsRpcResponseDto(
     String comments,
     String statusDesc,
     String reprocessed,
-    String ageClass) {}
+    String ageClass,
+    // Exact package volume less its scales, unlike the rounded volumes above.
+    String remainingVolume) {}

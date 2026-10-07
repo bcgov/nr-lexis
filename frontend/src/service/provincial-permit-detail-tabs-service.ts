@@ -36,6 +36,8 @@ type ProvincialPermitPackageInfoRow = {
   averageTopDiameter: string
   productType: string
   currentPackageVolume: string
+  // Exact package volume less its scales; the other volumes are rounded for display.
+  remainingVolume?: string
   status: string
   reprocessed: string
   comments: string
@@ -368,7 +370,7 @@ const normalizePackageDetailsFields = (
   payload: unknown,
 ): Pick<
   ProvincialPermitPackageInfoRow,
-  'currentPackageVolume' | 'status' | 'reprocessed' | 'comments' | 'ageClass'
+  'currentPackageVolume' | 'remainingVolume' | 'status' | 'reprocessed' | 'comments' | 'ageClass'
 > => {
   const source = recordOrEmpty(payload)
   const statusCode = asString(source.status)
@@ -376,6 +378,7 @@ const normalizePackageDetailsFields = (
 
   return {
     currentPackageVolume: asString(source.scaledVolume ?? source.currentPackageVolume),
+    remainingVolume: asString(source.remainingVolume),
     status: [statusCode, statusDescription].filter(Boolean).join(' - '),
     reprocessed: asString(source.reprocessed || source.reprocessedIndicator),
     comments: asString(source.comments),
@@ -443,6 +446,7 @@ const fetchCoreTabs = async (
           ...packageInfo,
           ageClass: packageDetails?.ageClass || packageInfo.ageClass,
           currentPackageVolume: packageDetails?.currentPackageVolume || '',
+          ...(packageDetails ? { remainingVolume: packageDetails.remainingVolume } : {}),
           status: packageDetails?.status || '',
           reprocessed: packageDetails?.reprocessed || '',
           comments: packageDetails?.comments || '',

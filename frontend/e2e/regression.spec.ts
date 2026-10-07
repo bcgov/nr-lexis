@@ -3158,13 +3158,15 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(addButton).toBeEnabled({ timeout: 30_000 })
       await addButton.click()
 
-      const dialog = page.getByRole('dialog', { name: addAction })
-      await expect(dialog).toBeVisible()
+      const panel = page.getByRole('complementary', { name: addAction })
+      await expect(panel).toBeVisible()
       for (const fieldLabel of fieldLabels) {
-        await expect(dialog.getByLabel(fieldLabel)).toBeVisible()
+        await expect(panel.getByLabel(fieldLabel)).toBeVisible()
       }
-      await dialog.getByRole('button', { name: 'Cancel' }).click()
-      await expect(dialog).toHaveCount(0)
+      await expect(panel.getByLabel('Policy effective date')).toBeFocused()
+      await panel.getByRole('button', { name: 'Cancel' }).click()
+      await expect(panel).toHaveCount(0)
+      await expect(addButton).toBeFocused()
     }
 
     expect(apiServerErrors).toEqual([])
@@ -3607,7 +3609,7 @@ test.describe('TEST IDIR admin regression', () => {
       await expectAccessiblePage(page, '/notifications', /^Notifications$/)
       await page.getByRole('button', { name: 'New notification' }).click()
 
-      const editor = page.getByRole('dialog', { name: 'New notification' })
+      const editor = page.getByRole('complementary', { name: 'New notification' })
       await expect(editor).toBeVisible()
       await editor.getByLabel('Title').fill(notificationTitle)
       await editor.getByLabel('Notification content editor').fill(notificationMessage)
