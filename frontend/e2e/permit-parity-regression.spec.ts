@@ -582,7 +582,7 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(page.getByLabel('Submit date', { exact: true })).toBeEnabled()
     await selectTab(page, 'Shipping')
     const country = page.getByRole('combobox', { name: 'Final destination country', exact: true })
-    await expect(country).toHaveValue('United States (US)')
+    await expect(country).toHaveValue('United States')
     await selectTab(page, 'Permit')
     await save.click()
 
@@ -591,9 +591,7 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(summary).toContainText(
       'Complete the required fields in Permit, Applicant and Shipping tabs.',
     )
-    await expect(
-      page.getByText(/The permit number is assigned after a successful save/),
-    ).toHaveCount(0)
+    await expect(page.getByText(/The permit number is assigned when you save/)).toHaveCount(0)
     await expect(
       page.getByRole('tab', { name: 'Permit, 2 required fields outstanding', exact: true }),
     ).toBeVisible()
@@ -615,14 +613,14 @@ test.describe('Provincial permit parity regressions', () => {
     await page
       .getByRole('tab', { name: 'Applicant, 2 required fields outstanding', exact: true })
       .click()
-    await page.getByRole('combobox', { name: 'Applicant client number', exact: true }).fill('Owner')
+    await page.getByRole('combobox', { name: 'Client', exact: true }).fill('Owner')
     await page
       .getByRole('option', { name: 'Owner Forestry Ltd. (OFL) · 00067890', exact: true })
       .click()
     await expect(
       page.getByRole('region', { name: 'Applicant details', exact: true }),
     ).toContainText('1 Owner Street')
-    await page.getByLabel('Applicant location', { exact: true }).selectOption('04')
+    await page.getByLabel('Client location', { exact: true }).selectOption('04')
     await expect(
       page.getByRole('region', { name: 'Applicant details', exact: true }),
     ).toContainText('4 Mill Road')
@@ -633,32 +631,24 @@ test.describe('Provincial permit parity regressions', () => {
     await country.click()
     const countries = page.getByRole('listbox').getByRole('option')
     await expect(countries).toHaveText([
-      'United States (US)',
-      'Japan (JP)',
-      'China (CN)',
-      'Korea (KR)',
-      'Taiwan (TW)',
-      'Canada (CA)',
-      'Cambodia (KH)',
-      'Chile (CL)',
-      'Colombia (CO)',
+      'United States',
+      'Japan',
+      'China',
+      'Korea',
+      'Taiwan',
+      'Canada',
+      'Cambodia',
+      'Chile',
+      'Colombia',
     ])
     await country.fill('c')
-    await expect(countries).toHaveText([
-      'China (CN)',
-      'Canada (CA)',
-      'Cambodia (KH)',
-      'Chile (CL)',
-      'Colombia (CO)',
-    ])
-    await page.getByRole('option', { name: 'Canada (CA)', exact: true }).click()
+    await expect(countries).toHaveText(['China', 'Canada', 'Cambodia', 'Chile', 'Colombia'])
+    await page.getByRole('option', { name: 'Canada', exact: true }).click()
     await page.getByLabel('Purchaser', { exact: true }).fill('Synthetic Purchaser')
     await page.getByLabel('Transport name', { exact: true }).fill('Synthetic vessel')
     await page.getByLabel('Estimated shipping date', { exact: true }).fill('2099-01-01')
     await expect(summary).toHaveCount(0)
-    await expect(
-      page.getByText(/The permit number is assigned after a successful save/),
-    ).toBeVisible()
+    await expect(page.getByText(/The permit number is assigned when you save/)).toBeVisible()
     await save.click()
 
     await expect(page).toHaveURL(/\/provincial\/permit\/91002$/)
@@ -681,7 +671,7 @@ test.describe('Provincial permit parity regressions', () => {
     await selectTab(page, 'Scale')
     await expect(page.getByRole('heading', { name: 'No packages yet', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Create package', exact: true })).toBeVisible()
-    await expect(page.getByRole('group', { name: 'Summary of Scale', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('group', { name: 'Summary of scale', exact: true })).toHaveCount(0)
     await selectTab(page, 'Fees')
     await expect(page.getByRole('heading', { name: 'Permit fees', exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Package fees', exact: true })).toBeVisible()
@@ -775,7 +765,7 @@ test.describe('Provincial permit parity regressions', () => {
     await selectTab(page, 'Shipping')
     await expect(
       page.getByRole('combobox', { name: 'Final destination country', exact: true }),
-    ).toHaveValue('United States (US)')
+    ).toHaveValue('United States')
     await selectTab(page, 'Permit')
     await page.getByLabel('Remarks', { exact: true }).fill('')
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
@@ -852,7 +842,7 @@ test.describe('Provincial permit parity regressions', () => {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
     })
     await selectTab(page, 'Scale')
-    await expect(page.getByRole('group', { name: 'Summary of Scale' })).toBeVisible()
+    await expect(page.getByRole('group', { name: 'Summary of scale' })).toBeVisible()
 
     const species = page.getByRole('combobox', { name: 'Species', exact: true })
     const grade = page.getByRole('combobox', { name: 'Grade', exact: true })
@@ -903,7 +893,7 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(page.getByText('1 Owner Street', { exact: true })).toBeVisible()
 
     await page.getByRole('button', { name: 'Edit applicant details', exact: true }).click()
-    const ownerLocation = page.getByLabel('Applicant location', { exact: true })
+    const ownerLocation = page.getByLabel('Client location', { exact: true })
     await expect(ownerLocation).toHaveValue('03')
     await expect(
       page.getByRole('option', { name: '03 - Owner office', exact: true }),

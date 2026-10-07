@@ -42,6 +42,7 @@ import {
 } from '@/service/notification-service'
 import { formatBusinessIsoDate, formatLocalIsoDate } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import './Notifications.scss'
 
 const DEFAULT_DISPLAY_DURATION_DAYS = 7
@@ -532,6 +533,7 @@ export default function NotificationsPage() {
             />
           )}
 
+          <RequiredFieldsLegend />
           <div className="notifications-page__form-section">
             <h3>Message</h3>
             <TextInput

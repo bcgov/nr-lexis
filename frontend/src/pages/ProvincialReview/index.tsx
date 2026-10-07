@@ -109,9 +109,11 @@ import {
 } from '@/utils/text'
 import { firstStringField, isRecord } from '@/utils/record'
 import { requiredLabel } from '@/utils/required-label'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 
 import './ProvincialReview.scss'
+import { formatVolume } from '@/utils/volume'
 
 type ApplicationApprovalResult = {
   applicationNumber: string
@@ -196,7 +198,7 @@ const approvalRequestFailureMessage = (error: unknown): string => {
   return normalizeApprovalFailureMessage(responseMessage || errorMessage)
 }
 
-const formatApplicationVolume = (volume: number): string => volume.toFixed(1)
+const formatApplicationVolume = formatVolume
 
 const isReviewableSourceStatus = (status: string | null | undefined): boolean =>
   REVIEWABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(status ?? ''))
@@ -1191,6 +1193,7 @@ const ProvincialReviewPage = () => {
           }
         }}
       >
+        <RequiredFieldsLegend />
         <div className="review-reject-modal__grid">
           <SearchableSelect
             id="reviewRejectStatus"

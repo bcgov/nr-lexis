@@ -68,6 +68,7 @@ import { combineActionMessages } from '@/utils/action-result'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { getResponseMessage, getResponseStatus } from '@/utils/http-error'
 import { requiredLabel } from '@/utils/required-label'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
 type PolicyField =
   | 'feeEffectiveDate'
@@ -949,6 +950,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               onCloseButtonClick={() => setErrorMessage('')}
             />
           )}
+          <RequiredFieldsLegend />
           <div className="admin-policy-modal__fields admin-policy-modal__fields--fee">
             <IsoDatePicker
               id="feeEffectiveDate"
@@ -982,15 +984,9 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                 value=""
                 text={isLoadingFeeRegionOptions ? 'Loading regions…' : 'Choose a region'}
               />
-              {feeRegionOptions.map((option) => {
-                const knownCode = feePolicies.find(
-                  (policy) => policy.orgUnitNo === option.value,
-                )?.orgUnitCode
-                const optionText = knownCode
-                  ? `${knownCode} — ${option.label}`
-                  : `${option.label} (${option.value})`
-                return <SelectItem key={option.value} value={option.value} text={optionText} />
-              })}
+              {feeRegionOptions.map((option) => (
+                <SelectItem key={option.value} value={option.value} text={option.label} />
+              ))}
             </Select>
             <TextInput
               id="feePolicyPercentage"
@@ -1060,6 +1056,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               onCloseButtonClick={() => setErrorMessage('')}
             />
           )}
+          <RequiredFieldsLegend />
           <div className="admin-policy-modal__fields">
             <IsoDatePicker
               id="filEffectiveDate"
@@ -1390,6 +1387,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           <div className="admin-policy-workspace">
             <Tile className="create-form-tile admin-policy-editor-tile">
               <h2 className="dashboard-title">Schedule details</h2>
+              <RequiredFieldsLegend />
               <div className="legacy-search-grid create-form-grid">
                 <IsoDatePicker
                   id="scheduleAdvertisingDate"
@@ -1467,7 +1465,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   onClick={resetScheduleForm}
                   disabled={isLoadingPolicies || isMutatingPolicies}
                 >
-                  {editingScheduleId ? 'Cancel Edit' : 'Clear Schedule'}
+                  {editingScheduleId ? 'Cancel edit' : 'Clear schedule'}
                 </Button>
               </div>
             </Tile>

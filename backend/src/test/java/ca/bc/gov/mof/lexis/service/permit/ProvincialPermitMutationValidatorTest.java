@@ -72,10 +72,10 @@ class ProvincialPermitMutationValidatorTest {
 
     assertThat(result.errors())
         .containsExactlyInAnyOrder(
-            "Submit Date can't be in the future.",
-            "Issued Date must be after or equal to Submit Date.",
-            "Permit Expiry Date must be after Submit Date and Issue Date.",
-            "Permit Expiry Date cannot be after the Exemption Expiry Date.");
+            "Submit date can't be in the future.",
+            "Issued date must be after or equal to submit date.",
+            "Expiry date must be after submit and issue dates.",
+            "Expiry date cannot be after the exemption expiry date.");
   }
 
   @Test
@@ -352,8 +352,8 @@ class ProvincialPermitMutationValidatorTest {
     assertThat(result.errors())
         .containsExactlyInAnyOrder(
             "At least one application is required before a permit can be completed.",
-            "Permit Request Pieces must be greater than 0 to complete a permit.",
-            "Permit Request Volume must be greater than 0 to complete a permit.");
+            "Permit request pieces must be greater than 0 to complete a permit.",
+            "Permit request volume must be greater than 0 to complete a permit.");
   }
 
   @Test
@@ -369,9 +369,9 @@ class ProvincialPermitMutationValidatorTest {
 
     assertThat(result.errors())
         .containsExactlyInAnyOrder(
-            "Permit Volume must be greater than or equal to 0.",
+            "Permit volume must be greater than or equal to 0.",
             "Override fee must be greater than zero.",
-            "Permit Request Volume must be greater than or equal to 0.");
+            "Permit request volume must be greater than or equal to 0.");
   }
 
   @Test
@@ -398,7 +398,7 @@ class ProvincialPermitMutationValidatorTest {
 
     assertThat(result.errors())
         .containsExactlyInAnyOrder(
-            "Permit Volume must round to 9999999.99 or less.",
+            "Permit volume must round to 9999999.99 or less.",
             "Override fee must round to 9999999.99 or less.");
   }
 

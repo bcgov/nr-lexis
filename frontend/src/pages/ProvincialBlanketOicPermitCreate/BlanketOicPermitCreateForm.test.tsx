@@ -30,8 +30,7 @@ vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
 
 vi.mock('@/service/shipping-reference-service', () => ({
   fetchShippingReferenceOptions: vi.fn(),
-  formatShippingReferenceOption: (option: { code: string; name: string }) =>
-    `${option.name} (${option.code})`,
+  formatShippingReferenceOption: (option: { code: string; name: string }) => option.name,
 }))
 
 const shippingReferences = {
@@ -53,7 +52,7 @@ const clientDetails = (clientNumber: string, locationCode: string) => ({
   companyName: `Resolved client ${clientNumber}`,
   clientAcronym: '',
   address: `Address ${locationCode}`,
-  city: 'Test city',
+  city: `City of ${clientNumber}`,
   province: 'BC',
   postalCode: 'V0A 0A0',
   country: 'Canada',
@@ -104,12 +103,18 @@ const fillRequiredPermitAndShippingFields = async (user: ReturnType<typeof userE
   await user.type(screen.getByLabelText('Estimated shipping date'), '2099-01-01')
 }
 
+const clientControl = (party: 'owner' | 'agent') =>
+  screen.getByLabelText('Client', { selector: `#boic-permit-${party}-client` })
+
+const clientLocationControl = (party: 'owner' | 'agent') =>
+  screen.getByLabelText('Client location', { selector: `#boic-permit-${party}-location` })
+
 const selectForestClient = async (
   user: ReturnType<typeof userEvent.setup>,
-  label: string,
+  party: 'owner' | 'agent',
   clientNumber: string,
 ) => {
-  await user.type(screen.getByRole('combobox', { name: label }), clientNumber)
+  await user.type(clientControl(party), clientNumber)
   await user.click(await screen.findByRole('option', { name: `Test client · ${clientNumber}` }))
 }
 
@@ -179,10 +184,13 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(screen.getByRole('heading', { name: 'Permit details' })).toBeInTheDocument()
     expect(screen.getByText('TEST13E2')).toBeInTheDocument()
     expect(screen.getByText('Blanket OIC')).toBeInTheDocument()
-    for (const label of ['Current permit pieces', 'Current permit volume (m³)']) {
+    for (const [label, value] of [
+      ['Current permit pieces', '0'],
+      ['Current permit volume (m³)', '0.0'],
+    ]) {
       const field = screen.getByText(label).closest('.detail-field-item')
       expect(field).toBeTruthy()
-      expect(within(field as HTMLElement).getByText('0')).toBeInTheDocument()
+      expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
     }
     expect(screen.getByText('0/250')).toBeInTheDocument()
     for (const tab of screen.getAllByRole('tab')) expect(tab.querySelector('svg')).not.toBeNull()
@@ -208,7 +216,7 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(screen.getByText('Permit request volume is required.')).toBeInTheDocument()
     expect(summary).toHaveFocus()
     expect(
-      screen.queryByText(/The permit number is assigned after a successful save/),
+      screen.queryByText(/The permit number is assigned when you save/),
     ).not.toBeInTheDocument()
     expect(
       screen
@@ -243,8 +251,8 @@ describe('BlanketOicPermitCreateForm', () => {
 
     await fillRequiredPermitAndShippingFields(user)
     await user.click(screen.getByRole('tab', { name: 'Applicant' }))
-    await selectForestClient(user, 'Applicant client number', '12345678')
-    await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('00'))
+    await selectForestClient(user, 'owner', '12345678')
+    await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('00'))
     await user.click(screen.getByRole('tab', { name: 'Permit' }))
     await user.type(screen.getByLabelText('Issued date'), '1900-01-01')
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
@@ -263,8 +271,8 @@ describe('BlanketOicPermitCreateForm', () => {
 
     await fillRequiredPermitAndShippingFields(user)
     await user.click(screen.getByRole('tab', { name: 'Applicant' }))
-    await selectForestClient(user, 'Applicant client number', '12345678')
-    await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('00'))
+    await selectForestClient(user, 'owner', '12345678')
+    await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('00'))
     await user.click(screen.getByRole('tab', { name: 'Permit' }))
     await user.clear(screen.getByLabelText('Submit date'))
     await user.type(screen.getByLabelText('Submit date'), '2099-01-01')
@@ -284,14 +292,12 @@ describe('BlanketOicPermitCreateForm', () => {
     await screen.findByRole('group', { name: 'Permit needs attention' })
     await fillRequiredPermitAndShippingFields(user)
     await user.click(screen.getByRole('tab', { name: /^Applicant,/ }))
-    await selectForestClient(user, 'Applicant client number', '12345678')
-    await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('00'))
+    await selectForestClient(user, 'owner', '12345678')
+    await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('00'))
 
     await user.click(screen.getByRole('tab', { name: 'Shipping' }))
     expect(screen.queryByRole('group', { name: 'Permit needs attention' })).not.toBeInTheDocument()
-    expect(
-      screen.getByText(/The permit number is assigned after a successful save/),
-    ).toBeInTheDocument()
+    expect(screen.getByText(/The permit number is assigned when you save/)).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Shipping' }).querySelector('svg')).not.toBeNull()
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
@@ -369,18 +375,19 @@ describe('BlanketOicPermitCreateForm', () => {
     await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
 
     expect(screen.getByRole('heading', { name: 'Agent information' })).toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Agent client number' })).toBeInTheDocument()
-    expect(screen.getByLabelText('Agent location')).toBeInTheDocument()
-    await selectForestClient(user, 'Agent client number', '12345678')
-    expect(await screen.findByRole('region', { name: 'Agent details' })).toHaveTextContent(
-      'Test client',
-    )
+    expect(clientControl('agent')).toBeInTheDocument()
+    expect(clientLocationControl('agent')).toBeInTheDocument()
+    await selectForestClient(user, 'agent', '12345678')
+    // The Client field shows the company name, so the details start at the address.
+    const agentDetails = await screen.findByRole('region', { name: 'Agent details' })
+    expect(agentDetails).toHaveTextContent('Address')
+    expect(agentDetails).not.toHaveTextContent('Test client')
 
     await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
-    expect(screen.getByRole('combobox', { name: 'Agent client number' })).toHaveValue('')
-    expect(screen.getByLabelText('Agent location')).toHaveValue('')
+    expect(clientControl('agent')).toHaveValue('')
+    expect(clientLocationControl('agent')).toHaveValue('')
     expect(screen.queryByRole('region', { name: 'Agent details' })).not.toBeInTheDocument()
   })
 
@@ -399,13 +406,15 @@ describe('BlanketOicPermitCreateForm', () => {
 
       await user.click(screen.getByRole('tab', { name: 'Applicant' }))
       if (kind === 'Agent') await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
-      await selectForestClient(user, `${kind} client number`, '12345678')
+      await selectForestClient(user, kind === 'Agent' ? 'agent' : 'owner', '12345678')
       const firstDetails = await screen.findByRole('region', { name: `${kind} details` })
-      expect(firstDetails).toHaveTextContent('Resolved client 12345678')
+      expect(firstDetails).toHaveTextContent('City of 12345678')
+      expect(firstDetails).not.toHaveTextContent('Resolved client 12345678')
+      expect(firstDetails).toHaveTextContent('Phone number')
       expect(firstDetails).toHaveTextContent('Address 01')
       expect(within(firstDetails).queryByRole('textbox')).not.toBeInTheDocument()
 
-      await user.selectOptions(screen.getByLabelText(`${kind} location`), '02')
+      await user.selectOptions(clientLocationControl(kind === 'Agent' ? 'agent' : 'owner'), '02')
       expect(await screen.findByRole('region', { name: `${kind} details` })).toHaveTextContent(
         'Address 02',
       )
@@ -432,23 +441,23 @@ describe('BlanketOicPermitCreateForm', () => {
     renderForm()
 
     await user.click(screen.getByRole('tab', { name: 'Applicant' }))
-    await selectForestClient(user, 'Applicant client number', '12345678')
+    await selectForestClient(user, 'owner', '12345678')
     await screen.findByText('Address 01')
-    await user.selectOptions(screen.getByLabelText('Applicant location'), '02')
+    await user.selectOptions(clientLocationControl('owner'), '02')
     expect(screen.queryByRole('region', { name: 'Applicant details' })).not.toBeInTheDocument()
-    await user.clear(screen.getByRole('combobox', { name: 'Applicant client number' }))
-    expect(screen.getByLabelText('Applicant location')).toHaveValue('')
-    await selectForestClient(user, 'Applicant client number', '87654321')
+    await user.clear(clientControl('owner'))
+    expect(clientLocationControl('owner')).toHaveValue('')
+    await selectForestClient(user, 'owner', '87654321')
     expect(await screen.findByRole('region', { name: 'Applicant details' })).toHaveTextContent(
-      'Resolved client 87654321',
+      'City of 87654321',
     )
 
     await act(async () => resolveOldLocation(clientDetails('12345678', '02')))
     expect(screen.getByRole('region', { name: 'Applicant details' })).toHaveTextContent(
-      'Resolved client 87654321',
+      'City of 87654321',
     )
     expect(screen.queryByText('Address 02')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Applicant location')).toHaveValue('01')
+    expect(clientLocationControl('owner')).toHaveValue('01')
   })
 
   it('uses selectable applicant and agent locations when the lookup also returns synthetic rows', async () => {
@@ -482,16 +491,14 @@ describe('BlanketOicPermitCreateForm', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
     await user.click(screen.getByRole('tab', { name: 'Applicant' }))
-    await selectForestClient(user, 'Applicant client number', '12345678')
-    await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('01'))
-    expect(
-      screen.getByLabelText('Applicant location').querySelector('option[value="0"]'),
-    ).toBeNull()
+    await selectForestClient(user, 'owner', '12345678')
+    await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('01'))
+    expect(clientLocationControl('owner').querySelector('option[value="0"]')).toBeNull()
 
     await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
-    await selectForestClient(user, 'Agent client number', '87654321')
-    await waitFor(() => expect(screen.getByLabelText('Agent location')).toHaveValue('02'))
-    expect(screen.getByLabelText('Agent location').querySelector('option[value="0"]')).toBeNull()
+    await selectForestClient(user, 'agent', '87654321')
+    await waitFor(() => expect(clientLocationControl('agent')).toHaveValue('02'))
+    expect(clientLocationControl('agent').querySelector('option[value="0"]')).toBeNull()
 
     await user.click(screen.getByRole('tab', { name: 'Permit' }))
     await fillRequiredPermitAndShippingFields(user)
@@ -513,13 +520,13 @@ describe('BlanketOicPermitCreateForm', () => {
     {
       kind: 'applicant',
       blockedClientNumber: '12345678',
-      locationLabel: 'Applicant location',
+      party: 'owner' as const,
       errorMessage: 'No verified locations were found for this applicant.',
     },
     {
       kind: 'agent',
       blockedClientNumber: '87654321',
-      locationLabel: 'Agent location',
+      party: 'agent' as const,
       errorMessage: 'No verified locations were found for this agent.',
     },
   ])('does not submit a permit with only a synthetic $kind location', async (scenario) => {
@@ -534,19 +541,17 @@ describe('BlanketOicPermitCreateForm', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
     await user.click(screen.getByRole('tab', { name: 'Applicant' }))
     if (scenario.kind === 'agent') {
-      await selectForestClient(user, 'Applicant client number', '12345678')
-      await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('01'))
+      await selectForestClient(user, 'owner', '12345678')
+      await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('01'))
       await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
-      await selectForestClient(user, 'Agent client number', scenario.blockedClientNumber)
+      await selectForestClient(user, 'agent', scenario.blockedClientNumber)
     } else {
-      await selectForestClient(user, 'Applicant client number', scenario.blockedClientNumber)
+      await selectForestClient(user, 'owner', scenario.blockedClientNumber)
     }
 
     await waitFor(() => expect(screen.getByText(scenario.errorMessage)).toBeInTheDocument())
-    expect(screen.getByLabelText(scenario.locationLabel)).toBeDisabled()
-    expect(
-      screen.getByLabelText(scenario.locationLabel).querySelector('option[value="0"]'),
-    ).toBeNull()
+    expect(clientLocationControl(scenario.party)).toBeDisabled()
+    expect(clientLocationControl(scenario.party).querySelector('option[value="0"]')).toBeNull()
 
     await user.click(screen.getByRole('tab', { name: 'Permit' }))
     await fillRequiredPermitAndShippingFields(user)

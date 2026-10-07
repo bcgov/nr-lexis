@@ -381,7 +381,7 @@ describe('Admin policy action states', () => {
 
   it('surfaces backend policy mutation errors', async () => {
     mockedUpsertFeePolicy.mockRejectedValue(
-      new AdminPolicyMutationError(['Effective Date must be greater than the current date.']),
+      new AdminPolicyMutationError(['Effective date must be greater than the current date.']),
     )
     renderPage('fee')
 
@@ -394,7 +394,7 @@ describe('Admin policy action states', () => {
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee policy' }))
 
     expect(
-      await within(dialog).findByText('Effective Date must be greater than the current date.'),
+      await within(dialog).findByText('Effective date must be greater than the current date.'),
     ).toBeInTheDocument()
   })
 
@@ -507,7 +507,7 @@ describe('Admin policy action states', () => {
 
     const dialog = await openAddPolicyDialog('fee')
     await within(dialog).findByRole('option', {
-      name: 'Thompson-Okanagan Natural Resource Region (1905)',
+      name: 'Thompson-Okanagan Natural Resource Region',
     })
 
     fireEvent.change(within(dialog).getByLabelText('Policy effective date'), {
@@ -707,7 +707,7 @@ describe('Admin policy action states', () => {
 
     if (area === 'fee') {
       await within(dialog).findByRole('option', {
-        name: 'RCO — Kootenay-Boundary Natural Resource Region',
+        name: 'Kootenay-Boundary Natural Resource Region',
       })
       await userEvent.selectOptions(within(dialog).getByLabelText('Region'), '1904')
       await userEvent.type(within(dialog).getByLabelText('Fee increase percentage'), value)
@@ -774,7 +774,7 @@ describe('Admin policy action states', () => {
 
     if (area === 'fee') {
       await within(dialog).findByRole('option', {
-        name: 'RCO — Kootenay-Boundary Natural Resource Region',
+        name: 'Kootenay-Boundary Natural Resource Region',
       })
       await userEvent.selectOptions(within(dialog).getByLabelText('Region'), '1904')
       await userEvent.type(within(dialog).getByLabelText('Fee increase percentage'), value)

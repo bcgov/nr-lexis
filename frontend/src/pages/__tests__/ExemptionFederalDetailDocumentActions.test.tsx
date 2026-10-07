@@ -442,9 +442,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const exemptionHeader = exemptionHeading.closest('header')
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(exemptionHeader).toBeTruthy()
-    expect(
-      within(exemptionHeader as HTMLElement).getByText('Author: Not provided'),
-    ).toBeInTheDocument()
+    expect(within(exemptionHeader as HTMLElement).getByText('Author: —')).toBeInTheDocument()
     expect(within(exemptionHeader as HTMLElement).getByText('Active')).toHaveAttribute(
       'data-status-variant',
       'positive',
@@ -1756,6 +1754,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
       .getByRole('heading', { name: 'Applicant', level: 2 })
       .closest('.cds--tile')
     expect(ownerTile).toBeTruthy()
+    expect(
+      within(ownerTile as HTMLElement).getByText('Owner Company · 00021234'),
+    ).toBeInTheDocument()
+    expect(within(ownerTile as HTMLElement).getByText('Client')).toBeInTheDocument()
+    expect(within(ownerTile as HTMLElement).queryByText('Company name')).not.toBeInTheDocument()
     const ownerApplicantTypeField = within(ownerTile as HTMLElement)
       .getByText('Applicant type')
       .closest('.detail-field-item')
@@ -1769,6 +1772,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByText('agent@example.test')).toBeInTheDocument()
     const agentTile = screen.getByRole('heading', { name: 'Agent', level: 2 }).closest('.cds--tile')
     expect(agentTile).toBeTruthy()
+    expect(
+      within(agentTile as HTMLElement).getByText('Agent Company · 00011234'),
+    ).toBeInTheDocument()
+    expect(within(agentTile as HTMLElement).getByText('Client')).toBeInTheDocument()
+    expect(within(agentTile as HTMLElement).queryByText('Company name')).not.toBeInTheDocument()
     const agentApplicantTypeField = within(agentTile as HTMLElement)
       .getByText('Applicant type')
       .closest('.detail-field-item')
@@ -1782,7 +1790,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Items')
     expect(screen.getByText('Average log volume (m³)')).toBeInTheDocument()
     expect(screen.getByText('Application volume (m³)')).toBeInTheDocument()
-    expect(await screen.findByRole('heading', { name: 'Summary of Scale' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Summary of scale' })).toBeInTheDocument()
     expect(mockedFetchApplicationPackageScales).toHaveBeenCalledWith('PKG-1')
     expect(await screen.findByText('TM-1')).toBeInTheDocument()
 
@@ -1943,7 +1951,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
 
     await selectDetailTab('Remarks')
-    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
 
     await selectDetailTab('Documents')
@@ -2002,7 +2010,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       edit: async () => {
         await selectDetailTab('Remarks')
         await enterFederalRemarkEditMode()
-        await userEvent.type(screen.getByLabelText('New Remark'), 'Remark draft')
+        await userEvent.type(screen.getByLabelText('New remark'), 'Remark draft')
       },
     },
     {
@@ -2075,9 +2083,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
       } else {
         await selectDetailTab('Remarks')
         await enterFederalRemarkEditMode()
-        await userEvent.type(screen.getByLabelText('New Remark'), 'Saved remark')
+        await userEvent.type(screen.getByLabelText('New remark'), 'Saved remark')
         mockedFetchFederalApplicationRemarks.mockRejectedValueOnce(new Error('Refresh failed'))
-        await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+        await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
       }
       const message =
         section === 'status'
@@ -2615,7 +2623,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       await screen.findByText('No package has been recorded for this federal application.'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'No packages found' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Summary of Scale' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Summary of scale' })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'No scale details found' }),
     ).not.toBeInTheDocument()
@@ -2781,20 +2789,20 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByText('2026-07-17 21:37:21')).toBeInTheDocument()
 
     await enterFederalRemarkEditMode()
-    const newRemarkInput = screen.getByLabelText('New Remark')
-    expect(newRemarkInput.closest('.legacy-search-actions')).toHaveTextContent('Save Remark')
+    const newRemarkInput = screen.getByLabelText('New remark')
+    expect(newRemarkInput.closest('.legacy-search-actions')).toHaveTextContent('Save remark')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
     expect(await screen.findByText('Remark is required.')).toBeInTheDocument()
 
     await userEvent.type(newRemarkInput, 'R'.repeat(251))
-    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
     expect(await screen.findByText('Remark must not exceed 250 characters.')).toBeInTheDocument()
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
 
     await userEvent.clear(newRemarkInput)
     await userEvent.type(newRemarkInput, 'New note')
-    await userEvent.click(screen.getByRole('button', { name: 'Save Remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
 
     await waitFor(() => {
       expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledWith('888', 'New note', undefined)
@@ -2802,10 +2810,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    const remarkInput = screen.getByLabelText('Edit Remark 44')
+    const remarkInput = screen.getByLabelText('Edit remark 44')
     await userEvent.clear(remarkInput)
     await userEvent.type(remarkInput, 'Updated note')
-    await userEvent.click(screen.getByRole('button', { name: 'Update Remark' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Update remark' }))
 
     await waitFor(() => {
       expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledWith('888', 'Updated note', 44)
@@ -2857,7 +2865,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('Review note')).toBeInTheDocument()
     expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()
     expect(mockedFetchFederalApplicationRemarks).toHaveBeenCalledWith('888')
-    expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('New remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
   })
@@ -3250,7 +3258,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       await selectDetailTab('Application')
       expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
       await selectDetailTab('Remarks')
-      expect(screen.queryByLabelText('New Remark')).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('New remark')).not.toBeInTheDocument()
       await selectDetailTab('Shipping details')
       expect(
         screen.queryByRole('button', { name: 'Edit shipping details' }),

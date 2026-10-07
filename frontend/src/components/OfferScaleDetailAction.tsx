@@ -19,6 +19,7 @@ import {
   type OfferScaleTarget,
 } from '@/service/offer-scale-detail-service'
 import './OfferScaleDetailAction.scss'
+import { formatVolume } from '@/utils/volume'
 
 type OfferScaleDetailActionProps = {
   target: OfferScaleTarget
@@ -101,7 +102,7 @@ const ScaleDetailDialog = ({
                   <TableCell>{row.pieces}</TableCell>
                   <TableCell>{row.species}</TableCell>
                   <TableCell>{row.grade}</TableCell>
-                  <TableCell>{row.volume}</TableCell>
+                  <TableCell>{formatVolume(row.volume)}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -144,7 +145,7 @@ const ScaleDetailAction = ({ target, disabled }: OfferScaleDetailActionProps) =>
         disabled={disabled}
         onClick={() => setOpen(true)}
       >
-        See Scale Detail
+        See scale detail
       </Button>
       {open && <ScaleDetailDialog target={target} onClose={closeDialog} />}
     </>

@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import { Document, Folder, Package, Product, WarningAltFilled } from '@carbon/icons-react'
-import { displayValue } from '@/utils/text'
+import EmptyValue from '@/components/EmptyValue'
+import { displayValue, displayValueText } from '@/utils/display-value'
 import {
   formatScaleRows,
   formatUploadFileSize,
@@ -20,46 +21,37 @@ type UploadQueueReviewAccordionProps = {
 
 const asList = (value: string[] | undefined): string[] => value?.filter(Boolean) ?? []
 
-const formatDecimal = (value: number | undefined): string =>
-  typeof value === 'number' ? value.toFixed(1) : 'Not provided'
+const formatDecimal = (value: number | undefined): ReactNode =>
+  typeof value === 'number' ? value.toFixed(1) : <EmptyValue />
 
-const formatSubmissionDecimal = (value: number | undefined): string =>
-  typeof value === 'number' ? value.toFixed(1) : '—'
+const formatSubmissionDecimal = formatDecimal
 
 type ReviewTableRow = {
   label: string
-  value: string
+  value: ReactNode
 }
 
 const clientLocationValue = (
   clientNumber: string | undefined,
   locationCode: string | undefined,
 ): string => {
-  const client = displayValue(clientNumber)
+  const client = displayValueText(clientNumber)
   return locationCode ? `${client}-${locationCode}` : client
 }
 
 const submissionClientLocationValue = (
   clientNumber: string | undefined,
   locationCode: string | undefined,
-): string => {
+): ReactNode => {
   const client = clientNumber?.trim()
   if (!client) {
-    return '—'
+    return displayValue(client)
   }
   return locationCode ? `${client}-${locationCode}` : client
 }
 
-const submissionValue = (value: string | number | null | undefined): string => {
-  if (
-    value === null ||
-    value === undefined ||
-    value === '' ||
-    (typeof value === 'string' && !value.trim())
-  ) {
-    return '—'
-  }
-  return String(value)
+const submissionValue = (value: string | number | null | undefined): ReactNode => {
+  return displayValue(value)
 }
 
 type SubmissionReviewSectionProps = {
@@ -87,7 +79,7 @@ function SubmissionReviewList({ title, rows }: { title: string; rows: ReviewTabl
         {rows.map((row) => (
           <tr key={row.label}>
             <th scope="row">{row.label}</th>
-            <td>{row.value || '—'}</td>
+            <td>{row.value || <EmptyValue />}</td>
           </tr>
         ))}
       </tbody>
@@ -121,7 +113,9 @@ function SubmissionReview({
           {
             label: 'Scale rows',
             value:
-              typeof details?.scaleRows === 'number' ? formatScaleRows(details.scaleRows) : '—',
+              typeof details?.scaleRows === 'number'
+                ? formatScaleRows(details.scaleRows)
+                : displayValue(''),
           },
           ...(details?.userReference
             ? [{ label: 'User reference', value: details.userReference }]
@@ -268,7 +262,7 @@ function SubmissionReview({
                         <td>
                           {submissionSummary.speciesCodes?.length
                             ? submissionSummary.speciesCodes.join(', ')
-                            : '—'}
+                            : displayValue('')}
                         </td>
                         <td>{submissionValue(submissionSummary.endUseCode)}</td>
                       </tr>
@@ -313,11 +307,7 @@ function SubmissionReview({
   )
 }
 
-const renderFieldValueTable = (
-  title: string,
-  rows: ReviewTableRow[],
-  emptyValue = 'Not provided',
-) => (
+const renderFieldValueTable = (title: string, rows: ReviewTableRow[]) => (
   <div className="admin-upload-review__table-group">
     <h4>{title}</h4>
     <div className="admin-upload-review-table">
@@ -335,7 +325,7 @@ const renderFieldValueTable = (
           {rows.map((row) => (
             <tr key={row.label}>
               <th scope="row">{row.label}</th>
-              <td>{row.value || emptyValue}</td>
+              <td>{row.value || <EmptyValue />}</td>
             </tr>
           ))}
         </tbody>
@@ -511,7 +501,7 @@ function UploadQueueReviewAccordion({
                   )}
                   {details?.userReference && (
                     <div>
-                      <dt>User Reference</dt>
+                      <dt>User reference</dt>
                       <dd>{details.userReference}</dd>
                     </div>
                   )}
@@ -559,7 +549,7 @@ function UploadQueueReviewAccordion({
                               <td>
                                 {submissionSummary.speciesCodes?.length
                                   ? submissionSummary.speciesCodes.join(', ')
-                                  : 'Not provided'}
+                                  : displayValue('')}
                               </td>
                               <td>{displayValue(submissionSummary.endUseCode)}</td>
                             </tr>

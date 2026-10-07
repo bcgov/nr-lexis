@@ -243,7 +243,7 @@ test.describe('Frontend parity with mocked API responses', () => {
       await gotoSyntheticRoute(page, '/provincial/offers/81001', {
         ready: page.getByRole('heading', { name: 'Offer 81001', exact: true }),
       })
-      const launcher = page.getByRole('button', { name: 'See Scale Detail', exact: true })
+      const launcher = page.getByRole('button', { name: 'See scale detail', exact: true })
       await launcher.click()
       const dialog = page.getByRole('dialog', { name: 'Scale Detail', exact: true })
       await expect(dialog.getByText('No scale details found for this package.')).toBeVisible()

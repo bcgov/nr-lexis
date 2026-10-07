@@ -1,3 +1,5 @@
+import { EMPTY_VALUE_TEXT } from './display-value'
+
 export const normalizeFilterText = (value: string): string => value.trim().toLowerCase()
 
 export const normalizeTrimmedText = (value: string): string => value.trim()
@@ -7,19 +9,7 @@ export const normalizeUpperText = (value: string): string => value.trim().toUppe
 export const joinNonBlankText = (values: string[], separator: string): string =>
   values.filter((value) => value.trim().length > 0).join(separator)
 
-export const displayValue = (value: string | number | null | undefined): string => {
-  if (value === null || value === undefined || value === '') {
-    return 'Not provided'
-  }
-  return String(value)
-}
-
-export const displayTableValue = (value: string | number | null | undefined): string => {
-  if (value === null || value === undefined || (typeof value === 'string' && value.trim() === '')) {
-    return '—'
-  }
-  return String(value)
-}
+export { displayTableValue, displayValue, displayValueText } from './display-value'
 
 // Display padding explicitly without changing the exact package key used in requests.
 export const formatPackageNumberLabel = (packageNumber: string): string => {
@@ -40,7 +30,7 @@ const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{
 export const displayAuditIdentity = (value: string | null | undefined): string => {
   const normalized = value?.trim()
   if (!normalized) {
-    return 'Not provided'
+    return EMPTY_VALUE_TEXT
   }
 
   const separatorIndex = normalized.lastIndexOf('\\')

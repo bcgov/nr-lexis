@@ -437,7 +437,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       target: { value: 'Preserve review draft' },
     })
     await selectApplicationItemsForEditing()
-    fireEvent.change(await screen.findByLabelText('Package Comments'), {
+    fireEvent.change(await screen.findByLabelText('Package comments'), {
       target: { value: 'Saved package change' },
     })
     const detailFetchCountBeforeSave = mockedFetchProvincialApplicationDetail.mock.calls.length

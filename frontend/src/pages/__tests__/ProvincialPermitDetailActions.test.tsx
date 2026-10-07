@@ -887,8 +887,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(pageHeader).toBeTruthy()
     expect(
-      within(pageHeader as HTMLElement).getByText('Check and manage this provincial permit'),
-    ).toBeInTheDocument()
+      within(pageHeader as HTMLElement).queryByText('Check and manage this provincial permit'),
+    ).not.toBeInTheDocument()
+    expect(within(pageHeader as HTMLElement).getByText(/^Author: /)).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'Back to Provincial permit search' })).toHaveAttribute(
       'href',
       '/provincial/permit',
@@ -936,14 +937,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(permitFinancialTile as HTMLElement).getByText('Total volume remaining (m³)'),
     ).toBeInTheDocument()
-    expect(within(permitFinancialTile as HTMLElement).getByText('250')).toBeInTheDocument()
-    expect(within(permitFinancialTile as HTMLElement).getByText('130')).toBeInTheDocument()
-    expect(within(permitFinancialTile as HTMLElement).getByText('120')).toBeInTheDocument()
+    expect(within(permitFinancialTile as HTMLElement).getByText('250.0')).toBeInTheDocument()
+    expect(within(permitFinancialTile as HTMLElement).getByText('130.0')).toBeInTheDocument()
+    expect(within(permitFinancialTile as HTMLElement).getByText('120.0')).toBeInTheDocument()
     expect(
-      within(permitFinancialTile as HTMLElement).queryByText('Permit Request Pieces'),
+      within(permitFinancialTile as HTMLElement).queryByText('Permit request pieces'),
     ).not.toBeInTheDocument()
     expect(
-      within(permitFinancialTile as HTMLElement).queryByText('Permit Request Volume (m³)'),
+      within(permitFinancialTile as HTMLElement).queryByText('Permit request volume (m³)'),
     ).not.toBeInTheDocument()
     expect(
       within(permitFinancialTile as HTMLElement).queryByText('Agent client number'),
@@ -1264,8 +1265,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: "I'm an agent" })).toBeDisabled()
 
-    const applicantLocation = screen.getByLabelText('Applicant location')
-    const agentLocation = screen.getByLabelText('Agent location')
+    const applicantLocation = screen.getByLabelText('Client location')
+    const agentLocation = screen.getByLabelText('Agent client location')
     await waitFor(() => {
       expect(applicantLocation).toBeEnabled()
       expect(agentLocation).toBeEnabled()
@@ -1386,7 +1387,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(feesEmptyState?.closest('.cds--tile')).toBeNull()
     expect(feesEmptyState).toHaveTextContent(
-      "Fees are calculated from the permit's Summary of Scale. They appear once an application is selected on the Permit tab.",
+      "Fees are calculated from the permit's Summary of scale. They appear once an application is selected on the Permit tab.",
     )
     expect(screen.queryByLabelText('Receipt number')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit fee override' })).not.toBeInTheDocument()
@@ -2375,7 +2376,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const scaleDetails = screen.getByRole('group', { name: 'Package details' })
     expect(scalePackage).toHaveValue('MIN-1')
     expect(within(scaleDetails).getByText('Old growth')).toBeVisible()
-    expect(within(scaleDetails).getByText('3')).toBeVisible()
+    expect(within(scaleDetails).getByText('3.0')).toBeVisible()
     const scaleRows = screen.getByRole('region', { name: 'Scale rows' })
     expect(within(scaleRows).getByText('TM-PLAIN')).toBeVisible()
     expect(within(scaleRows).queryByText('TM-PADDED')).not.toBeInTheDocument()
@@ -2386,7 +2387,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await chooseComboBoxOption(scalePackage, 'MIN-1 (1 trailing space)')
     expect(scalePackage).toHaveValue('MIN-1 (1 trailing space)')
     expect(within(scaleDetails).getByText('Second growth')).toBeVisible()
-    expect(within(scaleDetails).getByText('9')).toBeVisible()
+    expect(within(scaleDetails).getByText('9.0')).toBeVisible()
     expect(within(scaleRows).getByText('TM-PADDED')).toBeVisible()
     expect(within(scaleRows).queryByText('TM-PLAIN')).not.toBeInTheDocument()
 
@@ -4876,7 +4877,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         await screen.findByRole('heading', { name: 'No packages for this permit' }),
       ).toBeInTheDocument()
       expect(screen.queryByRole('heading', { name: 'No package details' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('group', { name: 'Summary of Scale' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('group', { name: 'Summary of scale' })).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
       const heading = await screen.findByRole('heading', { name: 'Create package' })
       const packageEditor = heading.closest('.application-detail-edit-section') as HTMLElement
@@ -6311,11 +6312,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: "I'm an agent" })).toBeDisabled()
     await waitFor(() => {
-      expect(screen.getByLabelText('Applicant location')).toBeEnabled()
-      expect(screen.getByLabelText('Agent location')).toBeEnabled()
+      expect(screen.getByLabelText('Client location')).toBeEnabled()
+      expect(screen.getByLabelText('Agent client location')).toBeEnabled()
     })
-    await userEvent.selectOptions(screen.getByLabelText('Applicant location'), '04')
-    await userEvent.selectOptions(screen.getByLabelText('Agent location'), '02')
+    await userEvent.selectOptions(screen.getByLabelText('Client location'), '04')
+    await userEvent.selectOptions(screen.getByLabelText('Agent client location'), '02')
     await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => {
@@ -6727,7 +6728,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
           exemptionNumber: 'EX-9',
           permitSubmitDate: '2026-04-09',
           permitRequestDate: '2026-04-09',
-          permitTotalVolume: '120',
+          permitTotalVolume: '120.0',
           permitNumberOfPieces: '10',
         }),
       )
@@ -6937,7 +6938,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         await userEvent.click(
           await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
         )
-        const applicantLocation = screen.getByLabelText('Applicant location')
+        const applicantLocation = screen.getByLabelText('Client location')
         await waitFor(() => expect(applicantLocation).toBeEnabled())
         await userEvent.selectOptions(applicantLocation, '04')
       } else {
@@ -7190,19 +7191,19 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ]) {
       expect(within(permitTile as HTMLElement).queryByText(label)).not.toBeInTheDocument()
     }
-    const requestPiecesLabel = within(permitTile as HTMLElement).getByText('Permit Request Pieces')
+    const requestPiecesLabel = within(permitTile as HTMLElement).getByText('Permit request pieces')
     expect(requestPiecesLabel).toBeInTheDocument()
     expect(
       within(requestPiecesLabel.closest('.detail-field-item') as HTMLElement).getByText('250'),
     ).toBeInTheDocument()
     expect(
-      within(permitTile as HTMLElement).getByText('Permit Request Volume (m³)'),
+      within(permitTile as HTMLElement).getByText('Permit request volume (m³)'),
     ).toBeInTheDocument()
     expect(within(permitTile as HTMLElement).getByText('125.75')).toBeInTheDocument()
     for (const [label, value] of [
-      ['Total exemption volume (m³)', '250'],
-      ['Total volume remaining (m³)', '130'],
-      ['Current permit volume (m³)', String(permitDetail.permitVolume)],
+      ['Total exemption volume (m³)', '250.0'],
+      ['Total volume remaining (m³)', '130.0'],
+      ['Current permit volume (m³)', `${permitDetail.permitVolume}.0`],
       ['Current permit pieces', String(permitDetail.numberOfPieces)],
       ['Remarks', 'Saved BOIC remarks'],
     ]) {
@@ -7212,6 +7213,30 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(within(field).getByText(value)).toBeInTheDocument()
     }
   })
+
+  it.each([
+    [1, '1.0', '1'],
+    [12.25, '12.25', '12.25'],
+  ])(
+    'formats read-only BOIC request volume %s and retains editor text %s',
+    async (volume, expectedDisplay, expectedInput) => {
+      mockedFetchProvincialPermitDetail.mockResolvedValue({
+        ...permitDetail,
+        exemptionTypeDescription: 'Blanket OIC',
+        blanketOic: true,
+        oicRequestPieces: 1,
+        oicRequestVolume: volume,
+      })
+      renderPermitDetails()
+
+      const heading = await screen.findByRole('heading', { name: 'Permit details' })
+      const card = within(heading.closest('.cds--tile') as HTMLElement)
+      const label = card.getByText('Permit request volume (m³)')
+      expect(label.parentElement?.querySelector('dd')).toHaveTextContent(expectedDisplay)
+      await userEvent.click(card.getByRole('button', { name: 'Edit permit details' }))
+      expect(screen.getByLabelText('Permit request volume (m³)')).toHaveValue(expectedInput)
+    },
+  )
 
   it.each([
     ['populated', '250', '999999999'],
@@ -7243,11 +7268,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
         within(permitTile).queryByLabelText('Current permit volume (m³)'),
       ).not.toBeInTheDocument()
       expect(within(permitTile).queryByLabelText('Current permit pieces')).not.toBeInTheDocument()
-      expect(within(permitTile).getByLabelText('Permit Request Pieces')).toHaveAttribute(
+      expect(within(permitTile).getByLabelText('Permit request pieces')).toHaveAttribute(
         'aria-required',
         'true',
       )
-      expect(within(permitTile).getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
+      expect(within(permitTile).getByLabelText('Permit request volume (m³)')).toHaveAttribute(
         'aria-required',
         'true',
       )
@@ -7257,13 +7282,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(
         document.querySelector('label[for="permit-oicPermitTotalVolume"] .required-label__marker'),
       ).toBeInTheDocument()
-      await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
+      await userEvent.clear(screen.getByLabelText('Permit request pieces'))
       if (pieces) {
-        await userEvent.type(screen.getByLabelText('Permit Request Pieces'), pieces)
+        await userEvent.type(screen.getByLabelText('Permit request pieces'), pieces)
       }
-      await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
+      await userEvent.clear(screen.getByLabelText('Permit request volume (m³)'))
       if (volume) {
-        await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), volume)
+        await userEvent.type(screen.getByLabelText('Permit request volume (m³)'), volume)
       }
       await userEvent.click(getActiveSectionSaveButton())
 
@@ -7290,18 +7315,18 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
-    await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
-    await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
+    await userEvent.clear(screen.getByLabelText('Permit request pieces'))
+    await userEvent.clear(screen.getByLabelText('Permit request volume (m³)'))
     await userEvent.click(getActiveSectionSaveButton())
 
     expect(
-      (await screen.findAllByText('Permit Request Pieces is required.')).length,
+      (await screen.findAllByText('Permit request pieces is required.')).length,
     ).toBeGreaterThan(0)
     expect(
-      (await screen.findAllByText('Permit Request Volume is required.')).length,
+      (await screen.findAllByText('Permit request volume is required.')).length,
     ).toBeGreaterThan(0)
-    expect(screen.getByLabelText('Permit Request Pieces')).toHaveValue('')
-    expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveValue('')
+    expect(screen.getByLabelText('Permit request pieces')).toHaveValue('')
+    expect(screen.getByLabelText('Permit request volume (m³)')).toHaveValue('')
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
@@ -7318,15 +7343,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'CAN')
-    expect(screen.getByLabelText('Permit Request Pieces')).toHaveAttribute('aria-required', 'true')
-    expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
+    expect(screen.getByLabelText('Permit request pieces')).toHaveAttribute('aria-required', 'true')
+    expect(screen.getByLabelText('Permit request volume (m³)')).toHaveAttribute(
       'aria-required',
       'true',
     )
-    await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
-    await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '0')
-    await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
-    await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '0')
+    await userEvent.clear(screen.getByLabelText('Permit request pieces'))
+    await userEvent.type(screen.getByLabelText('Permit request pieces'), '0')
+    await userEvent.clear(screen.getByLabelText('Permit request volume (m³)'))
+    await userEvent.type(screen.getByLabelText('Permit request volume (m³)'), '0')
     await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => {
@@ -7355,10 +7380,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(getActiveSectionSaveButton())
 
     expect(
-      (await screen.findAllByText('Permit Request Pieces is required.')).length,
+      (await screen.findAllByText('Permit request pieces is required.')).length,
     ).toBeGreaterThan(0)
     expect(
-      (await screen.findAllByText('Permit Request Volume is required.')).length,
+      (await screen.findAllByText('Permit request volume is required.')).length,
     ).toBeGreaterThan(0)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
@@ -7375,40 +7400,40 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
-    await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
-    await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '-1')
-    await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
-    await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '-1')
+    await userEvent.clear(screen.getByLabelText('Permit request pieces'))
+    await userEvent.type(screen.getByLabelText('Permit request pieces'), '-1')
+    await userEvent.clear(screen.getByLabelText('Permit request volume (m³)'))
+    await userEvent.type(screen.getByLabelText('Permit request volume (m³)'), '-1')
     await userEvent.click(getActiveSectionSaveButton())
 
     expect(
-      (await screen.findAllByText('Permit Request Pieces must be a whole number.')).length,
+      (await screen.findAllByText('Permit request pieces must be a whole number.')).length,
     ).toBeGreaterThanOrEqual(2)
-    expect(await screen.findByText('Permit Request Volume must be numeric.')).toBeInTheDocument()
+    expect(await screen.findByText('Permit request volume must be numeric.')).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
-    await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
-    await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '10000000000')
-    await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
-    await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '1.234')
+    await userEvent.clear(screen.getByLabelText('Permit request pieces'))
+    await userEvent.type(screen.getByLabelText('Permit request pieces'), '10000000000')
+    await userEvent.clear(screen.getByLabelText('Permit request volume (m³)'))
+    await userEvent.type(screen.getByLabelText('Permit request volume (m³)'), '1.234')
     await userEvent.click(getActiveSectionSaveButton())
 
     expect(
-      (await screen.findAllByText('Permit Request Pieces must be 9999999999 or less.')).length,
+      (await screen.findAllByText('Permit request pieces must be 9999999999 or less.')).length,
     ).toBeGreaterThanOrEqual(1)
     expect(
-      screen.getByText('Permit Request Volume must have no more than 2 decimal places.'),
+      screen.getByText('Permit request volume must have no more than 2 decimal places.'),
     ).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
-    await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
-    await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '250')
-    await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
-    await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '1234567.89')
+    await userEvent.clear(screen.getByLabelText('Permit request pieces'))
+    await userEvent.type(screen.getByLabelText('Permit request pieces'), '250')
+    await userEvent.clear(screen.getByLabelText('Permit request volume (m³)'))
+    await userEvent.type(screen.getByLabelText('Permit request volume (m³)'), '1234567.89')
     await userEvent.click(getActiveSectionSaveButton())
 
     expect(
-      (await screen.findAllByText('Permit Request Volume must be 9 characters or fewer.')).length,
+      (await screen.findAllByText('Permit request volume must be 9 characters or fewer.')).length,
     ).toBeGreaterThanOrEqual(1)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
@@ -7426,8 +7451,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
-    expect(screen.getByLabelText('Permit Request Pieces')).toHaveAttribute('aria-required', 'true')
-    expect(screen.getByLabelText('Permit Request Volume (m³)')).toHaveAttribute(
+    expect(screen.getByLabelText('Permit request pieces')).toHaveAttribute('aria-required', 'true')
+    expect(screen.getByLabelText('Permit request volume (m³)')).toHaveAttribute(
       'aria-required',
       'true',
     )
@@ -7437,10 +7462,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       document.querySelector('label[for="permit-oicPermitTotalVolume"] .required-label__marker'),
     ).toBeInTheDocument()
-    await userEvent.clear(screen.getByLabelText('Permit Request Pieces'))
-    await userEvent.type(screen.getByLabelText('Permit Request Pieces'), '0')
-    await userEvent.clear(screen.getByLabelText('Permit Request Volume (m³)'))
-    await userEvent.type(screen.getByLabelText('Permit Request Volume (m³)'), '0')
+    await userEvent.clear(screen.getByLabelText('Permit request pieces'))
+    await userEvent.type(screen.getByLabelText('Permit request pieces'), '0')
+    await userEvent.clear(screen.getByLabelText('Permit request volume (m³)'))
+    await userEvent.type(screen.getByLabelText('Permit request volume (m³)'), '0')
     await userEvent.click(getActiveSectionSaveButton())
 
     expect(
@@ -7563,8 +7588,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
       await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
 
-      const requestPieces = screen.getByLabelText('Permit Request Pieces')
-      const requestVolume = screen.getByLabelText('Permit Request Volume (m³)')
+      const requestPieces = screen.getByLabelText('Permit request pieces')
+      const requestVolume = screen.getByLabelText('Permit request volume (m³)')
       expect(requestPieces).toBeDisabled()
       expect(requestVolume).toBeDisabled()
       expect(requestPieces).not.toHaveAttribute('aria-required')
@@ -7596,8 +7621,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    expect(await screen.findByText('Permit Request Pieces')).toBeInTheDocument()
-    expect(screen.getByText('Permit Request Volume (m³)')).toBeInTheDocument()
+    expect(await screen.findByText('Permit request pieces')).toBeInTheDocument()
+    expect(screen.getByText('Permit request volume (m³)')).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
     ).not.toBeInTheDocument()
@@ -7638,7 +7663,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       message: 'The permit was updated successfully.',
       errors: [],
       warnings: [
-        'Fee Receipt Number should not be empty for a complete Permit so it will be saved as Payment Pending.',
+        'Receipt number should not be empty for a complete permit so it will be saved as Payment Pending.',
       ],
       source: 'api',
       permitStatus: 'PPD',
@@ -7657,13 +7682,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1))
     expect(
-      await screen.findByText(/Fee Receipt Number should not be empty for a complete Permit/),
+      await screen.findByText(/Receipt number should not be empty for a complete permit/),
     ).toBeInTheDocument()
     expect(screen.getAllByText('Payment Pending').length).toBeGreaterThan(0)
     const financialTile = screen
       .getByRole('heading', { name: 'Financial and volume' })
       .closest('.cds--tile')
-    expect(within(financialTile as HTMLElement).getByText('95')).toBeInTheDocument()
+    expect(within(financialTile as HTMLElement).getByText('95.0')).toBeInTheDocument()
     expect(within(financialTile as HTMLElement).getByText('9')).toBeInTheDocument()
   })
 
@@ -7745,7 +7770,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     const permitStatusSelect = screen.getByLabelText('Permit status')
     expect(permitStatusSelect).toHaveValue('PPD')
     expect(
-      within(permitStatusSelect).getByRole('option', { name: 'Payment Pending (PPD)' }),
+      within(permitStatusSelect).getByRole('option', { name: 'Payment Pending' }),
     ).toBeInTheDocument()
   })
 

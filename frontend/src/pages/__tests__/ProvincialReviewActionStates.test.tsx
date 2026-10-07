@@ -448,7 +448,7 @@ describe('Provincial Review Action State Smoke', () => {
     await screen.findByText('1000456')
 
     expect(screen.getByText('1.0')).toBeInTheDocument()
-    expect(screen.getByText('1212.0')).toBeInTheDocument()
+    expect(screen.getByText('1,212.0')).toBeInTheDocument()
   })
 
   it('waits for explicit submission while the application number is typed', async () => {

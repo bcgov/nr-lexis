@@ -23,6 +23,7 @@ import { firstStringField, isRecord } from '@/utils/record'
 import { requiredLabel } from '@/utils/required-label'
 import './ConfirmationModal/ConfirmationModal.css'
 import './ExemptionApprovalModal.css'
+import { displayValue } from '@/utils/display-value'
 
 export type ExemptionApprovalOutcome = {
   approvedNumbers: string[]
@@ -520,11 +521,11 @@ const ExemptionApprovalModal = ({
                           <div className="exemption-approval-modal__recipient-summary">
                             <dl>
                               <dt>Owner email</dt>
-                              <dd>{row.ownerEmail || '—'}</dd>
+                              <dd>{displayValue(row.ownerEmail)}</dd>
                               {row.agentApplicable && (
                                 <>
                                   <dt>Agent email</dt>
-                                  <dd>{row.agentEmail || '—'}</dd>
+                                  <dd>{displayValue(row.agentEmail)}</dd>
                                 </>
                               )}
                             </dl>

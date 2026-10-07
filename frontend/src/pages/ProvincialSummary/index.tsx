@@ -20,6 +20,7 @@ import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
 import { useAuth } from '@/context/auth/useAuth'
 import { DetailFieldTile } from '@/pages/shared/DetailSections'
+import { displayValue } from '@/utils/display-value'
 import { fetchApplicationClientData } from '@/service/application-client-lookup-service'
 import {
   fetchSummaryApplications,
@@ -35,6 +36,7 @@ import {
   type SummaryPage,
   type SummaryPermit,
 } from '@/service/summary-service'
+import { displayVolume } from '@/utils/volume'
 
 const SUMMARY_PAGE_SIZE = 10
 
@@ -152,15 +154,10 @@ const renderSortHeader = (
   )
 }
 
-const displayValue = (value: string | null | undefined): string => {
-  const normalized = value?.trim()
-  return normalized || 'Not provided'
-}
-
-const formatNumber = (value: number | null | undefined): string =>
+const formatNumber = (value: number | null | undefined): ReactNode =>
   typeof value === 'number' && Number.isFinite(value)
     ? new Intl.NumberFormat('en-CA', { maximumFractionDigits: 2 }).format(value)
-    : 'Not provided'
+    : displayValue(value)
 
 const formatCurrency = (value: number | null | undefined): string =>
   typeof value === 'number' && Number.isFinite(value)
@@ -387,7 +384,7 @@ const ProvincialSummaryPage = () => {
             <SummarySection
               {...applications}
               onLoad={applications.load}
-              title="My Applications"
+              title="My applications"
               loadingDescription="Loading your applications…"
               emptyTitle="No applications found"
               emptyDescription="No provincial applications are linked to this forest client."
@@ -416,7 +413,7 @@ const ProvincialSummaryPage = () => {
                               className="cds--link"
                               to={`/provincial/application/${row.application}`}
                               state={{
-                                returnTo: { label: 'My Applications', to: '/provincial/summary' },
+                                returnTo: { label: 'My applications', to: '/provincial/summary' },
                               }}
                             >
                               {row.application}
@@ -433,19 +430,19 @@ const ProvincialSummaryPage = () => {
                                 className="cds--link"
                                 to={`/provincial/exemption/${encodeURIComponent(row.exemptionNumber)}`}
                                 state={{
-                                  returnTo: { label: 'My Applications', to: '/provincial/summary' },
+                                  returnTo: { label: 'My applications', to: '/provincial/summary' },
                                 }}
                               >
                                 {row.exemptionNumber}
                               </Link>
                             ) : (
-                              'Not provided'
+                              displayValue('')
                             )}
                           </TableCell>
                           <TableCell>
                             {row.packageNumberAry.length > 0
                               ? row.packageNumberAry.join(', ')
-                              : 'Not provided'}
+                              : displayValue('')}
                           </TableCell>
                           <TableCell>{displayValue(row.receivedDate)}</TableCell>
                           <TableCell>{displayValue(row.listingDate)}</TableCell>
@@ -460,7 +457,7 @@ const ProvincialSummaryPage = () => {
             <SummarySection
               {...offers}
               onLoad={offers.load}
-              title="My Offers"
+              title="My offers"
               loadingDescription="Loading your offers…"
               emptyTitle="No offers found"
               emptyDescription="No purchase offers are linked to this forest client."
@@ -485,7 +482,7 @@ const ProvincialSummaryPage = () => {
                               className="cds--link"
                               to={`/provincial/offers/${row.offerNumber}`}
                               state={{
-                                returnTo: { label: 'My Offers', to: '/provincial/summary' },
+                                returnTo: { label: 'My offers', to: '/provincial/summary' },
                               }}
                             >
                               {row.offerNumber}
@@ -496,7 +493,7 @@ const ProvincialSummaryPage = () => {
                               className="cds--link"
                               to={`/provincial/application/${row.application}`}
                               state={{
-                                returnTo: { label: 'My Offers', to: '/provincial/summary' },
+                                returnTo: { label: 'My offers', to: '/provincial/summary' },
                               }}
                             >
                               {row.application}
@@ -515,7 +512,7 @@ const ProvincialSummaryPage = () => {
             <SummarySection
               {...exemptions}
               onLoad={exemptions.load}
-              title="My Exemptions"
+              title="My exemptions"
               loadingDescription="Loading your exemptions…"
               emptyTitle="No exemptions found"
               emptyDescription="No exemptions are linked to this forest client."
@@ -545,7 +542,7 @@ const ProvincialSummaryPage = () => {
                               className="cds--link"
                               to={`/provincial/exemption/${encodeURIComponent(row.exemption)}`}
                               state={{
-                                returnTo: { label: 'My Exemptions', to: '/provincial/summary' },
+                                returnTo: { label: 'My exemptions', to: '/provincial/summary' },
                               }}
                             >
                               {row.exemption}
@@ -557,7 +554,7 @@ const ProvincialSummaryPage = () => {
                           <TableCell>
                             <StatusTag status={row.status} />
                           </TableCell>
-                          <TableCell>{formatNumber(row.approvedVolume)}</TableCell>
+                          <TableCell>{displayVolume(row.approvedVolume)}</TableCell>
                           <TableCell>{formatNumber(row.balanceRemaining)}</TableCell>
                           <TableCell>{displayValue(row.approvalDate)}</TableCell>
                           <TableCell>{displayValue(row.expiryDate)}</TableCell>
@@ -572,7 +569,7 @@ const ProvincialSummaryPage = () => {
             <SummarySection
               {...permits}
               onLoad={permits.load}
-              title="My Permits"
+              title="My permits"
               loadingDescription="Loading your permits…"
               emptyTitle="No permits found"
               emptyDescription="No permits are linked to this forest client."
@@ -601,7 +598,7 @@ const ProvincialSummaryPage = () => {
                               className="cds--link"
                               to={`/provincial/permit/${row.permit}`}
                               state={{
-                                returnTo: { label: 'My Permits', to: '/provincial/summary' },
+                                returnTo: { label: 'My permits', to: '/provincial/summary' },
                               }}
                             >
                               {row.permit}
@@ -618,17 +615,17 @@ const ProvincialSummaryPage = () => {
                                 className="cds--link"
                                 to={`/provincial/exemption/${encodeURIComponent(row.exemption)}`}
                                 state={{
-                                  returnTo: { label: 'My Permits', to: '/provincial/summary' },
+                                  returnTo: { label: 'My permits', to: '/provincial/summary' },
                                 }}
                               >
                                 {row.exemption}
                               </Link>
                             ) : (
-                              'Not provided'
+                              displayValue('')
                             )}
                           </TableCell>
                           <TableCell>{formatNumber(row.totalPieces)}</TableCell>
-                          <TableCell>{formatNumber(row.totalVolume)}</TableCell>
+                          <TableCell>{displayVolume(row.totalVolume)}</TableCell>
                           <TableCell>{displayValue(row.issueDate)}</TableCell>
                         </TableRow>
                       ))}
@@ -641,7 +638,7 @@ const ProvincialSummaryPage = () => {
             <SummarySection
               {...fees}
               onLoad={fees.load}
-              title="My Fees"
+              title="My fees"
               loadingDescription="Calculating your fees…"
               emptyTitle="No fees found"
               emptyDescription="No permit fees are linked to this forest client."
@@ -672,13 +669,13 @@ const ProvincialSummaryPage = () => {
                               className="cds--link"
                               to={`/provincial/permit/${row.permit}`}
                               state={{
-                                returnTo: { label: 'My Fees', to: '/provincial/summary' },
+                                returnTo: { label: 'My fees', to: '/provincial/summary' },
                               }}
                             >
                               {row.permit}
                             </Link>
                           </TableCell>
-                          <TableCell>{formatNumber(row.volume)}</TableCell>
+                          <TableCell>{displayVolume(row.volume)}</TableCell>
                           <TableCell>{formatCurrency(row.fees)}</TableCell>
                           <TableCell>{displayValue(row.receipt)}</TableCell>
                         </TableRow>
@@ -692,7 +689,7 @@ const ProvincialSummaryPage = () => {
             <SummarySection
               {...offersPlaced}
               onLoad={offersPlaced.load}
-              title="Offers Placed"
+              title="Offers placed"
               loadingDescription="Loading offers placed by your client…"
               emptyTitle="No offers placed"
               emptyDescription="This forest client has not placed any active offers."
@@ -715,7 +712,7 @@ const ProvincialSummaryPage = () => {
                               className="cds--link"
                               to={`/provincial/offers/${row.offerNumber}`}
                               state={{
-                                returnTo: { label: 'Offers Placed', to: '/provincial/summary' },
+                                returnTo: { label: 'Offers placed', to: '/provincial/summary' },
                               }}
                             >
                               {row.offerNumber}

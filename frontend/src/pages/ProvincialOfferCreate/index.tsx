@@ -34,6 +34,7 @@ import {
 import type { SearchOption } from '@/service/search-options-service'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import { displayAuditIdentity, formatPackageNumberLabel } from '@/utils/text'
 import {
   OFFER_COMPANY_NAME_MAX_LENGTH,
@@ -876,6 +877,7 @@ const ProvincialOfferCreatePage = () => {
               onCloseButtonClick={() => setStatus(null)}
             />
           )}
+          <RequiredFieldsLegend />
           <fieldset className="legacy-form-fieldset create-form-section offer-form-section">
             <legend>Application details</legend>
             <div className="legacy-search-grid create-form-grid">

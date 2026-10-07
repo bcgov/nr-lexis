@@ -100,6 +100,7 @@ import {
   fetchProvincialExemptionCreatePreview,
   submitProvincialExemptionCreate,
 } from '@/service/create-submit-service'
+import { formatVolume } from '@/utils/volume'
 
 type ExemptionStatus = {
   kind: 'error'
@@ -1016,7 +1017,7 @@ const ProvincialApplicationPage = () => {
                       {canCreateExemption && (
                         <TableCell>{displayTableValue(row.agentClientNumber)}</TableCell>
                       )}
-                      <TableCell>{row.applicationVolume.toFixed(1)}</TableCell>
+                      <TableCell>{formatVolume(row.applicationVolume)}</TableCell>
                       <TableCell>
                         {row.exemptionNumber ? (
                           <Link

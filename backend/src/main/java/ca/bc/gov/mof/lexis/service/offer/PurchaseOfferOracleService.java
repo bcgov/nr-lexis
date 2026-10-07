@@ -673,10 +673,10 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
 
     LocalDate today = LocalDate.now(clock);
     if (receivedDate.isAfter(today)) {
-      return List.of("Offer Received Date can't be in the future.");
+      return List.of("Offer received date can't be in the future.");
     }
     if (receivedDate.isBefore(today.minusDays(7))) {
-      return List.of("Offer Received Date can't be before 7 days from now.");
+      return List.of("Offer received date can't be before 7 days from now.");
     }
     return List.of();
   }

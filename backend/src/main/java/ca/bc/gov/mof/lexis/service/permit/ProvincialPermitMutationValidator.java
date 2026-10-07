@@ -22,7 +22,7 @@ import java.util.function.Predicate;
 final class ProvincialPermitMutationValidator {
 
   static final String PAYMENT_PENDING_WARNING =
-      "Fee Receipt Number should not be empty for a complete Permit so it will be saved as Payment Pending.";
+      "Receipt number should not be empty for a complete permit so it will be saved as Payment Pending.";
 
   private static final String STATUS_ACTIVE = "ACT";
   private static final String STATUS_COMPLETE = "COM";
@@ -203,15 +203,15 @@ final class ProvincialPermitMutationValidator {
       errors.add("A valid submit date is required to complete a permit.");
     }
     if (submitDate != null && submitDate.isAfter(LocalDate.now(clock))) {
-      errors.add("Submit Date can't be in the future.");
+      errors.add("Submit date can't be in the future.");
     }
     if (submitDate != null && issueDate != null && issueDate.isBefore(submitDate)) {
-      errors.add("Issued Date must be after or equal to Submit Date.");
+      errors.add("Issued date must be after or equal to submit date.");
     }
     if (expiryDate != null
         && ((submitDate != null && !expiryDate.isAfter(submitDate))
             || (issueDate != null && !expiryDate.isAfter(issueDate)))) {
-      errors.add("Permit Expiry Date must be after Submit Date and Issue Date.");
+      errors.add("Expiry date must be after submit and issue dates.");
     }
 
     if (exemption != null
@@ -220,7 +220,7 @@ final class ProvincialPermitMutationValidator {
         && exemption.expiryDate() != null
         && expiryDate != null
         && expiryDate.isAfter(exemption.expiryDate())) {
-      errors.add("Permit Expiry Date cannot be after the Exemption Expiry Date.");
+      errors.add("Expiry date cannot be after the exemption expiry date.");
     }
   }
 
@@ -228,10 +228,10 @@ final class ProvincialPermitMutationValidator {
       PermitMutationRow permit, ExemptionDetailDto exemption, List<String> errors) {
     if (permit.permitVolume() != null
         && (!Double.isFinite(permit.permitVolume()) || permit.permitVolume() < 0.0d)) {
-      errors.add("Permit Volume must be greater than or equal to 0.");
+      errors.add("Permit volume must be greater than or equal to 0.");
     } else {
       validateOracleDecimal(
-          permit.permitVolume(), "Permit Volume", MAX_PERMIT_DECIMAL_VALUE, errors);
+          permit.permitVolume(), "Permit volume", MAX_PERMIT_DECIMAL_VALUE, errors);
     }
     if (permit.overrideFee() != null
         && (!Double.isFinite(permit.overrideFee()) || permit.overrideFee() <= 0.0d)) {
@@ -250,12 +250,12 @@ final class ProvincialPermitMutationValidator {
       if (!complete
           && permit.oicRequestPieces() != null
           && permit.oicRequestPieces() < 0L) {
-        errors.add("Permit Request Pieces must be greater than or equal to 0.");
+        errors.add("Permit request pieces must be greater than or equal to 0.");
       }
       if (permit.oicRequestVolume() != null
           && (!Double.isFinite(permit.oicRequestVolume())
               || (!complete && permit.oicRequestVolume() < 0.0d))) {
-        errors.add("Permit Request Volume must be greater than or equal to 0.");
+        errors.add("Permit request volume must be greater than or equal to 0.");
       }
     }
   }
@@ -293,12 +293,12 @@ final class ProvincialPermitMutationValidator {
 
     if (blanketOic) {
       if (permit.oicRequestPieces() == null || permit.oicRequestPieces() <= 0) {
-        errors.add("Permit Request Pieces must be greater than 0 to complete a permit.");
+        errors.add("Permit request pieces must be greater than 0 to complete a permit.");
       }
       if (permit.oicRequestVolume() == null
           || (Double.isFinite(permit.oicRequestVolume())
               && permit.oicRequestVolume() <= 0.0d)) {
-        errors.add("Permit Request Volume must be greater than 0 to complete a permit.");
+        errors.add("Permit request volume must be greater than 0 to complete a permit.");
       }
     }
   }

@@ -1041,7 +1041,9 @@ describe('Admin upload workflow smoke', () => {
     expect(within(applicationDetailsTable).getByText('1074-03')).toBeInTheDocument()
     expect(within(applicationDetailsTable).getByText('CUSTOMER SERVICE')).toBeInTheDocument()
     expect(
-      within(applicationDetailsTable).getByRole('row', { name: 'Federal application —' }),
+      within(applicationDetailsTable).getByRole('row', {
+        name: 'Federal application Not provided',
+      }),
     ).toBeInTheDocument()
     expect(
       within(applicationDetailsTable).getByRole('rowheader', { name: 'Source status' }),

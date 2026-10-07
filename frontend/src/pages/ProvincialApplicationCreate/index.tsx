@@ -93,6 +93,7 @@ import { formatBusinessIsoDate, formatIsoDateLabel } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
 import { displayValue } from '@/utils/text'
 import './ApplicationCreate.scss'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
 type ProvincialApplicationCreateForm = {
   ownerClientNumber: string
@@ -357,17 +358,16 @@ const ApplicationCreateClientSummary = ({
     <section className="application-create-client-summary" aria-label={title}>
       <dl className="detail-field-grid">
         {[
-          ['Company name', displayValue(clientData.companyName)],
           ['Address', displayValue(clientData.address)],
           ['City', displayValue(clientData.city)],
           ['Province', displayValue(clientData.province)],
           ['Postal code', displayValue(clientData.postalCode)],
           ['Country', displayValue(clientData.country)],
-          ['Phone', displayValue(clientData.phone)],
-          ['Fax', displayValue(clientData.fax)],
-          ['Email', displayValue(clientData.email)],
+          ['Phone number', displayValue(clientData.phone)],
+          ['Fax number', displayValue(clientData.fax)],
+          ['Email address', displayValue(clientData.email)],
         ].map(([label, value]) => (
-          <div key={label} className="detail-field-item">
+          <div key={String(label)} className="detail-field-item">
             <dt className="detail-field-label">{label}</dt>
             <dd className="detail-field-value">{value}</dd>
           </div>
@@ -1436,7 +1436,7 @@ const ProvincialApplicationCreatePage = () => {
         }
         setStatus({
           kind: 'success',
-          title: 'Application Saved',
+          title: 'Application saved',
           message: 'Application saved successfully.',
         })
         return true
@@ -1444,7 +1444,7 @@ const ProvincialApplicationCreatePage = () => {
 
       setStatus({
         kind: 'error',
-        title: 'Save Failed',
+        title: 'Save failed',
         message:
           result.errors.length > 0
             ? result.errors.join(' ')
@@ -1456,7 +1456,7 @@ const ProvincialApplicationCreatePage = () => {
       console.error(error)
       setStatus({
         kind: 'error',
-        title: 'Save Failed',
+        title: 'Save failed',
         message:
           'Application save failed. Please review the form and try again. If the problem persists, contact support.',
       })
@@ -1674,7 +1674,7 @@ const ProvincialApplicationCreatePage = () => {
                     Applicant details
                   </h2>
                 </div>
-                <p className="application-create-required">{requiredLabel('Required fields')}</p>
+                <RequiredFieldsLegend className="application-create-required" />
                 <h3 className="detail-tile-title">
                   {form.applicantTypeCode === 'M' ? 'Ministerial' : 'Owner'}
                 </h3>
@@ -1890,7 +1890,7 @@ const ProvincialApplicationCreatePage = () => {
                     Application details
                   </h2>
                 </div>
-                <p className="application-create-required">{requiredLabel('Required fields')}</p>
+                <RequiredFieldsLegend className="application-create-required" />
                 <div className="legacy-search-grid create-form-grid">
                   <SearchableSelect
                     id="region"
@@ -2048,7 +2048,7 @@ const ProvincialApplicationCreatePage = () => {
                       Scale details
                     </h2>
                   </div>
-                  <p className="application-create-required">{requiredLabel('Required fields')}</p>
+                  <RequiredFieldsLegend className="application-create-required" />
                   <div className="legacy-search-grid create-form-grid">
                     {productTypeRequiresLogDetails(form.productTypeCode) && (
                       <TextArea

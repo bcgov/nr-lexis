@@ -305,11 +305,17 @@ const fillRequiredBlanketOicFields = async (
   }
   await userEvent.type(screen.getByLabelText('Remarks'), 'test blanket permit')
   await userEvent.click(screen.getByRole('tab', { name: 'Applicant' }))
-  fireEvent.change(screen.getByLabelText('Applicant client number'), {
+  fireEvent.change(screen.getByLabelText('Client', { selector: '#boic-permit-owner-client' }), {
     target: { value: '00001074' },
   })
-  await waitFor(() => expect(screen.getByLabelText('Applicant location')).toHaveValue('00'))
-  expect(screen.getByLabelText('Applicant client number')).toHaveValue('00001074')
+  await waitFor(() =>
+    expect(
+      screen.getByLabelText('Client location', { selector: '#boic-permit-owner-location' }),
+    ).toHaveValue('00'),
+  )
+  expect(screen.getByLabelText('Client', { selector: '#boic-permit-owner-client' })).toHaveValue(
+    '00001074',
+  )
   await userEvent.click(screen.getByRole('tab', { name: 'Shipping' }))
   await userEvent.type(screen.getByLabelText('Purchaser'), 'test destination')
   await userEvent.type(screen.getByLabelText('Transport name'), 'test barge')
@@ -684,9 +690,7 @@ describe('permit creation from an exemption', () => {
     await waitFor(() =>
       expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new'),
     )
-    expect(
-      within(page).getByText(/permit number is assigned after a successful save/i),
-    ).toBeInTheDocument()
+    expect(within(page).getByText(/permit number is assigned when you save/i)).toBeInTheDocument()
     expect(within(page).getByLabelText('Issued date')).toHaveValue('')
     expect(within(page).getByLabelText('Expiry date')).toHaveValue('')
     expect(within(page).getByRole('tab', { name: 'Permit' })).toBeInTheDocument()
@@ -750,16 +754,30 @@ describe('permit creation from an exemption', () => {
     const page = await openBlanketOicCreatePage()
     await userEvent.click(within(page).getByRole('tab', { name: 'Applicant' }))
 
-    fireEvent.change(within(page).getByLabelText('Applicant client number'), {
-      target: { value: '00001074' },
-    })
-    await waitFor(() => expect(within(page).getByLabelText('Applicant location')).toHaveValue('00'))
+    fireEvent.change(
+      within(page).getByLabelText('Client', { selector: '#boic-permit-owner-client' }),
+      {
+        target: { value: '00001074' },
+      },
+    )
+    await waitFor(() =>
+      expect(
+        within(page).getByLabelText('Client location', { selector: '#boic-permit-owner-location' }),
+      ).toHaveValue('00'),
+    )
 
     await userEvent.click(within(page).getByRole('checkbox', { name: "I'm an agent" }))
-    fireEvent.change(within(page).getByLabelText('Agent client number'), {
-      target: { value: '00012345' },
-    })
-    await waitFor(() => expect(within(page).getByLabelText('Agent location')).toHaveValue('00'))
+    fireEvent.change(
+      within(page).getByLabelText('Client', { selector: '#boic-permit-agent-client' }),
+      {
+        target: { value: '00012345' },
+      },
+    )
+    await waitFor(() =>
+      expect(
+        within(page).getByLabelText('Client location', { selector: '#boic-permit-agent-location' }),
+      ).toHaveValue('00'),
+    )
 
     expect(fetchExemptionClientLocations).toHaveBeenCalledWith('00001074')
     expect(fetchExemptionClientLocations).toHaveBeenCalledWith('00012345')
@@ -897,9 +915,12 @@ describe('permit creation from an exemption', () => {
     await userEvent.type(within(page).getByLabelText('Transport name'), 'test barge')
     await userEvent.type(within(page).getByLabelText('Estimated shipping date'), '2099-01-01')
     await userEvent.click(within(page).getByRole('tab', { name: 'Applicant' }))
-    fireEvent.change(within(page).getByLabelText('Applicant client number'), {
-      target: { value: '00001074' },
-    })
+    fireEvent.change(
+      within(page).getByLabelText('Client', { selector: '#boic-permit-owner-client' }),
+      {
+        target: { value: '00001074' },
+      },
+    )
 
     const saveButton = within(page).getByRole('button', { name: 'Save permit' })
     await userEvent.click(saveButton)
@@ -994,9 +1015,15 @@ describe('permit creation from an exemption', () => {
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
     await userEvent.click(within(page).getByRole('tab', { name: 'Applicant' }))
-    const ownerClientNumber = within(page).getByLabelText('Applicant client number')
+    const ownerClientNumber = within(page).getByLabelText('Client', {
+      selector: '#boic-permit-owner-client',
+    })
     fireEvent.change(ownerClientNumber, { target: { value: '00001074' } })
-    await waitFor(() => expect(within(page).getByLabelText('Applicant location')).toHaveValue('00'))
+    await waitFor(() =>
+      expect(
+        within(page).getByLabelText('Client location', { selector: '#boic-permit-owner-location' }),
+      ).toHaveValue('00'),
+    )
 
     vi.mocked(fetchExemptionClientLocations).mockRejectedValueOnce(
       new Error('client endpoint unavailable'),
@@ -1009,8 +1036,12 @@ describe('permit creation from an exemption', () => {
         'Client details could not be retrieved. Existing selections were preserved. Please try again.',
       ),
     ).toBeInTheDocument()
-    expect(within(page).getByLabelText('Applicant client number')).toHaveValue('00001074')
-    expect(within(page).getByLabelText('Applicant location')).toHaveValue('00')
+    expect(
+      within(page).getByLabelText('Client', { selector: '#boic-permit-owner-client' }),
+    ).toHaveValue('00001074')
+    expect(
+      within(page).getByLabelText('Client location', { selector: '#boic-permit-owner-location' }),
+    ).toHaveValue('00')
 
     consoleError.mockRestore()
   })
@@ -1038,18 +1069,26 @@ describe('permit creation from an exemption', () => {
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
     await userEvent.click(within(page).getByRole('tab', { name: 'Applicant' }))
-    const ownerClientNumber = within(page).getByLabelText('Applicant client number')
+    const ownerClientNumber = within(page).getByLabelText('Client', {
+      selector: '#boic-permit-owner-client',
+    })
     fireEvent.change(ownerClientNumber, { target: { value: '11111111' } })
     expect(await within(page).findByText('Permit needs attention')).toBeInTheDocument()
 
     await userEvent.click(within(page).getByRole('checkbox', { name: "I'm an agent" }))
-    const agentClientNumber = within(page).getByLabelText('Agent client number')
+    const agentClientNumber = within(page).getByLabelText('Client', {
+      selector: '#boic-permit-agent-client',
+    })
     fireEvent.change(agentClientNumber, { target: { value: '22222222' } })
     await waitFor(() => expect(lookupAttempts.get('22222222')).toBe(1))
 
     await userEvent.click(ownerClientNumber)
     await userEvent.tab()
-    await waitFor(() => expect(within(page).getByLabelText('Applicant location')).toHaveValue('00'))
+    await waitFor(() =>
+      expect(
+        within(page).getByLabelText('Client location', { selector: '#boic-permit-owner-location' }),
+      ).toHaveValue('00'),
+    )
     expect(within(page).getByText('Permit needs attention')).toBeInTheDocument()
     expect(
       within(page).getByText(
@@ -1059,7 +1098,11 @@ describe('permit creation from an exemption', () => {
 
     await userEvent.click(agentClientNumber)
     await userEvent.tab()
-    await waitFor(() => expect(within(page).getByLabelText('Agent location')).toHaveValue('00'))
+    await waitFor(() =>
+      expect(
+        within(page).getByLabelText('Client location', { selector: '#boic-permit-agent-location' }),
+      ).toHaveValue('00'),
+    )
     expect(within(page).queryByText('Permit needs attention')).not.toBeInTheDocument()
 
     consoleError.mockRestore()
@@ -1092,8 +1135,12 @@ describe('permit creation from an exemption', () => {
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
     await userEvent.click(within(page).getByRole('tab', { name: 'Applicant' }))
-    const ownerClientNumber = within(page).getByLabelText('Applicant client number')
-    const ownerLocation = within(page).getByLabelText('Applicant location')
+    const ownerClientNumber = within(page).getByLabelText('Client', {
+      selector: '#boic-permit-owner-client',
+    })
+    const ownerLocation = within(page).getByLabelText('Client location', {
+      selector: '#boic-permit-owner-location',
+    })
 
     fireEvent.change(ownerClientNumber, { target: { value: '11111111' } })
     await waitFor(() => expect(fetchExemptionClientLocations).toHaveBeenCalledWith('11111111'))
@@ -1136,7 +1183,7 @@ describe('permit creation from an exemption', () => {
     )
 
     expect(
-      await within(page).findAllByText('Applicant client number must be exactly 8 digits.'),
+      await within(page).findAllByText('Client number must be exactly 8 digits.'),
     ).not.toHaveLength(0)
     expect(addPermitDetail).not.toHaveBeenCalled()
   })

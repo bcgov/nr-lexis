@@ -47,7 +47,7 @@ describe('detail navigation state', () => {
   it('snapshots the full parent state under the immediate return target', () => {
     const parentState = {
       returnTo: {
-        label: 'My Applications',
+        label: 'My applications',
         to: '/provincial/summary?page=2&pageSize=25',
       },
       lexisDetailTab: 'offers',
@@ -88,7 +88,7 @@ describe('detail navigation state', () => {
 
   it('seeds a fallback parent for direct parent-to-child navigation', () => {
     const fallbackParent = {
-      label: 'My Applications',
+      label: 'My applications',
       to: '/provincial/summary?page=2&pageSize=25',
     }
 
@@ -134,7 +134,7 @@ describe('detail navigation state', () => {
 
   it('reads the ancestor-to-immediate trail in bounded order', () => {
     const summary = {
-      label: 'My Applications',
+      label: 'My applications',
       to: '/provincial/summary?page=2&pageSize=25',
     }
     const application = {

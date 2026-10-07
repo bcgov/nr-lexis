@@ -80,7 +80,7 @@ import {
   type ApplicationPackageScaleRow,
 } from '@/service/provincial-application-items-service'
 import { formatBusinessDateTime, formatBusinessIsoDate } from '@/utils/date'
-import { displayAuditIdentity } from '@/utils/text'
+import { displayAuditIdentity, displayTableValue } from '@/utils/text'
 import { requiredLabel } from '@/utils/required-label'
 import {
   firstValidationError,
@@ -95,6 +95,8 @@ import {
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
 import { allowedFederalStatusTransitions } from './status-transitions'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
+import { displayVolume } from '@/utils/volume'
 
 type FederalApplicationScaleRow = ApplicationPackageScaleRow & {
   packageNumber: string
@@ -1041,8 +1043,12 @@ const FederalApplicationDetailsPage = () => {
                         title="Applicant"
                         fields={[
                           {
-                            label: 'Client number',
-                            value: displayValue(detail.ownerClientNumber),
+                            label: 'Client',
+                            value: displayValue(
+                              [detail.ownerCompanyName?.trim(), detail.ownerClientNumber?.trim()]
+                                .filter(Boolean)
+                                .join(' · '),
+                            ),
                           },
                           {
                             label: 'Applicant type',
@@ -1055,10 +1061,6 @@ const FederalApplicationDetailsPage = () => {
                           {
                             label: 'Contact name',
                             value: displayValue(detail.ownerContactName),
-                          },
-                          {
-                            label: 'Company name',
-                            value: displayValue(detail.ownerCompanyName),
                           },
                           {
                             label: 'Address',
@@ -1081,15 +1083,15 @@ const FederalApplicationDetailsPage = () => {
                             value: displayValue(detail.ownerClientContext?.country),
                           },
                           {
-                            label: 'Phone',
+                            label: 'Phone number',
                             value: displayValue(detail.ownerClientContext?.phone),
                           },
                           {
-                            label: 'Fax',
+                            label: 'Fax number',
                             value: displayValue(detail.ownerClientContext?.fax),
                           },
                           {
-                            label: 'Email',
+                            label: 'Email address',
                             value: displayValue(detail.ownerClientContext?.email),
                           },
                         ]}
@@ -1106,8 +1108,12 @@ const FederalApplicationDetailsPage = () => {
                           title="Agent"
                           fields={[
                             {
-                              label: 'Client number',
-                              value: displayValue(detail.agentClientNumber),
+                              label: 'Client',
+                              value: displayValue(
+                                [detail.agentCompanyName?.trim(), detail.agentClientNumber?.trim()]
+                                  .filter(Boolean)
+                                  .join(' · '),
+                              ),
                             },
                             {
                               label: 'Applicant type',
@@ -1122,10 +1128,6 @@ const FederalApplicationDetailsPage = () => {
                             {
                               label: 'Contact name',
                               value: displayValue(detail.agentContactName),
-                            },
-                            {
-                              label: 'Company name',
-                              value: displayValue(detail.agentCompanyName),
                             },
                             {
                               label: 'Address',
@@ -1148,15 +1150,15 @@ const FederalApplicationDetailsPage = () => {
                               value: displayValue(detail.agentClientContext?.country),
                             },
                             {
-                              label: 'Phone',
+                              label: 'Phone number',
                               value: displayValue(detail.agentClientContext?.phone),
                             },
                             {
-                              label: 'Fax',
+                              label: 'Fax number',
                               value: displayValue(detail.agentClientContext?.fax),
                             },
                             {
-                              label: 'Email',
+                              label: 'Email address',
                               value: displayValue(detail.agentClientContext?.email),
                             },
                           ]}
@@ -1251,6 +1253,7 @@ const FederalApplicationDetailsPage = () => {
                         isEditingFederalStatus && (
                           <Tile>
                             <h2 className="detail-tile-title">Update federal status</h2>
+                            <RequiredFieldsLegend />
                             <div className="legacy-search-grid">
                               <Select
                                 id="federalApplicationStatus"
@@ -1326,11 +1329,11 @@ const FederalApplicationDetailsPage = () => {
                           },
                           {
                             label: 'Average log volume (m³)',
-                            value: displayValue(detail.averageLogVolume),
+                            value: displayVolume(detail.averageLogVolume),
                           },
                           {
                             label: 'Application volume (m³)',
-                            value: displayValue(detail.applicationVolume),
+                            value: displayVolume(detail.applicationVolume),
                           },
                           {
                             label: 'Species and end use sort',
@@ -1367,11 +1370,11 @@ const FederalApplicationDetailsPage = () => {
                       </Tile>
                     </Column>
                     {/* INTENTIONAL_LEGACY_DIVERGENCE(PACKAGE_FIRST_ITEMS_WORKFLOW):
-                        Suppress dependent Summary of Scale content until a package exists. */}
+                        Suppress dependent Summary of scale content until a package exists. */}
                     {detail.packages.length > 0 && (
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
-                          <h2 className="detail-tile-title">Summary of Scale</h2>
+                          <h2 className="detail-tile-title">Summary of scale</h2>
                           {scaleErrorMessage ? (
                             <EmptyState
                               title="Scale details unavailable"
@@ -1396,11 +1399,11 @@ const FederalApplicationDetailsPage = () => {
                                   {scaleRows.map((row) => (
                                     <TableRow key={`${row.packageNumber}-${row.id}`}>
                                       <TableCell>{row.packageNumber}</TableCell>
-                                      <TableCell>{row.timberMark || '-'}</TableCell>
+                                      <TableCell>{displayTableValue(row.timberMark)}</TableCell>
                                       <TableCell>{row.pieces.toLocaleString()}</TableCell>
-                                      <TableCell>{row.species || '-'}</TableCell>
-                                      <TableCell>{row.grade || '-'}</TableCell>
-                                      <TableCell>{row.volume || '-'}</TableCell>
+                                      <TableCell>{displayTableValue(row.species)}</TableCell>
+                                      <TableCell>{displayTableValue(row.grade)}</TableCell>
+                                      <TableCell>{displayVolume(row.volume)}</TableCell>
                                     </TableRow>
                                   ))}
                                 </TableBody>
@@ -1514,7 +1517,7 @@ const FederalApplicationDetailsPage = () => {
                               <TextArea
                                 id="federalApplicationRemark"
                                 labelText={requiredLabel(
-                                  editingRemarkId ? `Edit Remark ${editingRemarkId}` : 'New Remark',
+                                  editingRemarkId ? `Edit remark ${editingRemarkId}` : 'New remark',
                                 )}
                                 aria-required="true"
                                 maxCount={250}
@@ -1538,8 +1541,8 @@ const FederalApplicationDetailsPage = () => {
                                 {isSavingRemark
                                   ? 'Saving…'
                                   : editingRemarkId
-                                    ? 'Update Remark'
-                                    : 'Save Remark'}
+                                    ? 'Update remark'
+                                    : 'Save remark'}
                               </Button>
                               <Button
                                 kind="ghost"
@@ -1679,6 +1682,7 @@ const FederalApplicationDetailsPage = () => {
                                   : 'Add federal permit'}
                               </h2>
                             </div>
+                            <RequiredFieldsLegend />
                             <div className="federal-shipping-details__form">
                               <IsoDatePicker
                                 id="federalPermitIssueDate"

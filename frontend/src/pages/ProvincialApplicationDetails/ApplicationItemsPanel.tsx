@@ -71,8 +71,10 @@ import {
 } from '@/service/provincial-application-items-service'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { requiredLabel } from '@/utils/required-label'
-import { formatPackageNumberLabel } from '@/utils/text'
+import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
+import { displayTableValue, formatPackageNumberLabel } from '@/utils/text'
 import './ApplicationItemsPanel.scss'
+import { formatVolume } from '@/utils/volume'
 
 type PackageFormState = {
   packageNumber: string
@@ -271,7 +273,7 @@ const optionsWithCurrentCode = (
 const optionTextForCode = (options: ApplicationCodeOption[], code: string): string => {
   const normalizedCode = code.trim()
   if (!normalizedCode) {
-    return 'Not provided'
+    return ''
   }
   const option = options.find((item) => item.code === normalizedCode)
   return option ? asOptionText(option) : normalizedCode
@@ -308,7 +310,7 @@ const scaleVolumeWithinPackageFieldError = (
 
   return parsed <= remainingVolume
     ? null
-    : `Scale volume must be ${remainingVolume.toFixed(1)} or less.`
+    : `Scale volume must be ${formatVolume(remainingVolume)} or less.`
 }
 
 const buildPackageSelectionState = (packageNumbers: string[]): PackageSelectionState => ({
@@ -1261,10 +1263,10 @@ function ProvincialApplicationItemsPanel({
   const referenceOptionsUnavailableMessage = baseReferenceOptionsUnavailable
     ? 'Package saves, package creation, and scale additions are disabled because item options could not be loaded.'
     : selectedEndUseOptionsUnavailable && createEndUseOptionsUnavailable
-      ? 'Package saves and package creation are disabled because End Use options could not be loaded.'
+      ? 'Package saves and package creation are disabled because end use options could not be loaded.'
       : selectedEndUseOptionsUnavailable
-        ? 'Package saves are disabled because End Use options could not be loaded.'
-        : 'Package creation is disabled because End Use options could not be loaded.'
+        ? 'Package saves are disabled because end use options could not be loaded.'
+        : 'Package creation is disabled because end use options could not be loaded.'
   const baseReferenceOptionsAvailable =
     !baseReferenceOptionsLoading && !baseReferenceOptionsUnavailable
   const selectedPackageReferenceOptionsAvailable =
@@ -1842,7 +1844,7 @@ function ProvincialApplicationItemsPanel({
               </div>
               <SearchableSelect
                 id="applicationItemsPackageSelect"
-                labelText="Selected Package"
+                labelText="Selected package"
                 value={selectedPackageNumber}
                 placeholder="Select package"
                 disabled={itemsBusy}
@@ -1855,38 +1857,33 @@ function ProvincialApplicationItemsPanel({
             </div>
             <dl className="detail-field-grid application-items-summary">
               {[
-                ['Package Number', selectedPackageNumber || 'None selected'],
-                ['Package Volume (m³)', packageForm.volume || 'Not provided'],
-                ['Total Scale Volume (m³)', packageForm.scaledVolume || 'Not provided'],
+                ['Package number', selectedPackageNumber || 'None selected'],
+                ['Package volume (m³)', formatVolume(packageForm.volume)],
+                ['Total scale volume (m³)', formatVolume(packageForm.scaledVolume)],
                 [
-                  'Total Pieces',
+                  'Total pieces',
                   packageScalesUnavailable
                     ? 'Not available'
                     : selectedPackageTotalPieces.toLocaleString(),
                 ],
-                ['Average Length (m)', packageForm.averageLength || 'Not provided'],
-                ['Average top diameter (rads)', packageForm.averageDiameter || 'Not provided'],
+                ['Average length (m)', packageForm.averageLength],
+                ['Average top diameter (rads)', packageForm.averageDiameter],
                 ['Status', optionTextForCode(selectedPackageStatusOptions, packageForm.status)],
                 [
-                  'Product Type',
+                  'Product type',
                   optionTextForCode(selectedPackageProductTypeOptions, packageForm.productType),
                 ],
                 [
-                  'Age Class',
+                  'Age class',
                   optionTextForCode(selectedPackageGrowthTypeOptions, packageForm.ageClass),
                 ],
                 ['Reprocessed', packageForm.reprocessed === 'Y' ? 'Yes' : 'No'],
-                [
-                  'End Use',
-                  packageSpeciesUnavailable
-                    ? 'Not available'
-                    : packageForm.endUseCode || 'Not provided',
-                ],
-                ['Comments', packageForm.comments || 'Not provided'],
+                ['End use', packageSpeciesUnavailable ? 'Not available' : packageForm.endUseCode],
+                ['Comments', packageForm.comments],
               ].map(([label, value]) => (
                 <div key={label} className="detail-field-item">
                   <dt className="detail-field-label">{label}</dt>
-                  <dd className="detail-field-value">{value}</dd>
+                  <dd className="detail-field-value">{displayTableValue(value)}</dd>
                 </div>
               ))}
             </dl>
@@ -1916,6 +1913,7 @@ function ProvincialApplicationItemsPanel({
                   },
                 ]}
               >
+                <RequiredFieldsLegend />
                 {!!itemsErrorMessage && (
                   <InlineNotification
                     kind="error"
@@ -1929,7 +1927,7 @@ function ProvincialApplicationItemsPanel({
                   <div className="application-items-form">
                     <TextInput
                       id="applicationItemsPackageNumber"
-                      labelText={requiredLabel('Package Number')}
+                      labelText={requiredLabel('Package number')}
                       aria-required="true"
                       value={packageForm.newPackageNumber}
                       disabled={!canSaveSelectedPackage || !canUpdatePackageNumber}
@@ -1940,7 +1938,7 @@ function ProvincialApplicationItemsPanel({
                     />
                     <TextInput
                       id="applicationItemsPackageVolume"
-                      labelText={requiredLabel('Package Volume (m³)')}
+                      labelText={requiredLabel('Package volume (m³)')}
                       aria-required="true"
                       value={packageForm.volume}
                       disabled={!canSaveSelectedPackage}
@@ -1951,7 +1949,7 @@ function ProvincialApplicationItemsPanel({
                     />
                     <TextInput
                       id="applicationItemsPackageLength"
-                      labelText={requiredLabel('Average Length (m)')}
+                      labelText={requiredLabel('Average length (m)')}
                       aria-required="true"
                       value={packageForm.averageLength}
                       disabled={!canSaveSelectedPackage}
@@ -1973,7 +1971,7 @@ function ProvincialApplicationItemsPanel({
                     />
                     <SearchableSelect
                       id="applicationItemsPackageStatus"
-                      labelText={requiredLabel('Status Code')}
+                      labelText={requiredLabel('Status code')}
                       required
                       value={packageForm.status}
                       disabled={!canSaveSelectedPackage}
@@ -1986,7 +1984,7 @@ function ProvincialApplicationItemsPanel({
                     />
                     <SearchableSelect
                       id="applicationItemsPackageProductType"
-                      labelText={requiredLabel('Product Type')}
+                      labelText={requiredLabel('Product type')}
                       required
                       value={packageForm.productType}
                       disabled={!canSaveSelectedPackage}
@@ -2007,7 +2005,7 @@ function ProvincialApplicationItemsPanel({
                     <SearchableSelect
                       id="applicationItemsPackageAgeClass"
                       labelText={requiredLabel(
-                        'Age Class',
+                        'Age class',
                         packageRequiresAgeClass(packageForm.productType),
                       )}
                       required={packageRequiresAgeClass(packageForm.productType)}
@@ -2036,7 +2034,7 @@ function ProvincialApplicationItemsPanel({
                     />
                     <SearchableSelect
                       id="applicationItemsPackageEndUse"
-                      labelText="End Use"
+                      labelText="End use"
                       value={packageForm.endUseCode}
                       disabled={!canSaveSelectedPackage || endUseAvailability !== 'available'}
                       placeholder={
@@ -2056,7 +2054,7 @@ function ProvincialApplicationItemsPanel({
                   </div>
                   <TextArea
                     id="applicationItemsPackageComments"
-                    labelText="Package Comments"
+                    labelText="Package comments"
                     helperText="Use unaccented letters, numbers, spaces, or standard punctuation."
                     enableCounter
                     maxCount={PACKAGE_COMMENTS_MAX_LENGTH}
@@ -2070,7 +2068,7 @@ function ProvincialApplicationItemsPanel({
                   />
                 </div>
                 <div className="application-items-species-panel">
-                  <h4>Package Species</h4>
+                  <h4>Package species</h4>
                   {showMutationActions && (
                     <div className="application-items-inline-form">
                       <SearchableSelect
@@ -2119,7 +2117,9 @@ function ProvincialApplicationItemsPanel({
                               <TableRow key={row.code}>
                                 <TableCell>{asOptionText(row)}</TableCell>
                                 <TableCell>
-                                  {existing?.endUseDescription || packageForm.endUseCode || '-'}
+                                  {displayTableValue(
+                                    existing?.endUseDescription || packageForm.endUseCode,
+                                  )}
                                 </TableCell>
                                 {showMutationActions && (
                                   <TableCell>
@@ -2167,7 +2167,7 @@ function ProvincialApplicationItemsPanel({
 
         {standingTimberItems && (
           <section className="application-items-card application-items-section application-items-section--timber-marks">
-            <h3>Timber Marks</h3>
+            <h3>Timber marks</h3>
             <div className="application-items-table-scroll">
               <Table size="md" useZebraStyles>
                 <TableHead>
@@ -2219,6 +2219,7 @@ function ProvincialApplicationItemsPanel({
             ]}
           >
             <div className="application-items-drawer-content">
+              <RequiredFieldsLegend />
               {!!itemsErrorMessage && (
                 <InlineNotification
                   kind="error"
@@ -2231,7 +2232,7 @@ function ProvincialApplicationItemsPanel({
               <div className="application-items-form">
                 <TextInput
                   id="applicationItemsCreatePackageNumber"
-                  labelText={requiredLabel('Package Number')}
+                  labelText={requiredLabel('Package number')}
                   aria-required="true"
                   value={createPackageForm.packageNumber}
                   disabled={!canCreatePackages}
@@ -2242,7 +2243,7 @@ function ProvincialApplicationItemsPanel({
                 />
                 <TextInput
                   id="applicationItemsCreatePackageVolume"
-                  labelText={requiredLabel('Package Volume (m³)')}
+                  labelText={requiredLabel('Package volume (m³)')}
                   aria-required="true"
                   value={createPackageForm.volume}
                   disabled={!canCreatePackages}
@@ -2253,7 +2254,7 @@ function ProvincialApplicationItemsPanel({
                 />
                 <TextInput
                   id="applicationItemsCreatePackageLength"
-                  labelText={requiredLabel('Average Length (m)')}
+                  labelText={requiredLabel('Average length (m)')}
                   aria-required="true"
                   value={createPackageForm.averageLength}
                   disabled={!canCreatePackages}
@@ -2275,7 +2276,7 @@ function ProvincialApplicationItemsPanel({
                 />
                 <SearchableSelect
                   id="applicationItemsCreatePackageStatus"
-                  labelText={requiredLabel('Status Code')}
+                  labelText={requiredLabel('Status code')}
                   required
                   value={createPackageForm.status}
                   disabled={!canCreatePackages}
@@ -2288,7 +2289,7 @@ function ProvincialApplicationItemsPanel({
                 />
                 <SearchableSelect
                   id="applicationItemsCreatePackageProductType"
-                  labelText={requiredLabel('Product Type')}
+                  labelText={requiredLabel('Product type')}
                   required
                   value={createPackageForm.productType}
                   disabled={!canCreatePackages}
@@ -2309,7 +2310,7 @@ function ProvincialApplicationItemsPanel({
                 <SearchableSelect
                   id="applicationItemsCreatePackageAgeClass"
                   labelText={requiredLabel(
-                    'Age Class',
+                    'Age class',
                     packageRequiresAgeClass(createPackageForm.productType),
                   )}
                   required={packageRequiresAgeClass(createPackageForm.productType)}
@@ -2326,7 +2327,7 @@ function ProvincialApplicationItemsPanel({
                 />
                 <SearchableSelect
                   id="applicationItemsCreatePackageEndUse"
-                  labelText="End Use"
+                  labelText="End use"
                   value={createPackageForm.endUseCode}
                   disabled={!canCreatePackages || createEndUseAvailability !== 'available'}
                   placeholder={
@@ -2362,7 +2363,7 @@ function ProvincialApplicationItemsPanel({
               <div className="application-items-inline-form">
                 <SearchableSelect
                   id="applicationItemsCreateSpeciesToAdd"
-                  labelText="Create Package Species"
+                  labelText="Create package species"
                   value={createSpeciesToAdd}
                   disabled={!canCreatePackages}
                   placeholder="Select species"
@@ -2459,7 +2460,7 @@ function ProvincialApplicationItemsPanel({
                   ? 'Loading…'
                   : packageScalesUnavailable
                     ? 'Not available'
-                    : selectedPackageScaleVolume.toFixed(1)}
+                    : formatVolume(selectedPackageScaleVolume)}
               </span>
             </div>
             {scaleBackedItems && (
@@ -2489,10 +2490,11 @@ function ProvincialApplicationItemsPanel({
                 ]}
               >
                 <div className="application-items-drawer-content">
+                  <RequiredFieldsLegend />
                   <div className="application-items-form">
                     <TextInput
                       id="applicationItemsScaleTimberMark"
-                      labelText={requiredLabel('Timber Mark')}
+                      labelText={requiredLabel('Timber mark')}
                       aria-required="true"
                       value={scaleForm.timberMark}
                       disabled={
@@ -2556,7 +2558,7 @@ function ProvincialApplicationItemsPanel({
                     />
                     <TextInput
                       id="applicationItemsScaleVolume"
-                      labelText={requiredLabel('Scale Volume (m³)')}
+                      labelText={requiredLabel('Scale volume (m³)')}
                       aria-required="true"
                       value={scaleForm.volume}
                       disabled={
@@ -2626,7 +2628,7 @@ function ProvincialApplicationItemsPanel({
                         <TableCell>{row.pieces.toLocaleString()}</TableCell>
                         <TableCell>{row.species}</TableCell>
                         <TableCell>{row.grade}</TableCell>
-                        <TableCell>{row.volume}</TableCell>
+                        <TableCell>{formatVolume(row.volume)}</TableCell>
                         {canOpenItemsEditor && (
                           <TableCell>
                             <Button

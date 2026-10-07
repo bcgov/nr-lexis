@@ -2348,7 +2348,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
   it('keeps application edits open when the backend rejects a product change with persisted scales', async () => {
     const message =
-      'Product type cannot be changed to Unmanufactured Timber while Summary of Scale records exist. Remove the Summary of Scale records first.'
+      'Product type cannot be changed to Unmanufactured Timber while Summary of scale records exist. Remove the Summary of scale records first.'
     mockedUpdateApplicationSummary.mockResolvedValue({
       valid: false,
       applicationNumber: '321',

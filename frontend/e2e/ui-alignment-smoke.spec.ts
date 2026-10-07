@@ -1550,8 +1550,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(eligibleApplication).not.toBeChecked()
     await expect(createExemptionAction).toHaveCount(0)
     await expect(table).toHaveClass(/cds--data-table--md/)
-    // Empty values render as an em dash; owner-only rows have more than one.
-    await expect(rows.first().getByRole('cell', { name: '—', exact: true }).first()).toBeVisible()
+    // Empty values show an em dash, announced as "Not provided"; owner-only rows have more than one.
+    const emptyCell = rows.first().getByRole('cell', { name: 'Not provided', exact: true }).first()
+    await expect(emptyCell).toBeVisible()
+    await expect(emptyCell).toContainText('—')
     const firstRowHeight = await rows.first().evaluate((row) => row.getBoundingClientRect().height)
     expect(firstRowHeight).toBeGreaterThanOrEqual(40)
     expect(firstRowHeight).toBeLessThanOrEqual(64)

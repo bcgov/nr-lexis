@@ -42,8 +42,8 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
   private static final int DEFAULT_MODERN_PAGE_SIZE = 100;
   private static final int MAX_MODERN_PAGE_SIZE = 200;
   private static final String FEE_POLICY_KEY_EXISTS_MESSAGE =
-      "Effective Date and region combination already exists.";
-  private static final String FIL_POLICY_KEY_EXISTS_MESSAGE = "Effective Date already exists.";
+      "Effective date and region combination already exists.";
+  private static final String FIL_POLICY_KEY_EXISTS_MESSAGE = "Effective date already exists.";
   private static final String FEE_POLICY_DELETE_FUTURE_ONLY_MESSAGE =
       "Only future-dated fee policies can be deleted.";
   private static final String FIL_POLICY_DELETE_FUTURE_ONLY_MESSAGE =
@@ -207,13 +207,13 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
 
     LocalDate effectiveDate = parseFutureDate(parameters.get("effectiveDate"), errors);
     Long orgUnitNo = parseRequiredPositiveLong(parameters.get("orgUnitNo"), "Region is required.", errors);
-    Integer percentIncrease = parseRequiredInteger(parameters.get("feeIncrease"), "Fee Increase Percentage", errors);
+    Integer percentIncrease = parseRequiredInteger(parameters.get("feeIncrease"), "Fee increase percentage", errors);
 
     if (percentIncrease != null) {
       if (percentIncrease < 0) {
-        errors.add("Fee Increase Percentage must be greater than or equal to 0.");
+        errors.add("Fee increase percentage must be greater than or equal to 0.");
       } else if (percentIncrease > 100) {
-        errors.add("Fee Increase Percentage must be less than or equal to 100.");
+        errors.add("Fee increase percentage must be less than or equal to 100.");
       }
     }
 
@@ -248,13 +248,13 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
         parseRequiredPositiveLong(parameters.get("feePolicyId"), "Fee policy id is required.", errors);
     LocalDate effectiveDate = parseFutureDate(parameters.get("effectiveDate"), errors);
     Long orgUnitNo = parseRequiredPositiveLong(parameters.get("orgUnitNo"), "Region is required.", errors);
-    Integer percentIncrease = parseRequiredInteger(parameters.get("feeIncrease"), "Fee Increase Percentage", errors);
+    Integer percentIncrease = parseRequiredInteger(parameters.get("feeIncrease"), "Fee increase percentage", errors);
 
     if (percentIncrease != null) {
       if (percentIncrease < 0) {
-        errors.add("Fee Increase Percentage must be greater than or equal to 0.");
+        errors.add("Fee increase percentage must be greater than or equal to 0.");
       } else if (percentIncrease > 100) {
-        errors.add("Fee Increase Percentage must be less than or equal to 100.");
+        errors.add("Fee increase percentage must be less than or equal to 100.");
       }
     }
 
@@ -323,13 +323,13 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
 
     LocalDate effectiveDate = parseFutureDate(parameters.get("effectiveDate"), errors);
     Integer filPercent =
-        parseRequiredInteger(parameters.get("filPolicyPercentage"), "Fee in Lieu Percent", errors);
+        parseRequiredInteger(parameters.get("filPolicyPercentage"), "Fee in lieu percentage", errors);
 
     if (filPercent != null) {
       if (filPercent <= 0) {
-        errors.add("Fee in Lieu Percent must be more than 0.");
+        errors.add("Fee in lieu percentage must be more than 0.");
       } else if (filPercent >= 100) {
-        errors.add("Fee in Lieu Percent must be less than 100.");
+        errors.add("Fee in lieu percentage must be less than 100.");
       }
     }
 
@@ -359,13 +359,13 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
         parseRequiredPositiveLong(parameters.get("filPolicyId"), "FIL policy id is required.", errors);
     LocalDate effectiveDate = parseFutureDate(parameters.get("effectiveDate"), errors);
     Integer filPercent =
-        parseRequiredInteger(parameters.get("filPolicyPercentage"), "Fee in Lieu Percent", errors);
+        parseRequiredInteger(parameters.get("filPolicyPercentage"), "Fee in lieu percentage", errors);
 
     if (filPercent != null) {
       if (filPercent <= 0) {
-        errors.add("Fee in Lieu Percent must be more than 0.");
+        errors.add("Fee in lieu percentage must be more than 0.");
       } else if (filPercent >= 100) {
-        errors.add("Fee in Lieu Percent must be less than 100.");
+        errors.add("Fee in lieu percentage must be less than 100.");
       }
     }
 
@@ -642,18 +642,18 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
   private LocalDate parseFutureDate(String rawValue, List<String> errors) {
     String normalized = trimToNull(rawValue);
     if (normalized == null) {
-      errors.add("Effective Date is required.");
+      errors.add("Effective date is required.");
       return null;
     }
 
     LocalDate parsed = parseDate(normalized);
     if (parsed == null) {
-      errors.add("Effective Date is an invalid date format, must use yyyy-mm-dd.");
+      errors.add("Effective date is an invalid date format, must use yyyy-mm-dd.");
       return null;
     }
 
     if (!parsed.isAfter(LexisBusinessTime.today())) {
-      errors.add("Effective Date must be greater than the current date.");
+      errors.add("Effective date must be greater than the current date.");
     }
 
     return parsed;
