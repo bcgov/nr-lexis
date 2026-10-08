@@ -303,7 +303,9 @@ const fillRequiredBlanketOicFields = async (
   if (requestTotals.volume) {
     await userEvent.type(screen.getByLabelText('Permit request volume (m³)'), requestTotals.volume)
   }
-  await userEvent.type(screen.getByLabelText('Remarks'), 'test blanket permit')
+  fireEvent.change(screen.getByLabelText('Remarks'), {
+    target: { value: 'test blanket permit' },
+  })
   await userEvent.click(screen.getByRole('tab', { name: 'Applicant' }))
   fireEvent.change(screen.getByLabelText('Client', { selector: '#boic-permit-owner-client' }), {
     target: { value: '00001074' },
@@ -317,8 +319,12 @@ const fillRequiredBlanketOicFields = async (
     '00001074',
   )
   await userEvent.click(screen.getByRole('tab', { name: 'Shipping' }))
-  await userEvent.type(screen.getByLabelText('Purchaser'), 'test destination')
-  await userEvent.type(screen.getByLabelText('Transport name'), 'test barge')
+  fireEvent.change(screen.getByLabelText('Purchaser'), {
+    target: { value: 'test destination' },
+  })
+  fireEvent.change(screen.getByLabelText('Transport name'), {
+    target: { value: 'test barge' },
+  })
   await userEvent.type(screen.getByLabelText('Estimated shipping date'), '2099-01-01')
 }
 
@@ -568,7 +574,7 @@ describe('permit creation from an exemption', () => {
     expect(screen.getByText('9020933')).toBeInTheDocument()
   })
 
-  it('renders the legacy permit issue date with a month name without shifting its day', async () => {
+  it('renders the legacy permit issue date in ISO format without shifting its day', async () => {
     const actualService = await vi.importActual<{
       fetchExemptionPermits: typeof fetchExemptionPermits
     }>('@/service/provincial-exemption-detail-service')
@@ -589,7 +595,7 @@ describe('permit creation from an exemption', () => {
       await openPermitsTab()
 
       const table = await screen.findByRole('region', { name: 'Related exemption permits' })
-      expect(within(table).getByText('Mar 10, 2026')).toBeVisible()
+      expect(within(table).getByText('2026-03-10')).toBeVisible()
       expect(within(table).queryByText('03/10/2026')).not.toBeInTheDocument()
     } finally {
       get.mockRestore()
@@ -776,14 +782,16 @@ describe('permit creation from an exemption', () => {
 
     await userEvent.click(within(page).getByRole('checkbox', { name: "I'm an agent" }))
     fireEvent.change(
-      within(page).getByLabelText('Client', { selector: '#boic-permit-agent-client' }),
+      within(page).getByLabelText('Agent client', { selector: '#boic-permit-agent-client' }),
       {
         target: { value: '00012345' },
       },
     )
     await waitFor(() =>
       expect(
-        within(page).getByLabelText('Client location', { selector: '#boic-permit-agent-location' }),
+        within(page).getByLabelText('Agent client location', {
+          selector: '#boic-permit-agent-location',
+        }),
       ).toHaveValue('00'),
     )
 
@@ -1084,7 +1092,7 @@ describe('permit creation from an exemption', () => {
     expect(await within(page).findByText('Permit needs attention')).toBeInTheDocument()
 
     await userEvent.click(within(page).getByRole('checkbox', { name: "I'm an agent" }))
-    const agentClientNumber = within(page).getByLabelText('Client', {
+    const agentClientNumber = within(page).getByLabelText('Agent client', {
       selector: '#boic-permit-agent-client',
     })
     fireEvent.change(agentClientNumber, { target: { value: '22222222' } })
@@ -1108,7 +1116,9 @@ describe('permit creation from an exemption', () => {
     await userEvent.tab()
     await waitFor(() =>
       expect(
-        within(page).getByLabelText('Client location', { selector: '#boic-permit-agent-location' }),
+        within(page).getByLabelText('Agent client location', {
+          selector: '#boic-permit-agent-location',
+        }),
       ).toHaveValue('00'),
     )
     expect(within(page).queryByText('Permit needs attention')).not.toBeInTheDocument()

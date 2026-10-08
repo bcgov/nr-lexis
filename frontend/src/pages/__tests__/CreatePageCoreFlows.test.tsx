@@ -1641,8 +1641,8 @@ describe('Create Page Core Flows', () => {
       )
       expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
       expect(screen.queryByRole('textbox', { name: /Date received/i })).not.toBeInTheDocument()
-      expect(screen.getByRole('radio', { name: 'Aug 5, 2026' })).toBeChecked()
-      expect(screen.getByRole('radio', { name: 'Aug 12, 2026' })).not.toBeChecked()
+      expect(screen.getByRole('radio', { name: '2026-08-05' })).toBeChecked()
+      expect(screen.getByRole('radio', { name: '2026-08-12' })).not.toBeChecked()
       expect(screen.getByRole('radio', { name: 'No list date' })).not.toBeChecked()
     })
 
@@ -1705,8 +1705,8 @@ describe('Create Page Core Flows', () => {
     })
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
     expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
-    expect(screen.getByRole('radio', { name: 'Oct 7, 2026' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Oct 14, 2026' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: '2026-10-07' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: '2026-10-14' })).not.toBeChecked()
     expect(screen.queryByRole('radio', { name: 'No list date' })).not.toBeInTheDocument()
 
     await selectApplicationCreateTab('Applicant')
@@ -2068,7 +2068,9 @@ describe('Create Page Core Flows', () => {
     await selectExemptionCreateTab('Exemption details')
     const exemptionDetails = screen.getByRole('group', { name: 'Exemption details' })
     expect(exemptionDetails).toHaveClass('create-form-section')
-    expect(exemptionDetails.querySelector('.legacy-search-grid')).toHaveClass('create-form-grid')
+    expect(exemptionDetails.querySelector('.record-field-grid')).toHaveClass(
+      'record-field-grid--editing',
+    )
     expect(screen.getByLabelText('Approval volume (m³)')).toBeInTheDocument()
     expect(screen.queryByLabelText('Approved volumeume (m³)')).not.toBeInTheDocument()
     const exemptionFormActions = screen.getByRole('group', { name: 'Page actions' })
@@ -2569,7 +2571,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(screen.getByLabelText('Exemption number'), 'BOIC-1')
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
-    const regionComboBox = screen.getByRole('combobox', { name: /^Regions/ })
+    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
     await userEvent.click(regionComboBox)
     fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
     await userEvent.click(
@@ -2616,7 +2618,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(screen.getByLabelText('Exemption number'), 'BOIC-1')
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
-    const regionComboBox = screen.getByRole('combobox', { name: /^Regions/ })
+    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
     await userEvent.click(regionComboBox)
     fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
     await userEvent.click(
@@ -3191,7 +3193,7 @@ describe('Create Page Core Flows', () => {
       expect(section).toHaveClass('create-form-section')
       expect(section).toHaveClass('offer-form-section')
       expect(section.parentElement).toBe(offerSectionStack)
-      expect(section.querySelector('.legacy-search-grid')).toHaveClass('create-form-grid')
+      expect(section.querySelector('.record-field-grid')).toHaveClass('record-field-grid--editing')
     }
     expect(screen.getByRole('button', { name: 'See scale detail' })).toBeEnabled()
     expect(await screen.findByDisplayValue('PKG-9')).toBeInTheDocument()

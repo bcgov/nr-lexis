@@ -203,7 +203,7 @@ describe('Detail Quick Action Smoke', () => {
       'Date and time received',
     ])
     expect(offers.getByText('Example Lumber')).toBeInTheDocument()
-    expect(offers.getByText('Jan 4, 2026')).toBeInTheDocument()
+    expect(offers.getByText('2026-01-04')).toBeInTheDocument()
     expect(offers.queryByRole('button')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create offer' })).not.toBeInTheDocument()
   })
@@ -319,7 +319,7 @@ describe('Detail Quick Action Smoke', () => {
     expect(summary).toBeTruthy()
     const approvedVolume = within(summary as HTMLElement)
       .getByText('Approval volume (m³)')
-      .closest('.detail-field-item')
+      .closest('.record-field')
     expect(within(approvedVolume as HTMLElement).getByText('99.0')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Permits' }))
     const permitTotals = screen.getByRole('tabpanel', { name: 'Permits' })
@@ -328,7 +328,7 @@ describe('Detail Quick Action Smoke', () => {
       ['Scale volume assigned to permits (m³)', '5.0'],
       ['Balance remaining (m³)', '94.0'],
     ]) {
-      const field = within(permitTotals).getByText(label).closest('.detail-field-item')
+      const field = within(permitTotals).getByText(label).closest('.record-field')
       expect(field).toBeTruthy()
       expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
     }

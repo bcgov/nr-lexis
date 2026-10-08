@@ -2186,7 +2186,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(fillsContent).toBe(true)
   })
 
-  test('bounds detail field cards to one, two, and three columns', async ({ page }) => {
+  test('keeps record fields at one, two, and four columns', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/federal/application/888', {
       waitUntil: 'domcontentloaded',
@@ -2201,7 +2201,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       .getByRole('heading', { level: 2, name: 'Applicant' })
       .locator('..')
       .locator('..')
-      .locator('.detail-field-grid')
+      .locator('.record-field-grid')
     await expect(ownerFields).toBeVisible()
     await expect(page.locator('.application-detail-tab-list')).toHaveCSS('height', '48px')
     await expect(page.locator('.application-detail-tab-list [role="tab"]').first()).toHaveCSS(
@@ -2252,9 +2252,21 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.detail-section-card').first()).toHaveCSS('border-top-width', '1px')
 
     const columnCount = async () =>
-      ownerFields.evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length)
+      ownerFields.evaluate((grid) => {
+        const row = grid.querySelector('.record-field-grid__row')
+        const field = row?.querySelector('.record-field')
+        if (!(row instanceof HTMLElement) || !(field instanceof HTMLElement)) {
+          throw new Error('Record field row not found')
+        }
+        const style = getComputedStyle(field)
+        const columnWidth =
+          field.getBoundingClientRect().width +
+          Number.parseFloat(style.marginInlineStart) +
+          Number.parseFloat(style.marginInlineEnd)
+        return Math.round(row.getBoundingClientRect().width / columnWidth)
+      })
 
-    expect(await columnCount()).toBe(3)
+    expect(await columnCount()).toBe(4)
 
     await page.setViewportSize({ width: 768, height: 900 })
     expect(await columnCount()).toBe(2)
@@ -2274,7 +2286,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       card.classList.add('application-detail-clients')
     })
     await page.setViewportSize({ width: 1440, height: 900 })
-    expect(await columnCount()).toBe(3)
+    expect(await columnCount()).toBe(4)
     await page.setViewportSize({ width: 768, height: 900 })
     expect(await columnCount()).toBe(2)
     await page.setViewportSize({ width: 390, height: 844 })
@@ -2318,6 +2330,103 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await expect(documentsTable).toBeVisible()
     await expect(rowActions).toHaveCSS('justify-content', 'flex-start')
+  })
+
+  test('keeps record summaries and footer actions within the form', async ({ page }, testInfo) => {
+    const routes = [
+      ['/provincial/offers/create', 'Create provincial offer'],
+      ['/provincial/exemption/create', 'Create new exemption'],
+      ['/provincial/offers/81001', 'Offer 81001'],
+    ]
+    const bounds: unknown[] = []
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 })
+      for (const [path, title] of routes) {
+        await gotoSyntheticRoute(page, path, {
+          ready: page.getByRole('heading', { level: 1, name: title, exact: true }),
+        })
+        const footer = page.locator('.legacy-form-footer')
+        await expect(footer).toBeVisible()
+        const geometry = await footer.evaluate((element) => {
+          const grid = element.querySelector('.record-field-grid')
+          if (!(grid instanceof HTMLElement)) throw new Error('Record summary not found')
+          const bounds = element.getBoundingClientRect()
+          const style = getComputedStyle(element)
+          const insetLeft =
+            Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.borderLeftWidth)
+          const insetRight =
+            Number.parseFloat(style.paddingRight) + Number.parseFloat(style.borderRightWidth)
+          const summary = grid.getBoundingClientRect()
+          const actions = element.querySelector('.legacy-search-actions')?.getBoundingClientRect()
+          return {
+            left: bounds.left + insetLeft,
+            right: bounds.right - insetRight,
+            width: bounds.width - insetLeft - insetRight,
+            gridLeft: summary.left,
+            gridRight: summary.right,
+            gridWidth: summary.width,
+            gridTop: summary.top,
+            gridBottom: summary.bottom,
+            actionsLeft: actions?.left,
+            actionsTop: actions?.top,
+            actionsBottom: actions?.bottom,
+            actionsWidth: actions?.width,
+            columnGap: Number.parseFloat(style.columnGap) || 0,
+          }
+        })
+        bounds.push({ path, viewportWidth: width, ...geometry })
+        expect.soft(geometry.gridLeft).toBeGreaterThanOrEqual(geometry.left - 1)
+        expect.soft(geometry.gridRight).toBeLessThanOrEqual(geometry.right + 1)
+        const actionsShareRow =
+          geometry.actionsLeft !== undefined &&
+          geometry.actionsTop !== undefined &&
+          geometry.actionsBottom !== undefined &&
+          geometry.actionsTop <= geometry.gridBottom &&
+          geometry.actionsBottom >= geometry.gridTop
+        const availableWidth =
+          geometry.width - (actionsShareRow ? (geometry.actionsWidth ?? 0) + geometry.columnGap : 0)
+        expect.soft(geometry.gridWidth).toBeGreaterThanOrEqual(availableWidth - 1)
+        if (actionsShareRow) {
+          expect.soft(geometry.actionsLeft).toBeGreaterThanOrEqual(geometry.gridRight)
+        }
+      }
+    }
+    await testInfo.attach('footer-bounds', {
+      body: JSON.stringify(bounds, null, 2),
+      contentType: 'application/json',
+    })
+  })
+
+  test('spans exemption create conditions across the form', async ({ page }) => {
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 })
+      await gotoSyntheticRoute(page, '/provincial/exemption/create', {
+        ready: page.getByRole('heading', { level: 1, name: 'Create new exemption', exact: true }),
+      })
+      const conditions = page.getByRole('textbox', { name: 'Conditions' })
+      await expect(conditions).toBeVisible()
+      const geometry = await conditions.evaluate((element) => {
+        const section = element.closest('.create-form-section')
+        const firstField = section?.querySelector('.record-field')
+        if (!(section instanceof HTMLElement) || !(firstField instanceof HTMLElement)) {
+          throw new Error('Exemption details fields not found')
+        }
+        const style = getComputedStyle(section)
+        const sectionBounds = section.getBoundingClientRect()
+        const bounds = element.getBoundingClientRect()
+        return {
+          left: bounds.left,
+          width: bounds.width,
+          fieldLeft: firstField.getBoundingClientRect().left,
+          sectionWidth:
+            sectionBounds.width -
+            Number.parseFloat(style.paddingLeft) -
+            Number.parseFloat(style.paddingRight),
+        }
+      })
+      expect.soft(Math.abs(geometry.left - geometry.fieldLeft)).toBeLessThanOrEqual(1)
+      expect.soft(geometry.width).toBeGreaterThanOrEqual(geometry.sectionWidth - 1)
+    }
   })
 
   test('gives long create forms FSPTS section rhythm without mobile overflow', async ({ page }) => {

@@ -366,9 +366,7 @@ describe('Provincial exemption client parity', () => {
     expect(summaryTile).toBeTruthy()
     const exemptionHolderLabel = within(summaryTile as HTMLElement).getByText('Exemption holder')
     expect(
-      within(exemptionHolderLabel.closest('.detail-field-item') as HTMLElement).getByText(
-        '00001074',
-      ),
+      within(exemptionHolderLabel.closest('.record-field') as HTMLElement).getByText('00001074'),
     ).toBeInTheDocument()
   })
 

@@ -1,3 +1,9 @@
+import {
+  RecordField,
+  RecordFieldCell,
+  RecordFieldGrid,
+  RecordFieldRow,
+} from '@/pages/shared/RecordFieldGrid'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   Button,
@@ -528,48 +534,62 @@ const ProvincialOfferDetailsPage = () => {
             {isEditing && <RequiredFieldsLegend />}
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Application details</legend>
-              <div className="legacy-search-grid">
-                <div className="offer-application-link-field">
-                  <span className="cds--label">Application number</span>
-                  {applicationDetailPath ? (
-                    <Link
-                      className="cds--link"
-                      to={applicationDetailPath}
-                      state={withDetailReturnTo(
-                        navigationState,
-                        {
-                          label: offerPageTitle,
-                          to: locationPath(location),
-                        },
-                        detailReturnTo,
+              <RecordFieldGrid editing>
+                <RecordFieldRow>
+                  <RecordFieldCell>
+                    <div className="offer-application-link-field">
+                      <span className="cds--label">Application number</span>
+                      {applicationDetailPath ? (
+                        <Link
+                          className="cds--link"
+                          to={applicationDetailPath}
+                          state={withDetailReturnTo(
+                            navigationState,
+                            {
+                              label: offerPageTitle,
+                              to: locationPath(location),
+                            },
+                            detailReturnTo,
+                          )}
+                        >
+                          {form.applicationNumber}
+                        </Link>
+                      ) : (
+                        <span>{displayValue(form.applicationNumber)}</span>
                       )}
-                    >
-                      {form.applicationNumber}
-                    </Link>
-                  ) : (
-                    <span>{displayValue(form.applicationNumber)}</span>
-                  )}
-                </div>
-                <TextInput
-                  id="offerPackageNumber"
-                  labelText="Package number"
-                  value={form.packageNumber}
-                  readOnly
-                />
-                <TextInput id="offerRegion" labelText="Region" value={form.region} readOnly />
-                <TextInput
-                  id="offerAdvertisingDate"
-                  labelText="Listing date"
-                  value={textValue(detail.advertisingDate)}
-                  readOnly
-                />
-                <TextInput
-                  id="offerEndDate"
-                  labelText="Offer in effect until"
-                  value={textValue(detail.offerEndDate)}
-                  readOnly
-                />
-              </div>
+                    </div>
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <TextInput
+                      id="offerPackageNumber"
+                      labelText="Package number"
+                      value={form.packageNumber}
+                      readOnly
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell span="wide">
+                    <TextInput id="offerRegion" labelText="Region" value={form.region} readOnly />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+                <RecordFieldRow>
+                  <RecordFieldCell>
+                    <TextInput
+                      id="offerAdvertisingDate"
+                      labelText="Listing date"
+                      value={textValue(detail.advertisingDate)}
+                      readOnly
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <TextInput
+                      id="offerEndDate"
+                      labelText="Offer in effect until"
+                      value={textValue(detail.offerEndDate)}
+                      readOnly
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+              </RecordFieldGrid>
               <div className="legacy-search-actions">
                 <OfferScaleDetailAction
                   target={{ offerNumber: String(currentDetail.offerNumber) }}
@@ -580,227 +600,273 @@ const ProvincialOfferDetailsPage = () => {
 
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Offering company details</legend>
-              <div className="legacy-search-grid">
-                <TextInput
-                  id="offerOfferingClientNumber"
-                  labelText="Offering client number"
-                  value={form.offeringClientNumber}
-                  readOnly
-                />
-                <TextInput
-                  id="offerCompanyName"
-                  labelText={requiredLabel('Company')}
-                  aria-required="true"
-                  value={form.companyName}
-                  readOnly
-                  maxLength={OFFER_COMPANY_NAME_MAX_LENGTH}
-                />
-                <TextInput
-                  id="offerContactName"
-                  labelText={requiredLabel('Contact name')}
-                  aria-required="true"
-                  value={form.contactName}
-                  readOnly
-                  maxLength={OFFER_CONTACT_NAME_MAX_LENGTH}
-                />
-              </div>
+              <RecordFieldGrid editing>
+                <RecordFieldRow>
+                  <RecordFieldCell>
+                    <TextInput
+                      id="offerOfferingClientNumber"
+                      labelText="Offering client number"
+                      value={form.offeringClientNumber}
+                      readOnly
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <TextInput
+                      id="offerCompanyName"
+                      labelText={requiredLabel('Company')}
+                      aria-required="true"
+                      value={form.companyName}
+                      readOnly
+                      maxLength={OFFER_COMPANY_NAME_MAX_LENGTH}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <TextInput
+                      id="offerContactName"
+                      labelText={requiredLabel('Contact name')}
+                      aria-required="true"
+                      value={form.contactName}
+                      readOnly
+                      maxLength={OFFER_CONTACT_NAME_MAX_LENGTH}
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+              </RecordFieldGrid>
             </fieldset>
 
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Offer details</legend>
-              <div className="legacy-search-grid">
-                <TextInput
-                  id="offerPackageVolume"
-                  labelText="Application/package volume (m³)"
-                  value={textValue(detail.packageVolume)}
-                  readOnly
-                />
-                <TextInput
-                  id="offerSpeciesGradeCode"
-                  labelText="Species/grade"
-                  value={textValue(detail.speciesGradeCode)}
-                  readOnly
-                />
-                <TextInput
-                  id="offerVolume"
-                  labelText="Offer volume (m³)"
-                  value={form.offerVolume}
-                  readOnly={!canEditOfferDetailFields}
-                  invalid={canEditOfferDetailFields && !!fieldError('offerVolume')}
-                  invalidText={fieldError('offerVolume')}
-                  onBlur={() => {
-                    markFieldTouched('offerVolume')
-                    const originalVolume =
-                      detail.offerVolume == null ? '' : String(detail.offerVolume)
-                    if (
-                      form.offerVolume !== originalVolume &&
-                      !offerVolumeContextFieldError(form.offerVolume, detail.packageVolume)
-                    ) {
-                      updateFormField('offerVolume', formatLegacyOfferVolume(form.offerVolume))
-                    }
-                  }}
-                  onChange={(event) => updateFormField('offerVolume', event.target.value)}
-                />
-                <TextInput
-                  id="offerPurchaseOfferAmount"
-                  labelText={requiredLabel('Offer amount ($/m³)')}
-                  aria-required="true"
-                  value={form.purchaseOfferAmount}
-                  readOnly={!canEditOfferDetailFields}
-                  invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferAmount')}
-                  invalidText={fieldError('purchaseOfferAmount')}
-                  onBlur={() => markFieldTouched('purchaseOfferAmount')}
-                  onChange={(event) => updateFormField('purchaseOfferAmount', event.target.value)}
-                />
-                <IsoDatePicker
-                  id="offerPurchaseOfferDate"
-                  labelText={requiredLabel('Offer received date')}
-                  required
-                  value={form.purchaseOfferDate}
-                  invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferDate')}
-                  invalidText={fieldError('purchaseOfferDate')}
-                  onBlur={() => markFieldTouched('purchaseOfferDate')}
-                  onChange={(value) => updateFormField('purchaseOfferDate', value)}
-                  disabled
-                />
-                <TextArea
-                  id="offerPickupLocation"
-                  labelText={requiredLabel('Pickup location')}
-                  aria-required="true"
-                  value={form.pickupLocation}
-                  readOnly={!canEditOfferDetailFields}
-                  invalid={canEditOfferDetailFields && !!fieldError('pickupLocation')}
-                  invalidText={fieldError('pickupLocation')}
-                  onBlur={() => markFieldTouched('pickupLocation')}
-                  onChange={(event) => updateFormField('pickupLocation', event.target.value)}
-                  maxLength={OFFER_PICKUP_LOCATION_MAX_LENGTH}
-                />
-                <TextArea
-                  id="offerCondition"
-                  labelText="Offer conditions / remarks"
-                  value={form.offerCondition}
-                  readOnly={!canEditOfferCondition}
-                  invalid={canEditOfferCondition && !!fieldError('offerCondition')}
-                  invalidText={fieldError('offerCondition')}
-                  onBlur={() => markFieldTouched('offerCondition')}
-                  onChange={(event) => updateFormField('offerCondition', event.target.value)}
-                  maxLength={OFFER_CONDITION_MAX_LENGTH}
-                />
-              </div>
+              <RecordFieldGrid editing>
+                <RecordFieldRow>
+                  <RecordFieldCell>
+                    <TextInput
+                      id="offerPackageVolume"
+                      labelText="Application/package volume (m³)"
+                      value={textValue(detail.packageVolume)}
+                      readOnly
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <TextInput
+                      id="offerSpeciesGradeCode"
+                      labelText="Species/grade"
+                      value={textValue(detail.speciesGradeCode)}
+                      readOnly
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <TextInput
+                      id="offerVolume"
+                      labelText="Offer volume (m³)"
+                      value={form.offerVolume}
+                      readOnly={!canEditOfferDetailFields}
+                      invalid={canEditOfferDetailFields && !!fieldError('offerVolume')}
+                      invalidText={fieldError('offerVolume')}
+                      onBlur={() => {
+                        markFieldTouched('offerVolume')
+                        const originalVolume =
+                          detail.offerVolume == null ? '' : String(detail.offerVolume)
+                        if (
+                          form.offerVolume !== originalVolume &&
+                          !offerVolumeContextFieldError(form.offerVolume, detail.packageVolume)
+                        ) {
+                          updateFormField('offerVolume', formatLegacyOfferVolume(form.offerVolume))
+                        }
+                      }}
+                      onChange={(event) => updateFormField('offerVolume', event.target.value)}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <TextInput
+                      id="offerPurchaseOfferAmount"
+                      labelText={requiredLabel('Offer amount ($/m³)')}
+                      aria-required="true"
+                      value={form.purchaseOfferAmount}
+                      readOnly={!canEditOfferDetailFields}
+                      invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferAmount')}
+                      invalidText={fieldError('purchaseOfferAmount')}
+                      onBlur={() => markFieldTouched('purchaseOfferAmount')}
+                      onChange={(event) =>
+                        updateFormField('purchaseOfferAmount', event.target.value)
+                      }
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+                <RecordFieldRow>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="offerPurchaseOfferDate"
+                      labelText={requiredLabel('Offer received date')}
+                      required
+                      value={form.purchaseOfferDate}
+                      invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferDate')}
+                      invalidText={fieldError('purchaseOfferDate')}
+                      onBlur={() => markFieldTouched('purchaseOfferDate')}
+                      onChange={(value) => updateFormField('purchaseOfferDate', value)}
+                      disabled
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <TextArea
+                      id="offerPickupLocation"
+                      labelText={requiredLabel('Pickup location')}
+                      aria-required="true"
+                      value={form.pickupLocation}
+                      readOnly={!canEditOfferDetailFields}
+                      invalid={canEditOfferDetailFields && !!fieldError('pickupLocation')}
+                      invalidText={fieldError('pickupLocation')}
+                      onBlur={() => markFieldTouched('pickupLocation')}
+                      onChange={(event) => updateFormField('pickupLocation', event.target.value)}
+                      maxLength={OFFER_PICKUP_LOCATION_MAX_LENGTH}
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+                <RecordFieldRow>
+                  <RecordFieldCell span="full">
+                    <TextArea
+                      id="offerCondition"
+                      labelText="Offer conditions / remarks"
+                      value={form.offerCondition}
+                      readOnly={!canEditOfferCondition}
+                      invalid={canEditOfferCondition && !!fieldError('offerCondition')}
+                      invalidText={fieldError('offerCondition')}
+                      onBlur={() => markFieldTouched('offerCondition')}
+                      onChange={(event) => updateFormField('offerCondition', event.target.value)}
+                      maxLength={OFFER_CONDITION_MAX_LENGTH}
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+              </RecordFieldGrid>
             </fieldset>
 
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Offer withdrawals</legend>
-              <div className="legacy-search-grid">
-                <IsoDatePicker
-                  id="offerWithdrawalDate"
-                  labelText="Offer withdrawal date"
-                  value={form.offerWithdrawalDate}
-                  invalid={canEditWithdrawFields && !!fieldError('offerWithdrawalDate')}
-                  invalidText={fieldError('offerWithdrawalDate')}
-                  onBlur={() => markFieldTouched('offerWithdrawalDate')}
-                  onChange={(value) => updateFormField('offerWithdrawalDate', value)}
-                  disabled={!canEditWithdrawFields}
-                />
-                <TextArea
-                  id="offerWithdrawReason"
-                  labelText={requiredLabel(
-                    'Offer withdrawal reason',
-                    form.offerWithdrawalDate.trim().length > 0,
-                  )}
-                  aria-required={form.offerWithdrawalDate.trim().length > 0 ? 'true' : undefined}
-                  value={form.withdrawReason}
-                  readOnly={!canEditWithdrawFields}
-                  invalid={canEditWithdrawFields && !!fieldError('withdrawReason')}
-                  invalidText={fieldError('withdrawReason')}
-                  onBlur={() => markFieldTouched('withdrawReason')}
-                  onChange={(event) => updateFormField('withdrawReason', event.target.value)}
-                  maxLength={OFFER_WITHDRAW_REASON_MAX_LENGTH}
-                />
-              </div>
+              <RecordFieldGrid editing>
+                <RecordFieldRow>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="offerWithdrawalDate"
+                      labelText="Offer withdrawal date"
+                      value={form.offerWithdrawalDate}
+                      invalid={canEditWithdrawFields && !!fieldError('offerWithdrawalDate')}
+                      invalidText={fieldError('offerWithdrawalDate')}
+                      onBlur={() => markFieldTouched('offerWithdrawalDate')}
+                      onChange={(value) => updateFormField('offerWithdrawalDate', value)}
+                      disabled={!canEditWithdrawFields}
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+                <RecordFieldRow>
+                  <RecordFieldCell span="full">
+                    <TextArea
+                      id="offerWithdrawReason"
+                      labelText={requiredLabel(
+                        'Offer withdrawal reason',
+                        form.offerWithdrawalDate.trim().length > 0,
+                      )}
+                      aria-required={
+                        form.offerWithdrawalDate.trim().length > 0 ? 'true' : undefined
+                      }
+                      value={form.withdrawReason}
+                      readOnly={!canEditWithdrawFields}
+                      invalid={canEditWithdrawFields && !!fieldError('withdrawReason')}
+                      invalidText={fieldError('withdrawReason')}
+                      onBlur={() => markFieldTouched('withdrawReason')}
+                      onChange={(event) => updateFormField('withdrawReason', event.target.value)}
+                      maxLength={OFFER_WITHDRAW_REASON_MAX_LENGTH}
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+              </RecordFieldGrid>
             </fieldset>
 
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Approval</legend>
-              <div className="legacy-search-grid">
-                {detail.canEditScheduleDates && (
-                  <IsoDatePicker
-                    id="offerTeacReviewDate"
-                    labelText="TEAC review date"
-                    value={form.teacReviewDate}
-                    invalid={canEditScheduleFields && !!fieldError('teacReviewDate')}
-                    invalidText={fieldError('teacReviewDate')}
-                    onBlur={() => markFieldTouched('teacReviewDate')}
-                    onChange={(value) => updateFormField('teacReviewDate', value)}
-                    disabled={!canEditScheduleFields}
-                  />
-                )}
-                <SearchableSelect
-                  id="offerFairOfferIndicator"
-                  labelText="Fair market value"
-                  value={form.fairOfferIndicator}
-                  placeholder="Select value"
-                  options={YES_NO_OPTIONS}
-                  disabled={!canEditScheduleFields}
-                  onChange={(value) => updateFormField('fairOfferIndicator', value)}
-                />
-                <SearchableSelect
-                  id="offerValidOfferIndicator"
-                  labelText="Valid offer"
-                  value={form.validOfferIndicator}
-                  placeholder="Select value"
-                  options={YES_NO_OPTIONS}
-                  disabled={!canEditScheduleFields}
-                  onChange={(value) => updateFormField('validOfferIndicator', value)}
-                />
-                <SearchableSelect
-                  id="offerApprovalIndicator"
-                  labelText="Offer approved"
-                  value={form.approvalIndicator}
-                  placeholder="Select value"
-                  options={YES_NO_OPTIONS}
-                  disabled={!canEditScheduleFields}
-                  onChange={(value) => updateFormField('approvalIndicator', value)}
-                />
-                {detail.canEditOfferRemarks && (
-                  <TextArea
-                    id="offerRemark"
-                    labelText="Offer remarks"
-                    value={form.offerRemark}
-                    readOnly={!canEditOfferRemarkFields}
-                    invalid={canEditOfferRemarkFields && !!fieldError('offerRemark')}
-                    invalidText={fieldError('offerRemark')}
-                    onBlur={() => markFieldTouched('offerRemark')}
-                    onChange={(event) => updateFormField('offerRemark', event.target.value)}
-                    maxLength={OFFER_REMARK_MAX_LENGTH}
-                  />
-                )}
-              </div>
+              <RecordFieldGrid editing>
+                <RecordFieldRow>
+                  {detail.canEditScheduleDates && (
+                    <RecordFieldCell>
+                      <IsoDatePicker
+                        id="offerTeacReviewDate"
+                        labelText="TEAC review date"
+                        value={form.teacReviewDate}
+                        invalid={canEditScheduleFields && !!fieldError('teacReviewDate')}
+                        invalidText={fieldError('teacReviewDate')}
+                        onBlur={() => markFieldTouched('teacReviewDate')}
+                        onChange={(value) => updateFormField('teacReviewDate', value)}
+                        disabled={!canEditScheduleFields}
+                      />
+                    </RecordFieldCell>
+                  )}
+                  <RecordFieldCell>
+                    <SearchableSelect
+                      id="offerFairOfferIndicator"
+                      labelText="Fair market value"
+                      value={form.fairOfferIndicator}
+                      placeholder="Select value"
+                      options={YES_NO_OPTIONS}
+                      disabled={!canEditScheduleFields}
+                      onChange={(value) => updateFormField('fairOfferIndicator', value)}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <SearchableSelect
+                      id="offerValidOfferIndicator"
+                      labelText="Valid offer"
+                      value={form.validOfferIndicator}
+                      placeholder="Select value"
+                      options={YES_NO_OPTIONS}
+                      disabled={!canEditScheduleFields}
+                      onChange={(value) => updateFormField('validOfferIndicator', value)}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <SearchableSelect
+                      id="offerApprovalIndicator"
+                      labelText="Offer approved"
+                      value={form.approvalIndicator}
+                      placeholder="Select value"
+                      options={YES_NO_OPTIONS}
+                      disabled={!canEditScheduleFields}
+                      onChange={(value) => updateFormField('approvalIndicator', value)}
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+                <RecordFieldRow>
+                  {detail.canEditOfferRemarks && (
+                    <RecordFieldCell span="full">
+                      <TextArea
+                        id="offerRemark"
+                        labelText="Offer remarks"
+                        value={form.offerRemark}
+                        readOnly={!canEditOfferRemarkFields}
+                        invalid={canEditOfferRemarkFields && !!fieldError('offerRemark')}
+                        invalidText={fieldError('offerRemark')}
+                        onBlur={() => markFieldTouched('offerRemark')}
+                        onChange={(event) => updateFormField('offerRemark', event.target.value)}
+                        maxLength={OFFER_REMARK_MAX_LENGTH}
+                      />
+                    </RecordFieldCell>
+                  )}
+                </RecordFieldRow>
+              </RecordFieldGrid>
             </fieldset>
 
             <div className="legacy-form-footer">
-              <dl className="detail-field-grid">
-                <div className="detail-field-item">
-                  <dt className="detail-field-label">Offer number</dt>
-                  <dd className="detail-field-value">{displayValue(detail.offerNumber)}</dd>
-                </div>
-                <div className="detail-field-item">
-                  <dt className="detail-field-label">Author</dt>
-                  <dd className="detail-field-value">{displayValue(detail.author)}</dd>
-                </div>
-                <div className="detail-field-item">
-                  <dt className="detail-field-label">Manufacturing facility</dt>
-                  <dd className="detail-field-value">
-                    {displayValue(detail.manufacturingFacilityInfo)}
-                  </dd>
-                </div>
-                <div className="detail-field-item">
-                  <dt className="detail-field-label">Export jurisdiction</dt>
-                  <dd className="detail-field-value">
-                    {displayValue(detail.exportJurisdictionCode)}
-                  </dd>
-                </div>
-              </dl>
+              <RecordFieldGrid>
+                <RecordFieldRow>
+                  <RecordField label="Offer number" value={displayValue(detail.offerNumber)} />
+                  <RecordField label="Author" value={displayValue(detail.author)} />
+                  <RecordField
+                    label="Manufacturing facility"
+                    value={displayValue(detail.manufacturingFacilityInfo)}
+                  />
+                  <RecordField
+                    label="Export jurisdiction"
+                    value={displayValue(detail.exportJurisdictionCode)}
+                  />
+                </RecordFieldRow>
+              </RecordFieldGrid>
               <div className="legacy-search-actions">
                 {isEditing ? (
                   <>

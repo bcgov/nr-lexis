@@ -344,12 +344,14 @@ test.describe('Frontend parity with mocked API responses', () => {
       ready: page.getByRole('heading', { level: 1, name: 'Exemption PARITY-BOIC', exact: true }),
     })
     await page.getByRole('button', { name: 'Edit exemption details', exact: true }).click()
-    for (const label of ['Approval date', 'Expiry date']) {
-      const date = page.getByLabel(label, { exact: true })
-      await expect(date).toBeDisabled()
-      await expect(date).toHaveValue('')
-      await expect(date).not.toHaveAttribute('aria-invalid', 'true')
-    }
+    await expect(page.getByLabel('Approval date', { exact: true })).toHaveCount(0)
+    await expect(
+      page.locator('dt', { hasText: /^Approval date$/ }).locator('xpath=following-sibling::dd'),
+    ).toHaveText('Not approved')
+    const expiryDate = page.getByLabel('Expiry date', { exact: true })
+    await expect(expiryDate).toBeDisabled()
+    await expect(expiryDate).toHaveValue('')
+    await expect(expiryDate).not.toHaveAttribute('aria-invalid', 'true')
     await expect(page.getByLabel('Approved volume (m³)', { exact: true })).toBeDisabled()
     await expect(page.getByLabel('Conditions', { exact: true })).toBeDisabled()
     await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled()

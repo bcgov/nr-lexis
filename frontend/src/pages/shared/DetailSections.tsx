@@ -1,32 +1,48 @@
 import { Tile } from '@carbon/react'
 import type { ReactNode } from 'react'
+import {
+  RecordField,
+  RecordFieldGrid,
+  RecordFieldRow,
+  type RecordFieldSpan,
+} from './RecordFieldGrid'
 
 export type DetailField = {
   label: string
   value: ReactNode
+  span?: RecordFieldSpan
 }
 
 type DetailFieldTileProps = {
   title: string
-  fields: DetailField[]
+  /** One group of fields, or one group per row; each group starts a new row. */
+  fields: DetailField[] | DetailField[][]
   headerAction?: ReactNode
   icon?: ReactNode
   children?: ReactNode
 }
 
-export function DetailFieldGrid({ fields }: { fields: DetailField[] }) {
+const fieldRows = (fields: DetailField[] | DetailField[][]): DetailField[][] =>
+  fields.length > 0 && Array.isArray(fields[0])
+    ? (fields as DetailField[][])
+    : [fields as DetailField[]]
+
+export function DetailFieldGrid({ fields }: { fields: DetailField[] | DetailField[][] }) {
   return (
-    <dl className="detail-field-grid">
-      {fields.map((field) => (
-        <div
-          key={field.label}
-          className={`detail-field-item${fields.length === 1 ? ' detail-field-item--full' : ''}`}
-        >
-          <dt className="detail-field-label">{field.label}</dt>
-          <dd className="detail-field-value">{field.value}</dd>
-        </div>
+    <RecordFieldGrid>
+      {fieldRows(fields).map((row) => (
+        <RecordFieldRow key={row.map((field) => field.label).join('|')}>
+          {row.map((field) => (
+            <RecordField
+              key={field.label}
+              label={field.label}
+              value={field.value}
+              span={field.span}
+            />
+          ))}
+        </RecordFieldRow>
       ))}
-    </dl>
+    </RecordFieldGrid>
   )
 }
 

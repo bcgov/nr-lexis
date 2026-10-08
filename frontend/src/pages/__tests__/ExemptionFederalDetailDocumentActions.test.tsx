@@ -1761,7 +1761,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(within(ownerTile as HTMLElement).queryByText('Company name')).not.toBeInTheDocument()
     const ownerApplicantTypeField = within(ownerTile as HTMLElement)
       .getByText('Applicant type')
-      .closest('.detail-field-item')
+      .closest('.record-field')
     expect(ownerApplicantTypeField).toBeTruthy()
     expect(within(ownerApplicantTypeField as HTMLElement).getByText('Agent')).toBeInTheDocument()
 
@@ -1779,7 +1779,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(within(agentTile as HTMLElement).queryByText('Company name')).not.toBeInTheDocument()
     const agentApplicantTypeField = within(agentTile as HTMLElement)
       .getByText('Applicant type')
-      .closest('.detail-field-item')
+      .closest('.record-field')
     expect(agentApplicantTypeField).toBeTruthy()
     expect(within(agentApplicantTypeField as HTMLElement).getByText('Agent')).toBeInTheDocument()
 
