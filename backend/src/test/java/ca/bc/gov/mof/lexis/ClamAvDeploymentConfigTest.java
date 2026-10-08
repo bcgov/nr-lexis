@@ -39,10 +39,12 @@ class ClamAvDeploymentConfigTest {
   void deploymentWorkflowCallersShouldSupplySharedClamAvNamespace() throws IOException {
     String prOpenWorkflow = read(".github/workflows/pr-open.yml");
     String mergeWorkflow = read(".github/workflows/merge.yml");
+    String releaseWorkflow = read(".github/workflows/release-prod.yml");
     String namespaceSecret = "clamav_namespace: ${{ secrets.clamav_namespace }}";
 
     assertThat(prOpenWorkflow).contains(namespaceSecret);
-    assertThat(occurrences(mergeWorkflow, namespaceSecret)).isEqualTo(2);
+    assertThat(occurrences(mergeWorkflow, namespaceSecret)).isEqualTo(1);
+    assertThat(occurrences(releaseWorkflow, namespaceSecret)).isEqualTo(1);
   }
 
   @Test

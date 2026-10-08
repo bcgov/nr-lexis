@@ -3,7 +3,6 @@ package ca.bc.gov.mof.lexis.service.session;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
-import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -29,7 +28,7 @@ class LexisAuthorizationServiceTest {
   }
 
   @Test
-  void prodRtmOnlyModeShouldPreserveAdminAndReadOnlyRoleContracts() {
+  void shouldCombineNormalRoleActionsWithoutRestrictingAdministrators() {
     LexisAuthorizationService service =
         createService(
             "LEXIS_PROVINCIAL_SUBMITTER",
@@ -37,28 +36,24 @@ class LexisAuthorizationServiceTest {
                 "LEXIS_ADMIN", List.of("*"),
                 "LEXIS_READ_ONLY", List.of("/applicationSearch", "/applicationDetails"),
                 "LEXIS_APPLICATION_APPROVER",
-                    List.of("/applicationSearch", "createApplication")),
-            true);
+                    List.of("/applicationSearch", "createApplication")));
 
     assertThat(service.resolveGrantedActions(List.of("LEXIS_ADMIN")))
-        .containsExactly("/lexisAgentAdmin");
+        .containsExactlyElementsOf(service.getKnownActions());
     assertThat(service.resolveGrantedActions(List.of("LEXIS_READ_ONLY")))
         .containsExactly("/applicationSearch", "/applicationDetails");
-    assertThat(service.resolveGrantedActions(List.of("LEXIS_APPLICATION_APPROVER"))).isEmpty();
+    assertThat(service.resolveGrantedActions(List.of("LEXIS_APPLICATION_APPROVER")))
+        .containsExactly("/applicationSearch", "createApplication");
     assertThat(service.resolveGrantedActions(List.of("LEXIS_ADMIN", "LEXIS_READ_ONLY")))
-        .containsExactly("/lexisAgentAdmin");
+        .containsExactlyElementsOf(service.getKnownActions());
     assertThat(
             service.resolveGrantedActions(
                 List.of("LEXIS_READ_ONLY", "LEXIS_APPLICATION_APPROVER")))
-        .containsExactly("/applicationSearch", "/applicationDetails");
+        .containsExactly("/applicationSearch", "/applicationDetails", "createApplication");
     assertThat(service.canPerformAction(List.of("LEXIS_ADMIN"), "/lexisAgentAdmin")).isTrue();
-    assertThat(service.canPerformAction(List.of("LEXIS_ADMIN"), "/applicationSearch")).isFalse();
+    assertThat(service.canPerformAction(List.of("LEXIS_ADMIN"), "/applicationSearch")).isTrue();
     assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "/applicationSearch")).isTrue();
-    assertThat(service.isReadOnlyRolloutUser(List.of("LEXIS_READ_ONLY"))).isTrue();
-    assertThat(
-            service.isReadOnlyRolloutUser(List.of("LEXIS_READ_ONLY", "LEXIS_APPLICATION_APPROVER")))
-        .isTrue();
-    assertThat(service.isReadOnlyRolloutUser(List.of("LEXIS_ADMIN", "LEXIS_READ_ONLY"))).isFalse();
+    assertThat(service.canPerformAction(List.of("LEXIS_READ_ONLY"), "createApplication")).isFalse();
   }
 
   @Test
@@ -254,33 +249,18 @@ class LexisAuthorizationServiceTest {
 
   private LexisAuthorizationService createService(
       String industryRolesCsv, Map<String, List<String>> roleActions) {
-    return createService(industryRolesCsv, roleActions, Map.of(), false);
-  }
-
-  private LexisAuthorizationService createService(
-      String industryRolesCsv, Map<String, List<String>> roleActions, boolean prodRtmOnly) {
-    return createService(industryRolesCsv, roleActions, Map.of(), prodRtmOnly);
+    return createService(industryRolesCsv, roleActions, Map.of());
   }
 
   private LexisAuthorizationService createService(
       String industryRolesCsv,
       Map<String, List<String>> roleActions,
       Map<String, List<String>> scopeActions) {
-    return createService(industryRolesCsv, roleActions, scopeActions, false);
-  }
-
-  private LexisAuthorizationService createService(
-      String industryRolesCsv,
-      Map<String, List<String>> roleActions,
-      Map<String, List<String>> scopeActions,
-      boolean prodRtmOnly) {
     LexisAuthorizationProperties properties = new LexisAuthorizationProperties();
     Map<String, List<String>> orderedMappings = new LinkedHashMap<>(roleActions);
     properties.setRoleActions(orderedMappings);
     properties.setScopeActions(new LinkedHashMap<>(scopeActions));
-    LexisFeatureProperties featureProperties = new LexisFeatureProperties();
-    featureProperties.setProdRtmOnly(prodRtmOnly);
     LexisSessionService sessionService = new LexisSessionService(industryRolesCsv);
-    return new LexisAuthorizationService(properties, featureProperties, sessionService);
+    return new LexisAuthorizationService(properties, sessionService);
   }
 }

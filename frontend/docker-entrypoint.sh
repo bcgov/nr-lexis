@@ -36,7 +36,6 @@ window.config = {
   VITE_OIDC_IDIR_HINT: "$(escape "${VITE_OIDC_IDIR_HINT:-azureidir}")",
   VITE_OIDC_BCEID_HINT: "$(escape "${VITE_OIDC_BCEID_HINT:-bceidbusiness}")",
   VITE_OIDC_SITEMINDER_LOGOUT_URL: "$(escape "${VITE_OIDC_SITEMINDER_LOGOUT_URL:-}")",
-  VITE_LEXIS_PROD_RTM_ONLY: "$(escape "${VITE_LEXIS_PROD_RTM_ONLY:-false}")",
   VITE_LEXIS_REPORT_ENDPOINT_BASE: "$(escape "${VITE_LEXIS_REPORT_ENDPOINT_BASE:-/api}")",
   VITE_LEXIS_REPORT_API_BASE: "$(escape "${VITE_LEXIS_REPORT_API_BASE:-/lexis/reports}")"
 };

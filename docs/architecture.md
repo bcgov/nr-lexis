@@ -342,36 +342,67 @@ action (v4.2.2 or later) keeps rendered templates, which include Secret values, 
 logs; don't pin an older version or print rendered templates from other steps.
 
 Pull requests deploy an isolated DEV preview after their required builds and tests pass. A merge to
-`main` deploys the accepted images to the persistent TEST environment, runs the smoke suite, and then
-deploys and promotes the same images to PROD. The PROD GitHub Environment remains the operational
-gate; do not merge a deployment-enabling change until production readiness is approved.
+`main` deploys the accepted images to TEST and runs the smoke suite. PROD deployment requires a
+user to run **Release PROD** from `main` with an existing Git tag. Merges and tag creation do not
+start PROD deployments. The PROD GitHub Environment must allow deployments from the `main`
+branch, because the release tag is an input to that workflow.
 
 ### Image promotion model
 
-LEXIS intentionally follows the
-[BC Gov quickstart-openshift](https://github.com/bcgov/quickstart-openshift) build-once/promote
-model. The pull-request workflow builds frontend and backend images and applies the PR number as a
-mutable image tag. After merge, `.github/workflows/merge.yml` resolves that PR number, deploys the
-same images through TEST and PROD, and then promotes them with the `prod` tag. It does not rebuild
-images from the merged `main` commit SHA.
+LEXIS follows the [BC Gov quickstart-openshift](https://github.com/bcgov/quickstart-openshift)
+build-once/promote model. Pull requests build frontend and backend images with PR-number tags.
+The Merge workflow resolves those tags to immutable digests before deploying TEST. After the
+smoke suite passes, it records the commit and exact image pair in a release-candidate artifact.
+Release PROD requires a tag on a commit in `main`, a successful Merge run for that commit, and its
+matching release-candidate artifact. It deploys the recorded digests and the tagged commit's
+OpenShift templates. It does not rebuild images or resolve the mutable PR tags again.
 
-This model has an accepted provenance risk: if multiple PRs were built from the same earlier `main`
-and are then merged in sequence, a later PR image can omit changes from an earlier merge and can
-temporarily roll those changes back when deployed. A previously green PR is therefore not sufficient
-merge evidence after `main` advances.
+PR images are still built before merge. Before merging another application PR after `main`
+changes, synchronize the branch with `main`, wait for its checks, and confirm that both images
+include the current baseline. Otherwise a later PR image can omit earlier merged changes. Digest
+pinning preserves the tested images; it does not remove this existing build-baseline requirement.
 
-Before merging another application PR after `main` changes:
+To release:
 
-1. Synchronize the PR branch with current `main`.
-2. Wait for the resulting PR workflow and required checks to complete.
-3. Confirm its PR-numbered frontend and backend images were rebuilt or deliberately recycled from
-   the current baseline; do not rely on images produced before the synchronization.
-4. Let the preceding merge workflow finish TEST, PROD, and image promotion before merging the next
-   release PR.
+1. Wait for the candidate commit's Merge workflow, including TEST smoke tests, to succeed.
+2. Create a Git tag on that exact commit, for example `v1.0.0`.
+3. In GitHub Actions, choose **Release PROD**, **Run workflow**, branch **main**, and enter the tag.
+4. Complete any configured PROD environment approval and verify the deployment and both login
+   providers at the vanity URL.
 
-If those checks cannot be established, stop and rebuild the candidate images. Building and promoting
-images from the immutable merged `main` SHA would remove this risk, but that is a separate,
-template-level CI change rather than part of the current LEXIS delivery model.
+If a Merge run fails, use **Re-run all jobs** to redeploy and retest its images. Partial reruns
+cannot publish a release candidate because TEST may have advanced to another commit.
+
+Release manifests are retained for 90 days. A missing, expired, or mismatched manifest stops the
+release; tags from before this workflow cannot be released through it. A rollback uses the same
+manual workflow with a retained, previously tested tag. The release summary identifies the TEST
+run, commit, and deployed image digests. Production releases are serialized.
+
+`LEXIS_EXPIRY_ENABLED` controls only the modern exemption-expiry job, including startup catch-up.
+The PROD workflow passes `expiry_enabled: false` while legacy owns expiry; TEST passes `true`
+and DEV previews pass `false`. This setting does not restrict pages, roles, APIs, or manual writes.
+The former `LEXIS_PROD_RTM_ONLY` and `VITE_LEXIS_PROD_RTM_ONLY` settings are retired. Enable
+modern expiry separately only after the legacy expiry job has stopped.
+
+### Interactive production authentication
+
+Backend and frontend receive the same GitHub PROD environment variables, `LEXIS_OIDC_ISSUER_URI`
+and `LEXIS_OIDC_CLIENT_ID`. The browser uses provider hints `azureidir` and `bceidbusiness` by
+default; optional overrides are `LEXIS_OIDC_IDIR_HINT` and `LEXIS_OIDC_BCEID_HINT`.
+The browser uses authorization code with PKCE and does not need a client secret. Enabling Business
+BCeID on the existing SSO client does not require replacing these values. A replacement client or
+realm does require updating both shared variables to match its registration.
+
+The registered browser client must allow the PROD vanity origin, its `/authCallback` redirect, and
+its root URL for post-logout redirect. Business BCeID logout defaults to the production SiteMinder
+endpoint; `LEXIS_OIDC_SITEMINDER_LOGOUT_URL` can override it. FAM must grant users the production
+LEXIS roles, including forest-client scopes where required. IDIR and Business BCeID login, role
+access, and logout still require credentialed acceptance after deployment.
+
+The `KEYCLOAK_ISSUER_URI`, `NEXCOL_KEYCLOAK_CLIENT_ID`, `keycloak_sa_client_id`, and
+`keycloak_sa_client_secret` settings belong to the separate machine-client provisioning path.
+They are not browser BCeID credentials. Old Cognito environment variables are unused by the new
+SSO build and can be removed after the production migration is verified.
 
 ### PROD vanity route
 

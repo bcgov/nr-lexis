@@ -99,8 +99,8 @@ complete reviewed submission was accepted.
 
 The active page retains the XLSX template, validation, preview, and species review flow. Preview
 calls `POST /api/lexis/rtm/emslogamv/preview`; the reviewed values are then submitted through the
-atomic batch endpoint. These routes require `/lexisAgentAdmin`, including when the application
-runs in PROD RTM-only mode. The older direct `/upload` endpoint remains for compatibility but is
+atomic batch endpoint. These routes require `/lexisAgentAdmin`. The older direct `/upload`
+endpoint remains for compatibility but is
 not called by this page because it would re-read the original workbook and discard review edits.
 If it is called, it resolves and persists the authenticated actor through the same audit-aware
 `MERGE` implementation.

@@ -12,7 +12,6 @@ import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 
-import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import java.time.Clock;
 import java.time.Duration;
@@ -38,7 +37,6 @@ import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.event.ApplicationReadyEvent;
 import org.springframework.context.event.EventListener;
 import org.springframework.mock.env.MockEnvironment;
@@ -158,17 +156,6 @@ class ExemptionExpirySchedulerTest {
   }
 
   @Test
-  void expirySchedulerShouldBeEnabledWhenTheOperationalOverrideIsNotConfigured() {
-    ConditionalOnProperty condition =
-        ExemptionExpiryScheduler.class.getAnnotation(ConditionalOnProperty.class);
-
-    assertThat(condition.prefix()).isEqualTo("lexis.expiry");
-    assertThat(condition.name()).containsExactly("enabled");
-    assertThat(condition.havingValue()).isEqualTo("true");
-    assertThat(condition.matchIfMissing()).isTrue();
-  }
-
-  @Test
   void startupReconciliationShouldUseTheLockedRunAndSuppressTheSameDaySchedule()
       throws NoSuchMethodException {
     SimpleMeterRegistry registry = new SimpleMeterRegistry();
@@ -190,21 +177,6 @@ class ExemptionExpirySchedulerTest {
     verify(distributedLock).unlock();
     assertThat(counter(registry, "completed")).isEqualTo(1d);
     assertThat(counter(registry, "skipped")).isEqualTo(1d);
-  }
-
-  @Test
-  void expiryTriggersShouldNotRunInProdRtmOnlyMode() {
-    SimpleMeterRegistry registry = new SimpleMeterRegistry();
-    ExemptionExpiryScheduler scheduler = scheduler(registry, fixedClock(), true);
-
-    scheduler.reconcileDueExemptionsOnStartup();
-    scheduler.expireDueExemptions();
-
-    verifyNoInteractions(expiryService);
-    verifyNoInteractions(lockProvider);
-    assertThat(counter(registry, "completed")).isZero();
-    assertThat(counter(registry, "failed")).isZero();
-    assertThat(counter(registry, "skipped")).isEqualTo(2d);
   }
 
   @Test
@@ -428,12 +400,7 @@ class ExemptionExpirySchedulerTest {
   }
 
   private ExemptionExpiryScheduler scheduler(SimpleMeterRegistry registry, Clock clock) {
-    return scheduler(registry, clock, false);
-  }
-
-  private ExemptionExpiryScheduler scheduler(
-      SimpleMeterRegistry registry, Clock clock, boolean prodRtmOnly) {
-    return scheduler(expiryService, lockProvider, registry, clock, prodRtmOnly);
+    return scheduler(expiryService, lockProvider, registry, clock);
   }
 
   private ExemptionExpiryScheduler scheduler(
@@ -441,22 +408,10 @@ class ExemptionExpirySchedulerTest {
       LockProvider provider,
       SimpleMeterRegistry registry,
       Clock clock) {
-    return scheduler(service, provider, registry, clock, false);
-  }
-
-  private ExemptionExpiryScheduler scheduler(
-      ExemptionExpiryService service,
-      LockProvider provider,
-      SimpleMeterRegistry registry,
-      Clock clock,
-      boolean prodRtmOnly) {
-    LexisFeatureProperties featureProperties = new LexisFeatureProperties();
-    featureProperties.setProdRtmOnly(prodRtmOnly);
     return new ExemptionExpiryScheduler(
         service,
         provider,
         registry,
-        featureProperties,
         clock,
         VANCOUVER,
         LOCK_AT_MOST_FOR,

@@ -99,8 +99,6 @@ lexis:
     port: ${LEXIS_VIRUS_SCAN_PORT:3310}
     timeout: ${LEXIS_VIRUS_SCAN_TIMEOUT:10s}
     chunk-size: ${LEXIS_VIRUS_SCAN_CHUNK_SIZE:8192}
-  features:
-    prod-rtm-only: ${LEXIS_PROD_RTM_ONLY:false}
   mail:
     non-production: ${LEXIS_MAIL_NON_PRODUCTION:true}
     environment: ${LEXIS_MAIL_ENVIRONMENT:non-prod}

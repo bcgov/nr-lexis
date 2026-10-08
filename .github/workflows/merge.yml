@@ -24,10 +24,22 @@ jobs:
       pull-requests: read
     outputs:
       pr: ${{ steps.pr.outputs.pr }}
+      backend_image: ${{ steps.images.outputs.backend_image }}
+      frontend_image: ${{ steps.images.outputs.frontend_image }}
+      capture_attempt: ${{ steps.images.outputs.capture_attempt }}
     runs-on: ubuntu-24.04
     steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
       - id: pr
         uses: bcgov/action-get-pr@3931962bf13b3f4702d0013ec7c836f752ff1a3b # v0.3.0
+
+      - name: Resolve candidate image digests
+        id: images
+        env:
+          PR_NUMBER: ${{ steps.pr.outputs.pr }}
+        run: node .github/scripts/release-images.mjs capture
 
   deploy-test:
     name: TEST Deploys (${{ needs.init.outputs.pr }})
@@ -44,7 +56,6 @@ jobs:
       database_host: ${{ secrets.database_host }}
       database_service_name: ${{ secrets.database_service_name }}
       keystore_secret: ${{ secrets.keystore_secret }}
-      lexis_prod_rtm_only: ${{ secrets.lexis_prod_rtm_only }}
       keycloak_sa_client_id: ${{ secrets.keycloak_sa_client_id }}
       keycloak_sa_client_secret: ${{ secrets.keycloak_sa_client_secret }}
       lexis_mail_override_recipients: ${{ secrets.LEXIS_MAIL_OVERRIDE_RECIPIENTS }}
@@ -56,6 +67,8 @@ jobs:
       environment: test
       target: test
       tag: ${{ needs.init.outputs.pr }}
+      backend_image: ${{ needs.init.outputs.backend_image }}
+      frontend_image: ${{ needs.init.outputs.frontend_image }}
       # Keep TEST at 2 replicas until quota can accommodate a third backend pod.
       backend_min_replicas: "2"
       backend_max_replicas: "2"
@@ -79,88 +92,25 @@ jobs:
     with:
       target: test
 
-  deploy-prod:
-    name: PROD Deploys (${{ needs.init.outputs.pr }})
-    # Pause PROD deployments until the deployment restriction is lifted.
-    # TODO: once PROD runs the BC Gov SSO build (after the IDIM team enables PROD Business BCeID),
-    # delete the PROD environment's unused Cognito variables: AWS_COGNITO_ISSUER_URI,
-    # VITE_COGNITO_DOMAIN, VITE_USER_POOLS_ID, VITE_USER_POOLS_WEB_CLIENT_ID, VITE_REDIRECT_SIGN_IN,
-    # VITE_REDIRECT_SIGN_OUT, VITE_LOGOUT_KEYCLOAK_URL, VITE_LOGOUT_KEYCLOAK_CLIENT_ID,
-    # VITE_LOGOUT_SITEMINDER_URL and VITE_ZONE.
-    if: ${{ false }}
-    needs: [tests, init]
-    permissions:
-      contents: read
-    uses: ./.github/workflows/reusable-deploy.yml
-    secrets:
-      oc_namespace: ${{ secrets.oc_namespace }}
-      clamav_namespace: ${{ secrets.clamav_namespace }}
-      oc_token: ${{ secrets.oc_token }}
-      database_user: ${{ secrets.database_user }}
-      database_password: ${{ secrets.database_password }}
-      database_host: ${{ secrets.database_host }}
-      database_service_name: ${{ secrets.database_service_name }}
-      keystore_secret: ${{ secrets.keystore_secret }}
-      lexis_prod_rtm_only: ${{ secrets.lexis_prod_rtm_only }}
-      keycloak_sa_client_id: ${{ secrets.keycloak_sa_client_id }}
-      keycloak_sa_client_secret: ${{ secrets.keycloak_sa_client_secret }}
-      lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}
-      lexis_mail_region_rco_address: ${{ secrets.LEXIS_MAIL_REGION_RCO_ADDRESS }}
-      lexis_mail_region_rni_address: ${{ secrets.LEXIS_MAIL_REGION_RNI_ADDRESS }}
-      lexis_mail_region_rsi_address: ${{ secrets.LEXIS_MAIL_REGION_RSI_ADDRESS }}
-      vanity_tls_certificate: ${{ secrets.VANITY_TLS_CERTIFICATE }}
-      vanity_tls_key: ${{ secrets.VANITY_TLS_KEY }}
-      vanity_tls_ca_certificate: ${{ secrets.VANITY_TLS_CA_CERTIFICATE }}
-    with:
-      environment: prod
-      target: prod
-      tag: ${{ needs.init.outputs.pr }}
-      # Keep PROD at 3 replicas until quota can accommodate a fourth backend pod.
-      backend_min_replicas: "3"
-      backend_max_replicas: "3"
-      frontend_replicas: "3"
-      backend_cpu_request: "400m"
-      backend_memory_request: "1Gi"
-      backend_cpu_limit: "1500m"
-      backend_memory_limit: "1536Mi"
-      expiry_enabled: true
-
-  # Sync Sysdig email alerts for PROD. No-ops cleanly if SYSDIG_API_TOKEN is
-  # unset; alert templates live in monitoring/alerts/.
-  monitor-prod:
-    name: Sysdig Monitor (PROD)
-    if: ${{ false }}
-    needs: [deploy-prod]
+  release-candidate:
+    name: Record tested release candidate
+    needs: [init, tests]
     runs-on: ubuntu-24.04
-    environment: prod
     permissions:
       contents: read
-    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - uses: bcgov/actions/sysdig-monitor@4ad61a784f1c17765b03d8d6de9737c1d3f4c0f2 # v0.5.0
+      - name: Record tested images
+        env:
+          CAPTURE_ATTEMPT: ${{ needs.init.outputs.capture_attempt }}
+          BACKEND_IMAGE: ${{ needs.init.outputs.backend_image }}
+          FRONTEND_IMAGE: ${{ needs.init.outputs.frontend_image }}
+        run: node .github/scripts/release-images.mjs record "$RUNNER_TEMP/release-candidate.json"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          sysdig_api_token: ${{ secrets.SYSDIG_API_TOKEN }}
-          oc_namespace: ${{ secrets.oc_namespace }}
-          app: nr-lexis
-
-  promote:
-    name: Promote Images
-    if: ${{ false }}
-    needs: [deploy-prod, init]
-    runs-on: ubuntu-slim
-    permissions:
-      packages: write
-    strategy:
-      matrix:
-        package: [backend, frontend]
-    timeout-minutes: 1
-    steps:
-      - uses: shrink/actions-docker-registry-tag@e6aaef25c595b6e0edd18bf4c7dbfea3abd43299 # v5
-        with:
-          registry: ghcr.io
-          repository: ${{ github.repository }}/${{ matrix.package }}
-          target: ${{ needs.init.outputs.pr }}
-          tags: prod
+          name: release-candidate-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/release-candidate.json
+          if-no-files-found: error
+          retention-days: 90

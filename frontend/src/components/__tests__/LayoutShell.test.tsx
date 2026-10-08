@@ -107,38 +107,34 @@ describe('Layout shell', () => {
     document.getElementById(NOTIFICATION_REGION_ID)?.remove()
   })
 
-  it.each([false, true])(
-    'shows only federal navigation for an unscoped BCeID reader with rollout mode %s',
-    async (rollout) => {
-      window.config = { VITE_LEXIS_PROD_RTM_ONLY: String(rollout) }
-      const grantedActions = [
-        '/federalApplicationSearch',
-        '/federalApplicationDetails',
-        'viewFederalApplication',
-      ]
-      mockedUseAuth.mockReturnValue(
-        createTestAuthContext({
-          capabilities: createTestCapabilities({
-            principal: 'nexcol-reader',
-            roles: ['FEDERAL_READ_ONLY'],
-            grantedActions,
-          }),
-          defaultRoute: '/federal',
-          canPerform: (action) => grantedActions.includes(action),
+  it('shows only federal navigation for an unscoped BCeID reader', () => {
+    const grantedActions = [
+      '/federalApplicationSearch',
+      '/federalApplicationDetails',
+      'viewFederalApplication',
+    ]
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'nexcol-reader',
+          roles: ['FEDERAL_READ_ONLY'],
+          grantedActions,
         }),
-      )
-      renderLayout('/federal')
-      expect(screen.getByRole('link', { name: 'Application search' })).toHaveAttribute(
-        'href',
-        '/federal',
-      )
-      for (const name of ['Provincial', 'Reports', 'Admin', 'Notifications']) {
-        expect(screen.queryByText(name)).not.toBeInTheDocument()
-      }
-      expect(mockedFetchNotifications).not.toHaveBeenCalled()
-      expect(mockedFetchUserPreferences).not.toHaveBeenCalled()
-    },
-  )
+        defaultRoute: '/federal',
+        canPerform: (action) => grantedActions.includes(action),
+      }),
+    )
+    renderLayout('/federal')
+    expect(screen.getByRole('link', { name: 'Application search' })).toHaveAttribute(
+      'href',
+      '/federal',
+    )
+    for (const name of ['Provincial', 'Reports', 'Admin', 'Notifications']) {
+      expect(screen.queryByText(name)).not.toBeInTheDocument()
+    }
+    expect(mockedFetchNotifications).not.toHaveBeenCalled()
+    expect(mockedFetchUserPreferences).not.toHaveBeenCalled()
+  })
 
   it('uses and persists public-safe defaults when no preferences exist', () => {
     renderLayout('/provincial/review')
@@ -484,31 +480,27 @@ describe('Layout shell', () => {
     expect(averageMarketValuesLink).not.toHaveClass('cds--side-nav__link--active')
   })
 
-  it('shows only the RTM navigation links when PROD RTM-only mode is enabled', () => {
+  it('ignores stale RTM-only runtime configuration for admin navigation', async () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        defaultRoute: '/admin/rtm/emslogamv/upload',
-        canPerform: (action: string) => action === '/lexisAgentAdmin',
-      }),
-    )
 
-    renderLayout('/admin/rtm/emslogamv/upload')
+    renderLayout('/provincial/review')
+
+    for (const name of ['Provincial', 'Federal', 'Reports', 'Admin']) {
+      expect(screen.getByRole('button', { name })).toBeVisible()
+    }
+    await userEvent.click(screen.getByRole('button', { name: 'Admin' }))
 
     expect(screen.getByRole('link', { name: /Average market values/i })).toHaveAttribute(
       'href',
       '/admin/rtm/emslogamv/upload',
     )
-    expect(screen.queryByRole('link', { name: /Average Monthly Values/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /Users & Access/i })).not.toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
-    expect(screen.queryByText('Provincial')).not.toBeInTheDocument()
-    expect(screen.queryByText('Federal')).not.toBeInTheDocument()
-    expect(screen.queryByText('Reports')).not.toBeInTheDocument()
+    expect(screen.getByRole('link', { name: /Multiplication Factor/i })).toHaveAttribute(
+      'href',
+      '/admin/policies/fee',
+    )
   })
 
-  it('preserves normal read-only navigation when PROD RTM-only mode is enabled', () => {
-    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+  it('preserves read-only navigation without write or admin links', () => {
     const grantedActions = [
       '/applicationSearch',
       '/exemptionSearch',

@@ -14,7 +14,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
-import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
@@ -97,7 +96,7 @@ class RegionalAuthorizationRegressionTest {
     var properties = new Binder(new MapConfigurationPropertySource(yaml.getObject()))
         .bind("lexis.authz", LexisAuthorizationProperties.class).get();
     var session = new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER");
-    var authorization = new LexisAuthorizationService(properties, new LexisFeatureProperties(), session);
+    var authorization = new LexisAuthorizationService(properties, session);
     var beans = new StaticListableBeanFactory();
     beans.addBean("exemptions", exemptions);
     beans.addBean("exemptionRpc", exemptionRpc);

@@ -162,14 +162,15 @@ output. Business BCeID browser regression is intentionally not scheduled because
 login attempts can lock the TEST account. See
 [frontend/e2e/README.md](frontend/e2e/README.md) for the required GitHub environment secrets.
 
-Production RTM-only rollout is controlled by the optional GitHub environment secret
-`lexis_prod_rtm_only`. Set it to `true` for PROD to pass `LEXIS_PROD_RTM_ONLY` to the backend and
-`VITE_LEXIS_PROD_RTM_ONLY` to the frontend. In that mode, LEXIS admins retain normal Average Monthly
-Values access, users with `LEXIS_READ_ONLY` retain their existing read-only experience, and users with
-`LEXIS_FEDERAL_READ_ONLY` retain federal application search and read-only details. Administrator
-access takes precedence over either read-only role and remains limited to Average Monthly Values.
-All other application roles are denied. The deployment also forces `LEXIS_EXPIRY_ENABLED=false`;
-changing the secret takes effect on the next deployment.
+Production releases are manual: create a tag on a commit that passed TEST, then run **Release PROD**
+from `main` and supply that tag. The workflow deploys the exact frontend/backend image digests
+recorded by the successful TEST run. Merges and tag creation do not deploy PROD. See
+[the release procedure](docs/architecture.md#image-promotion-model) for prerequisites and rollback.
+
+Production expiry remains disabled independently of application access. The PROD release workflow
+passes `expiry_enabled: false`, setting `LEXIS_EXPIRY_ENABLED=false` for both nightly expiry and
+startup catch-up while legacy owns the job. All modules use their normal role permissions. The
+former `lexis_prod_rtm_only` secret is no longer consumed.
 
 ## Component docs
 

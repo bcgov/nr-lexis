@@ -69,6 +69,18 @@ on:
         description: Container tag
         default: ${{ github.event.number }}
         type: string
+      backend_image:
+        description: Immutable backend image reference; defaults to the PR tag
+        default: ""
+        type: string
+      frontend_image:
+        description: Immutable frontend image reference; defaults to the PR tag
+        default: ""
+        type: string
+      source_ref:
+        description: Commit containing the deployment templates and provisioning script
+        default: ""
+        type: string
       triggers:
         description: Triggers for deployment (paths that must change)
         default: ""
@@ -99,9 +111,6 @@ on:
       keystore_secret:
         description: Oracle keystore passphrase
         required: true
-      lexis_prod_rtm_only:
-        description: Restricts admins to RTM AMV, preserves read-only users, and disables expiry
-        required: false
       keycloak_sa_client_id:
         description: Keycloak service-account client id used to provision LEXIS clients/scopes
         required: false
@@ -165,9 +174,28 @@ jobs:
             exit 1
           fi
 
+      - name: Validate release image
+        if: ${{ inputs.environment != 'dev' }}
+        env:
+          RELEASE_IMAGE: ${{ inputs.backend_image }}
+          IMAGE_REPOSITORY: ghcr.io/${{ github.repository }}/backend
+        run: |
+          if [[ ! "$RELEASE_IMAGE" =~ ^"$IMAGE_REPOSITORY"@sha256:[a-f0-9]{64}$ ]]; then
+            echo "::error::TEST and PROD require the repository's backend image pinned by SHA-256 digest."
+            exit 1
+          fi
+
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          ref: ${{ inputs.source_ref || github.sha }}
+
+      # The deployer performs its own checkout. Keep the selected release templates
+      # outside the workspace so that checkout cannot replace them with newer main files.
+      - name: Stage backend template
+        run: |
+          mkdir -p "$RUNNER_TEMP/lexis-deploy"
+          cp backend/openshift.deploy.yml "$RUNNER_TEMP/lexis-deploy/backend.yml"
 
       # DEV deployments are ephemeral PR previews; gateway client provisioning is TEST/PROD-only.
       - name: Ensure Keycloak scopes and NEXCOL client
@@ -187,8 +215,7 @@ jobs:
           DATABASE_USER: ${{ secrets.database_user }}
           DATABASE_PASSWORD: ${{ secrets.database_password }}
           KEYSTORE_SECRET: ${{ secrets.keystore_secret }}
-          LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
-          LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && secrets.lexis_prod_rtm_only != 'true' && 'true' || 'false' }}
+          LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}
           LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}
           LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}
           LEXIS_EXPIRY_LOCK_AT_MOST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_MOST_FOR || 'PT6H' }}
@@ -209,7 +236,7 @@ jobs:
           LEXIS_MAIL_REGION_RNI_ADDRESS: ${{ secrets.lexis_mail_region_rni_address }}
           LEXIS_MAIL_REGION_RSI_ADDRESS: ${{ secrets.lexis_mail_region_rsi_address }}
         with:
-          file: backend/openshift.deploy.yml
+          file: ${{ runner.temp }}/lexis-deploy/backend.yml
           # PR lite mode produces an invalid strategy for this RollingUpdate deployment.
           lite_mode: false
           oc_namespace: ${{ secrets.oc_namespace }}
@@ -220,7 +247,7 @@ jobs:
           parameters:
             -p ZONE="${{ inputs.target }}"
             -p NAME="${{ github.event.repository.name }}"
-            -p IMAGE_TAG="${{ inputs.tag }}"
+            -p IMAGE_REF="${{ inputs.backend_image || format('ghcr.io/{0}/backend:{1}', github.repository, inputs.tag) }}"
             -p ROLLOUT_TRIGGER="${{ github.run_id }}-${{ github.run_attempt }}"
             -p MIN_REPLICAS="${{ inputs.backend_min_replicas }}"
             -p MAX_REPLICAS="${{ inputs.backend_max_replicas }}"
@@ -238,7 +265,6 @@ jobs:
             -p DATABASE_PASSWORD="$DATABASE_PASSWORD"
             -p KEYSTORE_SECRET="$KEYSTORE_SECRET"
             -p LEXIS_VIRUS_SCAN_HOST="clamav.${{ secrets.clamav_namespace }}.svc"
-            -p LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
             -p LEXIS_EXPIRY_ENABLED="$LEXIS_EXPIRY_ENABLED"
             -p LEXIS_EXPIRY_CRON="$LEXIS_EXPIRY_CRON"
             -p LEXIS_EXPIRY_ZONE="$LEXIS_EXPIRY_ZONE"
@@ -287,6 +313,29 @@ jobs:
             exit 1
           fi
 
+      - name: Validate release image
+        if: ${{ inputs.environment != 'dev' }}
+        env:
+          RELEASE_IMAGE: ${{ inputs.frontend_image }}
+          IMAGE_REPOSITORY: ghcr.io/${{ github.repository }}/frontend
+        run: |
+          if [[ ! "$RELEASE_IMAGE" =~ ^"$IMAGE_REPOSITORY"@sha256:[a-f0-9]{64}$ ]]; then
+            echo "::error::TEST and PROD require the repository's frontend image pinned by SHA-256 digest."
+            exit 1
+          fi
+
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+          ref: ${{ inputs.source_ref || github.sha }}
+
+      - name: Stage frontend templates
+        run: |
+          mkdir -p "$RUNNER_TEMP/lexis-deploy"
+          cp frontend/openshift.deploy.yml "$RUNNER_TEMP/lexis-deploy/frontend.yml"
+          cp frontend/openshift.route.yml "$RUNNER_TEMP/lexis-deploy/route.yml"
+          cp frontend/openshift.vanity-route.yml "$RUNNER_TEMP/lexis-deploy/vanity-route.yml"
+
       - name: Validate PROD vanity Route configuration
         if: ${{ inputs.target == 'prod' }}
         env:
@@ -304,10 +353,8 @@ jobs:
 
       - uses: bcgov/action-deployer-openshift@bb9d143f4f03187239580c17c4b77da04cdb6e66 # v4.2.2
         id: deploy
-        env:
-          LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}
         with:
-          file: frontend/openshift.deploy.yml
+          file: ${{ runner.temp }}/lexis-deploy/frontend.yml
           oc_namespace: ${{ secrets.oc_namespace }}
           oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}
@@ -316,7 +363,7 @@ jobs:
           parameters:
             -p ZONE="${{ inputs.target }}"
             -p NAME="${{ github.event.repository.name }}"
-            -p IMAGE_TAG="${{ inputs.tag }}"
+            -p IMAGE_REF="${{ inputs.frontend_image || format('ghcr.io/{0}/frontend:{1}', github.repository, inputs.tag) }}"
             -p ROLLOUT_TRIGGER="${{ github.run_id }}-${{ github.run_attempt }}"
             -p REPLICAS="${{ inputs.frontend_replicas }}"
             -p MIN_CPU="${{ inputs.frontend_cpu_request }}"
@@ -328,7 +375,6 @@ jobs:
             -p VITE_OIDC_IDIR_HINT="${{ vars.LEXIS_OIDC_IDIR_HINT || 'azureidir' }}"
             -p VITE_OIDC_BCEID_HINT="${{ vars.LEXIS_OIDC_BCEID_HINT || 'bceidbusiness' }}"
             -p VITE_OIDC_SITEMINDER_LOGOUT_URL="${{ vars.LEXIS_OIDC_SITEMINDER_LOGOUT_URL || (inputs.environment == 'prod' && 'https://logon7.gov.bc.ca/clp-cgi/logoff.cgi' || 'https://logontest7.gov.bc.ca/clp-cgi/logoff.cgi') }}"
-            -p VITE_LEXIS_PROD_RTM_ONLY="$LEXIS_PROD_RTM_ONLY"
             -p VITE_LEXIS_REPORT_ENDPOINT_BASE="${{ vars.VITE_LEXIS_REPORT_ENDPOINT_BASE }}"
             -p VITE_LEXIS_REPORT_API_BASE="${{ vars.VITE_LEXIS_REPORT_API_BASE }}"
           triggers: ${{ inputs.triggers }}
@@ -337,7 +383,7 @@ jobs:
         if: ${{ inputs.target != 'prod' }}
         uses: bcgov/action-deployer-openshift@bb9d143f4f03187239580c17c4b77da04cdb6e66 # v4.2.2
         with:
-          file: frontend/openshift.route.yml
+          file: ${{ runner.temp }}/lexis-deploy/route.yml
           oc_namespace: ${{ secrets.oc_namespace }}
           oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}
@@ -357,7 +403,7 @@ jobs:
           VANITY_TLS_KEY: ${{ secrets.vanity_tls_key }}
           VANITY_TLS_CA_CERTIFICATE: ${{ secrets.vanity_tls_ca_certificate }}
         with:
-          file: frontend/openshift.vanity-route.yml
+          file: ${{ runner.temp }}/lexis-deploy/vanity-route.yml
           oc_namespace: ${{ secrets.oc_namespace }}
           oc_server: ${{ vars.oc_server }}
           oc_token: ${{ secrets.oc_token }}
@@ -375,7 +421,10 @@ jobs:
     name: Record deployment result
     needs: [backend, frontend]
     if: ${{ always() }}
-    environment: ${{ inputs.environment }}
+    environment:
+      name: ${{ inputs.environment }}
+      # Release PROD records the tagged commit, rather than the dispatcher's main SHA.
+      deployment: ${{ inputs.environment != 'prod' }}
     runs-on: ubuntu-slim
     timeout-minutes: 1
     permissions: {}

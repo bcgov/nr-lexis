@@ -3,7 +3,6 @@ package ca.bc.gov.mof.lexis.service.session;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
-import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
@@ -16,7 +15,6 @@ class LexisStaffRegionConstraintTest {
   private static final String APPROVE = "approveExemption";
   private static final String REGIONAL_APP = "LEXIS_APPLICATION_APPROVER_REGION-CARIBOO";
   private final LexisSessionService sessionService = new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER");
-  private final LexisFeatureProperties features = new LexisFeatureProperties();
   private final LexisAuthorizationService service = service();
 
   @Test
@@ -86,13 +84,11 @@ class LexisStaffRegionConstraintTest {
   }
 
   @Test
-  void administratorRemainsGlobalWithinItsEnabledActions() {
+  void administratorRemainsGlobalForAllActions() {
     var authorities = List.of("LEXIS_ADMIN", REGIONAL_APP);
     assertThat(service.resolveStaffRegionConstraint(authorities, WRITE).restricted()).isFalse();
     assertThat(service.resolveStaffRegionConstraint(authorities, APPROVE).restricted()).isFalse();
 
-    features.setProdRtmOnly(true);
-    assertThat(service.resolveStaffRegionConstraint(authorities, WRITE).denied()).isTrue();
     assertThat(service.resolveStaffRegionConstraint(authorities, "/lexisAgentAdmin").restricted()).isFalse();
   }
 
@@ -164,6 +160,6 @@ class LexisStaffRegionConstraintTest {
         "LEXIS_READ_ONLY", List.of(READ),
         "LEXIS_APPLICATION_APPROVER", List.of(READ, WRITE),
         "LEXIS_EXEMPTION_APPROVER", List.of(READ, APPROVE)));
-    return new LexisAuthorizationService(properties, features, sessionService);
+    return new LexisAuthorizationService(properties, sessionService);
   }
 }

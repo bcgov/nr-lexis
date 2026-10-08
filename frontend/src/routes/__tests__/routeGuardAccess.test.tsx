@@ -310,23 +310,16 @@ describe('Protected route guard access', () => {
     expect(screen.getByLabelText('Application submission file')).toBeInTheDocument()
   })
 
-  it('blocks admin non-RTM protected routes when PROD RTM-only mode is enabled', async () => {
+  it('ignores stale RTM-only runtime configuration for authorized protected routes', async () => {
     window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        canPerform: (action: string) => action === '/lexisAgentAdmin',
-      }),
-    )
+    mockedUseAuth.mockReturnValue(createTestAuthContext())
 
-    renderWithPath('/admin/policies/fee')
+    renderWithPath('/reports/biweeklyListing')
 
-    expect(
-      await screen.findByRole('heading', { name: "You don't have access to view this page" }),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Reports' })).toBeInTheDocument()
   })
 
-  it('allows normal read-only protected routes when PROD RTM-only mode is enabled', async () => {
-    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+  it('allows read-only protected routes with granted actions', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -348,7 +341,6 @@ describe('Protected route guard access', () => {
   })
 
   it('redirects the disabled AMV GUI route to the spreadsheet upload', async () => {
-    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action === '/lexisAgentAdmin',
@@ -363,8 +355,7 @@ describe('Protected route guard access', () => {
     expect(router.state.location.pathname).toBe('/admin/rtm/emslogamv/upload')
   })
 
-  it('allows the AMV spreadsheet upload route when PROD RTM-only mode is enabled', async () => {
-    window.config = { VITE_LEXIS_PROD_RTM_ONLY: 'true' }
+  it('allows the AMV spreadsheet upload route with the admin action', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action === '/lexisAgentAdmin',

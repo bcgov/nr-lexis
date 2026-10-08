@@ -28,29 +28,30 @@ reconciliation after the application is ready. The reconciliation uses the same 
 idempotent expiry service as the nightly trigger, so only a lock holder runs it and exemptions that
 were already processed are harmlessly ignored. Lock contention or a failed startup reconciliation
 does not fail pod startup or claim the local run date, so another replica or a later trigger can
-retry. Both startup reconciliation and the nightly trigger are skipped before locking or mutation
-while `LEXIS_PROD_RTM_ONLY=true`, because the legacy application remains responsible for expiry
-during the temporary RTM-only rollout.
+retry. Setting `LEXIS_EXPIRY_ENABLED=false` removes the scheduler and its startup listener, so
+neither trigger can lock or mutate records. Keep it false while the legacy application remains
+responsible for expiry. This setting does not affect application modules or role-based access.
 
 ## Configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `LEXIS_PROD_RTM_ONLY` | `false` | Prevents every modern expiry trigger while legacy remains active. |
-| `LEXIS_EXPIRY_ENABLED` | `true` | Creates the expiry scheduler; set false only as an operational kill switch. |
+| `LEXIS_EXPIRY_ENABLED` | `true` | Enables nightly expiry and startup catch-up; false suppresses both. |
 | `LEXIS_EXPIRY_CRON` | `30 0 0 * * *` | Spring six-field cron expression. |
 | `LEXIS_EXPIRY_ZONE` | `America/Vancouver` | Scheduler time zone. |
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | `PT6H` | Maximum duration of one Oracle scheduler lock. |
 | `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | `PT5M` | Minimum duration of one Oracle scheduler lock. |
 
-The deployment workflow forces `LEXIS_EXPIRY_ENABLED=false` whenever the `lexis_prod_rtm_only`
-environment secret is `true`. Re-enabling expiry requires clearing the flag and redeploying; missed
-exemptions remain eligible for the next nightly run.
+The deployment workflow maps its `expiry_enabled` input directly to `LEXIS_EXPIRY_ENABLED`.
+PROD defaults to disabled independently of module access. Enabling expiry requires setting
+`expiry_enabled=true` and redeploying; missed exemptions remain eligible for startup catch-up and
+the next nightly run.
 
 ## Operations
 
 Prometheus exposes completed, failed, and skipped run counters plus gauges for
 the last completed run's timestamp, candidate count, expired count, and deferred count. A separate
 gauge records the last top-level failure timestamp. These metrics are process-local and reset when
-the backend pod restarts. Lock contention, lock-provider failures, and RTM-only suppression increment
-the skipped counter; deferred exemptions remain eligible for the next run.
+the backend pod restarts. Lock contention and lock-provider failures increment the skipped counter;
+deferred exemptions remain eligible for the next run. When expiry is disabled, the scheduler's
+metrics are not registered.
