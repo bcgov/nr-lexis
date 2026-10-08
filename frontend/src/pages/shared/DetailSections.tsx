@@ -27,7 +27,7 @@ const fieldRows = (fields: DetailField[] | DetailField[][]): DetailField[][] =>
     ? (fields as DetailField[][])
     : [fields as DetailField[]]
 
-export function DetailFieldGrid({ fields }: { fields: DetailField[] | DetailField[][] }) {
+function DetailFieldGrid({ fields }: { fields: DetailField[] | DetailField[][] }) {
   return (
     <RecordFieldGrid>
       {fieldRows(fields).map((row) => (
