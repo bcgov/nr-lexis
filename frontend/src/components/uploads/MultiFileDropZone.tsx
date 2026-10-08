@@ -133,6 +133,7 @@ function MultiFileDropZone({
       />
 
       <div
+        id={`${inputId}-drop-zone`}
         className={dropZoneClassName}
         role="button"
         tabIndex={disabled ? -1 : 0}

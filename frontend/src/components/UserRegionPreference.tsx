@@ -117,7 +117,7 @@ export default function UserRegionPreference({ active }: UserRegionPreferencePro
       <div className="profile-panel__preferences-actions">
         <Button
           kind="primary"
-          size="sm"
+          size="md"
           disabled={isLoading || isSaving || !hasLoaded || selectedZone === savedZone}
           renderIcon={isSaving ? PendingIcon : undefined}
           onClick={() => void savePreference()}

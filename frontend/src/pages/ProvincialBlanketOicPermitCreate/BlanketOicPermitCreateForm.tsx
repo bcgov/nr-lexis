@@ -1,8 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useRef, useState, type ReactNode } from 'react'
 import {
   Button,
   Checkbox,
-  InlineLoading,
   InlineNotification,
   Select,
   SelectItem,
@@ -16,6 +15,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
+import { AddDocument, Cardboard, Invoice } from '@carbon/pictograms-react'
 import {
   Box,
   Certificate,
@@ -23,8 +23,10 @@ import {
   DocumentAttachment,
   EarthFilled,
   Enterprise,
+  Save,
 } from '@carbon/icons-react'
 import { Link, useLocation } from 'react-router-dom'
+import DetailCardTitle from '@/components/DetailCardTitle'
 import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
@@ -62,8 +64,9 @@ import { resolveBlanketOicRegionContext } from './region-context'
 
 import './BlanketOicPermitCreateForm.scss'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
-import { displayValue } from '@/utils/display-value'
-import { formatVolume } from '@/utils/volume'
+import { ClientDetailsRows } from '@/pages/shared/ClientDetailsRows'
+import { RecordField, RecordFieldGrid, RecordFieldRow } from '@/pages/shared/RecordFieldGrid'
+import { displayVolume, formatVolume } from '@/utils/volume'
 
 type BlanketOicPermitForm = {
   permitSubmitDate: string
@@ -99,12 +102,23 @@ type PendingClientLookup = { clientNumber: string; promise: Promise<ClientLookup
 
 type BlanketOicPermitCreateFormProps = {
   exemptionNumber: string
+  approvedExemptionVolume?: number | null
+  exemptionVolumeRemaining?: number | null
   regionOptions: IdTextOption[]
   defaultRegionNumbers: string[]
   onCancel: () => void
   onCreated: (permitNumber: string) => void
   onUnknownOutcome: (message: string) => void
+  /** Places the page actions (Cancel, Save permit) and the form; the page puts the actions on its title row. */
+  layout?: (parts: { actions: ReactNode; content: ReactNode }) => ReactNode
 }
+
+const defaultLayout = ({ actions, content }: { actions: ReactNode; content: ReactNode }) => (
+  <>
+    {actions}
+    {content}
+  </>
+)
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
@@ -317,10 +331,10 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
   }
 
   if (agentUsed) {
-    errors.agentClientNumber = clientNumberError(form.agentClientNumber, 'Client number')
+    errors.agentClientNumber = clientNumberError(form.agentClientNumber, 'Agent client number')
     errors.agentClientLocation = form.agentClientLocation.trim()
       ? undefined
-      : 'Client location is required.'
+      : 'Agent client location is required.'
   }
 
   return Object.fromEntries(Object.entries(errors).filter(([, error]) => Boolean(error)))
@@ -328,11 +342,14 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
 
 const BlanketOicPermitCreateForm = ({
   exemptionNumber,
+  approvedExemptionVolume,
+  exemptionVolumeRemaining,
   regionOptions,
   defaultRegionNumbers,
   onCancel,
   onCreated,
   onUnknownOutcome,
+  layout = defaultLayout,
 }: BlanketOicPermitCreateFormProps) => {
   const { canPerform } = useAuth()
   const canReviewPermits = canPerform('/permitsReview')
@@ -680,36 +697,6 @@ const BlanketOicPermitCreateForm = ({
     }
   }
 
-  const renderClientDetails = (kind: ClientKind) => {
-    const clientData = kind === 'owner' ? ownerClientData : agentClientData
-    const loading = kind === 'owner' ? ownerLookupLoading : agentLookupLoading
-    const title = kind === 'owner' ? 'Applicant details' : 'Agent details'
-    if (loading) return <InlineLoading description={`Loading ${title.toLowerCase()}…`} />
-    if (!clientData) return null
-
-    return (
-      <section aria-label={title} className="application-client-summary">
-        <dl className="detail-field-grid">
-          {[
-            ['Address', clientData.address],
-            ['City', clientData.city],
-            ['Province', clientData.province],
-            ['Postal code', clientData.postalCode],
-            ['Country', clientData.country],
-            ['Phone number', clientData.phone],
-            ['Fax number', clientData.fax],
-            ['Email address', clientData.email],
-          ].map(([label, value]) => (
-            <div key={label} className="detail-field-item">
-              <dt className="detail-field-label">{label}</dt>
-              <dd className="detail-field-value">{displayValue(value)}</dd>
-            </div>
-          ))}
-        </dl>
-      </section>
-    )
-  }
-
   const markDraftSaved = (nextForm: BlanketOicPermitForm) => {
     draftBaselineRef.current = { form: nextForm, agentUsed }
     formEditedRef.current = false
@@ -855,7 +842,24 @@ const BlanketOicPermitCreateForm = ({
     if (!saving) onCancel()
   }
 
-  return (
+  const actions = (
+    <>
+      <Button kind="tertiary" size="md" disabled={saving} onClick={close}>
+        Cancel
+      </Button>
+      <Button
+        kind="primary"
+        size="md"
+        disabled={saving}
+        renderIcon={saving ? PendingIcon : Save}
+        onClick={() => void createPermit()}
+      >
+        {saving ? 'Saving…' : 'Save permit'}
+      </Button>
+    </>
+  )
+
+  const content = (
     <section aria-label="Blanket OIC permit details">
       {invalidTabLabels.length > 0 || errorMessages.length > 0 ? (
         <div ref={errorSummaryRef} tabIndex={-1} role="group" aria-label="Permit needs attention">
@@ -889,24 +893,6 @@ const BlanketOicPermitCreateForm = ({
           hideCloseButton
         />
       )}
-      <div
-        className="legacy-search-actions application-create-actions"
-        role="group"
-        aria-label="Blanket OIC permit actions"
-      >
-        <Button kind="tertiary" disabled={saving} onClick={close}>
-          Cancel
-        </Button>
-        <Button
-          kind="primary"
-          disabled={saving}
-          renderIcon={saving ? PendingIcon : undefined}
-          onClick={() => void createPermit()}
-        >
-          {saving ? 'Saving…' : 'Save permit'}
-        </Button>
-      </div>
-
       <Tabs
         selectedIndex={selectedTabIndex}
         onChange={({ selectedIndex }) => setSelectedTabIndex(selectedIndex)}
@@ -948,186 +934,246 @@ const BlanketOicPermitCreateForm = ({
         <TabPanels>
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Permit">
-              <h2 className="detail-tile-title">Permit details</h2>
+              <DetailCardTitle icon={Certificate}>Permit details</DetailCardTitle>
               <RequiredFieldsLegend className="boic-permit-required-hint" />
               <fieldset className="legacy-form-fieldset boic-permit-details">
                 <legend className="cds--visually-hidden">Permit details</legend>
-                <dl className="detail-field-grid boic-permit-details__status">
-                  <div className="detail-field-item">
-                    <dt className="detail-field-label">{requiredLabel('Status')}</dt>
-                    <dd className="detail-field-value">Active</dd>
-                  </div>
-                </dl>
-                <dl className="detail-field-grid boic-permit-details__pair">
-                  <div className="detail-field-item">
-                    <dt className="detail-field-label">Exemption number</dt>
-                    <dd className="detail-field-value">
-                      <Link
-                        className="cds--link"
-                        to={
-                          exemptionReturnTo?.to ??
-                          `/provincial/exemption/${encodeURIComponent(exemptionNumber)}`
-                        }
-                        state={exemptionReturnTo?.state}
-                      >
-                        {exemptionNumber}
-                      </Link>
-                    </dd>
-                  </div>
-                  <div className="detail-field-item">
-                    <dt className="detail-field-label">Exemption type</dt>
-                    <dd className="detail-field-value">Blanket OIC</dd>
-                  </div>
-                </dl>
-                <div className="boic-permit-details__region">
-                  <Select
-                    id="boic-permit-region"
-                    labelText={requiredLabel('Region')}
-                    aria-required="true"
-                    value={form.orgUnitNumber}
-                    invalid={!!fieldError('orgUnitNumber')}
-                    invalidText={fieldError('orgUnitNumber')}
-                    disabled={regionContext.options.length === 0}
-                    onChange={(event) => setField('orgUnitNumber', event.target.value)}
-                  >
-                    <SelectItem value="" text="Select a region" />
-                    {regionContext.options.map((option) => (
-                      <SelectItem key={option.id} value={option.id} text={option.text} />
-                    ))}
-                  </Select>
-                </div>
-                <div className="boic-permit-details__dates">
-                  <IsoDatePicker
-                    id="boic-permit-submit-date"
-                    labelText={requiredLabel('Submit date')}
-                    required
-                    value={form.permitSubmitDate}
-                    invalid={!!fieldError('permitSubmitDate')}
-                    invalidText={fieldError('permitSubmitDate')}
-                    onChange={(value) => setField('permitSubmitDate', value)}
-                  />
-                  <IsoDatePicker
-                    id="boic-permit-issue-date"
-                    labelText="Issued date"
-                    disabled={!canReviewPermits}
-                    value={form.permitIssueDate}
-                    invalid={!!fieldError('permitIssueDate')}
-                    invalidText={fieldError('permitIssueDate')}
-                    onChange={(value) => setField('permitIssueDate', value)}
-                  />
-                  <IsoDatePicker
-                    id="boic-permit-expiry-date"
-                    labelText="Expiry date"
-                    disabled={!canReviewPermits}
-                    value={form.permitExpiryDate}
-                    invalid={!!fieldError('permitExpiryDate')}
-                    invalidText={fieldError('permitExpiryDate')}
-                    onChange={(value) => setField('permitExpiryDate', value)}
-                  />
-                </div>
-                <div className="boic-permit-details__pair">
-                  <TextInput
-                    id="boic-permit-request-pieces"
-                    labelText={requiredLabel('Permit request pieces')}
-                    aria-required="true"
-                    value={form.oicPermitTotalPieces}
-                    invalid={!!fieldError('oicPermitTotalPieces')}
-                    invalidText={fieldError('oicPermitTotalPieces')}
-                    onChange={(event) => setField('oicPermitTotalPieces', event.target.value)}
-                  />
-                  <TextInput
-                    id="boic-permit-request-volume"
-                    labelText={requiredLabel('Permit request volume (m³)')}
-                    aria-required="true"
-                    value={form.oicPermitTotalVolume}
-                    invalid={!!fieldError('oicPermitTotalVolume')}
-                    invalidText={fieldError('oicPermitTotalVolume')}
-                    onChange={(event) => setField('oicPermitTotalVolume', event.target.value)}
-                  />
-                </div>
-                <dl className="detail-field-grid boic-permit-details__pair">
-                  <div className="detail-field-item">
-                    <dt className="detail-field-label">Current permit pieces</dt>
-                    <dd className="detail-field-value">0</dd>
-                  </div>
-                  <div className="detail-field-item">
-                    <dt className="detail-field-label">Current permit volume (m³)</dt>
-                    <dd className="detail-field-value">{formatVolume(0)}</dd>
-                  </div>
-                </dl>
-                <div className="boic-permit-details__remarks">
-                  <TextArea
-                    id="boic-permit-remarks"
-                    labelText="Remarks"
-                    enableCounter
-                    maxCount={250}
-                    value={form.permitRemarks}
-                    invalid={!!fieldError('permitRemarks')}
-                    invalidText={fieldError('permitRemarks')}
-                    maxLength={250}
-                    onChange={(event) => setField('permitRemarks', event.target.value)}
-                  />
-                </div>
+                <RecordFieldGrid editing>
+                  <RecordFieldRow>
+                    <RecordField label={requiredLabel('Status')} value="Active" />
+                  </RecordFieldRow>
+                  <RecordFieldRow>
+                    <RecordField
+                      label="Exemption number"
+                      value={
+                        <Link
+                          className="cds--link"
+                          to={
+                            exemptionReturnTo?.to ??
+                            `/provincial/exemption/${encodeURIComponent(exemptionNumber)}`
+                          }
+                          state={exemptionReturnTo?.state}
+                        >
+                          {exemptionNumber}
+                        </Link>
+                      }
+                    />
+                    <RecordField label="Exemption type" value="Blanket OIC" />
+                    <RecordField
+                      label="Region"
+                      span="wide"
+                      edit={
+                        <Select
+                          id="boic-permit-region"
+                          labelText={requiredLabel('Region')}
+                          aria-required="true"
+                          value={form.orgUnitNumber}
+                          invalid={!!fieldError('orgUnitNumber')}
+                          invalidText={fieldError('orgUnitNumber')}
+                          disabled={regionContext.options.length === 0}
+                          onChange={(event) => setField('orgUnitNumber', event.target.value)}
+                        >
+                          <SelectItem value="" text="Select a region" />
+                          {regionContext.options.map((option) => (
+                            <SelectItem key={option.id} value={option.id} text={option.text} />
+                          ))}
+                        </Select>
+                      }
+                    />
+                  </RecordFieldRow>
+                  <RecordFieldRow>
+                    <RecordField
+                      label="Submit date"
+                      edit={
+                        <IsoDatePicker
+                          id="boic-permit-submit-date"
+                          labelText={requiredLabel('Submit date')}
+                          required
+                          value={form.permitSubmitDate}
+                          invalid={!!fieldError('permitSubmitDate')}
+                          invalidText={fieldError('permitSubmitDate')}
+                          onChange={(value) => setField('permitSubmitDate', value)}
+                        />
+                      }
+                    />
+                    <RecordField
+                      label="Issued date"
+                      edit={
+                        <IsoDatePicker
+                          id="boic-permit-issue-date"
+                          labelText="Issued date"
+                          disabled={!canReviewPermits}
+                          value={form.permitIssueDate}
+                          invalid={!!fieldError('permitIssueDate')}
+                          invalidText={fieldError('permitIssueDate')}
+                          onChange={(value) => setField('permitIssueDate', value)}
+                        />
+                      }
+                    />
+                    <RecordField
+                      label="Expiry date"
+                      edit={
+                        <IsoDatePicker
+                          id="boic-permit-expiry-date"
+                          labelText="Expiry date"
+                          disabled={!canReviewPermits}
+                          value={form.permitExpiryDate}
+                          invalid={!!fieldError('permitExpiryDate')}
+                          invalidText={fieldError('permitExpiryDate')}
+                          onChange={(value) => setField('permitExpiryDate', value)}
+                        />
+                      }
+                    />
+                  </RecordFieldRow>
+                  <RecordFieldRow>
+                    <RecordField
+                      label="Total exemption volume (m³)"
+                      value={displayVolume(approvedExemptionVolume)}
+                    />
+                    <RecordField
+                      label="Total volume remaining (m³)"
+                      value={displayVolume(exemptionVolumeRemaining)}
+                    />
+                    <RecordField label="Current permit pieces" value={0} />
+                    <RecordField label="Current permit volume (m³)" value={formatVolume(0)} />
+                  </RecordFieldRow>
+                  <RecordFieldRow>
+                    <RecordField
+                      label="Permit request pieces"
+                      edit={
+                        <TextInput
+                          id="boic-permit-request-pieces"
+                          labelText={requiredLabel('Permit request pieces')}
+                          aria-required="true"
+                          value={form.oicPermitTotalPieces}
+                          invalid={!!fieldError('oicPermitTotalPieces')}
+                          invalidText={fieldError('oicPermitTotalPieces')}
+                          onChange={(event) => setField('oicPermitTotalPieces', event.target.value)}
+                        />
+                      }
+                    />
+                    <RecordField
+                      label="Permit request volume (m³)"
+                      edit={
+                        <TextInput
+                          id="boic-permit-request-volume"
+                          labelText={requiredLabel('Permit request volume (m³)')}
+                          aria-required="true"
+                          value={form.oicPermitTotalVolume}
+                          invalid={!!fieldError('oicPermitTotalVolume')}
+                          invalidText={fieldError('oicPermitTotalVolume')}
+                          onChange={(event) => setField('oicPermitTotalVolume', event.target.value)}
+                        />
+                      }
+                    />
+                  </RecordFieldRow>
+                  <RecordFieldRow>
+                    <RecordField
+                      label="Remarks"
+                      span="full"
+                      edit={
+                        <TextArea
+                          id="boic-permit-remarks"
+                          labelText="Remarks"
+                          enableCounter
+                          maxCount={250}
+                          value={form.permitRemarks}
+                          invalid={!!fieldError('permitRemarks')}
+                          invalidText={fieldError('permitRemarks')}
+                          maxLength={250}
+                          onChange={(event) => setField('permitRemarks', event.target.value)}
+                        />
+                      }
+                    />
+                  </RecordFieldRow>
+                </RecordFieldGrid>
               </fieldset>
             </Tile>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Applicant">
-              <h2 className="detail-tile-title">Applicant details</h2>
+              <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
               <RequiredFieldsLegend className="boic-permit-required-hint" />
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Applicant</legend>
-                <div className="legacy-search-grid">
-                  <ForestClientComboBox
-                    id="boic-permit-owner-client"
-                    labelText={requiredLabel('Client')}
-                    value={form.ownerClientNumber}
-                    resetKey={clientSearchResetKey}
-                    counterpartyClientNumber={form.agentClientNumber}
-                    required
-                    invalid={
-                      !!fieldError('ownerClientNumber') ||
-                      (ownerLookupAttempted &&
-                        !ownerLookupLoading &&
-                        !ownerLocations.some(isSelectableClientLocation))
-                    }
-                    invalidText={
-                      fieldError('ownerClientNumber') ||
-                      'No verified locations were found for this applicant.'
-                    }
-                    onBlur={() => {
-                      if (form.ownerClientNumber.trim()) {
-                        void requestClientLocations('owner')
-                      }
+                <h3 className="permit-client-subheading">Owner</h3>
+                <RecordFieldGrid editing>
+                  <ClientDetailsRows
+                    client={{
+                      label: 'Client',
+                      edit: () => (
+                        <ForestClientComboBox
+                          id="boic-permit-owner-client"
+                          labelText={requiredLabel('Client')}
+                          helperText="Enter name, acronym, or client number (min. 3 characters)"
+                          value={form.ownerClientNumber}
+                          resetKey={clientSearchResetKey}
+                          counterpartyClientNumber={form.agentClientNumber}
+                          required
+                          invalid={
+                            !!fieldError('ownerClientNumber') ||
+                            (ownerLookupAttempted &&
+                              !ownerLookupLoading &&
+                              !ownerLocations.some(isSelectableClientLocation))
+                          }
+                          invalidText={
+                            fieldError('ownerClientNumber') ||
+                            'No verified locations were found for this applicant.'
+                          }
+                          onBlur={() => {
+                            if (form.ownerClientNumber.trim()) {
+                              void requestClientLocations('owner')
+                            }
+                          }}
+                          onChange={(ownerClientNumber) => selectClient('owner', ownerClientNumber)}
+                        />
+                      ),
                     }}
-                    onChange={(ownerClientNumber) => selectClient('owner', ownerClientNumber)}
+                    location={{
+                      label: 'Client location',
+                      edit: () => (
+                        <Select
+                          id="boic-permit-owner-location"
+                          labelText={requiredLabel('Client location')}
+                          aria-required="true"
+                          helperText={
+                            form.ownerClientNumber.trim()
+                              ? undefined
+                              : 'Available once a client is selected.'
+                          }
+                          value={form.ownerClientLocation}
+                          invalid={!!fieldError('ownerClientLocation')}
+                          invalidText={fieldError('ownerClientLocation')}
+                          disabled={
+                            ownerLookupLoading || !ownerLocations.some(isSelectableClientLocation)
+                          }
+                          onChange={(event) =>
+                            void selectClientLocation('owner', event.target.value)
+                          }
+                        >
+                          <SelectItem
+                            value=""
+                            text={ownerLookupLoading ? 'Loading locations' : 'Select location'}
+                          />
+                          {ownerLocations.filter(isSelectableClientLocation).map((location) => (
+                            <SelectItem
+                              key={location.locationCode}
+                              value={location.locationCode}
+                              text={clientLocationLabel(
+                                location.locationCode,
+                                location.locationName,
+                              )}
+                            />
+                          ))}
+                        </Select>
+                      ),
+                    }}
+                    clientData={ownerClientData}
+                    isLoading={ownerLookupLoading}
+                    showDetails={!!form.ownerClientLocation}
                   />
-                  <Select
-                    id="boic-permit-owner-location"
-                    labelText={requiredLabel('Client location')}
-                    aria-required="true"
-                    value={form.ownerClientLocation}
-                    invalid={!!fieldError('ownerClientLocation')}
-                    invalidText={fieldError('ownerClientLocation')}
-                    disabled={
-                      ownerLookupLoading || !ownerLocations.some(isSelectableClientLocation)
-                    }
-                    onChange={(event) => void selectClientLocation('owner', event.target.value)}
-                  >
-                    <SelectItem
-                      value=""
-                      text={ownerLookupLoading ? 'Loading locations' : 'Select a client location'}
-                    />
-                    {ownerLocations.filter(isSelectableClientLocation).map((location) => (
-                      <SelectItem
-                        key={location.locationCode}
-                        value={location.locationCode}
-                        text={clientLocationLabel(location.locationCode, location.locationName)}
-                      />
-                    ))}
-                  </Select>
-                </div>
-                {renderClientDetails('owner')}
+                </RecordFieldGrid>
+                <hr className="application-applicant-divider" />
                 <Checkbox
                   id="boic-permit-agent-used"
                   labelText="I'm an agent"
@@ -1153,62 +1199,91 @@ const BlanketOicPermitCreateForm = ({
                     className="boic-permit-agent-information"
                     aria-labelledby="boic-permit-agent-information-heading"
                   >
-                    <h2 id="boic-permit-agent-information-heading" className="detail-tile-title">
-                      Agent information
-                    </h2>
-                    <div className="legacy-search-grid">
-                      <ForestClientComboBox
-                        id="boic-permit-agent-client"
-                        labelText={requiredLabel('Client')}
-                        value={form.agentClientNumber}
-                        resetKey={clientSearchResetKey}
-                        counterpartyClientNumber={form.ownerClientNumber}
-                        required
-                        invalid={
-                          !!fieldError('agentClientNumber') ||
-                          (agentLookupAttempted &&
-                            !agentLookupLoading &&
-                            !agentLocations.some(isSelectableClientLocation))
-                        }
-                        invalidText={
-                          fieldError('agentClientNumber') ||
-                          'No verified locations were found for this agent.'
-                        }
-                        onBlur={() => {
-                          if (form.agentClientNumber.trim()) {
-                            void requestClientLocations('agent')
-                          }
+                    <h3
+                      id="boic-permit-agent-information-heading"
+                      className="permit-client-subheading"
+                    >
+                      Agent
+                    </h3>
+                    <RecordFieldGrid editing>
+                      <ClientDetailsRows
+                        client={{
+                          label: 'Agent client',
+                          edit: () => (
+                            <ForestClientComboBox
+                              id="boic-permit-agent-client"
+                              labelText={requiredLabel('Agent client')}
+                              helperText="Enter name, acronym, or client number (min. 3 characters)"
+                              value={form.agentClientNumber}
+                              resetKey={clientSearchResetKey}
+                              counterpartyClientNumber={form.ownerClientNumber}
+                              required
+                              invalid={
+                                !!fieldError('agentClientNumber') ||
+                                (agentLookupAttempted &&
+                                  !agentLookupLoading &&
+                                  !agentLocations.some(isSelectableClientLocation))
+                              }
+                              invalidText={
+                                fieldError('agentClientNumber') ||
+                                'No verified locations were found for this agent.'
+                              }
+                              onBlur={() => {
+                                if (form.agentClientNumber.trim()) {
+                                  void requestClientLocations('agent')
+                                }
+                              }}
+                              onChange={(agentClientNumber) =>
+                                selectClient('agent', agentClientNumber)
+                              }
+                            />
+                          ),
                         }}
-                        onChange={(agentClientNumber) => selectClient('agent', agentClientNumber)}
+                        location={{
+                          label: 'Agent client location',
+                          edit: () => (
+                            <Select
+                              id="boic-permit-agent-location"
+                              labelText={requiredLabel('Agent client location')}
+                              aria-required="true"
+                              helperText={
+                                form.agentClientNumber.trim()
+                                  ? undefined
+                                  : 'Available once a client is selected.'
+                              }
+                              value={form.agentClientLocation}
+                              invalid={!!fieldError('agentClientLocation')}
+                              invalidText={fieldError('agentClientLocation')}
+                              disabled={
+                                agentLookupLoading ||
+                                !agentLocations.some(isSelectableClientLocation)
+                              }
+                              onChange={(event) =>
+                                void selectClientLocation('agent', event.target.value)
+                              }
+                            >
+                              <SelectItem
+                                value=""
+                                text={agentLookupLoading ? 'Loading locations' : 'Select location'}
+                              />
+                              {agentLocations.filter(isSelectableClientLocation).map((location) => (
+                                <SelectItem
+                                  key={location.locationCode}
+                                  value={location.locationCode}
+                                  text={clientLocationLabel(
+                                    location.locationCode,
+                                    location.locationName,
+                                  )}
+                                />
+                              ))}
+                            </Select>
+                          ),
+                        }}
+                        clientData={agentClientData}
+                        isLoading={agentLookupLoading}
+                        showDetails={!!form.agentClientLocation}
                       />
-                      <Select
-                        id="boic-permit-agent-location"
-                        labelText={requiredLabel('Client location')}
-                        aria-required="true"
-                        value={form.agentClientLocation}
-                        invalid={!!fieldError('agentClientLocation')}
-                        invalidText={fieldError('agentClientLocation')}
-                        disabled={
-                          agentLookupLoading || !agentLocations.some(isSelectableClientLocation)
-                        }
-                        onChange={(event) => void selectClientLocation('agent', event.target.value)}
-                      >
-                        <SelectItem
-                          value=""
-                          text={
-                            agentLookupLoading ? 'Loading locations' : 'Select a client location'
-                          }
-                        />
-                        {agentLocations.filter(isSelectableClientLocation).map((location) => (
-                          <SelectItem
-                            key={location.locationCode}
-                            value={location.locationCode}
-                            text={clientLocationLabel(location.locationCode, location.locationName)}
-                          />
-                        ))}
-                      </Select>
-                    </div>
-                    {renderClientDetails('agent')}
+                    </RecordFieldGrid>
                   </section>
                 )}
               </fieldset>
@@ -1216,140 +1291,188 @@ const BlanketOicPermitCreateForm = ({
           </TabPanel>
           <TabPanel className="application-detail-tab-panel">
             <Tile className="create-form-tile application-detail-section" aria-label="Shipping">
-              <h2 className="detail-tile-title">Shipping details</h2>
+              <DetailCardTitle icon={EarthFilled}>Shipping details</DetailCardTitle>
               <RequiredFieldsLegend className="boic-permit-required-hint" />
               <fieldset className="legacy-form-fieldset">
                 <legend className="cds--visually-hidden">Shipping</legend>
-                <div className="legacy-search-grid">
-                  <TextInput
-                    id="boic-permit-destination-company"
-                    labelText={requiredLabel('Purchaser')}
-                    aria-required="true"
-                    helperText="Company name"
-                    value={form.destinationCompanyName}
-                    invalid={!!fieldError('destinationCompanyName')}
-                    invalidText={fieldError('destinationCompanyName')}
-                    maxLength={52}
-                    onChange={(event) => setField('destinationCompanyName', event.target.value)}
-                  />
-                  <PermitCountrySelect
-                    id="boic-permit-destination-country"
-                    labelText={requiredLabel('Final destination country')}
-                    value={form.destinationCountry}
-                    options={(shippingReferences?.countries ?? []).map((option) => ({
-                      value: option.code,
-                      label: formatShippingReferenceOption(option),
-                    }))}
-                    placeholder="Search and select a final destination country"
-                    required
-                    invalid={!!fieldError('destinationCountry')}
-                    invalidText={fieldError('destinationCountry')}
-                    disabled={shippingReferencesLoading || !shippingReferences}
-                    onChange={(value) => setField('destinationCountry', value)}
-                  />
-                  <Select
-                    id="boic-permit-transport-type"
-                    labelText={requiredLabel('Transport type')}
-                    aria-required="true"
-                    value={form.transportType}
-                    invalid={!!fieldError('transportType')}
-                    invalidText={fieldError('transportType')}
-                    disabled={shippingReferencesLoading || !shippingReferences}
-                    onChange={(event) => setField('transportType', event.target.value)}
-                  >
-                    <SelectItem value="" text="Select a transport type" />
-                    {(shippingReferences?.transportTypes ?? []).map((option) => (
-                      <SelectItem
-                        key={option.code}
-                        value={option.code}
-                        text={formatShippingReferenceOption(option)}
-                      />
-                    ))}
-                  </Select>
-                  <TextInput
-                    id="boic-permit-transport-name"
-                    labelText={requiredLabel('Transport name')}
-                    aria-required="true"
-                    value={form.transportName}
-                    invalid={!!fieldError('transportName')}
-                    invalidText={fieldError('transportName')}
-                    maxLength={26}
-                    onChange={(event) => setField('transportName', event.target.value)}
-                  />
-                  <IsoDatePicker
-                    id="boic-permit-estimated-shipping-date"
-                    labelText={requiredLabel('Estimated shipping date')}
-                    required
-                    value={form.estimatedShippingDate}
-                    invalid={!!fieldError('estimatedShippingDate')}
-                    invalidText={fieldError('estimatedShippingDate')}
-                    onChange={(value) => setField('estimatedShippingDate', value)}
-                  />
-                  <Select
-                    id="boic-permit-port-of-export"
-                    labelText={requiredLabel('Customs port of export')}
-                    aria-required="true"
-                    value={form.portOfExport}
-                    invalid={!!fieldError('portOfExport')}
-                    invalidText={fieldError('portOfExport')}
-                    disabled={shippingReferencesLoading || !shippingReferences}
-                    onChange={(event) => {
-                      const port = event.target.value
-                      setField('portOfExport', port)
-                      if (port.toUpperCase() !== 'OT') setField('otherPortOfExport', '')
-                    }}
-                  >
-                    <SelectItem value="" text="Select a customs port of export" />
-                    {(shippingReferences?.ports ?? []).map((option) => (
-                      <SelectItem
-                        key={option.code}
-                        value={option.code}
-                        text={formatShippingReferenceOption(option)}
-                      />
-                    ))}
-                  </Select>
-                  {form.portOfExport.trim().toUpperCase() === 'OT' && (
-                    <TextInput
-                      id="boic-permit-other-port"
-                      labelText={requiredLabel('Other port name')}
-                      aria-required="true"
-                      value={form.otherPortOfExport}
-                      invalid={!!fieldError('otherPortOfExport')}
-                      invalidText={fieldError('otherPortOfExport')}
-                      maxLength={34}
-                      onChange={(event) => setField('otherPortOfExport', event.target.value)}
+                <RecordFieldGrid editing>
+                  <RecordFieldRow>
+                    <RecordField
+                      label="Purchaser"
+                      span="wide"
+                      edit={
+                        <TextInput
+                          id="boic-permit-destination-company"
+                          labelText={requiredLabel('Purchaser')}
+                          aria-required="true"
+                          helperText="Company name"
+                          value={form.destinationCompanyName}
+                          invalid={!!fieldError('destinationCompanyName')}
+                          invalidText={fieldError('destinationCompanyName')}
+                          maxLength={52}
+                          onChange={(event) =>
+                            setField('destinationCompanyName', event.target.value)
+                          }
+                        />
+                      }
                     />
-                  )}
-                </div>
+                  </RecordFieldRow>
+                  <RecordFieldRow>
+                    <RecordField
+                      label="Final destination country"
+                      span="wide"
+                      edit={
+                        <PermitCountrySelect
+                          id="boic-permit-destination-country"
+                          labelText={requiredLabel('Final destination country')}
+                          value={form.destinationCountry}
+                          options={(shippingReferences?.countries ?? []).map((option) => ({
+                            value: option.code,
+                            label: formatShippingReferenceOption(option),
+                          }))}
+                          placeholder="Search and select a final destination country"
+                          required
+                          invalid={!!fieldError('destinationCountry')}
+                          invalidText={fieldError('destinationCountry')}
+                          disabled={shippingReferencesLoading || !shippingReferences}
+                          onChange={(value) => setField('destinationCountry', value)}
+                        />
+                      }
+                    />
+                  </RecordFieldRow>
+                  <RecordFieldRow>
+                    <RecordField
+                      label="Transport type"
+                      edit={
+                        <Select
+                          id="boic-permit-transport-type"
+                          labelText={requiredLabel('Transport type')}
+                          aria-required="true"
+                          value={form.transportType}
+                          invalid={!!fieldError('transportType')}
+                          invalidText={fieldError('transportType')}
+                          disabled={shippingReferencesLoading || !shippingReferences}
+                          onChange={(event) => setField('transportType', event.target.value)}
+                        >
+                          <SelectItem value="" text="Select a transport type" />
+                          {(shippingReferences?.transportTypes ?? []).map((option) => (
+                            <SelectItem
+                              key={option.code}
+                              value={option.code}
+                              text={formatShippingReferenceOption(option)}
+                            />
+                          ))}
+                        </Select>
+                      }
+                    />
+                    <RecordField
+                      label="Transport name"
+                      edit={
+                        <TextInput
+                          id="boic-permit-transport-name"
+                          labelText={requiredLabel('Transport name')}
+                          aria-required="true"
+                          value={form.transportName}
+                          invalid={!!fieldError('transportName')}
+                          invalidText={fieldError('transportName')}
+                          maxLength={26}
+                          onChange={(event) => setField('transportName', event.target.value)}
+                        />
+                      }
+                    />
+                  </RecordFieldRow>
+                  <RecordFieldRow>
+                    <RecordField
+                      label="Estimated shipping date"
+                      edit={
+                        <IsoDatePicker
+                          id="boic-permit-estimated-shipping-date"
+                          labelText={requiredLabel('Estimated shipping date')}
+                          required
+                          value={form.estimatedShippingDate}
+                          invalid={!!fieldError('estimatedShippingDate')}
+                          invalidText={fieldError('estimatedShippingDate')}
+                          onChange={(value) => setField('estimatedShippingDate', value)}
+                        />
+                      }
+                    />
+                  </RecordFieldRow>
+                  <RecordFieldRow>
+                    <RecordField
+                      label="Customs port of export"
+                      edit={
+                        <Select
+                          id="boic-permit-port-of-export"
+                          labelText={requiredLabel('Customs port of export')}
+                          aria-required="true"
+                          value={form.portOfExport}
+                          invalid={!!fieldError('portOfExport')}
+                          invalidText={fieldError('portOfExport')}
+                          disabled={shippingReferencesLoading || !shippingReferences}
+                          onChange={(event) => {
+                            const port = event.target.value
+                            setField('portOfExport', port)
+                            if (port.toUpperCase() !== 'OT') setField('otherPortOfExport', '')
+                          }}
+                        >
+                          <SelectItem value="" text="Select a customs port of export" />
+                          {(shippingReferences?.ports ?? []).map((option) => (
+                            <SelectItem
+                              key={option.code}
+                              value={option.code}
+                              text={formatShippingReferenceOption(option)}
+                            />
+                          ))}
+                        </Select>
+                      }
+                    />
+                    <RecordField
+                      label="Other port of export"
+                      hidden={form.portOfExport.trim().toUpperCase() !== 'OT'}
+                      edit={
+                        <TextInput
+                          id="boic-permit-other-port"
+                          labelText={requiredLabel('Other port of export')}
+                          aria-required="true"
+                          value={form.otherPortOfExport}
+                          invalid={!!fieldError('otherPortOfExport')}
+                          invalidText={fieldError('otherPortOfExport')}
+                          maxLength={34}
+                          onChange={(event) => setField('otherPortOfExport', event.target.value)}
+                        />
+                      }
+                    />
+                  </RecordFieldRow>
+                </RecordFieldGrid>
               </fieldset>
             </Tile>
           </TabPanel>
-          <TabPanel className="application-detail-tab-panel">
-            <Tile className="create-form-tile application-detail-section" aria-label="Scale">
-              <EmptyState
-                title="Save the permit first"
-                description="Scale details are available after the permit is saved."
-                headingLevel={2}
-              />
-            </Tile>
+          <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
+            <EmptyState
+              variant="tab"
+              icon={<Cardboard width={48} height={48} />}
+              title="Save the permit first"
+              description="Available after the permit is saved."
+              headingLevel={2}
+            />
           </TabPanel>
-          <TabPanel className="application-detail-tab-panel">
-            <Tile className="create-form-tile application-detail-section" aria-label="Documents">
-              <EmptyState
-                title="Save the permit first"
-                description="Documents can be added after the permit is saved."
-                headingLevel={2}
-              />
-            </Tile>
+          <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
+            <EmptyState
+              variant="tab"
+              icon={<AddDocument width={48} height={48} />}
+              title="Save the permit first"
+              description="Available after the permit is saved."
+              headingLevel={2}
+            />
           </TabPanel>
-          <TabPanel className="application-detail-tab-panel">
-            <Tile className="create-form-tile application-detail-section" aria-label="Fees">
-              <EmptyState
-                title="Save the permit first"
-                description="Fee details are available after the permit is saved."
-                headingLevel={2}
-              />
-            </Tile>
+          <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
+            <EmptyState
+              variant="tab"
+              icon={<Invoice width={48} height={48} />}
+              title="Save the permit first"
+              description="Available after the permit is saved."
+              headingLevel={2}
+            />
           </TabPanel>
         </TabPanels>
       </Tabs>
@@ -1368,6 +1491,8 @@ const BlanketOicPermitCreateForm = ({
       />
     </section>
   )
+
+  return layout({ actions, content })
 }
 
 export default BlanketOicPermitCreateForm

@@ -348,7 +348,12 @@ const ProvincialPage = () => {
             />
           </div>
           <div className="legacy-search-actions">
-            <Button kind="tertiary" onClick={() => void loadTotals()} disabled={loadingTotals}>
+            <Button
+              kind="tertiary"
+              size="md"
+              onClick={() => void loadTotals()}
+              disabled={loadingTotals}
+            >
               Refresh Totals
             </Button>
           </div>
@@ -364,7 +369,7 @@ const ProvincialPage = () => {
                 <Button
                   key={action.id}
                   kind="primary"
-                  size="sm"
+                  size="md"
                   onClick={() => navigate(action.path)}
                 >
                   {action.label}
@@ -424,7 +429,7 @@ const ProvincialPage = () => {
                             : workflowTotal.toLocaleString()}
                         </TableCell>
                         <TableCell>
-                          <Button kind="primary" size="sm" onClick={() => navigate(workflow.path)}>
+                          <Button kind="primary" size="md" onClick={() => navigate(workflow.path)}>
                             Open
                           </Button>
                         </TableCell>

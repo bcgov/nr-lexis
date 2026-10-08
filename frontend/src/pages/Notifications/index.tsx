@@ -20,7 +20,8 @@ import {
 } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmationModal from '@/components/ConfirmationModal'
-import Modal from '@/components/Modal'
+import DetailSidePanel from '@/components/DetailSidePanel'
+import PendingIcon from '@/components/PendingIcon'
 import NotificationEditor from '@/components/NotificationEditor'
 import PageHeader from '@/components/PageHeader'
 import { formValuesEqual } from '@/components/UnsavedChangesGuard'
@@ -323,11 +324,6 @@ export default function NotificationsPage() {
     setShowEditor(true)
   }
 
-  const restoreEditorLauncherFocus = (): void => {
-    const launcher = editorLauncherRef.current
-    window.setTimeout(() => launcher?.focus())
-  }
-
   const resetForm = (): void => {
     const nextForm = emptyForm()
     editorBaselineRef.current = nextForm
@@ -335,7 +331,6 @@ export default function NotificationsPage() {
     setShowEditor(false)
     setShowDiscardConfirmation(false)
     setMessage(null)
-    restoreEditorLauncherFocus()
   }
 
   const requestCloseEditor = (): void => {
@@ -411,7 +406,6 @@ export default function NotificationsPage() {
 
     setSaving(true)
     setMessage(null)
-    let restoreLauncherFocus = false
     try {
       if (form.id === null) {
         await createNotification(toRequest(form))
@@ -432,7 +426,6 @@ export default function NotificationsPage() {
       editorBaselineRef.current = nextForm
       setForm(nextForm)
       setShowEditor(false)
-      restoreLauncherFocus = true
       await loadNotifications(false)
     } catch {
       setMessage({
@@ -442,9 +435,6 @@ export default function NotificationsPage() {
       })
     } finally {
       setSaving(false)
-      if (restoreLauncherFocus) {
-        restoreEditorLauncherFocus()
-      }
     }
   }
 
@@ -479,7 +469,13 @@ export default function NotificationsPage() {
         subtitle={pageDescription}
         actions={
           isAdmin ? (
-            <Button size="md" renderIcon={Add} onClick={startCreate} disabled={saving}>
+            <Button
+              id="notification-create"
+              size="md"
+              renderIcon={Add}
+              onClick={startCreate}
+              disabled={saving || showEditor}
+            >
               New notification
             </Button>
           ) : undefined
@@ -497,26 +493,27 @@ export default function NotificationsPage() {
         />
       )}
 
-      {isAdmin && showEditor && (
-        <Modal
-          open
-          className="notifications-page__editor-modal"
-          modalLabel={<span>Admin</span>}
-          modalHeading={editorTitle}
-          aria-label={editorTitle}
-          hasScrollingContent
-          launcherButtonRef={editorLauncherRef}
-          selectorPrimaryFocus="#notification-title"
-          primaryButtonText={isEditing ? 'Save changes' : 'Publish'}
-          secondaryButtonText="Cancel"
-          primaryButtonDisabled={saving}
-          loadingStatus={saving ? 'active' : 'inactive'}
-          loadingDescription="Saving notification…"
-          loadingIconDescription="Saving notification"
-          preventCloseOnClickOutside
-          onRequestClose={requestCloseEditor}
-          onSecondarySubmit={requestCloseEditor}
-          onRequestSubmit={() => void save()}
+      {isAdmin && (
+        <DetailSidePanel
+          open={showEditor}
+          title={editorTitle}
+          className="notifications-page__editor-panel"
+          contentSelector=".notifications-page"
+          launcherRef={editorLauncherRef}
+          fallbackFocusSelector="#notification-create"
+          initialFocusSelector="#notification-title"
+          busy={saving}
+          onClose={requestCloseEditor}
+          actions={[
+            { label: 'Cancel', kind: 'tertiary', disabled: saving, onClick: requestCloseEditor },
+            {
+              label: saving ? 'Saving notification…' : isEditing ? 'Save changes' : 'Publish',
+              kind: 'primary',
+              disabled: saving,
+              renderIcon: saving ? PendingIcon : undefined,
+              onClick: () => void save(),
+            },
+          ]}
         >
           <p className="notifications-page__editor-help">
             Rich text is sanitized on the server before it is saved.
@@ -681,7 +678,7 @@ export default function NotificationsPage() {
               has to dismiss it.
             </p>
           </section>
-        </Modal>
+        </DetailSidePanel>
       )}
 
       <section aria-labelledby="notification-list-heading">
@@ -748,18 +745,18 @@ export default function NotificationsPage() {
                         <div className="notifications-page__notification-actions">
                           <Button
                             kind="ghost"
-                            size="sm"
+                            size="md"
                             renderIcon={Edit}
-                            disabled={saving}
+                            disabled={saving || showEditor}
                             onClick={() => startEdit(adminNotification)}
                           >
                             Edit
                           </Button>
                           <Button
                             kind="danger--ghost"
-                            size="sm"
+                            size="md"
                             renderIcon={TrashCan}
-                            disabled={saving}
+                            disabled={saving || showEditor}
                             onClick={() => {
                               setMessage(null)
                               setNotificationPendingDeletion(adminNotification)

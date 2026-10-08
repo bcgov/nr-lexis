@@ -998,7 +998,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
                     resolveSpeciesDescription(row.exportSpeciesCode(), speciesDescriptionByCode),
                     row.piecesCount(),
                     resolveGradeDescription(row.exportGradeCode(), gradeDescriptionByCode),
-                    formatOneDecimal(row.speciesGradeVolume()),
+                    formatStoredAmount(row.speciesGradeVolume()),
                     nonNull(trimToNull(row.exportScaleDetailId())),
                     nonNull(trimToNull(row.cascadeSplitCode()))))
         .toList();
@@ -1017,12 +1017,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return emptyPackageDetails();
     }
 
-    BigDecimal scaledVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+    // The package's displayed scale total; the scale limits round each amount separately.
+    BigDecimal scaledVolume = BigDecimal.ZERO;
     for (ApplicationDetailsRpcRepository.ApplicationScaleDetailRow scale :
         repository.findScaleDetailsByPackageNumber(persistedPackageNumber)) {
-      BigDecimal speciesGradeVolume =
-          BigDecimal.valueOf(scale.speciesGradeVolume()).setScale(1, RoundingMode.HALF_UP);
-      scaledVolume = scaledVolume.add(speciesGradeVolume).setScale(1, RoundingMode.HALF_UP);
+      scaledVolume = scaledVolume.add(BigDecimal.valueOf(scale.speciesGradeVolume()));
     }
 
     String statusCode = trimToNull(packageDetails.packageStatusCode());
@@ -1039,10 +1038,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return new PackageDetailsItem(
         true,
         nonNull(preservePackageNumber(packageDetails.packageNumber())),
-        formatOneDecimal(packageDetails.packageVolume()),
+        formatStoredAmount(packageDetails.packageVolume()),
         scaledVolume.doubleValue(),
-        formatOneDecimal(packageDetails.averageLength()),
-        formatOneDecimal(packageDetails.averageDiameter()),
+        formatStoredAmount(packageDetails.averageLength()),
+        formatStoredAmount(packageDetails.averageDiameter()),
         nonNull(statusCode),
         nonNull(packageDetails.comments()),
         statusDescription,
@@ -1070,7 +1069,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
                     trimToNull(row.exportSpeciesCode()),
                     Long.toString(row.piecesCount()),
                     trimToNull(row.exportGradeCode()),
-                    formatOneDecimal(row.speciesGradeVolume()),
+                    formatStoredAmount(row.speciesGradeVolume()),
                     trimToNull(row.exportScaleDetailId())))
         .orElseGet(this::missingScaleDetail);
   }
@@ -1985,9 +1984,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return new PackagePersistenceResult(
         true,
         nonNull(preservePackageNumber(packageNumber)),
-        formatOneDecimal(record.packageVolume() == null ? 0.0d : record.packageVolume()),
-        formatOneDecimal(record.averageLength() == null ? 0.0d : record.averageLength()),
-        formatOneDecimal(record.averageDiameter() == null ? 0.0d : record.averageDiameter()),
+        formatStoredAmount(record.packageVolume() == null ? 0.0d : record.packageVolume()),
+        formatStoredAmount(record.averageLength() == null ? 0.0d : record.averageLength()),
+        formatStoredAmount(record.averageDiameter() == null ? 0.0d : record.averageDiameter()),
         nonNull(trimToNull(record.packageStatusCode())),
         List.of(),
         List.of());
@@ -2248,7 +2247,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         resolveSpeciesDescription(row.exportSpeciesCode(), new LinkedHashMap<>()),
         row.piecesCount(),
         resolveGradeDescription(row.exportGradeCode(), new LinkedHashMap<>()),
-        formatOneDecimal(row.speciesGradeVolume()),
+        formatStoredAmount(row.speciesGradeVolume()),
         nonNull(trimToNull(row.exportScaleDetailId())),
         nonNull(trimToNull(row.cascadeSplitCode())));
   }
@@ -2471,6 +2470,17 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private String formatOneDecimal(double value) {
     return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
+  }
+
+  /**
+   * A stored package or scale amount as it is shown and edited: the columns keep two decimals, so
+   * the second one is kept when it's used.
+   */
+  private String formatStoredAmount(double value) {
+    BigDecimal amount = BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP);
+    return amount.remainder(new BigDecimal("0.1")).signum() == 0
+        ? amount.setScale(1, RoundingMode.UNNECESSARY).toPlainString()
+        : amount.toPlainString();
   }
 
   private BigDecimal roundOneDecimal(Double value) {

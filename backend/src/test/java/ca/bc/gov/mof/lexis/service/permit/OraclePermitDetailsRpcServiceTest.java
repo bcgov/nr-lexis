@@ -6470,6 +6470,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.packageNumber()).isEmpty();
     assertThat(response.scaledVolume()).isEqualTo(0.0d);
+    assertThat(response.remainingVolume()).isEmpty();
   }
 
   @Test
@@ -6493,6 +6494,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.packageNumber()).isEqualTo("PKG-903");
     assertThat(response.volume()).isEqualTo("10.3");
     assertThat(response.scaledVolume()).isEqualTo(3.6d);
+    assertThat(response.remainingVolume()).isEqualTo("6.66");
     assertThat(response.length()).isEqualTo("6.0");
     assertThat(response.diameter()).isEqualTo("24.0");
     assertThat(response.status()).isEqualTo("ACT");
@@ -6500,6 +6502,38 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.statusDesc()).isEqualTo("Active");
     assertThat(response.reprocessed()).isEqualTo("N");
     assertThat(response.ageClass()).isEqualTo("Standing");
+  }
+  @Test
+  void packageDetailsShouldGiveTheExactRemainingVolumeForTwoDecimalScales() {
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-904"))
+        .thenReturn(
+            Optional.of(
+                new PackageDetailsRow("PKG-904", 2.0d, 6.0d, 24.0d, "ACT", "", "N", "O")));
+    when(repository.findScaleDetailsByPackageNumber("PKG-904"))
+        .thenReturn(
+            List.of(
+                scale("201", "TM1", "HEM", "J", 0.25d, 1L, "7000123", "PKG-904"),
+                scale("202", "TM2", "HEM", "K", 0.25d, 1L, "7000123", "PKG-904")));
+
+    PermitPackageDetailsRpcResponseDto response = service.getPackageDetails("PKG-904");
+
+    // The displayed total rounds each scale; the save check and this limit do not.
+    assertThat(response.scaledVolume()).isEqualTo(0.6d);
+    assertThat(response.remainingVolume()).isEqualTo("1.5");
+  }
+
+  @Test
+  void packageDetailsShouldNotGiveANegativeRemainingVolume() {
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-905"))
+        .thenReturn(
+            Optional.of(
+                new PackageDetailsRow("PKG-905", 1.0d, 6.0d, 24.0d, "ACT", "", "N", "O")));
+    when(repository.findScaleDetailsByPackageNumber("PKG-905"))
+        .thenReturn(List.of(scale("301", "TM1", "HEM", "J", 1.25d, 1L, "7000123", "PKG-905")));
+
+    PermitPackageDetailsRpcResponseDto response = service.getPackageDetails("PKG-905");
+
+    assertThat(response.remainingVolume()).isEqualTo("0");
   }
 
   @Test

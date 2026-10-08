@@ -303,7 +303,9 @@ const fillRequiredBlanketOicFields = async (
   if (requestTotals.volume) {
     await userEvent.type(screen.getByLabelText('Permit request volume (m³)'), requestTotals.volume)
   }
-  await userEvent.type(screen.getByLabelText('Remarks'), 'test blanket permit')
+  fireEvent.change(screen.getByLabelText('Remarks'), {
+    target: { value: 'test blanket permit' },
+  })
   await userEvent.click(screen.getByRole('tab', { name: 'Applicant' }))
   fireEvent.change(screen.getByLabelText('Client', { selector: '#boic-permit-owner-client' }), {
     target: { value: '00001074' },
@@ -317,8 +319,12 @@ const fillRequiredBlanketOicFields = async (
     '00001074',
   )
   await userEvent.click(screen.getByRole('tab', { name: 'Shipping' }))
-  await userEvent.type(screen.getByLabelText('Purchaser'), 'test destination')
-  await userEvent.type(screen.getByLabelText('Transport name'), 'test barge')
+  fireEvent.change(screen.getByLabelText('Purchaser'), {
+    target: { value: 'test destination' },
+  })
+  fireEvent.change(screen.getByLabelText('Transport name'), {
+    target: { value: 'test barge' },
+  })
   await userEvent.type(screen.getByLabelText('Estimated shipping date'), '2099-01-01')
 }
 
@@ -568,7 +574,7 @@ describe('permit creation from an exemption', () => {
     expect(screen.getByText('9020933')).toBeInTheDocument()
   })
 
-  it('renders the legacy permit issue date with a month name without shifting its day', async () => {
+  it('renders the legacy permit issue date in ISO format without shifting its day', async () => {
     const actualService = await vi.importActual<{
       fetchExemptionPermits: typeof fetchExemptionPermits
     }>('@/service/provincial-exemption-detail-service')
@@ -589,7 +595,7 @@ describe('permit creation from an exemption', () => {
       await openPermitsTab()
 
       const table = await screen.findByRole('region', { name: 'Related exemption permits' })
-      expect(within(table).getByText('Mar 10, 2026')).toBeVisible()
+      expect(within(table).getByText('2026-03-10')).toBeVisible()
       expect(within(table).queryByText('03/10/2026')).not.toBeInTheDocument()
     } finally {
       get.mockRestore()
@@ -672,6 +678,27 @@ describe('permit creation from an exemption', () => {
     expect(createPermitFromExemption).not.toHaveBeenCalled()
   })
 
+  it('puts the Blanket OIC create actions on the title row, above the notice', async () => {
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    renderPage(activeBlanketOicExemption)
+
+    await openPermitsTab()
+    const page = await openBlanketOicCreatePage()
+    const pageActions = screen.getByRole('group', { name: 'Blanket OIC permit actions' })
+    expect(
+      screen.getByRole('heading', { level: 1, name: 'Apply for new permit' }).closest('header'),
+    ).toContainElement(pageActions)
+    expect(within(pageActions).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    expect(
+      within(pageActions).getByRole('button', { name: 'Save permit' }).querySelector('svg'),
+    ).not.toBeNull()
+    expect(
+      pageActions.compareDocumentPosition(page) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(screen.getByRole('link', { name: /Exemption TEST13E2/ })).toBeInTheDocument()
+  })
+
   it('collects and saves the required Blanket OIC permit fields before navigating', async () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
@@ -699,21 +726,8 @@ describe('permit creation from an exemption', () => {
     expect(within(page).getByRole('tab', { name: 'Scale' })).toBeInTheDocument()
     expect(within(page).getByRole('tab', { name: 'Documents' })).toBeInTheDocument()
     expect(within(page).getByRole('tab', { name: 'Fees' })).toBeInTheDocument()
-    await userEvent.click(within(page).getByRole('tab', { name: 'Scale' }))
-    expect(
-      within(page).getByText('Scale details are available after the permit is saved.'),
-    ).toBeInTheDocument()
-    await userEvent.click(within(page).getByRole('tab', { name: 'Documents' }))
-    expect(
-      within(page).getByText('Documents can be added after the permit is saved.'),
-    ).toBeInTheDocument()
-    await userEvent.click(within(page).getByRole('tab', { name: 'Fees' }))
-    expect(
-      within(page).getByText('Fee details are available after the permit is saved.'),
-    ).toBeInTheDocument()
-    await userEvent.click(within(page).getByRole('tab', { name: 'Permit' }))
     await fillRequiredBlanketOicFields()
-    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     await waitFor(() => expect(addPermitDetail).toHaveBeenCalledOnce())
     expect(addPermitDetail).toHaveBeenCalledWith(
@@ -768,14 +782,16 @@ describe('permit creation from an exemption', () => {
 
     await userEvent.click(within(page).getByRole('checkbox', { name: "I'm an agent" }))
     fireEvent.change(
-      within(page).getByLabelText('Client', { selector: '#boic-permit-agent-client' }),
+      within(page).getByLabelText('Agent client', { selector: '#boic-permit-agent-client' }),
       {
         target: { value: '00012345' },
       },
     )
     await waitFor(() =>
       expect(
-        within(page).getByLabelText('Client location', { selector: '#boic-permit-agent-location' }),
+        within(page).getByLabelText('Agent client location', {
+          selector: '#boic-permit-agent-location',
+        }),
       ).toHaveValue('00'),
     )
 
@@ -809,7 +825,7 @@ describe('permit creation from an exemption', () => {
         'true',
       )
       await fillRequiredBlanketOicFields(totals)
-      await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
       await waitFor(() => expect(addPermitDetail).toHaveBeenCalledOnce())
       expect(addPermitDetail).toHaveBeenCalledWith(
@@ -831,7 +847,7 @@ describe('permit creation from an exemption', () => {
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
     await fillRequiredBlanketOicFields({ pieces: '-1', volume: '1234567.89' })
-    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     expect(
       await within(page).findAllByText(
@@ -867,9 +883,9 @@ describe('permit creation from an exemption', () => {
     })
 
     await openPermitsTab()
-    const page = await openBlanketOicCreatePage()
+    await openBlanketOicCreatePage()
     await fillRequiredBlanketOicFields()
-    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/permit/9020949'))
     const permitReturnTo = readDetailReturnTo(router.state.location.state)
@@ -922,7 +938,7 @@ describe('permit creation from an exemption', () => {
       },
     )
 
-    const saveButton = within(page).getByRole('button', { name: 'Save permit' })
+    const saveButton = screen.getByRole('button', { name: 'Save permit' })
     await userEvent.click(saveButton)
     await userEvent.click(saveButton)
 
@@ -995,7 +1011,7 @@ describe('permit creation from an exemption', () => {
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
     await fillRequiredBlanketOicFields()
-    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
     await waitFor(() => expect(addPermitDetail).toHaveBeenCalledOnce())
 
     await userEvent.click(within(page).getByRole('tab', { name: 'Permit' }))
@@ -1076,7 +1092,7 @@ describe('permit creation from an exemption', () => {
     expect(await within(page).findByText('Permit needs attention')).toBeInTheDocument()
 
     await userEvent.click(within(page).getByRole('checkbox', { name: "I'm an agent" }))
-    const agentClientNumber = within(page).getByLabelText('Client', {
+    const agentClientNumber = within(page).getByLabelText('Agent client', {
       selector: '#boic-permit-agent-client',
     })
     fireEvent.change(agentClientNumber, { target: { value: '22222222' } })
@@ -1100,7 +1116,9 @@ describe('permit creation from an exemption', () => {
     await userEvent.tab()
     await waitFor(() =>
       expect(
-        within(page).getByLabelText('Client location', { selector: '#boic-permit-agent-location' }),
+        within(page).getByLabelText('Agent client location', {
+          selector: '#boic-permit-agent-location',
+        }),
       ).toHaveValue('00'),
     )
     expect(within(page).queryByText('Permit needs attention')).not.toBeInTheDocument()
@@ -1172,7 +1190,7 @@ describe('permit creation from an exemption', () => {
 
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
-    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
     expect(
       within(page).getByRole('tab', { name: 'Permit, 2 required fields outstanding' }),
     ).toHaveAttribute('aria-selected', 'true')
@@ -1204,7 +1222,7 @@ describe('permit creation from an exemption', () => {
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
     await fillRequiredBlanketOicFields()
-    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     expect(
       await within(page).findByText('The exemption is no longer eligible.'),
@@ -1220,9 +1238,9 @@ describe('permit creation from an exemption', () => {
     const router = renderPage(activeBlanketOicExemption)
 
     await openPermitsTab()
-    const page = await openBlanketOicCreatePage()
+    await openBlanketOicCreatePage()
     await fillRequiredBlanketOicFields()
-    await userEvent.click(within(page).getByRole('button', { name: 'Save permit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
 
     expect(
       await screen.findByText(

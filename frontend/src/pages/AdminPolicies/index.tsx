@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { RecordFieldCell, RecordFieldGrid, RecordFieldRow } from '@/pages/shared/RecordFieldGrid'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Button,
@@ -24,7 +25,7 @@ import { ActionResultNotification } from '../../components/ActionResultNotificat
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
-import Modal from '@/components/Modal'
+import DetailSidePanel from '@/components/DetailSidePanel'
 import PageHeader from '@/components/PageHeader'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
 import {
@@ -257,6 +258,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [showFilValidationErrors, setShowFilValidationErrors] = useState(false)
   const [showScheduleValidationErrors, setShowScheduleValidationErrors] = useState(false)
   const [isPolicyEditorOpen, setIsPolicyEditorOpen] = useState(false)
+  const policyEditorLauncherRef = useRef<HTMLElement>(null)
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null)
 
   // INTENTIONAL_LEGACY_DIVERGENCE(NAVIGATION_MENU_CONTRACT): Keep these page
@@ -923,17 +925,42 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         />
       )}
 
-      {area === 'fee' && isPolicyEditorOpen && (
-        <Modal
+      {area === 'fee' && (
+        <DetailSidePanel
           open={isPolicyEditorOpen}
-          passiveModal
-          size="md"
-          modalHeading={editingFeePolicyId ? 'Edit fee policy' : 'Add fee policy'}
-          aria-label={editingFeePolicyId ? 'Edit fee policy' : 'Add fee policy'}
+          title={editingFeePolicyId ? 'Edit fee policy' : 'Add fee policy'}
           className="admin-policy-modal"
-          preventCloseOnClickOutside
-          selectorPrimaryFocus="#feeEffectiveDate"
-          onRequestClose={closePolicyEditor}
+          contentSelector=".admin-policy-page"
+          launcherRef={policyEditorLauncherRef}
+          fallbackFocusSelector="#admin-policy-create"
+          initialFocusSelector="#feeEffectiveDate"
+          busy={isMutatingPolicies}
+          onClose={closePolicyEditor}
+          actions={[
+            {
+              label: 'Cancel',
+              kind: 'tertiary',
+              disabled: isMutatingPolicies,
+              onClick: closePolicyEditor,
+            },
+            {
+              label: isMutatingPolicies
+                ? 'Saving…'
+                : editingFeePolicyId
+                  ? 'Update fee policy'
+                  : 'Add fee policy',
+              kind: 'primary',
+              renderIcon: isMutatingPolicies ? PendingIcon : editingFeePolicyId ? undefined : Add,
+              disabled:
+                isLoadingPolicies ||
+                isMutatingPolicies ||
+                isLoadingFeeRegionOptions ||
+                Boolean(feeRegionOptionsError) ||
+                feeRegionOptions.length === 0 ||
+                !canManageFeePolicy,
+              onClick: () => void upsertFeePolicy(),
+            },
+          ]}
         >
           <p className="admin-policy-modal__description">
             {editingFeePolicyId
@@ -1002,44 +1029,39 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               onChange={(event) => setFeePolicyPercentage(event.target.value)}
             />
           </div>
-          <div className="admin-policy-modal__actions">
-            <Button kind="tertiary" disabled={isMutatingPolicies} onClick={closePolicyEditor}>
-              Cancel
-            </Button>
-            <Button
-              kind="primary"
-              renderIcon={isMutatingPolicies ? PendingIcon : editingFeePolicyId ? undefined : Add}
-              disabled={
-                isLoadingPolicies ||
-                isMutatingPolicies ||
-                isLoadingFeeRegionOptions ||
-                Boolean(feeRegionOptionsError) ||
-                feeRegionOptions.length === 0 ||
-                !canManageFeePolicy
-              }
-              onClick={() => void upsertFeePolicy()}
-            >
-              {isMutatingPolicies
-                ? 'Saving…'
-                : editingFeePolicyId
-                  ? 'Update fee policy'
-                  : 'Add fee policy'}
-            </Button>
-          </div>
-        </Modal>
+        </DetailSidePanel>
       )}
 
-      {area === 'fil' && isPolicyEditorOpen && (
-        <Modal
+      {area === 'fil' && (
+        <DetailSidePanel
           open={isPolicyEditorOpen}
-          passiveModal
-          size="md"
-          modalHeading={editingFilPolicyId ? 'Edit fee in lieu policy' : 'Add fee in lieu policy'}
-          aria-label={editingFilPolicyId ? 'Edit fee in lieu policy' : 'Add fee in lieu policy'}
+          title={editingFilPolicyId ? 'Edit fee in lieu policy' : 'Add fee in lieu policy'}
           className="admin-policy-modal"
-          preventCloseOnClickOutside
-          selectorPrimaryFocus="#filEffectiveDate"
-          onRequestClose={closePolicyEditor}
+          contentSelector=".admin-policy-page"
+          launcherRef={policyEditorLauncherRef}
+          fallbackFocusSelector="#admin-policy-create"
+          initialFocusSelector="#filEffectiveDate"
+          busy={isMutatingPolicies}
+          onClose={closePolicyEditor}
+          actions={[
+            {
+              label: 'Cancel',
+              kind: 'tertiary',
+              disabled: isMutatingPolicies,
+              onClick: closePolicyEditor,
+            },
+            {
+              label: isMutatingPolicies
+                ? 'Saving…'
+                : editingFilPolicyId
+                  ? 'Update fee in lieu policy'
+                  : 'Add fee in lieu policy',
+              kind: 'primary',
+              renderIcon: isMutatingPolicies ? PendingIcon : editingFilPolicyId ? undefined : Add,
+              disabled: isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy,
+              onClick: () => void upsertFilPolicy(),
+            },
+          ]}
         >
           <p className="admin-policy-modal__description">
             {editingFilPolicyId
@@ -1083,24 +1105,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               onChange={(event) => setFilPolicyPercentage(event.target.value)}
             />
           </div>
-          <div className="admin-policy-modal__actions">
-            <Button kind="tertiary" disabled={isMutatingPolicies} onClick={closePolicyEditor}>
-              Cancel
-            </Button>
-            <Button
-              kind="primary"
-              renderIcon={isMutatingPolicies ? PendingIcon : editingFilPolicyId ? undefined : Add}
-              disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
-              onClick={() => void upsertFilPolicy()}
-            >
-              {isMutatingPolicies
-                ? 'Saving…'
-                : editingFilPolicyId
-                  ? 'Update fee in lieu policy'
-                  : 'Add fee in lieu policy'}
-            </Button>
-          </div>
-        </Modal>
+        </DetailSidePanel>
       )}
 
       {pendingDeletion && (
@@ -1159,10 +1164,15 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   kind="primary"
                   size="md"
                   renderIcon={Add}
-                  onClick={openPolicyEditor}
+                  id="admin-policy-create"
+                  onClick={(event) => {
+                    policyEditorLauncherRef.current = event.currentTarget
+                    openPolicyEditor()
+                  }}
                   disabled={
                     isLoadingPolicies ||
                     isMutatingPolicies ||
+                    isPolicyEditorOpen ||
                     isLoadingFeeRegionOptions ||
                     Boolean(feeRegionOptionsError) ||
                     feeRegionOptions.length === 0 ||
@@ -1222,11 +1232,15 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                             <div className="admin-policy-row-actions">
                               <Button
                                 kind="ghost"
-                                size="sm"
-                                onClick={() => editFeePolicy(row)}
+                                size="md"
+                                onClick={(event) => {
+                                  policyEditorLauncherRef.current = event.currentTarget
+                                  editFeePolicy(row)
+                                }}
                                 disabled={
                                   isLoadingPolicies ||
                                   isMutatingPolicies ||
+                                  isPolicyEditorOpen ||
                                   isLoadingFeeRegionOptions ||
                                   Boolean(feeRegionOptionsError) ||
                                   feeRegionOptions.length === 0
@@ -1236,7 +1250,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                               </Button>
                               <Button
                                 kind="danger--ghost"
-                                size="sm"
+                                size="md"
                                 renderIcon={TrashCan}
                                 onClick={() =>
                                   requestDelete({
@@ -1247,7 +1261,9 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                     percentage: row.policyPercentage,
                                   })
                                 }
-                                disabled={isLoadingPolicies || isMutatingPolicies}
+                                disabled={
+                                  isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
+                                }
                               >
                                 Delete
                               </Button>
@@ -1287,8 +1303,17 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   kind="primary"
                   size="md"
                   renderIcon={Add}
-                  onClick={openPolicyEditor}
-                  disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
+                  id="admin-policy-create"
+                  onClick={(event) => {
+                    policyEditorLauncherRef.current = event.currentTarget
+                    openPolicyEditor()
+                  }}
+                  disabled={
+                    isLoadingPolicies ||
+                    isMutatingPolicies ||
+                    isPolicyEditorOpen ||
+                    !canManageFilPolicy
+                  }
                 >
                   Add fee in lieu policy
                 </Button>
@@ -1340,15 +1365,20 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                             <div className="admin-policy-row-actions">
                               <Button
                                 kind="ghost"
-                                size="sm"
-                                onClick={() => editFilPolicy(row)}
-                                disabled={isLoadingPolicies || isMutatingPolicies}
+                                size="md"
+                                onClick={(event) => {
+                                  policyEditorLauncherRef.current = event.currentTarget
+                                  editFilPolicy(row)
+                                }}
+                                disabled={
+                                  isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
+                                }
                               >
                                 Edit
                               </Button>
                               <Button
                                 kind="danger--ghost"
-                                size="sm"
+                                size="md"
                                 renderIcon={TrashCan}
                                 onClick={() =>
                                   requestDelete({
@@ -1358,7 +1388,9 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                     percentage: row.filPercentage,
                                   })
                                 }
-                                disabled={isLoadingPolicies || isMutatingPolicies}
+                                disabled={
+                                  isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
+                                }
                               >
                                 Delete
                               </Button>
@@ -1388,68 +1420,84 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             <Tile className="create-form-tile admin-policy-editor-tile">
               <h2 className="dashboard-title">Schedule details</h2>
               <RequiredFieldsLegend />
-              <div className="legacy-search-grid create-form-grid">
-                <IsoDatePicker
-                  id="scheduleAdvertisingDate"
-                  labelText={requiredLabel('Advertising date')}
-                  required
-                  value={scheduleAdvertisingDate}
-                  invalid={!!scheduleFieldError('scheduleAdvertisingDate')}
-                  invalidText={scheduleFieldError('scheduleAdvertisingDate')}
-                  onBlur={() => markFieldTouched('scheduleAdvertisingDate')}
-                  onChange={setScheduleAdvertisingDate}
-                />
-                <IsoDatePicker
-                  id="scheduleApplicationReceiptDate"
-                  labelText={requiredLabel('Application receipt date')}
-                  required
-                  value={scheduleApplicationReceiptDate}
-                  invalid={!!scheduleFieldError('scheduleApplicationReceiptDate')}
-                  invalidText={scheduleFieldError('scheduleApplicationReceiptDate')}
-                  onBlur={() => markFieldTouched('scheduleApplicationReceiptDate')}
-                  onChange={setScheduleApplicationReceiptDate}
-                />
-                <IsoDatePicker
-                  id="scheduleOfferReceiptDate"
-                  labelText={requiredLabel('Offer receipt date')}
-                  required
-                  value={scheduleOfferReceiptDate}
-                  invalid={!!scheduleFieldError('scheduleOfferReceiptDate')}
-                  invalidText={scheduleFieldError('scheduleOfferReceiptDate')}
-                  onBlur={() => markFieldTouched('scheduleOfferReceiptDate')}
-                  onChange={setScheduleOfferReceiptDate}
-                />
-                <IsoDatePicker
-                  id="scheduleOfferEndDate"
-                  labelText={requiredLabel('Offer end date')}
-                  required
-                  value={scheduleOfferEndDate}
-                  invalid={!!scheduleFieldError('scheduleOfferEndDate')}
-                  invalidText={scheduleFieldError('scheduleOfferEndDate')}
-                  onBlur={() => markFieldTouched('scheduleOfferEndDate')}
-                  onChange={setScheduleOfferEndDate}
-                />
-                <IsoDatePicker
-                  id="scheduleOfferWithdrawalDate"
-                  labelText={requiredLabel('Offer withdrawal date')}
-                  required
-                  value={scheduleOfferWithdrawalDate}
-                  invalid={!!scheduleFieldError('scheduleOfferWithdrawalDate')}
-                  invalidText={scheduleFieldError('scheduleOfferWithdrawalDate')}
-                  onBlur={() => markFieldTouched('scheduleOfferWithdrawalDate')}
-                  onChange={setScheduleOfferWithdrawalDate}
-                />
-                <IsoDatePicker
-                  id="scheduleTeacMeetingDate"
-                  labelText={requiredLabel('TEAC meeting date')}
-                  required
-                  value={scheduleTeacMeetingDate}
-                  invalid={!!scheduleFieldError('scheduleTeacMeetingDate')}
-                  invalidText={scheduleFieldError('scheduleTeacMeetingDate')}
-                  onBlur={() => markFieldTouched('scheduleTeacMeetingDate')}
-                  onChange={setScheduleTeacMeetingDate}
-                />
-              </div>
+              <RecordFieldGrid editing>
+                <RecordFieldRow>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleAdvertisingDate"
+                      labelText={requiredLabel('Advertising date')}
+                      required
+                      value={scheduleAdvertisingDate}
+                      invalid={!!scheduleFieldError('scheduleAdvertisingDate')}
+                      invalidText={scheduleFieldError('scheduleAdvertisingDate')}
+                      onBlur={() => markFieldTouched('scheduleAdvertisingDate')}
+                      onChange={setScheduleAdvertisingDate}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleApplicationReceiptDate"
+                      labelText={requiredLabel('Application receipt date')}
+                      required
+                      value={scheduleApplicationReceiptDate}
+                      invalid={!!scheduleFieldError('scheduleApplicationReceiptDate')}
+                      invalidText={scheduleFieldError('scheduleApplicationReceiptDate')}
+                      onBlur={() => markFieldTouched('scheduleApplicationReceiptDate')}
+                      onChange={setScheduleApplicationReceiptDate}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleOfferReceiptDate"
+                      labelText={requiredLabel('Offer receipt date')}
+                      required
+                      value={scheduleOfferReceiptDate}
+                      invalid={!!scheduleFieldError('scheduleOfferReceiptDate')}
+                      invalidText={scheduleFieldError('scheduleOfferReceiptDate')}
+                      onBlur={() => markFieldTouched('scheduleOfferReceiptDate')}
+                      onChange={setScheduleOfferReceiptDate}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleOfferEndDate"
+                      labelText={requiredLabel('Offer end date')}
+                      required
+                      value={scheduleOfferEndDate}
+                      invalid={!!scheduleFieldError('scheduleOfferEndDate')}
+                      invalidText={scheduleFieldError('scheduleOfferEndDate')}
+                      onBlur={() => markFieldTouched('scheduleOfferEndDate')}
+                      onChange={setScheduleOfferEndDate}
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+                <RecordFieldRow>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleOfferWithdrawalDate"
+                      labelText={requiredLabel('Offer withdrawal date')}
+                      required
+                      value={scheduleOfferWithdrawalDate}
+                      invalid={!!scheduleFieldError('scheduleOfferWithdrawalDate')}
+                      invalidText={scheduleFieldError('scheduleOfferWithdrawalDate')}
+                      onBlur={() => markFieldTouched('scheduleOfferWithdrawalDate')}
+                      onChange={setScheduleOfferWithdrawalDate}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleTeacMeetingDate"
+                      labelText={requiredLabel('TEAC meeting date')}
+                      required
+                      value={scheduleTeacMeetingDate}
+                      invalid={!!scheduleFieldError('scheduleTeacMeetingDate')}
+                      invalidText={scheduleFieldError('scheduleTeacMeetingDate')}
+                      onBlur={() => markFieldTouched('scheduleTeacMeetingDate')}
+                      onChange={setScheduleTeacMeetingDate}
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+              </RecordFieldGrid>
               <div className="legacy-search-actions create-form-actions">
                 <Button
                   kind="primary"
@@ -1546,7 +1594,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                             <div className="admin-policy-row-actions">
                               <Button
                                 kind="ghost"
-                                size="sm"
+                                size="md"
                                 onClick={() => editExportSchedule(row)}
                                 disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
                               >
@@ -1554,7 +1602,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                               </Button>
                               <Button
                                 kind="danger--ghost"
-                                size="sm"
+                                size="md"
                                 renderIcon={TrashCan}
                                 onClick={() => requestDelete({ area: 'schedule', row })}
                                 disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}

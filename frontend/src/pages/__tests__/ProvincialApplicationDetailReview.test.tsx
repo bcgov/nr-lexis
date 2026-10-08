@@ -195,7 +195,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       .filter((row) => row.textContent?.includes('note'))
     expect(rows).toHaveLength(3)
     expect(rows[0]).toHaveTextContent('Date-only note')
-    expect(rows[0]).toHaveTextContent('Sep 24, 2026')
+    expect(rows[0]).toHaveTextContent('2026-09-24')
     expect(rows[1]).toHaveTextContent('Later note')
     expect(rows[1]).toHaveTextContent('Sep 24, 2026 · 10:30:00 AM')
     expect(rows[2]).toHaveTextContent('Earlier note')
@@ -623,6 +623,12 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     await selectApplicationRemarksForEditing()
     expect(await screen.findByLabelText('Remark')).toBeInTheDocument()
+    // The panel's only field marks itself required, so there is no legend.
+    expect(
+      within(screen.getByRole('complementary', { name: 'Add remark' })).queryByText(
+        'Required fields',
+      ),
+    ).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('Remark'), {
       target: { value: 'New application note' },
     })
@@ -851,7 +857,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       within(remarksTable).queryByRole('columnheader', { name: 'Title' }),
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Filter remarks' })).not.toBeInTheDocument()
-    expect(within(remarkRow as HTMLElement).getByText('Jan 4, 2026')).toBeInTheDocument()
+    expect(within(remarkRow as HTMLElement).getByText('2026-01-04')).toBeInTheDocument()
     expect(within(remarkRow as HTMLElement).getByText('idir\\reviewer')).toBeInTheDocument()
     await userEvent.click(within(remarkRow as HTMLElement).getByRole('button', { name: 'Edit' }))
     const remarkInput = await screen.findByLabelText('Remark')
@@ -1340,7 +1346,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     const clientLocationField = screen
       .getAllByText('Client location')
       .find((element) => element.tagName === 'DT')
-      ?.closest('.detail-field-item')
+      ?.closest('.record-field, .detail-field-item')
     expect(clientLocationField).toBeTruthy()
     expect(
       within(clientLocationField as HTMLElement).getByText('03 - WOODLANDS SERVICES'),
@@ -1532,7 +1538,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(screen.getByText('Email sent to agent@example.test.')).toBeInTheDocument()
     const savedEmail = within(await selectApplicationReviewTile(false))
       .getByText('Client email address')
-      .closest('.detail-field-item') as HTMLElement
+      .closest('.record-field, .detail-field-item') as HTMLElement
     expect(within(savedEmail).getByText('agent@example.test')).toBeInTheDocument()
   })
 

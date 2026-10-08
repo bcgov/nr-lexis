@@ -228,7 +228,7 @@ const RecordDocumentsSection = <Row extends DocumentRowBase>({
                       <div className="legacy-search-actions detail-documents-table__actions">
                         <Button
                           kind="ghost"
-                          size="sm"
+                          size="md"
                           renderIcon={Launch}
                           disabled={openDisabled}
                           title="Open supported files in a new tab; other formats download."
@@ -238,7 +238,7 @@ const RecordDocumentsSection = <Row extends DocumentRowBase>({
                         </Button>
                         <Button
                           kind="ghost"
-                          size="sm"
+                          size="md"
                           renderIcon={Download}
                           disabled={openDisabled}
                           onClick={() => onOpen(row, false)}
@@ -248,7 +248,7 @@ const RecordDocumentsSection = <Row extends DocumentRowBase>({
                         {deletable && (
                           <Button
                             kind="danger--ghost"
-                            size="sm"
+                            size="md"
                             renderIcon={TrashCan}
                             disabled={removing}
                             onClick={() => {

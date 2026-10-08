@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Button, Column, Grid, InlineNotification, Loading } from '@carbon/react'
 import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
@@ -120,9 +120,27 @@ const BlanketOicPermitCreateContent = ({
           ? editContext.lockMessage ||
             'This exemption is currently locked for editing by another user.'
           : ''
+  const formReady =
+    !loading &&
+    !errorMessage &&
+    !eligibilityMessage &&
+    !outcomeUnknownMessage &&
+    !!detail &&
+    !!editContext
+
+  const header = (actions?: ReactNode) => (
+    <Column sm={4} md={8} lg={16} className="detail-page-header">
+      <PageHeader
+        title="Apply for new permit"
+        actions={actions}
+        actionsLabel="Blanket OIC permit actions"
+      />
+    </Column>
+  )
 
   return (
     <>
+      {!formReady && header()}
       {loading && (
         <Column
           sm={4}
@@ -160,30 +178,33 @@ const BlanketOicPermitCreateContent = ({
             hideCloseButton
           />
           <div className="legacy-search-actions application-create-actions">
-            <Button kind="tertiary" size="sm" onClick={onCancel}>
+            <Button kind="tertiary" size="md" onClick={onCancel}>
               Return to exemption
             </Button>
           </div>
         </Column>
       )}
 
-      {!loading &&
-        !errorMessage &&
-        !eligibilityMessage &&
-        !outcomeUnknownMessage &&
-        detail &&
-        editContext && (
-          <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
-            <BlanketOicPermitCreateForm
-              exemptionNumber={detail.exemptionNumber}
-              regionOptions={regionOptions}
-              defaultRegionNumbers={editContext.regionNumbers}
-              onCancel={onCancel}
-              onCreated={onCreated}
-              onUnknownOutcome={setOutcomeUnknownMessage}
-            />
-          </Column>
-        )}
+      {formReady && detail && editContext && (
+        <BlanketOicPermitCreateForm
+          exemptionNumber={detail.exemptionNumber}
+          approvedExemptionVolume={detail.approvedVolume}
+          exemptionVolumeRemaining={detail.remainingVolume}
+          regionOptions={regionOptions}
+          defaultRegionNumbers={editContext.regionNumbers}
+          onCancel={onCancel}
+          onCreated={onCreated}
+          onUnknownOutcome={setOutcomeUnknownMessage}
+          layout={({ actions, content }) => (
+            <>
+              {header(actions)}
+              <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
+                {content}
+              </Column>
+            </>
+          )}
+        />
+      )}
     </>
   )
 }
@@ -235,9 +256,6 @@ const ProvincialBlanketOicPermitCreatePage = () => {
           to={exemptionDetailPath}
           returnTo={detailReturnTo}
         />
-      </Column>
-      <Column sm={4} md={8} lg={16} className="detail-page-header">
-        <PageHeader title="Apply for new permit" />
       </Column>
       <BlanketOicPermitCreateContent
         key={normalizedExemptionNumber}

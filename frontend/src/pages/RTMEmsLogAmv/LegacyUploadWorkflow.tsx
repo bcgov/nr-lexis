@@ -1709,25 +1709,6 @@ const RtmEmsLogAmvUploadPage = () => {
 
             <div className="admin-upload-fspts-button-row rtm-amv-upload-review-actions">
               <Button
-                kind="primary"
-                size="md"
-                className="admin-upload-fspts-action-button"
-                renderIcon={isUploading ? PendingIcon : Save}
-                onClick={() => {
-                  if (savedActionsUnavailable) {
-                    return
-                  }
-                  void submitUpload()
-                }}
-                disabled={isUploadDisabled}
-                aria-disabled={savedActionsUnavailable || undefined}
-                aria-describedby={
-                  savedActionsUnavailable ? 'rtm-amv-saved-actions-helper' : undefined
-                }
-              >
-                {isUploading ? 'Saving values' : 'Save values'}
-              </Button>
-              <Button
                 ref={cancelButtonRef}
                 kind="tertiary"
                 size="md"
@@ -1748,6 +1729,25 @@ const RtmEmsLogAmvUploadPage = () => {
                 }}
               >
                 Cancel
+              </Button>
+              <Button
+                kind="primary"
+                size="md"
+                className="admin-upload-fspts-action-button"
+                renderIcon={isUploading ? PendingIcon : Save}
+                onClick={() => {
+                  if (savedActionsUnavailable) {
+                    return
+                  }
+                  void submitUpload()
+                }}
+                disabled={isUploadDisabled}
+                aria-disabled={savedActionsUnavailable || undefined}
+                aria-describedby={
+                  savedActionsUnavailable ? 'rtm-amv-saved-actions-helper' : undefined
+                }
+              >
+                {isUploading ? 'Saving values' : 'Save values'}
               </Button>
             </div>
           </>

@@ -16,6 +16,8 @@ type EmptyStateProps = {
   className?: string
   headingLevel?: 1 | 2 | 3 | 4
   role?: 'region' | 'status' | 'alert'
+  /** "tab" fills an empty tab: no card, centred on the tab's own background. */
+  variant?: 'default' | 'tab'
 }
 
 /** Centered empty-result treatment shared by search, list, and detail surfaces. */
@@ -28,6 +30,7 @@ const EmptyState = ({
   className,
   headingLevel = 2,
   role,
+  variant = 'default',
 }: EmptyStateProps) => {
   const generatedId = useId().replaceAll(':', '')
   const titleId = `lexis-empty-state-title-${generatedId}`
@@ -36,7 +39,13 @@ const EmptyState = ({
 
   return (
     <section
-      className={['lexis-empty-state', className].filter(Boolean).join(' ')}
+      className={[
+        'lexis-empty-state',
+        variant === 'tab' ? 'lexis-empty-state--tab' : undefined,
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
       role={role}
       aria-labelledby={titleId}
       aria-describedby={descriptionId}

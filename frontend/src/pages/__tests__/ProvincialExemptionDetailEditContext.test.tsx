@@ -232,11 +232,19 @@ describe('Provincial exemption edit context', () => {
     expect(within(summaryCard as HTMLElement).getByText('Region')).toBeInTheDocument()
     expect(within(summaryCard as HTMLElement).getByText('Blanket OIC')).toBeInTheDocument()
 
+    for (const [label, value] of [
+      ['Approval date', '2026-02-01'],
+      ['Expiry date', '2026-12-31'],
+    ]) {
+      const field = within(summaryCard as HTMLElement)
+        .getByText(label)
+        .closest('.record-field') as HTMLElement
+      expect(within(field).getByText(value)).toBeInTheDocument()
+    }
+
     const exemptionHolderLabel = within(summaryCard as HTMLElement).getByText('Exemption holder')
     expect(
-      within(exemptionHolderLabel.closest('.detail-field-item') as HTMLElement).getByText(
-        'Blanket OIC',
-      ),
+      within(exemptionHolderLabel.closest('.record-field') as HTMLElement).getByText('Blanket OIC'),
     ).toBeInTheDocument()
     expect(within(summaryCard as HTMLElement).getByText('Conditions')).toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
@@ -247,7 +255,7 @@ describe('Provincial exemption edit context', () => {
     ) as HTMLElement
     const overrideLabel = within(feesCard).getByText('Override fee rate?')
     expect(
-      within(overrideLabel.closest('.detail-field-item') as HTMLElement).getByText('No'),
+      within(overrideLabel.closest('.record-field') as HTMLElement).getByText('No'),
     ).toBeInTheDocument()
     expect(within(feesCard).queryByText('Fee rate ($/m³)')).not.toBeInTheDocument()
   })
@@ -331,6 +339,14 @@ describe('Provincial exemption edit context', () => {
 
     // Editing Exemption details no longer opens fee controls on the Fees tab.
     await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    // Conditions and the edit actions sit in the one Exemption details card.
+    const detailsCard = screen
+      .getByRole('heading', { level: 2, name: 'Exemption details' })
+      .closest('.cds--tile') as HTMLElement
+    expect(within(detailsCard).getByLabelText('Conditions')).toBeInTheDocument()
+    expect(within(detailsCard).getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+    expect(within(detailsCard).getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { level: 2, name: 'Conditions' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Fees' }))
     expect(screen.queryByRole('radiogroup', { name: 'Override fee rate?' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit fee override' })).not.toBeInTheDocument()
@@ -1297,7 +1313,10 @@ describe('Provincial exemption edit context', () => {
     expect(await screen.findByText('Options unavailable')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Edit exemption details' }))
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
-    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toBeDisabled()
+    expect(screen.queryByRole('combobox', { name: 'Exemption type' })).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Exemption type', { selector: 'dt' }).nextElementSibling,
+    ).toHaveTextContent('Blanket Order in Council')
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
 
@@ -1529,6 +1548,42 @@ describe('Provincial exemption edit context', () => {
     expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
 
     expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+  })
+
+  it('shows locked exemption type, holder and approval date as the same text in view and edit', async () => {
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const lockedFields = ['Exemption type', 'Exemption holder', 'Approval date']
+    const fieldValue = (label: string) =>
+      screen.getByText(label, { selector: 'dt' }).nextElementSibling?.textContent
+    const editButton = await screen.findByRole('button', { name: 'Edit exemption details' })
+    const viewValues = lockedFields.map(fieldValue)
+    expect(viewValues).toEqual(['Blanket Order in Council', 'Blanket OIC', '2026-02-01'])
+
+    await userEvent.click(editButton)
+
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    expect(lockedFields.map(fieldValue)).toEqual(viewValues)
+    expect(screen.queryByRole('combobox', { name: /Exemption type/ })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText(/Approval date/)).not.toBeInTheDocument()
+    expect(screen.getByLabelText(/Expiry date/)).toBeEnabled()
   })
 
   it('protects relationship drafts and disables linking while exemption fields are dirty', async () => {
@@ -2358,9 +2413,11 @@ describe('Provincial exemption edit context', () => {
         expect(screen.getByRole('textbox', { name: /Exemption number/ })).toBeDisabled()
       }
       expect(screen.getByLabelText('Approval volume (m³)')).toBeDisabled()
-      expect(screen.getByLabelText('Approval date')).toBeDisabled()
+      expect(screen.queryByLabelText('Approval date')).not.toBeInTheDocument()
+      expect(
+        screen.getByText('Approval date', { selector: 'dt' }).nextElementSibling,
+      ).toHaveTextContent(cancelledDetail.approvalDate ?? 'Not approved')
       expect(screen.getByLabelText('Expiry date')).toBeDisabled()
-      expect(screen.getByLabelText('Approval date')).not.toHaveAttribute('aria-invalid', 'true')
       expect(screen.getByLabelText('Expiry date')).not.toHaveAttribute('aria-invalid', 'true')
       expect(screen.getByLabelText('Conditions')).toBeDisabled()
       expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()

@@ -1,0 +1,72 @@
+// The field grid sits flush with its card's content edge, whether or not the card is inside a page
+// grid. Inside one, Carbon renders it as a subgrid; outside, as a grid with page margins, which
+// would inset the fields.
+.record-field-grid.cds--css-grid,
+.record-field-grid.cds--subgrid {
+  inline-size: auto;
+  max-inline-size: none;
+  margin-inline: -1rem;
+  padding-inline: 0;
+}
+
+.legacy-form-footer .record-field-grid.cds--css-grid,
+.legacy-form-footer .record-field-grid.cds--subgrid {
+  flex: 1 1 24rem;
+  margin: 0;
+}
+
+// Exemption create's Conditions row sits in a flex action row; it takes the whole row.
+.create-form-comments > .record-field-grid.cds--css-grid,
+.create-form-comments > .record-field-grid.cds--subgrid {
+  flex: 1 1 100%;
+}
+
+// Rows and row groups span the card and lay their own fields on the same columns. They stay one
+// element deep so fields don't nest further than they need to.
+.record-field-grid .record-field-grid__row,
+.record-field-grid .record-field-grid__group {
+  display: grid;
+  grid-template-columns: repeat(var(--cds-grid-columns), minmax(0, 1fr));
+  margin-inline: 0;
+}
+
+// Fields that wrap inside a row on narrower screens keep the row spacing.
+.record-field-grid .record-field-grid__row {
+  row-gap: 1.5rem;
+}
+
+// Rows and row groups stack 24px apart.
+.record-field-grid > * + *,
+.record-field-grid__group > * + * {
+  margin-block-start: 1.5rem;
+}
+
+.record-field-grid + .record-field-grid {
+  margin-block-start: 1.5rem;
+}
+
+// A row whose fields render nothing takes no space.
+.record-field-grid .record-field-grid__row:empty {
+  display: none;
+}
+
+// A group whose rows are all hidden stays in place for its live region, but adds no space.
+.record-field-grid > .record-field-grid__group:empty {
+  margin-block-start: 0;
+}
+
+.record-field {
+  min-inline-size: 0;
+  margin-block: 0;
+}
+
+.record-field .cds--date-picker,
+.record-field .cds--date-picker-container,
+.record-field .cds--date-picker-input__wrapper,
+.record-field .cds--date-picker-input__wrapper > span,
+.record-field .cds--date-picker--single .cds--date-picker__input,
+.record-field .cds--date-picker-input__wrapper input {
+  inline-size: 100%;
+  max-inline-size: 100%;
+  min-inline-size: 0;
+}

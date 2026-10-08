@@ -1557,7 +1557,7 @@ export const ReportsPageContent = () => {
                         {canExpandDestinationCountries && (
                           <Button
                             kind="ghost"
-                            size="sm"
+                            size="md"
                             disabled={optionControlDisabled}
                             onClick={() =>
                               setExpandedDestinationCountryReports((current) => ({

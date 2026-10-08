@@ -1,4 +1,10 @@
 import {
+  RecordField,
+  RecordFieldCell,
+  RecordFieldGrid,
+  RecordFieldRow,
+} from '@/pages/shared/RecordFieldGrid'
+import {
   useCallback,
   useEffect,
   useMemo,
@@ -50,6 +56,7 @@ import { AddDocument } from '@carbon/pictograms-react'
 import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
+import DetailCardTitle from '@/components/DetailCardTitle'
 import DetailLoadError from '@/components/DetailLoadError'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
@@ -70,11 +77,7 @@ import {
   applicationListDateOptions,
   NO_LIST_DATE_VALUE,
 } from '@/pages/shared/application-list-date-options'
-import {
-  formatBusinessDateTimeLabel,
-  formatBusinessIsoDate,
-  formatIsoDateLabel,
-} from '@/utils/date'
+import { formatBusinessDateTimeLabel, formatBusinessIsoDate } from '@/utils/date'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { displayValue } from '@/pages/shared/detail-page-utils'
@@ -134,6 +137,7 @@ import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
   averageLogVolumeFieldError,
   clientLookupNumbersMatch,
+  clientDisplayName,
   clientLocationLabel,
   isAgentApplicant,
   isSelectableClientLocation,
@@ -179,18 +183,6 @@ const APPLICATION_WRITE_ACTIONS = [
 ]
 
 const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
-// Figma shows a client as "NAME (ACRONYM) · number"; the number stands alone until the name loads.
-const clientDisplayName = (
-  clientData: ApplicationClientData | null,
-  clientNumber: string,
-): string => {
-  const name = clientData?.companyName.trim() ?? ''
-  const acronym = clientData?.clientAcronym.trim() ?? ''
-  const number = clientNumber.trim()
-  const label = name && acronym ? `${name} (${acronym})` : name
-  return label && number ? `${label} · ${number}` : label || number
-}
-
 // Figma confirms every Applicant, Application and Scale save, including the first, with this title.
 const APPLICATION_SAVED_TITLE = 'The application was saved.'
 
@@ -323,39 +315,57 @@ function ClientDataSummary({
         loadingDescription={`Refreshing ${title.toLowerCase()}...`}
       />
       {showTitle && <h3 className="application-client-summary__title">{title}</h3>}
-      {/* Figma rows: contact, client identity, address, then phone, fax and email. */}
+      {/* Contact, client identity, address and communication details use separate rows. */}
       <div className="application-client-summary__groups">
-        {[
-          persistedDetailFields.slice(0, 1),
-          persistedDetailFields.slice(1),
-          clientData
-            ? ([
-                ['Address', displayValue(clientData.address)],
-                ['City', displayValue(clientData.city)],
-                ['Province', displayValue(clientData.province)],
-                ['Country', displayValue(clientData.country)],
-                ['Postal code', displayValue(clientData.postalCode)],
-              ] as Array<[string, string]>)
-            : [],
-          clientData
-            ? ([
-                ['Phone number', displayValue(clientData.phone)],
-                ['Fax number', displayValue(clientData.fax)],
-                ['Email address', displayValue(clientData.email)],
-              ] as Array<[string, string]>)
-            : [],
-        ]
-          .filter((group) => group.length > 0)
-          .map((group) => (
-            <dl key={group[0][0]} className="detail-field-grid">
-              {group.map(([label, value]) => (
-                <div key={label} className="detail-field-item">
-                  <dt className="detail-field-label">{label}</dt>
-                  <dd className="detail-field-value">{value}</dd>
-                </div>
+        {
+          <RecordFieldGrid>
+            {[
+              persistedDetailFields.slice(0, 1),
+              persistedDetailFields.slice(1),
+              clientData
+                ? ([
+                    ['Address', displayValue(clientData.address)],
+                    ['City', displayValue(clientData.city)],
+                    ['Province', displayValue(clientData.province)],
+                  ] as Array<[string, string]>)
+                : [],
+              clientData
+                ? ([
+                    ['Country', displayValue(clientData.country)],
+                    ['Postal code', displayValue(clientData.postalCode)],
+                  ] as Array<[string, string]>)
+                : [],
+              clientData
+                ? ([
+                    ['Phone number', displayValue(clientData.phone)],
+                    ['Fax number', displayValue(clientData.fax)],
+                    ['Email address', displayValue(clientData.email)],
+                  ] as Array<[string, string]>)
+                : [],
+            ]
+              .filter((group) => group.length > 0)
+              .map((group) => (
+                <RecordFieldRow key={group[0][0]}>
+                  {group.map(([label, value]) => (
+                    <RecordField
+                      key={label}
+                      label={label}
+                      value={value}
+                      span={
+                        label === 'Client' ||
+                        label === 'Client location' ||
+                        label === 'Agent client' ||
+                        label === 'Agent location' ||
+                        label === 'Address'
+                          ? 'wide'
+                          : 'field'
+                      }
+                    />
+                  ))}
+                </RecordFieldRow>
               ))}
-            </dl>
-          ))}
+          </RecordFieldGrid>
+        }
       </div>
       {!clientData && !isLoading && (
         <InlineNotification
@@ -1295,14 +1305,14 @@ const ProvincialApplicationDetailsPage = () => {
     : isLoadingOwnerClientLocations
       ? 'Loading locations'
       : hasSelectableOwnerClientLocations
-        ? 'Select applicant client location'
+        ? 'Select location'
         : 'No locations on file'
   const agentClientLocationPlaceholder = !summaryAgentClientNumber
     ? 'Enter agent client number first'
     : isLoadingAgentClientLocations
       ? 'Loading locations'
       : hasSelectableAgentClientLocations
-        ? 'Select agent client location'
+        ? 'Select location'
         : 'No locations on file'
   const exemptionReasonOptions = optionsWithCurrentValue(
     summaryExemptionReasonOptions,
@@ -3503,7 +3513,7 @@ const ProvincialApplicationDetailsPage = () => {
                   <TableCell>
                     {item.receivedTimestamp
                       ? formatBusinessDateTimeLabel(item.receivedTimestamp)
-                      : displayValue(formatIsoDateLabel(item.receivedDate))}
+                      : displayValue(item.receivedDate)}
                   </TableCell>
                 </TableRow>
               ))}
@@ -3524,115 +3534,139 @@ const ProvincialApplicationDetailsPage = () => {
   const showsEmptyApplicationDocuments =
     documentLookupAvailability === 'available' && !hasApplicationDocuments
   const applicationScaleForm = summaryForm && (
-    <div className="legacy-search-grid application-scale-form">
-      {summaryProductTypeHasLogDetails && (
-        <TextArea
-          className="application-scale-form__location"
-          id="applicationSummaryProductLocation"
-          labelText={requiredLabel('Location of logs')}
-          aria-required="true"
-          enableCounter
-          maxCount={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
-          maxLength={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
-          value={summaryForm.productLocation}
-          invalid={Boolean(visibleSummaryFieldError('productLocation'))}
-          invalidText={visibleSummaryFieldError('productLocation')}
-          onChange={(event) => onSummaryFormChange('productLocation', event.target.value)}
-        />
-      )}
-      {summaryProductTypeHasGrowthDetails && (
-        <SearchableSelect
-          id="applicationSummaryGrowthType"
-          labelText={requiredLabel('Age class')}
-          required
-          value={summaryForm.growthTypeCode}
-          invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
-          invalidText={visibleSummaryFieldError('growthTypeCode')}
-          disabled={
-            summaryOptionsAvailability !== 'available' || summaryGrowthTypeOptions.length === 0
-          }
-          placeholder="Select age class"
-          options={optionsWithCurrentValue(growthTypeOptions, summaryForm.growthTypeCode)}
-          onChange={(value) => onSummaryFormChange('growthTypeCode', value.toUpperCase())}
-        />
-      )}
-      {summaryProductTypeHasLogDetails && (
-        <TextInput
-          id="applicationSummaryAverageLogVolume"
-          labelText={requiredLabel('Average log volume (m³)')}
-          aria-required="true"
-          type="number"
-          min={0}
-          max={99.9}
-          step="0.1"
-          value={summaryForm.averageLogVolume}
-          invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
-          invalidText={visibleSummaryFieldError('averageLogVolume')}
-          onChange={(event) => onSummaryFormChange('averageLogVolume', event.target.value)}
-        />
-      )}
-      <TextInput
-        id="applicationSummaryVolume"
-        labelText={requiredLabel('Application volume (m³)')}
-        aria-required="true"
-        type="number"
-        min={0}
-        step="0.01"
-        value={summaryForm.applicationVolume}
-        invalid={Boolean(visibleSummaryFieldError('applicationVolume'))}
-        invalidText={visibleSummaryFieldError('applicationVolume')}
-        onChange={(event) => onSummaryFormChange('applicationVolume', event.target.value)}
-      />
-      <FilterableMultiSelect
-        id="applicationSummarySpecies"
-        titleText={requiredLabel('Species list')}
-        items={applicationSpeciesMultiSelectOptions}
-        itemToString={(item) => item?.text ?? ''}
-        selectedItems={selectedApplicationSpeciesOptions}
-        placeholder="Select species"
-        inputProps={{ 'aria-required': true }}
-        disabled={applicationSpeciesMultiSelectOptions.length === 0}
-        invalid={Boolean(summarySpeciesCodesError)}
-        invalidText={summarySpeciesCodesError}
-        onChange={({ selectedItems }) => {
-          setSummaryForm((current) =>
-            current
-              ? {
-                  ...current,
-                  speciesCodes: selectedItems.map((item) => item.id),
-                }
-              : current,
-          )
-          setSummaryVolumeWarningAccepted(false)
-          setActionResult(withoutVolumeWarning)
-        }}
-      />
-      {summarySpeciesCodesError && applicationSpeciesMultiSelectOptions.length === 0 && (
-        <p className="legacy-search-error" role="alert">
-          {summarySpeciesCodesError}
-        </p>
-      )}
-      {summaryProductTypeHasGrowthDetails && (
-        <SearchableSelect
-          id="applicationSummaryEndUse"
-          labelText={requiredLabel('End use')}
-          required
-          value={summaryForm.endUseCode}
-          disabled={
-            summaryForm.speciesCodes.length === 0 || applicationEndUseSelectOptions.length === 0
-          }
-          placeholder={endUsePlaceholder}
-          options={applicationEndUseSelectOptions}
-          onChange={(value) => onSummaryFormChange('endUseCode', value)}
-        />
-      )}
-      {productTypeSupportsPackages(summaryProductTypeCode) && (
-        <dl className="detail-field-item">
-          <dt className="detail-field-label">Total pieces</dt>
-          <dd className="detail-field-value">{applicationTotalPieces.toLocaleString()}</dd>
-        </dl>
-      )}
-    </div>
+    <RecordFieldGrid editing>
+      <RecordFieldRow>
+        {summaryProductTypeHasLogDetails && (
+          <RecordFieldCell>
+            <TextArea
+              className="application-scale-form__location"
+              id="applicationSummaryProductLocation"
+              labelText={requiredLabel('Location of logs')}
+              aria-required="true"
+              enableCounter
+              maxCount={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
+              maxLength={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
+              value={summaryForm.productLocation}
+              invalid={Boolean(visibleSummaryFieldError('productLocation'))}
+              invalidText={visibleSummaryFieldError('productLocation')}
+              onChange={(event) => onSummaryFormChange('productLocation', event.target.value)}
+            />
+          </RecordFieldCell>
+        )}
+      </RecordFieldRow>
+      <RecordFieldRow>
+        {summaryProductTypeHasGrowthDetails && (
+          <RecordFieldCell>
+            <SearchableSelect
+              id="applicationSummaryGrowthType"
+              labelText={requiredLabel('Age class')}
+              required
+              value={summaryForm.growthTypeCode}
+              invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
+              invalidText={visibleSummaryFieldError('growthTypeCode')}
+              disabled={
+                summaryOptionsAvailability !== 'available' || summaryGrowthTypeOptions.length === 0
+              }
+              placeholder="Select age class"
+              options={optionsWithCurrentValue(growthTypeOptions, summaryForm.growthTypeCode)}
+              onChange={(value) => onSummaryFormChange('growthTypeCode', value.toUpperCase())}
+            />
+          </RecordFieldCell>
+        )}
+      </RecordFieldRow>
+      <RecordFieldRow>
+        {summaryProductTypeHasLogDetails && (
+          <RecordFieldCell>
+            <TextInput
+              id="applicationSummaryAverageLogVolume"
+              labelText={requiredLabel('Average log volume (m³)')}
+              aria-required="true"
+              type="number"
+              min={0}
+              max={99.9}
+              step="0.1"
+              value={summaryForm.averageLogVolume}
+              invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
+              invalidText={visibleSummaryFieldError('averageLogVolume')}
+              onChange={(event) => onSummaryFormChange('averageLogVolume', event.target.value)}
+            />
+          </RecordFieldCell>
+        )}
+        <RecordFieldCell>
+          <TextInput
+            id="applicationSummaryVolume"
+            labelText={requiredLabel('Application volume (m³)')}
+            aria-required="true"
+            type="number"
+            min={0}
+            step="0.01"
+            value={summaryForm.applicationVolume}
+            invalid={Boolean(visibleSummaryFieldError('applicationVolume'))}
+            invalidText={visibleSummaryFieldError('applicationVolume')}
+            onChange={(event) => onSummaryFormChange('applicationVolume', event.target.value)}
+          />
+        </RecordFieldCell>
+      </RecordFieldRow>
+      <RecordFieldRow>
+        <RecordFieldCell>
+          <FilterableMultiSelect
+            id="applicationSummarySpecies"
+            titleText={requiredLabel('Species list')}
+            items={applicationSpeciesMultiSelectOptions}
+            itemToString={(item) => item?.text ?? ''}
+            selectedItems={selectedApplicationSpeciesOptions}
+            placeholder="Select species"
+            inputProps={{ 'aria-required': true }}
+            disabled={applicationSpeciesMultiSelectOptions.length === 0}
+            invalid={Boolean(summarySpeciesCodesError)}
+            invalidText={summarySpeciesCodesError}
+            onChange={({ selectedItems }) => {
+              setSummaryForm((current) =>
+                current
+                  ? {
+                      ...current,
+                      speciesCodes: selectedItems.map((item) => item.id),
+                    }
+                  : current,
+              )
+              setSummaryVolumeWarningAccepted(false)
+              setActionResult(withoutVolumeWarning)
+            }}
+          />
+          {summarySpeciesCodesError && applicationSpeciesMultiSelectOptions.length === 0 && (
+            <p className="legacy-search-error" role="alert">
+              {summarySpeciesCodesError}
+            </p>
+          )}
+        </RecordFieldCell>
+        {summaryProductTypeHasGrowthDetails && (
+          <RecordFieldCell>
+            <SearchableSelect
+              id="applicationSummaryEndUse"
+              labelText={requiredLabel('End use')}
+              required
+              value={summaryForm.endUseCode}
+              disabled={
+                summaryForm.speciesCodes.length === 0 || applicationEndUseSelectOptions.length === 0
+              }
+              placeholder={endUsePlaceholder}
+              options={applicationEndUseSelectOptions}
+              onChange={(value) => onSummaryFormChange('endUseCode', value)}
+            />
+          </RecordFieldCell>
+        )}
+      </RecordFieldRow>
+      <RecordFieldRow>
+        {productTypeSupportsPackages(summaryProductTypeCode) && (
+          <RecordFieldCell>
+            <dl className="detail-field-item">
+              <dt className="detail-field-label">Total pieces</dt>
+              <dd className="detail-field-value">{applicationTotalPieces.toLocaleString()}</dd>
+            </dl>
+          </RecordFieldCell>
+        )}
+      </RecordFieldRow>
+    </RecordFieldGrid>
   )
 
   const hasApplicationRemarks = (detail?.remarks?.length ?? 0) > 0
@@ -3689,10 +3723,7 @@ const ProvincialApplicationDetailsPage = () => {
       >
         {(!isReviewNotStarted || isEditingReview) && (
           <div className="detail-section-card__header">
-            <h2 className="detail-tile-title">
-              <Stamp size={24} aria-hidden="true" />
-              Application review
-            </h2>
+            <DetailCardTitle icon={Stamp}>Application review</DetailCardTitle>
             {canEditApplicationReview &&
               !isEditingReview &&
               !isReviewNotStarted &&
@@ -3708,101 +3739,120 @@ const ProvincialApplicationDetailsPage = () => {
         {isEditingReview ? (
           <div className="application-detail-review__form">
             <RequiredFieldsLegend className="application-detail-required" />
-            <RadioButtonGroup
-              legendText={requiredLabel('Application status')}
-              required
-              name="applicationDetailReviewStatus"
-              valueSelected={reviewStatusCode}
-              disabled={
-                isRetryingApprovalRemark ||
-                isSubmittingReviewAction ||
-                reviewOptionsAvailability !== 'available'
-              }
-              onChange={(value) => {
-                const nextStatus = String(value)
-                setReviewStatusCode(nextStatus)
-                if (nextStatus === 'APP' && !canManageRemarks) {
-                  setReviewStatusRemark('')
-                }
-                setReviewValidationMessage('')
-              }}
-            >
-              {[
-                ...(canApproveApplicationReview || isRetryingApprovalRemark
-                  ? [{ value: 'APP', label: 'Approved' }]
-                  : []),
-                ...reviewStatusOptions
-                  .map((option) => ({ ...option, value: normalizeReviewStatus(option.value) }))
-                  .filter((option) => ['REJ', 'WDN'].includes(option.value)),
-              ].map((option) => (
-                <RadioButton
-                  key={option.value}
-                  id={`applicationDetailReviewStatus-${option.value}`}
-                  value={option.value}
-                  labelText={option.label}
-                />
-              ))}
-            </RadioButtonGroup>
-            {isReviewStatusInvalid && <p role="alert">{reviewValidationMessage}</p>}
-            {(normalizedReviewStatusCode !== 'APP' || canManageRemarks) && (
-              <TextArea
-                id="applicationDetailReviewRemark"
-                labelText={requiredLabel(
-                  'Remarks',
-                  isRetryingApprovalRemark ||
-                    REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode),
-                )}
-                aria-required={
-                  isRetryingApprovalRemark ||
-                  REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode) ||
-                  undefined
-                }
-                helperText="Saved to the Remarks tab."
-                rows={5}
-                enableCounter
-                maxCount={APPLICATION_REMARK_MAX_LENGTH}
-                maxLength={APPLICATION_REMARK_MAX_LENGTH}
-                invalid={isReviewRemarkInvalid}
-                invalidText={reviewValidationMessage}
-                value={reviewStatusRemark}
-                disabled={
-                  isSubmittingReviewAction ||
-                  (!isRetryingApprovalRemark && reviewOptionsAvailability !== 'available')
-                }
-                onChange={(event) => {
-                  setReviewStatusRemark(event.target.value)
-                  setReviewValidationMessage('')
-                }}
-              />
-            )}
-            {canSendReviewStatusEmail && (
-              <>
-                <Checkbox
-                  id="applicationDetailReviewSendEmail"
-                  labelText="Send email notification to the client, including the remark"
-                  checked={sendReviewEmail}
-                  onChange={(_, { checked }) => setSendReviewEmail(checked)}
-                />
-                {sendReviewEmail && (
-                  <TextInput
-                    id="applicationDetailReviewEmail"
-                    labelText={requiredLabel('Client email address')}
+            <RecordFieldGrid editing>
+              <RecordFieldRow>
+                <RecordFieldCell>
+                  <RadioButtonGroup
+                    legendText={requiredLabel('Application status')}
                     required
-                    helperText={REVIEW_EMAIL_PREVIEW_HELPER}
-                    value={reviewStatusEmailAddress}
-                    invalid={reviewValidationMessage === REVIEW_EMAIL_REQUIRED_MESSAGE}
-                    invalidText={reviewValidationMessage}
-                    onChange={(event) => {
-                      setReviewStatusEmailOverride({
-                        applicationNumber: applicationNumber ?? '',
-                        value: event.target.value,
-                      })
+                    name="applicationDetailReviewStatus"
+                    valueSelected={reviewStatusCode}
+                    disabled={
+                      isRetryingApprovalRemark ||
+                      isSubmittingReviewAction ||
+                      reviewOptionsAvailability !== 'available'
+                    }
+                    onChange={(value) => {
+                      const nextStatus = String(value)
+                      setReviewStatusCode(nextStatus)
+                      if (nextStatus === 'APP' && !canManageRemarks) {
+                        setReviewStatusRemark('')
+                      }
                       setReviewValidationMessage('')
                     }}
-                  />
+                  >
+                    {[
+                      ...(canApproveApplicationReview || isRetryingApprovalRemark
+                        ? [{ value: 'APP', label: 'Approved' }]
+                        : []),
+                      ...reviewStatusOptions
+                        .map((option) => ({
+                          ...option,
+                          value: normalizeReviewStatus(option.value),
+                        }))
+                        .filter((option) => ['REJ', 'WDN'].includes(option.value)),
+                    ].map((option) => (
+                      <RadioButton
+                        key={option.value}
+                        id={`applicationDetailReviewStatus-${option.value}`}
+                        value={option.value}
+                        labelText={option.label}
+                      />
+                    ))}
+                  </RadioButtonGroup>
+                  {isReviewStatusInvalid && <p role="alert">{reviewValidationMessage}</p>}
+                </RecordFieldCell>
+              </RecordFieldRow>
+              <RecordFieldRow>
+                {(normalizedReviewStatusCode !== 'APP' || canManageRemarks) && (
+                  <RecordFieldCell span="full">
+                    <TextArea
+                      id="applicationDetailReviewRemark"
+                      labelText={requiredLabel(
+                        'Remarks',
+                        isRetryingApprovalRemark ||
+                          REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode),
+                      )}
+                      aria-required={
+                        isRetryingApprovalRemark ||
+                        REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode) ||
+                        undefined
+                      }
+                      helperText="Saved to the Remarks tab."
+                      rows={5}
+                      enableCounter
+                      maxCount={APPLICATION_REMARK_MAX_LENGTH}
+                      maxLength={APPLICATION_REMARK_MAX_LENGTH}
+                      invalid={isReviewRemarkInvalid}
+                      invalidText={reviewValidationMessage}
+                      value={reviewStatusRemark}
+                      disabled={
+                        isSubmittingReviewAction ||
+                        (!isRetryingApprovalRemark && reviewOptionsAvailability !== 'available')
+                      }
+                      onChange={(event) => {
+                        setReviewStatusRemark(event.target.value)
+                        setReviewValidationMessage('')
+                      }}
+                    />
+                  </RecordFieldCell>
                 )}
-              </>
-            )}
+              </RecordFieldRow>
+              <RecordFieldRow>
+                {canSendReviewStatusEmail && (
+                  <RecordFieldCell span="full">
+                    <Checkbox
+                      id="applicationDetailReviewSendEmail"
+                      labelText="Send email notification to the client, including the remark"
+                      checked={sendReviewEmail}
+                      onChange={(_, { checked }) => setSendReviewEmail(checked)}
+                    />
+                  </RecordFieldCell>
+                )}
+              </RecordFieldRow>
+              <RecordFieldRow>
+                {canSendReviewStatusEmail && sendReviewEmail && (
+                  <RecordFieldCell>
+                    <TextInput
+                      id="applicationDetailReviewEmail"
+                      labelText={requiredLabel('Client email address')}
+                      required
+                      helperText={REVIEW_EMAIL_PREVIEW_HELPER}
+                      value={reviewStatusEmailAddress}
+                      invalid={reviewValidationMessage === REVIEW_EMAIL_REQUIRED_MESSAGE}
+                      invalidText={reviewValidationMessage}
+                      onChange={(event) => {
+                        setReviewStatusEmailOverride({
+                          applicationNumber: applicationNumber ?? '',
+                          value: event.target.value,
+                        })
+                        setReviewValidationMessage('')
+                      }}
+                    />
+                  </RecordFieldCell>
+                )}
+              </RecordFieldRow>
+            </RecordFieldGrid>
             {showReviewValidationNotification && (
               <InlineNotification
                 className="detail-context-notification"
@@ -3859,7 +3909,7 @@ const ProvincialApplicationDetailsPage = () => {
             headingLevel={3}
           />
         ) : (
-          <dl className="detail-field-grid">
+          <RecordFieldGrid>
             {[
               [
                 'Application status',
@@ -3876,12 +3926,15 @@ const ProvincialApplicationDetailsPage = () => {
                 ? [['Client email address', sentReviewEmail.address]]
                 : []),
             ].map(([label, value]) => (
-              <div key={String(label)} className="detail-field-item">
-                <dt className="detail-field-label">{label}</dt>
-                <dd className="detail-field-value">{value}</dd>
-              </div>
+              <RecordFieldRow key={String(label)}>
+                <RecordField
+                  label={label}
+                  value={value}
+                  span={label === 'Remarks' ? 'full' : 'field'}
+                />
+              </RecordFieldRow>
             ))}
-          </dl>
+          </RecordFieldGrid>
         )}
       </Tile>
     ) : (
@@ -3891,10 +3944,7 @@ const ProvincialApplicationDetailsPage = () => {
         role="region"
         aria-label="Application review"
       >
-        <h2 className="detail-tile-title">
-          <Stamp size={24} aria-hidden="true" />
-          Application review
-        </h2>
+        <DetailCardTitle icon={Stamp}>Application review</DetailCardTitle>
         <EmptyState
           title="Review unavailable"
           description="Review actions are not available for this application."
@@ -4071,10 +4121,7 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-clients"
                       >
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">
-                            <Enterprise size={24} aria-hidden="true" />
-                            Applicant details
-                          </h2>
+                          <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4096,67 +4143,78 @@ const ProvincialApplicationDetailsPage = () => {
                         {isEditingOwnerDetails && summaryForm ? (
                           <>
                             <RequiredFieldsLegend className="application-detail-required" />
-                            <h3 className="detail-tile-title">{ownerSectionTitle}</h3>
-                            <div className="legacy-search-grid application-client-edit-grid application-client-edit-grid--fixed-client">
-                              <TextInput
-                                id="applicationOwnerContactNameEdit"
-                                labelText={requiredLabel('Contact name')}
-                                aria-required="true"
-                                value={summaryForm.ownerContactName}
-                                invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
-                                invalidText={visibleSummaryFieldError('ownerContactName')}
-                                disabled={isSavingSummary}
-                                placeholder="Enter contact name"
-                                onChange={(event) =>
-                                  onSummaryFormChange('ownerContactName', event.target.value)
-                                }
-                              />
-                              {/* Figma: the saved application's client is shown, not changed. */}
-                              <dl className="detail-field-item">
-                                <dt className="detail-field-label">Client</dt>
-                                <dd className="detail-field-value">
-                                  {displayValue(
-                                    clientDisplayName(
-                                      ownerClientData,
-                                      summaryForm.ownerClientNumber,
-                                    ),
-                                  )}
-                                </dd>
-                                {visibleSummaryFieldError('ownerClientNumber') && (
-                                  <dd className="legacy-search-error" role="alert">
-                                    {visibleSummaryFieldError('ownerClientNumber')}
-                                  </dd>
-                                )}
-                              </dl>
-                              <SearchableSelect
-                                id="applicationOwnerClientLocationEdit"
-                                labelText={requiredLabel('Client location')}
-                                required
-                                value={summaryForm.ownerClientLocationCode}
-                                invalid={Boolean(
-                                  visibleSummaryFieldError('ownerClientLocationCode'),
-                                )}
-                                invalidText={visibleSummaryFieldError('ownerClientLocationCode')}
-                                disabled={
-                                  isSavingSummary ||
-                                  !summaryForm.ownerClientNumber.trim() ||
-                                  isLoadingOwnerClientLocations
-                                }
-                                placeholder={ownerClientLocationPlaceholder}
-                                options={ownerClientLocations
-                                  .filter(isSelectableClientLocation)
-                                  .map((clientLocation) => ({
-                                    value: clientLocation.locationCode,
-                                    label: clientLocationLabel(
-                                      clientLocation.locationCode,
-                                      clientLocation.locationName,
-                                    ),
-                                  }))}
-                                onChange={(value) =>
-                                  onSummaryFormChange('ownerClientLocationCode', value)
-                                }
-                              />
-                            </div>
+                            <h3 className="detail-section-subtitle">{ownerSectionTitle}</h3>
+                            <RecordFieldGrid editing>
+                              <RecordFieldRow>
+                                <RecordFieldCell>
+                                  <TextInput
+                                    id="applicationOwnerContactNameEdit"
+                                    labelText={requiredLabel('Contact name')}
+                                    aria-required="true"
+                                    value={summaryForm.ownerContactName}
+                                    invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
+                                    invalidText={visibleSummaryFieldError('ownerContactName')}
+                                    disabled={isSavingSummary}
+                                    placeholder="Enter contact name"
+                                    onChange={(event) =>
+                                      onSummaryFormChange('ownerContactName', event.target.value)
+                                    }
+                                  />
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                              <RecordFieldRow>
+                                <RecordFieldCell span="wide">
+                                  <dl className="detail-field-item">
+                                    <dt className="detail-field-label">Client</dt>
+                                    <dd className="detail-field-value">
+                                      {displayValue(
+                                        clientDisplayName(
+                                          ownerClientData,
+                                          summaryForm.ownerClientNumber,
+                                        ),
+                                      )}
+                                    </dd>
+                                    {visibleSummaryFieldError('ownerClientNumber') && (
+                                      <dd className="legacy-search-error" role="alert">
+                                        {visibleSummaryFieldError('ownerClientNumber')}
+                                      </dd>
+                                    )}
+                                  </dl>
+                                </RecordFieldCell>
+                                <RecordFieldCell span="wide">
+                                  <SearchableSelect
+                                    id="applicationOwnerClientLocationEdit"
+                                    labelText={requiredLabel('Client location')}
+                                    required
+                                    value={summaryForm.ownerClientLocationCode}
+                                    invalid={Boolean(
+                                      visibleSummaryFieldError('ownerClientLocationCode'),
+                                    )}
+                                    invalidText={visibleSummaryFieldError(
+                                      'ownerClientLocationCode',
+                                    )}
+                                    disabled={
+                                      isSavingSummary ||
+                                      !summaryForm.ownerClientNumber.trim() ||
+                                      isLoadingOwnerClientLocations
+                                    }
+                                    placeholder={ownerClientLocationPlaceholder}
+                                    options={ownerClientLocations
+                                      .filter(isSelectableClientLocation)
+                                      .map((clientLocation) => ({
+                                        value: clientLocation.locationCode,
+                                        label: clientLocationLabel(
+                                          clientLocation.locationCode,
+                                          clientLocation.locationName,
+                                        ),
+                                      }))}
+                                    onChange={(value) =>
+                                      onSummaryFormChange('ownerClientLocationCode', value)
+                                    }
+                                  />
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                            </RecordFieldGrid>
                             <ClientDataSummary
                               title="Applicant client details"
                               showTitle={false}
@@ -4177,66 +4235,86 @@ const ProvincialApplicationDetailsPage = () => {
                             />
                             {isSummaryAgentApplicant && (
                               <section aria-label="Agent information">
-                                <h3 className="detail-tile-title">Agent information</h3>
-                                <div className="legacy-search-grid application-client-edit-grid">
-                                  <TextInput
-                                    id="applicationAgentContactNameEdit"
-                                    labelText={requiredLabel('Contact name')}
-                                    aria-required="true"
-                                    value={summaryForm.agentContactName}
-                                    invalid={Boolean(visibleSummaryFieldError('agentContactName'))}
-                                    invalidText={visibleSummaryFieldError('agentContactName')}
-                                    disabled={isSavingSummary}
-                                    placeholder="Enter contact name"
-                                    onChange={(event) =>
-                                      onSummaryFormChange('agentContactName', event.target.value)
-                                    }
-                                  />
-                                  <ForestClientComboBox
-                                    id="applicationAgentClientNumberEdit"
-                                    labelText={requiredLabel('Agent client')}
-                                    value={summaryForm.agentClientNumber}
-                                    selectedClientName={clientDisplayName(agentClientData, '')}
-                                    counterpartyClientNumber={summaryForm.ownerClientNumber}
-                                    required
-                                    invalid={Boolean(visibleSummaryFieldError('agentClientNumber'))}
-                                    invalidText={visibleSummaryFieldError('agentClientNumber')}
-                                    disabled={isSavingSummary}
-                                    onChange={(agentClientNumber) =>
-                                      onSummaryFormChange('agentClientNumber', agentClientNumber)
-                                    }
-                                  />
-                                  <SearchableSelect
-                                    id="applicationAgentClientLocationEdit"
-                                    labelText={requiredLabel('Agent location')}
-                                    required
-                                    value={summaryForm.agentClientLocationCode}
-                                    invalid={Boolean(
-                                      visibleSummaryFieldError('agentClientLocationCode'),
-                                    )}
-                                    invalidText={visibleSummaryFieldError(
-                                      'agentClientLocationCode',
-                                    )}
-                                    disabled={
-                                      isSavingSummary ||
-                                      !summaryForm.agentClientNumber.trim() ||
-                                      isLoadingAgentClientLocations
-                                    }
-                                    placeholder={agentClientLocationPlaceholder}
-                                    options={agentClientLocations
-                                      .filter(isSelectableClientLocation)
-                                      .map((clientLocation) => ({
-                                        value: clientLocation.locationCode,
-                                        label: clientLocationLabel(
-                                          clientLocation.locationCode,
-                                          clientLocation.locationName,
-                                        ),
-                                      }))}
-                                    onChange={(value) =>
-                                      onSummaryFormChange('agentClientLocationCode', value)
-                                    }
-                                  />
-                                </div>
+                                <h3 className="detail-section-subtitle">Agent information</h3>
+                                <RecordFieldGrid editing>
+                                  <RecordFieldRow>
+                                    <RecordFieldCell>
+                                      <TextInput
+                                        id="applicationAgentContactNameEdit"
+                                        labelText={requiredLabel('Contact name')}
+                                        aria-required="true"
+                                        value={summaryForm.agentContactName}
+                                        invalid={Boolean(
+                                          visibleSummaryFieldError('agentContactName'),
+                                        )}
+                                        invalidText={visibleSummaryFieldError('agentContactName')}
+                                        disabled={isSavingSummary}
+                                        placeholder="Enter contact name"
+                                        onChange={(event) =>
+                                          onSummaryFormChange(
+                                            'agentContactName',
+                                            event.target.value,
+                                          )
+                                        }
+                                      />
+                                    </RecordFieldCell>
+                                  </RecordFieldRow>
+                                  <RecordFieldRow>
+                                    <RecordFieldCell span="wide">
+                                      <ForestClientComboBox
+                                        id="applicationAgentClientNumberEdit"
+                                        labelText={requiredLabel('Agent client')}
+                                        value={summaryForm.agentClientNumber}
+                                        selectedClientName={clientDisplayName(agentClientData, '')}
+                                        counterpartyClientNumber={summaryForm.ownerClientNumber}
+                                        required
+                                        invalid={Boolean(
+                                          visibleSummaryFieldError('agentClientNumber'),
+                                        )}
+                                        invalidText={visibleSummaryFieldError('agentClientNumber')}
+                                        disabled={isSavingSummary}
+                                        onChange={(agentClientNumber) =>
+                                          onSummaryFormChange(
+                                            'agentClientNumber',
+                                            agentClientNumber,
+                                          )
+                                        }
+                                      />
+                                    </RecordFieldCell>
+                                    <RecordFieldCell span="wide">
+                                      <SearchableSelect
+                                        id="applicationAgentClientLocationEdit"
+                                        labelText={requiredLabel('Agent location')}
+                                        required
+                                        value={summaryForm.agentClientLocationCode}
+                                        invalid={Boolean(
+                                          visibleSummaryFieldError('agentClientLocationCode'),
+                                        )}
+                                        invalidText={visibleSummaryFieldError(
+                                          'agentClientLocationCode',
+                                        )}
+                                        disabled={
+                                          isSavingSummary ||
+                                          !summaryForm.agentClientNumber.trim() ||
+                                          isLoadingAgentClientLocations
+                                        }
+                                        placeholder={agentClientLocationPlaceholder}
+                                        options={agentClientLocations
+                                          .filter(isSelectableClientLocation)
+                                          .map((clientLocation) => ({
+                                            value: clientLocation.locationCode,
+                                            label: clientLocationLabel(
+                                              clientLocation.locationCode,
+                                              clientLocation.locationName,
+                                            ),
+                                          }))}
+                                        onChange={(value) =>
+                                          onSummaryFormChange('agentClientLocationCode', value)
+                                        }
+                                      />
+                                    </RecordFieldCell>
+                                  </RecordFieldRow>
+                                </RecordFieldGrid>
                                 <ClientDataSummary
                                   title="Agent information"
                                   showTitle={false}
@@ -4248,7 +4326,7 @@ const ProvincialApplicationDetailsPage = () => {
                             <div className="legacy-search-actions">
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 disabled={isSavingSummary}
                                 onClick={onCancelOwnerDetails}
                               >
@@ -4256,7 +4334,7 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                               <Button
                                 kind="primary"
-                                size="sm"
+                                size="md"
                                 disabled={
                                   isSavingSummary ||
                                   summaryOptionsUnavailableForSource(
@@ -4278,14 +4356,14 @@ const ProvincialApplicationDetailsPage = () => {
                         ) : (
                           <>
                             <section aria-label={ownerSectionTitle}>
-                              <h3 className="detail-tile-title">{ownerSectionTitle}</h3>
+                              <h3 className="detail-section-subtitle">{ownerSectionTitle}</h3>
                               {ownerClientSummaryContent}
                             </section>
                             {isSummaryAgentApplicant && (
                               <>
                                 <hr className="application-applicant-divider" />
                                 <section aria-label="Agent information">
-                                  <h3 className="detail-tile-title">Agent information</h3>
+                                  <h3 className="detail-section-subtitle">Agent information</h3>
                                   {agentClientSummaryContent}
                                 </section>
                               </>
@@ -4304,10 +4382,7 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-summary"
                       >
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">
-                            <Task size={24} aria-hidden="true" />
-                            Application details
-                          </h2>
+                          <DetailCardTitle icon={Task}>Application details</DetailCardTitle>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4329,136 +4404,164 @@ const ProvincialApplicationDetailsPage = () => {
                         {isEditingSummary && canEditSummary && summaryForm ? (
                           <>
                             <RequiredFieldsLegend className="application-detail-required" />
-                            <div className="legacy-search-grid">
-                              <SearchableSelect
-                                id="applicationSummaryRegion"
-                                labelText={requiredLabel('Region')}
-                                required
-                                value={summaryForm.orgUnitNumber}
-                                invalid={Boolean(visibleSummaryFieldError('orgUnitNumber'))}
-                                invalidText={visibleSummaryFieldError('orgUnitNumber')}
-                                disabled={
-                                  summaryOptionsAvailability !== 'available' ||
-                                  summaryRegionOptions.length === 0
-                                }
-                                placeholder="Select region"
-                                options={optionsWithCurrentValue(
-                                  regionOptions,
-                                  summaryForm.orgUnitNumber,
-                                )}
-                                onChange={(value) => onSummaryFormChange('orgUnitNumber', value)}
-                              />
-
-                              <SearchableSelect
-                                id="applicationSummaryProductType"
-                                labelText={requiredLabel('Product type')}
-                                required
-                                value={summaryForm.productTypeCode}
-                                invalid={Boolean(visibleSummaryFieldError('productTypeCode'))}
-                                invalidText={visibleSummaryFieldError('productTypeCode')}
-                                disabled={
-                                  summaryOptionsAvailability !== 'available' ||
-                                  summaryProductTypeOptions.length === 0
-                                }
-                                placeholder="Select product type"
-                                options={optionsWithCurrentValue(
-                                  productTypeOptions,
-                                  summaryForm.productTypeCode,
-                                )}
-                                onChange={(value) =>
-                                  onSummaryFormChange('productTypeCode', value.toUpperCase())
-                                }
-                              />
-                              <SearchableSelect
-                                id="applicationSummaryExemptionReason"
-                                labelText={requiredLabel('Exemption reason')}
-                                required
-                                value={summaryForm.exemptionReasonCode}
-                                invalid={Boolean(visibleSummaryFieldError('exemptionReasonCode'))}
-                                invalidText={visibleSummaryFieldError('exemptionReasonCode')}
-                                disabled={
-                                  summaryOptionsAvailability !== 'available' ||
-                                  summaryExemptionReasonOptions.length === 0
-                                }
-                                placeholder="Select exemption reason"
-                                options={optionsWithCurrentValue(
-                                  exemptionReasonOptions,
-                                  summaryForm.exemptionReasonCode,
-                                )}
-                                onChange={(value) =>
-                                  onSummaryFormChange('exemptionReasonCode', value.toUpperCase())
-                                }
-                              />
-                              <IsoDatePicker
-                                id="applicationSummaryApplicationDate"
-                                labelText={requiredLabel('Application date')}
-                                required
-                                value={summaryForm.applicationDate}
-                                invalid={Boolean(visibleSummaryFieldError('applicationDate'))}
-                                invalidText={visibleSummaryFieldError('applicationDate')}
-                                onChange={(value) => onSummaryFormChange('applicationDate', value)}
-                              />
-                              <div className="application-list-date-field">
-                                <RadioButtonGroup
-                                  legendText={requiredLabel('List date')}
-                                  name="applicationSummarySchedule"
-                                  valueSelected={
-                                    summaryForm.exportScheduleId ||
-                                    (canReviewApplication ? NO_LIST_DATE_VALUE : '')
-                                  }
-                                  required
-                                  orientation="horizontal"
-                                  disabled={
-                                    summaryOptionsAvailability !== 'available' ||
-                                    summaryScheduleOptions.length === 0
-                                  }
-                                  readOnly={listDateLocked}
-                                  helperText={
-                                    listDateLocked
-                                      ? 'List date cannot be changed after the application is approved.'
-                                      : undefined
-                                  }
-                                  onChange={(value) =>
-                                    onSummaryFormChange(
-                                      'exportScheduleId',
-                                      value === NO_LIST_DATE_VALUE ? '' : String(value),
-                                    )
-                                  }
-                                >
-                                  {scheduleOptions.map((option) => (
-                                    <RadioButton
-                                      key={option.value}
-                                      id={`applicationSummarySchedule-${option.value}`}
-                                      value={option.value}
-                                      labelText={formatIsoDateLabel(option.label)}
-                                    />
-                                  ))}
-                                </RadioButtonGroup>
-                                {visibleSummaryFieldError('exportScheduleId') && (
-                                  <p role="alert">{visibleSummaryFieldError('exportScheduleId')}</p>
-                                )}
-                              </div>
-                              <TextInput
-                                id="applicationSummaryTermDays"
-                                labelText={requiredLabel('Exemption term (days)')}
-                                aria-required="true"
-                                type="number"
-                                min={1}
-                                max={MAX_APPLICATION_TERM_DAYS}
-                                value={summaryForm.termDays}
-                                invalid={Boolean(visibleSummaryFieldError('termDays'))}
-                                invalidText={visibleSummaryFieldError('termDays')}
-                                onChange={(event) =>
-                                  onSummaryFormChange('termDays', event.target.value)
-                                }
-                              />
-                            </div>
+                            <RecordFieldGrid editing>
+                              <RecordFieldRow>
+                                <RecordFieldCell span="wide">
+                                  <SearchableSelect
+                                    id="applicationSummaryRegion"
+                                    labelText={requiredLabel('Region')}
+                                    required
+                                    value={summaryForm.orgUnitNumber}
+                                    invalid={Boolean(visibleSummaryFieldError('orgUnitNumber'))}
+                                    invalidText={visibleSummaryFieldError('orgUnitNumber')}
+                                    disabled={
+                                      summaryOptionsAvailability !== 'available' ||
+                                      summaryRegionOptions.length === 0
+                                    }
+                                    placeholder="Select region"
+                                    options={optionsWithCurrentValue(
+                                      regionOptions,
+                                      summaryForm.orgUnitNumber,
+                                    )}
+                                    onChange={(value) =>
+                                      onSummaryFormChange('orgUnitNumber', value)
+                                    }
+                                  />
+                                </RecordFieldCell>
+                                <RecordFieldCell>
+                                  <SearchableSelect
+                                    id="applicationSummaryProductType"
+                                    labelText={requiredLabel('Product type')}
+                                    required
+                                    value={summaryForm.productTypeCode}
+                                    invalid={Boolean(visibleSummaryFieldError('productTypeCode'))}
+                                    invalidText={visibleSummaryFieldError('productTypeCode')}
+                                    disabled={
+                                      summaryOptionsAvailability !== 'available' ||
+                                      summaryProductTypeOptions.length === 0
+                                    }
+                                    placeholder="Select product type"
+                                    options={optionsWithCurrentValue(
+                                      productTypeOptions,
+                                      summaryForm.productTypeCode,
+                                    )}
+                                    onChange={(value) =>
+                                      onSummaryFormChange('productTypeCode', value.toUpperCase())
+                                    }
+                                  />
+                                </RecordFieldCell>
+                                <RecordFieldCell>
+                                  <SearchableSelect
+                                    id="applicationSummaryExemptionReason"
+                                    labelText={requiredLabel('Exemption reason')}
+                                    required
+                                    value={summaryForm.exemptionReasonCode}
+                                    invalid={Boolean(
+                                      visibleSummaryFieldError('exemptionReasonCode'),
+                                    )}
+                                    invalidText={visibleSummaryFieldError('exemptionReasonCode')}
+                                    disabled={
+                                      summaryOptionsAvailability !== 'available' ||
+                                      summaryExemptionReasonOptions.length === 0
+                                    }
+                                    placeholder="Select exemption reason"
+                                    options={optionsWithCurrentValue(
+                                      exemptionReasonOptions,
+                                      summaryForm.exemptionReasonCode,
+                                    )}
+                                    onChange={(value) =>
+                                      onSummaryFormChange(
+                                        'exemptionReasonCode',
+                                        value.toUpperCase(),
+                                      )
+                                    }
+                                  />
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                              <RecordFieldRow>
+                                <RecordFieldCell>
+                                  <IsoDatePicker
+                                    id="applicationSummaryApplicationDate"
+                                    labelText={requiredLabel('Application date')}
+                                    required
+                                    value={summaryForm.applicationDate}
+                                    invalid={Boolean(visibleSummaryFieldError('applicationDate'))}
+                                    invalidText={visibleSummaryFieldError('applicationDate')}
+                                    onChange={(value) =>
+                                      onSummaryFormChange('applicationDate', value)
+                                    }
+                                  />
+                                </RecordFieldCell>
+                                <RecordFieldCell>
+                                  <div className="application-list-date-field">
+                                    <RadioButtonGroup
+                                      legendText={requiredLabel('List date')}
+                                      name="applicationSummarySchedule"
+                                      valueSelected={
+                                        summaryForm.exportScheduleId ||
+                                        (canReviewApplication ? NO_LIST_DATE_VALUE : '')
+                                      }
+                                      required
+                                      orientation="horizontal"
+                                      disabled={
+                                        summaryOptionsAvailability !== 'available' ||
+                                        summaryScheduleOptions.length === 0
+                                      }
+                                      readOnly={listDateLocked}
+                                      helperText={
+                                        listDateLocked
+                                          ? 'List date cannot be changed after the application is approved.'
+                                          : undefined
+                                      }
+                                      onChange={(value) =>
+                                        onSummaryFormChange(
+                                          'exportScheduleId',
+                                          value === NO_LIST_DATE_VALUE ? '' : String(value),
+                                        )
+                                      }
+                                    >
+                                      {scheduleOptions.map((option) => (
+                                        <RadioButton
+                                          key={option.value}
+                                          id={`applicationSummarySchedule-${option.value}`}
+                                          value={option.value}
+                                          labelText={option.label}
+                                        />
+                                      ))}
+                                    </RadioButtonGroup>
+                                    {visibleSummaryFieldError('exportScheduleId') && (
+                                      <p role="alert">
+                                        {visibleSummaryFieldError('exportScheduleId')}
+                                      </p>
+                                    )}
+                                  </div>
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                              <RecordFieldRow>
+                                <RecordFieldCell>
+                                  <TextInput
+                                    id="applicationSummaryTermDays"
+                                    labelText={requiredLabel('Exemption term (days)')}
+                                    aria-required="true"
+                                    type="number"
+                                    min={1}
+                                    max={MAX_APPLICATION_TERM_DAYS}
+                                    value={summaryForm.termDays}
+                                    invalid={Boolean(visibleSummaryFieldError('termDays'))}
+                                    invalidText={visibleSummaryFieldError('termDays')}
+                                    onChange={(event) =>
+                                      onSummaryFormChange('termDays', event.target.value)
+                                    }
+                                  />
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                            </RecordFieldGrid>
                             {summaryScaleFieldsChanged && (
                               <section
                                 className="application-product-scale-details"
                                 aria-label="Scale details for changed product type"
                               >
-                                <h3 className="detail-tile-title">Scale details</h3>
+                                <h3 className="detail-section-subtitle">Scale details</h3>
                                 <p>
                                   Review the scale details for the selected product type before
                                   saving.
@@ -4469,7 +4572,7 @@ const ProvincialApplicationDetailsPage = () => {
                             <div className="legacy-search-actions">
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 disabled={isSavingSummary}
                                 onClick={onCancelSummaryDetails}
                               >
@@ -4477,7 +4580,7 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                               <Button
                                 kind="primary"
-                                size="sm"
+                                size="md"
                                 disabled={
                                   isSavingSummary ||
                                   summaryOptionsUnavailableForSource(
@@ -4493,34 +4596,34 @@ const ProvincialApplicationDetailsPage = () => {
                             </div>
                           </>
                         ) : (
-                          // Figma groups the saved Application details into these rows.
-                          [
-                            [
-                              ['Region', displayValue(summaryRegionDescription)],
-                              ['Product type', displayValue(summaryProductTypeDescription)],
-                              ['Exemption reason', displayValue(summaryExemptionReasonDescription)],
-                            ],
-                            [
+                          <RecordFieldGrid>
+                            {[
                               [
-                                'Application date',
-                                displayValue(formatIsoDateLabel(detail.applicationDate)),
+                                ['Region', displayValue(summaryRegionDescription)],
+                                ['Product type', displayValue(summaryProductTypeDescription)],
+                                [
+                                  'Exemption reason',
+                                  displayValue(summaryExemptionReasonDescription),
+                                ],
                               ],
-                              ['List date', displayValue(formatIsoDateLabel(detail.listingDate))],
-                            ],
-                            [['Exemption term (days)', displayValue(detail.termDays)]],
-                          ].map((row) => (
-                            <dl
-                              key={String(row[0][0])}
-                              className="detail-field-grid application-summary-fields"
-                            >
-                              {row.map(([label, value]) => (
-                                <div key={String(label)} className="detail-field-item">
-                                  <dt className="detail-field-label">{label}</dt>
-                                  <dd className="detail-field-value">{value}</dd>
-                                </div>
-                              ))}
-                            </dl>
-                          ))
+                              [
+                                ['Application date', displayValue(detail.applicationDate)],
+                                ['List date', displayValue(detail.listingDate)],
+                              ],
+                              [['Exemption term (days)', displayValue(detail.termDays)]],
+                            ].map((row) => (
+                              <RecordFieldRow key={String(row[0][0])}>
+                                {row.map(([label, value]) => (
+                                  <RecordField
+                                    key={String(label)}
+                                    label={label}
+                                    value={value}
+                                    span={label === 'Region' ? 'wide' : 'field'}
+                                  />
+                                ))}
+                              </RecordFieldRow>
+                            ))}
+                          </RecordFieldGrid>
                         )}
                       </Tile>
                     </Column>
@@ -4534,10 +4637,7 @@ const ProvincialApplicationDetailsPage = () => {
                         className="application-detail-section application-detail-summary"
                       >
                         <div className="detail-section-card__header">
-                          <h2 className="detail-tile-title">
-                            <ContainerRegistry size={24} aria-hidden="true" />
-                            Scale details
-                          </h2>
+                          <DetailCardTitle icon={ContainerRegistry}>Scale details</DetailCardTitle>
                           {canEditSummary &&
                             summaryForm &&
                             !isEditingSummary &&
@@ -4566,7 +4666,7 @@ const ProvincialApplicationDetailsPage = () => {
                             <div className="legacy-search-actions">
                               <Button
                                 kind="tertiary"
-                                size="sm"
+                                size="md"
                                 disabled={isSavingSummary}
                                 onClick={onCancelApplicationItemDetails}
                               >
@@ -4574,7 +4674,7 @@ const ProvincialApplicationDetailsPage = () => {
                               </Button>
                               <Button
                                 kind="primary"
-                                size="sm"
+                                size="md"
                                 disabled={
                                   isSavingSummary ||
                                   summaryOptionsUnavailableForSource('items') ||
@@ -4591,59 +4691,55 @@ const ProvincialApplicationDetailsPage = () => {
                             </div>
                           </>
                         ) : (
-                          [
-                            savedProductTypeHasLogDetails
-                              ? [
-                                  [
-                                    'Location of logs',
-                                    displayValue(savedScaleForm?.productLocation),
-                                  ],
-                                ]
-                              : [],
-                            savedProductTypeHasGrowthDetails
-                              ? [['Age class', displayValue(savedGrowthTypeDescription)]]
-                              : [],
-                            [
-                              ...(savedProductTypeHasLogDetails
+                          <RecordFieldGrid>
+                            {[
+                              savedProductTypeHasLogDetails
                                 ? [
                                     [
-                                      'Average log volume (m³)',
-                                      displayVolume(savedScaleForm?.averageLogVolume),
+                                      'Location of logs',
+                                      displayValue(savedScaleForm?.productLocation),
                                     ],
                                   ]
-                                : []),
+                                : [],
+                              savedProductTypeHasGrowthDetails
+                                ? [['Age class', displayValue(savedGrowthTypeDescription)]]
+                                : [],
                               [
-                                'Application volume (m³)',
-                                displayVolume(savedScaleForm?.applicationVolume),
+                                ...(savedProductTypeHasLogDetails
+                                  ? [
+                                      [
+                                        'Average log volume (m³)',
+                                        displayVolume(savedScaleForm?.averageLogVolume),
+                                      ],
+                                    ]
+                                  : []),
+                                [
+                                  'Application volume (m³)',
+                                  displayVolume(savedScaleForm?.applicationVolume),
+                                ],
                               ],
-                            ],
-                            [
                               [
-                                'Species list',
-                                displayValue(savedScaleForm?.speciesCodes.join(', ')),
+                                [
+                                  'Species list',
+                                  displayValue(savedScaleForm?.speciesCodes.join(', ')),
+                                ],
+                                ...(savedProductTypeHasGrowthDetails
+                                  ? [['End use', displayValue(savedEndUseDescription)]]
+                                  : []),
                               ],
-                              ...(savedProductTypeHasGrowthDetails
-                                ? [['End use', displayValue(savedEndUseDescription)]]
-                                : []),
-                            ],
-                            applicationProductSupportsPackages
-                              ? [['Total pieces', applicationTotalPieces.toLocaleString()]]
-                              : [],
-                          ]
-                            .filter((row) => row.length > 0)
-                            .map((row) => (
-                              <dl
-                                key={String(row[0][0])}
-                                className="detail-field-grid application-scale-fields"
-                              >
-                                {row.map(([label, value]) => (
-                                  <div key={String(label)} className="detail-field-item">
-                                    <dt className="detail-field-label">{label}</dt>
-                                    <dd className="detail-field-value">{value}</dd>
-                                  </div>
-                                ))}
-                              </dl>
-                            ))
+                              applicationProductSupportsPackages
+                                ? [['Total pieces', applicationTotalPieces.toLocaleString()]]
+                                : [],
+                            ]
+                              .filter((row) => row.length > 0)
+                              .map((row) => (
+                                <RecordFieldRow key={String(row[0][0])}>
+                                  {row.map(([label, value]) => (
+                                    <RecordField key={String(label)} label={label} value={value} />
+                                  ))}
+                                </RecordFieldRow>
+                              ))}
+                          </RecordFieldGrid>
                         )}
                       </Tile>
                     </Column>
@@ -4653,10 +4749,7 @@ const ProvincialApplicationDetailsPage = () => {
                           id="application-packages"
                           className="application-detail-section application-detail-packages"
                         >
-                          <h2 className="detail-tile-title">
-                            <Box size={24} aria-hidden="true" />
-                            Packages
-                          </h2>
+                          <DetailCardTitle icon={Box}>Packages</DetailCardTitle>
                           <TableFrame ariaLabel="Application packages">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -4858,7 +4951,7 @@ const ProvincialApplicationDetailsPage = () => {
                                         <TableCell>
                                           {item.timestamp
                                             ? formatBusinessDateTimeLabel(item.timestamp)
-                                            : displayValue(formatIsoDateLabel(item.date))}
+                                            : displayValue(item.date)}
                                         </TableCell>
                                         <TableCell>{displayValue(item.user)}</TableCell>
                                         <TableCell>{item.remark}</TableCell>
@@ -4866,7 +4959,7 @@ const ProvincialApplicationDetailsPage = () => {
                                           <TableCell>
                                             <Button
                                               kind="ghost"
-                                              size="sm"
+                                              size="md"
                                               renderIcon={Edit}
                                               disabled={
                                                 !item.remarkId || isEditingRemarks || isSavingRemark
@@ -4922,7 +5015,6 @@ const ProvincialApplicationDetailsPage = () => {
                                 },
                               ]}
                             >
-                              <RequiredFieldsLegend />
                               <TextArea
                                 ref={remarkBodyRef}
                                 id="applicationRemarkBody"

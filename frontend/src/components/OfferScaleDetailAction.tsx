@@ -110,7 +110,7 @@ const ScaleDetailDialog = ({
         </TableFrame>
       )}
       <div className="offer-scale-detail-modal__actions">
-        <Button type="button" kind="tertiary" onClick={onClose}>
+        <Button type="button" kind="tertiary" size="md" onClick={onClose}>
           Close
         </Button>
       </div>
@@ -141,7 +141,7 @@ const ScaleDetailAction = ({ target, disabled }: OfferScaleDetailActionProps) =>
         ref={launcherRef}
         type="button"
         kind="ghost"
-        size="sm"
+        size="md"
         disabled={disabled}
         onClick={() => setOpen(true)}
       >

@@ -44,8 +44,12 @@
 
 .lexis-page-header__actions {
   justify-content: flex-end;
-  gap: 0.5rem;
+  gap: 1rem;
   margin-inline-start: auto;
+}
+
+.lexis-page-header__actions > .legacy-search-actions {
+  gap: 1rem;
 }
 
 .lexis-page-header__subtitle {

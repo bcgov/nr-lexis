@@ -638,7 +638,8 @@ class PermitDetailsRpcControllerTest {
             "Reviewed",
             "Active",
             "N",
-            "Standing");
+            "Standing",
+            "1.4");
     when(service.getPackageDetails("PKG-903")).thenReturn(dto);
     when(service.packageBelongsToPermit("PKG-903", 7000123L)).thenReturn(true);
 

@@ -2114,7 +2114,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     const editOfferButton = page.getByRole('button', { name: 'Edit', exact: true })
     await expect(editOfferButton).toHaveClass(/cds--btn--tertiary/)
-    await expect(editOfferButton).toHaveCSS('height', '32px')
+    await expect(editOfferButton).toHaveCSS('height', '40px')
 
     await expect(page.getByLabel('Offer highlights')).toHaveCount(0)
 
@@ -2186,7 +2186,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(fillsContent).toBe(true)
   })
 
-  test('bounds detail field cards to one, two, and three columns', async ({ page }) => {
+  test('keeps record fields at one, two, and four columns', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/federal/application/888', {
       waitUntil: 'domcontentloaded',
@@ -2201,7 +2201,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       .getByRole('heading', { level: 2, name: 'Applicant' })
       .locator('..')
       .locator('..')
-      .locator('.detail-field-grid')
+      .locator('.record-field-grid')
     await expect(ownerFields).toBeVisible()
     await expect(page.locator('.application-detail-tab-list')).toHaveCSS('height', '48px')
     await expect(page.locator('.application-detail-tab-list [role="tab"]').first()).toHaveCSS(
@@ -2210,7 +2210,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     await expect(page.locator('.application-detail-tab-panel .cds--tile').first()).toHaveCSS(
       'padding-top',
-      '20px',
+      '32px',
     )
 
     const detailCanvas = await page.evaluate(() => {
@@ -2252,9 +2252,21 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.detail-section-card').first()).toHaveCSS('border-top-width', '1px')
 
     const columnCount = async () =>
-      ownerFields.evaluate((grid) => getComputedStyle(grid).gridTemplateColumns.split(' ').length)
+      ownerFields.evaluate((grid) => {
+        const row = grid.querySelector('.record-field-grid__row')
+        const field = row?.querySelector('.record-field')
+        if (!(row instanceof HTMLElement) || !(field instanceof HTMLElement)) {
+          throw new Error('Record field row not found')
+        }
+        const style = getComputedStyle(field)
+        const columnWidth =
+          field.getBoundingClientRect().width +
+          Number.parseFloat(style.marginInlineStart) +
+          Number.parseFloat(style.marginInlineEnd)
+        return Math.round(row.getBoundingClientRect().width / columnWidth)
+      })
 
-    expect(await columnCount()).toBe(3)
+    expect(await columnCount()).toBe(4)
 
     await page.setViewportSize({ width: 768, height: 900 })
     expect(await columnCount()).toBe(2)
@@ -2274,7 +2286,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       card.classList.add('application-detail-clients')
     })
     await page.setViewportSize({ width: 1440, height: 900 })
-    expect(await columnCount()).toBe(3)
+    expect(await columnCount()).toBe(4)
     await page.setViewportSize({ width: 768, height: 900 })
     expect(await columnCount()).toBe(2)
     await page.setViewportSize({ width: 390, height: 844 })
@@ -2318,6 +2330,103 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await expect(documentsTable).toBeVisible()
     await expect(rowActions).toHaveCSS('justify-content', 'flex-start')
+  })
+
+  test('keeps record summaries and footer actions within the form', async ({ page }, testInfo) => {
+    const routes = [
+      ['/provincial/offers/create', 'Create provincial offer'],
+      ['/provincial/exemption/create', 'Create new exemption'],
+      ['/provincial/offers/81001', 'Offer 81001'],
+    ]
+    const bounds: unknown[] = []
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 })
+      for (const [path, title] of routes) {
+        await gotoSyntheticRoute(page, path, {
+          ready: page.getByRole('heading', { level: 1, name: title, exact: true }),
+        })
+        const footer = page.locator('.legacy-form-footer')
+        await expect(footer).toBeVisible()
+        const geometry = await footer.evaluate((element) => {
+          const grid = element.querySelector('.record-field-grid')
+          if (!(grid instanceof HTMLElement)) throw new Error('Record summary not found')
+          const bounds = element.getBoundingClientRect()
+          const style = getComputedStyle(element)
+          const insetLeft =
+            Number.parseFloat(style.paddingLeft) + Number.parseFloat(style.borderLeftWidth)
+          const insetRight =
+            Number.parseFloat(style.paddingRight) + Number.parseFloat(style.borderRightWidth)
+          const summary = grid.getBoundingClientRect()
+          const actions = element.querySelector('.legacy-search-actions')?.getBoundingClientRect()
+          return {
+            left: bounds.left + insetLeft,
+            right: bounds.right - insetRight,
+            width: bounds.width - insetLeft - insetRight,
+            gridLeft: summary.left,
+            gridRight: summary.right,
+            gridWidth: summary.width,
+            gridTop: summary.top,
+            gridBottom: summary.bottom,
+            actionsLeft: actions?.left,
+            actionsTop: actions?.top,
+            actionsBottom: actions?.bottom,
+            actionsWidth: actions?.width,
+            columnGap: Number.parseFloat(style.columnGap) || 0,
+          }
+        })
+        bounds.push({ path, viewportWidth: width, ...geometry })
+        expect.soft(geometry.gridLeft).toBeGreaterThanOrEqual(geometry.left - 1)
+        expect.soft(geometry.gridRight).toBeLessThanOrEqual(geometry.right + 1)
+        const actionsShareRow =
+          geometry.actionsLeft !== undefined &&
+          geometry.actionsTop !== undefined &&
+          geometry.actionsBottom !== undefined &&
+          geometry.actionsTop <= geometry.gridBottom &&
+          geometry.actionsBottom >= geometry.gridTop
+        const availableWidth =
+          geometry.width - (actionsShareRow ? (geometry.actionsWidth ?? 0) + geometry.columnGap : 0)
+        expect.soft(geometry.gridWidth).toBeGreaterThanOrEqual(availableWidth - 1)
+        if (actionsShareRow) {
+          expect.soft(geometry.actionsLeft).toBeGreaterThanOrEqual(geometry.gridRight)
+        }
+      }
+    }
+    await testInfo.attach('footer-bounds', {
+      body: JSON.stringify(bounds, null, 2),
+      contentType: 'application/json',
+    })
+  })
+
+  test('spans exemption create conditions across the form', async ({ page }) => {
+    for (const width of [1440, 390]) {
+      await page.setViewportSize({ width, height: 900 })
+      await gotoSyntheticRoute(page, '/provincial/exemption/create', {
+        ready: page.getByRole('heading', { level: 1, name: 'Create new exemption', exact: true }),
+      })
+      const conditions = page.getByRole('textbox', { name: 'Conditions' })
+      await expect(conditions).toBeVisible()
+      const geometry = await conditions.evaluate((element) => {
+        const section = element.closest('.create-form-section')
+        const firstField = section?.querySelector('.record-field')
+        if (!(section instanceof HTMLElement) || !(firstField instanceof HTMLElement)) {
+          throw new Error('Exemption details fields not found')
+        }
+        const style = getComputedStyle(section)
+        const sectionBounds = section.getBoundingClientRect()
+        const bounds = element.getBoundingClientRect()
+        return {
+          left: bounds.left,
+          width: bounds.width,
+          fieldLeft: firstField.getBoundingClientRect().left,
+          sectionWidth:
+            sectionBounds.width -
+            Number.parseFloat(style.paddingLeft) -
+            Number.parseFloat(style.paddingRight),
+        }
+      })
+      expect.soft(Math.abs(geometry.left - geometry.fieldLeft)).toBeLessThanOrEqual(1)
+      expect.soft(geometry.width).toBeGreaterThanOrEqual(geometry.sectionWidth - 1)
+    }
   })
 
   test('gives long create forms FSPTS section rhythm without mobile overflow', async ({ page }) => {
@@ -2714,7 +2823,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(dialog.locator('.app-inline-notification')).toHaveCount(0)
   })
 
-  test('places policy add actions in result toolbars and uses focused add dialogs', async ({
+  test('places policy add actions in result toolbars and uses focused add panels', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
@@ -2772,23 +2881,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(Math.abs(feeLayout.tableRight - feeLayout.buttonRight - 16)).toBeLessThanOrEqual(1)
 
     await feeAddButton.click()
-    const feeDialog = page.getByRole('dialog', { name: 'Add fee policy' })
-    await expect(feeDialog).toBeVisible()
+    const feePanel = page.getByRole('complementary', { name: 'Add fee policy' })
+    await expect(feePanel).toBeVisible()
     await expect(
-      feeDialog.getByText(
-        'Set the fee increase for one region from a given effective date onward.',
-      ),
+      feePanel.getByText('Set the fee increase for one region from a given effective date onward.'),
     ).toBeVisible()
-    await expect(feeDialog.getByLabel('Policy effective date')).toBeVisible()
-    await expect(feeDialog.getByLabel('Policy effective date')).toBeFocused()
-    await expect(feeDialog.getByLabel('Region')).toBeVisible()
-    await expect(feeDialog.getByLabel('Fee increase percentage')).toBeVisible()
-    await expect(feeDialog.getByText('Whole numbers from 0 to 100')).toBeVisible()
-    const feeDialogCancel = feeDialog.getByRole('button', { name: 'Cancel' })
-    await expect(feeDialogCancel).toHaveClass(/cds--btn--tertiary/)
-    await expect(feeDialog.locator('.admin-policy-modal__actions')).toHaveCSS('gap', '8px')
-    await feeDialogCancel.click()
-    await expect(feeDialog).toBeHidden()
+    await expect(feePanel.getByLabel('Policy effective date')).toBeVisible()
+    await expect(feePanel.getByLabel('Policy effective date')).toBeFocused()
+    await expect(feePanel.getByLabel('Region')).toBeVisible()
+    await expect(feePanel.getByLabel('Fee increase percentage')).toBeVisible()
+    await expect(feePanel.getByText('Whole numbers from 0 to 100')).toBeVisible()
+    const feePanelCancel = feePanel.getByRole('button', { name: 'Cancel' })
+    await expect(feePanelCancel).toHaveClass(/cds--btn--tertiary/)
+    await expect(feePanelCancel).toHaveCSS('height', '40px')
+    await expect(feePanel.locator('.c4p--side-panel__actions-container')).toHaveCSS('gap', '8px')
+    await feePanelCancel.click()
+    await expect(feePanel).toBeHidden()
+    await expect(feeAddButton).toBeFocused()
 
     await page.setViewportSize({ width: 390, height: 844 })
     await gotoSyntheticRoute(page, '/admin/policies/fil', {
@@ -2802,26 +2911,29 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(filAddButton).toBeEnabled()
     await expect(filAddButton).toHaveCSS('height', '40px')
     await filAddButton.click()
-    const filDialog = page.getByRole('dialog', { name: 'Add fee in lieu policy' })
-    await expect(filDialog).toBeVisible()
-    await expect(filDialog.getByLabel('Policy effective date')).toBeVisible()
-    await expect(filDialog.getByLabel('Policy effective date')).toBeFocused()
-    await expect(filDialog.getByLabel('Fee in lieu percentage')).toBeVisible()
-    await expect(filDialog.getByText('Whole numbers from 1 to 99')).toBeVisible()
+    const filPanel = page.getByRole('complementary', { name: 'Add fee in lieu policy' })
+    await expect(filPanel).toBeVisible()
+    await expect(filPanel.getByLabel('Policy effective date')).toBeVisible()
+    await expect(filPanel.getByLabel('Policy effective date')).toBeFocused()
+    await expect(filPanel.getByLabel('Fee in lieu percentage')).toBeVisible()
+    await expect(filPanel.getByText('Whole numbers from 1 to 99')).toBeVisible()
 
-    const mobileDialog = await filDialog.evaluate((dialog) => {
-      const fields = dialog.querySelector('.admin-policy-modal__fields')
+    const mobilePanel = await filPanel.evaluate((panel) => {
+      const fields = panel.querySelector('.admin-policy-modal__fields')
       if (!(fields instanceof HTMLElement)) {
         throw new Error('Fee in lieu fields not found')
       }
       return {
-        dialogClientWidth: dialog.clientWidth,
-        dialogScrollWidth: dialog.scrollWidth,
+        panelClientWidth: panel.clientWidth,
+        panelScrollWidth: panel.scrollWidth,
         gridColumns: getComputedStyle(fields).gridTemplateColumns,
       }
     })
-    expect(mobileDialog.dialogScrollWidth).toBeLessThanOrEqual(mobileDialog.dialogClientWidth)
-    expect(mobileDialog.gridColumns.split(' ')).toHaveLength(1)
+    expect(mobilePanel.panelScrollWidth).toBeLessThanOrEqual(mobilePanel.panelClientWidth)
+    expect(mobilePanel.gridColumns.split(' ')).toHaveLength(1)
+    await filPanel.getByRole('button', { name: 'Cancel' }).click()
+    await expect(filPanel).toBeHidden()
+    await expect(filAddButton).toBeFocused()
   })
 
   test('uses the FSPTS review-card layout for validated application submissions', async ({

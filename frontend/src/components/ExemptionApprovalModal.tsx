@@ -531,7 +531,7 @@ const ExemptionApprovalModal = ({
                             </dl>
                             <Button
                               kind="ghost"
-                              size="sm"
+                              size="md"
                               disabled={pending || queueStatusUnknown}
                               onClick={() =>
                                 setEditing((current) => [...current, row.exemptionNumber])

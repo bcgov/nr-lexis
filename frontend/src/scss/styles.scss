@@ -25,8 +25,9 @@
   content: '*' / '';
 }
 
-// The "* Required fields" line. Zero specificity, so a page's own spacing wins.
-:where(.required-fields-legend) {
+// The "* Required fields" line. Element specificity: it follows Carbon's p reset, so it wins over
+// that, and a page's own class still sets different spacing.
+p:where(.required-fields-legend) {
   margin: 0 0 1rem;
 }
 
@@ -929,23 +930,15 @@ b {
 .app-shell .cds--btn {
   display: inline-flex;
   align-items: center;
-  justify-content: center;
   border-radius: 4px;
   line-height: 1.125rem;
 }
 
-.app-shell .cds--btn:not(.cds--btn--icon-only) {
+// A button without an icon centres its label between even padding. A button with an icon keeps
+// Carbon's layout, with the icon at the right edge.
+.app-shell .cds--btn:not(.cds--btn--icon-only):not(:has(.cds--btn__icon)) {
   justify-content: center;
-  gap: 0.5rem;
   padding-inline-end: 1rem;
-}
-
-.app-shell .cds--btn:not(.cds--btn--icon-only) .cds--btn__icon {
-  position: static;
-  align-self: center;
-  inset-inline-end: auto;
-  margin-inline-start: 0;
-  transform: translateY(1px);
 }
 
 .cds--btn--tertiary:hover {
@@ -1489,10 +1482,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   text-align: right;
 }
 
-.admin-policy-modal .cds--modal-content {
-  padding-block-end: 1rem;
-}
-
 .admin-policy-modal__description {
   margin-block-end: 1.25rem;
   color: var(--csp-text-secondary);
@@ -1531,20 +1520,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 0;
 }
 
-.admin-policy-modal__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-block-start: 1.5rem;
-}
-
 @media (max-width: 671px) {
-  .admin-policy-modal__actions .cds--btn {
-    flex: 1 1 100%;
-    max-inline-size: none;
-  }
-
   .admin-policy-modal__fields,
   .admin-policy-modal__fields--fee {
     grid-template-columns: minmax(0, 1fr);
@@ -1582,10 +1558,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
 }
 
-// Span the full row without adding implicit columns when auto-fit collapses to one column.
-.legacy-search-grid .application-list-date-field {
-  grid-column: 1 / -1;
-
+.application-list-date-field {
   .cds--radio-button-group {
     flex-wrap: wrap;
     row-gap: 0.5rem;
@@ -2202,11 +2175,17 @@ $notification-types: 'error', 'info', 'success', 'warning';
   border: 0;
 }
 
+// A visible legend titles a section inside a card, like .detail-section-subtitle.
 .legacy-form-fieldset > legend {
   margin-bottom: 0.75rem;
   padding: 0;
   color: var(--csp-text-primary);
-  font-weight: 600;
+  @include carbon-type.type-style('heading-compact-02');
+}
+
+// A legend that titles the whole card keeps the card title style.
+.legacy-form-fieldset > legend.detail-tile-title {
+  @include carbon-type.type-style('heading-03');
 }
 
 .legacy-form-footer {
@@ -2216,11 +2195,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   align-items: flex-end;
   justify-content: space-between;
   margin-top: 1rem;
-}
-
-.legacy-form-footer .detail-field-grid {
-  flex: 1 1 24rem;
-  margin: 0;
 }
 
 .legacy-search-section + .legacy-search-section {
@@ -2556,10 +2530,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   gap: 1rem;
 }
 
-.review-reject-modal .cds--modal-content {
-  padding-block-end: 1rem;
-}
-
 .review-reject-modal .cds--text-area {
   block-size: auto;
 }
@@ -2567,21 +2537,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .review-reject-modal__grid .cds--inline-notification {
   margin-block: 0;
   max-inline-size: none;
-}
-
-.review-reject-modal__actions {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: flex-end;
-  gap: 0.5rem;
-  margin-block-start: 1.5rem;
-}
-
-@media (max-width: 671px) {
-  .review-reject-modal__actions .cds--btn {
-    flex: 1 1 100%;
-    max-inline-size: none;
-  }
 }
 
 // Action feedback participates in its owning page/form layout and never times out.
@@ -4896,14 +4851,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin: 0;
 }
 
-// Use the signed-off Figma dimensions on the Documents and Remarks tabs.
+// The Documents and Remarks add buttons keep one fixed width, whatever their label.
 .detail-documents-section .detail-documents-add-button,
 .detail-remarks-section .detail-remarks-add-button {
   inline-size: 12.25rem;
   max-inline-size: 100%;
-  min-block-size: 2.75rem;
-  font-size: 1rem;
-  line-height: 1.375rem;
 }
 
 .detail-documents-section .lexis-empty-state__title,
@@ -4939,34 +4891,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .detail-review-update-button {
   inline-size: 11.25rem;
   max-inline-size: 100%;
-  min-block-size: 2.75rem;
-  font-size: 1rem;
-  line-height: 1.375rem;
-}
-
-.provincial-application-detail .detail-section-card__header .detail-tile-title {
-  font-size: 1.25rem;
-  font-weight: 400;
-  line-height: 1.75rem;
-}
-
-.provincial-application-detail
-  .application-detail-summary
-  :is(.application-summary-fields, .application-scale-fields) {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 2rem 3.5rem;
-}
-
-.provincial-application-detail
-  :is(.application-summary-fields, .application-scale-fields)
-  .detail-field-label {
-  margin-block-end: 0.5rem;
-}
-
-.provincial-application-detail .application-detail-summary .detail-field-grid + .detail-field-grid,
-.provincial-application-detail .application-scale-fields + .application-scale-fields {
-  margin-block-start: 2rem;
 }
 
 .provincial-application-detail .application-items-section h3 {
@@ -4976,7 +4900,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .provincial-application-detail .application-items-section-header {
-  min-block-size: 2.75rem;
+  min-block-size: 2.5rem;
   margin-block-end: 2rem;
 }
 
@@ -5006,23 +4930,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .provincial-application-detail .application-items-empty-package .cds--btn {
   inline-size: 12.25rem;
   max-inline-size: 100%;
-  min-block-size: 2.75rem;
-  font-size: 1rem;
-  line-height: 1.375rem;
 }
 
 .provincial-application-detail
   :is(.application-detail-clients, .application-detail-summary)
   .detail-section-card__header {
-  min-block-size: 2.75rem;
+  min-block-size: 2.5rem;
   margin-block-end: 2rem;
-}
-
-.provincial-application-detail .detail-section-card__header .cds--btn,
-.provincial-application-detail .application-items-panel__header .cds--btn {
-  min-block-size: 2.75rem;
-  font-size: 1rem;
-  line-height: 1.375rem;
 }
 
 @media (min-width: 672px) {
@@ -5109,14 +5023,8 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .application-detail-review .detail-section-card__header {
-  min-block-size: 2.75rem;
+  min-block-size: 2.5rem;
   margin-block-end: 2rem;
-}
-
-.application-detail-tab-panel .application-detail-review .detail-tile-title {
-  font-size: 1.25rem;
-  font-weight: 400;
-  line-height: 1.75rem;
 }
 
 .application-detail-review__form {
@@ -5133,12 +5041,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   color: var(--cds-text-primary);
   font-size: 0.875rem;
   line-height: 1.25rem;
-}
-
-.application-detail-review__form .cds--btn {
-  min-block-size: 2.75rem;
-  font-size: 1rem;
-  line-height: 1.375rem;
 }
 
 .detail-documents-section .detail-document-upload-modal__subtitle {
@@ -5383,26 +5285,9 @@ $notification-types: 'error', 'info', 'success', 'warning';
   }
 }
 
-.application-client-summary-grid {
-  display: grid;
-  gap: 1rem;
-  margin-top: 1rem;
-}
-
 .application-client-summary__groups {
   display: grid;
   gap: 1.75rem;
-
-  .detail-field-grid {
-    display: flex;
-    flex-wrap: wrap;
-    gap: 1.5rem 2rem;
-    margin: 0;
-  }
-
-  .detail-field-item {
-    min-inline-size: 7rem;
-  }
 }
 
 .application-client-summary__title {
@@ -5505,18 +5390,26 @@ $notification-types: 'error', 'info', 'success', 'warning';
   padding: 4rem 1rem;
 }
 
+// A card's title: heading-03, led by its tab's 24px icon (DetailCardTitle).
 .detail-tile-title {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
   margin: 0 0 1rem;
   @include carbon-type.type-style('heading-03');
+
+  > svg {
+    flex-shrink: 0;
+    fill: var(--cds-icon-secondary);
+  }
 }
 
-.detail-section-card .detail-tile-title,
-.create-form-tile .detail-tile-title,
-.application-detail-tab-panel .detail-tile-title {
+// A titled section inside a card, such as Summary of scale. No icon.
+.detail-section-subtitle {
+  margin: 0 0 1rem;
   @include carbon-type.type-style('heading-compact-02');
 }
 
-.provincial-summary-section .detail-tile-title,
 .application-items-panel__title {
   @include carbon-type.type-style('heading-03');
 }
@@ -5557,17 +5450,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .detail-section-card__header .detail-tile-title {
   margin: 0;
-}
-
-.application-detail-tab-panel .detail-tile-title {
-  align-items: center;
-  display: flex;
-  gap: 0.5rem;
-
-  > svg {
-    flex-shrink: 0;
-    fill: var(--cds-icon-secondary);
-  }
 }
 
 .application-detail-required {
@@ -5620,84 +5502,21 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin: 0;
 }
 
-.detail-field-grid + .legacy-search-grid {
-  margin-block-start: 1rem;
-}
-
-.application-detail-summary .detail-field-grid + .detail-field-grid {
-  margin-block-start: 1rem;
-}
-
-.detail-section-card .detail-field-grid,
-.application-detail-clients .detail-field-grid,
-.application-summary-fields.detail-field-grid {
-  grid-template-columns: 1fr;
-  gap: 1rem 1.5rem;
-}
-
-@media (min-width: 672px) {
-  .detail-section-card .detail-field-grid,
-  .application-detail-clients .detail-field-grid,
-  .application-summary-fields.detail-field-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (min-width: 1312px) {
-  .detail-section-card .detail-field-grid,
-  .application-detail-clients .detail-field-grid,
-  .application-summary-fields.detail-field-grid {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-  }
-}
-
 .application-detail-tab-panel .federal-shipping-details.cds--tile {
   min-height: auto;
-}
-
-.federal-shipping-details .federal-shipping-details__field-grid {
-  justify-content: start;
-}
-
-.federal-shipping-details__form {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: flex-start;
-  gap: 1rem 1.5rem;
-}
-
-.federal-shipping-details__form > * {
-  flex: 1 1 16rem;
-  max-inline-size: 18rem;
 }
 
 .federal-shipping-details__actions {
   display: flex;
   justify-content: flex-end;
   flex-wrap: wrap;
-  gap: 0.5rem;
-  margin-block-start: 1.5rem;
-}
-
-@media (min-width: 672px) {
-  .federal-shipping-details .federal-shipping-details__field-grid {
-    grid-template-columns: repeat(2, minmax(12rem, 18rem));
-  }
-}
-
-@media (min-width: 1312px) {
-  .federal-shipping-details .federal-shipping-details__field-grid {
-    grid-template-columns: repeat(3, minmax(12rem, 18rem));
-  }
+  gap: 1rem;
+  margin-block-start: 2rem;
 }
 
 .detail-field-item {
   margin: 0;
   min-width: 0;
-}
-
-.detail-field-item--full {
-  grid-column: 1 / -1;
 }
 
 .detail-field-label {
@@ -5829,30 +5648,12 @@ $notification-types: 'error', 'info', 'success', 'warning';
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
 }
 
-.application-client-edit-grid {
-  align-items: start;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-}
-
-.application-client-edit-grid + .application-client-summary {
+.record-field-grid + .application-client-summary {
   margin-block-start: 1.5rem;
 }
 
-.provincial-application-detail .application-client-edit-grid {
-  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
-}
-
-.provincial-application-detail .application-client-edit-grid > :first-child {
-  grid-column: 1 / -1;
-  max-inline-size: 24rem;
-}
-
-// Figma 2765:28889: the read-only owner client sits beside its location.
-.provincial-application-detail .application-client-edit-grid--fixed-client {
-  grid-template-columns: minmax(0, max-content) minmax(12rem, 24rem);
-}
-
-#permit-detail-content .permit-client-subheading {
+#permit-detail-content .permit-client-subheading,
+.provincial-blanket-oic-permit-create-page .permit-client-subheading {
   margin-block: 0 1.5rem;
   font-size: 1rem;
   font-weight: 600;
@@ -5861,26 +5662,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 #permit-detail-content .permit-applicant-card .permit-client-tile {
   padding: 0;
-}
-
-.permit-scale-panel .legacy-search-grid {
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.permit-scale-panel .legacy-search-grid > :last-child {
-  grid-column: 1 / -1;
-}
-
-@media (min-width: 672px) {
-  .permit-scale-panel .legacy-search-grid {
-    grid-template-columns: repeat(2, minmax(0, 1fr));
-  }
-}
-
-@media (max-width: 671px) {
-  .provincial-application-detail .application-client-edit-grid {
-    grid-template-columns: minmax(0, 1fr);
-  }
 }
 
 .application-detail-tab-panel .cds--form-item + .lexis-table-frame,
@@ -6046,13 +5827,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   min-inline-size: 8rem;
 }
 
-.application-items-inline-error {
-  color: var(--cds-text-error, #da1e28);
-  font-size: 0.75rem;
-  line-height: 1rem;
-  margin: -0.25rem 0 0.75rem;
-}
-
 .application-items-section--create-package .application-items-inline-form {
   border-block-start: 1px solid var(--csp-tile-border);
   padding-block-start: 0.75rem;
@@ -6144,10 +5918,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
   .application-items-package-edit-panel {
     grid-row: 1 / span 2;
-  }
-
-  .provincial-application-detail .application-items-section--scales .application-items-form {
-    grid-template-columns: repeat(3, minmax(180px, 1fr));
   }
 }
 
@@ -6266,11 +6036,30 @@ $notification-types: 'error', 'info', 'success', 'warning';
   .application-detail-tab-panel .cds--tile,
   .cds--tile.application-detail-section,
   .cds--tile.create-form-tile {
-    padding: 1.25rem 2rem 1.75rem;
+    padding: 2rem;
   }
 
   .application-detail-tab-panel .cds--tile.detail-section-card {
-    padding: 1.25rem 2rem 1.75rem;
+    padding: 2rem;
+  }
+}
+
+// Record cards keep a 32px rhythm: the title or title row, "* Required fields", the fields and the
+// actions.
+.application-detail-tab-panel .cds--tile,
+.cds--tile.create-form-tile {
+  > .detail-tile-title,
+  > .detail-section-card__header {
+    margin-block-end: 2rem;
+  }
+
+  > .required-fields-legend {
+    margin-block: 0 2rem;
+  }
+
+  > .legacy-search-actions {
+    gap: 1rem;
+    margin-block-start: 2rem;
   }
 }
 

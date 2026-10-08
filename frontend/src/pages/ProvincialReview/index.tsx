@@ -23,7 +23,7 @@ import { AppNotification } from '../../components/AppNotification'
 import { ActionResultNotifications } from '@/components/ActionResultNotification'
 import { actionResultText, type ActionResult } from '@/utils/action-result'
 import ConfirmationModal from '@/components/ConfirmationModal'
-import Modal from '@/components/Modal'
+import DetailSidePanel from '@/components/DetailSidePanel'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
@@ -280,6 +280,7 @@ const ProvincialReviewPage = () => {
   const [submittingApproval, setSubmittingApproval] = useState(false)
   const [approvalConfirmationNumbers, setApprovalConfirmationNumbers] = useState<string[]>([])
   const [rejectApplicationNumber, setRejectApplicationNumber] = useState('')
+  const rejectPanelLauncherRef = useRef<HTMLElement>(null)
   const [rejectStatusCode, setRejectStatusCode] = useState(REJECT_STATUS_CODE)
   const [rejectEmailAddress, setRejectEmailAddress] = useState('')
   const [rejectRemark, setRejectRemark] = useState('')
@@ -745,7 +746,7 @@ const ProvincialReviewPage = () => {
   }, [])
 
   const onOpenRejectPanel = useCallback(
-    (applicationNumber: string) => {
+    (applicationNumber: string, launcher?: HTMLElement) => {
       if (!canApproveApplications) {
         setReviewActionResults([
           {
@@ -765,6 +766,8 @@ const ProvincialReviewPage = () => {
         return
       }
 
+      rejectPanelLauncherRef.current =
+        launcher ?? (document.activeElement instanceof HTMLElement ? document.activeElement : null)
       rejectEmailRequestRef.current += 1
       setReviewActionResults([])
       setRejectApplicationNumber(applicationNumber)
@@ -1178,20 +1181,35 @@ const ProvincialReviewPage = () => {
         </ul>
       </ConfirmationModal>
 
-      <Modal
+      <DetailSidePanel
         open={Boolean(rejectApplicationNumber)}
-        passiveModal
-        size="md"
-        modalHeading={`Update application ${rejectApplicationNumber}`}
-        aria-label={`Update application ${rejectApplicationNumber}`}
+        title={`Update application ${rejectApplicationNumber}`}
         className="review-reject-modal"
-        preventCloseOnClickOutside
-        selectorPrimaryFocus="#reviewRejectStatus"
-        onRequestClose={() => {
-          if (!submittingReject) {
-            closeRejectPanel()
-          }
-        }}
+        contentSelector=".provincial-review-search-page"
+        launcherRef={rejectPanelLauncherRef}
+        fallbackFocusSelector=".provincial-review-search-page button:not(:disabled)"
+        initialFocusSelector="#reviewRejectStatus"
+        busy={submittingReject}
+        onClose={closeRejectPanel}
+        actions={[
+          {
+            label: 'Cancel',
+            kind: 'tertiary',
+            disabled: submittingReject,
+            onClick: closeRejectPanel,
+          },
+          {
+            label: submittingReject ? 'Saving…' : 'Save',
+            kind: 'primary',
+            disabled:
+              optionsUnavailable ||
+              !rejectStatusAvailable ||
+              (sendRejectEmail && loadingRejectEmail) ||
+              submittingReject,
+            renderIcon: submittingReject ? PendingIcon : undefined,
+            onClick: () => void onRejectApplicationClick(),
+          },
+        ]}
       >
         <RequiredFieldsLegend />
         <div className="review-reject-modal__grid">
@@ -1286,25 +1304,7 @@ const ProvincialReviewPage = () => {
             onCloseButtonClick={() => setReviewActionResults([])}
           />
         )}
-        <div className="review-reject-modal__actions">
-          <Button kind="tertiary" disabled={submittingReject} onClick={closeRejectPanel}>
-            Cancel
-          </Button>
-          <Button
-            kind="primary"
-            disabled={
-              optionsUnavailable ||
-              !rejectStatusAvailable ||
-              (sendRejectEmail && loadingRejectEmail) ||
-              submittingReject
-            }
-            renderIcon={submittingReject ? PendingIcon : undefined}
-            onClick={() => void onRejectApplicationClick()}
-          >
-            {submittingReject ? 'Saving…' : 'Save'}
-          </Button>
-        </div>
-      </Modal>
+      </DetailSidePanel>
 
       <Column
         sm={4}
@@ -1343,6 +1343,7 @@ const ProvincialReviewPage = () => {
                   loading ||
                   submittingApproval ||
                   submittingReject ||
+                  Boolean(rejectApplicationNumber) ||
                   selectedRowsCount === 0 ||
                   !canApproveApplications
                 }
@@ -1351,18 +1352,22 @@ const ProvincialReviewPage = () => {
                     ? 'Wait for the review results to load.'
                     : submittingApproval || submittingReject
                       ? 'Wait for the current review update to finish.'
-                      : !canApproveApplications
-                        ? 'You do not have permission to approve applications.'
-                        : 'Select at least one application to approve.'
+                      : rejectApplicationNumber
+                        ? 'Close the application editor before approving applications.'
+                        : !canApproveApplications
+                          ? 'You do not have permission to approve applications.'
+                          : 'Select at least one application to approve.'
                 }
               >
                 <Button
                   kind="tertiary"
+                  size="md"
                   onClick={() => void onApproveSelectedClick()}
                   disabled={
                     loading ||
                     submittingApproval ||
                     submittingReject ||
+                    Boolean(rejectApplicationNumber) ||
                     selectedRowsCount === 0 ||
                     !canApproveApplications
                   }
@@ -1496,10 +1501,11 @@ const ProvincialReviewPage = () => {
                         <div className="provincial-review-row-actions">
                           <Button
                             kind="ghost"
-                            size="sm"
+                            size="md"
                             disabled={
                               !canApproveApplications ||
                               !isReviewableSourceStatus(row.status) ||
+                              Boolean(rejectApplicationNumber) ||
                               submittingApproval ||
                               submittingReject
                             }
@@ -1511,16 +1517,19 @@ const ProvincialReviewPage = () => {
                           </Button>
                           <Button
                             kind="ghost"
-                            size="sm"
+                            size="md"
                             disabled={
                               !canApproveApplications ||
                               !isReviewableSourceStatus(row.status) ||
                               optionsUnavailable ||
                               !rejectStatusAvailable ||
+                              Boolean(rejectApplicationNumber) ||
                               submittingApproval ||
                               submittingReject
                             }
-                            onClick={() => void onOpenRejectPanel(row.applicationNumber)}
+                            onClick={(event) =>
+                              void onOpenRejectPanel(row.applicationNumber, event.currentTarget)
+                            }
                           >
                             Disapprove
                           </Button>

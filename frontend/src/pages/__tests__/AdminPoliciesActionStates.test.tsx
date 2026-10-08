@@ -134,7 +134,7 @@ const openAddPolicyDialog = async (area: 'fee' | 'fil') => {
     expect(openButton).toBeEnabled()
   })
   await userEvent.click(openButton)
-  return screen.getByRole('dialog', { name: dialogName })
+  return screen.getByRole('complementary', { name: dialogName })
 }
 
 describe('Admin policy action states', () => {
@@ -439,11 +439,22 @@ describe('Admin policy action states', () => {
     expect(savingButton).toBeDisabled()
     expect(savingButton.querySelector('.cds--loading')).toBeInTheDocument()
     expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Close' }))
+    fireEvent.keyDown(within(dialog).getByLabelText('Policy effective date'), {
+      key: 'Escape',
+      code: 'Escape',
+      keyCode: 27,
+      which: 27,
+    })
+    expect(dialog).toBeVisible()
+    expect(mockedUpsertFeePolicy).toHaveBeenCalledTimes(1)
 
     await act(async () => resolveSave())
 
     await waitFor(() => {
-      expect(screen.queryByRole('dialog', { name: 'Add fee policy' })).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole('complementary', { name: 'Add fee policy' }),
+      ).not.toBeInTheDocument()
     })
   })
 
@@ -503,7 +514,7 @@ describe('Admin policy action states', () => {
     renderPage()
 
     await screen.findByRole('heading', { level: 1, name: 'Multiplication Factor' })
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: 'Add fee policy' })).not.toBeInTheDocument()
 
     const dialog = await openAddPolicyDialog('fee')
     await within(dialog).findByRole('option', {
@@ -528,7 +539,7 @@ describe('Admin policy action states', () => {
 
     expect(screen.getByText('Policy update')).toBeInTheDocument()
     expect(screen.getByText('Fee policy added.')).toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Add fee policy' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: 'Add fee policy' })).not.toBeInTheDocument()
     expect(screen.getByText('2 results found')).toBeInTheDocument()
     const rows = within(screen.getByRole('table')).getAllByRole('row')
     expect(rows[1]).toHaveTextContent('2026-02-01')
@@ -546,7 +557,7 @@ describe('Admin policy action states', () => {
     expect(policyRow).not.toBeNull()
     await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: 'Edit' }))
 
-    const dialog = screen.getByRole('dialog', { name: 'Edit fee policy' })
+    const dialog = screen.getByRole('complementary', { name: 'Edit fee policy' })
     expect(within(dialog).getByLabelText('Region')).toHaveValue('1904')
     await userEvent.clear(within(dialog).getByLabelText('Fee increase percentage'))
     await userEvent.type(within(dialog).getByLabelText('Fee increase percentage'), '5')
@@ -623,7 +634,9 @@ describe('Admin policy action states', () => {
       })
     })
     expect(screen.getByText('Fee in lieu policy added.')).toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Add fee in lieu policy' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('complementary', { name: 'Add fee in lieu policy' }),
+    ).not.toBeInTheDocument()
     expect(screen.getByText('2 results found')).toBeInTheDocument()
     const rows = within(screen.getByRole('table')).getAllByRole('row')
     expect(rows[1]).toHaveTextContent('2026-02-01')
@@ -641,7 +654,7 @@ describe('Admin policy action states', () => {
     expect(policyRow).not.toBeNull()
     await userEvent.click(within(policyRow as HTMLElement).getByRole('button', { name: 'Edit' }))
 
-    const dialog = screen.getByRole('dialog', { name: 'Edit fee in lieu policy' })
+    const dialog = screen.getByRole('complementary', { name: 'Edit fee in lieu policy' })
     expect(within(dialog).getByLabelText('Policy effective date')).toHaveValue('2099-01-01')
     await userEvent.clear(within(dialog).getByLabelText('Fee in lieu percentage'))
     await userEvent.type(within(dialog).getByLabelText('Fee in lieu percentage'), '3')
@@ -659,18 +672,33 @@ describe('Admin policy action states', () => {
   it.each([
     { area: 'fee' as const, percentageLabel: 'Fee increase percentage' },
     { area: 'fil' as const, percentageLabel: 'Fee in lieu percentage' },
-  ])('cancels and resets the $area add dialog', async ({ area, percentageLabel }) => {
-    renderPage(area)
+  ])(
+    'returns focus and resets the $area add panel on cancel',
+    async ({ area, percentageLabel }) => {
+      renderPage(area)
 
-    const dialog = await openAddPolicyDialog(area)
-    await userEvent.type(within(dialog).getByLabelText(percentageLabel), '7')
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+      const panelName = area === 'fee' ? 'Add fee policy' : 'Add fee in lieu policy'
+      const launcher = await screen.findByRole('button', { name: panelName })
+      const panel = await openAddPolicyDialog(area)
+      await waitFor(() =>
+        expect(within(panel).getByLabelText('Policy effective date')).toHaveFocus(),
+      )
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      expect(launcher).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
+      await userEvent.type(within(panel).getByLabelText(percentageLabel), '7')
+      await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
 
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      await waitFor(() => expect(launcher).toHaveFocus())
+      expect(screen.queryByRole('complementary', { name: panelName })).not.toBeInTheDocument()
+      expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
+      expect(mockedUpsertFilPolicy).not.toHaveBeenCalled()
 
-    const reopenedDialog = await openAddPolicyDialog(area)
-    expect(within(reopenedDialog).getByLabelText(percentageLabel)).toHaveValue('')
-  })
+      const reopenedDialog = await openAddPolicyDialog(area)
+      expect(within(reopenedDialog).getByLabelText(percentageLabel)).toHaveValue('')
+    },
+  )
 
   it('fails closed when authoritative fee region options are unavailable', async () => {
     mockedFetchReportOptions.mockResolvedValue({ ...reportOptions, regions: [] })
@@ -684,7 +712,7 @@ describe('Admin policy action states', () => {
       ),
     ).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add fee policy' })).toBeDisabled()
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByRole('complementary', { name: 'Add fee policy' })).not.toBeInTheDocument()
     expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
   })
 

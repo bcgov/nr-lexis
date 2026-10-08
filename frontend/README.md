@@ -140,9 +140,33 @@ keystroke. Application volume accepts two decimal places. OIC request-volume edi
 existing text representation because the storage field is `VARCHAR2(9)`; format only their read-only
 display.
 
-Use Client and Client location labels in both owner and agent sections. Read-only Client values
-combine the company name and client number, with the acronym where available; do not repeat the
-company name in a separate row.
+Label owner client fields Client and Client location. Agent fields are Agent client and Agent
+client location on permits, and Agent client and Agent location on applications. Client location
+selects open on "Select location". Read-only Client values combine the company name and client
+number, with the acronym where available; do not repeat the company name in a separate row.
 
 Shipping reference labels lowercase the connector "Of" to "of" for display. Option codes and the
 returned reference names remain unchanged.
+
+Set `size="md"` (40px) on every `Button`; Carbon's default is lg (48px). A unit test checks every
+call site.
+
+Put actions that cover the whole record (Save and Cancel on a create page, Approve exemption, Print
+permit) in `PageHeader`'s `actions`, on the title row above any notification. A tab's edit actions
+(Cancel, Save changes) go inside its card, bottom right, after the last field.
+
+Title each record card with `DetailCardTitle`, passing its tab's icon: an h2 in heading-03 led by
+the 24px icon. A titled section inside a card is an h3 with `detail-section-subtitle`
+(heading-compact-02, no icon).
+
+Use `pages/shared/RecordFieldGrid` for record fields, keeping the same `RecordFieldRow` groups and
+field spans in view and edit. A standard field fills one of four columns on large screens, two on
+medium screens and one on small screens. Use `span="wide"` for Region and the wider client, address
+and shipping fields; use `span="full"` for remarks and conditions. Leave unused columns empty.
+`RecordField` renders its value or its `edit` control; `RecordFieldCell` holds other controls.
+Render tables as full-width siblings of field grids so their tooltips and popovers stay outside
+field rows. Keep field IDs and names stable when changing the layout.
+
+An empty tab has no card. Render `EmptyState` with `variant="tab"` straight in the tab panel, with
+the tab's pictogram: Cardboard for Scale, AddDocument for Documents, Invoice for Fees. An empty
+section inside a card is one line of text.
