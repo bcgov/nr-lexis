@@ -188,6 +188,8 @@ const BlanketOicPermitCreateContent = ({
       {formReady && detail && editContext && (
         <BlanketOicPermitCreateForm
           exemptionNumber={detail.exemptionNumber}
+          approvedExemptionVolume={detail.approvedVolume}
+          exemptionVolumeRemaining={detail.remainingVolume}
           regionOptions={regionOptions}
           defaultRegionNumbers={editContext.regionNumbers}
           onCancel={onCancel}

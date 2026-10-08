@@ -361,7 +361,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(within(ownerTile).getByRole('button', { name: 'Edit applicant details' }))
     expect(within(ownerTile).getByText('Required fields')).toBeInTheDocument()
     const editOwnerEmail = (await within(ownerTile).findByText('owner@example.test')).closest(
-      '.detail-field-item',
+      '.record-field, .detail-field-item',
     )
     const editOwnerAgentIndicator = within(ownerTile).getByLabelText("I'm an agent")
     // Figma separates the owner's details from the agent checkbox with a divider.
@@ -866,7 +866,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     agentControls = within(getAgentDetailsTile())
     expect(agentControls.queryByLabelText('Agent client')).not.toBeInTheDocument()
-    const agentClientField = agentControls.getByText('Agent client').closest('.detail-field-item')
+    const agentClientField = agentControls
+      .getByText('Agent client')
+      .closest('.record-field, .detail-field-item')
     expect(agentClientField).toBeTruthy()
     expect(within(agentClientField as HTMLElement).getByText(/00033344$/)).toBeInTheDocument()
   })
@@ -922,7 +924,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await selectApplicationDetailTab('Application')
     const summaryTile = getApplicationSummaryTile()
     const expectDetailField = (tile: HTMLElement, label: string, value: string) => {
-      const field = within(tile).getByText(label).closest('.detail-field-item')
+      const field = within(tile).getByText(label).closest('.record-field, .detail-field-item')
       expect(field).toBeTruthy()
       expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
     }
@@ -990,7 +992,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(await screen.findByRole('region', { name: 'Application offers' })).toBeInTheDocument()
     expect(await screen.findByText('Example Lumber')).toBeInTheDocument()
-    expect(screen.getByText('Apr 5, 2026')).toBeInTheDocument()
+    expect(screen.getByText('2026-04-05')).toBeInTheDocument()
     expect(screen.queryByText('OFF-77')).not.toBeInTheDocument()
 
     expect(screen.queryByLabelText('Filter offers')).not.toBeInTheDocument()
@@ -1037,7 +1039,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(offers.queryByRole('button')).not.toBeInTheDocument()
   })
 
-  it('groups the signed-off Application and Scale fields without linked exemption or permits', async () => {
+  it('groups Application and Scale fields in record rows without linked exemption or permits', async () => {
     mockApplicationDetailAuth(() => true, ['LEXIS_PROVINCIAL_SUBMITTER_00011122'])
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -1056,7 +1058,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     const summaryTile = await selectApplicationSummaryTile(false)
-    const rows = summaryTile.querySelectorAll('dl')
+    const rows = summaryTile.querySelectorAll('.record-field-grid__row')
     expect(
       Array.from(rows, (row) => Array.from(row.querySelectorAll('dt'), (term) => term.textContent)),
     ).toEqual([
@@ -1074,14 +1076,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByText('EX-555')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Permits' })).not.toBeInTheDocument()
     expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
-    expect(within(summaryTile).getByText('Jan 1, 2026')).toBeInTheDocument()
-    expect(within(summaryTile).getByText('Jan 3, 2026')).toBeInTheDocument()
+    expect(within(summaryTile).getByText('2026-01-01')).toBeInTheDocument()
+    expect(within(summaryTile).getByText('2026-01-03')).toBeInTheDocument()
 
     await selectApplicationDetailTab('Scale')
     const scaleTile = screen.getByRole('heading', { name: 'Scale details' }).closest('.cds--tile')
     expect(scaleTile).toBeTruthy()
     expect(
-      Array.from((scaleTile as HTMLElement).querySelectorAll('dl'), (row) =>
+      Array.from((scaleTile as HTMLElement).querySelectorAll('.record-field-grid__row'), (row) =>
         Array.from(row.querySelectorAll('dt'), (term) => term.textContent),
       ),
     ).toEqual([
@@ -1821,7 +1823,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue(
         'Historic Natural Resource Region',
       )
-      expect(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' })).toBeChecked()
+      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
     })
 
     fireEvent.change(termDaysInput, {
@@ -1876,12 +1878,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryControls = within(await selectApplicationSummaryTile())
     await waitFor(() => {
-      expect(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' })).toBeChecked()
+      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
     })
 
     await userEvent.click(summaryControls.getByRole('radio', { name: 'Jan 25, 2026' }))
     expect(summaryControls.getByRole('radio', { name: 'Jan 25, 2026' })).toBeChecked()
-    await userEvent.click(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' }))
+    await userEvent.click(summaryControls.getByRole('radio', { name: '2011-11-25' }))
     await userEvent.click(summaryControls.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
@@ -2511,7 +2513,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const scaleTile = await selectApplicationItemDetailsTile(false)
     const detailField = (label: string): HTMLElement => {
-      const field = within(scaleTile).getByText(label).closest('.detail-field-item')
+      const field = within(scaleTile).getByText(label).closest('.record-field, .detail-field-item')
       expect(field).toBeTruthy()
       return field as HTMLElement
     }

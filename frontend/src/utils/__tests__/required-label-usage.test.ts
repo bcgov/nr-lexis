@@ -21,7 +21,7 @@ const declaresRequired = (attributes: ts.JsxAttributes): boolean =>
     return name === 'inputProps' && !!attribute.initializer?.getText().includes('aria-required')
   })
 
-/** Fields labelled with requiredLabel() that don't tell assistive technology they're required. */
+/** Inputs labelled with requiredLabel() that don't tell assistive technology they're required. */
 const unannouncedRequiredFields = (): string[] =>
   sourceFiles(SOURCE_ROOT).flatMap((file) => {
     const source = readFileSync(file, 'utf8')
@@ -36,7 +36,9 @@ const unannouncedRequiredFields = (): string[] =>
             LABEL_ATTRIBUTES.has(attribute.name.getText()) &&
             !!attribute.initializer?.getText().includes('requiredLabel('),
         )
-        if (labelledRequired && !declaresRequired(node.attributes)) {
+        // RecordField.label describes its value; edit controls supply their own labels.
+        const isRecordValueLabel = node.tagName.getText() === 'RecordField'
+        if (labelledRequired && !isRecordValueLabel && !declaresRequired(node.attributes)) {
           const { line } = sourceFile.getLineAndCharacterOfPosition(node.getStart())
           findings.push(`${relative(SOURCE_ROOT, file)}:${line + 1} <${node.tagName.getText()}>`)
         }

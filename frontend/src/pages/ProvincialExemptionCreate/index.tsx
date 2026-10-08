@@ -1,4 +1,10 @@
 import {
+  RecordField,
+  RecordFieldCell,
+  RecordFieldGrid,
+  RecordFieldRow,
+} from '@/pages/shared/RecordFieldGrid'
+import {
   Certificate,
   Currency,
   DocumentAttachment,
@@ -75,7 +81,11 @@ import {
   fetchApplicationSummarySnapshot,
   type ApplicationSummarySnapshot,
 } from '@/service/provincial-application-items-service'
-import { clientLocationLabel, isAgentApplicant } from '@/pages/shared/application-form-utils'
+import {
+  clientDisplayName,
+  clientLocationLabel,
+  isAgentApplicant,
+} from '@/pages/shared/application-form-utils'
 import { requiredLabel } from '@/utils/required-label'
 import { displayAuditIdentity, displayValue } from '@/utils/text'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
@@ -287,17 +297,6 @@ type ExemptionCreateClientSummaryProps = {
   clientData: ApplicationClientData | null
 }
 
-const clientDisplayName = (
-  clientData: ApplicationClientData | null,
-  clientNumber: string,
-): string => {
-  const name = clientData?.companyName.trim() ?? ''
-  const acronym = clientData?.clientAcronym.trim() ?? ''
-  const number = clientNumber.trim()
-  const label = name && acronym ? `${name} (${acronym})` : name
-  return label && number ? `${label} · ${number}` : label || number
-}
-
 const ExemptionCreateClientSummary = ({ title, clientData }: ExemptionCreateClientSummaryProps) => {
   if (!clientData) {
     return null
@@ -306,23 +305,22 @@ const ExemptionCreateClientSummary = ({ title, clientData }: ExemptionCreateClie
   return (
     <section className="application-create-client-summary" aria-label={title}>
       <h3 className="application-client-summary__title">{title}</h3>
-      <dl className="detail-field-grid">
-        {[
-          ['Address', displayValue(clientData.address)],
-          ['City', displayValue(clientData.city)],
-          ['Province', displayValue(clientData.province)],
-          ['Postal code', displayValue(clientData.postalCode)],
-          ['Country', displayValue(clientData.country)],
-          ['Phone number', displayValue(clientData.phone)],
-          ['Fax number', displayValue(clientData.fax)],
-          ['Email address', displayValue(clientData.email)],
-        ].map(([label, value]) => (
-          <div key={String(label)} className="detail-field-item">
-            <dt className="detail-field-label">{label}</dt>
-            <dd className="detail-field-value">{value}</dd>
-          </div>
-        ))}
-      </dl>
+      <RecordFieldGrid>
+        <RecordFieldRow>
+          <RecordField label="Address" value={displayValue(clientData.address)} span="wide" />
+          <RecordField label="City" value={displayValue(clientData.city)} />
+          <RecordField label="Province" value={displayValue(clientData.province)} />
+        </RecordFieldRow>
+        <RecordFieldRow>
+          <RecordField label="Country" value={displayValue(clientData.country)} />
+          <RecordField label="Postal code" value={displayValue(clientData.postalCode)} />
+        </RecordFieldRow>
+        <RecordFieldRow>
+          <RecordField label="Phone number" value={displayValue(clientData.phone)} />
+          <RecordField label="Fax number" value={displayValue(clientData.fax)} />
+          <RecordField label="Email address" value={displayValue(clientData.email)} />
+        </RecordFieldRow>
+      </RecordFieldGrid>
       {clientData.notfound && (
         <InlineNotification
           className="detail-context-notification"
@@ -1213,140 +1211,176 @@ const ProvincialExemptionCreatePage = () => {
                       Exemption details
                     </legend>
                     <RequiredFieldsLegend className="application-detail-required" />
-                    <div className="legacy-search-grid create-form-grid">
-                      <RadioButtonGroup
-                        className="provincial-exemption-type-group"
-                        legendText={requiredLabel('Exemption type')}
-                        name="exemptionTypeCode"
-                        valueSelected={form.exemptionTypeCode}
-                        required
-                        orientation="horizontal"
-                        invalid={!!fieldError('exemptionTypeCode')}
-                        invalidText={fieldError('exemptionTypeCode')}
-                        disabled={!optionsLoaded || optionsUnavailable}
-                        onChange={(value) => onExemptionTypeChange(String(value))}
-                      >
-                        {availableExemptionTypes.map((option) => (
-                          <RadioButton
-                            key={option.value}
-                            id={`exemptionTypeCode-${option.value}`}
-                            value={option.value}
-                            labelText={option.label}
+                    <RecordFieldGrid editing>
+                      <RecordFieldRow>
+                        <RecordFieldCell>
+                          <SearchableSelect
+                            id="exemptionStatusCode"
+                            labelText={requiredLabel(
+                              'Exemption status',
+                              canEditInitialExemptionStatus,
+                            )}
+                            required={canEditInitialExemptionStatus}
+                            value={form.exemptionStatusCode}
+                            invalid={!!fieldError('exemptionStatusCode')}
+                            invalidText={fieldError('exemptionStatusCode')}
+                            placeholder="Select status"
+                            options={exemptionStatuses}
+                            disabled={!canEditInitialExemptionStatus}
+                            onChange={(value) => {
+                              markFormEdited()
+                              setForm((current) => ({ ...current, exemptionStatusCode: value }))
+                            }}
                           />
-                        ))}
-                      </RadioButtonGroup>
-                      {oicLike && (
-                        <TextInput
-                          id="exemptionNumber"
-                          labelText={requiredLabel('Exemption number')}
-                          aria-required="true"
-                          maxLength={8}
-                          value={form.exemptionNumber}
-                          invalid={!!fieldError('exemptionNumber')}
-                          invalidText={fieldError('exemptionNumber')}
-                          onChange={(event) => {
-                            markFormEdited()
-                            setForm((current) => ({
-                              ...current,
-                              exemptionNumber: event.target.value,
-                            }))
-                          }}
-                        />
-                      )}
-                      <SearchableSelect
-                        id="exemptionStatusCode"
-                        labelText={requiredLabel('Exemption status', canEditInitialExemptionStatus)}
-                        required={canEditInitialExemptionStatus}
-                        value={form.exemptionStatusCode}
-                        invalid={!!fieldError('exemptionStatusCode')}
-                        invalidText={fieldError('exemptionStatusCode')}
-                        placeholder="Select status"
-                        options={exemptionStatuses}
-                        disabled={!canEditInitialExemptionStatus}
-                        onChange={(value) => {
-                          markFormEdited()
-                          setForm((current) => ({ ...current, exemptionStatusCode: value }))
-                        }}
-                      />
-                      <IsoDatePicker
-                        id="approvalDate"
-                        labelText={requiredLabel('Approval date (YYYY-MM-DD)', oicLike)}
-                        required={oicLike}
-                        value={form.approvalDate}
-                        disabled={normalizedTypeCode === 'M'}
-                        invalid={!!fieldError('approvalDate')}
-                        invalidText={fieldError('approvalDate')}
-                        onChange={(value) => {
-                          markFormEdited()
-                          setForm((current) => ({ ...current, approvalDate: value }))
-                        }}
-                      />
-                      <IsoDatePicker
-                        id="expiryDate"
-                        labelText={requiredLabel(
-                          'Expiry date (YYYY-MM-DD)',
-                          oicLike || !!form.approvalDate,
+                        </RecordFieldCell>
+                      </RecordFieldRow>
+                      <RecordFieldRow>
+                        <RecordFieldCell>
+                          <RadioButtonGroup
+                            className="provincial-exemption-type-group"
+                            legendText={requiredLabel('Exemption type')}
+                            name="exemptionTypeCode"
+                            valueSelected={form.exemptionTypeCode}
+                            required
+                            orientation="horizontal"
+                            invalid={!!fieldError('exemptionTypeCode')}
+                            invalidText={fieldError('exemptionTypeCode')}
+                            disabled={!optionsLoaded || optionsUnavailable}
+                            onChange={(value) => onExemptionTypeChange(String(value))}
+                          >
+                            {availableExemptionTypes.map((option) => (
+                              <RadioButton
+                                key={option.value}
+                                id={`exemptionTypeCode-${option.value}`}
+                                value={option.value}
+                                labelText={option.label}
+                              />
+                            ))}
+                          </RadioButtonGroup>
+                        </RecordFieldCell>
+                        {oicLike && (
+                          <RecordFieldCell>
+                            <TextInput
+                              id="exemptionNumber"
+                              labelText={requiredLabel('Exemption number')}
+                              aria-required="true"
+                              maxLength={8}
+                              value={form.exemptionNumber}
+                              invalid={!!fieldError('exemptionNumber')}
+                              invalidText={fieldError('exemptionNumber')}
+                              onChange={(event) => {
+                                markFormEdited()
+                                setForm((current) => ({
+                                  ...current,
+                                  exemptionNumber: event.target.value,
+                                }))
+                              }}
+                            />
+                          </RecordFieldCell>
                         )}
-                        required={oicLike || !!form.approvalDate}
-                        value={form.expiryDate}
-                        invalid={!!fieldError('expiryDate')}
-                        invalidText={fieldError('expiryDate')}
-                        onChange={(value) => {
-                          markFormEdited()
-                          setForm((current) => ({ ...current, expiryDate: value }))
-                        }}
-                      />
-                      <TextInput
-                        id="approvedVolume"
-                        labelText={requiredLabel('Approval volume (m³)')}
-                        aria-required="true"
-                        value={form.approvedVolume}
-                        invalid={!!fieldError('approvedVolume')}
-                        invalidText={fieldError('approvedVolume')}
-                        onChange={(event) => {
-                          markFormEdited()
-                          setForm((current) => ({ ...current, approvedVolume: event.target.value }))
-                        }}
-                      />
-                      {blanketOic && (
-                        <RegionMultiSelect
-                          id="exemptionRegions"
-                          titleText={requiredLabel('Regions')}
-                          required
-                          items={regionOptions}
-                          selectedItems={selectedRegions}
-                          invalid={!!fieldError('regionNumbers')}
-                          invalidText={fieldError('regionNumbers')}
-                          disabled={!optionsLoaded || optionsUnavailable}
-                          onChange={(selectedItems) => {
-                            const regionNumbers = selectedItems.map((item) => item.id)
-                            if (formValuesEqual(regionNumbers, form.regionNumbers)) {
-                              return
-                            }
-                            markFormEdited()
-                            setForm((current) => ({ ...current, regionNumbers }))
-                          }}
-                        />
-                      )}
-                    </div>
+                      </RecordFieldRow>
+                      <RecordFieldRow>
+                        <RecordFieldCell>
+                          <IsoDatePicker
+                            id="approvalDate"
+                            labelText={requiredLabel('Approval date (YYYY-MM-DD)', oicLike)}
+                            required={oicLike}
+                            value={form.approvalDate}
+                            disabled={normalizedTypeCode === 'M'}
+                            invalid={!!fieldError('approvalDate')}
+                            invalidText={fieldError('approvalDate')}
+                            onChange={(value) => {
+                              markFormEdited()
+                              setForm((current) => ({ ...current, approvalDate: value }))
+                            }}
+                          />
+                        </RecordFieldCell>
+                        <RecordFieldCell>
+                          <IsoDatePicker
+                            id="expiryDate"
+                            labelText={requiredLabel(
+                              'Expiry date (YYYY-MM-DD)',
+                              oicLike || !!form.approvalDate,
+                            )}
+                            required={oicLike || !!form.approvalDate}
+                            value={form.expiryDate}
+                            invalid={!!fieldError('expiryDate')}
+                            invalidText={fieldError('expiryDate')}
+                            onChange={(value) => {
+                              markFormEdited()
+                              setForm((current) => ({ ...current, expiryDate: value }))
+                            }}
+                          />
+                        </RecordFieldCell>
+                      </RecordFieldRow>
+                      <RecordFieldRow>
+                        <RecordFieldCell>
+                          <TextInput
+                            id="approvedVolume"
+                            labelText={requiredLabel('Approval volume (m³)')}
+                            aria-required="true"
+                            value={form.approvedVolume}
+                            invalid={!!fieldError('approvedVolume')}
+                            invalidText={fieldError('approvedVolume')}
+                            onChange={(event) => {
+                              markFormEdited()
+                              setForm((current) => ({
+                                ...current,
+                                approvedVolume: event.target.value,
+                              }))
+                            }}
+                          />
+                        </RecordFieldCell>
+                      </RecordFieldRow>
+                      <RecordFieldRow>
+                        {blanketOic && (
+                          <RecordFieldCell span="wide">
+                            <RegionMultiSelect
+                              id="exemptionRegions"
+                              titleText={requiredLabel('Region')}
+                              required
+                              items={regionOptions}
+                              selectedItems={selectedRegions}
+                              invalid={!!fieldError('regionNumbers')}
+                              invalidText={fieldError('regionNumbers')}
+                              disabled={!optionsLoaded || optionsUnavailable}
+                              onChange={(selectedItems) => {
+                                const regionNumbers = selectedItems.map((item) => item.id)
+                                if (formValuesEqual(regionNumbers, form.regionNumbers)) {
+                                  return
+                                }
+                                markFormEdited()
+                                setForm((current) => ({ ...current, regionNumbers }))
+                              }}
+                            />
+                          </RecordFieldCell>
+                        )}
+                      </RecordFieldRow>
+                    </RecordFieldGrid>
                     <div className="legacy-search-actions create-form-comments">
-                      <TextArea
-                        id="otherConditions"
-                        labelText="Conditions"
-                        enableCounter
-                        maxCount={250}
-                        maxLength={250}
-                        value={form.otherConditions}
-                        invalid={!!fieldError('otherConditions')}
-                        invalidText={fieldError('otherConditions')}
-                        onChange={(event) => {
-                          markFormEdited()
-                          setForm((current) => ({
-                            ...current,
-                            otherConditions: event.target.value,
-                          }))
-                        }}
-                      />
+                      <RecordFieldGrid editing>
+                        <RecordFieldRow>
+                          <RecordFieldCell span="full">
+                            <TextArea
+                              id="otherConditions"
+                              labelText="Conditions"
+                              enableCounter
+                              maxCount={250}
+                              maxLength={250}
+                              value={form.otherConditions}
+                              invalid={!!fieldError('otherConditions')}
+                              invalidText={fieldError('otherConditions')}
+                              onChange={(event) => {
+                                markFormEdited()
+                                setForm((current) => ({
+                                  ...current,
+                                  otherConditions: event.target.value,
+                                }))
+                              }}
+                            />
+                          </RecordFieldCell>
+                        </RecordFieldRow>
+                      </RecordFieldGrid>
                     </div>
                   </fieldset>
                 </Tile>
@@ -1358,47 +1392,63 @@ const ProvincialExemptionCreatePage = () => {
                     role="region"
                     aria-label="Applicant"
                   >
-                    <div className="legacy-search-grid create-form-grid">
-                      <TextInput
-                        id="ownerClientNumber"
-                        labelText="Client"
-                        value={clientDisplayName(ownerClientData, ownerClientNumber)}
-                        readOnly
-                        helperText={
-                          ownerContextState === 'loading'
-                            ? 'Loading from the selected application…'
-                            : 'Derived from the selected application.'
-                        }
-                      />
-                      <TextInput
-                        id="ownerApplicantType"
-                        labelText="Applicant type"
-                        value={
-                          applicationOwnerSnapshot
-                            ? applicantTypeDescription(ownerApplicantType)
-                            : ''
-                        }
-                        readOnly
-                      />
-                      <TextInput
-                        id="ownerClientLocation"
-                        labelText="Client location"
-                        value={ownerClientLocationDisplay}
-                        readOnly
-                      />
-                      <TextInput
-                        id="ownerContactName"
-                        labelText="Contact name"
-                        value={ownerContactName}
-                        readOnly
-                      />
-                      <TextInput
-                        id="ownerAgentIndicator"
-                        labelText="I'm an agent"
-                        value={applicationOwnerSnapshot ? (hasAgentTab ? 'Yes' : 'No') : ''}
-                        readOnly
-                      />
-                    </div>
+                    <RecordFieldGrid editing>
+                      <RecordFieldRow>
+                        <RecordFieldCell>
+                          <TextInput
+                            id="ownerContactName"
+                            labelText="Contact name"
+                            value={ownerContactName}
+                            readOnly
+                          />
+                        </RecordFieldCell>
+                        <RecordFieldCell>
+                          <TextInput
+                            id="ownerApplicantType"
+                            labelText="Applicant type"
+                            value={
+                              applicationOwnerSnapshot
+                                ? applicantTypeDescription(ownerApplicantType)
+                                : ''
+                            }
+                            readOnly
+                          />
+                        </RecordFieldCell>
+                      </RecordFieldRow>
+                      <RecordFieldRow>
+                        <RecordFieldCell span="wide">
+                          <TextInput
+                            id="ownerClientNumber"
+                            labelText="Client"
+                            value={clientDisplayName(ownerClientData, ownerClientNumber)}
+                            readOnly
+                            helperText={
+                              ownerContextState === 'loading'
+                                ? 'Loading from the selected application…'
+                                : 'Derived from the selected application.'
+                            }
+                          />
+                        </RecordFieldCell>
+                        <RecordFieldCell span="wide">
+                          <TextInput
+                            id="ownerClientLocation"
+                            labelText="Client location"
+                            value={ownerClientLocationDisplay}
+                            readOnly
+                          />
+                        </RecordFieldCell>
+                      </RecordFieldRow>
+                      <RecordFieldRow>
+                        <RecordFieldCell>
+                          <TextInput
+                            id="ownerAgentIndicator"
+                            labelText="I'm an agent"
+                            value={applicationOwnerSnapshot ? (hasAgentTab ? 'Yes' : 'No') : ''}
+                            readOnly
+                          />
+                        </RecordFieldCell>
+                      </RecordFieldRow>
+                    </RecordFieldGrid>
                     {!applicationOwnerSnapshot && ownerContextState === 'idle' && (
                       <p className="detail-empty-message">
                         Applicant details are derived from the first selected application. A
@@ -1425,32 +1475,44 @@ const ProvincialExemptionCreatePage = () => {
                     {hasAgentTab && (
                       <section className="detail-subsection" aria-label="Agent information">
                         <h3 className="detail-section-subtitle">Agent information</h3>
-                        <div className="legacy-search-grid create-form-grid">
-                          <TextInput
-                            id="agentClientNumber"
-                            labelText="Client"
-                            value={clientDisplayName(agentClientData, agentClientNumber)}
-                            readOnly
-                          />
-                          <TextInput
-                            id="agentApplicantType"
-                            labelText="Applicant type"
-                            value="Agent"
-                            readOnly
-                          />
-                          <TextInput
-                            id="agentClientLocation"
-                            labelText="Client location"
-                            value={agentClientLocationDisplay}
-                            readOnly
-                          />
-                          <TextInput
-                            id="agentContactName"
-                            labelText="Contact name"
-                            value={agentContactName}
-                            readOnly
-                          />
-                        </div>
+                        <RecordFieldGrid editing>
+                          <RecordFieldRow>
+                            <RecordFieldCell>
+                              <TextInput
+                                id="agentContactName"
+                                labelText="Contact name"
+                                value={agentContactName}
+                                readOnly
+                              />
+                            </RecordFieldCell>
+                            <RecordFieldCell>
+                              <TextInput
+                                id="agentApplicantType"
+                                labelText="Applicant type"
+                                value="Agent"
+                                readOnly
+                              />
+                            </RecordFieldCell>
+                          </RecordFieldRow>
+                          <RecordFieldRow>
+                            <RecordFieldCell span="wide">
+                              <TextInput
+                                id="agentClientNumber"
+                                labelText="Client"
+                                value={clientDisplayName(agentClientData, agentClientNumber)}
+                                readOnly
+                              />
+                            </RecordFieldCell>
+                            <RecordFieldCell span="wide">
+                              <TextInput
+                                id="agentClientLocation"
+                                labelText="Client location"
+                                value={agentClientLocationDisplay}
+                                readOnly
+                              />
+                            </RecordFieldCell>
+                          </RecordFieldRow>
+                        </RecordFieldGrid>
                         <ExemptionCreateClientSummary
                           title="Agent client details"
                           clientData={agentClientData}
@@ -1468,38 +1530,50 @@ const ProvincialExemptionCreatePage = () => {
                     aria-label="Applications"
                   >
                     {isFederalApplicationPrefill ? (
-                      <TextArea
-                        className="selected-application-numbers"
-                        id="selectedApplicationNumbers"
-                        labelText="Selected application numbers"
-                        value={selectedApplicationNumbers.join('\n')}
-                        rows={Math.min(Math.max(selectedApplicationNumbers.length, 2), 6)}
-                        readOnly
-                      />
+                      <RecordFieldGrid>
+                        <RecordFieldRow>
+                          <RecordFieldCell span="full">
+                            <TextArea
+                              className="selected-application-numbers"
+                              id="selectedApplicationNumbers"
+                              labelText="Selected application numbers"
+                              value={selectedApplicationNumbers.join('\n')}
+                              rows={Math.min(Math.max(selectedApplicationNumbers.length, 2), 6)}
+                              readOnly
+                            />
+                          </RecordFieldCell>
+                        </RecordFieldRow>
+                      </RecordFieldGrid>
                     ) : (
                       <div className="exemption-create-application-field">
-                        <div className="exemption-create-application-picker">
-                          <ApplicationNumberSelect
-                            id="applicationNumber"
-                            labelText="Application number (optional)"
-                            value={form.applicationNumber}
-                            invalid={!!fieldError('applicationNumber')}
-                            invalidText={fieldError('applicationNumber')}
-                            onChange={(value) => {
-                              markFormEdited()
-                              setForm((current) => ({ ...current, applicationNumber: value }))
-                            }}
-                          />
-                          <Button
-                            type="button"
-                            kind="tertiary"
-                            size="md"
-                            disabled={!form.applicationNumber.trim()}
-                            onClick={onAddApplication}
-                          >
-                            Add application
-                          </Button>
-                        </div>
+                        <RecordFieldGrid editing>
+                          <RecordFieldRow>
+                            <RecordFieldCell>
+                              <ApplicationNumberSelect
+                                id="applicationNumber"
+                                labelText="Application number (optional)"
+                                value={form.applicationNumber}
+                                invalid={!!fieldError('applicationNumber')}
+                                invalidText={fieldError('applicationNumber')}
+                                onChange={(value) => {
+                                  markFormEdited()
+                                  setForm((current) => ({ ...current, applicationNumber: value }))
+                                }}
+                              />
+                            </RecordFieldCell>
+                            <RecordFieldCell>
+                              <Button
+                                type="button"
+                                kind="tertiary"
+                                size="md"
+                                disabled={!form.applicationNumber.trim()}
+                                onClick={onAddApplication}
+                              >
+                                Add application
+                              </Button>
+                            </RecordFieldCell>
+                          </RecordFieldRow>
+                        </RecordFieldGrid>
                         {selectedApplicationNumbers.length > 0 && (
                           <div className="exemption-create-application-selection">
                             <p>Selected applications</p>
@@ -1619,25 +1693,19 @@ const ProvincialExemptionCreatePage = () => {
           </TabPanels>
         </Tabs>
         <div className="legacy-form-footer">
-          <dl className="detail-field-grid">
-            <div className="detail-field-item">
-              <dt className="detail-field-label">Exemption number</dt>
-              <dd className="detail-field-value">{displayValue(form.exemptionNumber)}</dd>
-            </div>
-            <div className="detail-field-item">
-              <dt className="detail-field-label">Status</dt>
-              <dd className="detail-field-value">
-                {displayValue(
+          <RecordFieldGrid>
+            <RecordFieldRow>
+              <RecordField label="Exemption number" value={displayValue(form.exemptionNumber)} />
+              <RecordField
+                label="Status"
+                value={displayValue(
                   exemptionStatuses.find((option) => option.value === form.exemptionStatusCode)
                     ?.label ?? form.exemptionStatusCode,
                 )}
-              </dd>
-            </div>
-            <div className="detail-field-item">
-              <dt className="detail-field-label">Author</dt>
-              <dd className="detail-field-value">{author}</dd>
-            </div>
-          </dl>
+              />
+              <RecordField label="Author" value={author} />
+            </RecordFieldRow>
+          </RecordFieldGrid>
         </div>
       </Column>
       <UnsavedChangesGuard

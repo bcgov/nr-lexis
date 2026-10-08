@@ -1,4 +1,7 @@
-import type { ApplicationClientLocation } from '@/service/application-client-lookup-service'
+import type {
+  ApplicationClientData,
+  ApplicationClientLocation,
+} from '@/service/application-client-lookup-service'
 import type { ApplicationCodeOption } from '@/service/provincial-application-items-service'
 import type { SearchOption } from '@/service/search-options-service'
 import {
@@ -24,6 +27,18 @@ export const clientLookupNumbersMatch = (left: string, right: string): boolean =
 
 export const isSelectableClientLocation = (location: ApplicationClientLocation): boolean =>
   location.locationCode !== '0'
+
+/** A client as "NAME (ACRONYM) · number"; the number stands alone until the name loads. */
+export const clientDisplayName = (
+  clientData: ApplicationClientData | null,
+  clientNumber: string,
+): string => {
+  const name = clientData?.companyName?.trim() ?? ''
+  const acronym = clientData?.clientAcronym?.trim() ?? ''
+  const number = clientNumber.trim()
+  const label = name && acronym ? `${name} (${acronym})` : name
+  return label && number ? `${label} · ${number}` : label || number
+}
 
 export const clientLocationLabel = (
   locationCode: string,

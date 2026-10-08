@@ -1,3 +1,4 @@
+import { RecordFieldCell, RecordFieldGrid, RecordFieldRow } from '@/pages/shared/RecordFieldGrid'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
@@ -1419,68 +1420,84 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             <Tile className="create-form-tile admin-policy-editor-tile">
               <h2 className="dashboard-title">Schedule details</h2>
               <RequiredFieldsLegend />
-              <div className="legacy-search-grid create-form-grid">
-                <IsoDatePicker
-                  id="scheduleAdvertisingDate"
-                  labelText={requiredLabel('Advertising date')}
-                  required
-                  value={scheduleAdvertisingDate}
-                  invalid={!!scheduleFieldError('scheduleAdvertisingDate')}
-                  invalidText={scheduleFieldError('scheduleAdvertisingDate')}
-                  onBlur={() => markFieldTouched('scheduleAdvertisingDate')}
-                  onChange={setScheduleAdvertisingDate}
-                />
-                <IsoDatePicker
-                  id="scheduleApplicationReceiptDate"
-                  labelText={requiredLabel('Application receipt date')}
-                  required
-                  value={scheduleApplicationReceiptDate}
-                  invalid={!!scheduleFieldError('scheduleApplicationReceiptDate')}
-                  invalidText={scheduleFieldError('scheduleApplicationReceiptDate')}
-                  onBlur={() => markFieldTouched('scheduleApplicationReceiptDate')}
-                  onChange={setScheduleApplicationReceiptDate}
-                />
-                <IsoDatePicker
-                  id="scheduleOfferReceiptDate"
-                  labelText={requiredLabel('Offer receipt date')}
-                  required
-                  value={scheduleOfferReceiptDate}
-                  invalid={!!scheduleFieldError('scheduleOfferReceiptDate')}
-                  invalidText={scheduleFieldError('scheduleOfferReceiptDate')}
-                  onBlur={() => markFieldTouched('scheduleOfferReceiptDate')}
-                  onChange={setScheduleOfferReceiptDate}
-                />
-                <IsoDatePicker
-                  id="scheduleOfferEndDate"
-                  labelText={requiredLabel('Offer end date')}
-                  required
-                  value={scheduleOfferEndDate}
-                  invalid={!!scheduleFieldError('scheduleOfferEndDate')}
-                  invalidText={scheduleFieldError('scheduleOfferEndDate')}
-                  onBlur={() => markFieldTouched('scheduleOfferEndDate')}
-                  onChange={setScheduleOfferEndDate}
-                />
-                <IsoDatePicker
-                  id="scheduleOfferWithdrawalDate"
-                  labelText={requiredLabel('Offer withdrawal date')}
-                  required
-                  value={scheduleOfferWithdrawalDate}
-                  invalid={!!scheduleFieldError('scheduleOfferWithdrawalDate')}
-                  invalidText={scheduleFieldError('scheduleOfferWithdrawalDate')}
-                  onBlur={() => markFieldTouched('scheduleOfferWithdrawalDate')}
-                  onChange={setScheduleOfferWithdrawalDate}
-                />
-                <IsoDatePicker
-                  id="scheduleTeacMeetingDate"
-                  labelText={requiredLabel('TEAC meeting date')}
-                  required
-                  value={scheduleTeacMeetingDate}
-                  invalid={!!scheduleFieldError('scheduleTeacMeetingDate')}
-                  invalidText={scheduleFieldError('scheduleTeacMeetingDate')}
-                  onBlur={() => markFieldTouched('scheduleTeacMeetingDate')}
-                  onChange={setScheduleTeacMeetingDate}
-                />
-              </div>
+              <RecordFieldGrid editing>
+                <RecordFieldRow>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleAdvertisingDate"
+                      labelText={requiredLabel('Advertising date')}
+                      required
+                      value={scheduleAdvertisingDate}
+                      invalid={!!scheduleFieldError('scheduleAdvertisingDate')}
+                      invalidText={scheduleFieldError('scheduleAdvertisingDate')}
+                      onBlur={() => markFieldTouched('scheduleAdvertisingDate')}
+                      onChange={setScheduleAdvertisingDate}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleApplicationReceiptDate"
+                      labelText={requiredLabel('Application receipt date')}
+                      required
+                      value={scheduleApplicationReceiptDate}
+                      invalid={!!scheduleFieldError('scheduleApplicationReceiptDate')}
+                      invalidText={scheduleFieldError('scheduleApplicationReceiptDate')}
+                      onBlur={() => markFieldTouched('scheduleApplicationReceiptDate')}
+                      onChange={setScheduleApplicationReceiptDate}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleOfferReceiptDate"
+                      labelText={requiredLabel('Offer receipt date')}
+                      required
+                      value={scheduleOfferReceiptDate}
+                      invalid={!!scheduleFieldError('scheduleOfferReceiptDate')}
+                      invalidText={scheduleFieldError('scheduleOfferReceiptDate')}
+                      onBlur={() => markFieldTouched('scheduleOfferReceiptDate')}
+                      onChange={setScheduleOfferReceiptDate}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleOfferEndDate"
+                      labelText={requiredLabel('Offer end date')}
+                      required
+                      value={scheduleOfferEndDate}
+                      invalid={!!scheduleFieldError('scheduleOfferEndDate')}
+                      invalidText={scheduleFieldError('scheduleOfferEndDate')}
+                      onBlur={() => markFieldTouched('scheduleOfferEndDate')}
+                      onChange={setScheduleOfferEndDate}
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+                <RecordFieldRow>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleOfferWithdrawalDate"
+                      labelText={requiredLabel('Offer withdrawal date')}
+                      required
+                      value={scheduleOfferWithdrawalDate}
+                      invalid={!!scheduleFieldError('scheduleOfferWithdrawalDate')}
+                      invalidText={scheduleFieldError('scheduleOfferWithdrawalDate')}
+                      onBlur={() => markFieldTouched('scheduleOfferWithdrawalDate')}
+                      onChange={setScheduleOfferWithdrawalDate}
+                    />
+                  </RecordFieldCell>
+                  <RecordFieldCell>
+                    <IsoDatePicker
+                      id="scheduleTeacMeetingDate"
+                      labelText={requiredLabel('TEAC meeting date')}
+                      required
+                      value={scheduleTeacMeetingDate}
+                      invalid={!!scheduleFieldError('scheduleTeacMeetingDate')}
+                      invalidText={scheduleFieldError('scheduleTeacMeetingDate')}
+                      onBlur={() => markFieldTouched('scheduleTeacMeetingDate')}
+                      onChange={setScheduleTeacMeetingDate}
+                    />
+                  </RecordFieldCell>
+                </RecordFieldRow>
+              </RecordFieldGrid>
               <div className="legacy-search-actions create-form-actions">
                 <Button
                   kind="primary"
