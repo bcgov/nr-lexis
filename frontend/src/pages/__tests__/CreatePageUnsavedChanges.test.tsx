@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -142,6 +142,9 @@ const createCases = [
     heading: 'Create provincial application',
     fieldLabel: 'Location of logs',
     saveButtonName: 'Save application',
+    discardTitle: 'Discard this application?',
+    discardDescription:
+      "The application hasn't been created yet. Everything you've entered will be lost.",
     element: <ProvincialApplicationCreatePage />,
   },
   {
@@ -151,6 +154,9 @@ const createCases = [
     heading: 'Create new exemption',
     fieldLabel: 'Conditions',
     saveButtonName: 'Save exemption',
+    discardTitle: 'Discard this exemption?',
+    discardDescription:
+      "The exemption hasn't been created yet. Everything you've entered will be lost.",
     element: <ProvincialExemptionCreatePage />,
   },
   {
@@ -160,6 +166,9 @@ const createCases = [
     heading: 'Create provincial offer',
     fieldLabel: 'Offer conditions / remarks',
     saveButtonName: 'Save new offer',
+    discardTitle: 'Discard this offer?',
+    discardDescription:
+      "The offer hasn't been created yet. Everything you've entered will be lost.",
     element: <ProvincialOfferCreatePage />,
   },
 ] as const
@@ -176,6 +185,11 @@ const getDraftField = async (testCase: (typeof createCases)[number]) => {
 
   return screen.getByLabelText(testCase.fieldLabel)
 }
+
+const settleLoads = () =>
+  act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0))
+  })
 
 const renderCreatePage = (
   createPath: string,
@@ -253,12 +267,21 @@ describe('create page unsaved changes', () => {
     })
   })
 
+  it.each(createCases)(
+    'focuses the $name heading and keeps Save enabled on load',
+    async (testCase) => {
+      renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
+
+      const heading = await screen.findByRole('heading', { level: 1, name: testCase.heading })
+      await waitFor(() => expect(heading).toHaveFocus())
+      expect(screen.getByRole('button', { name: testCase.saveButtonName })).toBeEnabled()
+    },
+  )
+
   it.each(createCases)('allows a clean $name Cancel without confirmation', async (testCase) => {
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: testCase.saveButtonName })).toBeEnabled(),
-    )
+    await settleLoads()
 
     const unloadEvent = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(unloadEvent)
@@ -267,28 +290,45 @@ describe('create page unsaved changes', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe(testCase.targetPath))
-    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it.each(createCases)(
-    'confirms a dirty $name Cancel and protects native unload',
+    'asks before discarding a dirty $name on Cancel and protects native unload',
     async (testCase) => {
       const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
       await screen.findByRole('heading', { level: 1, name: testCase.heading })
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: testCase.saveButtonName })).toBeEnabled(),
-      )
-      await userEvent.type(await getDraftField(testCase), 'Draft value')
+      await settleLoads()
+      const draftField = await getDraftField(testCase)
+      await userEvent.type(draftField, 'Draft value')
 
       const unloadEvent = new Event('beforeunload', { cancelable: true })
       window.dispatchEvent(unloadEvent)
       expect(unloadEvent.defaultPrevented).toBe(true)
 
-      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      const cancelButton = screen.getByRole('button', { name: 'Cancel' })
+      await userEvent.click(cancelButton)
 
-      expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+      const dialog = await screen.findByRole('dialog', { name: testCase.discardTitle })
+      expect(dialog).toHaveTextContent(testCase.discardDescription)
+      expect(within(dialog).queryByRole('button', { name: /Save/ })).not.toBeInTheDocument()
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('dialog', { name: testCase.discardTitle }),
+        ).not.toBeInTheDocument(),
+      )
       expect(router.state.location.pathname).toBe(testCase.createPath)
-      await userEvent.click(screen.getByRole('button', { name: 'Discard and leave' }))
+      expect(draftField).toHaveValue('Draft value')
+      await waitFor(() => expect(cancelButton).toHaveFocus())
+
+      await userEvent.click(cancelButton)
+      await userEvent.click(
+        within(await screen.findByRole('dialog', { name: testCase.discardTitle })).getByRole(
+          'button',
+          { name: 'Discard' },
+        ),
+      )
       await waitFor(() => expect(router.state.location.pathname).toBe(testCase.targetPath))
     },
   )
@@ -306,11 +346,50 @@ describe('create page unsaved changes', () => {
       await router.navigate(-1)
     })
 
-    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: testCase.discardTitle })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe(testCase.createPath)
   })
 
-  it('does not offer application Save-and-leave while client locations are loading', async () => {
+  it('keeps a create draft when switching tabs without asking', async () => {
+    const testCase = createCases[1]
+    renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
+    await screen.findByRole('heading', { level: 1, name: testCase.heading })
+    await userEvent.type(await getDraftField(testCase), 'Draft value')
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Documents' }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
+
+    expect(screen.getByLabelText('Conditions')).toHaveValue('Draft value')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('treats late application option defaults as initial values when the user reverts an edit', async () => {
+    let resolveOptions!: (
+      value: Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>,
+    ) => void
+    const loadedOptions = await fetchProvincialApplicationOptions()
+    mockedFetchProvincialApplicationOptions.mockReturnValue(
+      new Promise((resolve) => {
+        resolveOptions = resolve
+      }),
+    )
+    const testCase = createCases[0]
+    const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
+    await screen.findByRole('heading', { level: 1, name: testCase.heading })
+
+    const draftField = await getDraftField(testCase)
+    await userEvent.type(draftField, 'Temporary draft')
+    await act(async () => resolveOptions(loadedOptions))
+    await settleLoads()
+    await userEvent.clear(draftField)
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe(testCase.targetPath))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('reports pending application client details on Save without submitting', async () => {
     mockedFetchApplicationClientLocations.mockReturnValue(new Promise(() => undefined))
     const testCase = createCases[0]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
@@ -319,37 +398,46 @@ describe('create page unsaved changes', () => {
     fireEvent.change(screen.getByRole('textbox', { name: 'Client' }), {
       target: { value: '00011111' },
     })
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save application' })).toBeDisabled(),
-    )
+    const saveButton = screen.getByRole('button', { name: 'Save application' })
+    await waitFor(() => expect(mockedFetchApplicationClientLocations).toHaveBeenCalled())
+    expect(saveButton).toBeEnabled()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(saveButton)
 
     expect(
-      await screen.findByRole('dialog', { name: 'Unsaved changes' }),
-    ).toHaveAccessibleDescription(/Client details must finish loading/)
-    expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
+      await screen.findByText(
+        'Client details must finish loading before this application can be saved.',
+      ),
+    ).toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByRole('dialog', { name: testCase.discardTitle })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe(testCase.createPath)
   })
 
-  it('does not offer exemption Save-and-leave without create authorization', async () => {
+  it('reports missing exemption create authorization on Save without submitting', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({ canPerform: vi.fn().mockReturnValue(false) }),
     )
     const testCase = createCases[1]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
+    await settleLoads()
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     await userEvent.type(screen.getByLabelText('Conditions'), 'Draft value')
 
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
-      await screen.findByRole('dialog', { name: 'Unsaved changes' }),
-    ).toHaveAccessibleDescription(/Authorization to create this exemption is required/)
-    expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
+      await screen.findByText(
+        'Authorization to create this exemption is required before it can be saved.',
+      ),
+    ).toBeInTheDocument()
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(await screen.findByRole('dialog', { name: testCase.discardTitle })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe(testCase.createPath)
   })
 
@@ -358,11 +446,11 @@ describe('create page unsaved changes', () => {
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
-    await userEvent.click(screen.getByRole('radio', { name: 'Order in Council' }))
+    await userEvent.click(await screen.findByRole('radio', { name: 'Order in Council' }))
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
-    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: testCase.discardTitle })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe(testCase.createPath)
   })
 
@@ -383,7 +471,7 @@ describe('create page unsaved changes', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
-    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: testCase.discardTitle })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe(testCase.createPath)
   })
 
@@ -398,41 +486,13 @@ describe('create page unsaved changes', () => {
     const testCase = createCases[1]
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
+    await settleLoads()
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
-    )
     await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '10')
 
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/provincial/exemption/EX-123'))
-    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
-  })
-
-  it('saves a dirty create form and follows the Cancel destination', async () => {
-    mockedSubmitProvincialExemptionCreate.mockResolvedValue({
-      success: true,
-      message: 'ok',
-      createdId: 'EX-124',
-      errors: [],
-      warnings: [],
-    })
-    const testCase = createCases[1]
-    const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
-    await screen.findByRole('heading', { level: 1, name: testCase.heading })
-    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
-    )
-    await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '10')
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await screen.findByRole('dialog', { name: 'Unsaved changes' })
-
-    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
-
-    await waitFor(() => expect(router.state.location.pathname).toBe(testCase.targetPath))
-    expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledTimes(1)
-    expect(router.state.location.pathname).not.toBe('/provincial/exemption/EX-124')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 })

@@ -9,6 +9,7 @@ import {
 } from '@/service/forest-client-selection'
 import {
   RECORD_VERSION_HEADER,
+  conflictSaveSubject,
   createOptimisticConflictEvent,
   type OptimisticConflictProblem,
   type OptimisticRecordType,
@@ -507,6 +508,8 @@ class APIService {
       return Promise.reject(error)
     }
 
+    // The user may move to another record while the conflict is enriched.
+    const recordType = this.activeRecord()?.recordType
     const authorizationHeader = this.getHeader(originalConfig.headers, 'authorization')
     return this.enrichOptimisticConflictWithinTimeout(
       problem,
@@ -516,6 +519,8 @@ class APIService {
         new Promise<AxiosResponse<unknown>>((_, reject) => {
           const event = createOptimisticConflictEvent({
             problem: enrichedProblem,
+            recordType,
+            saveSubject: conflictSaveSubject(originalConfig.method, originalConfig.url),
             refresh: () => {
               this.clearCachedGetData()
               this.clearRecordVersions()

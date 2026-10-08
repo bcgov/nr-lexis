@@ -9,8 +9,10 @@ import {
   fetchAdminNotifications,
   fetchNotificationAudienceRoles,
   fetchNotifications,
+  updateNotification,
 } from '@/service/notification-service'
 import { render, userEvent } from '@/test-utils'
+import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -21,18 +23,26 @@ vi.mock('@/components/NotificationEditor', () => ({
   default: ({
     value,
     required,
+    invalid,
+    invalidText,
     onChange,
   }: {
     value: string
     required?: boolean
+    invalid?: boolean
+    invalidText?: string
     onChange: (contentHtml: string) => void
   }) => (
-    <textarea
-      aria-label="Notification content editor"
-      aria-required={required}
-      value={value}
-      onChange={(event) => onChange(event.target.value)}
-    />
+    <>
+      <textarea
+        aria-label="Notification content editor"
+        aria-required={required}
+        aria-invalid={invalid}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+      />
+      {invalid && invalidText && <p role="alert">{invalidText}</p>}
+    </>
   ),
 }))
 
@@ -77,6 +87,62 @@ const mockedFetchNotificationAudienceRoles = vi.mocked(fetchNotificationAudience
 const mockedFetchNotifications = vi.mocked(fetchNotifications)
 
 describe('Notifications page', () => {
+  it('closes unchanged notification editing without a write or feedback', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+    render(<NotificationsPage />)
+    const edit = await screen.findByRole('button', { name: 'Edit' })
+    await userEvent.click(edit)
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('complementary', { name: 'Edit notification' }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(updateNotification).not.toHaveBeenCalled()
+    expect(mockedCreateNotification).not.toHaveBeenCalled()
+    expect(screen.queryByText('Notification updated')).not.toBeInTheDocument()
+    await waitFor(() => expect(edit).toHaveFocus())
+  })
+
+  it('keeps a notification draft on blocked navigation and discards before leaving', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/notifications',
+          element: (
+            <>
+              <Link to="/next">Leave notifications</Link>
+              <NotificationsPage />
+            </>
+          ),
+        },
+        { path: '/next', element: <h1>Next page</h1> },
+      ],
+      { initialEntries: ['/notifications'] },
+    )
+    render(<RouterProvider router={router} />)
+    await userEvent.click(await screen.findByRole('button', { name: 'New notification' }))
+    await userEvent.type(screen.getByLabelText('Title'), 'Unsaved notice')
+    await userEvent.click(screen.getByRole('link', { name: 'Leave notifications' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Keep editing' }))
+    expect(router.state.location.pathname).toBe('/notifications')
+    expect(screen.getByLabelText('Title')).toHaveValue('Unsaved notice')
+    await userEvent.click(screen.getByRole('link', { name: 'Leave notifications' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+    expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
+    expect(mockedCreateNotification).not.toHaveBeenCalled()
+    expect(updateNotification).not.toHaveBeenCalled()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     mockedFetchNotifications.mockResolvedValue([viewerNotification])
@@ -414,7 +480,10 @@ describe('Notifications page', () => {
     await user.type(within(dialog).getByLabelText('Notification content editor'), '<p>&nbsp;</p>')
     await user.click(within(dialog).getByRole('button', { name: 'Publish' }))
 
-    expect(await screen.findByText('Complete the required fields')).toBeVisible()
+    expect(await screen.findByText('Message is required')).toBeVisible()
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText('Notification content editor')).toHaveFocus(),
+    )
     expect(mockedCreateNotification).not.toHaveBeenCalled()
   })
 
@@ -486,20 +555,18 @@ describe('Notifications page', () => {
     await user.click(launcher)
     const editor = await screen.findByRole('complementary', { name: 'New notification' })
     await user.type(within(editor).getByLabelText(/^Title/), 'Unsaved notice')
-    await user.click(within(editor).getByRole('button', { name: 'Cancel' }))
+    const editorCancel = within(editor).getByRole('button', { name: 'Cancel' })
+    await user.click(editorCancel)
 
-    const discardDialog = await screen.findByRole('dialog', {
-      name: 'Discard notification changes?',
-    })
+    const discardDialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    expect(discardDialog).toHaveTextContent('Your changes will be lost.')
     expect(editor).toBeVisible()
-    await user.click(within(discardDialog).getByRole('button', { name: 'Cancel' }))
-    await waitFor(() => expect(within(editor).getByLabelText(/^Title/)).toHaveFocus())
+    await user.click(within(discardDialog).getByRole('button', { name: 'Keep editing' }))
+    await waitFor(() => expect(editorCancel).toHaveFocus())
     expect(within(editor).getByLabelText(/^Title/)).toHaveValue('Unsaved notice')
 
-    await user.click(within(editor).getByRole('button', { name: 'Cancel' }))
-    const reopenedDiscardDialog = await screen.findByRole('dialog', {
-      name: 'Discard notification changes?',
-    })
+    await user.click(editorCancel)
+    const reopenedDiscardDialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
     await user.click(within(reopenedDiscardDialog).getByRole('button', { name: 'Discard changes' }))
 
     await waitFor(() => expect(launcher).toHaveFocus())

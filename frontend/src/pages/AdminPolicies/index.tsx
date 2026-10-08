@@ -24,10 +24,12 @@ import { useAuth } from '@/context/auth/useAuth'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import { useDiscardPrompt } from '@/components/DiscardChangesModal'
 import EmptyState from '@/components/EmptyState'
 import DetailSidePanel from '@/components/DetailSidePanel'
 import PageHeader from '@/components/PageHeader'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
+import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import {
   firstValidationError,
   greaterThanOrEqualFieldError,
@@ -67,6 +69,10 @@ import IsoDatePicker from '../../components/IsoDatePicker'
 import { toCarbonSortDirection } from '@/pages/shared/search-query-utils'
 import { combineActionMessages } from '@/utils/action-result'
 import { formatBusinessIsoDate } from '@/utils/date'
+import {
+  focusFirstEditableFieldAfterPanelChange,
+  focusFirstInvalidFieldAfterRender,
+} from '@/utils/focus'
 import { getResponseMessage, getResponseStatus } from '@/utils/http-error'
 import { requiredLabel } from '@/utils/required-label'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
@@ -110,6 +116,9 @@ type PendingDeletion =
     }
 
 const ADMIN_PAGE_SIZES = [20, 50, 100, 200]
+const EMPTY_FEE_VALUES = ['', '', '']
+const EMPTY_FIL_VALUES = ['', '']
+const EMPTY_SCHEDULE_VALUES = ['', '', '', '', '', '']
 const DEFAULT_ADMIN_PAGE_SIZE = 100
 const PendingIcon = () => <Loading small withOverlay={false} description="" />
 const FEE_REGION_OPTIONS_ERROR =
@@ -259,6 +268,12 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [showScheduleValidationErrors, setShowScheduleValidationErrors] = useState(false)
   const [isPolicyEditorOpen, setIsPolicyEditorOpen] = useState(false)
   const policyEditorLauncherRef = useRef<HTMLElement>(null)
+  const policyFieldsRef = useRef<HTMLDivElement>(null)
+  const scheduleFieldsRef = useRef<HTMLDivElement>(null)
+  // The row Edit button that opened the schedule edit, which takes focus back when the edit ends.
+  const scheduleEditButtonRef = useRef<HTMLElement | null>(null)
+  const [policyBaseline, setPolicyBaseline] = useState<string[]>([])
+  const [scheduleBaseline, setScheduleBaseline] = useState<string[]>(EMPTY_SCHEDULE_VALUES)
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null)
 
   // INTENTIONAL_LEGACY_DIVERGENCE(NAVIGATION_MENU_CONTRACT): Keep these page
@@ -421,6 +436,24 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     fieldErrors.scheduleTeacMeetingDate,
   )
 
+  const policyValues =
+    area === 'fee'
+      ? [feeEffectiveDate, feeOrgUnitNo, feePolicyPercentage]
+      : [filEffectiveDate, filPolicyPercentage]
+  const scheduleValues = [
+    scheduleAdvertisingDate,
+    scheduleApplicationReceiptDate,
+    scheduleOfferReceiptDate,
+    scheduleOfferEndDate,
+    scheduleOfferWithdrawalDate,
+    scheduleTeacMeetingDate,
+  ]
+  const hasUnsavedChanges =
+    area === 'schedule'
+      ? !formValuesEqual(scheduleValues, scheduleBaseline)
+      : isPolicyEditorOpen && !formValuesEqual(policyValues, policyBaseline)
+  const { confirmDiscard, discardModal } = useDiscardPrompt(hasUnsavedChanges)
+
   const markFieldTouched = (field: PolicyField): void => {
     setTouchedFields((current) => ({ ...current, [field]: true }))
   }
@@ -469,12 +502,21 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setIsPolicyEditorOpen(false)
   }
 
+  const requestClosePolicyEditor = (): void => {
+    if (isMutatingPolicies) {
+      return
+    }
+    confirmDiscard(closePolicyEditor)
+  }
+
   const openPolicyEditor = (): void => {
     clearNotifications()
     if (area === 'fee') {
       resetFeeForm()
+      setPolicyBaseline(EMPTY_FEE_VALUES)
     } else {
       resetFilForm()
+      setPolicyBaseline(EMPTY_FIL_VALUES)
     }
     setIsPolicyEditorOpen(true)
   }
@@ -487,8 +529,17 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setScheduleOfferWithdrawalDate('')
     setScheduleTeacMeetingDate('')
     setEditingScheduleId(null)
+    setScheduleBaseline(EMPTY_SCHEDULE_VALUES)
     setTouchedFields({})
     setShowScheduleValidationErrors(false)
+  }
+
+  const discardPolicyEdits = (): void => {
+    if (area === 'schedule') {
+      resetScheduleForm()
+    } else {
+      closePolicyEditor()
+    }
   }
 
   const onScheduleSort = (sortField: ExportScheduleSortField): void => {
@@ -625,6 +676,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   }, [area, canManageFeePolicy])
 
   const upsertFeePolicy = async (): Promise<void> => {
+    if (isMutatingPolicies) return
     clearNotifications()
 
     if (!canManageFeePolicy) {
@@ -637,9 +689,14 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       return
     }
 
+    if (editingFeePolicyId !== null && !hasUnsavedChanges) {
+      closePolicyEditor()
+      return
+    }
+
     if (feeHasValidationError) {
       setShowFeeValidationErrors(true)
-      setErrorMessage('Correct the highlighted fee policy fields before saving.')
+      focusFirstInvalidFieldAfterRender(() => policyFieldsRef.current)
       return
     }
 
@@ -682,6 +739,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setFeeEffectiveDate(row.effectiveDate)
     setFeeOrgUnitNo(row.orgUnitNo)
     setFeePolicyPercentage(row.policyPercentage)
+    setPolicyBaseline([row.effectiveDate, row.orgUnitNo, row.policyPercentage])
     setEditingFeePolicyId(row.id)
     setShowFeeValidationErrors(false)
     setIsPolicyEditorOpen(true)
@@ -704,6 +762,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   }
 
   const upsertFilPolicy = async (): Promise<void> => {
+    if (isMutatingPolicies) return
     clearNotifications()
 
     if (!canManageFilPolicy) {
@@ -711,9 +770,14 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       return
     }
 
+    if (editingFilPolicyId !== null && !hasUnsavedChanges) {
+      closePolicyEditor()
+      return
+    }
+
     if (filHasValidationError) {
       setShowFilValidationErrors(true)
-      setErrorMessage('Correct the highlighted fee in lieu policy fields before saving.')
+      focusFirstInvalidFieldAfterRender(() => policyFieldsRef.current)
       return
     }
 
@@ -748,6 +812,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const editFilPolicy = (row: FilPolicyRow): void => {
     setFilEffectiveDate(row.effectiveDate)
     setFilPolicyPercentage(row.filPercentage)
+    setPolicyBaseline([row.effectiveDate, row.filPercentage])
     setEditingFilPolicyId(row.id)
     setShowFilValidationErrors(false)
     clearNotifications()
@@ -797,12 +862,49 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
     setScheduleOfferEndDate(row.offerEndDate)
     setScheduleOfferWithdrawalDate(row.offerWithdrawalDate)
     setScheduleTeacMeetingDate(row.teacMeetingDate)
+    setScheduleBaseline([
+      row.advertisingDate,
+      row.applicationReceiptDate,
+      row.offerReceiptDate,
+      row.offerEndDate,
+      row.offerWithdrawalDate,
+      row.teacMeetingDate,
+    ])
     setEditingScheduleId(row.exportScheduleId)
     setShowScheduleValidationErrors(false)
     clearNotifications()
   }
 
+  const requestEditExportSchedule = (row: ExportScheduleRow, editButton: HTMLElement): void => {
+    confirmDiscard(() => {
+      scheduleEditButtonRef.current = editButton
+      editExportSchedule(row)
+      focusFirstEditableFieldAfterPanelChange(() => scheduleFieldsRef.current)
+    })
+  }
+
+  const requestResetScheduleForm = (resetButton: HTMLElement): void => {
+    confirmDiscard(() => {
+      resetScheduleForm()
+      if (!scheduleEditButtonRef.current) {
+        requestAnimationFrame(() => resetButton.focus())
+      }
+    })
+  }
+
+  useEffect(() => {
+    const editButton = scheduleEditButtonRef.current
+    if (!editButton || editingScheduleId || isMutatingPolicies) {
+      return
+    }
+    scheduleEditButtonRef.current = null
+    if (editButton.isConnected) {
+      editButton.focus()
+    }
+  }, [editingScheduleId, isMutatingPolicies])
+
   const upsertExportSchedule = async (): Promise<void> => {
+    if (isMutatingPolicies) return
     clearNotifications()
 
     if (!canManageFeePolicy) {
@@ -810,9 +912,15 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
       return
     }
 
+    if (editingScheduleId !== null && !hasUnsavedChanges) {
+      resetScheduleForm()
+      requestAnimationFrame(() => scheduleEditButtonRef.current?.focus())
+      return
+    }
+
     if (scheduleHasValidationError) {
       setShowScheduleValidationErrors(true)
-      setErrorMessage('Correct the highlighted export schedule fields before saving.')
+      focusFirstInvalidFieldAfterRender(() => scheduleFieldsRef.current)
       return
     }
 
@@ -913,6 +1021,14 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         <PageHeader title={pageTitle} subtitle={pageSubtitle} />
       </Column>
 
+      <UnsavedChangesGuard
+        isDirty={hasUnsavedChanges}
+        isBusy={isMutatingPolicies}
+        onDiscard={discardPolicyEdits}
+        subject={area === 'schedule' ? 'this export schedule' : 'this policy'}
+      />
+      {discardModal}
+
       {pageActionResult && !isPolicyEditorOpen && !pendingDeletion && (
         <ActionResultNotification result={pageActionResult} onClose={clearNotifications} />
       )}
@@ -935,13 +1051,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           fallbackFocusSelector="#admin-policy-create"
           initialFocusSelector="#feeEffectiveDate"
           busy={isMutatingPolicies}
-          onClose={closePolicyEditor}
+          onClose={requestClosePolicyEditor}
           actions={[
             {
               label: 'Cancel',
               kind: 'tertiary',
               disabled: isMutatingPolicies,
-              onClick: closePolicyEditor,
+              onClick: requestClosePolicyEditor,
             },
             {
               label: isMutatingPolicies
@@ -951,13 +1067,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   : 'Add fee policy',
               kind: 'primary',
               renderIcon: isMutatingPolicies ? PendingIcon : editingFeePolicyId ? undefined : Add,
-              disabled:
-                isLoadingPolicies ||
-                isMutatingPolicies ||
-                isLoadingFeeRegionOptions ||
-                Boolean(feeRegionOptionsError) ||
-                feeRegionOptions.length === 0 ||
-                !canManageFeePolicy,
+              disabled: isMutatingPolicies,
               onClick: () => void upsertFeePolicy(),
             },
           ]}
@@ -978,7 +1088,10 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             />
           )}
           <RequiredFieldsLegend />
-          <div className="admin-policy-modal__fields admin-policy-modal__fields--fee">
+          <div
+            ref={policyFieldsRef}
+            className="admin-policy-modal__fields admin-policy-modal__fields--fee"
+          >
             <IsoDatePicker
               id="feeEffectiveDate"
               labelText={requiredLabel('Policy effective date')}
@@ -1042,13 +1155,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
           fallbackFocusSelector="#admin-policy-create"
           initialFocusSelector="#filEffectiveDate"
           busy={isMutatingPolicies}
-          onClose={closePolicyEditor}
+          onClose={requestClosePolicyEditor}
           actions={[
             {
               label: 'Cancel',
               kind: 'tertiary',
               disabled: isMutatingPolicies,
-              onClick: closePolicyEditor,
+              onClick: requestClosePolicyEditor,
             },
             {
               label: isMutatingPolicies
@@ -1058,7 +1171,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   : 'Add fee in lieu policy',
               kind: 'primary',
               renderIcon: isMutatingPolicies ? PendingIcon : editingFilPolicyId ? undefined : Add,
-              disabled: isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy,
+              disabled: isMutatingPolicies,
               onClick: () => void upsertFilPolicy(),
             },
           ]}
@@ -1079,7 +1192,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             />
           )}
           <RequiredFieldsLegend />
-          <div className="admin-policy-modal__fields">
+          <div ref={policyFieldsRef} className="admin-policy-modal__fields">
             <IsoDatePicker
               id="filEffectiveDate"
               labelText={requiredLabel('Policy effective date')}
@@ -1420,7 +1533,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
             <Tile className="create-form-tile admin-policy-editor-tile">
               <h2 className="dashboard-title">Schedule details</h2>
               <RequiredFieldsLegend />
-              <RecordFieldGrid editing>
+              <RecordFieldGrid editing ref={scheduleFieldsRef}>
                 <RecordFieldRow>
                   <RecordFieldCell>
                     <IsoDatePicker
@@ -1503,15 +1616,15 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   kind="primary"
                   size="md"
                   onClick={() => void upsertExportSchedule()}
-                  disabled={isLoadingPolicies || isMutatingPolicies || !canManageFeePolicy}
+                  disabled={isMutatingPolicies}
                 >
                   {editingScheduleId ? 'Update Export Schedule' : 'Add Export Schedule'}
                 </Button>
                 <Button
                   kind="ghost"
                   size="md"
-                  onClick={resetScheduleForm}
-                  disabled={isLoadingPolicies || isMutatingPolicies}
+                  onClick={(event) => requestResetScheduleForm(event.currentTarget)}
+                  disabled={isMutatingPolicies}
                 >
                   {editingScheduleId ? 'Cancel edit' : 'Clear schedule'}
                 </Button>
@@ -1595,7 +1708,9 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                               <Button
                                 kind="ghost"
                                 size="md"
-                                onClick={() => editExportSchedule(row)}
+                                onClick={(event) =>
+                                  requestEditExportSchedule(row, event.currentTarget)
+                                }
                                 disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
                               >
                                 Edit

@@ -170,3 +170,9 @@ field rows. Keep field IDs and names stable when changing the layout.
 An empty tab has no card. Render `EmptyState` with `variant="tab"` straight in the tab panel, with
 the tab's pictogram: Cardboard for Scale, AddDocument for Documents, Invoice for Fees. An empty
 section inside a card is one line of text.
+
+### Forms
+
+- **Save:** Save buttons stay enabled and are disabled only while saving. On Save, validate and show each error on its field (`invalid` and `invalidText`, which replace the helper), then focus the first error. `useFieldErrors` in `pages/shared` does this, and clears an error when its field changes. A notification at the top of a form or panel is only for errors that don't belong to a field, such as a record updated by someone else or options that failed to load. Show a server error on its field when it names one.
+- **Edit mode:** a record page edits one section at a time through `useEditSections`. Entering edit mode focuses the section's first editable field. Save or Cancel returns focus to its Edit button. Create pages don't focus a field; they pass `focusTitle` to `PageHeader`, which focuses the `h1`.
+- **Unsaved changes:** a section, form or panel is changed when its values differ from the ones it started with (`useDirtyForm`). Cancel, closing a side panel, switching tabs or leaving the record with changes asks "Discard changes?". Use `useEditSections().confirmLeave` or `useDiscardPrompt`, and `UnsavedChangesGuard` for route changes and reloads. For tab changes, pass the page's complete dirty and busy state through `leaveGuard` to protect queued uploads and item drafts as well as section edits. Keep editing has the initial focus and returns focus to where the user was. On create pages, switching tabs keeps the data without asking.

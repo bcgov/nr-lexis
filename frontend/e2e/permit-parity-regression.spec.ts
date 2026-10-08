@@ -772,7 +772,7 @@ test.describe('Provincial permit parity regressions', () => {
     await page.getByLabel('Remarks', { exact: true }).fill('')
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(page).toHaveURL(/\/provincial\/exemption\/EX-BOIC-91002$/)
-    await expect(page.getByRole('dialog', { name: 'Unsaved changes', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('dialog', { name: 'Discard changes?', exact: true })).toHaveCount(0)
     expect(fixture.writes).toEqual([])
     expect(fixture.unexpectedRequests).toEqual([])
   })
@@ -975,7 +975,7 @@ test.describe('Provincial permit parity regressions', () => {
 
     const packageNumber = panel.getByLabel('Package number', { exact: true })
     await panel.getByRole('button', { name: 'Save package', exact: true }).click()
-    await expect(panel.getByText('Package number is required.', { exact: true })).toBeVisible()
+    await expect(panel.getByText('Package number is required', { exact: true })).toBeVisible()
     await expect(packageNumber).toBeFocused()
     await page.setViewportSize({ width: 390, height: 844 })
     await expect
@@ -1035,6 +1035,13 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(panel).toBeVisible()
     await panel.getByLabel('Package number', { exact: true }).fill('DRAFT-CANCEL')
     await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
+    const discard = page.getByRole('dialog', { name: 'Discard changes?', exact: true })
+    await expect(discard).toBeVisible()
+    await discard.getByRole('button', { name: 'Keep editing', exact: true }).click()
+    await expect(panel.getByLabel('Package number', { exact: true })).toHaveValue('DRAFT-CANCEL')
+    await expect(panel.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused()
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()
     await expect(panel).toHaveCount(0)
     await expect(trigger).toBeFocused()
 
@@ -1042,6 +1049,8 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(panel.getByLabel('Package number', { exact: true })).toHaveValue('')
     await panel.getByLabel('Package number', { exact: true }).fill('DRAFT-ESCAPE')
     await page.keyboard.press('Escape')
+    await expect(discard).toBeVisible()
+    await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()
     await expect(panel).toHaveCount(0)
     await expect(trigger).toBeFocused()
 

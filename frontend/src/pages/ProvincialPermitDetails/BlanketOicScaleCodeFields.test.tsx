@@ -174,7 +174,7 @@ describe('BlanketOicScaleCodeFields', () => {
       />,
     )
 
-    expect(await screen.findByText('Select a species.')).toBeInTheDocument()
+    expect(await screen.findByText('Select a species')).toBeInTheDocument()
     // Carbon marks an invalid dropdown on its list box.
     expect(
       screen.getByRole('combobox', { name: 'Species' }).closest('[data-invalid="true"]'),

@@ -1,5 +1,6 @@
 import { ComboBox } from '@carbon/react'
 import type { ReactNode } from 'react'
+import { fieldErrorText } from '@/utils/field-error'
 import { shouldFilterSearchableDropdownItem } from './dropdown-filtering'
 
 type SearchableSelectOption = {
@@ -62,7 +63,7 @@ export default function SearchableSelect({
       disabled={disabled}
       readOnly={readOnly}
       invalid={invalid}
-      invalidText={invalidText}
+      invalidText={fieldErrorText(invalidText)}
       onBlur={onBlur}
       onFocus={() => onFocus?.()}
       onInputChange={(inputValue) => {

@@ -14,12 +14,15 @@ import StarterKit from '@tiptap/starter-kit'
 import { useEffect, useId, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import Modal from '@/components/Modal'
+import { fieldErrorText } from '@/utils/field-error'
 import './NotificationEditor.scss'
 
 type NotificationEditorProps = {
   value: string
   disabled?: boolean
   required?: boolean
+  invalid?: boolean
+  invalidText?: string
   onChange: (value: string) => void
 }
 
@@ -48,10 +51,13 @@ export default function NotificationEditor({
   value,
   disabled = false,
   required = false,
+  invalid = false,
+  invalidText,
   onChange,
 }: NotificationEditorProps) {
   const generatedId = useId().replaceAll(':', '')
   const linkInputId = `notification-editor-link-url-${generatedId}`
+  const errorId = `notification-editor-error-${generatedId}`
   const linkButtonRef = useRef<HTMLButtonElement>(null)
   const [isLinkModalOpen, setIsLinkModalOpen] = useState(false)
   const [linkUrl, setLinkUrl] = useState('')
@@ -85,11 +91,26 @@ export default function NotificationEditor({
   })
 
   useEffect(() => {
+    if (!editor) return
+    editor.setOptions({
+      editorProps: {
+        attributes: {
+          'aria-label': 'Notification content editor',
+          'aria-invalid': String(invalid),
+          ...(required ? { 'aria-required': 'true' } : {}),
+          ...(invalid && invalidText ? { 'aria-describedby': errorId } : {}),
+          class: 'notification-editor__content',
+        },
+      },
+    })
+  }, [editor, errorId, invalid, invalidText, required])
+
+  useEffect(() => {
     if (!editor) {
       return
     }
 
-    editor.setEditable(!disabled)
+    editor.setEditable(!disabled, false)
   }, [disabled, editor])
 
   useEffect(() => {
@@ -137,7 +158,7 @@ export default function NotificationEditor({
 
   return (
     <>
-      <div className="notification-editor">
+      <div className={`notification-editor${invalid ? ' notification-editor--invalid' : ''}`}>
         <div className="notification-editor__toolbar" role="toolbar" aria-label="Text formatting">
           <button
             type="button"
@@ -218,6 +239,11 @@ export default function NotificationEditor({
           </button>
         </div>
         <EditorContent editor={editor} />
+        {invalid && invalidText && (
+          <div id={errorId} className="notification-editor__error" role="alert">
+            {fieldErrorText(invalidText)}
+          </div>
+        )}
       </div>
       {createPortal(
         <Modal
@@ -237,7 +263,7 @@ export default function NotificationEditor({
             helperText="Enter an HTTPS URL or mailto link. Clear the URL to remove an existing link."
             value={linkUrl}
             invalid={!linkUrlIsValid}
-            invalidText="Enter a valid HTTPS URL or mailto link."
+            invalidText={fieldErrorText('Enter a valid HTTPS URL or mailto link.')}
             disabled={disabled}
             onChange={(event) => setLinkUrl(event.currentTarget.value)}
           />

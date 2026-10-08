@@ -851,12 +851,12 @@ describe('permit creation from an exemption', () => {
 
     expect(
       await within(page).findAllByText(
-        'Permit request pieces must be a whole number no greater than 9999999999.',
+        'Permit request pieces must be a whole number no greater than 9999999999',
       ),
     ).not.toHaveLength(0)
     expect(
       within(page).getAllByText(
-        'Permit request volume must be non-negative, 9 characters or fewer, with at most 2 decimal places.',
+        'Permit request volume must be non-negative, 9 characters or fewer, with at most 2 decimal places',
       ),
     ).not.toHaveLength(0)
     expect(addPermitDetail).not.toHaveBeenCalled()
@@ -963,12 +963,14 @@ describe('permit creation from an exemption', () => {
 
     await openPermitsTab()
     const page = await openBlanketOicCreatePage()
+    expect(screen.getByRole('heading', { level: 1, name: 'Apply for new permit' })).toHaveFocus()
     await userEvent.click(within(page).getByRole('link', { name: 'TEST13E2' }))
 
     await waitFor(() =>
       expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2'),
     )
     expect(router.state.location.search).toBe('?permitFilter=902')
+    expect(screen.queryByRole('dialog', { name: 'Discard this permit?' })).not.toBeInTheDocument()
     expect(addPermitDetail).not.toHaveBeenCalled()
   })
 
@@ -982,18 +984,20 @@ describe('permit creation from an exemption', () => {
     await userEvent.type(within(page).getByLabelText('Permit request pieces'), '4')
     await userEvent.click(within(page).getByRole('link', { name: 'TEST13E2' }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
-    expect(
-      within(dialog).getByText(/You have unsaved changes to this new Blanket OIC permit/i),
-    ).toBeInTheDocument()
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Stay' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard this permit?' })
+    expect(dialog).toHaveTextContent(
+      "The permit hasn't been created yet. Everything you've entered will be lost.",
+    )
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
     expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')
+    expect(within(page).getByLabelText('Permit request pieces')).toHaveValue('4')
 
     await userEvent.click(within(page).getByRole('link', { name: 'TEST13E2' }))
     await userEvent.click(
-      within(await screen.findByRole('dialog', { name: 'Unsaved changes' })).getByRole('button', {
-        name: 'Discard and leave',
-      }),
+      within(await screen.findByRole('dialog', { name: 'Discard this permit?' })).getByRole(
+        'button',
+        { name: 'Discard' },
+      ),
     )
     await waitFor(() =>
       expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2'),
@@ -1017,8 +1021,8 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(within(page).getByRole('tab', { name: 'Permit' }))
     await userEvent.click(within(page).getByRole('link', { name: 'TEST13E2' }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
-    expect(within(dialog).getByRole('button', { name: 'Discard and leave' })).toBeDisabled()
+    const dialog = await screen.findByRole('dialog', { name: 'Discard this permit?' })
+    expect(within(dialog).getByRole('button', { name: 'Discard' })).toBeDisabled()
     expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')
   })
 
@@ -1194,14 +1198,14 @@ describe('permit creation from an exemption', () => {
     expect(
       within(page).getByRole('tab', { name: 'Permit, 2 required fields outstanding' }),
     ).toHaveAttribute('aria-selected', 'true')
-    expect(within(page).getAllByText('Permit request pieces is required.')).not.toHaveLength(0)
-    expect(within(page).getAllByText('Permit request volume is required.')).not.toHaveLength(0)
+    expect(within(page).getAllByText('Permit request pieces is required')).not.toHaveLength(0)
+    expect(within(page).getAllByText('Permit request volume is required')).not.toHaveLength(0)
     await userEvent.click(
       within(page).getByRole('tab', { name: /^Applicant, \d+ required fields outstanding$/ }),
     )
 
     expect(
-      await within(page).findAllByText('Client number must be exactly 8 digits.'),
+      await within(page).findAllByText('Client number must be exactly 8 digits'),
     ).not.toHaveLength(0)
     expect(addPermitDetail).not.toHaveBeenCalled()
   })
@@ -1378,23 +1382,23 @@ describe('permit creation from an exemption', () => {
     expect(router.state.location.pathname).toBe('/provincial/exemption/EX-205')
   })
 
-  it('cancels an Apply request while an exemption edit remains open', async () => {
+  it('keeps an exemption edit when the switch to Permits is not confirmed', async () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'saveExemption'])
     renderPage(activeMinisterialExemption)
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
     await userEvent.type(screen.getByLabelText('Conditions'), ' updated')
     await openPermitsTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
-    expect(within(dialog).getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
-    expect(within(dialog).getByRole('button', { name: 'Discard changes' })).toBeInTheDocument()
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
 
-    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    expect(screen.getByRole('tab', { name: 'Exemption details' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByLabelText('Conditions')).toHaveValue(' updated')
     expect(updateExemption).not.toHaveBeenCalled()
     expect(createPermitFromExemption).not.toHaveBeenCalled()
   })
@@ -1407,173 +1411,55 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Add application' }))
     await userEvent.type(screen.getByLabelText('Application number'), '1000457')
     await openPermitsTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
 
-    const dialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
-    expect(
-      within(dialog).getByText(/Add or clear the typed application number before leaving/i),
-    ).toBeInTheDocument()
+    const dialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    expect(within(dialog).getByText('Your changes will be lost.')).toBeInTheDocument()
     expect(within(dialog).queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByRole('tab', { name: 'Applications' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    expect(screen.getByLabelText('Application number')).toHaveValue('1000457')
+
+    await openPermitsTab()
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+    expect(screen.queryByLabelText('Application number')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
 
     expect(await screen.findByRole('dialog', { name: 'Apply for new permit' })).toBeInTheDocument()
     expect(updateExemption).not.toHaveBeenCalled()
     expect(createPermitFromExemption).not.toHaveBeenCalled()
   })
 
-  it.each(['Discard changes', 'Save changes'])(
-    'opens Blanket OIC permit entry after resolving an exemption draft with %s',
-    async (action) => {
-      configureBlanketOicCreationDependencies()
-      mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit', 'saveExemption'])
-      vi.mocked(updateExemption).mockResolvedValue({
-        success: true,
-        message: 'The exemption was saved successfully.',
-        exemptionNumber: activeBlanketOicExemption.exemptionNumber,
-        errors: [],
-        warnings: [],
-      })
-      const router = renderPage(activeBlanketOicExemption)
-
-      await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
-      await userEvent.type(screen.getByLabelText('Conditions'), ' updated')
-      await openPermitsTab()
-      await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
-      await userEvent.click(
-        within(await screen.findByRole('dialog', { name: 'Unsaved changes' })).getByRole('button', {
-          name: action,
-        }),
-      )
-
-      await userEvent.click(
-        within(await screen.findByRole('dialog', { name: 'Apply for new permit' })).getByRole(
-          'button',
-          { name: 'Continue' },
-        ),
-      )
-
-      expect(
-        await screen.findByRole('region', { name: 'Blanket OIC permit details' }),
-      ).toBeInTheDocument()
-      expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')
-      expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
-      expect(updateExemption).toHaveBeenCalledTimes(action === 'Save changes' ? 1 : 0)
-      expect(addPermitDetail).not.toHaveBeenCalled()
-      expect(createPermitFromExemption).not.toHaveBeenCalled()
-    },
-  )
-
-  it('saves an exemption edit before confirming permit creation', async () => {
-    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'saveExemption'])
-    vi.mocked(updateExemption).mockResolvedValue({
-      success: true,
-      message: 'The exemption was saved successfully.',
-      exemptionNumber: 'EX-205',
-      errors: [],
-      warnings: [],
-    })
-    renderPage(activeMinisterialExemption)
+  it('opens Blanket OIC permit entry after an exemption draft is discarded', async () => {
+    configureBlanketOicCreationDependencies()
+    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit', 'saveExemption'])
+    const router = renderPage(activeBlanketOicExemption)
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
     await userEvent.type(screen.getByLabelText('Conditions'), ' updated')
     await openPermitsTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
     await userEvent.click(
-      within(await screen.findByRole('dialog', { name: 'Unsaved changes' })).getByRole('button', {
-        name: 'Save changes',
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
       }),
     )
-
-    await waitFor(() => expect(updateExemption).toHaveBeenCalledOnce())
-    expect(await screen.findByRole('dialog', { name: 'Apply for new permit' })).toBeInTheDocument()
-    expect(screen.queryByText('The exemption was saved successfully.')).not.toBeInTheDocument()
-    expect(createPermitFromExemption).not.toHaveBeenCalled()
-  })
-
-  it('requires a reload after a successful save when editable data refresh fails', async () => {
-    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'saveExemption'])
-    vi.mocked(updateExemption).mockResolvedValue({
-      success: true,
-      message: 'The exemption was saved successfully.',
-      exemptionNumber: 'EX-205',
-      errors: [],
-      warnings: [],
-    })
-    vi.mocked(fetchExemptionEditContext)
-      .mockResolvedValueOnce({
-        rateOverrideEnabled: false,
-        fixedFeeRate: '',
-        regionNumbers: [],
-        locked: false,
-        lockMessage: '',
-      })
-      .mockRejectedValueOnce(new Error('editable data refresh unavailable'))
-    renderPage(activeMinisterialExemption)
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
-    await userEvent.type(screen.getByLabelText('Conditions'), ' updated')
-    await openPermitsTab()
     await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
-    await userEvent.click(
-      within(await screen.findByRole('dialog', { name: 'Unsaved changes' })).getByRole('button', {
-        name: 'Save changes',
-      }),
-    )
 
-    await waitFor(() => expect(updateExemption).toHaveBeenCalledOnce())
-    expect(
-      await screen.findByText(
-        /Current data could not be refreshed; reload before making another change\./i,
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Apply for new permit' })).getByRole(
+        'button',
+        { name: 'Continue' },
       ),
-    ).toBeInTheDocument()
-    const dialog = await screen.findByRole('dialog', { name: 'Reload required' })
-    expect(
-      within(dialog).getByText(
-        'The exemption was saved, but its current data could not be refreshed. Reload the page before creating a permit.',
-      ),
-    ).toBeInTheDocument()
-    expect(within(dialog).queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
-    expect(
-      within(dialog).queryByRole('button', { name: 'Discard changes' }),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Apply for new permit' })).not.toBeInTheDocument()
-    expect(updateExemption).toHaveBeenCalledOnce()
-    expect(createPermitFromExemption).not.toHaveBeenCalled()
-
-    await userEvent.click(within(dialog).getByText('Close', { selector: 'button' }))
-    expect(screen.queryByRole('dialog', { name: 'Reload required' })).not.toBeInTheDocument()
-
-    consoleError.mockRestore()
-  })
-
-  it('does not create a permit when saving the exemption edit fails', async () => {
-    mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'saveExemption'])
-    vi.mocked(updateExemption).mockResolvedValue({
-      success: false,
-      message: 'Unable to save the exemption.',
-      exemptionNumber: 'EX-205',
-      errors: ['The exemption could not be saved.'],
-      warnings: [],
-    })
-    renderPage(activeMinisterialExemption)
-
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled())
-    await userEvent.type(screen.getByLabelText('Conditions'), ' updated')
-    await openPermitsTab()
-    await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
-    await userEvent.click(
-      within(await screen.findByRole('dialog', { name: 'Unsaved changes' })).getByRole('button', {
-        name: 'Save changes',
-      }),
     )
 
-    await waitFor(() => expect(updateExemption).toHaveBeenCalledOnce())
-    expect(await screen.findByText('Could not finish saving changes')).toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Apply for new permit' })).not.toBeInTheDocument()
+    expect(
+      await screen.findByRole('region', { name: 'Blanket OIC permit details' }),
+    ).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')
+    expect(updateExemption).not.toHaveBeenCalled()
+    expect(addPermitDetail).not.toHaveBeenCalled()
     expect(createPermitFromExemption).not.toHaveBeenCalled()
   })
 

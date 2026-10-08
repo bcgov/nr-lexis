@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { DismissibleTag, Dropdown, FilterableMultiSelect } from '@carbon/react'
+import { fieldErrorText } from '@/utils/field-error'
 import { markRequired, requiredLabel } from '@/utils/required-label'
 import {
   fetchApplicationEndUsesForSpeciesRegion,
@@ -276,7 +277,7 @@ export default function BlanketOicPackageCodeFields({
             inputProps={{ 'aria-required': true }}
             disabled={disabled || speciesAvailability !== 'available'}
             invalid={!!fieldErrors?.speciesCodes}
-            invalidText={fieldErrors?.speciesCodes}
+            invalidText={fieldErrorText(fieldErrors?.speciesCodes)}
             onChange={({ selectedItems }) =>
               onChange('speciesCodes', selectedItems.map((item) => item.id).join(', '))
             }
@@ -304,7 +305,7 @@ export default function BlanketOicPackageCodeFields({
           selectedItem={selectedEndUse}
           disabled={endUseDisabled}
           invalid={!!fieldErrors?.endUseCode}
-          invalidText={fieldErrors?.endUseCode}
+          invalidText={fieldErrorText(fieldErrors?.endUseCode)}
           helperText={endUseAwaitsSpecies ? END_USE_HELPER_TEXT : undefined}
           onChange={({ selectedItem }) =>
             onChange('endUseCode', selectedItem ? normalizeCode(selectedItem.code) : '')
@@ -322,7 +323,7 @@ export default function BlanketOicPackageCodeFields({
           selectedItem={selectedAgeClass}
           disabled={disabled || ageClassAvailability !== 'available'}
           invalid={!!fieldErrors?.ageClass}
-          invalidText={fieldErrors?.ageClass}
+          invalidText={fieldErrorText(fieldErrors?.ageClass)}
           onChange={({ selectedItem }) =>
             onChange('ageClass', selectedItem ? normalizeCode(selectedItem.value) : '')
           }
@@ -337,7 +338,7 @@ export default function BlanketOicPackageCodeFields({
           selectedItem={selectedProductType}
           readOnly
           invalid={!!fieldErrors?.productType}
-          invalidText={fieldErrors?.productType}
+          invalidText={fieldErrorText(fieldErrors?.productType)}
           onChange={() => undefined}
         />
       </div>

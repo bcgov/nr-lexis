@@ -2521,19 +2521,24 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     }
   })
 
-  test('reveals offer validation after each save from the bottom of a long form', async ({
+  test('reveals offer field errors after each save from the bottom of a long form', async ({
     page,
   }) => {
     await page.setViewportSize({ width: 780, height: 999 })
     await gotoSyntheticRoute(page, '/provincial/offers/create', {
       ready: page.getByRole('heading', { level: 1, name: 'Create provincial offer', exact: true }),
     })
+    const applicationNumber = page.getByLabel('Application number', { exact: true })
     for (let attempt = 0; attempt < 2; attempt += 1) {
+      await page.getByLabel('Offer remarks', { exact: true }).click()
       await page.getByRole('button', { name: 'Save new offer', exact: true }).click()
-      const banner = page.locator('.create-form-validation-notification')
-      await expect(banner).toContainText('Application number is required.')
-      await expect(banner).toBeInViewport({ ratio: 1 })
-      await expect(banner).toHaveClass(/cds--inline-notification--error/)
+      const error = page.getByText('Application number is required', { exact: true })
+      await expect(applicationNumber).toHaveAttribute('aria-invalid', 'true')
+      await expect(applicationNumber).toBeFocused()
+      await expect(applicationNumber).toBeInViewport({ ratio: 1 })
+      await expect(error).toBeInViewport({ ratio: 1 })
+      await expect(error).toHaveClass(/cds--form-requirement/)
+      await expect(page.locator('.create-form-validation-notification')).toHaveCount(0)
       await expect(page.locator('.cds--toast-notification')).toHaveCount(0)
     }
   })
@@ -2550,7 +2555,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.getByLabel('Offer remarks').click()
 
     await expect(dateInput).toHaveValue('2026-02-31')
-    await expect(page.getByText('Date must be YYYY-MM-DD.')).toBeVisible()
+    await expect(page.getByText('Date must be YYYY-MM-DD')).toBeVisible()
   })
 
   test('styles an active report configuration without changing its route', async ({ page }) => {
@@ -2980,7 +2985,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(reviewButton).toBeEnabled()
     await reviewButton.click()
     const uploadError = uploadPanel.locator('.admin-upload-file-error')
-    await expect(uploadError).toContainText('Please upload a file before continuing.')
+    await expect(uploadError).toContainText('Please upload a file before continuing')
     await expect(uploadError.locator('svg')).toHaveCount(1)
     await expect(uploadError).toHaveCSS('display', 'flex')
     await expect(uploadError).toHaveCSS('font-size', '12px')

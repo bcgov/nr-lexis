@@ -27,6 +27,8 @@ import { Archive } from '@carbon/pictograms-react'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '../../components/ConfirmationModal'
+import { useDiscardPrompt } from '../../components/DiscardChangesModal'
+import { focusFirstEditableFieldAfterPanelChange } from '@/utils/focus'
 import EmptyState from '../../components/EmptyState'
 import DetailSidePanel from '../../components/DetailSidePanel'
 import PendingIcon from '../../components/PendingIcon'
@@ -71,6 +73,7 @@ import {
   type ApplicationPackageSpeciesRow,
 } from '@/service/provincial-application-items-service'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
+import { fieldErrorText } from '@/utils/field-error'
 import { markRequired, requiredLabel } from '@/utils/required-label'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import { displayTableValue, formatPackageNumberLabel } from '@/utils/text'
@@ -156,6 +159,16 @@ const CREATE_PACKAGE_INPUT_FIELDS: Partial<Record<keyof PackageFormState, Applic
   comments: 'createPackageComments',
 }
 
+const EDIT_PACKAGE_INPUT_FIELDS: Partial<Record<keyof PackageFormState, ApplicationItemField>> = {
+  newPackageNumber: 'packageNewPackageNumber',
+  volume: 'packageVolume',
+  averageLength: 'packageAverageLength',
+  averageDiameter: 'packageAverageDiameter',
+  comments: 'packageComments',
+  productType: 'packageProductType',
+  ageClass: 'packageAgeClass',
+}
+
 const SCALE_INPUT_FIELDS: Record<keyof ScaleFormState, ApplicationItemField> = {
   timberMark: 'scaleTimberMark',
   speciesCode: 'scaleSpeciesCode',
@@ -172,6 +185,16 @@ const CREATE_PACKAGE_SERVER_FIELDS: Array<[RegExp, ApplicationItemField]> = [
   [/^The package average length .+\.$/, 'createPackageAverageLength'],
   [/^The package average diameter .+\.$/, 'createPackageAverageDiameter'],
   [/^Package comments .+\.$/, 'createPackageComments'],
+]
+
+const EDIT_PACKAGE_SERVER_FIELDS: Array<[RegExp, ApplicationItemField]> = [
+  [/^Package (number )?.+ already exists\.$/, 'packageNewPackageNumber'],
+  [/^The (total )?package volume .+\.$/, 'packageVolume'],
+  [/^The package average length .+\.$/, 'packageAverageLength'],
+  [/^The package average diameter .+\.$/, 'packageAverageDiameter'],
+  [/^Package comments .+\.$/, 'packageComments'],
+  [/^Package product type code does not exist\.$/, 'packageProductType'],
+  [/^Package growth type code does not exist\.$/, 'packageAgeClass'],
 ]
 
 const SCALE_SERVER_FIELDS: Array<[RegExp, ApplicationItemField]> = [
@@ -512,10 +535,8 @@ function ProvincialApplicationItemsPanel({
   )
   const [isEditingItems, setIsEditingItems] = useState(false)
   const [activeDrawer, setActiveDrawer] = useState<'create' | 'edit' | 'scale' | null>(null)
-  const [pendingDrawerClose, setPendingDrawerClose] = useState(false)
   const packageLauncherRef = useRef<HTMLElement>(null)
   const scaleLauncherRef = useRef<HTMLElement>(null)
-  const drawerDiscardLauncherRef = useRef<HTMLElement>(null)
   const drawerFormRef = useRef<HTMLDivElement>(null)
   const [serverFieldErrors, setServerFieldErrors] = useState<FieldErrors<ApplicationItemField>>({})
   const focusFirstDrawerError = () =>
@@ -568,7 +589,7 @@ function ProvincialApplicationItemsPanel({
     useState<PackageDataAvailability>(unavailablePackageData)
   const [packageLoadWarning, setPackageLoadWarning] = useState('')
   const [itemsErrorMessage, setItemsErrorMessage] = useState('')
-  // A failure inside an open drawer stays in that drawer; the page behind it is inert.
+  // A failure inside an open drawer stays in that drawer.
   const showItemActionError = (message: string) => {
     if (activeDrawer === 'scale') {
       setScaleActionErrorMessage(message)
@@ -609,7 +630,6 @@ function ProvincialApplicationItemsPanel({
   const [packageDraftTouched, setPackageDraftTouched] = useState(false)
   const [createPackageDraftTouched, setCreatePackageDraftTouched] = useState(false)
   const [scaleDraftTouched, setScaleDraftTouched] = useState(false)
-  const [pendingPackageSelection, setPendingPackageSelection] = useState('')
   const [packagePendingDeletion, setPackagePendingDeletion] = useState('')
   const [scalePendingDeletion, setScalePendingDeletion] =
     useState<ApplicationPackageScaleRow | null>(null)
@@ -632,6 +652,22 @@ function ProvincialApplicationItemsPanel({
     scaleDraftTouched && JSON.stringify(scaleForm) !== JSON.stringify(emptyScaleForm)
   const itemsDirty = selectedPackageDraftDirty || createPackageDraftDirty || scaleDraftDirty
   const itemsBusy = isSavingPackage || isSavingScale || !!deletingScaleId
+  const drawerReturnFocus = () => {
+    const active = document.activeElement
+    return active instanceof HTMLElement &&
+      active !== document.body &&
+      active.isConnected &&
+      active.getAttribute('role') !== 'option'
+      ? active
+      : document.querySelector<HTMLElement>(
+          '.application-items-drawer input:not(:disabled), .application-items-drawer textarea:not(:disabled)',
+        )
+  }
+  const { confirmDiscard: confirmItemDiscard, discardModal: itemDiscardModal } = useDiscardPrompt(
+    itemsDirty,
+    undefined,
+    drawerReturnFocus,
+  )
 
   useEffect(() => {
     if (activeDrawer || createPackageDraftTouched) return
@@ -823,10 +859,11 @@ function ProvincialApplicationItemsPanel({
   }
 
   const packageFieldError = (field: ApplicationItemField): string | undefined =>
+    fieldErrorText(serverFieldErrors[field]) ??
     getVisibleFieldError(field, itemFieldErrors, touchedItemFields, showPackageValidationErrors)
 
   const createPackageFieldError = (field: ApplicationItemField): string | undefined =>
-    serverFieldErrors[field] ??
+    fieldErrorText(serverFieldErrors[field]) ??
     getVisibleFieldError(
       field,
       itemFieldErrors,
@@ -835,7 +872,7 @@ function ProvincialApplicationItemsPanel({
     )
 
   const scaleFieldError = (field: ApplicationItemField): string | undefined =>
-    serverFieldErrors[field] ??
+    fieldErrorText(serverFieldErrors[field]) ??
     getVisibleFieldError(field, itemFieldErrors, touchedItemFields, showScaleValidationErrors)
 
   const firstItemError = (...fields: ApplicationItemField[]): string | undefined =>
@@ -850,17 +887,74 @@ function ProvincialApplicationItemsPanel({
     }
   }, [applicationNumber])
 
+  const resetSelectedPackageDrafts = useCallback(() => {
+    setServerFieldErrors({})
+    setPackageForm(packageBaselineForm)
+    setSpeciesDraft(packageSpeciesBaseline)
+    setSpeciesToAdd('')
+    setPackageDraftTouched(false)
+    setScaleForm(emptyScaleForm)
+    setScaleActionErrorMessage('')
+    setShowScaleValidationErrors(false)
+    setScaleDraftTouched(false)
+    setTouchedItemFields({})
+    setShowPackageValidationErrors(false)
+  }, [packageBaselineForm, packageSpeciesBaseline])
+
+  const resetCreatePackageDraft = useCallback(() => {
+    setServerFieldErrors({})
+    setCreatePackageForm(
+      newPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
+    )
+    setCreateSpeciesDraft(applicationSpeciesCodes)
+    setCreatePackageDraftTouched(false)
+    setTouchedItemFields({})
+    setShowCreatePackageValidationErrors(false)
+  }, [productTypeCode, applicationGrowthTypeCode, applicationEndUseCode, applicationSpeciesCodes])
+
+  const resetScaleDraft = useCallback(() => {
+    setServerFieldErrors({})
+    setScaleForm(emptyScaleForm)
+    setScaleActionErrorMessage('')
+    setScaleDraftTouched(false)
+    setTouchedItemFields({})
+    setShowScaleValidationErrors(false)
+  }, [])
+
+  const cancelItemEditing = useCallback(() => {
+    resetSelectedPackageDrafts()
+    resetCreatePackageDraft()
+    resetScaleDraft()
+    setItemsErrorMessage('')
+    onActionResult(withoutActionError)
+    setIsEditingItems(false)
+    setActiveDrawer(null)
+  }, [resetSelectedPackageDrafts, resetCreatePackageDraft, resetScaleDraft, onActionResult])
+
   const requestPackageSelection = useCallback(
     (packageNumber: string) => {
       if (itemsBusy || packageNumber === selectedPackageNumber) return
-      if (selectedPackageDraftDirty || scaleDraftDirty) {
-        setPendingPackageSelection(packageNumber)
-        return
-      }
-      onActionResult(withoutActionError)
-      dispatchPackageSelection({ type: 'select', packageNumber })
+      // Loading the next package replaces the current package's drafts.
+      confirmItemDiscard(() => {
+        if (activeDrawer === 'create') cancelItemEditing()
+        else {
+          resetSelectedPackageDrafts()
+          resetCreatePackageDraft()
+          onActionResult(withoutActionError)
+        }
+        dispatchPackageSelection({ type: 'select', packageNumber })
+      })
     },
-    [itemsBusy, onActionResult, scaleDraftDirty, selectedPackageDraftDirty, selectedPackageNumber],
+    [
+      activeDrawer,
+      cancelItemEditing,
+      confirmItemDiscard,
+      itemsBusy,
+      onActionResult,
+      resetSelectedPackageDrafts,
+      resetCreatePackageDraft,
+      selectedPackageNumber,
+    ],
   )
   const requestPackageSelectionRef = useRef(requestPackageSelection)
 
@@ -991,6 +1085,7 @@ function ProvincialApplicationItemsPanel({
         setPackageForm(loadedPackageForm)
         setPackageBaselineForm(loadedPackageForm)
         setShowPackageValidationErrors(false)
+        setServerFieldErrors({})
         setPackageSpeciesRows(speciesRows)
         setSpeciesDraft(nextSpeciesDraft)
         setPackageSpeciesBaseline(nextSpeciesDraft)
@@ -1191,6 +1286,10 @@ function ProvincialApplicationItemsPanel({
   }, [detail.orgUnitNumber, scaleForm.speciesCode])
 
   const setPackageField = (field: keyof PackageFormState, value: string) => {
+    const errorField = EDIT_PACKAGE_INPUT_FIELDS[field]
+    if (errorField) {
+      setServerFieldErrors((current) => ({ ...current, [errorField]: undefined }))
+    }
     setPackageDraftTouched(true)
     setPackageForm((current) => ({
       ...current,
@@ -1237,72 +1336,9 @@ function ProvincialApplicationItemsPanel({
     setSpeciesDraft((current) => current.filter((item) => item !== species))
   }
 
-  const resetSelectedPackageDrafts = () => {
-    setServerFieldErrors({})
-    setPackageForm(packageBaselineForm)
-    setSpeciesDraft(packageSpeciesBaseline)
-    setSpeciesToAdd('')
-    setPackageDraftTouched(false)
-    setScaleForm(emptyScaleForm)
-    setScaleActionErrorMessage('')
-    setShowScaleValidationErrors(false)
-    setScaleDraftTouched(false)
-    setTouchedItemFields({})
-    setShowPackageValidationErrors(false)
-  }
-
-  const resetCreatePackageDraft = () => {
-    setServerFieldErrors({})
-    setCreatePackageForm(
-      newPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
-    )
-    setCreateSpeciesDraft(applicationSpeciesCodes)
-    setCreatePackageDraftTouched(false)
-    setTouchedItemFields({})
-    setShowCreatePackageValidationErrors(false)
-  }
-
-  const resetScaleDraft = () => {
-    setServerFieldErrors({})
-    setScaleForm(emptyScaleForm)
-    setScaleActionErrorMessage('')
-    setScaleDraftTouched(false)
-    setTouchedItemFields({})
-    setShowScaleValidationErrors(false)
-  }
-
-  const cancelItemEditing = () => {
-    resetSelectedPackageDrafts()
-    resetCreatePackageDraft()
-    resetScaleDraft()
-    setItemsErrorMessage('')
-    onActionResult(withoutActionError)
-    setIsEditingItems(false)
-    setActiveDrawer(null)
-  }
-
   const requestDrawerClose = () => {
     if (itemsBusy) return
-    const dirty =
-      activeDrawer === 'create'
-        ? createPackageDraftDirty
-        : activeDrawer === 'edit'
-          ? selectedPackageDraftDirty
-          : scaleDraftDirty
-    if (dirty) {
-      const activeElement = document.activeElement
-      drawerDiscardLauncherRef.current =
-        activeElement instanceof HTMLElement &&
-        activeElement.closest('.application-items-drawer') &&
-        activeElement.getAttribute('role') !== 'option'
-          ? activeElement
-          : document.querySelector<HTMLElement>(
-              '.application-items-drawer input:not(:disabled), .application-items-drawer textarea:not(:disabled)',
-            )
-      setPendingDrawerClose(true)
-    } else {
-      cancelItemEditing()
-    }
+    confirmItemDiscard(cancelItemEditing)
   }
 
   const selectedPackageTotalPieces = scales.reduce((total, row) => total + row.pieces, 0)
@@ -1353,7 +1389,6 @@ function ProvincialApplicationItemsPanel({
     !standingTimberItems &&
     !editingBlocked &&
     (packageFirstEmptyState ? !hideMutationActions && canAddPackages : canManageItems)
-  const otherItemActionDisabled = activeDrawer !== null || itemsBusy
   const showMutationActions = canManageItems && isEditingItems
   const canSaveSelectedPackage =
     activeDrawer === 'edit' &&
@@ -1363,6 +1398,8 @@ function ProvincialApplicationItemsPanel({
     !!selectedPackageNumber &&
     !isSavingPackage &&
     !selectedPackageHasPermittedScale
+  const canSubmitSelectedPackage =
+    activeDrawer === 'edit' && canEditPackages && !itemsBusy && !selectedPackageHasPermittedScale
   const canCreatePackages = activeDrawer === 'create' && canAddPackages && !itemsBusy
   const canSubmitScale = activeDrawer === 'scale' && canAddScales && !itemsBusy
   const canAddScalesWithReferenceOptions =
@@ -1370,16 +1407,35 @@ function ProvincialApplicationItemsPanel({
   const scaleFieldsDisabled =
     !canAddScalesWithReferenceOptions || !packageDataLoaded || !selectedPackageNumber
   const canDeleteSelectedPackage =
-    activeDrawer === null &&
     !itemsBusy &&
     canAddPackages &&
     packageDataLoaded &&
     !!selectedPackageNumber &&
     !isSavingPackage &&
-    !selectedPackageDraftDirty &&
-    !scaleDraftDirty &&
     !selectedPackageHasPermittedScale &&
     selectedPackageTotalPieces === 0
+
+  const startItemEditing = (drawer: 'create' | 'edit' | 'scale', launcher: HTMLElement) => {
+    if (!canOpenItemsEditor || itemsBusy) return
+    if (drawer === 'create' && !canAddPackages) return
+    if (
+      drawer === 'edit' &&
+      (!canEditPackages || !packageDataLoaded || selectedPackageHasPermittedScale)
+    )
+      return
+    if (drawer === 'scale' && (!canAddScales || !packageDataLoaded || !selectedPackageNumber))
+      return
+    confirmItemDiscard(() => {
+      cancelItemEditing()
+      if (drawer === 'scale') scaleLauncherRef.current = launcher
+      else packageLauncherRef.current = launcher
+      setActiveDrawer(drawer)
+      setIsEditingItems(true)
+      focusFirstEditableFieldAfterPanelChange(() =>
+        document.querySelector('.application-items-drawer'),
+      )
+    })
+  }
 
   const buildPackageMutation = (form: PackageFormState, packageNumber: string) => ({
     packageNumber,
@@ -1398,7 +1454,21 @@ function ProvincialApplicationItemsPanel({
   })
 
   const onSaveSelectedPackage = async () => {
-    if (!canSaveSelectedPackage) {
+    if (!canSubmitSelectedPackage) {
+      return
+    }
+
+    setServerFieldErrors({})
+    setItemsErrorMessage('')
+    if (!selectedPackageReferenceOptionsAvailable || !packageDataLoaded || !selectedPackageNumber) {
+      showItemActionError(
+        !selectedPackageReferenceOptionsAvailable
+          ? baseReferenceOptionsLoading || selectedEndUseOptionsLoading
+            ? 'Loading authoritative item options…'
+            : referenceOptionsUnavailableMessage
+          : packageLoadWarning || 'Selected package data unavailable',
+      )
+      focusFirstDrawerError()
       return
     }
 
@@ -1412,20 +1482,15 @@ function ProvincialApplicationItemsPanel({
       return
     }
 
+    if (!selectedPackageDraftDirty) {
+      cancelItemEditing()
+      return
+    }
+
     if (hasPackageValidationError) {
       setShowPackageValidationErrors(true)
-      showItemActionError(
-        firstItemError(
-          'packageNewPackageNumber',
-          'packageComments',
-          'packageVolume',
-          'packageAverageLength',
-          'packageAverageDiameter',
-          'packageStatus',
-          'packageProductType',
-          'packageAgeClass',
-        ) ?? 'Please fix validation errors before saving the package.',
-      )
+      showItemActionError(firstItemError('packageStatus') ?? '')
+      focusFirstDrawerError()
       return
     }
 
@@ -1437,7 +1502,13 @@ function ProvincialApplicationItemsPanel({
         buildPackageMutation(packageForm, selectedPackageNumber),
       )
       if (!result.valid) {
-        showItemActionError(result.errors.join(' ') || 'Package update failed.')
+        const { fieldErrors, otherMessages } = drawerServerErrors(
+          result.errors.length ? result.errors : ['Package update failed.'],
+          EDIT_PACKAGE_SERVER_FIELDS,
+        )
+        setServerFieldErrors(fieldErrors)
+        showItemActionError(otherMessages.join(' '))
+        focusFirstDrawerError()
         return
       }
 
@@ -1463,6 +1534,7 @@ function ProvincialApplicationItemsPanel({
       }
     } catch {
       showItemActionError('Unable to save package details.')
+      focusFirstDrawerError()
     } finally {
       setIsSavingPackage(false)
     }
@@ -1662,7 +1734,6 @@ function ProvincialApplicationItemsPanel({
         )
       }
     } catch {
-      showItemActionError('Unable to add scale.')
       setScaleActionErrorMessage('Unable to add scale.')
       focusFirstDrawerError()
     } finally {
@@ -1747,12 +1818,8 @@ function ProvincialApplicationItemsPanel({
                     kind="tertiary"
                     size="md"
                     renderIcon={Add}
-                    disabled={otherItemActionDisabled}
-                    onClick={(event) => {
-                      packageLauncherRef.current = event.currentTarget
-                      setActiveDrawer('create')
-                      setIsEditingItems(true)
-                    }}
+                    disabled={itemsBusy}
+                    onClick={(event) => startItemEditing('create', event.currentTarget)}
                   >
                     Create package
                   </Button>
@@ -1821,16 +1888,8 @@ function ProvincialApplicationItemsPanel({
                     kind="tertiary"
                     size="md"
                     renderIcon={Edit}
-                    disabled={
-                      otherItemActionDisabled ||
-                      !packageDataLoaded ||
-                      selectedPackageHasPermittedScale
-                    }
-                    onClick={(event) => {
-                      packageLauncherRef.current = event.currentTarget
-                      setActiveDrawer('edit')
-                      setIsEditingItems(true)
-                    }}
+                    disabled={itemsBusy || !packageDataLoaded || selectedPackageHasPermittedScale}
+                    onClick={(event) => startItemEditing('edit', event.currentTarget)}
                   >
                     Edit package
                   </Button>
@@ -1841,9 +1900,12 @@ function ProvincialApplicationItemsPanel({
                     size="md"
                     renderIcon={TrashCan}
                     onClick={() => {
-                      setItemsErrorMessage('')
-                      onActionResult(null)
-                      setPackagePendingDeletion(selectedPackageNumber)
+                      if (itemsBusy) return
+                      confirmItemDiscard(() => {
+                        cancelItemEditing()
+                        onActionResult(null)
+                        setPackagePendingDeletion(selectedPackageNumber)
+                      })
                     }}
                   >
                     Delete package
@@ -1854,12 +1916,8 @@ function ProvincialApplicationItemsPanel({
                     kind="tertiary"
                     size="md"
                     renderIcon={Add}
-                    disabled={otherItemActionDisabled}
-                    onClick={(event) => {
-                      packageLauncherRef.current = event.currentTarget
-                      setActiveDrawer('create')
-                      setIsEditingItems(true)
-                    }}
+                    disabled={itemsBusy}
+                    onClick={(event) => startItemEditing('create', event.currentTarget)}
                   >
                     Create package
                   </Button>
@@ -1930,22 +1988,24 @@ function ProvincialApplicationItemsPanel({
                   {
                     label: isSavingPackage ? 'Saving…' : 'Save package',
                     kind: 'primary',
-                    disabled: !canSaveSelectedPackage,
+                    disabled: !canSubmitSelectedPackage,
                     onClick: () => void onSaveSelectedPackage(),
                   },
                 ]}
               >
                 <RequiredFieldsLegend />
-                {!!itemsErrorMessage && (
-                  <InlineNotification
-                    kind="error"
-                    title="Package save failed"
-                    subtitle={itemsErrorMessage}
-                    lowContrast
-                    hideCloseButton
-                  />
-                )}
-                <div className="application-items-package-edit-panel">
+                <div className="application-items-package-edit-panel" ref={drawerFormRef}>
+                  {!!itemsErrorMessage && (
+                    <div tabIndex={-1} data-drawer-error>
+                      <InlineNotification
+                        kind="error"
+                        title="Package save failed"
+                        subtitle={itemsErrorMessage}
+                        lowContrast
+                        hideCloseButton
+                      />
+                    </div>
+                  )}
                   <div className="application-items-form">
                     <TextInput
                       id="applicationItemsPackageNumber"
@@ -2309,12 +2369,8 @@ function ProvincialApplicationItemsPanel({
                   kind="tertiary"
                   size="md"
                   renderIcon={Add}
-                  disabled={otherItemActionDisabled || !packageDataLoaded}
-                  onClick={(event) => {
-                    scaleLauncherRef.current = event.currentTarget
-                    setActiveDrawer('scale')
-                    setIsEditingItems(true)
-                  }}
+                  disabled={itemsBusy || !packageDataLoaded}
+                  onClick={(event) => startItemEditing('scale', event.currentTarget)}
                 >
                   Add scale
                 </Button>
@@ -2498,16 +2554,19 @@ function ProvincialApplicationItemsPanel({
                               size="md"
                               disabled={
                                 !canAddScales ||
-                                otherItemActionDisabled ||
+                                itemsBusy ||
                                 !packageDataLoaded ||
                                 deletingScaleId === row.id ||
                                 row.permitted
                               }
                               renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
                               onClick={() => {
-                                setItemsErrorMessage('')
-                                onActionResult(null)
-                                setScalePendingDeletion(row)
+                                if (itemsBusy) return
+                                confirmItemDiscard(() => {
+                                  cancelItemEditing()
+                                  onActionResult(null)
+                                  setScalePendingDeletion(row)
+                                })
                               }}
                             >
                               {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
@@ -2565,35 +2624,7 @@ function ProvincialApplicationItemsPanel({
           onClose={() => setScalePendingDeletion(null)}
         />
       )}
-      <ConfirmationModal
-        open={!!pendingPackageSelection}
-        title="Discard package drafts?"
-        description="Changing packages will discard unsaved package, species, and scale values for the current package."
-        confirmLabel="Discard and switch"
-        danger
-        onConfirm={() => {
-          const nextPackageNumber = pendingPackageSelection
-          resetSelectedPackageDrafts()
-          setPendingPackageSelection('')
-          onActionResult(withoutActionError)
-          dispatchPackageSelection({ type: 'select', packageNumber: nextPackageNumber })
-        }}
-        onClose={() => setPendingPackageSelection('')}
-      />
-      <ConfirmationModal
-        open={pendingDrawerClose}
-        launcherButtonRef={drawerDiscardLauncherRef}
-        title="Discard unsaved changes?"
-        description="Your changes to this package or scale will be lost."
-        confirmLabel="Discard changes"
-        danger
-        onConfirm={() => {
-          drawerDiscardLauncherRef.current = null
-          setPendingDrawerClose(false)
-          cancelItemEditing()
-        }}
-        onClose={() => setPendingDrawerClose(false)}
-      />
+      {itemDiscardModal}
     </div>
   )
 }

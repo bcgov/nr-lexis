@@ -972,7 +972,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.queryByLabelText('Send to')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
-    expect(screen.getByText('Remarks are required.')).toBeInTheDocument()
+    expect(screen.getByText('Remarks are required')).toBeInTheDocument()
     expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
@@ -1032,7 +1032,7 @@ describe('Provincial Review Action State Smoke', () => {
     const sendToInput = await revealSendToField()
     expect(sendToInput).toHaveValue('')
     expect(
-      screen.queryByText('Enter one valid client email address or deselect Send status email.'),
+      screen.queryByText('Enter one valid client email address or deselect Send status email'),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByText(
@@ -1044,12 +1044,10 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
-      await screen.findByText(
-        'Enter one valid client email address or deselect Send status email.',
-      ),
+      await screen.findByText('Enter one valid client email address or deselect Send status email'),
     ).toBeInTheDocument()
     expect(
-      screen.getAllByText('Enter one valid client email address or deselect Send status email.'),
+      screen.getAllByText('Enter one valid client email address or deselect Send status email'),
     ).toHaveLength(1)
     expect(screen.queryByText('Review validation')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()

@@ -40,9 +40,8 @@ import DetailCardTitle from '@/components/DetailCardTitle'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import PageHeader from '@/components/PageHeader'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
-import ApplicationAccuracyConfirmation, {
-  APPLICATION_ACCURACY_ACKNOWLEDGEMENT,
-} from '@/components/ApplicationAccuracyConfirmation'
+import ApplicationAccuracyConfirmation from '@/components/ApplicationAccuracyConfirmation'
+import { discardNewRecordCopy } from '@/components/DiscardChangesModal'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { nonNegativeWholeNumberFieldError } from '@/pages/shared/application-term-utils'
 import {
@@ -417,6 +416,14 @@ const ProvincialApplicationCreatePage = () => {
   const currentFormRef = useRef(form)
   currentFormRef.current = form
   const [formEdited, setFormEdited] = useState(false)
+  // Values the page fills in itself belong to the starting draft, even after the user starts editing.
+  const applyLoadedFormValues = useCallback(
+    (update: (current: ProvincialApplicationCreateForm) => ProvincialApplicationCreateForm) => {
+      draftBaselineRef.current = update(draftBaselineRef.current)
+      setForm(update)
+    },
+    [],
+  )
   const [clientSearchResetKey, setClientSearchResetKey] = useState(0)
   const [createdApplicationNavigation, setCreatedApplicationNavigation] =
     useState<CreatedApplicationNavigation | null>(null)
@@ -525,7 +532,7 @@ const ProvincialApplicationCreatePage = () => {
         setExemptionReasons(options.exemptionReasons)
         setAllRegions(options.regions)
         setCurrentSchedules(scheduleOptions)
-        setForm((current) => {
+        applyLoadedFormValues((current) => {
           const withScheduleDefaults = applyScheduleDefaults(
             current,
             scheduleOptions,
@@ -553,7 +560,12 @@ const ProvincialApplicationCreatePage = () => {
     }
 
     void loadOptions()
-  }, [authoritativeOrgUnitNo, canReviewApplications, provincialSubmitterIdentityLocked])
+  }, [
+    applyLoadedFormValues,
+    authoritativeOrgUnitNo,
+    canReviewApplications,
+    provincialSubmitterIdentityLocked,
+  ])
 
   useEffect(() => {
     if (!provincialSubmitterIdentityLocked) {
@@ -629,7 +641,7 @@ const ProvincialApplicationCreatePage = () => {
         return
       }
 
-      setForm((current) => {
+      applyLoadedFormValues((current) => {
         const currentExemptionReason = current.exemptionType.trim()
         if (
           !currentExemptionReason ||
@@ -645,7 +657,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [exemptionReasons])
+  }, [applyLoadedFormValues, exemptionReasons])
 
   useEffect(() => {
     const ownerClientNumber = ownerClientNumberForLookup.trim()
@@ -688,7 +700,7 @@ const ProvincialApplicationCreatePage = () => {
 
         setOwnerClientLocations(locations)
         updateClientLookupFailure('owner-locations', false)
-        setForm((current) => {
+        applyLoadedFormValues((current) => {
           if (!clientLookupNumbersMatch(current.ownerClientNumber, ownerClientNumber)) {
             return current
           }
@@ -719,7 +731,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [ownerClientNumberForLookup, updateClientLookupFailure])
+  }, [applyLoadedFormValues, ownerClientNumberForLookup, updateClientLookupFailure])
 
   useEffect(() => {
     if (!isAgentApplicant(form.applicantTypeCode)) {
@@ -789,7 +801,7 @@ const ProvincialApplicationCreatePage = () => {
 
         setAgentClientLocations(locations)
         updateClientLookupFailure('agent-locations', false)
-        setForm((current) => {
+        applyLoadedFormValues((current) => {
           if (!clientLookupNumbersMatch(current.agentClientNumber, agentClientNumber)) {
             return current
           }
@@ -820,7 +832,12 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [agentClientNumberForLookup, form.applicantTypeCode, updateClientLookupFailure])
+  }, [
+    agentClientNumberForLookup,
+    applyLoadedFormValues,
+    form.applicantTypeCode,
+    updateClientLookupFailure,
+  ])
 
   useEffect(() => {
     const ownerClientNumber = ownerClientNumberForLookup.trim()
@@ -862,7 +879,7 @@ const ProvincialApplicationCreatePage = () => {
 
         setOwnerClientData(clientData)
         updateClientLookupFailure('owner-details', false)
-        setForm((current) => {
+        applyLoadedFormValues((current) => {
           if (
             !clientLookupNumbersMatch(current.ownerClientNumber, ownerClientNumber) ||
             current.ownerClientLocationCode.trim() !== ownerClientLocationCode
@@ -895,7 +912,12 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.ownerClientLocationCode, ownerClientNumberForLookup, updateClientLookupFailure])
+  }, [
+    applyLoadedFormValues,
+    form.ownerClientLocationCode,
+    ownerClientNumberForLookup,
+    updateClientLookupFailure,
+  ])
 
   useEffect(() => {
     if (!isAgentApplicant(form.applicantTypeCode)) {
@@ -957,7 +979,7 @@ const ProvincialApplicationCreatePage = () => {
 
         setAgentClientData(clientData)
         updateClientLookupFailure('agent-details', false)
-        setForm((current) => {
+        applyLoadedFormValues((current) => {
           if (
             !clientLookupNumbersMatch(current.agentClientNumber, agentClientNumber) ||
             current.agentClientLocationCode.trim() !== agentClientLocationCode
@@ -992,6 +1014,7 @@ const ProvincialApplicationCreatePage = () => {
     }
   }, [
     agentClientNumberForLookup,
+    applyLoadedFormValues,
     form.agentClientLocationCode,
     form.applicantTypeCode,
     updateClientLookupFailure,
@@ -1092,7 +1115,7 @@ const ProvincialApplicationCreatePage = () => {
         }
 
         setApplicationEndUseOptions(options)
-        setForm((current) => {
+        applyLoadedFormValues((current) => {
           const currentSpeciesKey = current.speciesCodes.join(',')
           const requestedSpeciesKey = form.speciesCodes.join(',')
           if (current.region.trim() !== region || currentSpeciesKey !== requestedSpeciesKey) {
@@ -1121,7 +1144,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [form.region, form.speciesCodes])
+  }, [applyLoadedFormValues, form.region, form.speciesCodes])
 
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
@@ -1355,23 +1378,29 @@ const ProvincialApplicationCreatePage = () => {
     (field) => !!fieldErrors[field],
   )
 
-  const onSave = async (
-    accuracyAcknowledged = false,
-    navigateToCreatedRecord = true,
-  ): Promise<boolean> => {
+  const saveUnavailableReason =
+    !optionsLoaded || optionsUnavailable || requiredApplicationOptionsMissing
+      ? 'Authoritative application options must load before this application can be saved.'
+      : isLoadingOwnerClientLocations ||
+          isLoadingAgentClientLocations ||
+          isLoadingOwnerClientData ||
+          isLoadingAgentClientData
+        ? 'Client details must finish loading before this application can be saved.'
+        : provincialSubmitterScopeUnavailable
+          ? 'An authenticated forest client is required before this application can be saved.'
+          : undefined
+
+  const showSaveUnavailable = (): boolean => {
+    if (!saveUnavailableReason) return false
+    setStatus({ kind: 'error', title: 'Cannot save yet.', message: saveUnavailableReason })
+    return true
+  }
+
+  const onSave = async (accuracyAcknowledged = false): Promise<boolean> => {
     if (provincialSubmitterIdentityLocked && !accuracyAcknowledged) {
       return false
     }
-    if (
-      !optionsLoaded ||
-      optionsUnavailable ||
-      requiredApplicationOptionsMissing ||
-      isLoadingOwnerClientLocations ||
-      isLoadingAgentClientLocations ||
-      isLoadingOwnerClientData ||
-      isLoadingAgentClientData ||
-      provincialSubmitterScopeUnavailable
-    ) {
+    if (showSaveUnavailable()) {
       return false
     }
     setStatus(null)
@@ -1432,12 +1461,10 @@ const ProvincialApplicationCreatePage = () => {
         draftBaselineRef.current = confirmedForm
         setFormEdited(false)
         if (result.createdId) {
-          if (navigateToCreatedRecord) {
-            setCreatedApplicationNavigation({
-              path: `/provincial/application/${encodeURIComponent(result.createdId)}`,
-              applicationNumber: result.createdId,
-            })
-          }
+          setCreatedApplicationNavigation({
+            path: `/provincial/application/${encodeURIComponent(result.createdId)}`,
+            applicationNumber: result.createdId,
+          })
           return true
         }
         setStatus({
@@ -1478,8 +1505,11 @@ const ProvincialApplicationCreatePage = () => {
   }
 
   const onRequestSave = () => {
+    if (showSaveUnavailable()) {
+      return
+    }
     if (!provincialSubmitterIdentityLocked) {
-      void onSave(false, true)
+      void onSave()
       return
     }
     setStatus(null)
@@ -1489,7 +1519,7 @@ const ProvincialApplicationCreatePage = () => {
 
   const onConfirmAccuracy = async () => {
     if (!accuracyConfirmed || isSubmitting) return
-    const saved = await onSave(true, true)
+    const saved = await onSave(true)
     if (!saved) {
       throw new Error('Application save failed.')
     }
@@ -1512,6 +1542,7 @@ const ProvincialApplicationCreatePage = () => {
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Create provincial application"
+          focusTitle
           actions={
             <div
               className="legacy-search-actions application-create-actions"
@@ -1534,17 +1565,7 @@ const ProvincialApplicationCreatePage = () => {
                 kind="primary"
                 size="md"
                 onClick={onRequestSave}
-                disabled={
-                  !optionsLoaded ||
-                  optionsUnavailable ||
-                  requiredApplicationOptionsMissing ||
-                  isSubmitting ||
-                  isLoadingOwnerClientLocations ||
-                  isLoadingAgentClientLocations ||
-                  isLoadingOwnerClientData ||
-                  isLoadingAgentClientData ||
-                  provincialSubmitterScopeUnavailable
-                }
+                disabled={isSubmitting}
               >
                 {isSubmitting ? 'Saving application…' : 'Save application'}
               </Button>
@@ -1572,7 +1593,7 @@ const ProvincialApplicationCreatePage = () => {
           <AppNotification
             kind="error"
             title="Forest client scope unavailable"
-            subtitle="Your Provincial Submitter access does not contain one authoritative forest client. Save is disabled."
+            subtitle="Your Provincial Submitter access does not contain one authoritative forest client."
             lowContrast
           />
         </Column>
@@ -1583,7 +1604,7 @@ const ProvincialApplicationCreatePage = () => {
           <AppNotification
             kind="warning"
             title="Required options not configured"
-            subtitle="A required product type, exemption reason, age class, or region list is empty. Save remains disabled."
+            subtitle="A required product type, exemption reason, age class, or region list is empty."
             lowContrast
             onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
           />
@@ -1606,6 +1627,7 @@ const ProvincialApplicationCreatePage = () => {
         <Column sm={4} md={8} lg={16}>
           <AppNotification
             kind={currentStatus.kind}
+            revealKey={currentStatus}
             title={currentStatus.title}
             subtitle={currentStatus.message}
             lowContrast
@@ -1798,6 +1820,8 @@ const ProvincialApplicationCreatePage = () => {
                     <Checkbox
                       id="applicationCreateAgentUsed"
                       labelText="I'm an agent"
+                      invalid={!!fieldError('applicantTypeCode')}
+                      invalidText={fieldError('applicantTypeCode')}
                       checked={hasAgentDetails}
                       disabled={isSubmitting}
                       onChange={(_, { checked }) => {
@@ -2318,24 +2342,9 @@ const ProvincialApplicationCreatePage = () => {
       <UnsavedChangesGuard
         isDirty={isCreateDraftDirty}
         isBusy={isSubmitting}
-        onSave={() => onSave(provincialSubmitterIdentityLocked, false)}
         onDiscard={onDiscardCreateDraft}
+        discardCopy={discardNewRecordCopy('application')}
         subject="this new application"
-        saveAcknowledgement={
-          provincialSubmitterIdentityLocked ? APPLICATION_ACCURACY_ACKNOWLEDGEMENT : undefined
-        }
-        saveUnavailableReason={
-          !optionsLoaded || optionsUnavailable || requiredApplicationOptionsMissing
-            ? 'Authoritative application options must load before this application can be saved.'
-            : isLoadingOwnerClientLocations ||
-                isLoadingAgentClientLocations ||
-                isLoadingOwnerClientData ||
-                isLoadingAgentClientData
-              ? 'Client details must finish loading before this application can be saved.'
-              : provincialSubmitterScopeUnavailable
-                ? 'An authenticated forest client is required before this application can be saved.'
-                : undefined
-        }
       />
     </Grid>
   )

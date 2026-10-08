@@ -6,6 +6,7 @@ import Modal from '@/components/Modal'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import DetailSidePanel from '@/components/DetailSidePanel'
 import { actionMessageResults, type ActionResult } from '@/utils/action-result'
+import { fieldErrorText } from '@/utils/field-error'
 import { requiredLabel } from '@/utils/required-label'
 import {
   buildUploadResultMessage,
@@ -852,7 +853,9 @@ const DetailDocumentUploadPanel = ({
                 aria-required="true"
                 value={salesInvoiceNumber}
                 invalid={showInvoiceFieldErrors && !!invoiceNumberError}
-                invalidText={showInvoiceFieldErrors ? invoiceNumberError : undefined}
+                invalidText={
+                  showInvoiceFieldErrors ? fieldErrorText(invoiceNumberError) : undefined
+                }
                 onChange={(event) => setSalesInvoiceNumber(event.target.value)}
                 disabled={disabled}
               />
@@ -862,7 +865,9 @@ const DetailDocumentUploadPanel = ({
                 aria-required="true"
                 value={invoiceExportValue}
                 invalid={showInvoiceFieldErrors && !!invoiceExportValueError}
-                invalidText={showInvoiceFieldErrors ? invoiceExportValueError : undefined}
+                invalidText={
+                  showInvoiceFieldErrors ? fieldErrorText(invoiceExportValueError) : undefined
+                }
                 onChange={(event) => setInvoiceExportValue(event.target.value)}
                 disabled={disabled}
               />
@@ -872,7 +877,9 @@ const DetailDocumentUploadPanel = ({
                 aria-required="true"
                 value={invoiceConversionRate}
                 invalid={showInvoiceFieldErrors && !!invoiceConversionRateError}
-                invalidText={showInvoiceFieldErrors ? invoiceConversionRateError : undefined}
+                invalidText={
+                  showInvoiceFieldErrors ? fieldErrorText(invoiceConversionRateError) : undefined
+                }
                 onChange={(event) => setInvoiceConversionRateOverride(event.target.value)}
                 disabled={disabled}
               />
@@ -882,7 +889,9 @@ const DetailDocumentUploadPanel = ({
                 aria-required="true"
                 value={invoiceFeeInLieu}
                 invalid={showInvoiceFieldErrors && !!invoiceFeeInLieuError}
-                invalidText={showInvoiceFieldErrors ? invoiceFeeInLieuError : undefined}
+                invalidText={
+                  showInvoiceFieldErrors ? fieldErrorText(invoiceFeeInLieuError) : undefined
+                }
                 onChange={(event) => setInvoiceFeeInLieu(event.target.value)}
                 disabled={disabled}
               />
@@ -942,7 +951,7 @@ const DetailDocumentUploadPanel = ({
                     value={description}
                     maxLength={250}
                     invalid={!!descriptionError}
-                    invalidText={descriptionError}
+                    invalidText={fieldErrorText(descriptionError)}
                     disabled={disabled || isSubmitting || item.status === 'complete'}
                     onChange={(event) => updateFileDescription(item.id, event.target.value)}
                   />
@@ -978,7 +987,7 @@ const DetailDocumentUploadPanel = ({
                 value={description}
                 onChange={(event) => updateFileDescription(item.id, event.target.value)}
                 invalid={!!error}
-                invalidText={error}
+                invalidText={fieldErrorText(error)}
                 enableCounter
                 maxCount={250}
                 rows={2}

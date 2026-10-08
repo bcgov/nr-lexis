@@ -41,6 +41,7 @@ import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
+import { discardNewRecordCopy } from '@/components/DiscardChangesModal'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
@@ -88,6 +89,7 @@ import {
 } from '@/pages/shared/application-form-utils'
 import { requiredLabel } from '@/utils/required-label'
 import { displayAuditIdentity, displayValue } from '@/utils/text'
+import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
 type ProvincialExemptionCreateForm = {
@@ -411,6 +413,7 @@ const ProvincialExemptionCreatePage = () => {
     {},
   )
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
+  const formRef = useRef<HTMLDivElement>(null)
   const roles = capabilities?.roles ?? []
   const isFederalApplicationPrefill = prefillState?.applicationSource === 'federal'
   const canUseApplicationPrefill =
@@ -572,7 +575,9 @@ const ProvincialExemptionCreatePage = () => {
         if (!active) {
           return
         }
-        setForm((current) => ({
+        const applyPreview = (
+          current: ProvincialExemptionCreateForm,
+        ): ProvincialExemptionCreateForm => ({
           ...current,
           exemptionNumber: '',
           exemptionTypeCode: preview.exemptionTypeCode,
@@ -584,7 +589,14 @@ const ProvincialExemptionCreatePage = () => {
           enableRateOverride: false,
           feeRate: '',
           regionNumbers: [],
-        }))
+        })
+        // The preview of the starting applications belongs to the starting draft.
+        if (
+          formValuesEqual(selectedApplicationNumbers, selectedApplicationNumbersBaselineRef.current)
+        ) {
+          draftBaselineRef.current = applyPreview(draftBaselineRef.current)
+        }
+        setForm(applyPreview)
         setConfirmedApplicationNumbers(preview.applicationNumbers)
         setPreviewState('ready')
       } catch (error) {
@@ -849,9 +861,6 @@ const ProvincialExemptionCreatePage = () => {
 
   const fieldError = (field: ProvincialExemptionCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
-  const firstSubmitValidationError = Object.values(fieldErrors).find(
-    (error): error is string => !!error,
-  )
 
   const onExemptionTypeChange = (value: string): void => {
     if (value === form.exemptionTypeCode) {
@@ -913,13 +922,20 @@ const ProvincialExemptionCreatePage = () => {
     setStatus(null)
   }
 
-  const onSave = async (navigateToCreatedRecord = true): Promise<boolean> => {
-    if (
-      !optionsLoaded ||
-      optionsUnavailable ||
-      requiredOptionsUnavailable ||
-      !canUseApplicationPrefill
-    ) {
+  const onSave = async (): Promise<boolean> => {
+    const saveUnavailableReason =
+      !optionsLoaded || optionsUnavailable || requiredOptionsUnavailable
+        ? 'Authoritative exemption options must load before this exemption can be saved.'
+        : !canUseApplicationPrefill
+          ? 'Authorization to create this exemption is required before it can be saved.'
+          : undefined
+    if (saveUnavailableReason) {
+      setStatus({
+        kind: 'error',
+        title: 'Cannot save yet.',
+        message: saveUnavailableReason,
+        placement: 'inline',
+      })
       return false
     }
     if (form.applicationNumber.trim()) {
@@ -952,15 +968,8 @@ const ProvincialExemptionCreatePage = () => {
       )
       setSelectedExemptionTab(!firstSummaryError && feeRateValidationError ? 'fees' : 'summary')
       setShowAllValidationErrors(true)
-      setStatus({
-        kind: 'error',
-        title: 'Validation error',
-        message:
-          firstSummaryError ??
-          firstSubmitValidationError ??
-          'Please fix validation errors before saving.',
-        placement: 'inline',
-      })
+      setStatus(null)
+      focusFirstInvalidFieldAfterRender(() => formRef.current)
       return false
     }
 
@@ -979,10 +988,8 @@ const ProvincialExemptionCreatePage = () => {
         selectedApplicationNumbersBaselineRef.current = [...selectedApplicationNumbers]
         setFormEdited(false)
         if (result.createdId) {
-          if (navigateToCreatedRecord) {
-            createdFromApplicationNumbersRef.current = linkedApplicationNumbers
-            setCreatedExemptionNumber(result.createdId)
-          }
+          createdFromApplicationNumbersRef.current = linkedApplicationNumbers
+          setCreatedExemptionNumber(result.createdId)
           return true
         }
         setStatus({
@@ -1060,6 +1067,7 @@ const ProvincialExemptionCreatePage = () => {
         <PageHeader
           title="Create new exemption"
           subtitle={pageSubtitle}
+          focusTitle
           actions={
             <>
               <Button
@@ -1076,15 +1084,8 @@ const ProvincialExemptionCreatePage = () => {
                 type="button"
                 kind="primary"
                 size="md"
-                onClick={() => void onSave(true)}
-                disabled={
-                  !optionsLoaded ||
-                  optionsUnavailable ||
-                  requiredOptionsUnavailable ||
-                  isSubmitting ||
-                  !canUseApplicationPrefill ||
-                  (selectedApplicationNumbers.length > 0 && !hasCurrentPreview)
-                }
+                onClick={() => void onSave()}
+                disabled={isSubmitting}
                 renderIcon={isSubmitting ? PendingIcon : Save}
               >
                 {isSubmitting ? 'Saving…' : 'Save exemption'}
@@ -1111,7 +1112,7 @@ const ProvincialExemptionCreatePage = () => {
           <AppNotification
             kind="warning"
             title="Required options not configured"
-            subtitle="No valid exemption type, status, or required region values are configured. Save remains disabled."
+            subtitle="No valid exemption type, status, or required region values are configured."
             lowContrast
             onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
           />
@@ -1165,7 +1166,7 @@ const ProvincialExemptionCreatePage = () => {
         </Column>
       )}
 
-      <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
+      <Column ref={formRef} sm={4} md={8} lg={16} className="application-detail-tabs-column">
         {status?.placement === 'inline' && (
           <AppNotification
             className="create-form-validation-notification"
@@ -1711,20 +1712,9 @@ const ProvincialExemptionCreatePage = () => {
       <UnsavedChangesGuard
         isDirty={isCreateDraftDirty}
         isBusy={isSubmitting}
-        onSave={() => onSave(false)}
         onDiscard={onDiscardCreateDraft}
+        discardCopy={discardNewRecordCopy('exemption')}
         subject="this new exemption"
-        saveUnavailableReason={
-          !optionsLoaded || optionsUnavailable || requiredOptionsUnavailable
-            ? 'Authoritative exemption options must load before this exemption can be saved.'
-            : !canUseApplicationPrefill
-              ? 'Authorization to create this exemption is required before it can be saved.'
-              : form.applicationNumber.trim()
-                ? 'Add or clear the pending application number before this exemption can be saved.'
-                : selectedApplicationNumbers.length > 0 && !hasCurrentPreview
-                  ? 'The selected applications must be validated before this exemption can be saved.'
-                  : undefined
-        }
       />
     </Grid>
   )

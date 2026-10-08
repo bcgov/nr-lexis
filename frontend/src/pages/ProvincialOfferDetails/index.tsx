@@ -30,13 +30,12 @@ import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialOfferDetail } from '@/interfaces/LexisDetails'
 import {
   firstValidationError,
-  getVisibleFieldError,
   isoDateFieldError,
   requiredFieldError,
-  type FieldErrors,
-  type TouchedFields,
 } from '@/pages/shared/create-form-utils'
 import { displayValue } from '@/pages/shared/detail-page-utils'
+import { useEditSections } from '@/pages/shared/useEditSections'
+import { hasFieldErrors, useFieldErrors, type FieldErrors } from '@/pages/shared/useFieldErrors'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   locationPath,
@@ -66,6 +65,28 @@ import { requiredLabel } from '@/utils/required-label'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
 type ProvincialOfferDetailField = keyof ProvincialOfferUpdateSubmission & string
+
+// Server messages that name one offer field.
+const offerServerField = (message: string): ProvincialOfferDetailField | undefined => {
+  if (message.startsWith('Offer volume ')) return 'offerVolume'
+  if (/^(The purchase|Purchase) offer amount /.test(message)) return 'purchaseOfferAmount'
+  if (
+    message === 'A valid pickup location is required.' ||
+    message.startsWith('Pickup location ')
+  ) {
+    return 'pickupLocation'
+  }
+  if (
+    message === 'A valid withdraw reason is required.' ||
+    message.startsWith('Withdraw reason ')
+  ) {
+    return 'withdrawReason'
+  }
+  if (message.startsWith('Offer conditions ')) return 'offerCondition'
+  if (message.startsWith('Offer remarks ')) return 'offerRemark'
+  if (message === 'A valid fair offer indicator is required.') return 'fairOfferIndicator'
+  return undefined
+}
 
 type PageStatus = {
   kind: 'success' | 'error' | 'warning'
@@ -129,7 +150,8 @@ const ProvincialOfferDetailsPage = () => {
   const [detail, setDetail] = useState<ProvincialOfferDetail | null>(null)
   const [form, setForm] = useState<ProvincialOfferUpdateSubmission | null>(null)
   const [loading, setLoading] = useState(true)
-  const [isEditing, setIsEditing] = useState(false)
+  const [editingSection, setEditingSection] = useState<'offer' | null>(null)
+  const isEditing = editingSection === 'offer'
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [status, setStatus] = useState<PageStatus | null>(() =>
@@ -141,8 +163,9 @@ const ProvincialOfferDetailsPage = () => {
         }
       : null,
   )
-  const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialOfferDetailField>>({})
-  const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
+  const { clearFieldError, resetFieldErrors, showFieldErrors, invalidProps } =
+    useFieldErrors<ProvincialOfferDetailField>()
+  const offerContentRef = useRef<HTMLDivElement>(null)
   const beginDetailRequest = useLatestRequestGuard()
   const currentDetail = detail && String(detail.offerNumber) === offerNumber ? detail : null
   // Pages opened from this one name it by its title in their back link or breadcrumb.
@@ -256,7 +279,7 @@ const ProvincialOfferDetailsPage = () => {
     }
   }, [offerNumber])
 
-  const fieldErrors = useMemo<FieldErrors<ProvincialOfferDetailField>>(
+  const validationErrors = useMemo<FieldErrors<ProvincialOfferDetailField>>(
     () => ({
       offerNumber: requiredFieldError(form?.offerNumber ?? '', 'Offer number') ?? undefined,
       applicationNumber:
@@ -341,28 +364,63 @@ const ProvincialOfferDetailsPage = () => {
     }),
     [detail, form],
   )
-  const hasValidationError = Object.values(fieldErrors).some((error) => !!error)
 
-  const markFieldTouched = (field: ProvincialOfferDetailField): void => {
-    setTouchedFields((current) => ({ ...current, [field]: true }))
+  const isEditableOfferField = (field: ProvincialOfferDetailField): boolean => {
+    switch (field) {
+      case 'offerVolume':
+      case 'purchaseOfferAmount':
+      case 'pickupLocation':
+        return canEditOfferDetailFields
+      case 'offerCondition':
+        return canEditOfferCondition
+      case 'offerWithdrawalDate':
+      case 'withdrawReason':
+        return canEditWithdrawFields
+      case 'teacReviewDate':
+      case 'fairOfferIndicator':
+        return canEditScheduleFields
+      case 'offerRemark':
+        return canEditOfferRemarkFields
+      default:
+        return false
+    }
   }
 
-  const fieldError = (field: ProvincialOfferDetailField): string | undefined =>
-    getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
+  /** Splits errors into the ones shown on editable fields and the first one that is not. */
+  const splitOfferErrors = (
+    errors: Array<[string, string | null | undefined]>,
+  ): { fieldErrors: FieldErrors<ProvincialOfferDetailField>; otherError?: string } => {
+    const fieldErrors: FieldErrors<ProvincialOfferDetailField> = {}
+    let otherError: string | undefined
+    for (const [field, error] of errors) {
+      if (!error) continue
+      if (field && isEditableOfferField(field as ProvincialOfferDetailField)) {
+        fieldErrors[field as ProvincialOfferDetailField] ??= error
+      } else {
+        otherError ??= error
+      }
+    }
+    return { fieldErrors, otherError }
+  }
 
   const updateFormField = (field: ProvincialOfferDetailField, value: string): void => {
     setForm((current) => (current ? { ...current, [field]: value } : current))
+    clearFieldError(field)
   }
 
-  const onCancelEdit = (): void => {
+  const discardOfferChanges = (): void => {
     if (detail) {
       setForm(buildOfferForm(detail))
     }
-    setTouchedFields({})
-    setShowAllValidationErrors(false)
+    resetFieldErrors()
     setStatus(null)
-    setIsEditing(false)
   }
+
+  const sections = useEditSections<'offer'>({
+    isDirty: isOfferDirty,
+    onDiscard: discardOfferChanges,
+    state: [editingSection, setEditingSection],
+  })
 
   const onSave = async (): Promise<boolean> => {
     if (!form || !detail || isSubmitting) {
@@ -380,17 +438,24 @@ const ProvincialOfferDetailsPage = () => {
       return false
     }
 
-    if (hasValidationError) {
-      const validationMessage =
-        Object.values(fieldErrors).find((error): error is string => !!error) ??
-        'Please fix validation errors before saving.'
-      setShowAllValidationErrors(true)
+    if (!canEditAnyOfferField) return false
+    if (!isOfferDirty) {
+      discardOfferChanges()
+      sections.finishEditing()
+      return true
+    }
+
+    const { fieldErrors, otherError } = splitOfferErrors(Object.entries(validationErrors))
+    const fieldsValid = showFieldErrors(fieldErrors, () => offerContentRef.current)
+    if (otherError) {
       setStatus({
         kind: 'error',
         title: 'Validation error',
-        message: validationMessage,
+        message: otherError,
         placement: 'inline',
       })
+    }
+    if (!fieldsValid || otherError) {
       return false
     }
 
@@ -403,9 +468,8 @@ const ProvincialOfferDetailsPage = () => {
           .map((warning) => warning.trim())
           .filter(Boolean)
           .join(' ')
-        setTouchedFields({})
-        setShowAllValidationErrors(false)
-        setIsEditing(false)
+        resetFieldErrors()
+        sections.finishEditing()
         setStatus({
           kind: warningMessage ? 'warning' : 'success',
           title: warningMessage ? 'Offer saved with warning' : 'Offer saved',
@@ -418,14 +482,20 @@ const ProvincialOfferDetailsPage = () => {
         return true
       }
 
-      setStatus({
-        kind: 'error',
-        title: 'Save failed',
-        message:
-          result.errors[0] ||
-          result.message ||
-          'Offer update failed. Please review the form and try again.',
-      })
+      const { fieldErrors: serverFieldErrors, otherError: serverError } = splitOfferErrors(
+        result.errors.map((message) => [offerServerField(message) ?? '', message]),
+      )
+      showFieldErrors(serverFieldErrors, () => offerContentRef.current)
+      if (serverError || !hasFieldErrors(serverFieldErrors)) {
+        setStatus({
+          kind: 'error',
+          title: 'Save failed',
+          message:
+            serverError ||
+            result.message ||
+            'Offer update failed. Please review the form and try again.',
+        })
+      }
       return false
     } catch (error) {
       console.error(error)
@@ -455,7 +525,12 @@ const ProvincialOfferDetailsPage = () => {
           subtitle="Check and manage this provincial offer"
           actions={
             !loading && !isEditing && currentDetail && form && canEditAnyOfferField ? (
-              <Button kind="tertiary" size="md" onClick={() => setIsEditing(true)}>
+              <Button
+                ref={sections.editButtonRef('offer')}
+                kind="tertiary"
+                size="md"
+                onClick={() => sections.startEditing('offer')}
+              >
                 Edit
               </Button>
             ) : undefined
@@ -508,6 +583,7 @@ const ProvincialOfferDetailsPage = () => {
 
       {detail && currentDetail && form && (
         <Column
+          ref={offerContentRef}
           sm={4}
           md={8}
           lg={16}
@@ -530,7 +606,10 @@ const ProvincialOfferDetailsPage = () => {
               onCloseButtonClick={() => setStatus(null)}
             />
           )}
-          <Tile className="provincial-offer-create provincial-offer-sections">
+          <Tile
+            ref={sections.sectionRef('offer')}
+            className="provincial-offer-create provincial-offer-sections"
+          >
             {isEditing && <RequiredFieldsLegend />}
             <fieldset className="legacy-form-fieldset offer-form-section">
               <legend>Application details</legend>
@@ -660,10 +739,8 @@ const ProvincialOfferDetailsPage = () => {
                       labelText="Offer volume (m³)"
                       value={form.offerVolume}
                       readOnly={!canEditOfferDetailFields}
-                      invalid={canEditOfferDetailFields && !!fieldError('offerVolume')}
-                      invalidText={fieldError('offerVolume')}
+                      {...invalidProps('offerVolume')}
                       onBlur={() => {
-                        markFieldTouched('offerVolume')
                         const originalVolume =
                           detail.offerVolume == null ? '' : String(detail.offerVolume)
                         if (
@@ -683,9 +760,7 @@ const ProvincialOfferDetailsPage = () => {
                       aria-required="true"
                       value={form.purchaseOfferAmount}
                       readOnly={!canEditOfferDetailFields}
-                      invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferAmount')}
-                      invalidText={fieldError('purchaseOfferAmount')}
-                      onBlur={() => markFieldTouched('purchaseOfferAmount')}
+                      {...invalidProps('purchaseOfferAmount')}
                       onChange={(event) =>
                         updateFormField('purchaseOfferAmount', event.target.value)
                       }
@@ -699,11 +774,9 @@ const ProvincialOfferDetailsPage = () => {
                       labelText={requiredLabel('Offer received date')}
                       required
                       value={form.purchaseOfferDate}
-                      invalid={canEditOfferDetailFields && !!fieldError('purchaseOfferDate')}
-                      invalidText={fieldError('purchaseOfferDate')}
-                      onBlur={() => markFieldTouched('purchaseOfferDate')}
-                      onChange={(value) => updateFormField('purchaseOfferDate', value)}
                       disabled
+                      {...invalidProps('purchaseOfferDate')}
+                      onChange={(value) => updateFormField('purchaseOfferDate', value)}
                     />
                   </RecordFieldCell>
                   <RecordFieldCell>
@@ -713,11 +786,9 @@ const ProvincialOfferDetailsPage = () => {
                       aria-required="true"
                       value={form.pickupLocation}
                       readOnly={!canEditOfferDetailFields}
-                      invalid={canEditOfferDetailFields && !!fieldError('pickupLocation')}
-                      invalidText={fieldError('pickupLocation')}
-                      onBlur={() => markFieldTouched('pickupLocation')}
-                      onChange={(event) => updateFormField('pickupLocation', event.target.value)}
                       maxLength={OFFER_PICKUP_LOCATION_MAX_LENGTH}
+                      {...invalidProps('pickupLocation')}
+                      onChange={(event) => updateFormField('pickupLocation', event.target.value)}
                     />
                   </RecordFieldCell>
                 </RecordFieldRow>
@@ -728,11 +799,9 @@ const ProvincialOfferDetailsPage = () => {
                       labelText="Offer conditions / remarks"
                       value={form.offerCondition}
                       readOnly={!canEditOfferCondition}
-                      invalid={canEditOfferCondition && !!fieldError('offerCondition')}
-                      invalidText={fieldError('offerCondition')}
-                      onBlur={() => markFieldTouched('offerCondition')}
-                      onChange={(event) => updateFormField('offerCondition', event.target.value)}
                       maxLength={OFFER_CONDITION_MAX_LENGTH}
+                      {...invalidProps('offerCondition')}
+                      onChange={(event) => updateFormField('offerCondition', event.target.value)}
                     />
                   </RecordFieldCell>
                 </RecordFieldRow>
@@ -748,11 +817,9 @@ const ProvincialOfferDetailsPage = () => {
                       id="offerWithdrawalDate"
                       labelText="Offer withdrawal date"
                       value={form.offerWithdrawalDate}
-                      invalid={canEditWithdrawFields && !!fieldError('offerWithdrawalDate')}
-                      invalidText={fieldError('offerWithdrawalDate')}
-                      onBlur={() => markFieldTouched('offerWithdrawalDate')}
-                      onChange={(value) => updateFormField('offerWithdrawalDate', value)}
                       disabled={!canEditWithdrawFields}
+                      {...invalidProps('offerWithdrawalDate')}
+                      onChange={(value) => updateFormField('offerWithdrawalDate', value)}
                     />
                   </RecordFieldCell>
                 </RecordFieldRow>
@@ -769,11 +836,9 @@ const ProvincialOfferDetailsPage = () => {
                       }
                       value={form.withdrawReason}
                       readOnly={!canEditWithdrawFields}
-                      invalid={canEditWithdrawFields && !!fieldError('withdrawReason')}
-                      invalidText={fieldError('withdrawReason')}
-                      onBlur={() => markFieldTouched('withdrawReason')}
-                      onChange={(event) => updateFormField('withdrawReason', event.target.value)}
                       maxLength={OFFER_WITHDRAW_REASON_MAX_LENGTH}
+                      {...invalidProps('withdrawReason')}
+                      onChange={(event) => updateFormField('withdrawReason', event.target.value)}
                     />
                   </RecordFieldCell>
                 </RecordFieldRow>
@@ -790,11 +855,9 @@ const ProvincialOfferDetailsPage = () => {
                         id="offerTeacReviewDate"
                         labelText="TEAC review date"
                         value={form.teacReviewDate}
-                        invalid={canEditScheduleFields && !!fieldError('teacReviewDate')}
-                        invalidText={fieldError('teacReviewDate')}
-                        onBlur={() => markFieldTouched('teacReviewDate')}
-                        onChange={(value) => updateFormField('teacReviewDate', value)}
                         disabled={!canEditScheduleFields}
+                        {...invalidProps('teacReviewDate')}
+                        onChange={(value) => updateFormField('teacReviewDate', value)}
                       />
                     </RecordFieldCell>
                   )}
@@ -806,6 +869,7 @@ const ProvincialOfferDetailsPage = () => {
                       placeholder="Select value"
                       options={YES_NO_OPTIONS}
                       disabled={!canEditScheduleFields}
+                      {...invalidProps('fairOfferIndicator')}
                       onChange={(value) => updateFormField('fairOfferIndicator', value)}
                     />
                   </RecordFieldCell>
@@ -840,11 +904,9 @@ const ProvincialOfferDetailsPage = () => {
                         labelText="Offer remarks"
                         value={form.offerRemark}
                         readOnly={!canEditOfferRemarkFields}
-                        invalid={canEditOfferRemarkFields && !!fieldError('offerRemark')}
-                        invalidText={fieldError('offerRemark')}
-                        onBlur={() => markFieldTouched('offerRemark')}
-                        onChange={(event) => updateFormField('offerRemark', event.target.value)}
                         maxLength={OFFER_REMARK_MAX_LENGTH}
+                        {...invalidProps('offerRemark')}
+                        onChange={(event) => updateFormField('offerRemark', event.target.value)}
                       />
                     </RecordFieldCell>
                   )}
@@ -873,7 +935,7 @@ const ProvincialOfferDetailsPage = () => {
                     <Button
                       kind="tertiary"
                       size="md"
-                      onClick={onCancelEdit}
+                      onClick={sections.cancelEditing}
                       disabled={isSubmitting}
                     >
                       Cancel
@@ -897,10 +959,13 @@ const ProvincialOfferDetailsPage = () => {
       <UnsavedChangesGuard
         isDirty={isOfferDirty}
         isBusy={isSubmitting}
-        onSave={onSave}
-        onDiscard={onCancelEdit}
+        onDiscard={() => {
+          discardOfferChanges()
+          setEditingSection(null)
+        }}
         subject="this purchase offer"
       />
+      {sections.discardModal}
     </Grid>
   )
 }

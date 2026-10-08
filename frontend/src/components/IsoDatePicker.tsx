@@ -1,6 +1,7 @@
 import { DatePicker, DatePickerInput } from '@carbon/react'
 import { type ReactNode, useEffect, useRef } from 'react'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
+import { fieldErrorText } from '@/utils/field-error'
 
 const ISO_DATE_INPUT_PATTERN = String.raw`\d{4}-\d{2}-\d{2}`
 
@@ -69,7 +70,7 @@ export default function IsoDatePicker({
         data-1p-ignore="true"
         data-lpignore="true"
         invalid={invalid}
-        invalidText={invalidText}
+        invalidText={fieldErrorText(invalidText)}
         aria-required={required || undefined}
         disabled={disabled}
         onBlur={(event) => {

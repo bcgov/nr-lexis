@@ -132,7 +132,7 @@ describe('DetailDocumentUploadPanel', () => {
     )
     expect(within(panel).queryByRole('button', { name: 'Review upload' })).not.toBeInTheDocument()
     await userEvent.click(within(panel).getByRole('button', { name: 'Save documents' }))
-    expect(screen.getByRole('alert')).toHaveTextContent('Choose at least one file to upload.')
+    expect(screen.getByRole('alert')).toHaveTextContent('Choose at least one file to upload')
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     expect(within(panel).getByText('Required fields')).toBeVisible()
     expect(within(panel).getByText('Files')).toBeVisible()
@@ -608,7 +608,7 @@ describe('DetailDocumentUploadPanel', () => {
       target: { value: 'x'.repeat(251) },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    expect(screen.getByText('Document description must be 250 characters or fewer.')).toBeVisible()
+    expect(screen.getByText('Document description must be 250 characters or fewer')).toBeVisible()
     expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText(/Document description/), {
       target: { value: 'Valid description' },
@@ -1009,7 +1009,7 @@ describe('DetailDocumentUploadPanel', () => {
     expect(
       screen.queryByText('1 queued file needs attention before review.'),
     ).not.toBeInTheDocument()
-    expect(screen.getByText('Choose at least one file to upload.')).toBeInTheDocument()
+    expect(screen.getByText('Choose at least one file to upload')).toBeInTheDocument()
   })
 
   it('shows the empty queue error when file removals are batched', async () => {
@@ -1038,7 +1038,7 @@ describe('DetailDocumentUploadPanel', () => {
     })
 
     expect(screen.queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
-    expect(screen.getByText('Choose at least one file to upload.')).toBeInTheDocument()
+    expect(screen.getByText('Choose at least one file to upload')).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
 
     await userEvent.upload(screen.getByLabelText('Document File'), files[0])
@@ -1081,7 +1081,7 @@ describe('DetailDocumentUploadPanel', () => {
       screen.getByText('1 file failed validation. Review the queue for details.'),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('1 queued file needs attention and will be excluded from review.'),
+      screen.getByText('1 queued file needs attention and will be excluded from review'),
     ).toBeInTheDocument()
 
     const invalidRow = screen.getByText(invalidFile.name).closest('tr')
@@ -1089,7 +1089,7 @@ describe('DetailDocumentUploadPanel', () => {
     await userEvent.click(within(invalidRow as HTMLElement).getByRole('button', { name: 'Remove' }))
 
     expect(
-      screen.queryByText('1 queued file needs attention and will be excluded from review.'),
+      screen.queryByText('1 queued file needs attention and will be excluded from review'),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByText('1 file failed validation. Review the queue for details.'),
@@ -1318,7 +1318,7 @@ describe('DetailDocumentUploadPanel', () => {
       expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
     })
     expect(
-      screen.getByText('1 queued file needs attention and will be excluded from review.'),
+      screen.getByText('1 queued file needs attention and will be excluded from review'),
     ).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
@@ -1565,9 +1565,9 @@ describe('DetailDocumentUploadPanel', () => {
         'Invoice number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText('Export value must round to 9999999.99 or less.')).toBeInTheDocument()
-    expect(screen.getByText('Conversion rate must round to 9.99999 or less.')).toBeInTheDocument()
-    expect(screen.getByText('Fee in lieu must round to 9999999.99 or less.')).toBeInTheDocument()
+    expect(screen.getByText('Export value must round to 9999999.99 or less')).toBeInTheDocument()
+    expect(screen.getByText('Conversion rate must round to 9.99999 or less')).toBeInTheDocument()
+    expect(screen.getByText('Fee in lieu must round to 9999999.99 or less')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
     await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
     expect(screen.getByRole('region', { name: 'Add invoice' })).toBeInTheDocument()
