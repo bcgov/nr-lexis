@@ -2985,7 +2985,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(reviewButton).toBeEnabled()
     await reviewButton.click()
     const uploadError = uploadPanel.locator('.admin-upload-file-error')
-    await expect(uploadError).toContainText('Please upload a file before continuing.')
+    await expect(uploadError).toContainText('Please upload a file before continuing')
     await expect(uploadError.locator('svg')).toHaveCount(1)
     await expect(uploadError).toHaveCSS('display', 'flex')
     await expect(uploadError).toHaveCSS('font-size', '12px')
