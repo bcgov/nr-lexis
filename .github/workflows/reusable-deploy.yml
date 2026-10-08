@@ -62,7 +62,7 @@ on:
         default: "128Mi"
         type: string
       expiry_enabled:
-        description: Enable exemption expiry; false is an explicit operational kill switch
+        description: Default expiry setting when the environment LEXIS_EXPIRY_ENABLED variable is unset
         default: true
         type: boolean
       tag:
@@ -174,6 +174,18 @@ jobs:
             exit 1
           fi
 
+      - name: Validate expiry flag
+        env:
+          LEXIS_EXPIRY_ENABLED: ${{ vars.LEXIS_EXPIRY_ENABLED || (inputs.expiry_enabled && 'true' || 'false') }}
+        run: |
+          case "$LEXIS_EXPIRY_ENABLED" in
+            true|false) ;;
+            *)
+              echo "::error::The environment variable LEXIS_EXPIRY_ENABLED must be true or false."
+              exit 1
+              ;;
+          esac
+
       - name: Validate release image
         if: ${{ inputs.environment != 'dev' }}
         env:
@@ -215,7 +227,7 @@ jobs:
           DATABASE_USER: ${{ secrets.database_user }}
           DATABASE_PASSWORD: ${{ secrets.database_password }}
           KEYSTORE_SECRET: ${{ secrets.keystore_secret }}
-          LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}
+          LEXIS_EXPIRY_ENABLED: ${{ vars.LEXIS_EXPIRY_ENABLED || (inputs.expiry_enabled && 'true' || 'false') }}
           LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}
           LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}
           LEXIS_EXPIRY_LOCK_AT_MOST_FOR: ${{ vars.LEXIS_EXPIRY_LOCK_AT_MOST_FOR || 'PT6H' }}

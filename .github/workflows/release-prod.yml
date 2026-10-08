@@ -90,7 +90,7 @@ jobs:
       backend_memory_request: "1Gi"
       backend_cpu_limit: "1500m"
       backend_memory_limit: "1536Mi"
-      # Legacy remains the expiry owner during coexistence, including startup catch-up.
+      # Default off if the PROD environment LEXIS_EXPIRY_ENABLED variable is unset.
       expiry_enabled: false
 
   # Sync Sysdig email alerts for PROD. No-ops cleanly if SYSDIG_API_TOKEN is

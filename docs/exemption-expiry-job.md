@@ -42,10 +42,16 @@ responsible for expiry. This setting does not affect application modules or role
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | `PT6H` | Maximum duration of one Oracle scheduler lock. |
 | `LEXIS_EXPIRY_LOCK_AT_LEAST_FOR` | `PT5M` | Minimum duration of one Oracle scheduler lock. |
 
-The deployment workflow maps its `expiry_enabled` input directly to `LEXIS_EXPIRY_ENABLED`.
-PROD defaults to disabled independently of module access. Enabling expiry requires setting
-`expiry_enabled=true` and redeploying; missed exemptions remain eligible for startup catch-up and
-the next nightly run.
+Set the GitHub environment **variable** `LEXIS_EXPIRY_ENABLED` to `false` to disable both triggers,
+or `true` to enable them. It is not a secret. The deployment job reads the flag from its selected
+GitHub environment, validates it, and passes it to the backend. Changing the variable takes effect
+on the next deployment; it does not change running pods immediately.
+
+If the variable is unset, the workflow uses its `expiry_enabled` input: PROD and DEV default to
+disabled, TEST to enabled. While legacy owns expiry, keep the PROD variable `false`. After legacy
+expiry stops, set it to `true` and run a manual tagged release without editing code. Missed exemptions
+remain eligible for startup catch-up and the next nightly run. This replaces the former RTM-only
+flag without restricting application access.
 
 ## Operations
 

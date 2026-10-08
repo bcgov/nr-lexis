@@ -101,7 +101,7 @@ The reusable deployment workflow maps these GitHub settings:
 | `DATABASE_USER` | Secret `database_user` |
 | `DATABASE_PASSWORD` | Secret `database_password` |
 | `KEYSTORE_SECRET` | Secret `keystore_secret` |
-| `LEXIS_EXPIRY_ENABLED` | Workflow input `expiry_enabled` |
+| `LEXIS_EXPIRY_ENABLED` | GitHub environment variable `LEXIS_EXPIRY_ENABLED`; when unset, workflow input `expiry_enabled` supplies the default |
 | `LEXIS_EXPIRY_CRON` | Variable `LEXIS_EXPIRY_CRON` |
 | `LEXIS_EXPIRY_ZONE` | Variable `LEXIS_EXPIRY_ZONE` |
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Variable `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` |

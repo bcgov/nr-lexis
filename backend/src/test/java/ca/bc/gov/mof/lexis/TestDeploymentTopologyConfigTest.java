@@ -79,7 +79,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("cp frontend/openshift.deploy.yml")
         .contains("inputs.backend_image || format(")
         .contains("inputs.frontend_image || format(")
-        .contains("LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled && 'true' || 'false' }}")
+        .contains("LEXIS_EXPIRY_ENABLED: ${{ vars.LEXIS_EXPIRY_ENABLED || (inputs.expiry_enabled && 'true' || 'false') }}")
         .doesNotContain("LEXIS_PROD_RTM_ONLY", "lexis_prod_rtm_only");
     for (String template : new String[] {backendTemplate, frontendTemplate}) {
       assertThat(template)
@@ -189,14 +189,14 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_max_replicas:")
         .contains(
             "expiry_enabled:\n"
-                + "        description: Enable exemption expiry; false is an explicit operational kill switch\n"
+                + "        description: Default expiry setting when the environment LEXIS_EXPIRY_ENABLED variable is unset\n"
                 + "        default: true")
         .doesNotContain("Enforce single-backend lock topology", "inputs.backend_replicas")
         .contains("-p MIN_REPLICAS=\"${{ inputs.backend_min_replicas }}\"")
         .contains("-p MAX_REPLICAS=\"${{ inputs.backend_max_replicas }}\"")
         .contains(
-            "LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled"
-                + " && 'true' || 'false' }}")
+            "LEXIS_EXPIRY_ENABLED: ${{ vars.LEXIS_EXPIRY_ENABLED"
+                + " || (inputs.expiry_enabled && 'true' || 'false') }}")
         .contains("LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}")
         .contains("LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}")
         .contains(
@@ -426,7 +426,6 @@ class TestDeploymentTopologyConfigTest {
             "DATABASE_PASSWORD",
             "KEYSTORE_SECRET",
             "LEXIS_PROD_RTM_ONLY",
-            "LEXIS_EXPIRY_ENABLED",
             "LEXIS_PERMIT_INVOICE_MODE",
             "LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS",
             "LEXIS_MAIL_NON_PRODUCTION",
@@ -442,8 +441,8 @@ class TestDeploymentTopologyConfigTest {
         .contains("DATABASE_PASSWORD: ${{ secrets.database_password }}")
         .contains("KEYSTORE_SECRET: ${{ secrets.keystore_secret }}")
         .contains(
-            "LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled"
-                + " && 'true' || 'false' }}")
+            "LEXIS_EXPIRY_ENABLED: ${{ vars.LEXIS_EXPIRY_ENABLED"
+                + " || (inputs.expiry_enabled && 'true' || 'false') }}")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}")

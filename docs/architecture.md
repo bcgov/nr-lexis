@@ -378,11 +378,16 @@ release; tags from before this workflow cannot be released through it. A rollbac
 manual workflow with a retained, previously tested tag. The release summary identifies the TEST
 run, commit, and deployed image digests. Production releases are serialized.
 
-`LEXIS_EXPIRY_ENABLED` controls only the modern exemption-expiry job, including startup catch-up.
-The PROD workflow passes `expiry_enabled: false` while legacy owns expiry; TEST passes `true`
-and DEV previews pass `false`. This setting does not restrict pages, roles, APIs, or manual writes.
-The former `LEXIS_PROD_RTM_ONLY` and `VITE_LEXIS_PROD_RTM_ONLY` settings are retired. Enable
-modern expiry separately only after the legacy expiry job has stopped.
+The GitHub environment variable `LEXIS_EXPIRY_ENABLED` controls only the modern exemption-expiry
+job, including startup catch-up. Set it to `false` in PROD while legacy owns expiry. Set it to `true`
+and redeploy to enable both triggers after the legacy expiry job has stopped. The variable is resolved
+inside the deployment job's environment and must be exactly `true` or `false`; invalid values stop
+the deployment before provisioning or rollout. An unset variable uses the caller's `expiry_enabled`
+default: PROD and DEV disabled, TEST enabled. Keep this variable environment-specific.
+
+This flag replaces the former `LEXIS_PROD_RTM_ONLY` secret and has no effect on pages, roles, APIs,
+or manual writes. The frontend flag `VITE_LEXIS_PROD_RTM_ONLY` is retired. Keep the old secret until
+the previous build is no longer needed for rollback; the new workflow does not consume it.
 
 ### Interactive production authentication
 
