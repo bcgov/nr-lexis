@@ -1,12 +1,11 @@
-import { InlineLoading, InlineNotification } from '@carbon/react'
+import { Dropdown } from '@carbon/react'
 import { useEffect, useRef, useState } from 'react'
-import SearchableSelect from '@/components/SearchableSelect'
 import {
   fetchApplicationGradeCodes,
   fetchApplicationSpeciesCodes,
   type ApplicationCodeOption,
 } from '@/service/provincial-application-items-service'
-import { requiredLabel } from '@/utils/required-label'
+import { markRequired, requiredLabel } from '@/utils/required-label'
 
 export type BlanketOicScaleCodeField = 'speciesCode' | 'gradeCode'
 
@@ -15,6 +14,8 @@ export type BlanketOicScaleCodeFieldsValue = {
   gradeCode: string
 }
 
+export type BlanketOicScaleOptionsStatus = 'loading' | 'ready' | 'unavailable'
+
 type ReferenceAvailability = 'loading' | 'available' | 'unavailable' | 'idle'
 
 export type BlanketOicScaleCodeFieldsProps = {
@@ -22,15 +23,28 @@ export type BlanketOicScaleCodeFieldsProps = {
   value: BlanketOicScaleCodeFieldsValue
   onChange: (field: BlanketOicScaleCodeField, value: string) => void
   disabled: boolean
-  onAvailabilityChange: (ready: boolean) => void
+  // The panel shows loading and load failures at its top, so the fields only report them.
+  onAvailabilityChange: (status: BlanketOicScaleOptionsStatus) => void
+  fieldErrors?: Partial<Record<BlanketOicScaleCodeField, string>>
 }
+
+const GRADE_HELPER_TEXT = 'Available once species are selected'
 
 const normalizeCode = (value: string): string => value.trim().toUpperCase()
 
-const optionLabel = (option: ApplicationCodeOption): string =>
-  option.description && option.description !== option.code
-    ? `${option.code} - ${option.description}`
-    : option.code
+const optionName = (option: ApplicationCodeOption | null): string =>
+  option ? option.description || option.code : ''
+
+const findOption = (
+  options: ApplicationCodeOption[],
+  code: string,
+): ApplicationCodeOption | null =>
+  code
+    ? (options.find((option) => normalizeCode(option.code) === code) ?? {
+        code,
+        description: code,
+      })
+    : null
 
 export default function BlanketOicScaleCodeFields({
   region,
@@ -38,19 +52,16 @@ export default function BlanketOicScaleCodeFields({
   onChange,
   disabled,
   onAvailabilityChange,
+  fieldErrors,
 }: BlanketOicScaleCodeFieldsProps) {
   const [speciesOptions, setSpeciesOptions] = useState<ApplicationCodeOption[]>([])
   const [gradeOptions, setGradeOptions] = useState<ApplicationCodeOption[]>([])
   const [speciesAvailability, setSpeciesAvailability] = useState<ReferenceAvailability>('loading')
   const [gradeAvailability, setGradeAvailability] = useState<ReferenceAvailability>('idle')
-  const lastAvailabilityRef = useRef<boolean | null>(null)
+  const lastAvailabilityRef = useRef<BlanketOicScaleOptionsStatus | null>(null)
   const onAvailabilityChangeRef = useRef(onAvailabilityChange)
-  const onChangeRef = useRef(onChange)
-  const valueRef = useRef(value)
 
   onAvailabilityChangeRef.current = onAvailabilityChange
-  onChangeRef.current = onChange
-  valueRef.current = value
 
   const normalizedRegion = region.trim()
   const selectedSpeciesCode = normalizeCode(value.speciesCode)
@@ -63,7 +74,7 @@ export default function BlanketOicScaleCodeFields({
         const options = await fetchApplicationSpeciesCodes()
         if (!active) return
         setSpeciesOptions(options)
-        setSpeciesAvailability(options.length > 0 ? 'available' : 'unavailable')
+        setSpeciesAvailability('available')
       } catch {
         if (!active) return
         setSpeciesOptions([])
@@ -92,16 +103,7 @@ export default function BlanketOicScaleCodeFields({
         const options = await fetchApplicationGradeCodes(normalizedRegion, selectedSpeciesCode)
         if (!active) return
         setGradeOptions(options)
-        setGradeAvailability(options.length > 0 ? 'available' : 'unavailable')
-        const currentGradeCode = normalizeCode(valueRef.current.gradeCode)
-        const nextGradeCode = options.some(
-          (option) => normalizeCode(option.code) === currentGradeCode,
-        )
-          ? currentGradeCode
-          : normalizeCode(options[0]?.code ?? '')
-        if (nextGradeCode !== currentGradeCode) {
-          onChangeRef.current('gradeCode', nextGradeCode)
-        }
+        setGradeAvailability('available')
       } catch {
         if (!active) return
         setGradeOptions([])
@@ -115,66 +117,58 @@ export default function BlanketOicScaleCodeFields({
     }
   }, [normalizedRegion, selectedSpeciesCode])
 
-  const referenceOptionsReady =
-    speciesAvailability === 'available' &&
-    (!selectedSpeciesCode || gradeAvailability === 'available')
+  const referenceOptionsStatus: BlanketOicScaleOptionsStatus =
+    speciesAvailability === 'unavailable' || gradeAvailability === 'unavailable'
+      ? 'unavailable'
+      : speciesAvailability === 'loading' || gradeAvailability === 'loading'
+        ? 'loading'
+        : 'ready'
 
   useEffect(() => {
-    if (lastAvailabilityRef.current === referenceOptionsReady) return
-    lastAvailabilityRef.current = referenceOptionsReady
-    onAvailabilityChangeRef.current(referenceOptionsReady)
-  }, [referenceOptionsReady])
+    if (lastAvailabilityRef.current === referenceOptionsStatus) return
+    lastAvailabilityRef.current = referenceOptionsStatus
+    onAvailabilityChangeRef.current(referenceOptionsStatus)
+  }, [referenceOptionsStatus])
 
-  const referenceOptionsLoading =
-    speciesAvailability === 'loading' ||
-    (Boolean(selectedSpeciesCode) && gradeAvailability === 'loading')
-  const referenceOptionsUnavailable =
-    speciesAvailability === 'unavailable' ||
-    (Boolean(selectedSpeciesCode) && gradeAvailability === 'unavailable')
+  const gradeAwaitsSpecies = !selectedSpeciesCode
 
   return (
-    <>
-      {referenceOptionsLoading && <InlineLoading description="Loading scale options…" />}
-      {referenceOptionsUnavailable && (
-        <InlineNotification
-          kind="warning"
-          title="Scale options unavailable"
-          subtitle="Species and grade options could not be loaded. Reload the page to try again."
-          lowContrast
-          hideCloseButton
-        />
-      )}
-      <SearchableSelect
+    <div className="legacy-search-grid permit-panel-form__pair">
+      <Dropdown<ApplicationCodeOption | null>
         id="boicScaleSpeciesCode"
-        labelText={requiredLabel('Species')}
-        required
-        value={value.speciesCode}
-        options={speciesOptions.map((option) => ({
-          value: option.code,
-          label: optionLabel(option),
-        }))}
-        placeholder="Select species"
+        ref={markRequired}
+        titleText={requiredLabel('Species')}
+        label=""
+        items={speciesOptions}
+        itemToString={optionName}
+        selectedItem={findOption(speciesOptions, selectedSpeciesCode)}
         disabled={disabled || speciesAvailability !== 'available'}
-        onChange={(nextValue) => {
-          const nextSpeciesCode = normalizeCode(nextValue)
+        invalid={!!fieldErrors?.speciesCode}
+        invalidText={fieldErrors?.speciesCode}
+        onChange={({ selectedItem }) => {
+          const nextSpeciesCode = selectedItem ? normalizeCode(selectedItem.code) : ''
           if (nextSpeciesCode === selectedSpeciesCode) return
           onChange('speciesCode', nextSpeciesCode)
+          // Grades depend on the species, so a new species starts with no grade.
           onChange('gradeCode', '')
         }}
       />
-      <SearchableSelect
+      <Dropdown<ApplicationCodeOption | null>
         id="boicScaleGradeCode"
-        labelText={requiredLabel('Grade')}
-        required
-        value={value.gradeCode}
-        options={gradeOptions.map((option) => ({
-          value: option.code,
-          label: optionLabel(option),
-        }))}
-        placeholder={selectedSpeciesCode ? 'Select grade' : 'Select species first'}
-        disabled={disabled || !selectedSpeciesCode || gradeAvailability !== 'available'}
-        onChange={(nextValue) => onChange('gradeCode', normalizeCode(nextValue))}
+        ref={markRequired}
+        titleText={requiredLabel('Grade')}
+        label=""
+        items={gradeOptions}
+        itemToString={optionName}
+        selectedItem={findOption(gradeOptions, normalizeCode(value.gradeCode))}
+        disabled={disabled || gradeAwaitsSpecies || gradeAvailability !== 'available'}
+        invalid={!!fieldErrors?.gradeCode}
+        invalidText={fieldErrors?.gradeCode}
+        helperText={gradeAwaitsSpecies ? GRADE_HELPER_TEXT : undefined}
+        onChange={({ selectedItem }) =>
+          onChange('gradeCode', selectedItem ? normalizeCode(selectedItem.code) : '')
+        }
       />
-    </>
+    </div>
   )
 }

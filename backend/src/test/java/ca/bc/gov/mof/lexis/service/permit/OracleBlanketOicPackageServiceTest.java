@@ -99,6 +99,63 @@ class OracleBlanketOicPackageServiceTest {
   }
 
   @Test
+  void addPackageRejectsTotalAHundredthAbovePermitRequestVolume() {
+    OracleBlanketOicPackageService service = service();
+    PermitMutationRow permit = permit(1000456L, 125.0d);
+    when(permitRepository.findPermitMutationByPermitNumber(7000123L)).thenReturn(Optional.of(permit));
+    when(permitRepository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(permitRepository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of("PKG-OLD"));
+    when(applicationService.getPackageDetails("PKG-OLD"))
+        .thenReturn(packageDetails("PKG-OLD", "25.04"));
+
+    BlanketOicPackageService.MutationResult result =
+        service.addPackage(request("PKG-NEW", null, 100.0d), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors()).containsExactly(
+        "The total package volume must not exceed the permit request volume (125.0).");
+    verify(applicationService, never()).addHiddenBlanketOicPackage(any(), any());
+  }
+
+  @Test
+  void addPackageAcceptsTotalExactlyAtPermitRequestVolume() {
+    OracleBlanketOicPackageService service = service();
+    PermitMutationRow permit = permit(1000456L, 125.05d);
+    when(permitRepository.findPermitMutationByPermitNumber(7000123L)).thenReturn(Optional.of(permit));
+    when(permitRepository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(permitRepository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of("PKG-OLD"));
+    when(applicationService.getPackageDetails("PKG-OLD"))
+        .thenReturn(packageDetails("PKG-OLD", "25.05"));
+    when(applicationService.addHiddenBlanketOicPackage(any(), eq("idir\\jsmith")))
+        .thenReturn(new ApplicationDetailsRpcService.PackagePersistenceResult(
+            true, "PKG-NEW", "100.0", "10.0", "20.0", "ACT", List.of(), List.of()));
+
+    BlanketOicPackageService.MutationResult result =
+        service.addPackage(request("PKG-NEW", null, 100.0d), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(applicationService).addHiddenBlanketOicPackage(any(), eq("idir\\jsmith"));
+  }
+
+  @Test
+  void addPackageNamesAPermitRequestVolumeWithItsSecondDecimal() {
+    OracleBlanketOicPackageService service = service();
+    PermitMutationRow permit = permit(1000456L, 125.05d);
+    when(permitRepository.findPermitMutationByPermitNumber(7000123L)).thenReturn(Optional.of(permit));
+    when(permitRepository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(permitRepository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of("PKG-OLD"));
+    when(applicationService.getPackageDetails("PKG-OLD"))
+        .thenReturn(packageDetails("PKG-OLD", "25.06"));
+
+    BlanketOicPackageService.MutationResult result =
+        service.addPackage(request("PKG-NEW", null, 100.0d), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors()).containsExactly(
+        "The total package volume must not exceed the permit request volume (125.05).");
+  }
+
+  @Test
   void updatePackageBindsRenameToPermitsHiddenApplication() {
     OracleBlanketOicPackageService service = service();
     PermitMutationRow permit = permit(1000456L, 250.0d);

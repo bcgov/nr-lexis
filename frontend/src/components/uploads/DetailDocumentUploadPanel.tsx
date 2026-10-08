@@ -1092,7 +1092,8 @@ const DetailDocumentUploadPanel = ({
           title={modalHeading}
           className="detail-document-upload-panel"
           contentSelector={drawer.contentSelector}
-          initialFocusSelector={`#${modalInitialFocusId}`}
+          // The Files drop zone is the panel's first field.
+          initialFocusSelector={`#${inputId}File-drop-zone`}
           launcherRef={drawer.launcherRef ?? uploadTriggerRef}
           fallbackFocusSelector={drawer.fallbackFocusSelector}
           busy={isSubmitting}

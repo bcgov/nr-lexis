@@ -3338,7 +3338,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private PermitPackageDetailsRpcResponseDto emptyPackageDetails() {
     return new PermitPackageDetailsRpcResponseDto(
-        false, "", "", 0.0d, "", "", "", "", "", "", "");
+        false, "", "", 0.0d, "", "", "", "", "", "", "", "");
   }
 
   private PermitPackageInfoRpcResponseDto toPermitPackageInfo(
@@ -3431,11 +3431,18 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
 
     BigDecimal scaledVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
+    BigDecimal exactScaledVolume = BigDecimal.ZERO;
     for (PermitScaleDetailRow scale : scaleRows) {
       BigDecimal speciesGradeVolume =
           BigDecimal.valueOf(scale.speciesGradeVolume()).setScale(1, RoundingMode.HALF_UP);
       scaledVolume = scaledVolume.add(speciesGradeVolume).setScale(1, RoundingMode.HALF_UP);
+      exactScaledVolume = exactScaledVolume.add(BigDecimal.valueOf(scale.speciesGradeVolume()));
     }
+    // The scale save check compares exact sums, so its limit must not use the rounded totals.
+    BigDecimal remainingVolume =
+        BigDecimal.valueOf(packageDetails.packageVolume())
+            .subtract(exactScaledVolume)
+            .max(BigDecimal.ZERO);
 
     return new PermitPackageDetailsRpcResponseDto(
         true,
@@ -3448,7 +3455,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         nonNull(packageDetails.comments()),
         resolvePackageStatusDescription(packageDetails.packageStatusCode(), lookupContext),
         nonNull(trimToNull(packageDetails.reprocessedIndicator())),
-        resolveGrowthTypeDescription(packageDetails.growthTypeCode(), lookupContext));
+        resolveGrowthTypeDescription(packageDetails.growthTypeCode(), lookupContext),
+        remainingVolume.stripTrailingZeros().toPlainString());
   }
 
   private PackageInfoRow toPackageInfoRow(PermitCorePackageRow packageRow) {

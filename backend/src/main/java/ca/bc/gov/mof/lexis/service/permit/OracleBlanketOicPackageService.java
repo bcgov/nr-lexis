@@ -10,7 +10,6 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.Crea
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.PackagePersistenceResult;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.math.BigDecimal;
-import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -363,16 +362,21 @@ public class OracleBlanketOicPackageService implements BlanketOicPackageService 
         return List.of("Unable to verify the existing Blanket OIC package volume.");
       }
     }
-    BigDecimal requested =
-        total.add(BigDecimal.valueOf(request.volume())).setScale(1, RoundingMode.HALF_UP);
-    BigDecimal permitted =
-        BigDecimal.valueOf(permit.oicRequestVolume()).setScale(1, RoundingMode.HALF_UP);
+    // Compare the exact amounts; rounding either side would let a total just over the limit pass.
+    BigDecimal requested = total.add(BigDecimal.valueOf(request.volume()));
+    BigDecimal permitted = BigDecimal.valueOf(permit.oicRequestVolume());
     if (requested.compareTo(permitted) > 0) {
       return List.of(
           "The total package volume must not exceed the permit request volume ("
-              + permitted.toPlainString() + ").");
+              + formatVolumeLimit(permitted) + ").");
     }
     return List.of();
+  }
+
+  /** The limit as stored, with at least one decimal. */
+  private static String formatVolumeLimit(BigDecimal volume) {
+    BigDecimal plain = volume.stripTrailingZeros();
+    return (plain.scale() < 1 ? plain.setScale(1) : plain).toPlainString();
   }
 
   private MutationResult fromPersistenceFailure(

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import {
   Button,
@@ -24,7 +24,7 @@ import { ActionResultNotification } from '../../components/ActionResultNotificat
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import EmptyState from '@/components/EmptyState'
-import Modal from '@/components/Modal'
+import DetailSidePanel from '@/components/DetailSidePanel'
 import PageHeader from '@/components/PageHeader'
 import SearchResultsTableFrame from '@/components/SearchResultsTableFrame'
 import {
@@ -257,6 +257,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const [showFilValidationErrors, setShowFilValidationErrors] = useState(false)
   const [showScheduleValidationErrors, setShowScheduleValidationErrors] = useState(false)
   const [isPolicyEditorOpen, setIsPolicyEditorOpen] = useState(false)
+  const policyEditorLauncherRef = useRef<HTMLElement>(null)
   const [pendingDeletion, setPendingDeletion] = useState<PendingDeletion | null>(null)
 
   // INTENTIONAL_LEGACY_DIVERGENCE(NAVIGATION_MENU_CONTRACT): Keep these page
@@ -923,17 +924,42 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
         />
       )}
 
-      {area === 'fee' && isPolicyEditorOpen && (
-        <Modal
+      {area === 'fee' && (
+        <DetailSidePanel
           open={isPolicyEditorOpen}
-          passiveModal
-          size="md"
-          modalHeading={editingFeePolicyId ? 'Edit fee policy' : 'Add fee policy'}
-          aria-label={editingFeePolicyId ? 'Edit fee policy' : 'Add fee policy'}
+          title={editingFeePolicyId ? 'Edit fee policy' : 'Add fee policy'}
           className="admin-policy-modal"
-          preventCloseOnClickOutside
-          selectorPrimaryFocus="#feeEffectiveDate"
-          onRequestClose={closePolicyEditor}
+          contentSelector=".admin-policy-page"
+          launcherRef={policyEditorLauncherRef}
+          fallbackFocusSelector="#admin-policy-create"
+          initialFocusSelector="#feeEffectiveDate"
+          busy={isMutatingPolicies}
+          onClose={closePolicyEditor}
+          actions={[
+            {
+              label: 'Cancel',
+              kind: 'tertiary',
+              disabled: isMutatingPolicies,
+              onClick: closePolicyEditor,
+            },
+            {
+              label: isMutatingPolicies
+                ? 'Saving…'
+                : editingFeePolicyId
+                  ? 'Update fee policy'
+                  : 'Add fee policy',
+              kind: 'primary',
+              renderIcon: isMutatingPolicies ? PendingIcon : editingFeePolicyId ? undefined : Add,
+              disabled:
+                isLoadingPolicies ||
+                isMutatingPolicies ||
+                isLoadingFeeRegionOptions ||
+                Boolean(feeRegionOptionsError) ||
+                feeRegionOptions.length === 0 ||
+                !canManageFeePolicy,
+              onClick: () => void upsertFeePolicy(),
+            },
+          ]}
         >
           <p className="admin-policy-modal__description">
             {editingFeePolicyId
@@ -1002,50 +1028,39 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               onChange={(event) => setFeePolicyPercentage(event.target.value)}
             />
           </div>
-          <div className="admin-policy-modal__actions">
-            <Button
-              kind="tertiary"
-              size="md"
-              disabled={isMutatingPolicies}
-              onClick={closePolicyEditor}
-            >
-              Cancel
-            </Button>
-            <Button
-              kind="primary"
-              size="md"
-              renderIcon={isMutatingPolicies ? PendingIcon : editingFeePolicyId ? undefined : Add}
-              disabled={
-                isLoadingPolicies ||
-                isMutatingPolicies ||
-                isLoadingFeeRegionOptions ||
-                Boolean(feeRegionOptionsError) ||
-                feeRegionOptions.length === 0 ||
-                !canManageFeePolicy
-              }
-              onClick={() => void upsertFeePolicy()}
-            >
-              {isMutatingPolicies
-                ? 'Saving…'
-                : editingFeePolicyId
-                  ? 'Update fee policy'
-                  : 'Add fee policy'}
-            </Button>
-          </div>
-        </Modal>
+        </DetailSidePanel>
       )}
 
-      {area === 'fil' && isPolicyEditorOpen && (
-        <Modal
+      {area === 'fil' && (
+        <DetailSidePanel
           open={isPolicyEditorOpen}
-          passiveModal
-          size="md"
-          modalHeading={editingFilPolicyId ? 'Edit fee in lieu policy' : 'Add fee in lieu policy'}
-          aria-label={editingFilPolicyId ? 'Edit fee in lieu policy' : 'Add fee in lieu policy'}
+          title={editingFilPolicyId ? 'Edit fee in lieu policy' : 'Add fee in lieu policy'}
           className="admin-policy-modal"
-          preventCloseOnClickOutside
-          selectorPrimaryFocus="#filEffectiveDate"
-          onRequestClose={closePolicyEditor}
+          contentSelector=".admin-policy-page"
+          launcherRef={policyEditorLauncherRef}
+          fallbackFocusSelector="#admin-policy-create"
+          initialFocusSelector="#filEffectiveDate"
+          busy={isMutatingPolicies}
+          onClose={closePolicyEditor}
+          actions={[
+            {
+              label: 'Cancel',
+              kind: 'tertiary',
+              disabled: isMutatingPolicies,
+              onClick: closePolicyEditor,
+            },
+            {
+              label: isMutatingPolicies
+                ? 'Saving…'
+                : editingFilPolicyId
+                  ? 'Update fee in lieu policy'
+                  : 'Add fee in lieu policy',
+              kind: 'primary',
+              renderIcon: isMutatingPolicies ? PendingIcon : editingFilPolicyId ? undefined : Add,
+              disabled: isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy,
+              onClick: () => void upsertFilPolicy(),
+            },
+          ]}
         >
           <p className="admin-policy-modal__description">
             {editingFilPolicyId
@@ -1089,30 +1104,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
               onChange={(event) => setFilPolicyPercentage(event.target.value)}
             />
           </div>
-          <div className="admin-policy-modal__actions">
-            <Button
-              kind="tertiary"
-              size="md"
-              disabled={isMutatingPolicies}
-              onClick={closePolicyEditor}
-            >
-              Cancel
-            </Button>
-            <Button
-              kind="primary"
-              size="md"
-              renderIcon={isMutatingPolicies ? PendingIcon : editingFilPolicyId ? undefined : Add}
-              disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
-              onClick={() => void upsertFilPolicy()}
-            >
-              {isMutatingPolicies
-                ? 'Saving…'
-                : editingFilPolicyId
-                  ? 'Update fee in lieu policy'
-                  : 'Add fee in lieu policy'}
-            </Button>
-          </div>
-        </Modal>
+        </DetailSidePanel>
       )}
 
       {pendingDeletion && (
@@ -1171,10 +1163,15 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   kind="primary"
                   size="md"
                   renderIcon={Add}
-                  onClick={openPolicyEditor}
+                  id="admin-policy-create"
+                  onClick={(event) => {
+                    policyEditorLauncherRef.current = event.currentTarget
+                    openPolicyEditor()
+                  }}
                   disabled={
                     isLoadingPolicies ||
                     isMutatingPolicies ||
+                    isPolicyEditorOpen ||
                     isLoadingFeeRegionOptions ||
                     Boolean(feeRegionOptionsError) ||
                     feeRegionOptions.length === 0 ||
@@ -1235,10 +1232,14 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                               <Button
                                 kind="ghost"
                                 size="md"
-                                onClick={() => editFeePolicy(row)}
+                                onClick={(event) => {
+                                  policyEditorLauncherRef.current = event.currentTarget
+                                  editFeePolicy(row)
+                                }}
                                 disabled={
                                   isLoadingPolicies ||
                                   isMutatingPolicies ||
+                                  isPolicyEditorOpen ||
                                   isLoadingFeeRegionOptions ||
                                   Boolean(feeRegionOptionsError) ||
                                   feeRegionOptions.length === 0
@@ -1259,7 +1260,9 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                     percentage: row.policyPercentage,
                                   })
                                 }
-                                disabled={isLoadingPolicies || isMutatingPolicies}
+                                disabled={
+                                  isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
+                                }
                               >
                                 Delete
                               </Button>
@@ -1299,8 +1302,17 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                   kind="primary"
                   size="md"
                   renderIcon={Add}
-                  onClick={openPolicyEditor}
-                  disabled={isLoadingPolicies || isMutatingPolicies || !canManageFilPolicy}
+                  id="admin-policy-create"
+                  onClick={(event) => {
+                    policyEditorLauncherRef.current = event.currentTarget
+                    openPolicyEditor()
+                  }}
+                  disabled={
+                    isLoadingPolicies ||
+                    isMutatingPolicies ||
+                    isPolicyEditorOpen ||
+                    !canManageFilPolicy
+                  }
                 >
                   Add fee in lieu policy
                 </Button>
@@ -1353,8 +1365,13 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                               <Button
                                 kind="ghost"
                                 size="md"
-                                onClick={() => editFilPolicy(row)}
-                                disabled={isLoadingPolicies || isMutatingPolicies}
+                                onClick={(event) => {
+                                  policyEditorLauncherRef.current = event.currentTarget
+                                  editFilPolicy(row)
+                                }}
+                                disabled={
+                                  isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
+                                }
                               >
                                 Edit
                               </Button>
@@ -1370,7 +1387,9 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                     percentage: row.filPercentage,
                                   })
                                 }
-                                disabled={isLoadingPolicies || isMutatingPolicies}
+                                disabled={
+                                  isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
+                                }
                               >
                                 Delete
                               </Button>

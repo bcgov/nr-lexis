@@ -10,6 +10,7 @@ import {
 } from 'react'
 import {
   Button,
+  Dropdown,
   InlineLoading,
   InlineNotification,
   Table,
@@ -33,6 +34,7 @@ import SearchableSelect from '../../components/SearchableSelect'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import {
   atMostOneDecimalFieldError,
+  atMostTwoDecimalFieldError,
   firstValidationError,
   getVisibleFieldError,
   greaterThanFieldError,
@@ -59,7 +61,6 @@ import {
   fetchApplicationPackageStatusCodes,
   fetchApplicationPackageSpecies,
   fetchApplicationRemainingSpecies,
-  fetchApplicationScaleDetails,
   fetchApplicationSpeciesCodes,
   fetchApplicationUniqueScales,
   updateApplicationPackage,
@@ -70,7 +71,7 @@ import {
   type ApplicationPackageSpeciesRow,
 } from '@/service/provincial-application-items-service'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
-import { requiredLabel } from '@/utils/required-label'
+import { markRequired, requiredLabel } from '@/utils/required-label'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import { displayTableValue, formatPackageNumberLabel } from '@/utils/text'
 import './ApplicationItemsPanel.scss'
@@ -147,6 +148,56 @@ type ApplicationItemField =
   | 'scalePieces'
   | 'scaleVolume'
 
+const CREATE_PACKAGE_INPUT_FIELDS: Partial<Record<keyof PackageFormState, ApplicationItemField>> = {
+  packageNumber: 'createPackageNumber',
+  volume: 'createPackageVolume',
+  averageLength: 'createPackageAverageLength',
+  averageDiameter: 'createPackageAverageDiameter',
+  comments: 'createPackageComments',
+}
+
+const SCALE_INPUT_FIELDS: Record<keyof ScaleFormState, ApplicationItemField> = {
+  timberMark: 'scaleTimberMark',
+  speciesCode: 'scaleSpeciesCode',
+  gradeCode: 'scaleGradeCode',
+  pieces: 'scalePieces',
+  volume: 'scaleVolume',
+}
+
+const DUPLICATE_SCALE_MESSAGE = 'A scale with this timber mark, species, and grade already exists.'
+
+const CREATE_PACKAGE_SERVER_FIELDS: Array<[RegExp, ApplicationItemField]> = [
+  [/^Package number .+ already exists\.$/, 'createPackageNumber'],
+  [/^The (total )?package volume .+\.$/, 'createPackageVolume'],
+  [/^The package average length .+\.$/, 'createPackageAverageLength'],
+  [/^The package average diameter .+\.$/, 'createPackageAverageDiameter'],
+  [/^Package comments .+\.$/, 'createPackageComments'],
+]
+
+const SCALE_SERVER_FIELDS: Array<[RegExp, ApplicationItemField]> = [
+  [
+    /^A valid timber mark is required\.$|^Timber mark .+ (does not exist|is not valid.*)\.$/,
+    'scaleTimberMark',
+  ],
+  [/^A scale with this timber mark, species, and grade already exists\.$/, 'scaleTimberMark'],
+  [/^A valid species code is required\.$|^Species code .+ does not exist\.$/, 'scaleSpeciesCode'],
+  [/^A valid grade code is required\.$|^Grade code .+ does not exist\.$/, 'scaleGradeCode'],
+  [/^The scale pieces .+\.$/, 'scalePieces'],
+  [/^The scale volume .+\.$|^The package volume has already been met\.$/, 'scaleVolume'],
+]
+
+// Keep the server's message on its field; errors without a matching field stay in the panel.
+const drawerServerErrors = (messages: string[], fields: Array<[RegExp, ApplicationItemField]>) => {
+  const fieldErrors: FieldErrors<ApplicationItemField> = {}
+  const otherMessages: string[] = []
+  for (const message of messages) {
+    const field = fields.find(([pattern]) => pattern.test(message))?.[1]
+    if (field) fieldErrors[field] ??= message
+    else otherMessages.push(message)
+  }
+  return { fieldErrors, otherMessages }
+}
+
 type PackageSelectionState = {
   packageNumbers: string[]
   selectedPackageNumber: string
@@ -206,13 +257,35 @@ const emptyPackageForm = (
   endUseCode,
 })
 
+// INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_PACKAGE_PANELS): a new package starts its amounts at
+// 0.0. Create package doesn't show status, product type, age class, end use or species, so it saves
+// an active package with the application's own values.
+const newPackageForm = (
+  productTypeCode: string | null | undefined,
+  growthTypeCode = '',
+  endUseCode = '',
+): PackageFormState => ({
+  ...emptyPackageForm(productTypeCode, growthTypeCode, endUseCode),
+  volume: '0.0',
+  averageLength: '0.0',
+  averageDiameter: '0.0',
+  status: 'ACT',
+})
+
+// A new scale's volume starts at 0.0.
 const emptyScaleForm: ScaleFormState = {
   timberMark: '',
   speciesCode: '',
   gradeCode: '',
   pieces: '',
-  volume: '',
+  volume: '0.0',
 }
+
+const GRADE_HELPER_TEXT = 'Available once species are selected'
+
+// A package or scale saved from its side panel reports inside the section that shows it.
+const PACKAGE_SAVED_TITLE = 'Package saved.'
+const SCALE_SAVED_TITLE = 'Scale saved.'
 const NO_SPECIES_CODES: string[] = []
 
 const normalizePackageNumberInput = (value: string): string => value.toUpperCase()
@@ -285,20 +358,22 @@ const packageRequiresAgeClass = (productTypeCode: string): boolean =>
 const uniqueCodes = (rows: ApplicationPackageSpeciesRow[]): string[] =>
   Array.from(new Set(rows.map((row) => row.species).filter(Boolean)))
 
-const roundOneDecimal = (value: number): number => Math.round(value * 10) / 10
+// Rounds half up from hundredths, as the server does with volumes stored to two decimals.
+const roundOneDecimal = (value: number): number => Math.round(Math.round(value * 100) / 10) / 10
 
-const formatPieceCount = (value: number | string): string =>
-  typeof value === 'number' ? value.toLocaleString() : value
+const optionName = (option: ApplicationCodeOption | null): string =>
+  option ? option.description || option.code : ''
 
-const formatScaleLookupResult = (row: {
-  timberMark: string
-  species: string
-  grade: string
-  pieces: number | string
-  volume: string
-}): string =>
-  `${row.timberMark} ${row.species}/${row.grade} ${formatPieceCount(row.pieces)} pcs ${row.volume} m3`
+const findOption = (
+  options: ApplicationCodeOption[],
+  code: string,
+): ApplicationCodeOption | null =>
+  code ? (options.find((option) => option.code === code) ?? { code, description: code }) : null
 
+const scaleVolumeLimitText = (remainingVolume: number): string =>
+  `Must be less than or equal to remaining package volume (${formatVolume(remainingVolume)} m³)`
+
+// The server compares a scale's volume, rounded to one decimal, with what's left of the package.
 const scaleVolumeWithinPackageFieldError = (
   value: string,
   remainingVolume: number | null,
@@ -308,9 +383,9 @@ const scaleVolumeWithinPackageFieldError = (
     return null
   }
 
-  return parsed <= remainingVolume
+  return roundOneDecimal(parsed) <= remainingVolume
     ? null
-    : `Scale volume must be ${formatVolume(remainingVolume)} or less.`
+    : `${scaleVolumeLimitText(remainingVolume)}.`
 }
 
 const buildPackageSelectionState = (packageNumbers: string[]): PackageSelectionState => ({
@@ -440,11 +515,27 @@ function ProvincialApplicationItemsPanel({
   const [pendingDrawerClose, setPendingDrawerClose] = useState(false)
   const packageLauncherRef = useRef<HTMLElement>(null)
   const scaleLauncherRef = useRef<HTMLElement>(null)
+  const drawerDiscardLauncherRef = useRef<HTMLElement>(null)
+  const drawerFormRef = useRef<HTMLDivElement>(null)
+  const [serverFieldErrors, setServerFieldErrors] = useState<FieldErrors<ApplicationItemField>>({})
+  const focusFirstDrawerError = () =>
+    requestAnimationFrame(() => {
+      const form = drawerFormRef.current
+      const invalid = form?.querySelector<HTMLElement>(
+        '[aria-invalid="true"], [data-invalid="true"]',
+      )
+      const control = invalid?.matches('input, textarea, button')
+        ? invalid
+        : invalid?.querySelector<HTMLElement>('input, textarea, button')
+      const target = control ?? form?.querySelector<HTMLElement>('[data-drawer-error]')
+      target?.focus()
+      target?.scrollIntoView({ block: 'nearest' })
+    })
   const [packageBaselineForm, setPackageBaselineForm] = useState<PackageFormState>(() =>
     emptyPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
   )
   const [createPackageForm, setCreatePackageForm] = useState<PackageFormState>(() =>
-    emptyPackageForm(productTypeCode),
+    newPackageForm(productTypeCode),
   )
   const [packageSpeciesRows, setPackageSpeciesRows] = useState<ApplicationPackageSpeciesRow[]>([])
   const [speciesDraft, setSpeciesDraft] = useState<string[]>([])
@@ -456,24 +547,16 @@ function ProvincialApplicationItemsPanel({
   const [scales, setScales] = useState<ApplicationPackageScaleRow[]>([])
   const [applicationScaleRows, setApplicationScaleRows] = useState<ApplicationScaleSummaryRow[]>([])
   const [speciesOptions, setSpeciesOptions] = useState<ApplicationCodeOption[]>([])
-  const [packageStatusOptions, setPackageStatusOptions] = useState<ApplicationCodeOption[]>([])
   const [remainingSpeciesOptions, setRemainingSpeciesOptions] = useState<ApplicationCodeOption[]>(
     [],
   )
-  const [createRemainingSpeciesOptions, setCreateRemainingSpeciesOptions] = useState<
-    ApplicationCodeOption[]
-  >([])
   const [endUseOptions, setEndUseOptions] = useState<ApplicationCodeOption[]>([])
-  const [createEndUseOptions, setCreateEndUseOptions] = useState<ApplicationCodeOption[]>([])
   const [endUseAvailability, setEndUseAvailability] = useState<DependentOptionsAvailability>('idle')
   const [createEndUseAvailability, setCreateEndUseAvailability] =
     useState<DependentOptionsAvailability>('idle')
   const [gradeOptions, setGradeOptions] = useState<ApplicationCodeOption[]>([])
   const [speciesToAdd, setSpeciesToAdd] = useState('')
-  const [createSpeciesToAdd, setCreateSpeciesToAdd] = useState('')
   const [scaleForm, setScaleForm] = useState<ScaleFormState>(emptyScaleForm)
-  const [scaleLookupId, setScaleLookupId] = useState('')
-  const [scaleLookupResult, setScaleLookupResult] = useState('')
   const [scaleActionErrorMessage, setScaleActionErrorMessage] = useState('')
   const [baseReferenceOptionsAvailability, setBaseReferenceOptionsAvailability] = useState<
     'loading' | 'available' | 'unavailable'
@@ -501,6 +584,19 @@ function ProvincialApplicationItemsPanel({
       title: kind === 'success' ? 'Item action completed' : 'Item action needs attention',
       message,
     })
+  const actionResultSection =
+    actionResult?.kind !== 'success'
+      ? 'items'
+      : actionResult.title === PACKAGE_SAVED_TITLE
+        ? 'package'
+        : actionResult.title === SCALE_SAVED_TITLE
+          ? 'scales'
+          : 'items'
+  const actionResultNotification = (section: typeof actionResultSection) =>
+    !!actionResult &&
+    actionResultSection === section && (
+      <ActionResultNotification result={actionResult} onClose={() => onActionResult(null)} />
+    )
   const [isSavingPackage, setIsSavingPackage] = useState(false)
   const [isSavingScale, setIsSavingScale] = useState(false)
   const [deletingScaleId, setDeletingScaleId] = useState('')
@@ -529,7 +625,7 @@ function ProvincialApplicationItemsPanel({
     createPackageDraftTouched &&
     (JSON.stringify(createPackageForm) !==
       JSON.stringify(
-        emptyPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
+        newPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
       ) ||
       JSON.stringify(createSpeciesDraft) !== JSON.stringify(applicationSpeciesCodes))
   const scaleDraftDirty =
@@ -542,7 +638,7 @@ function ProvincialApplicationItemsPanel({
     // The saved summary can arrive after this panel mounts; refresh only an untouched create draft.
     // eslint-disable-next-line @eslint-react/set-state-in-effect
     setCreatePackageForm(
-      emptyPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
+      newPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
     )
     setCreateSpeciesDraft(applicationSpeciesCodesRef.current)
   }, [
@@ -587,13 +683,20 @@ function ProvincialApplicationItemsPanel({
     0,
   )
   const selectedPackageVolume = parseNonNegativeDecimalFieldValue(packageForm.volume)
+  // As on the server, each amount counts rounded to one decimal.
   const selectedPackageRemainingScaleVolume =
     selectedPackageVolume === null
       ? null
-      : Math.max(0, roundOneDecimal(selectedPackageVolume - selectedPackageScaleVolume))
-  // Legacy rounds manually entered scale volume before validation and submission.
-  const scaleVolumeForSubmission =
-    parseNonNegativeDecimalFieldValue(scaleForm.volume)?.toFixed(1) ?? scaleForm.volume
+      : Math.max(
+          0,
+          roundOneDecimal(
+            scales.reduce(
+              (remaining, row) =>
+                remaining - roundOneDecimal(parseNonNegativeDecimalFieldValue(row.volume) ?? 0),
+              roundOneDecimal(selectedPackageVolume),
+            ),
+          ),
+        )
 
   const itemFieldErrors = useMemo<FieldErrors<ApplicationItemField>>(
     () => ({
@@ -629,9 +732,9 @@ function ProvincialApplicationItemsPanel({
         requiredFieldError(createPackageForm.packageNumber, 'Package number') ??
         existingPackageNumberError(createPackageForm.packageNumber, packageNumbers),
       createPackageVolume: firstValidationError(
-        () => requiredNumericFieldError(createPackageForm.volume, 'Package volume'),
-        () => greaterThanOrEqualFieldError(createPackageForm.volume, 'Package volume', 0),
-        () => atMostOneDecimalFieldError(createPackageForm.volume, 'Package volume'),
+        () => requiredNumericFieldError(createPackageForm.volume, 'Volume'),
+        () => greaterThanFieldError(createPackageForm.volume, 'Volume', 0),
+        () => atMostOneDecimalFieldError(createPackageForm.volume, 'Volume'),
       ),
       createPackageAverageLength: firstValidationError(
         () => requiredNumericFieldError(createPackageForm.averageLength, 'Average length'),
@@ -654,7 +757,10 @@ function ProvincialApplicationItemsPanel({
       createPackageComments: packageCommentsFieldError(createPackageForm.comments),
       scaleTimberMark: requiredFieldError(scaleForm.timberMark, 'Timber mark') ?? undefined,
       scaleSpeciesCode: requiredFieldError(scaleForm.speciesCode, 'Species') ?? undefined,
-      scaleGradeCode: requiredFieldError(scaleForm.gradeCode, 'Grade') ?? undefined,
+      // Grade only becomes available, and required, once a species is chosen.
+      scaleGradeCode: scaleForm.speciesCode
+        ? (requiredFieldError(scaleForm.gradeCode, 'Grade') ?? undefined)
+        : undefined,
       scalePieces: firstValidationError(
         () => requiredFieldError(scaleForm.pieces, 'Pieces'),
         () => numericFieldError(scaleForm.pieces, 'Pieces'),
@@ -663,15 +769,15 @@ function ProvincialApplicationItemsPanel({
         () => lessThanOrEqualFieldError(scaleForm.pieces, 'Pieces', 999999999),
       ),
       scaleVolume: firstValidationError(
-        () => requiredFieldError(scaleForm.volume, 'Scale volume'),
-        () => numericFieldError(scaleForm.volume, 'Scale volume'),
-        () => greaterThanOrEqualFieldError(scaleForm.volume, 'Scale volume', 0),
-        () => lessThanOrEqualFieldError(scaleVolumeForSubmission, 'Scale volume', 99999.9),
+        () => requiredFieldError(scaleForm.volume, 'Volume'),
+        () => numericFieldError(scaleForm.volume, 'Volume'),
+        () => greaterThanOrEqualFieldError(scaleForm.volume, 'Volume', 0),
+        // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_PACKAGE_PANELS): saved as entered, to the
+        // database's two decimals.
+        () => atMostTwoDecimalFieldError(scaleForm.volume, 'Volume'),
+        () => lessThanOrEqualFieldError(scaleForm.volume, 'Volume', 99999.9),
         () =>
-          scaleVolumeWithinPackageFieldError(
-            scaleVolumeForSubmission,
-            selectedPackageRemainingScaleVolume,
-          ),
+          scaleVolumeWithinPackageFieldError(scaleForm.volume, selectedPackageRemainingScaleVolume),
       ),
     }),
     [
@@ -679,7 +785,6 @@ function ProvincialApplicationItemsPanel({
       packageForm,
       packageNumbers,
       scaleForm,
-      scaleVolumeForSubmission,
       selectedPackageRemainingScaleVolume,
       selectedPackageNumber,
     ],
@@ -721,6 +826,7 @@ function ProvincialApplicationItemsPanel({
     getVisibleFieldError(field, itemFieldErrors, touchedItemFields, showPackageValidationErrors)
 
   const createPackageFieldError = (field: ApplicationItemField): string | undefined =>
+    serverFieldErrors[field] ??
     getVisibleFieldError(
       field,
       itemFieldErrors,
@@ -729,6 +835,7 @@ function ProvincialApplicationItemsPanel({
     )
 
   const scaleFieldError = (field: ApplicationItemField): string | undefined =>
+    serverFieldErrors[field] ??
     getVisibleFieldError(field, itemFieldErrors, touchedItemFields, showScaleValidationErrors)
 
   const firstItemError = (...fields: ApplicationItemField[]): string | undefined =>
@@ -794,7 +901,6 @@ function ProvincialApplicationItemsPanel({
         ])
         if (!cancelled) {
           setSpeciesOptions(species)
-          setPackageStatusOptions(packageStatuses)
           setBaseReferenceOptionsAvailability(
             species.length > 0 && packageStatuses.length > 0 ? 'available' : 'unavailable',
           )
@@ -978,45 +1084,6 @@ function ProvincialApplicationItemsPanel({
   useEffect(() => {
     let cancelled = false
     const region = detail.orgUnitNumber ? String(detail.orgUnitNumber) : ''
-    const productType = createPackageForm.productType || productTypeCode
-
-    const loadCreateSpeciesOptions = async () => {
-      if (!region) {
-        setCreateRemainingSpeciesOptions(speciesOptions)
-        return
-      }
-      try {
-        const remaining = await fetchApplicationRemainingSpecies(
-          region,
-          productType,
-          createSpeciesDraft,
-        )
-        if (!cancelled) {
-          setCreateRemainingSpeciesOptions(remaining)
-        }
-      } catch {
-        if (!cancelled) {
-          setDependentReferenceOptionsUnavailable(true)
-          setCreateRemainingSpeciesOptions(speciesOptions)
-        }
-      }
-    }
-
-    void loadCreateSpeciesOptions()
-    return () => {
-      cancelled = true
-    }
-  }, [
-    createPackageForm.productType,
-    createSpeciesDraft,
-    detail.orgUnitNumber,
-    productTypeCode,
-    speciesOptions,
-  ])
-
-  useEffect(() => {
-    let cancelled = false
-    const region = detail.orgUnitNumber ? String(detail.orgUnitNumber) : ''
 
     const loadEndUseOptions = async () => {
       if (!region || speciesDraft.length === 0) {
@@ -1056,22 +1123,20 @@ function ProvincialApplicationItemsPanel({
     }
   }, [detail.orgUnitNumber, speciesDraft])
 
+  // A new package saves the application's end use, or the first one valid for its species.
   useEffect(() => {
     let cancelled = false
     const region = detail.orgUnitNumber ? String(detail.orgUnitNumber) : ''
 
     const loadCreateEndUseOptions = async () => {
       if (!region || createSpeciesDraft.length === 0) {
-        setCreateEndUseOptions([])
         setCreateEndUseAvailability('idle')
         return
       }
       setCreateEndUseAvailability('loading')
-      setCreateEndUseOptions([])
       try {
         const options = await fetchApplicationEndUsesForSpeciesRegion(region, createSpeciesDraft)
         if (!cancelled) {
-          setCreateEndUseOptions(options)
           setCreateEndUseAvailability(options.length > 0 ? 'available' : 'unavailable')
           setCreatePackageForm((current) => ({
             ...current,
@@ -1086,7 +1151,6 @@ function ProvincialApplicationItemsPanel({
         }
       } catch {
         if (!cancelled) {
-          setCreateEndUseOptions([])
           setCreateEndUseAvailability('unavailable')
         }
       }
@@ -1111,13 +1175,6 @@ function ProvincialApplicationItemsPanel({
         const options = await fetchApplicationGradeCodes(region, scaleForm.speciesCode)
         if (!cancelled) {
           setGradeOptions(options)
-          setScaleForm((current) => ({
-            ...current,
-            gradeCode:
-              current.gradeCode && options.some((option) => option.code === current.gradeCode)
-                ? current.gradeCode
-                : (options[0]?.code ?? current.gradeCode),
-          }))
         }
       } catch {
         if (!cancelled) {
@@ -1142,6 +1199,10 @@ function ProvincialApplicationItemsPanel({
   }
 
   const setCreatePackageField = (field: keyof PackageFormState, value: string) => {
+    const errorField = CREATE_PACKAGE_INPUT_FIELDS[field]
+    if (errorField) {
+      setServerFieldErrors((current) => ({ ...current, [errorField]: undefined }))
+    }
     setCreatePackageDraftTouched(true)
     setCreatePackageForm((current) => ({
       ...current,
@@ -1150,6 +1211,14 @@ function ProvincialApplicationItemsPanel({
   }
 
   const setScaleField = (field: keyof ScaleFormState, value: string) => {
+    setServerFieldErrors((current) => ({
+      ...current,
+      [SCALE_INPUT_FIELDS[field]]: undefined,
+      ...(['timberMark', 'speciesCode', 'gradeCode'].includes(field) &&
+      current.scaleTimberMark === DUPLICATE_SCALE_MESSAGE
+        ? { scaleTimberMark: undefined }
+        : {}),
+    }))
     setScaleDraftTouched(true)
     setScaleForm((current) => ({ ...current, [field]: value }))
   }
@@ -1168,21 +1237,8 @@ function ProvincialApplicationItemsPanel({
     setSpeciesDraft((current) => current.filter((item) => item !== species))
   }
 
-  const onAddCreateSpecies = () => {
-    if (!createSpeciesToAdd || createSpeciesDraft.includes(createSpeciesToAdd)) {
-      return
-    }
-    setCreatePackageDraftTouched(true)
-    setCreateSpeciesDraft((current) => [...current, createSpeciesToAdd])
-    setCreateSpeciesToAdd('')
-  }
-
-  const onRemoveCreateSpecies = (species: string) => {
-    setCreatePackageDraftTouched(true)
-    setCreateSpeciesDraft((current) => current.filter((item) => item !== species))
-  }
-
   const resetSelectedPackageDrafts = () => {
+    setServerFieldErrors({})
     setPackageForm(packageBaselineForm)
     setSpeciesDraft(packageSpeciesBaseline)
     setSpeciesToAdd('')
@@ -1196,17 +1252,18 @@ function ProvincialApplicationItemsPanel({
   }
 
   const resetCreatePackageDraft = () => {
+    setServerFieldErrors({})
     setCreatePackageForm(
-      emptyPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
+      newPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
     )
     setCreateSpeciesDraft(applicationSpeciesCodes)
-    setCreateSpeciesToAdd('')
     setCreatePackageDraftTouched(false)
     setTouchedItemFields({})
     setShowCreatePackageValidationErrors(false)
   }
 
   const resetScaleDraft = () => {
+    setServerFieldErrors({})
     setScaleForm(emptyScaleForm)
     setScaleActionErrorMessage('')
     setScaleDraftTouched(false)
@@ -1233,6 +1290,15 @@ function ProvincialApplicationItemsPanel({
           ? selectedPackageDraftDirty
           : scaleDraftDirty
     if (dirty) {
+      const activeElement = document.activeElement
+      drawerDiscardLauncherRef.current =
+        activeElement instanceof HTMLElement &&
+        activeElement.closest('.application-items-drawer') &&
+        activeElement.getAttribute('role') !== 'option'
+          ? activeElement
+          : document.querySelector<HTMLElement>(
+              '.application-items-drawer input:not(:disabled), .application-items-drawer textarea:not(:disabled)',
+            )
       setPendingDrawerClose(true)
     } else {
       cancelItemEditing()
@@ -1297,13 +1363,12 @@ function ProvincialApplicationItemsPanel({
     !!selectedPackageNumber &&
     !isSavingPackage &&
     !selectedPackageHasPermittedScale
-  const canCreatePackages =
-    activeDrawer === 'create' &&
-    canAddPackages &&
-    createPackageReferenceOptionsAvailable &&
-    !itemsBusy
+  const canCreatePackages = activeDrawer === 'create' && canAddPackages && !itemsBusy
+  const canSubmitScale = activeDrawer === 'scale' && canAddScales && !itemsBusy
   const canAddScalesWithReferenceOptions =
     activeDrawer === 'scale' && canAddScales && baseReferenceOptionsAvailable && !itemsBusy
+  const scaleFieldsDisabled =
+    !canAddScalesWithReferenceOptions || !packageDataLoaded || !selectedPackageNumber
   const canDeleteSelectedPackage =
     activeDrawer === null &&
     !itemsBusy &&
@@ -1408,20 +1473,27 @@ function ProvincialApplicationItemsPanel({
       return
     }
 
+    setServerFieldErrors({})
+    setItemsErrorMessage('')
     if (hasCreatePackageValidationError) {
       setShowCreatePackageValidationErrors(true)
       showItemActionError(
         firstItemError(
-          'createPackageNumber',
-          'createPackageVolume',
-          'createPackageAverageLength',
-          'createPackageAverageDiameter',
           'createPackageStatus',
           'createPackageProductType',
           'createPackageAgeClass',
-          'createPackageComments',
-        ) ?? 'Please fix validation errors before creating the package.',
+        ) ?? '',
       )
+      focusFirstDrawerError()
+      return
+    }
+    if (!createPackageReferenceOptionsAvailable) {
+      showItemActionError(
+        baseReferenceOptionsUnavailable || createEndUseOptionsUnavailable
+          ? referenceOptionsUnavailableMessage
+          : 'Loading authoritative item options…',
+      )
+      focusFirstDrawerError()
       return
     }
 
@@ -1444,7 +1516,13 @@ function ProvincialApplicationItemsPanel({
         speciesCodes: createSpeciesDraft,
       })
       if (!result.valid) {
-        showItemActionError(result.errors.join(' ') || 'Package creation failed.')
+        const { fieldErrors, otherMessages } = drawerServerErrors(
+          result.errors.length > 0 ? result.errors : ['Package creation failed.'],
+          CREATE_PACKAGE_SERVER_FIELDS,
+        )
+        setServerFieldErrors(fieldErrors)
+        showItemActionError(otherMessages.join(' '))
+        focusFirstDrawerError()
         return
       }
 
@@ -1457,7 +1535,7 @@ function ProvincialApplicationItemsPanel({
         await onDetailChanged()
         await loadApplicationScaleSummary()
         await loadPackageItems(nextPackageNumber)
-        showItemActionResult('success', `Package ${nextPackageNumber} created.`)
+        onActionResult({ kind: 'success', title: PACKAGE_SAVED_TITLE, message: '' })
       } catch {
         showItemActionResult(
           'warning',
@@ -1466,6 +1544,7 @@ function ProvincialApplicationItemsPanel({
       }
     } catch {
       showItemActionError('Unable to create package.')
+      focusFirstDrawerError()
     } finally {
       setIsSavingPackage(false)
     }
@@ -1519,24 +1598,26 @@ function ProvincialApplicationItemsPanel({
   }
 
   const onAddScale = async () => {
-    if (!canAddScalesWithReferenceOptions || !packageDataLoaded || !selectedPackageNumber) {
+    if (!canSubmitScale) {
       return
     }
 
+    setServerFieldErrors({})
     setScaleActionErrorMessage('')
-    setScaleForm((current) => ({ ...current, volume: scaleVolumeForSubmission }))
+    if (!baseReferenceOptionsAvailable || !packageDataLoaded || !selectedPackageNumber) {
+      showItemActionError(
+        !baseReferenceOptionsAvailable
+          ? baseReferenceOptionsLoading
+            ? 'Loading authoritative item options…'
+            : referenceOptionsUnavailableMessage
+          : packageLoadWarning || 'Selected package data unavailable',
+      )
+      focusFirstDrawerError()
+      return
+    }
     if (hasScaleValidationError) {
-      const message =
-        firstItemError(
-          'scaleTimberMark',
-          'scaleSpeciesCode',
-          'scaleGradeCode',
-          'scalePieces',
-          'scaleVolume',
-        ) ?? 'Please fix validation errors before adding the scale.'
       setShowScaleValidationErrors(true)
-      showItemActionError(message)
-      setScaleActionErrorMessage(message)
+      focusFirstDrawerError()
       return
     }
 
@@ -1551,12 +1632,16 @@ function ProvincialApplicationItemsPanel({
         speciesCode: scaleForm.speciesCode,
         applicationNumber,
         pieces: scaleForm.pieces,
-        volume: scaleVolumeForSubmission,
+        volume: scaleForm.volume,
       })
       if (!result.valid || !result.result) {
-        const message = result.errors.join(' ') || 'Scale creation failed.'
-        showItemActionError(message)
-        setScaleActionErrorMessage(message)
+        const { fieldErrors, otherMessages } = drawerServerErrors(
+          result.errors.length > 0 ? result.errors : ['Scale creation failed.'],
+          SCALE_SERVER_FIELDS,
+        )
+        setServerFieldErrors(fieldErrors)
+        showItemActionError(otherMessages.join(' '))
+        focusFirstDrawerError()
         return
       }
 
@@ -1564,12 +1649,11 @@ function ProvincialApplicationItemsPanel({
       resetScaleDraft()
       setActiveDrawer(null)
       setIsEditingItems(false)
-      setScaleLookupResult('')
       try {
         await onDetailChanged()
         await loadApplicationScaleSummary()
         await loadPackageItems(selectedPackageNumber)
-        showItemActionResult('success', `Scale ${result.result.id} added.`)
+        onActionResult({ kind: 'success', title: SCALE_SAVED_TITLE, message: '' })
       } catch (refreshError) {
         console.error(refreshError)
         showItemActionResult(
@@ -1580,6 +1664,7 @@ function ProvincialApplicationItemsPanel({
     } catch {
       showItemActionError('Unable to add scale.')
       setScaleActionErrorMessage('Unable to add scale.')
+      focusFirstDrawerError()
     } finally {
       setIsSavingScale(false)
     }
@@ -1599,7 +1684,6 @@ function ProvincialApplicationItemsPanel({
         throw new Error('Scale delete failed. Refresh and try again.')
       }
       setScales((current) => current.filter((item) => item.id !== row.id))
-      setScaleLookupResult('')
       try {
         await onDetailChanged()
         await loadApplicationScaleSummary()
@@ -1620,50 +1704,7 @@ function ProvincialApplicationItemsPanel({
     }
   }
 
-  const onLookupScale = async () => {
-    const lookupValue = scaleLookupId.trim()
-    if (!lookupValue) {
-      return
-    }
-    setItemsErrorMessage('')
-    onActionResult(null)
-    setScaleLookupResult('')
-
-    const normalizedLookupValue = lookupValue.toUpperCase()
-    const matchingTimberMarkRows = scales.filter(
-      (row) => row.timberMark.trim().toUpperCase() === normalizedLookupValue,
-    )
-    if (matchingTimberMarkRows.length > 0) {
-      setScaleLookupResult(
-        `Found ${matchingTimberMarkRows.length} scale row${
-          matchingTimberMarkRows.length === 1 ? '' : 's'
-        } for timber mark ${lookupValue}: ${matchingTimberMarkRows
-          .map(formatScaleLookupResult)
-          .join('; ')}`,
-      )
-      return
-    }
-
-    try {
-      const result = await fetchApplicationScaleDetails(lookupValue)
-      if (!result.success) {
-        setScaleLookupResult('Scale not found.')
-        return
-      }
-      setScaleLookupResult(formatScaleLookupResult(result))
-    } catch {
-      showItemActionError('Unable to look up scale.')
-    }
-  }
-
   const selectedSpeciesOptions = speciesDraft.map((species) => {
-    const known = speciesOptions.find((option) => option.code === species)
-    return {
-      code: species,
-      description: known?.description ?? species,
-    }
-  })
-  const selectedCreateSpeciesOptions = createSpeciesDraft.map((species) => {
     const known = speciesOptions.find((option) => option.code === species)
     return {
       code: species,
@@ -1672,14 +1713,6 @@ function ProvincialApplicationItemsPanel({
   })
   const scaleSpeciesOptions =
     selectedSpeciesOptions.length > 0 ? selectedSpeciesOptions : speciesOptions
-  const selectedPackageStatusOptions = optionsWithCurrentCode(
-    packageStatusOptions,
-    packageForm.status,
-  )
-  const createPackageStatusOptions = optionsWithCurrentCode(
-    packageStatusOptions,
-    createPackageForm.status,
-  )
   const selectedPackageProductTypeOptions = optionsWithCurrentCode(
     productTypeOptions,
     packageForm.productType,
@@ -1687,14 +1720,6 @@ function ProvincialApplicationItemsPanel({
   const selectedPackageGrowthTypeOptions = optionsWithCurrentCode(
     growthTypeOptions,
     packageForm.ageClass,
-  )
-  const createPackageProductTypeOptions = optionsWithCurrentCode(
-    productTypeOptions,
-    createPackageForm.productType,
-  )
-  const createPackageGrowthTypeOptions = optionsWithCurrentCode(
-    growthTypeOptions,
-    createPackageForm.ageClass,
   )
   return (
     <div
@@ -1773,9 +1798,7 @@ function ProvincialApplicationItemsPanel({
             onCloseButtonClick={() => setItemsErrorMessage('')}
           />
         )}
-        {!!actionResult && (
-          <ActionResultNotification result={actionResult} onClose={() => onActionResult(null)} />
-        )}
+        {actionResultNotification('items')}
       </section>
 
       <div className="application-items-grid">
@@ -1855,6 +1878,7 @@ function ProvincialApplicationItemsPanel({
                 onChange={requestPackageSelection}
               />
             </div>
+            {actionResultNotification('package')}
             <dl className="detail-field-grid application-items-summary">
               {[
                 ['Package number', selectedPackageNumber || 'None selected'],
@@ -1868,7 +1892,6 @@ function ProvincialApplicationItemsPanel({
                 ],
                 ['Average length (m)', packageForm.averageLength],
                 ['Average top diameter (rads)', packageForm.averageDiameter],
-                ['Status', optionTextForCode(selectedPackageStatusOptions, packageForm.status)],
                 [
                   'Product type',
                   optionTextForCode(selectedPackageProductTypeOptions, packageForm.productType),
@@ -1877,7 +1900,6 @@ function ProvincialApplicationItemsPanel({
                   'Age class',
                   optionTextForCode(selectedPackageGrowthTypeOptions, packageForm.ageClass),
                 ],
-                ['Reprocessed', packageForm.reprocessed === 'Y' ? 'Yes' : 'No'],
                 ['End use', packageSpeciesUnavailable ? 'Not available' : packageForm.endUseCode],
                 ['Comments', packageForm.comments],
               ].map(([label, value]) => (
@@ -1970,19 +1992,6 @@ function ProvincialApplicationItemsPanel({
                       onChange={(event) => setPackageField('averageDiameter', event.target.value)}
                     />
                     <SearchableSelect
-                      id="applicationItemsPackageStatus"
-                      labelText={requiredLabel('Status code')}
-                      required
-                      value={packageForm.status}
-                      disabled={!canSaveSelectedPackage}
-                      invalid={!!packageFieldError('packageStatus')}
-                      invalidText={packageFieldError('packageStatus')}
-                      placeholder="Select package status"
-                      options={selectedPackageStatusOptions.map(toSearchableOption)}
-                      onBlur={() => markItemFieldTouched('packageStatus')}
-                      onChange={(value) => setPackageField('status', value)}
-                    />
-                    <SearchableSelect
                       id="applicationItemsPackageProductType"
                       labelText={requiredLabel('Product type')}
                       required
@@ -2019,18 +2028,6 @@ function ProvincialApplicationItemsPanel({
                       options={selectedPackageGrowthTypeOptions.map(toSearchableOption)}
                       onBlur={() => markItemFieldTouched('packageAgeClass')}
                       onChange={(value) => setPackageField('ageClass', value)}
-                    />
-                    <SearchableSelect
-                      id="applicationItemsPackageReprocessed"
-                      labelText="Reprocessed"
-                      value={packageForm.reprocessed}
-                      disabled={!canSaveSelectedPackage}
-                      placeholder="Select reprocessed status"
-                      options={[
-                        { value: 'N', label: 'No' },
-                        { value: 'Y', label: 'Yes' },
-                      ]}
-                      onChange={(value) => setPackageField('reprocessed', value)}
                     />
                     <SearchableSelect
                       id="applicationItemsPackageEndUse"
@@ -2211,145 +2208,77 @@ function ProvincialApplicationItemsPanel({
                 onClick: requestDrawerClose,
               },
               {
-                label: isSavingPackage ? 'Saving…' : 'Save package',
+                label: isSavingPackage ? 'Saving package' : 'Save package',
                 kind: 'primary',
                 disabled: !canCreatePackages,
+                renderIcon: isSavingPackage ? PendingIcon : undefined,
                 onClick: () => void onCreatePackage(),
               },
             ]}
           >
-            <div className="application-items-drawer-content">
+            <div className="application-items-panel-form" ref={drawerFormRef}>
               <RequiredFieldsLegend />
               {!!itemsErrorMessage && (
-                <InlineNotification
-                  kind="error"
-                  title="Package creation failed"
-                  subtitle={itemsErrorMessage}
-                  lowContrast
-                  hideCloseButton
-                />
+                <div tabIndex={-1} data-drawer-error>
+                  <InlineNotification
+                    kind="error"
+                    title="Package creation failed"
+                    subtitle={itemsErrorMessage}
+                    lowContrast
+                    hideCloseButton
+                  />
+                </div>
               )}
-              <div className="application-items-form">
-                <TextInput
-                  id="applicationItemsCreatePackageNumber"
-                  labelText={requiredLabel('Package number')}
-                  aria-required="true"
-                  value={createPackageForm.packageNumber}
-                  disabled={!canCreatePackages}
-                  invalid={!!createPackageFieldError('createPackageNumber')}
-                  invalidText={createPackageFieldError('createPackageNumber')}
-                  onBlur={() => markItemFieldTouched('createPackageNumber')}
-                  onChange={(event) => setCreatePackageField('packageNumber', event.target.value)}
-                />
-                <TextInput
-                  id="applicationItemsCreatePackageVolume"
-                  labelText={requiredLabel('Package volume (m³)')}
-                  aria-required="true"
-                  value={createPackageForm.volume}
-                  disabled={!canCreatePackages}
-                  invalid={!!createPackageFieldError('createPackageVolume')}
-                  invalidText={createPackageFieldError('createPackageVolume')}
-                  onBlur={() => markItemFieldTouched('createPackageVolume')}
-                  onChange={(event) => setCreatePackageField('volume', event.target.value)}
-                />
-                <TextInput
-                  id="applicationItemsCreatePackageLength"
-                  labelText={requiredLabel('Average length (m)')}
-                  aria-required="true"
-                  value={createPackageForm.averageLength}
-                  disabled={!canCreatePackages}
-                  invalid={!!createPackageFieldError('createPackageAverageLength')}
-                  invalidText={createPackageFieldError('createPackageAverageLength')}
-                  onBlur={() => markItemFieldTouched('createPackageAverageLength')}
-                  onChange={(event) => setCreatePackageField('averageLength', event.target.value)}
-                />
-                <TextInput
-                  id="applicationItemsCreatePackageDiameter"
-                  labelText={requiredLabel('Average top diameter (rads)')}
-                  aria-required="true"
-                  value={createPackageForm.averageDiameter}
-                  disabled={!canCreatePackages}
-                  invalid={!!createPackageFieldError('createPackageAverageDiameter')}
-                  invalidText={createPackageFieldError('createPackageAverageDiameter')}
-                  onBlur={() => markItemFieldTouched('createPackageAverageDiameter')}
-                  onChange={(event) => setCreatePackageField('averageDiameter', event.target.value)}
-                />
-                <SearchableSelect
-                  id="applicationItemsCreatePackageStatus"
-                  labelText={requiredLabel('Status code')}
-                  required
-                  value={createPackageForm.status}
-                  disabled={!canCreatePackages}
-                  invalid={!!createPackageFieldError('createPackageStatus')}
-                  invalidText={createPackageFieldError('createPackageStatus')}
-                  placeholder="Select package status"
-                  options={createPackageStatusOptions.map(toSearchableOption)}
-                  onBlur={() => markItemFieldTouched('createPackageStatus')}
-                  onChange={(value) => setCreatePackageField('status', value)}
-                />
-                <SearchableSelect
-                  id="applicationItemsCreatePackageProductType"
-                  labelText={requiredLabel('Product type')}
-                  required
-                  value={createPackageForm.productType}
-                  disabled={!canCreatePackages}
-                  invalid={!!createPackageFieldError('createPackageProductType')}
-                  invalidText={createPackageFieldError('createPackageProductType')}
-                  placeholder="Select product type"
-                  options={createPackageProductTypeOptions.map(toSearchableOption)}
-                  onBlur={() => markItemFieldTouched('createPackageProductType')}
-                  onChange={(value) => {
-                    setCreatePackageDraftTouched(true)
-                    setCreatePackageForm((current) => ({
-                      ...current,
-                      productType: value,
-                      ageClass: packageRequiresAgeClass(value) ? current.ageClass : '',
-                    }))
-                  }}
-                />
-                <SearchableSelect
-                  id="applicationItemsCreatePackageAgeClass"
-                  labelText={requiredLabel(
-                    'Age class',
-                    packageRequiresAgeClass(createPackageForm.productType),
-                  )}
-                  required={packageRequiresAgeClass(createPackageForm.productType)}
-                  value={createPackageForm.ageClass}
-                  disabled={
-                    !canCreatePackages || !packageRequiresAgeClass(createPackageForm.productType)
-                  }
-                  invalid={!!createPackageFieldError('createPackageAgeClass')}
-                  invalidText={createPackageFieldError('createPackageAgeClass')}
-                  placeholder="Select age class"
-                  options={createPackageGrowthTypeOptions.map(toSearchableOption)}
-                  onBlur={() => markItemFieldTouched('createPackageAgeClass')}
-                  onChange={(value) => setCreatePackageField('ageClass', value)}
-                />
-                <SearchableSelect
-                  id="applicationItemsCreatePackageEndUse"
-                  labelText="End use"
-                  value={createPackageForm.endUseCode}
-                  disabled={!canCreatePackages || createEndUseAvailability !== 'available'}
-                  placeholder={
-                    createEndUseAvailability === 'loading'
-                      ? 'Loading end uses'
-                      : createSpeciesDraft.length === 0
-                        ? 'Select species first'
-                        : createEndUseAvailability === 'available'
-                          ? 'Select end use'
-                          : 'End uses unavailable'
-                  }
-                  options={optionsWithCurrentCode(
-                    createEndUseOptions,
-                    createPackageForm.endUseCode,
-                  ).map(toSearchableOption)}
-                  onChange={(value) => setCreatePackageField('endUseCode', value)}
-                />
-              </div>
+              <TextInput
+                id="applicationItemsCreatePackageNumber"
+                labelText={requiredLabel('Package number')}
+                aria-required="true"
+                value={createPackageForm.packageNumber}
+                disabled={!canCreatePackages}
+                invalid={!!createPackageFieldError('createPackageNumber')}
+                invalidText={createPackageFieldError('createPackageNumber')}
+                onBlur={() => markItemFieldTouched('createPackageNumber')}
+                onChange={(event) => setCreatePackageField('packageNumber', event.target.value)}
+              />
+              <TextInput
+                id="applicationItemsCreatePackageVolume"
+                labelText={requiredLabel('Volume (m³)')}
+                aria-required="true"
+                helperText="Must be less than or equal to application request volume. Must be greater than 0"
+                value={createPackageForm.volume}
+                disabled={!canCreatePackages}
+                invalid={!!createPackageFieldError('createPackageVolume')}
+                invalidText={createPackageFieldError('createPackageVolume')}
+                onBlur={() => markItemFieldTouched('createPackageVolume')}
+                onChange={(event) => setCreatePackageField('volume', event.target.value)}
+              />
+              <TextInput
+                id="applicationItemsCreatePackageLength"
+                labelText={requiredLabel('Average length (m)')}
+                aria-required="true"
+                helperText="Must be greater than 0"
+                value={createPackageForm.averageLength}
+                disabled={!canCreatePackages}
+                invalid={!!createPackageFieldError('createPackageAverageLength')}
+                invalidText={createPackageFieldError('createPackageAverageLength')}
+                onBlur={() => markItemFieldTouched('createPackageAverageLength')}
+                onChange={(event) => setCreatePackageField('averageLength', event.target.value)}
+              />
+              <TextInput
+                id="applicationItemsCreatePackageDiameter"
+                labelText={requiredLabel('Average top diameter (rads)')}
+                aria-required="true"
+                helperText="Must be greater than 0"
+                value={createPackageForm.averageDiameter}
+                disabled={!canCreatePackages}
+                invalid={!!createPackageFieldError('createPackageAverageDiameter')}
+                invalidText={createPackageFieldError('createPackageAverageDiameter')}
+                onBlur={() => markItemFieldTouched('createPackageAverageDiameter')}
+                onChange={(event) => setCreatePackageField('averageDiameter', event.target.value)}
+              />
               <TextArea
                 id="applicationItemsCreatePackageComments"
                 labelText="Comments"
-                helperText="Use unaccented letters, numbers, spaces, or standard punctuation."
                 enableCounter
                 maxCount={PACKAGE_COMMENTS_MAX_LENGTH}
                 maxLength={PACKAGE_COMMENTS_MAX_LENGTH}
@@ -2360,60 +2289,6 @@ function ProvincialApplicationItemsPanel({
                 onBlur={() => markItemFieldTouched('createPackageComments')}
                 onChange={(event) => setCreatePackageField('comments', event.target.value)}
               />
-              <div className="application-items-inline-form">
-                <SearchableSelect
-                  id="applicationItemsCreateSpeciesToAdd"
-                  labelText="Create package species"
-                  value={createSpeciesToAdd}
-                  disabled={!canCreatePackages}
-                  placeholder="Select species"
-                  options={createRemainingSpeciesOptions
-                    .filter((option) => !createSpeciesDraft.includes(option.code))
-                    .map(toSearchableOption)}
-                  onChange={setCreateSpeciesToAdd}
-                />
-                <Button
-                  kind="tertiary"
-                  size="md"
-                  aria-label="Add species to new package"
-                  disabled={!canCreatePackages || !createSpeciesToAdd}
-                  onClick={onAddCreateSpecies}
-                >
-                  Add Species
-                </Button>
-              </div>
-              <div className="application-items-table-scroll">
-                <Table size="md" useZebraStyles>
-                  <TableHead>
-                    <TableRow>
-                      <TableHeader>Species</TableHeader>
-                      <TableHeader>Action</TableHeader>
-                    </TableRow>
-                  </TableHead>
-                  <TableBody>
-                    {selectedCreateSpeciesOptions.map((row) => (
-                      <TableRow key={row.code}>
-                        <TableCell>{asOptionText(row)}</TableCell>
-                        <TableCell>
-                          <Button
-                            kind="ghost"
-                            size="md"
-                            disabled={!canCreatePackages}
-                            onClick={() => onRemoveCreateSpecies(row.code)}
-                          >
-                            Remove
-                          </Button>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                    {createSpeciesDraft.length === 0 && (
-                      <TableRow>
-                        <TableCell colSpan={2}>No species selected for the new package.</TableCell>
-                      </TableRow>
-                    )}
-                  </TableBody>
-                </Table>
-              </div>
             </div>
           </DetailSidePanel>
         )}
@@ -2445,6 +2320,7 @@ function ProvincialApplicationItemsPanel({
                 </Button>
               )}
             </div>
+            {actionResultNotification('scales')}
             <div className="application-items-scale-totals">
               <span>
                 Total pieces:{' '}
@@ -2482,121 +2358,106 @@ function ProvincialApplicationItemsPanel({
                     onClick: requestDrawerClose,
                   },
                   {
-                    label: isSavingScale ? 'Saving…' : 'Save scale',
+                    label: isSavingScale ? 'Saving scale' : 'Save scale',
                     kind: 'primary',
-                    disabled: !canAddScalesWithReferenceOptions || !packageDataLoaded,
+                    disabled: !canSubmitScale,
+                    renderIcon: isSavingScale ? PendingIcon : undefined,
                     onClick: () => void onAddScale(),
                   },
                 ]}
               >
-                <div className="application-items-drawer-content">
+                <div className="application-items-panel-form" ref={drawerFormRef}>
                   <RequiredFieldsLegend />
-                  <div className="application-items-form">
+                  {!!scaleActionErrorMessage && (
+                    <div tabIndex={-1} data-drawer-error>
+                      <InlineNotification
+                        kind="error"
+                        title="Scale creation failed"
+                        subtitle={scaleActionErrorMessage}
+                        lowContrast
+                        hideCloseButton
+                      />
+                    </div>
+                  )}
+                  <div className="application-items-panel-form__pair">
                     <TextInput
                       id="applicationItemsScaleTimberMark"
                       labelText={requiredLabel('Timber mark')}
                       aria-required="true"
                       value={scaleForm.timberMark}
-                      disabled={
-                        !canAddScalesWithReferenceOptions ||
-                        !packageDataLoaded ||
-                        !selectedPackageNumber
-                      }
+                      disabled={scaleFieldsDisabled}
                       invalid={!!scaleFieldError('scaleTimberMark')}
                       invalidText={scaleFieldError('scaleTimberMark')}
                       onBlur={() => markItemFieldTouched('scaleTimberMark')}
                       onChange={(event) => setScaleField('timberMark', event.target.value)}
-                    />
-                    <SearchableSelect
-                      id="applicationItemsScaleSpecies"
-                      labelText={requiredLabel('Species')}
-                      required
-                      value={scaleForm.speciesCode}
-                      disabled={
-                        !canAddScalesWithReferenceOptions ||
-                        !packageDataLoaded ||
-                        !selectedPackageNumber
-                      }
-                      invalid={!!scaleFieldError('scaleSpeciesCode')}
-                      invalidText={scaleFieldError('scaleSpeciesCode')}
-                      placeholder="Select species"
-                      options={scaleSpeciesOptions.map(toSearchableOption)}
-                      onBlur={() => markItemFieldTouched('scaleSpeciesCode')}
-                      onChange={(value) => setScaleField('speciesCode', value)}
-                    />
-                    <SearchableSelect
-                      id="applicationItemsScaleGrade"
-                      labelText={requiredLabel('Grade')}
-                      required
-                      value={scaleForm.gradeCode}
-                      disabled={
-                        !canAddScalesWithReferenceOptions ||
-                        !packageDataLoaded ||
-                        !selectedPackageNumber
-                      }
-                      invalid={!!scaleFieldError('scaleGradeCode')}
-                      invalidText={scaleFieldError('scaleGradeCode')}
-                      placeholder="Select grade"
-                      options={gradeOptions.map(toSearchableOption)}
-                      onBlur={() => markItemFieldTouched('scaleGradeCode')}
-                      onChange={(value) => setScaleField('gradeCode', value)}
                     />
                     <TextInput
                       id="applicationItemsScalePieces"
                       labelText={requiredLabel('Pieces')}
                       aria-required="true"
                       value={scaleForm.pieces}
-                      disabled={
-                        !canAddScalesWithReferenceOptions ||
-                        !packageDataLoaded ||
-                        !selectedPackageNumber
-                      }
+                      disabled={scaleFieldsDisabled}
                       invalid={!!scaleFieldError('scalePieces')}
                       invalidText={scaleFieldError('scalePieces')}
                       onBlur={() => markItemFieldTouched('scalePieces')}
                       onChange={(event) => setScaleField('pieces', event.target.value)}
                     />
-                    <TextInput
-                      id="applicationItemsScaleVolume"
-                      labelText={requiredLabel('Scale volume (m³)')}
-                      aria-required="true"
-                      value={scaleForm.volume}
-                      disabled={
-                        !canAddScalesWithReferenceOptions ||
-                        !packageDataLoaded ||
-                        !selectedPackageNumber
-                      }
-                      invalid={!!scaleFieldError('scaleVolume')}
-                      invalidText={scaleFieldError('scaleVolume')}
-                      onBlur={() => markItemFieldTouched('scaleVolume')}
-                      onChange={(event) => setScaleField('volume', event.target.value)}
-                    />
                   </div>
-                  {!!scaleActionErrorMessage && (
-                    <p className="application-items-inline-error" role="alert">
-                      {scaleActionErrorMessage}
-                    </p>
-                  )}
-                  <div className="application-items-inline-form">
-                    <TextInput
-                      id="applicationItemsScaleLookup"
-                      labelText="Scale ID or timber mark"
-                      value={scaleLookupId}
-                      onChange={(event) => {
-                        setScaleLookupId(event.target.value)
-                        setScaleLookupResult('')
+                  <div className="application-items-panel-form__pair">
+                    <Dropdown<ApplicationCodeOption | null>
+                      id="applicationItemsScaleSpecies"
+                      ref={markRequired}
+                      titleText={requiredLabel('Species')}
+                      label=""
+                      items={scaleSpeciesOptions}
+                      itemToString={optionName}
+                      selectedItem={findOption(scaleSpeciesOptions, scaleForm.speciesCode)}
+                      disabled={scaleFieldsDisabled}
+                      invalid={!!scaleFieldError('scaleSpeciesCode')}
+                      invalidText={scaleFieldError('scaleSpeciesCode')}
+                      onChange={({ selectedItem }) => {
+                        const speciesCode = selectedItem?.code ?? ''
+                        if (speciesCode === scaleForm.speciesCode) return
+                        markItemFieldTouched('scaleSpeciesCode')
+                        // Grades depend on the species, so a new species starts with no grade.
+                        setScaleField('speciesCode', speciesCode)
+                        setScaleField('gradeCode', '')
                       }}
                     />
-                    <Button
-                      type="button"
-                      kind="ghost"
-                      size="md"
-                      onClick={() => void onLookupScale()}
-                    >
-                      Lookup Scale
-                    </Button>
+                    <Dropdown<ApplicationCodeOption | null>
+                      id="applicationItemsScaleGrade"
+                      ref={markRequired}
+                      titleText={requiredLabel('Grade')}
+                      label=""
+                      items={gradeOptions}
+                      itemToString={optionName}
+                      selectedItem={findOption(gradeOptions, scaleForm.gradeCode)}
+                      disabled={scaleFieldsDisabled || !scaleForm.speciesCode}
+                      invalid={!!scaleFieldError('scaleGradeCode')}
+                      invalidText={scaleFieldError('scaleGradeCode')}
+                      helperText={scaleForm.speciesCode ? undefined : GRADE_HELPER_TEXT}
+                      onChange={({ selectedItem }) => {
+                        markItemFieldTouched('scaleGradeCode')
+                        setScaleField('gradeCode', selectedItem?.code ?? '')
+                      }}
+                    />
                   </div>
-                  {scaleLookupResult && <p className="detail-field-value">{scaleLookupResult}</p>}
+                  <TextInput
+                    id="applicationItemsScaleVolume"
+                    labelText={requiredLabel('Volume (m³)')}
+                    aria-required="true"
+                    helperText={
+                      selectedPackageRemainingScaleVolume === null
+                        ? undefined
+                        : scaleVolumeLimitText(selectedPackageRemainingScaleVolume)
+                    }
+                    value={scaleForm.volume}
+                    disabled={scaleFieldsDisabled}
+                    invalid={!!scaleFieldError('scaleVolume')}
+                    invalidText={scaleFieldError('scaleVolume')}
+                    onBlur={() => markItemFieldTouched('scaleVolume')}
+                    onChange={(event) => setScaleField('volume', event.target.value)}
+                  />
                 </div>
               </DetailSidePanel>
             )}
@@ -2721,11 +2582,13 @@ function ProvincialApplicationItemsPanel({
       />
       <ConfirmationModal
         open={pendingDrawerClose}
+        launcherButtonRef={drawerDiscardLauncherRef}
         title="Discard unsaved changes?"
         description="Your changes to this package or scale will be lost."
         confirmLabel="Discard changes"
         danger
         onConfirm={() => {
+          drawerDiscardLauncherRef.current = null
           setPendingDrawerClose(false)
           cancelItemEditing()
         }}

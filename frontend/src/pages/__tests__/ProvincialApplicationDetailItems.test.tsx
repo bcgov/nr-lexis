@@ -37,7 +37,6 @@ import {
   mockedFetchApplicationPackageStatusCodes,
   mockedFetchApplicationPermits,
   mockedFetchApplicationRemainingSpecies,
-  mockedFetchApplicationScaleDetails,
   mockedFetchApplicationSummarySnapshot,
   mockedFetchApplicationUniqueScales,
   mockedFetchProvincialApplicationDetail,
@@ -60,6 +59,44 @@ const openCreatePackageControls = async () => {
   await userEvent.click(await screen.findByRole('button', { name: 'Create package' }))
   const packageNumber = await screen.findByLabelText('Package number')
   return within(packageNumber.closest('.application-items-drawer') as HTMLElement)
+}
+
+const renderApplicationItems = () =>
+  render(
+    <MemoryRouter initialEntries={['/provincial/application/321']}>
+      <Routes>
+        <Route
+          path="/provincial/application/:applicationNumber"
+          element={<ProvincialApplicationDetailsPage />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+const fillNewPackage = (controls: ReturnType<typeof within>, packageNumber: string) => {
+  fireEvent.change(controls.getByLabelText('Package number'), { target: { value: packageNumber } })
+  fireEvent.change(controls.getByLabelText('Volume (m³)'), { target: { value: '25.0' } })
+  fireEvent.change(controls.getByLabelText('Average length (m)'), { target: { value: '12.0' } })
+  fireEvent.change(controls.getByLabelText('Average top diameter (rads)'), {
+    target: { value: '24.0' },
+  })
+}
+
+const chooseDropdownOption = async (dropdown: HTMLElement, optionName: string) => {
+  await waitFor(() => expect(dropdown).toBeEnabled())
+  await userEvent.click(dropdown)
+  await userEvent.click(await screen.findByRole('option', { name: optionName }))
+}
+
+const fillNewScale = async (
+  controls: ReturnType<typeof within>,
+  { pieces = '2', volume = '8.0' } = {},
+) => {
+  fireEvent.change(controls.getByLabelText('Timber mark'), { target: { value: 'TM002' } })
+  await chooseDropdownOption(controls.getByRole('combobox', { name: 'Species' }), 'Douglas-fir')
+  await chooseDropdownOption(controls.getByRole('combobox', { name: 'Grade' }), 'Sawlog')
+  fireEvent.change(controls.getByLabelText('Pieces'), { target: { value: pieces } })
+  fireEvent.change(controls.getByLabelText('Volume (m³)'), { target: { value: volume } })
 }
 
 const openScaleControls = async () => {
@@ -638,6 +675,27 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
   })
 
+  it('returns focus to the package Cancel action when keeping the draft', async () => {
+    renderApplicationItems()
+    const drawer = await openCreatePackageControls()
+    const packageNumber = drawer.getByLabelText('Package number')
+    fireEvent.change(packageNumber, { target: { value: 'KEEP-PACKAGE' } })
+    const cancel = drawer.getByRole('button', { name: 'Cancel' })
+    await userEvent.click(cancel)
+    const dialog = await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(cancel).toHaveFocus())
+    expect(packageNumber).toHaveValue('KEEP-PACKAGE')
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+    await userEvent.click(cancel)
+    const discard = await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })
+    await userEvent.click(within(discard).getByRole('button', { name: 'Discard changes' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Create package' })).toHaveFocus(),
+    )
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+  })
+
   it.each([
     { launcher: 'Edit package', field: 'Package number' },
     { launcher: 'Create package', field: 'Package number' },
@@ -762,30 +820,13 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     const drawer = await openCreatePackageControls()
-    fireEvent.change(drawer.getByLabelText('Package number'), { target: { value: 'PKG-NEW' } })
-    fireEvent.change(drawer.getByLabelText('Package volume (m³)'), { target: { value: '25.0' } })
-    fireEvent.change(drawer.getByLabelText('Average length (m)'), { target: { value: '12.0' } })
-    fireEvent.change(drawer.getByLabelText('Average top diameter (rads)'), {
-      target: { value: '24.0' },
-    })
-    await chooseComboBoxOption(
-      drawer.getByRole('combobox', { name: 'Status code' }),
-      'ACT - Active',
-    )
-    await chooseComboBoxOption(
-      drawer.getByRole('combobox', { name: 'Product type' }),
-      'H - Harvested Timber',
-    )
-    await chooseComboBoxOption(
-      drawer.getByRole('combobox', { name: 'Age class' }),
-      'S - Second Growth',
-    )
-    await waitFor(() => expect(drawer.getByRole('combobox', { name: 'End use' })).toBeEnabled())
+    fillNewPackage(drawer, 'PKG-NEW')
     const save = drawer.getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
     await userEvent.click(save)
     await waitFor(() => expect(mockedAddApplicationPackage).toHaveBeenCalledTimes(1))
-    expect(drawer.getByRole('button', { name: 'Saving…' })).toBeDisabled()
-    await userEvent.click(drawer.getByRole('button', { name: 'Saving…' }))
+    expect(drawer.getByRole('button', { name: 'Saving package' })).toBeDisabled()
+    await userEvent.click(drawer.getByRole('button', { name: 'Saving package' }))
     expect(mockedAddApplicationPackage).toHaveBeenCalledTimes(1)
 
     await act(async () => {
@@ -821,19 +862,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     const drawer = await openScaleControls()
-    fireEvent.change(drawer.getByLabelText('Timber mark'), { target: { value: 'TM002' } })
-    await chooseComboBoxOption(
-      drawer.getByRole('combobox', { name: 'Species' }),
-      'FI - Douglas-fir',
-    )
-    await chooseComboBoxOption(drawer.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
-    fireEvent.change(drawer.getByLabelText('Pieces'), { target: { value: '2' } })
-    fireEvent.change(drawer.getByLabelText('Scale volume (m³)'), { target: { value: '8.0' } })
+    await fillNewScale(drawer)
     const save = drawer.getByRole('button', { name: 'Save scale' })
     await userEvent.click(save)
     await waitFor(() => expect(mockedAddApplicationScaleToPackage).toHaveBeenCalledTimes(1))
-    expect(drawer.getByRole('button', { name: 'Saving…' })).toBeDisabled()
-    await userEvent.click(drawer.getByRole('button', { name: 'Saving…' }))
+    expect(drawer.getByRole('button', { name: 'Saving scale' })).toBeDisabled()
+    await userEvent.click(drawer.getByRole('button', { name: 'Saving scale' }))
     expect(mockedAddApplicationScaleToPackage).toHaveBeenCalledTimes(1)
 
     await act(async () => {
@@ -1200,19 +1234,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const packageSpecies = screen.getAllByRole('combobox', { name: 'Species' })[0]
     await userEvent.click(packageSpecies)
     expect(screen.queryByRole('option', { name: 'CE - Cedar' })).not.toBeInTheDocument()
-
-    await userEvent.click(
-      within(document.querySelector('.application-items-drawer') as HTMLElement).getByRole(
-        'button',
-        { name: 'Cancel' },
-      ),
-    )
-    const createPackageControls = await openCreatePackageControls()
-    const createSpecies = createPackageControls.getByRole('combobox', {
-      name: 'Create package species',
-    })
-    await userEvent.click(createSpecies)
-    expect(screen.queryByRole('option', { name: 'CE - Cedar' })).not.toBeInTheDocument()
   })
 
   it('edits package species and saves application item details', async () => {
@@ -1399,16 +1420,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByLabelText('Package comments')).toHaveValue(historicalComment)
   })
 
-  it('keeps end use authoritative while dependent options are loading', async () => {
-    let resolveCreateEndUseOptions: ((options: ApplicationCodeOption[]) => void) | undefined
-    mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation((_region, speciesCodes) => {
-      if (speciesCodes.includes('CE')) {
-        return new Promise((resolve) => {
-          resolveCreateEndUseOptions = resolve
-        })
-      }
-      return Promise.resolve([{ code: 'LU', description: 'Lumber' }])
-    })
+  it("waits for the application's end uses before creating a package", async () => {
+    const pendingEndUseLookups: Array<(options: ApplicationCodeOption[]) => void> = []
+    mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation(
+      () => new Promise((resolve) => pendingEndUseLookups.push(resolve)),
+    )
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -1421,197 +1437,79 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await selectApplicationDetailTab('Scale')
-    await userEvent.click(await screen.findByRole('button', { name: 'Create package' }))
-    const packageNumber = await screen.findByLabelText('Package number')
-    const drawer = packageNumber.closest('.application-items-drawer') as HTMLElement
-    const createPackageControls = within(drawer)
-    const createSpecies = createPackageControls.getByRole('combobox', {
-      name: 'Create package species',
-    })
-    await waitFor(() => expect(createSpecies).toBeEnabled())
-    await chooseComboBoxOption(createSpecies, 'CE - Cedar')
-    await userEvent.click(
-      createPackageControls.getByRole('button', {
-        name: 'Add species to new package',
-      }),
-    )
-
-    const endUse = createPackageControls.getByRole('combobox', {
-      name: 'End use',
-    })
-
+    const createPackageControls = await openCreatePackageControls()
+    const save = createPackageControls.getByRole('button', { name: 'Save package' })
     await waitFor(() => {
-      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI', 'CE'])
-      expect(endUse).toBeDisabled()
-      expect(createPackageControls.getByRole('button', { name: 'Save package' })).toBeDisabled()
+      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI'])
+      expect(save).toBeEnabled()
     })
-    expect(
-      createPackageControls.queryByRole('textbox', { name: 'End use' }),
-    ).not.toBeInTheDocument()
     expect(screen.getByText('Loading authoritative item options…')).toBeInTheDocument()
+    fillNewPackage(createPackageControls, 'PKG-DELAYED')
+    await userEvent.click(save)
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+    // The panel shows only the fields its saved state asks for.
+    for (const hidden of ['Status code', 'Product type', 'Age class', 'End use']) {
+      expect(createPackageControls.queryByRole('combobox', { name: hidden })).toBeNull()
+    }
 
+    // The application's own end use isn't valid for its species, so the first valid one is saved.
     await act(async () => {
-      resolveCreateEndUseOptions?.([
-        { code: 'PL', description: 'Pulp' },
-        { code: 'SL', description: 'Sawn logs' },
-      ])
+      pendingEndUseLookups.forEach((resolve) =>
+        resolve([
+          { code: 'PL', description: 'Pulp' },
+          { code: 'SL', description: 'Sawn logs' },
+        ]),
+      )
     })
+    await waitFor(() => expect(save).toBeEnabled())
 
-    await waitFor(() => {
-      expect(endUse).toHaveValue('PL - Pulp')
-      expect(endUse).toBeEnabled()
-      expect(createPackageControls.getByRole('button', { name: 'Save package' })).toBeEnabled()
-    })
-
-    await chooseComboBoxOption(endUse, 'SL - Sawn logs')
-    expect(endUse).toHaveValue('SL - Sawn logs')
-
-    fireEvent.change(createPackageControls.getByLabelText('Package number'), {
-      target: { value: 'PKG-DELAYED' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
-      target: { value: '25.0' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
-      target: { value: '12.0' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
-      target: { value: '24.0' },
-    })
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Status code' }),
-      'ACT - Active',
-    )
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Product type' }),
-      'H - Harvested Timber',
-    )
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Age class' }),
-      'S - Second Growth',
-    )
-    await userEvent.click(createPackageControls.getByRole('button', { name: 'Save package' }))
+    fillNewPackage(createPackageControls, 'PKG-DELAYED')
+    await userEvent.click(save)
 
     await waitFor(() => {
       expect(mockedAddApplicationPackage).toHaveBeenCalledWith(
         expect.objectContaining({
           packageNumber: 'PKG-DELAYED',
-          endUseCode: 'SL',
-          speciesCodes: ['FI', 'CE'],
+          endUseCode: 'PL',
+          speciesCodes: ['FI'],
         }),
       )
     })
   })
 
-  it.each(['failed', 'empty'])('recovers %s create End Use', async (lookupResult) => {
-    let createEndUseFailuresRemaining = 1
-    mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation((_region, speciesCodes) => {
-      if (speciesCodes.includes('CE')) {
-        if (createEndUseFailuresRemaining > 0) {
-          createEndUseFailuresRemaining -= 1
-          return lookupResult === 'empty'
-            ? Promise.resolve([])
-            : Promise.reject(new Error('Temporary create end use lookup failure'))
-        }
-        return Promise.resolve([{ code: 'SL', description: 'Sawn logs' }])
-      }
-      return Promise.resolve([{ code: 'LU', description: 'Lumber' }])
-    })
+  it.each(['fail', 'come back empty'])(
+    "rejects package creation when the application's end uses %s",
+    async (lookupResult) => {
+      mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation(() =>
+        lookupResult === 'fail'
+          ? Promise.reject(new Error('End use lookup failure'))
+          : Promise.resolve([]),
+      )
 
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
 
-    let createPackageControls = await openCreatePackageControls()
-    let createSpecies = createPackageControls.getByRole('combobox', {
-      name: 'Create package species',
-    })
-    let createPackage = createPackageControls.getByRole('button', { name: 'Save package' })
-    await waitFor(() => expect(createSpecies).toBeEnabled())
-
-    await chooseComboBoxOption(createSpecies, 'CE - Cedar')
-    await userEvent.click(
-      createPackageControls.getByRole('button', { name: 'Add species to new package' }),
-    )
-
-    const createEndUse = createPackageControls.getByRole('combobox', { name: 'End use' })
-    await waitFor(() => {
-      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI', 'CE'])
-      expect(createEndUse).toBeDisabled()
-      expect(createPackage).toBeDisabled()
+      const createPackageControls = await openCreatePackageControls()
+      const save = createPackageControls.getByRole('button', { name: 'Save package' })
       expect(
-        screen.getByText(
-          'Package creation is disabled because end use options could not be loaded.',
+        await screen.findByText(
+          /package creation (is|are) disabled because end use options could not be loaded\./i,
         ),
       ).toBeInTheDocument()
-    })
-
-    await userEvent.click(createPackage)
-    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
-
-    await userEvent.click(createPackageControls.getByRole('button', { name: 'Cancel' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
-    createPackageControls = await openCreatePackageControls()
-    createSpecies = createPackageControls.getByRole('combobox', { name: 'Create package species' })
-    createPackage = createPackageControls.getByRole('button', { name: 'Save package' })
-    await waitFor(() => expect(createSpecies).toBeEnabled())
-
-    await chooseComboBoxOption(createSpecies, 'CE - Cedar')
-    await userEvent.click(
-      createPackageControls.getByRole('button', { name: 'Add species to new package' }),
-    )
-    const recoveredEndUse = createPackageControls.getByRole('combobox', { name: 'End use' })
-
-    await waitFor(() => {
-      expect(recoveredEndUse).toHaveValue('SL - Sawn logs')
-      expect(recoveredEndUse).toBeEnabled()
-      expect(createPackage).toBeEnabled()
-    })
-
-    fireEvent.change(createPackageControls.getByLabelText('Package number'), {
-      target: { value: 'PKG-RECOVERED' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
-      target: { value: '25.0' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
-      target: { value: '12.0' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
-      target: { value: '24.0' },
-    })
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Status code' }),
-      'ACT - Active',
-    )
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Product type' }),
-      'H - Harvested Timber',
-    )
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Age class' }),
-      'S - Second Growth',
-    )
-    await userEvent.click(createPackage)
-
-    await waitFor(() => {
-      expect(mockedAddApplicationPackage).toHaveBeenCalledWith(
-        expect.objectContaining({
-          packageNumber: 'PKG-RECOVERED',
-          endUseCode: 'SL',
-          speciesCodes: ['FI', 'CE'],
-        }),
-      )
-    })
-  })
+      expect(save).toBeEnabled()
+      fillNewPackage(createPackageControls, 'PKG-NEW')
+      await userEvent.click(save)
+      expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+    },
+  )
 
   it.each(['failed', 'empty'])('recovers %s selected End Use', async (lookupResult) => {
     let failNextSelectedEndUseLookup = false
@@ -1705,54 +1603,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       },
       { timeout: 5_000 },
     )
-  })
-
-  it('keeps a ready selected package available while create package end uses load', async () => {
-    let resolveCreateEndUseOptions: ((options: ApplicationCodeOption[]) => void) | undefined
-    mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation((_region, speciesCodes) => {
-      if (speciesCodes.includes('CE')) {
-        return new Promise((resolve) => {
-          resolveCreateEndUseOptions = resolve
-        })
-      }
-      return Promise.resolve([{ code: 'LU', description: 'Lumber' }])
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const createPackageControls = await openCreatePackageControls()
-    const createPackage = createPackageControls.getByRole('button', { name: 'Save package' })
-    expect(screen.getByRole('heading', { name: 'Package PKG-1' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Edit package' })).toBeDisabled()
-    const createSpecies = createPackageControls.getByRole('combobox', {
-      name: 'Create package species',
-    })
-    await chooseComboBoxOption(createSpecies, 'CE - Cedar')
-    await userEvent.click(
-      createPackageControls.getByRole('button', {
-        name: 'Add species to new package',
-      }),
-    )
-
-    await waitFor(() => {
-      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI', 'CE'])
-      expect(createPackageControls.getByRole('combobox', { name: 'End use' })).toBeDisabled()
-      expect(createPackage).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Edit package' })).toBeDisabled()
-    })
-
-    await act(async () => {
-      resolveCreateEndUseOptions?.([{ code: 'PL', description: 'Pulp' }])
-    })
   })
 
   it('preserves a selected package end use while dependent options are loading', async () => {
@@ -1981,31 +1831,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByText('Selected package data unavailable')).toBeInTheDocument()
 
     const createPackageControls = await openCreatePackageControls()
-    fireEvent.change(createPackageControls.getByLabelText('Package number'), {
-      target: { value: 'PKG-NEW' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
-      target: { value: '25.0' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
-      target: { value: '12.0' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
-      target: { value: '24.0' },
-    })
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Status code' }),
-      'ACT - Active',
-    )
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Product type' }),
-      'H - Harvested Timber',
-    )
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Age class' }),
-      'S - Second Growth',
-    )
-    await userEvent.click(createPackageControls.getByRole('button', { name: 'Save package' }))
+    fillNewPackage(createPackageControls, 'PKG-NEW')
+    const save = createPackageControls.getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await userEvent.click(save)
 
     await waitFor(() => {
       expect(mockedAddApplicationPackage).toHaveBeenCalled()
@@ -2132,14 +1961,100 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       ),
     )
     const createControls = await openCreatePackageControls()
-    expect(createControls.getByRole('button', { name: 'Save package' })).toBeDisabled()
+    expect(createControls.getByRole('button', { name: 'Save package' })).toBeEnabled()
+    fillNewPackage(createControls, 'PKG-NEW')
+    await userEvent.click(createControls.getByRole('button', { name: 'Save package' }))
+    expect(createControls.getByText('Package creation failed')).toBeInTheDocument()
     await userEvent.click(createControls.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     const scaleControls = await openScaleControls()
-    expect(scaleControls.getByRole('button', { name: 'Save scale' })).toBeDisabled()
+    expect(scaleControls.getByRole('button', { name: 'Save scale' })).toBeEnabled()
+    await userEvent.click(scaleControls.getByRole('button', { name: 'Save scale' }))
+    expect(scaleControls.getByText('Scale creation failed')).toBeInTheDocument()
 
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+  })
+
+  it('keeps Create package Save enabled while end use options load without submitting early', async () => {
+    let resolveEndUses: ((options: ApplicationCodeOption[]) => void) | undefined
+    mockedFetchApplicationEndUsesForSpeciesRegion.mockReturnValue(
+      new Promise((resolve) => {
+        resolveEndUses = resolve
+      }),
+    )
+    renderApplicationItems()
+    const drawer = await openCreatePackageControls()
+    fillNewPackage(drawer, 'PKG-NEW')
+    const save = drawer.getByRole('button', { name: 'Save package' })
+    expect(save).toBeEnabled()
+    await userEvent.click(save)
+    expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+    expect(drawer.getByText('Loading authoritative item options…')).toBeInTheDocument()
+
+    await act(async () => resolveEndUses?.([{ code: 'LU', description: 'Lumber' }]))
+    await userEvent.click(save)
+    await waitFor(() => expect(mockedAddApplicationPackage).toHaveBeenCalledTimes(1))
+  })
+
+  it('shows a server package-volume rejection on Volume and focuses it', async () => {
+    const message = 'The total package volume must not exceed the application volume (100.0).'
+    mockedAddApplicationPackage.mockResolvedValueOnce({
+      valid: false,
+      packageNumber: 'PKG-NEW',
+      errors: [message],
+      warnings: [],
+    })
+    renderApplicationItems()
+    const drawer = await openCreatePackageControls()
+    fillNewPackage(drawer, 'PKG-NEW')
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+
+    const volume = drawer.getByLabelText('Volume (m³)')
+    await waitFor(() => expect(volume).toHaveAttribute('aria-invalid', 'true'))
+    expect(drawer.getByText(message)).toBeInTheDocument()
+    expect(drawer.queryByText('Package creation failed')).not.toBeInTheDocument()
+    await waitFor(() => expect(volume).toHaveFocus())
+    fireEvent.change(volume, { target: { value: '1.0' } })
+    expect(drawer.queryByText(message)).not.toBeInTheDocument()
+  })
+
+  it('hides package status and reprocessed fields while preserving their saved values', async () => {
+    mockedFetchApplicationPackageDetails.mockResolvedValue({
+      success: true,
+      packageNumber: 'PKG-1',
+      volume: '100.0',
+      scaledVolume: 20,
+      length: '12.0',
+      diameter: '24.0',
+      status: 'ACT',
+      comments: '',
+      statusDescription: 'Active',
+      reprocessed: 'Y',
+      ageClass: 'O',
+      ageClassDescription: 'Old',
+      productType: 'H',
+      productTypeDescription: 'Harvested',
+    })
+    renderApplicationItems()
+    await selectApplicationDetailTab('Scale')
+    await screen.findByRole('button', { name: 'Edit package' })
+    const section = screen.getByRole('heading', { name: 'Package PKG-1' }).closest('section')!
+    expect(within(section).queryByText('Status')).not.toBeInTheDocument()
+    expect(within(section).queryByText('Reprocessed')).not.toBeInTheDocument()
+    await selectApplicationItemsForEditing()
+    const comments = await screen.findByLabelText('Package comments')
+    const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
+    expect(drawer.queryByRole('combobox', { name: 'Status code' })).not.toBeInTheDocument()
+    expect(drawer.queryByRole('combobox', { name: 'Reprocessed' })).not.toBeInTheDocument()
+    fireEvent.change(comments, { target: { value: 'Updated comment' } })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+    await waitFor(() =>
+      expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
+        expect.objectContaining({ status: 'ACT', reprocessed: 'Y' }),
+      ),
+    )
   })
 
   it('shows field validation before creating an empty package', async () => {
@@ -2155,10 +2070,26 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     const createPackageControls = await openCreatePackageControls()
-    await userEvent.click(createPackageControls.getByRole('button', { name: 'Save package' }))
+    expect(createPackageControls.getByLabelText('Volume (m³)')).toHaveValue('0.0')
+    expect(createPackageControls.getByLabelText('Average length (m)')).toHaveValue('0.0')
+    expect(createPackageControls.getByLabelText('Average top diameter (rads)')).toHaveValue('0.0')
+    const save = createPackageControls.getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await userEvent.click(save)
 
     expect(screen.getAllByText('Package number is required.').length).toBeGreaterThan(0)
+    expect(createPackageControls.getByText('Volume must be greater than 0.')).toBeInTheDocument()
+    expect(
+      createPackageControls.getByText('Average length must be greater than 0.'),
+    ).toBeInTheDocument()
+    expect(
+      createPackageControls.getByText('Average diameter must be greater than 0.'),
+    ).toBeInTheDocument()
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
+    expect(createPackageControls.queryByText('Package creation failed')).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(createPackageControls.getByLabelText('Package number')).toHaveFocus(),
+    )
   })
 
   it('blocks duplicate package numbers before creating a package', async () => {
@@ -2203,7 +2134,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(createPackageControls.getByLabelText('Package number'), {
       target: { value: 'pkg-new' },
     })
-    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
+    fireEvent.change(createPackageControls.getByLabelText('Volume (m³)'), {
       target: { value: '25.55' },
     })
     fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
@@ -2212,14 +2143,15 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
       target: { value: '100' },
     })
-    await userEvent.click(createPackageControls.getByRole('button', { name: 'Save package' }))
+    const save = createPackageControls.getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await userEvent.click(save)
 
     expect(
-      screen.getAllByText('Package volume must have no more than one decimal place.').length,
+      screen.getAllByText('Volume must have no more than one decimal place.').length,
     ).toBeGreaterThan(0)
     expect(screen.getByText('Average length must be 99 or less.')).toBeInTheDocument()
     expect(screen.getByText('Average diameter must be 99.99 or less.')).toBeInTheDocument()
-    expect(screen.getByText('Package status code is required.')).toBeInTheDocument()
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
   })
 
@@ -2240,35 +2172,18 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     const createPackageControls = await openCreatePackageControls()
+    fillNewPackage(createPackageControls, 'PKG-NEW')
+    const save = createPackageControls.getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await userEvent.click(save)
 
-    fireEvent.change(createPackageControls.getByLabelText('Package number'), {
-      target: { value: 'PKG-NEW' },
-    })
-    fireEvent.blur(createPackageControls.getByLabelText('Package number'))
-    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
-      target: { value: '25.0' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
-      target: { value: '12.0' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
-      target: { value: '24.0' },
-    })
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Status code' }),
-      'ACT - Active',
-    )
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Product type' }),
-      'H - Harvested Timber',
-    )
-    await userEvent.click(createPackageControls.getByRole('button', { name: 'Save package' }))
-
-    expect(screen.getAllByText('Age class is required.').length).toBeGreaterThan(0)
+    // The panel has no Age class field, so the missing application value shows at its top.
+    expect(createPackageControls.getByText('Package creation failed')).toBeInTheDocument()
+    expect(createPackageControls.getByText('Age class is required.')).toBeInTheDocument()
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
   })
 
-  it('creates application packages with selected species and end use', async () => {
+  it("creates application packages with the application's classification, species and end use", async () => {
     render(
       <MemoryRouter
         initialEntries={[
@@ -2294,52 +2209,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const drawer = packageNumber.closest('.application-items-drawer') as HTMLElement
     const createPackageControls = within(drawer)
 
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', {
-        name: 'Create package species',
-      }),
-      'CE - Cedar',
+    fillNewPackage(createPackageControls, 'PKG-NEW')
+    await waitFor(() =>
+      expect(createPackageControls.getByRole('button', { name: 'Save package' })).toBeEnabled(),
     )
-    await userEvent.click(
-      createPackageControls.getByRole('button', {
-        name: 'Add species to new package',
-      }),
-    )
-    await waitFor(() => {
-      expect(createPackageControls.getByText('CE - Cedar')).toBeInTheDocument()
-    })
-
-    fireEvent.change(createPackageControls.getByLabelText('Package number'), {
-      target: { value: 'PKG-NEW' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Package volume (m³)'), {
-      target: { value: '25.0' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Average length (m)'), {
-      target: { value: '12.0' },
-    })
-    fireEvent.change(createPackageControls.getByLabelText('Average top diameter (rads)'), {
-      target: { value: '24.0' },
-    })
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Status code' }),
-      'ACT - Active',
-    )
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Product type' }),
-      'H - Harvested Timber',
-    )
-    await chooseComboBoxOption(
-      createPackageControls.getByRole('combobox', { name: 'Age class' }),
-      'S - Second Growth',
-    )
-    await waitFor(() => {
-      expect(
-        createPackageControls.getByRole('combobox', {
-          name: 'End use',
-        }),
-      ).toHaveValue('LU - Lumber')
-    })
 
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Save package' }))
 
@@ -2353,17 +2226,17 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         status: 'ACT',
         comments: '',
         reprocessed: 'N',
-        ageClass: 'S',
+        ageClass: 'O',
         productType: 'H',
         endUseCode: 'LU',
-        speciesCodes: ['FI', 'CE'],
+        speciesCodes: ['FI'],
       })
     })
-    expect(await screen.findByText('Package PKG-NEW created.')).toBeInTheDocument()
+    expect(await screen.findByText('Package saved.')).toBeInTheDocument()
     expect(screen.queryByText('The application was saved.')).not.toBeInTheDocument()
-    // Item results stay beside the item controls rather than the page header.
+    // The saved package reports inside its own card rather than the page header.
     expect(
-      screen.getByText('Package PKG-NEW created.').closest('#application-items'),
+      screen.getByText('Package saved.').closest('.application-items-section--package-details'),
     ).not.toBeNull()
     expect(createPackageControls.queryByText('Package number is required.')).not.toBeInTheDocument()
   })
@@ -2792,24 +2665,8 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const detailFetchCountAfterInitialLoad =
       mockedFetchProvincialApplicationDetail.mock.calls.length
     await userEvent.click(screen.getByRole('button', { name: 'Add scale' }))
-    fireEvent.change(screen.getByLabelText('Timber mark'), {
-      target: { value: 'TM002' },
-    })
-    fireEvent.blur(screen.getByLabelText('Timber mark'))
-    await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Species' }),
-      'FI - Douglas-fir',
-    )
-    await waitFor(() => {
-      expect(mockedFetchApplicationGradeCodes).toHaveBeenCalledWith('12', 'FI')
-    })
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
-    fireEvent.change(screen.getByLabelText('Pieces'), {
-      target: { value: '2' },
-    })
-    fireEvent.change(screen.getByLabelText('Scale volume (m³)'), {
-      target: { value: '8.0' },
-    })
+    await fillNewScale(screen)
+    expect(mockedFetchApplicationGradeCodes).toHaveBeenCalledWith('12', 'FI')
     fireEvent.click(screen.getByRole('button', { name: 'Save scale' }))
 
     await waitFor(() => {
@@ -2818,6 +2675,8 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
           timberMark: 'TM002',
           packageNumber: 'PKG-1',
           applicationNumber: '321',
+          speciesCode: 'FI',
+          gradeCode: '1',
           pieces: '2',
           volume: '8.0',
         }),
@@ -2828,7 +2687,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         detailFetchCountAfterInitialLoad + 1,
       )
     })
-    expect(await screen.findByText('Scale 56 added.')).toBeInTheDocument()
+    expect(await screen.findByText('Scale saved.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Scale saved.').closest('.application-items-section--scales'),
+    ).not.toBeNull()
     expect(screen.queryByText('Timber mark is required.')).not.toBeInTheDocument()
 
     const scaleRow = screen.getByText('TM001').closest('tr')
@@ -2852,13 +2714,13 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   })
 
   it.each([
-    { volume: '1.04', packageVolume: 1, roundedVolume: '1.0', exceedsPackage: false },
-    { volume: '1.06', packageVolume: 1, roundedVolume: '1.1', exceedsPackage: true },
-    { volume: '1.04', packageVolume: 2, roundedVolume: '1.0', exceedsPackage: false },
-    { volume: '1.06', packageVolume: 2, roundedVolume: '1.1', exceedsPackage: false },
+    { volume: '0.05', packageVolume: 1, exceedsPackage: false },
+    { volume: '1.04', packageVolume: 1, exceedsPackage: false },
+    { volume: '1.05', packageVolume: 1, exceedsPackage: true },
+    { volume: '1.06', packageVolume: 2, exceedsPackage: false },
   ])(
-    'rounds manual scale volume $volume to $roundedVolume before validating a $packageVolume m³ package',
-    async ({ volume, packageVolume, roundedVolume, exceedsPackage }) => {
+    'saves scale volume $volume as entered and checks it rounded against a $packageVolume m³ package',
+    async ({ volume, packageVolume, exceedsPackage }) => {
       mockedFetchApplicationPackageDetails.mockResolvedValue({
         success: true,
         packageNumber: 'PKG-1',
@@ -2895,29 +2757,47 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       )
 
       await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
-      fireEvent.change(screen.getByLabelText('Timber mark'), { target: { value: 'TM002' } })
-      await chooseComboBoxOption(
-        screen.getByRole('combobox', { name: 'Species' }),
-        'FI - Douglas-fir',
-      )
-      await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
-      fireEvent.change(screen.getByLabelText('Pieces'), { target: { value: '2' } })
-      fireEvent.change(screen.getByLabelText('Scale volume (m³)'), { target: { value: volume } })
+      await fillNewScale(screen, { volume })
       await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
 
       if (exceedsPackage) {
-        expect(screen.getAllByText('Scale volume must be 1.0 or less.').length).toBeGreaterThan(0)
-        expect(screen.getByLabelText('Scale volume (m³)')).toHaveValue(roundedVolume)
+        expect(
+          screen.getAllByText('Must be less than or equal to remaining package volume (1.0 m³).')
+            .length,
+        ).toBeGreaterThan(0)
+        expect(screen.getByLabelText('Volume (m³)')).toHaveValue(volume)
         expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
       } else {
         await waitFor(() => {
           expect(mockedAddApplicationScaleToPackage).toHaveBeenCalledWith(
-            expect.objectContaining({ volume: roundedVolume }),
+            expect.objectContaining({ volume }),
           )
         })
       }
     },
   )
+
+  it('blocks a scale volume with more than two decimals', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const drawer = await openScaleControls()
+    await fillNewScale(drawer, { volume: '1.055' })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
+
+    expect(
+      drawer.getAllByText('Volume must have no more than two decimal places.').length,
+    ).toBeGreaterThan(0)
+    expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+  })
 
   it.each(['save', 'create'] as const)(
     'preserves a committed package %s as a warning when detail refresh rejects',
@@ -2934,6 +2814,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
           authoritativeOptionsAvailability="available"
           productTypeOptions={[{ code: 'H', description: 'Harvested Timber' }]}
           growthTypeOptions={[{ code: 'S', description: 'Second Growth' }]}
+          applicationGrowthTypeCode="S"
           onDetailChanged={onDetailChanged}
         />,
       )
@@ -2951,36 +2832,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         await userEvent.click(screen.getByRole('button', { name: 'Save package' }))
       } else {
         const section = within(document.querySelector('.application-items-drawer') as HTMLElement)
-        await chooseComboBoxOption(
-          section.getByRole('combobox', { name: 'Create package species' }),
-          'CE - Cedar',
-        )
-        await userEvent.click(section.getByRole('button', { name: 'Add species to new package' }))
-        fireEvent.change(section.getByLabelText('Package number'), { target: { value: 'PKG-NEW' } })
-        fireEvent.change(section.getByLabelText('Package volume (m³)'), {
-          target: { value: '25.0' },
-        })
-        fireEvent.change(section.getByLabelText('Average length (m)'), {
-          target: { value: '12.0' },
-        })
-        fireEvent.change(section.getByLabelText('Average top diameter (rads)'), {
-          target: { value: '24.0' },
-        })
-        await chooseComboBoxOption(
-          section.getByRole('combobox', { name: 'Status code' }),
-          'ACT - Active',
-        )
-        await chooseComboBoxOption(
-          section.getByRole('combobox', { name: 'Product type' }),
-          'H - Harvested Timber',
-        )
-        await chooseComboBoxOption(
-          section.getByRole('combobox', { name: 'Age class' }),
-          'S - Second Growth',
-        )
-        await waitFor(() =>
-          expect(section.getByRole('combobox', { name: 'End use' })).toHaveValue('LU - Lumber'),
-        )
+        fillNewPackage(section, 'PKG-NEW')
         await userEvent.click(section.getByRole('button', { name: 'Save package' }))
       }
 
@@ -2995,9 +2847,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(screen.queryByText('Unable to save package details.')).not.toBeInTheDocument()
       expect(screen.queryByText('Unable to create package.')).not.toBeInTheDocument()
       expect(
-        screen.queryByText(
-          operation === 'save' ? 'Package PKG-1 saved.' : 'Package PKG-NEW created.',
-        ),
+        screen.queryByText(operation === 'save' ? 'Package PKG-1 saved.' : 'Package saved.'),
       ).not.toBeInTheDocument()
       expect(
         operation === 'save' ? mockedUpdateApplicationPackage : mockedAddApplicationPackage,
@@ -3064,24 +2914,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     expect(await screen.findByText('TM001')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Timber mark'), {
-      target: { value: 'TM002' },
-    })
-    fireEvent.blur(screen.getByLabelText('Timber mark'))
-    await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Species' }),
-      'FI - Douglas-fir',
-    )
-    await waitFor(() => {
-      expect(mockedFetchApplicationGradeCodes).toHaveBeenCalledWith('12', 'FI')
-    })
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
-    fireEvent.change(screen.getByLabelText('Pieces'), {
-      target: { value: '2' },
-    })
-    fireEvent.change(screen.getByLabelText('Scale volume (m³)'), {
-      target: { value: '8.0' },
-    })
+    await fillNewScale(screen)
     await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
 
     await waitFor(() => {
@@ -3116,40 +2949,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.queryByText('Unable to delete scale.')).not.toBeInTheDocument()
   })
 
-  it('looks up package scales by timber mark and scale id', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await openScaleControls()
-    expect(await screen.findByText('TM001')).toBeInTheDocument()
-
-    fireEvent.change(screen.getByLabelText('Scale ID or timber mark'), {
-      target: { value: 'TM001' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
-    expect(
-      await screen.findByText(
-        'Found 1 scale row for timber mark TM001: TM001 Douglas-fir/Sawlog 5 pcs 20.0 m3',
-      ),
-    ).toBeInTheDocument()
-    expect(mockedFetchApplicationScaleDetails).not.toHaveBeenCalled()
-
-    fireEvent.change(screen.getByLabelText('Scale ID or timber mark'), {
-      target: { value: '55' },
-    })
-    fireEvent.click(screen.getByRole('button', { name: 'Lookup Scale' }))
-    expect(await screen.findByText('TM001 FI/1 5 pcs 20.0 m3')).toBeInTheDocument()
-    expect(mockedFetchApplicationScaleDetails).toHaveBeenCalledWith('55')
-  })
-
   it('shows field validation before adding an empty scale', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -3162,16 +2961,83 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await openScaleControls()
+    const drawer = await openScaleControls()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
+    // Grade waits for a species, and the volume starts at 0.0 with the package's remaining volume.
+    expect(drawer.getByRole('combobox', { name: 'Grade' })).toBeDisabled()
+    expect(drawer.getByText('Available once species are selected')).toBeInTheDocument()
+    expect(drawer.getByLabelText('Volume (m³)')).toHaveValue('0.0')
+    expect(
+      drawer.getByText('Must be less than or equal to remaining package volume (80.0 m³)'),
+    ).toBeInTheDocument()
+    await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
 
-    expect(screen.getAllByText('Timber mark is required.').length).toBeGreaterThan(0)
-    expect(screen.getByText('Species is required.')).toBeInTheDocument()
-    expect(screen.getByText('Grade is required.')).toBeInTheDocument()
-    expect(screen.getByText('Pieces is required.')).toBeInTheDocument()
-    expect(screen.getByText('Scale volume is required.')).toBeInTheDocument()
+    expect(drawer.getAllByText('Timber mark is required.').length).toBeGreaterThan(0)
+    expect(drawer.getByText('Species is required.')).toBeInTheDocument()
+    expect(drawer.queryByText('Grade is required.')).not.toBeInTheDocument()
+    expect(drawer.getByText('Pieces is required.')).toBeInTheDocument()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+    expect(drawer.queryByText('Scale creation failed')).not.toBeInTheDocument()
+    await waitFor(() => expect(drawer.getByLabelText('Timber mark')).toHaveFocus())
+  })
+
+  it.each([
+    {
+      message: 'Timber mark TM002 is not valid for this scale due to a status of ZZ.',
+      label: 'Timber mark',
+      corrected: 'TM003',
+    },
+    {
+      message: 'The scale volume must be less than 5.0.',
+      label: 'Volume (m³)',
+      corrected: '1.0',
+    },
+    {
+      message: 'A scale with this timber mark, species, and grade already exists.',
+      label: 'Timber mark',
+      corrected: 'TM003',
+    },
+  ])(
+    'attaches the server scale error to $label: $message',
+    async ({ message, label, corrected }) => {
+      mockedAddApplicationScaleToPackage.mockResolvedValueOnce({
+        valid: false,
+        errors: [message],
+        warnings: [],
+        result: null,
+      })
+      renderApplicationItems()
+      const drawer = await openScaleControls()
+      await fillNewScale(drawer)
+      await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
+
+      const field = drawer.getByLabelText(label)
+      await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'))
+      expect(drawer.getByText(message)).toBeInTheDocument()
+      expect(drawer.queryByText('Scale creation failed')).not.toBeInTheDocument()
+      await waitFor(() => expect(field).toHaveFocus())
+      fireEvent.change(field, { target: { value: corrected } })
+      expect(drawer.queryByText(message)).not.toBeInTheDocument()
+    },
+  )
+
+  it('keeps a non-field scale failure in a focused notification and preserves the draft', async () => {
+    const message = 'Record changed. Reload before retrying.'
+    mockedAddApplicationScaleToPackage.mockResolvedValueOnce({
+      valid: false,
+      errors: [message],
+      warnings: [],
+      result: null,
+    })
+    renderApplicationItems()
+    const drawer = await openScaleControls()
+    await fillNewScale(drawer)
+    await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
+
+    const notification = await drawer.findByText(message)
+    await waitFor(() => expect(notification.closest('[data-drawer-error]')).toHaveFocus())
+    expect(drawer.getByLabelText('Timber mark')).toHaveValue('TM002')
+    expect(drawer.getByLabelText('Volume (m³)')).toHaveValue('8.0')
   })
 
   it('shows legacy scale validation before adding invalid scale values', async () => {
@@ -3186,26 +3052,13 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await openScaleControls()
+    const drawer = await openScaleControls()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Timber mark'), {
-      target: { value: 'TM002' },
-    })
-    await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Species' }),
-      'FI - Douglas-fir',
-    )
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
-    fireEvent.change(screen.getByLabelText('Pieces'), {
-      target: { value: '1.5' },
-    })
-    fireEvent.change(screen.getByLabelText('Scale volume (m³)'), {
-      target: { value: '100000' },
-    })
-    await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
+    await fillNewScale(drawer, { pieces: '1.5', volume: '100000' })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
 
-    expect(screen.getAllByText('Pieces must be a whole number.').length).toBeGreaterThan(0)
-    expect(screen.getByText('Scale volume must be 99999.9 or less.')).toBeInTheDocument()
+    expect(drawer.getAllByText('Pieces must be a whole number.').length).toBeGreaterThan(0)
+    expect(drawer.getByText('Volume must be 99999.9 or less.')).toBeInTheDocument()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
@@ -3221,25 +3074,15 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       </MemoryRouter>,
     )
 
-    await openScaleControls()
+    const drawer = await openScaleControls()
     expect(await screen.findByText('TM001')).toBeInTheDocument()
-    fireEvent.change(screen.getByLabelText('Timber mark'), {
-      target: { value: 'TM002' },
-    })
-    await chooseComboBoxOption(
-      screen.getByRole('combobox', { name: 'Species' }),
-      'FI - Douglas-fir',
-    )
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Grade' }), '1 - Sawlog')
-    fireEvent.change(screen.getByLabelText('Pieces'), {
-      target: { value: '1' },
-    })
-    fireEvent.change(screen.getByLabelText('Scale volume (m³)'), {
-      target: { value: '80.1' },
-    })
-    await userEvent.click(screen.getByRole('button', { name: 'Save scale' }))
+    await fillNewScale(drawer, { pieces: '1', volume: '80.1' })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
 
-    expect(screen.getAllByText('Scale volume must be 80.0 or less.').length).toBeGreaterThan(0)
+    expect(
+      drawer.getAllByText('Must be less than or equal to remaining package volume (80.0 m³).')
+        .length,
+    ).toBeGreaterThan(0)
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 

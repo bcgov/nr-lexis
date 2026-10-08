@@ -566,6 +566,85 @@ describe('Provincial Review Action State Smoke', () => {
     expect(screen.getByText('Application approved')).toBeInTheDocument()
   })
 
+  it('returns focus from the application editor without changing a review decision', async () => {
+    renderPage()
+    await screen.findByText('1000123')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000456' }))
+    const launcher = screen.getAllByRole('button', { name: 'Disapprove' })[0]
+    await userEvent.click(launcher)
+
+    const panel = screen.getByRole('complementary', { name: 'Update application 1000123' })
+    await waitFor(() =>
+      expect(within(panel).getByRole('combobox', { name: 'Application status' })).toHaveFocus(),
+    )
+    expect(
+      screen.queryByRole('dialog', { name: 'Update application 1000123' }),
+    ).not.toBeInTheDocument()
+    expect(panel).not.toHaveAttribute('aria-modal')
+    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
+    const table = within(launcher.closest('table') as HTMLTableElement)
+    table.getAllByRole('button', { name: 'Approve' }).forEach((button) => {
+      expect(button).toBeDisabled()
+    })
+    table.getAllByRole('button', { name: 'Disapprove' }).forEach((button) => {
+      expect(button).toBeDisabled()
+    })
+    const remarks = within(panel).getByLabelText('Remarks')
+    await userEvent.type(remarks, 'Unsaved reason')
+    fireEvent.keyDown(remarks, { key: 'Escape', code: 'Escape', keyCode: 27, which: 27 })
+
+    await waitFor(() => expect(launcher).toHaveFocus())
+    expect(
+      screen.queryByRole('complementary', { name: 'Update application 1000123' }),
+    ).not.toBeInTheDocument()
+    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeEnabled()
+  })
+
+  it('keeps the application editor locked during save and retains a failed draft', async () => {
+    let resolveUpdate!: (
+      response: Awaited<ReturnType<typeof updateApplicationReviewStatus>>,
+    ) => void
+    mockedUpdateApplicationReviewStatus.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveUpdate = resolve
+      }),
+    )
+    renderPage()
+    await screen.findByText('1000123')
+    const launcher = screen.getAllByRole('button', { name: 'Disapprove' })[0]
+    await userEvent.click(launcher)
+    const panel = screen.getByRole('complementary', { name: 'Update application 1000123' })
+    const remarks = within(panel).getByLabelText('Remarks')
+    await userEvent.type(remarks, 'Draft reason')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(1))
+    expect(within(panel).getByRole('button', { name: 'Saving…' })).toBeDisabled()
+    expect(within(panel).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    await userEvent.click(within(panel).getByRole('button', { name: 'Close' }))
+    fireEvent.keyDown(remarks, { key: 'Escape', code: 'Escape', keyCode: 27, which: 27 })
+    expect(panel).toBeVisible()
+    await act(async () =>
+      resolveUpdate({
+        updated: false,
+        valid: false,
+        statusCode: 'REJ',
+        clientEmail: '',
+        remark: '',
+        message: 'Review update unavailable',
+      }),
+    )
+
+    expect(await within(panel).findByText('Review update unavailable')).toBeVisible()
+    expect(within(panel).getByRole('button', { name: 'Save' })).toBeEnabled()
+    expect(remarks).toHaveValue('Draft reason')
+    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+    await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(launcher).toHaveFocus())
+  })
+
   it('disapproves a single NEW row and sends email only when opted in', async () => {
     renderPage()
     await screen.findByText('1000123')
@@ -670,7 +749,7 @@ describe('Provincial Review Action State Smoke', () => {
       expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000123'),
     )
     await userEvent.click(
-      within(screen.getByRole('dialog', { name: 'Update application 1000123' })).getByRole(
+      within(screen.getByRole('complementary', { name: 'Update application 1000123' })).getByRole(
         'button',
         { name: 'Cancel' },
       ),
@@ -678,7 +757,7 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[1])
 
     expect(
-      await screen.findByRole('dialog', { name: 'Update application 1000456' }),
+      await screen.findByRole('complementary', { name: 'Update application 1000456' }),
     ).toBeInTheDocument()
     const sendToInput = await revealSendToField()
     expect(sendToInput).toHaveValue('second.client@example.com')
@@ -923,7 +1002,7 @@ describe('Provincial Review Action State Smoke', () => {
       await screen.findByText('Unable to load client email for this application.'),
     ).toBeInTheDocument()
     expect(screen.queryByText('Unable to reject application.')).not.toBeInTheDocument()
-    const dialog = screen.getByRole('dialog', { name: 'Update application 1000123' })
+    const dialog = screen.getByRole('complementary', { name: 'Update application 1000123' })
     expect(dialog.querySelectorAll('.cds--inline-notification')).toHaveLength(1)
     await userEvent.click(within(dialog).getByRole('button', { name: 'close notification' }))
     expect(screen.queryByText('Unable to reject application.')).not.toBeInTheDocument()

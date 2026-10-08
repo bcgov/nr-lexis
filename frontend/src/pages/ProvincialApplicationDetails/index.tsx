@@ -4905,7 +4905,6 @@ const ProvincialApplicationDetailsPage = () => {
                                 },
                               ]}
                             >
-                              <RequiredFieldsLegend />
                               <TextArea
                                 ref={remarkBodyRef}
                                 id="applicationRemarkBody"
