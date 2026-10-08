@@ -64,6 +64,7 @@ export default function DetailSidePanel({
     return () => query.removeEventListener('change', update)
   }, [])
 
+  // Own entry focus so Carbon's animation cannot reclaim it after a dialog closes.
   useEffect(() => {
     if (!open || loading) return
     const frame = requestAnimationFrame(() =>
@@ -164,7 +165,6 @@ export default function DetailSidePanel({
           .join(' ')}
         slideIn
         selectorPageContent={besidePage ? contentSelector : `[${SLIDE_OVER_MARKER}]`}
-        selectorPrimaryFocus={initialFocusSelector}
         preventCloseOnClickOutside
         animateTitle={false}
         // The footer uses standard buttons; the stylesheet sizes them to md.

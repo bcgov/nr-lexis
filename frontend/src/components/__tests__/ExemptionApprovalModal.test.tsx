@@ -52,6 +52,26 @@ const approval = (numbers = ['EX-205']) => ({
 })
 
 describe('ExemptionApprovalModal', () => {
+  it('keeps inline medium tertiary and primary actions in the modal footer', async () => {
+    const onClose = vi.fn()
+    render(
+      <ExemptionApprovalModal
+        exemptionNumbers={['EX-205']}
+        onApprove={vi.fn()}
+        onComplete={vi.fn()}
+        onClose={onClose}
+      />,
+    )
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+    const primary = screen.getByRole('button', { name: 'Approve and send email' })
+    expect(cancel).toHaveClass('cds--btn--tertiary', 'cds--btn--md')
+    expect(primary).toHaveClass('cds--btn--primary', 'cds--btn--md')
+    expect(cancel.closest('.cds--modal-footer')).toBe(primary.closest('.cds--modal-footer'))
+    expect(primary.closest('.cds--modal-content')).toBeNull()
+    await userEvent.click(cancel)
+    expect(onClose).toHaveBeenCalledTimes(1)
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(fetchExemptionApprovalRecipients).mockResolvedValue(contacts)
@@ -83,7 +103,7 @@ describe('ExemptionApprovalModal', () => {
     expect(submit).toBeEnabled()
     await user.click(submit)
     expect(
-      screen.getByText('Confirm that you certify this exemption has been approved.'),
+      screen.getByText('Confirm that you certify this exemption has been approved'),
     ).toBeVisible()
     await waitFor(() => expect(screen.getByRole('checkbox', { name: /I certify/ })).toHaveFocus())
     expect(
@@ -94,7 +114,7 @@ describe('ExemptionApprovalModal', () => {
 
     await user.click(screen.getByRole('checkbox', { name: /I certify/ }))
     expect(
-      screen.queryByText('Confirm that you certify this exemption has been approved.'),
+      screen.queryByText('Confirm that you certify this exemption has been approved'),
     ).not.toBeInTheDocument()
     await user.type(screen.getByRole('textbox', { name: 'Owner email' }), 'invalid address')
     await user.click(submit)
@@ -736,13 +756,19 @@ describe('ExemptionApprovalModal', () => {
     )
 
     await screen.findByText('owner@example.com')
+    const footer = screen
+      .getByRole('button', { name: 'Approve and send email' })
+      .closest('.cds--modal-footer')
+    expect(footer).toHaveAttribute('aria-busy', 'false')
     await user.click(screen.getByRole('checkbox', { name: /I certify/ }))
     await user.click(screen.getByRole('button', { name: 'Approve and send email' }))
     await waitFor(() => expect(sendExemptionApprovalNotifications).toHaveBeenCalledTimes(1))
     expect(onBusyChange).toHaveBeenLastCalledWith(true)
+    expect(footer).toHaveAttribute('aria-busy', 'true')
 
     resolveQueue?.({ outcomes: [] })
     await waitFor(() => expect(onBusyChange).toHaveBeenLastCalledWith(false))
+    expect(footer).toHaveAttribute('aria-busy', 'false')
   })
 
   it('blocks email approval when preview fails and cancellation makes no mutation', async () => {

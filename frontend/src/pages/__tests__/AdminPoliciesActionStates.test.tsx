@@ -138,6 +138,23 @@ const openAddPolicyDialog = async (area: 'fee' | 'fil') => {
 }
 
 describe('Admin policy action states', () => {
+  it.each([
+    { area: 'fee' as const, save: 'Update fee policy' },
+    { area: 'fil' as const, save: 'Update fee in lieu policy' },
+    { area: 'schedule' as const, save: 'Update Export Schedule' },
+  ])('closes unchanged $area editing without updating a policy', async ({ area, save }) => {
+    renderPage(area)
+    const edit = await screen.findByRole('button', { name: 'Edit' })
+    await userEvent.click(edit)
+    await userEvent.click(screen.getByRole('button', { name: save }))
+    await waitFor(() => expect(edit).toHaveFocus())
+    expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
+    expect(mockedUpsertFilPolicy).not.toHaveBeenCalled()
+    expect(mockedUpdateExportSchedule).not.toHaveBeenCalled()
+    expect(mockedCreateExportSchedule).not.toHaveBeenCalled()
+    expect(screen.queryByText('Policy updated.')).not.toBeInTheDocument()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
 
@@ -673,7 +690,7 @@ describe('Admin policy action states', () => {
     { area: 'fee' as const, percentageLabel: 'Fee increase percentage' },
     { area: 'fil' as const, percentageLabel: 'Fee in lieu percentage' },
   ])(
-    'returns focus and resets the $area add panel on cancel',
+    'asks before discarding the $area add panel and returns focus on cancel',
     async ({ area, percentageLabel }) => {
       renderPage(area)
 
@@ -688,7 +705,18 @@ describe('Admin policy action states', () => {
       expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
       expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
       await userEvent.type(within(panel).getByLabelText(percentageLabel), '7')
-      await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
+      const cancelButton = within(panel).getByRole('button', { name: 'Cancel' })
+      await userEvent.click(cancelButton)
+
+      let discardDialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+      expect(within(discardDialog).getByRole('button', { name: 'Keep editing' })).toHaveFocus()
+      await userEvent.click(within(discardDialog).getByRole('button', { name: 'Keep editing' }))
+      await waitFor(() => expect(cancelButton).toHaveFocus())
+      expect(within(panel).getByLabelText(percentageLabel)).toHaveValue('7')
+
+      await userEvent.click(cancelButton)
+      discardDialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+      await userEvent.click(within(discardDialog).getByRole('button', { name: 'Discard changes' }))
 
       await waitFor(() => expect(launcher).toHaveFocus())
       expect(screen.queryByRole('complementary', { name: panelName })).not.toBeInTheDocument()
@@ -766,27 +794,27 @@ describe('Admin policy action states', () => {
     {
       area: 'fee' as const,
       value: '4.2',
-      expectedError: 'Fee increase percentage must be a whole number.',
+      expectedError: 'Fee increase percentage must be a whole number',
     },
     {
       area: 'fee' as const,
       value: '101',
-      expectedError: 'Fee increase percentage must be 100 or less.',
+      expectedError: 'Fee increase percentage must be 100 or less',
     },
     {
       area: 'fil' as const,
       value: '2.5',
-      expectedError: 'Fee in lieu percentage must be a whole number.',
+      expectedError: 'Fee in lieu percentage must be a whole number',
     },
     {
       area: 'fil' as const,
       value: '0',
-      expectedError: 'Fee in lieu percentage must be greater than or equal to 1.',
+      expectedError: 'Fee in lieu percentage must be greater than or equal to 1',
     },
     {
       area: 'fil' as const,
       value: '100',
-      expectedError: 'Fee in lieu percentage must be 99 or less.',
+      expectedError: 'Fee in lieu percentage must be 99 or less',
     },
   ])('rejects $area percentage $value', async ({ area, value, expectedError }) => {
     renderPage(area)
@@ -1274,28 +1302,24 @@ describe('Admin policy action states', () => {
 
     expect(await screen.findByText('Export schedule added.')).toBeInTheDocument()
     expect(await screen.findByText('1002')).toBeInTheDocument()
-    expect(screen.queryByText('Offer end date is required.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offer end date is required')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Offer end date')).not.toHaveAttribute('aria-invalid', 'true')
   })
 
-  it('shows schedule validation errors before creating export schedule rows', async () => {
+  it('shows schedule errors on their fields and focuses the first before creating rows', async () => {
     renderPage('schedule')
 
     await screen.findByRole('heading', { level: 1, name: 'Export schedule administration' })
     await userEvent.click(screen.getByRole('button', { name: 'Add Export Schedule' }))
 
-    await waitFor(() => {
-      expect(screen.getByText('Schedule error')).toBeInTheDocument()
-      expect(
-        screen.getByText('Correct the highlighted export schedule fields before saving.'),
-      ).toBeInTheDocument()
-    })
-    expect(screen.getByText('Advertising date is required.')).toBeInTheDocument()
-    expect(screen.getByText('Application receipt date is required.')).toBeInTheDocument()
-    expect(screen.getByText('Offer receipt date is required.')).toBeInTheDocument()
-    expect(screen.getByText('Offer end date is required.')).toBeInTheDocument()
-    expect(screen.getByText('Offer withdrawal date is required.')).toBeInTheDocument()
-    expect(screen.getByText('TEAC meeting date is required.')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Advertising date')).toHaveFocus())
+    expect(screen.queryByText('Schedule error')).not.toBeInTheDocument()
+    expect(screen.getByText('Advertising date is required')).toBeInTheDocument()
+    expect(screen.getByText('Application receipt date is required')).toBeInTheDocument()
+    expect(screen.getByText('Offer receipt date is required')).toBeInTheDocument()
+    expect(screen.getByText('Offer end date is required')).toBeInTheDocument()
+    expect(screen.getByText('Offer withdrawal date is required')).toBeInTheDocument()
+    expect(screen.getByText('TEAC meeting date is required')).toBeInTheDocument()
     expect(mockedCreateExportSchedule).not.toHaveBeenCalled()
   })
 
@@ -1310,17 +1334,17 @@ describe('Admin policy action states', () => {
         offerWithdrawalDate: '2000-01-15',
         teacMeetingDate: '2000-01-16',
       },
-      expectedMessage: 'Advertising date must be today or a future date.',
+      expectedMessage: 'Advertising date must be today or a future date',
     },
     {
       caseName: 'an application receipt date after advertising',
       overrides: { applicationReceiptDate: '2099-01-11' },
-      expectedMessage: 'Application receipt date cannot be after the advertising date.',
+      expectedMessage: 'Application receipt date cannot be after the advertising date',
     },
     {
       caseName: 'an offer receipt date before advertising',
       overrides: { offerReceiptDate: '2099-01-09' },
-      expectedMessage: 'Offer receipt date cannot be before the advertising date.',
+      expectedMessage: 'Offer receipt date cannot be before the advertising date',
     },
     {
       caseName: 'an offer end date before offer receipt',
@@ -1329,27 +1353,27 @@ describe('Admin policy action states', () => {
         offerWithdrawalDate: '2099-01-10',
         teacMeetingDate: '2099-01-10',
       },
-      expectedMessage: 'Offer end date cannot be before the offer receipt date.',
+      expectedMessage: 'Offer end date cannot be before the offer receipt date',
     },
     {
       caseName: 'an offer withdrawal date before advertising',
       overrides: { offerWithdrawalDate: '2099-01-09' },
-      expectedMessage: 'Offer withdrawal date cannot be before the advertising date.',
+      expectedMessage: 'Offer withdrawal date cannot be before the advertising date',
     },
     {
       caseName: 'an offer withdrawal date after offer end',
       overrides: { offerWithdrawalDate: '2099-01-21' },
-      expectedMessage: 'Offer withdrawal date cannot be after the offer end date.',
+      expectedMessage: 'Offer withdrawal date cannot be after the offer end date',
     },
     {
       caseName: 'a TEAC meeting date before advertising',
       overrides: { teacMeetingDate: '2099-01-09' },
-      expectedMessage: 'TEAC meeting date cannot be before the advertising date.',
+      expectedMessage: 'TEAC meeting date cannot be before the advertising date',
     },
     {
       caseName: 'a TEAC meeting date after offer end',
       overrides: { teacMeetingDate: '2099-01-21' },
-      expectedMessage: 'TEAC meeting date cannot be after the offer end date.',
+      expectedMessage: 'TEAC meeting date cannot be after the offer end date',
     },
   ])(
     'blocks $caseName before creating an export schedule',
@@ -1604,6 +1628,9 @@ describe('Admin policy action states', () => {
 
     const updatedRow = screen.getByText('1001').closest('tr')
     expect(updatedRow).not.toBeNull()
+    await waitFor(() =>
+      expect(within(updatedRow as HTMLElement).getByRole('button', { name: 'Edit' })).toHaveFocus(),
+    )
     await userEvent.click(within(updatedRow as HTMLElement).getByRole('button', { name: 'Delete' }))
 
     const deleteDialog = screen.getByRole('dialog', { name: 'Delete export schedule?' })
@@ -1617,6 +1644,86 @@ describe('Admin policy action states', () => {
       expect(mockedDeleteExportSchedule).toHaveBeenCalledWith('1001')
     })
     expect(await screen.findByText('Export schedule deleted.')).toBeInTheDocument()
+  })
+
+  it('focuses the schedule on Edit and asks before discarding its changes', async () => {
+    mockedFetchExportSchedulePage.mockResolvedValue({
+      rows: [
+        {
+          exportScheduleId: '1001',
+          advertisingDate: '2026-06-24',
+          applicationReceiptDate: '2026-06-20',
+          offerReceiptDate: '2026-06-30',
+          offerEndDate: '2026-07-09',
+          offerWithdrawalDate: '2026-07-05',
+          teacMeetingDate: '2026-07-07',
+          applicationCount: 0,
+          mutable: true,
+        },
+      ],
+      total: 1,
+      page: 0,
+      size: 100,
+    })
+
+    renderPage('schedule')
+
+    const row = (await screen.findByText('1001')).closest('tr') as HTMLElement
+    const editButton = within(row).getByRole('button', { name: 'Edit' })
+    await userEvent.click(editButton)
+    await waitFor(() => expect(screen.getByLabelText('Advertising date')).toHaveFocus())
+
+    // Nothing changed, so Cancel ends the edit straight away.
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel edit' }))
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    await waitFor(() => expect(editButton).toHaveFocus())
+
+    await userEvent.click(editButton)
+    fireEvent.change(screen.getByLabelText('Offer end date'), {
+      target: { value: '2026-07-10' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel edit' }))
+    let discardDialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await userEvent.click(within(discardDialog).getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByLabelText('Offer end date')).toHaveValue('2026-07-10')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel edit' }))
+    discardDialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await userEvent.click(within(discardDialog).getByRole('button', { name: 'Discard changes' }))
+
+    await waitFor(() => expect(editButton).toHaveFocus())
+    expect(screen.getByLabelText('Offer end date')).toHaveValue('')
+    expect(screen.getByRole('button', { name: 'Add Export Schedule' })).toBeEnabled()
+    expect(mockedUpdateExportSchedule).not.toHaveBeenCalled()
+  })
+
+  it('asks before Escape discards an edited fee policy', async () => {
+    renderPage('fee')
+
+    const row = (await screen.findByText('2099-01-01')).closest('tr') as HTMLElement
+    const editButton = within(row).getByRole('button', { name: 'Edit' })
+    await waitFor(() => expect(editButton).toBeEnabled())
+    await userEvent.click(editButton)
+    const panel = screen.getByRole('complementary', { name: 'Edit fee policy' })
+    const percentage = within(panel).getByLabelText('Fee increase percentage')
+    await userEvent.clear(percentage)
+    await userEvent.type(percentage, '9')
+    await userEvent.keyboard('{Escape}')
+
+    const discardDialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await userEvent.click(within(discardDialog).getByRole('button', { name: 'Keep editing' }))
+    await waitFor(() => expect(percentage).toHaveFocus())
+    expect(percentage).toHaveValue('9')
+
+    await userEvent.keyboard('{Escape}')
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    )
+    await waitFor(() => expect(editButton).toHaveFocus())
+    expect(screen.queryByRole('complementary', { name: 'Edit fee policy' })).not.toBeInTheDocument()
+    expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
   })
 
   it('keeps a failed export schedule deletion open for retry', async () => {
@@ -1655,7 +1762,7 @@ describe('Admin policy action states', () => {
     })
   })
 
-  it('shows validation contract when fee policy fields are incomplete', async () => {
+  it('shows incomplete fee policy errors on their fields and focuses the first', async () => {
     renderPage()
 
     await screen.findByRole('heading', { level: 1, name: 'Multiplication Factor' })
@@ -1663,15 +1770,14 @@ describe('Admin policy action states', () => {
     expect(within(dialog).getByText('Whole numbers from 0 to 100')).toBeInTheDocument()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Add fee policy' }))
 
-    await waitFor(() => {
-      expect(screen.getByText('Policy error')).toBeInTheDocument()
-      expect(
-        screen.getByText('Correct the highlighted fee policy fields before saving.'),
-      ).toBeInTheDocument()
-    })
-    expect(screen.getByText('Policy effective date is required.')).toBeInTheDocument()
-    expect(screen.getByText('Region is required.')).toBeInTheDocument()
-    expect(screen.getByText('Fee increase percentage is required.')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(within(dialog).getByLabelText('Policy effective date')).toHaveFocus(),
+    )
+    expect(screen.queryByText('Policy error')).not.toBeInTheDocument()
+    expect(within(dialog).queryByText('Whole numbers from 0 to 100')).not.toBeInTheDocument()
+    expect(screen.getByText('Policy effective date is required')).toBeInTheDocument()
+    expect(screen.getByText('Region is required')).toBeInTheDocument()
+    expect(screen.getByText('Fee increase percentage is required')).toBeInTheDocument()
     expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
   })
 
@@ -1688,7 +1794,7 @@ describe('Admin policy action states', () => {
     await userEvent.type(within(feeDialog).getByLabelText('Fee increase percentage'), '4')
     await userEvent.click(within(feeDialog).getByRole('button', { name: 'Add fee policy' }))
 
-    expect(await within(feeDialog).findByText('Date must be YYYY-MM-DD.')).toBeInTheDocument()
+    expect(await within(feeDialog).findByText('Date must be YYYY-MM-DD')).toBeInTheDocument()
     expect(mockedUpsertFeePolicy).not.toHaveBeenCalled()
 
     feeView.unmount()
@@ -1706,7 +1812,7 @@ describe('Admin policy action states', () => {
     await userEvent.type(within(filDialog).getByLabelText('Fee in lieu percentage'), '2')
     await userEvent.click(within(filDialog).getByRole('button', { name: 'Add fee in lieu policy' }))
 
-    expect(await within(filDialog).findByText('Date must be YYYY-MM-DD.')).toBeInTheDocument()
+    expect(await within(filDialog).findByText('Date must be YYYY-MM-DD')).toBeInTheDocument()
     expect(mockedUpsertFilPolicy).not.toHaveBeenCalled()
   })
 })

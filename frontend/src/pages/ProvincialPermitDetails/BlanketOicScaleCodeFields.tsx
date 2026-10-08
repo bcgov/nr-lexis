@@ -5,6 +5,7 @@ import {
   fetchApplicationSpeciesCodes,
   type ApplicationCodeOption,
 } from '@/service/provincial-application-items-service'
+import { fieldErrorText } from '@/utils/field-error'
 import { markRequired, requiredLabel } from '@/utils/required-label'
 
 export type BlanketOicScaleCodeField = 'speciesCode' | 'gradeCode'
@@ -144,7 +145,7 @@ export default function BlanketOicScaleCodeFields({
         selectedItem={findOption(speciesOptions, selectedSpeciesCode)}
         disabled={disabled || speciesAvailability !== 'available'}
         invalid={!!fieldErrors?.speciesCode}
-        invalidText={fieldErrors?.speciesCode}
+        invalidText={fieldErrorText(fieldErrors?.speciesCode)}
         onChange={({ selectedItem }) => {
           const nextSpeciesCode = selectedItem ? normalizeCode(selectedItem.code) : ''
           if (nextSpeciesCode === selectedSpeciesCode) return
@@ -163,7 +164,7 @@ export default function BlanketOicScaleCodeFields({
         selectedItem={findOption(gradeOptions, normalizeCode(value.gradeCode))}
         disabled={disabled || gradeAwaitsSpecies || gradeAvailability !== 'available'}
         invalid={!!fieldErrors?.gradeCode}
-        invalidText={fieldErrors?.gradeCode}
+        invalidText={fieldErrorText(fieldErrors?.gradeCode)}
         helperText={gradeAwaitsSpecies ? GRADE_HELPER_TEXT : undefined}
         onChange={({ selectedItem }) =>
           onChange('gradeCode', selectedItem ? normalizeCode(selectedItem.code) : '')

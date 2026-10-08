@@ -1256,7 +1256,6 @@ const ProvincialExemptionPage = () => {
       <UnsavedChangesGuard
         isDirty={false}
         isBusy={approving || approvalDialogBusy}
-        onSave={async () => false}
         onDiscard={() => {}}
         subject="these exemptions"
       />

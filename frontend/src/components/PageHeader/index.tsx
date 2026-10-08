@@ -1,6 +1,16 @@
-import { useId, type ComponentPropsWithoutRef, type ReactNode } from 'react'
+import { useEffect, useId, useRef, type ComponentPropsWithoutRef, type ReactNode } from 'react'
 
 import './PageHeader.css'
+
+// The router's key for the current history entry. A header that remounts during one visit (for
+// example after its page loads) takes focus back only when focus was lost with the old header.
+let focusedTitleVisit: string | undefined
+const historyEntryKey = (): string | undefined => {
+  const state: unknown = window.history.state
+  return state && typeof state === 'object' && 'key' in state && typeof state.key === 'string'
+    ? state.key
+    : undefined
+}
 
 type PageHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 'title'> & {
   title: ReactNode
@@ -9,6 +19,8 @@ type PageHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 'title'> & {
   actions?: ReactNode
   headingId?: string
   actionsLabel?: string
+  /** Moves focus to the title when the page opens, as create pages do instead of a field. */
+  focusTitle?: boolean
 }
 
 /**
@@ -24,6 +36,7 @@ const PageHeader = ({
   actions,
   headingId,
   actionsLabel = 'Page actions',
+  focusTitle = false,
   className,
   'aria-describedby': ariaDescribedBy,
   ...headerProps
@@ -32,6 +45,17 @@ const PageHeader = ({
   const resolvedHeadingId = headingId ?? `lexis-page-title-${generatedId}`
   const subtitleId = `lexis-page-subtitle-${generatedId}`
   const describedBy = [ariaDescribedBy, subtitle ? subtitleId : undefined].filter(Boolean).join(' ')
+  const titleRef = useRef<HTMLHeadingElement>(null)
+
+  useEffect(() => {
+    if (!focusTitle) return
+    const visit = historyEntryKey()
+    const active = document.activeElement
+    const focusLost = !active || active === document.body
+    if (visit && visit === focusedTitleVisit && !focusLost) return
+    focusedTitleVisit = visit
+    titleRef.current?.focus()
+  }, [focusTitle])
 
   return (
     <header
@@ -42,7 +66,12 @@ const PageHeader = ({
     >
       <div className="lexis-page-header__top">
         <div className="lexis-page-header__title-group">
-          <h1 id={resolvedHeadingId} className="lexis-page-header__title">
+          <h1
+            ref={titleRef}
+            id={resolvedHeadingId}
+            className="lexis-page-header__title"
+            tabIndex={focusTitle ? -1 : undefined}
+          >
             {title}
           </h1>
           {status ? <div className="lexis-page-header__status">{status}</div> : null}

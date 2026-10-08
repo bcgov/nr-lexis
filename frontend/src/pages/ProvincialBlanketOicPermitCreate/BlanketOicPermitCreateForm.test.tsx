@@ -233,8 +233,8 @@ describe('BlanketOicPermitCreateForm', () => {
         'Complete the required fields in Permit, Applicant and Shipping tabs.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText('Permit request pieces is required.')).toBeInTheDocument()
-    expect(screen.getByText('Permit request volume is required.')).toBeInTheDocument()
+    expect(screen.getByText('Permit request pieces is required')).toBeInTheDocument()
+    expect(screen.getByText('Permit request volume is required')).toBeInTheDocument()
     expect(summary).toHaveFocus()
     expect(
       screen.queryByText(/The permit number is assigned when you save/),
@@ -381,8 +381,64 @@ describe('BlanketOicPermitCreateForm', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(router.state.location.pathname).toBe('/elsewhere')
-    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('leaves without asking when only the pre-filled values are present', async () => {
+    const user = userEvent.setup()
+    const { router } = renderForm()
+    await user.click(screen.getByRole('tab', { name: /^Shipping(?:,|$)/ }))
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Transport type' })).toHaveValue('B'),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/elsewhere'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('asks before discarding an entered permit on Cancel', async () => {
+    const user = userEvent.setup()
+    const { router } = renderForm()
+    const remarks = screen.getByLabelText('Remarks')
+    await user.type(remarks, 'Draft remarks')
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+
+    await user.click(cancel)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Discard this permit?' })
+    expect(dialog).toHaveTextContent(
+      "The permit hasn't been created yet. Everything you've entered will be lost.",
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+    await waitFor(() => expect(cancel).toHaveFocus())
+    expect(router.state.location.pathname).toBe('/')
+    expect(remarks).toHaveValue('Draft remarks')
+
+    await user.click(cancel)
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Discard this permit?' })).getByRole(
+        'button',
+        { name: 'Discard' },
+      ),
+    )
+    await waitFor(() => expect(router.state.location.pathname).toBe('/elsewhere'))
+    expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('keeps entered values when switching tabs without asking', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(screen.getByLabelText('Remarks'), 'Draft remarks')
+
+    await user.click(screen.getByRole('tab', { name: /^Shipping(?:,|$)/ }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /^Permit(?:,|$)/ }))
+
+    expect(screen.getByLabelText('Remarks')).toHaveValue('Draft remarks')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('reveals Agent information only when the applicant identifies as an agent', async () => {
@@ -555,14 +611,14 @@ describe('BlanketOicPermitCreateForm', () => {
     {
       kind: 'applicant',
       blockedClientNumber: '12345678',
-      locationLabel: 'Client location',
-      errorMessage: 'No verified locations were found for this applicant.',
+      party: 'owner' as const,
+      errorMessage: 'No verified locations were found for this applicant',
     },
     {
       kind: 'agent' as const,
       blockedClientNumber: '87654321',
-      locationLabel: 'Agent client location',
-      errorMessage: 'No verified locations were found for this agent.',
+      party: 'agent' as const,
+      errorMessage: 'No verified locations were found for this agent',
     },
   ])('does not submit a permit with only a synthetic $kind location', async (scenario) => {
     const user = userEvent.setup()

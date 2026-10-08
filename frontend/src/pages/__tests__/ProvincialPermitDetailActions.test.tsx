@@ -536,6 +536,90 @@ const openBlanketOicPackageDeleteConfirmation = async () => {
 
 describe('Provincial Permit Detail Action Smoke', () => {
   let previewWindow: Window
+  it.each([
+    { tab: 'Permit', edit: /Edit permit(?: details)?/, save: /^Save (permit|changes)$/ },
+    { tab: 'Applicant', edit: /Edit applicant(?: details)?/, save: /^Save (permit|changes)$/ },
+    { tab: 'Shipping', edit: /Edit shipping(?: details)?/, save: /^Save (shipping|changes)$/ },
+  ])('closes unchanged $tab editing without any permit mutation', async ({ tab, edit, save }) => {
+    if (tab === 'Applicant') configureMinisterialActivePermit()
+    else configureActivePermit()
+    renderPermitDetails()
+    await selectPermitDetailTab(tab)
+    const launcher = await screen.findByRole('button', { name: edit })
+    await userEvent.click(launcher)
+    await waitFor(() =>
+      expect(screen.queryByText('Loading client locations…')).not.toBeInTheDocument(),
+    )
+    await userEvent.click(screen.getByRole('button', { name: save }))
+    await waitFor(() => expect(screen.getByRole('button', { name: edit })).toHaveFocus())
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+    expect(screen.queryByText('Permit details updated.')).not.toBeInTheDocument()
+  })
+
+  it('closes unchanged receipt editing without updating the permit', async () => {
+    configureMinisterialActivePermit()
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee details' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Edit fee details' })).toHaveFocus(),
+    )
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+  })
+
+  it('closes unchanged fee override editing without rounding or updating its saved value', async () => {
+    configureActivePermit()
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: true,
+      overrideFee: '25.005',
+      overrideComment: 'Legacy override',
+      locked: false,
+      lockMessage: '',
+    })
+    renderPermitDetails()
+    await selectPermitDetailTab('Fees')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+    await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Edit fee override' })).toHaveFocus(),
+    )
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Override fee (CAD)')).toHaveValue('25.005')
+  })
+
+  it('closes unchanged Blanket OIC package editing without normalizing its saved precision', async () => {
+    configureEditableBlanketOicPackage()
+    mockedFetchBlanketOicPackageEditContext.mockResolvedValue({
+      packageNumber: 'BOIC-9',
+      volume: '120.55',
+      averageLength: '7.1',
+      averageDiameter: '16.2',
+      status: 'ACT',
+      comments: 'Current OIC package',
+      reprocessed: 'N',
+      ageClass: 'O',
+      productType: 'H',
+      endUseCode: 'LU',
+      speciesCodes: ['HE'],
+    })
+    renderPermitDetails()
+    await selectPermitDetailTab('Items')
+    const card = await findBlanketOicPackageCard()
+    await userEvent.click(within(card).getByRole('button', { name: 'Edit package' }))
+    const panel = within(await screen.findByRole('complementary', { name: 'Edit package' }))
+    await waitFor(() => expect(panel.getByLabelText('Volume (m³)')).toHaveValue('120.55'))
+    await userEvent.click(panel.getByRole('button', { name: 'Save package' }))
+    await waitFor(() =>
+      expect(within(card).getByRole('button', { name: 'Edit package' })).toHaveFocus(),
+    )
+    expect(mockedUpdateBlanketOicPackage).not.toHaveBeenCalled()
+    expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
+    expect(screen.queryByRole('complementary', { name: 'Edit package' })).not.toBeInTheDocument()
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     previewWindow = {
@@ -2055,6 +2139,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
         name: 'Cancel',
       }),
     )
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    )
     expect(checkbox).toBeChecked()
     expect(checkbox).toBeDisabled()
     expect(mockedUpdatePermitScaleSelection).not.toHaveBeenCalled()
@@ -2110,6 +2199,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(
       within(screen.getByRole('group', { name: 'Summary of scale' })).getByRole('button', {
         name: 'Cancel',
+      }),
+    )
+    await userEvent.click(
+      within(screen.getByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
       }),
     )
     expect(first).toBeChecked()
@@ -2271,7 +2365,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   )
 
-  it('saves a Ministerial scale draft before leaving through the unsaved changes guard', async () => {
+  it('asks before discarding a Ministerial scale draft when leaving the permit', async () => {
     configureMinisterialActivePermit()
     mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
       ...tabsResult,
@@ -2311,11 +2405,17 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit scale selection' }))
     await userEvent.click(screen.getByRole('checkbox', { name: 'Include scale SCALE-1 in permit' }))
     await userEvent.click(screen.getByRole('link', { name: 'Leave permit' }))
-    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeVisible()
-    expect(mockedUpdatePermitScaleSelection).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
+    expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeVisible()
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(router.state.location.pathname).toBe('/provincial/permit/777')
+    expect(
+      screen.getByRole('checkbox', { name: 'Include scale SCALE-1 in permit' }),
+    ).not.toBeChecked()
+
+    await userEvent.click(screen.getByRole('link', { name: 'Leave permit' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     expect(await screen.findByRole('heading', { name: 'Next page' })).toBeVisible()
-    expect(mockedUpdatePermitScaleSelection).toHaveBeenCalledTimes(1)
+    expect(mockedUpdatePermitScaleSelection).not.toHaveBeenCalled()
   })
 
   it('filters Ministerial scale and fees by the shared exact package selection', async () => {
@@ -4733,8 +4833,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       '.application-detail-edit-section',
     ) as HTMLElement
     await waitFor(() => expect(within(editor).getByLabelText('Package number')).toBeEnabled())
-    expect(screen.getByRole('combobox', { name: 'Package number' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Add scale' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Package number' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Add scale' })).toBeEnabled()
     expect(screen.queryByLabelText('Timber mark')).not.toBeInTheDocument()
     await userEvent.clear(within(editor).getByLabelText('Package number'))
     await userEvent.type(within(editor).getByLabelText('Package number'), 'BOIC-NEW')
@@ -5025,9 +5125,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
 
       expect(
-        await within(packageEditor).findByText(
-          'Enter a length greater than 0 and no more than 99.',
-        ),
+        await within(packageEditor).findByText('Enter a length greater than 0 and no more than 99'),
       ).toBeInTheDocument()
       expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
 
@@ -5136,21 +5234,17 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it.each([
-    ['Volume (m³)', '10.25', 'Package volume must have no more than one decimal place.'],
-    ['Volume (m³)', '0', 'Enter a volume greater than 0 and no more than 120.5.'],
-    ['Volume (m³)', '120.6', 'Enter a volume greater than 0 and no more than 120.5.'],
-    ['Average length (m)', '0', 'Enter a length greater than 0 and no more than 99.'],
-    ['Average length (m)', '-1', 'Enter a length greater than 0 and no more than 99.'],
-    ['Average top diameter (rads)', '0', 'Enter a diameter greater than 0 and no more than 99.99.'],
-    [
-      'Average top diameter (rads)',
-      '-1',
-      'Enter a diameter greater than 0 and no more than 99.99.',
-    ],
+    ['Volume (m³)', '10.25', 'Package volume must have no more than one decimal place'],
+    ['Volume (m³)', '0', 'Enter a volume greater than 0 and no more than 120.5'],
+    ['Volume (m³)', '120.6', 'Enter a volume greater than 0 and no more than 120.5'],
+    ['Average length (m)', '0', 'Enter a length greater than 0 and no more than 99'],
+    ['Average length (m)', '-1', 'Enter a length greater than 0 and no more than 99'],
+    ['Average top diameter (rads)', '0', 'Enter a diameter greater than 0 and no more than 99.99'],
+    ['Average top diameter (rads)', '-1', 'Enter a diameter greater than 0 and no more than 99.99'],
     [
       'Average top diameter (rads)',
       '100',
-      'Enter a diameter greater than 0 and no more than 99.99.',
+      'Enter a diameter greater than 0 and no more than 99.99',
     ],
   ])('keeps invalid Blanket OIC %s out of the save request', async (fieldLabel, value, error) => {
     configureEditableBlanketOicPackage()
@@ -5173,7 +5267,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
   it.each([
     { comments: 'A'.repeat(180), error: null },
-    { comments: 'A'.repeat(181), error: 'Package comments must be 180 characters or fewer.' },
+    { comments: 'A'.repeat(181), error: 'Package comments must be 180 characters or fewer' },
     {
       comments: 'Review caf\u00e9',
       error:
@@ -5276,12 +5370,17 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(averageLength, '0')
     await userEvent.click(within(firstPackageEditor).getByRole('button', { name: 'Save package' }))
 
-    const validationMessage = 'Enter a length greater than 0 and no more than 99.'
+    const validationMessage = 'Enter a length greater than 0 and no more than 99'
     expect(await within(firstPackageEditor).findByText(validationMessage)).toBeInTheDocument()
     const packageSelect = screen.getByRole('combobox', { name: 'Package number' })
-    expect(packageSelect).toBeDisabled()
+    expect(packageSelect).toBeEnabled()
 
     await userEvent.click(within(firstPackageEditor).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    )
     expect(screen.queryByText(validationMessage)).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
@@ -5454,9 +5553,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(cleanUnload.defaultPrevented).toBe(false)
     await userEvent.click(save)
 
-    expect(await within(packageEditor).findByText('Enter a package number.')).toBeVisible()
-    expect(within(packageEditor).getByText('Select at least one species.')).toBeVisible()
-    expect(within(packageEditor).queryByText('Select an end use.')).not.toBeInTheDocument()
+    expect(await within(packageEditor).findByText('Enter a package number')).toBeVisible()
+    expect(within(packageEditor).getByText('Select at least one species')).toBeVisible()
+    expect(within(packageEditor).queryByText('Select an end use')).not.toBeInTheDocument()
     expect(within(packageEditor).queryByText('Package needs attention')).not.toBeInTheDocument()
     await waitFor(() =>
       expect(within(packageEditor).getByLabelText('Package number')).toHaveFocus(),
@@ -5469,7 +5568,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() => expect(endUse).toBeEnabled())
     await userEvent.click(save)
 
-    expect(await within(packageEditor).findByText('Select an end use.')).toBeVisible()
+    expect(await within(packageEditor).findByText('Select an end use')).toBeVisible()
     await waitFor(() => expect(endUse).toHaveFocus())
     expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
   })
@@ -5503,7 +5602,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ),
     ).toBeVisible()
     const save = within(packageEditor).getByRole('button', { name: 'Save package' })
-    const limitError = 'Enter a volume greater than 0 and no more than 200.0.'
+    const limitError = 'Enter a volume greater than 0 and no more than 200.0'
 
     for (const value of ['0', '200.1']) {
       await userEvent.clear(volume)
@@ -5514,7 +5613,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.clear(volume)
     await userEvent.type(volume, '200')
     await userEvent.click(save)
-    await within(packageEditor).findByText('Enter a package number.')
+    await within(packageEditor).findByText('Enter a package number')
     expect(within(packageEditor).queryByText(limitError)).not.toBeInTheDocument()
     expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
   })
@@ -5554,7 +5653,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(
       await within(packageEditor).findByText(
-        'The total package volume must not exceed the permit request volume (120.5).',
+        'The total package volume must not exceed the permit request volume (120.5)',
       ),
     ).toBeVisible()
     expect(volume).toHaveAttribute('aria-invalid', 'true')
@@ -5609,13 +5708,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
         expect.objectContaining({ packageNumber: '2', volume: '0.1', averageLength: '2.5' }),
       ),
     )
-    expect(await within(packageEditor).findByText('Package 2 already exists.')).toBeVisible()
+    expect(await within(packageEditor).findByText('Package 2 already exists')).toBeVisible()
     expect(within(packageEditor).getByLabelText('Volume (m³)')).toHaveValue('0.1')
     expect(within(packageEditor).queryByText('Package needs attention')).not.toBeInTheDocument()
     await waitFor(() => expect(packageNumber).toHaveFocus())
 
     await userEvent.type(packageNumber, '5')
-    expect(within(packageEditor).queryByText('Package 2 already exists.')).not.toBeInTheDocument()
+    expect(within(packageEditor).queryByText('Package 2 already exists')).not.toBeInTheDocument()
     expect(within(packageEditor).queryByText('Package needs attention')).not.toBeInTheDocument()
   })
 
@@ -5723,12 +5822,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
       within(panel).getByText('Must be less than or equal to remaining package volume (2.0 m³)'),
     ).toBeInTheDocument()
     await userEvent.click(within(panel).getByRole('button', { name: 'Save scale' }))
-    expect(await within(panel).findByText('Enter a timber mark.')).toBeInTheDocument()
+    expect(await within(panel).findByText('Enter a timber mark')).toBeInTheDocument()
     expect(
-      within(panel).getByText('Enter a whole number of pieces greater than 0.'),
+      within(panel).getByText('Enter a whole number of pieces greater than 0'),
     ).toBeInTheDocument()
-    expect(within(panel).getByText('Select a species.')).toBeInTheDocument()
-    expect(within(panel).getByText('Enter a volume greater than 0.')).toBeInTheDocument()
+    expect(within(panel).getByText('Select a species')).toBeInTheDocument()
+    expect(within(panel).getByText('Enter a volume greater than 0')).toBeInTheDocument()
     expect(within(panel).queryByText('Scale needs attention')).not.toBeInTheDocument()
     expect(mockedAddBlanketOicScale).not.toHaveBeenCalled()
     await waitFor(() => expect(within(panel).getByLabelText('Timber mark')).toHaveFocus())
@@ -5738,18 +5837,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(dirtyUnload.defaultPrevented).toBe(true)
     await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
     await userEvent.click(
-      within(await screen.findByRole('dialog', { name: 'Discard scale changes?' })).getByRole(
-        'button',
-        { name: 'Keep editing' },
-      ),
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Keep editing',
+      }),
     )
     expect(within(panel).getByLabelText('Timber mark')).toHaveValue('KEEP-ME')
     await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
     await userEvent.click(
-      within(await screen.findByRole('dialog', { name: 'Discard scale changes?' })).getByRole(
-        'button',
-        { name: 'Discard changes' },
-      ),
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
     )
     expect(screen.queryByRole('complementary', { name: 'Add scale' })).not.toBeInTheDocument()
     const discardedUnload = new Event('beforeunload', { cancelable: true })
@@ -5757,6 +5854,36 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(discardedUnload.defaultPrevented).toBe(false)
     expect(mockedAddBlanketOicScale).not.toHaveBeenCalled()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add scale' })).toHaveFocus())
+  })
+
+  it('settles focus in the scale panel after discarding a package draft', async () => {
+    configureEditableBlanketOicPackage()
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+    await userEvent.click(await screen.findByRole('button', { name: 'Create package' }))
+    const packagePanel = screen.getByRole('complementary', { name: 'Create package' })
+    const packageNumber = within(packagePanel).getByLabelText('Package number')
+    await waitFor(() => expect(packageNumber).toBeEnabled())
+    await userEvent.type(packageNumber, 'DRAFT-PACKAGE')
+    const addScale = screen.getByRole('button', { name: 'Add scale' })
+    await waitFor(() => expect(addScale).toBeEnabled())
+
+    await userEvent.click(addScale)
+    expect(screen.getAllByRole('dialog', { name: 'Discard changes?' })).toHaveLength(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(packageNumber).toHaveValue('DRAFT-PACKAGE')
+    await waitFor(() => expect(addScale).toHaveFocus())
+
+    await userEvent.click(addScale)
+    await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
+    await new Promise<void>((resolve) =>
+      requestAnimationFrame(() => requestAnimationFrame(() => resolve())),
+    )
+    expect(screen.getByLabelText('Timber mark')).toHaveFocus()
+    expect(screen.queryByRole('complementary', { name: 'Create package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
+    expect(mockedAddBlanketOicScale).not.toHaveBeenCalled()
   })
 
   it('returns focus to collapsed Species when keeping the scale draft after native Escape', async () => {
@@ -5770,7 +5897,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     species.focus()
     expect(species).toHaveAttribute('aria-expanded', 'false')
     fireEvent.keyDown(species, { key: 'Escape', code: 'Escape', keyCode: 27, which: 27 })
-    const dialog = await screen.findByRole('dialog', { name: 'Discard scale changes?' })
+    const dialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
     await waitFor(() => expect(species).toHaveFocus())
     expect(species).toHaveTextContent('Hemlock')
@@ -5854,7 +5981,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(
       await within(panel).findByText(
-        'Must be less than or equal to remaining package volume (2.0 m³).',
+        'Must be less than or equal to remaining package volume (2.0 m³)',
       ),
     ).toBeInTheDocument()
     await waitFor(() => expect(volume).toHaveFocus())
@@ -5862,9 +5989,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await userEvent.clear(volume)
     await userEvent.type(volume, '.5')
+    expect(volume).not.toHaveAttribute('aria-invalid', 'true')
     expect(
-      within(panel).queryByText('Must be less than or equal to remaining package volume (2.0 m³).'),
-    ).not.toBeInTheDocument()
+      within(panel).getByText('Must be less than or equal to remaining package volume (2.0 m³)'),
+    ).toBeInTheDocument()
     await userEvent.click(within(panel).getByRole('button', { name: 'Save scale' }))
 
     await waitFor(() =>
@@ -5873,7 +6001,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ),
     )
     expect(
-      await within(panel).findByText('Timber mark TM-BAD is not valid for exemption 123.'),
+      await within(panel).findByText('Timber mark TM-BAD is not valid for exemption 123'),
     ).toBeInTheDocument()
     expect(within(panel).getByText('Scale needs attention')).toBeInTheDocument()
     expect(
@@ -5916,7 +6044,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(within(panel).getByRole('button', { name: 'Save scale' }))
     expect(
       await within(panel).findByText(
-        'Must be less than or equal to remaining package volume (1.5 m³).',
+        'Must be less than or equal to remaining package volume (1.5 m³)',
       ),
     ).toBeInTheDocument()
     expect(mockedAddBlanketOicScale).not.toHaveBeenCalled()
@@ -6023,19 +6151,24 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
     await userEvent.type(await screen.findByLabelText('Timber mark'), 'TM-NEW')
-    expect(packageSelect).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Create package' })).toBeDisabled()
+    // The page stays usable beside the panel, and replacing a panel with entered data asks first.
+    expect(packageSelect).toBeEnabled()
     const selectedPackageRow = await findBlanketOicPackageCard('BOIC-10')
-    expect(within(selectedPackageRow).getByRole('button', { name: 'Edit package' })).toBeDisabled()
-    expect(
-      within(selectedPackageRow).getByRole('button', { name: 'Delete package' }),
-    ).toBeDisabled()
+    expect(within(selectedPackageRow).getByRole('button', { name: 'Edit package' })).toBeEnabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Keep editing',
+      }),
+    )
+    expect(screen.getByLabelText('Timber mark')).toHaveValue('TM-NEW')
+    expect(screen.queryByRole('heading', { name: 'Create package' })).not.toBeInTheDocument()
     await userEvent.click(
       within(screen.getByRole('complementary', { name: 'Add scale' })).getByRole('button', {
         name: 'Cancel',
       }),
     )
-    const discardScale = await screen.findByRole('dialog', { name: 'Discard scale changes?' })
+    const discardScale = await screen.findByRole('dialog', { name: 'Discard changes?' })
     await userEvent.click(within(discardScale).getByRole('button', { name: 'Discard changes' }))
     expect(packageSelect).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Create package' })).toBeEnabled()
@@ -6666,7 +6799,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Save shipping' })).not.toBeInTheDocument()
   })
 
-  it('blocks Blanket OIC client saves until each selected client location is verified', async () => {
+  it('rejects Blanket OIC client saves until each selected client location is verified', async () => {
     configureEditableBlanketOicPackage()
     let resolveOwnerLocations:
       | ((
@@ -6690,14 +6823,33 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
     )
     const saveButton = getActiveSectionSaveButton()
-    expect(saveButton).toBeDisabled()
+    expect(saveButton).toBeEnabled()
+    await userEvent.click(saveButton)
+    const location = screen.getByLabelText('Client location', {
+      selector: '#permit-ownerClientLocation',
+    })
+    expect(location).toBeDisabled()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
     await act(async () =>
       resolveOwnerLocations?.([
         { locationCode: '03', locationName: 'Owner office', selected: true },
       ]),
     )
-    await waitFor(() => expect(saveButton).toBeEnabled())
+    expect(saveButton).toBeEnabled()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    await userEvent.selectOptions(location, '')
+    await userEvent.click(saveButton)
+    expect(await screen.findByText('Select a client location')).toBeVisible()
+    expect(location).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(location).toHaveFocus())
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    await userEvent.selectOptions(location, '03')
+    expect(location).not.toHaveAttribute('aria-invalid', 'true')
+    await userEvent.click(saveButton)
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Edit applicant(?: details)?/ })).toHaveFocus(),
+    )
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
@@ -6851,7 +7003,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     consoleWarn.mockRestore()
   })
 
-  it('does not navigate or continue a deferred status transition after a saved normal permit cannot refresh', async () => {
+  it('does not continue a deferred status transition after a saved normal permit cannot refresh', async () => {
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     configureActivePermit()
     mockedFetchProvincialPermitDetail
@@ -6882,9 +7034,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.clear(screen.getByLabelText('Submit date'))
     await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
-    await userEvent.click(screen.getByRole('link', { name: 'Leave permit' }))
-    await screen.findByRole('dialog', { name: 'Unsaved changes' })
-    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
+    await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledOnce())
     expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
@@ -6918,7 +7068,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(saveButton)
 
     expect(
-      (await screen.findAllByText('Receipt number must be 50 characters or fewer.')).length,
+      (await screen.findAllByText('Receipt number must be 50 characters or fewer')).length,
     ).toBeGreaterThanOrEqual(1)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
@@ -6926,7 +7076,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(saveButton)
 
     expect(
-      (await screen.findAllByText('Permit remarks must be 254 characters or fewer.')).length,
+      (await screen.findAllByText('Permit remarks must be 254 characters or fewer')).length,
     ).toBeGreaterThanOrEqual(1)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
@@ -7056,47 +7206,41 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(dirtyUnload.defaultPrevented).toBe(true)
 
     await userEvent.click(screen.getAllByRole('button', { name: 'Cancel' })[0])
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     const cancelledUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(cancelledUnload)
     expect(cancelledUnload.defaultPrevented).toBe(false)
   })
 
-  it('saves dirty shipping before permit fields without erasing either draft', async () => {
-    configureActivePermit()
-    const router = createMemoryRouter(
-      [
-        {
-          path: '/provincial/permit/:permitNumber',
-          element: (
-            <>
-              <ProvincialPermitDetailsPage />
-              <Link to="/next">Leave permit</Link>
-            </>
-          ),
-        },
-        { path: '/next', element: <h1>Next page</h1> },
-      ],
-      { initialEntries: ['/provincial/permit/777'] },
+  it("saves a new Ministerial permit's shipping before its permit fields", async () => {
+    configureMinisterialActivePermit()
+    render(
+      <MemoryRouter
+        initialEntries={[{ pathname: '/provincial/permit/777', state: { permitCreated: true } }]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
     )
-    render(<RouterProvider router={router} />)
 
-    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
-    await userEvent.clear(screen.getByLabelText('Remarks'))
+    await userEvent.clear(await screen.findByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Updated permit remarks')
+    // A new permit's tabs keep their entered values without asking.
     await selectPermitDetailTab('Shipping')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
-    await userEvent.clear(screen.getByLabelText('Purchaser'))
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    await userEvent.clear(await screen.findByLabelText('Purchaser'))
     await userEvent.type(screen.getByLabelText('Purchaser'), 'Updated Destination')
+    await selectPermitDetailTab('Permit')
+    expect(screen.getByLabelText('Remarks')).toHaveValue('Updated permit remarks')
+    await userEvent.click(getActiveSectionSaveButton())
 
-    await userEvent.click(screen.getByRole('link', { name: 'Leave permit' }))
-    await screen.findByRole('dialog', { name: 'Unsaved changes' })
-    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
-
-    expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
+    expect(await screen.findByText('Permit and shipping details saved')).toBeInTheDocument()
     expect(mockedUpdatePermitShipping).toHaveBeenCalledWith(
-      expect.objectContaining({
-        destinationCompanyName: 'Updated Destination',
-      }),
+      expect.objectContaining({ destinationCompanyName: 'Updated Destination' }),
     )
     expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -7110,24 +7254,33 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
-  it('labels a combined permit and shipping save', async () => {
+  it('asks before leaving a tab with unsaved changes and edits one section at a time', async () => {
     configureActivePermit()
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Remarks'))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Updated permit remarks')
-    await selectPermitDetailTab('Shipping')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
-    await userEvent.clear(screen.getByLabelText('Purchaser'))
-    await userEvent.type(screen.getByLabelText('Purchaser'), 'Updated Destination')
-    await selectPermitDetailTab('Permit')
-    await userEvent.click(getActiveSectionSaveButton())
+    await userEvent.click(screen.getByRole('tab', { name: 'Shipping' }))
 
-    expect(await screen.findByText('Permit and shipping details saved')).toBeInTheDocument()
+    const discard = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await waitFor(() =>
+      expect(within(discard).getByRole('button', { name: 'Keep editing' })).toHaveFocus(),
+    )
+    await userEvent.click(within(discard).getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Remarks')).toHaveValue('Updated permit remarks')
+
+    await userEvent.click(screen.getByRole('tab', { name: 'Shipping' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+    expect(screen.getByRole('tab', { name: 'Shipping' })).toHaveAttribute('aria-selected', 'true')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
+    await selectPermitDetailTab('Permit')
+    expect(screen.queryByLabelText('Remarks')).not.toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
-  it('serializes direct permit and shipping saves without stranding busy state', async () => {
+  it('waits for a permit save before editing shipping without stranding busy state', async () => {
     configureActivePermit()
     let resolvePermitSave:
       | ((value: Awaited<ReturnType<typeof updatePermitDetail>>) => void)
@@ -7145,16 +7298,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(getActiveSectionSaveButton())
     await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1))
 
-    await selectPermitDetailTab('Shipping')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
-    await userEvent.clear(screen.getByLabelText('Purchaser'))
-    await userEvent.type(screen.getByLabelText('Purchaser'), 'Queued shipping change')
-    await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
-
+    await userEvent.click(screen.getByRole('tab', { name: 'Shipping' }))
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Remarks')).toHaveValue('Slow permit save')
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
-    expect(
-      await screen.findByText('Wait for the current permit change to finish before saving again.'),
-    ).toBeInTheDocument()
     await act(async () => {
       resolvePermitSave?.({
         success: true,
@@ -7165,6 +7313,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
       })
     })
 
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: /Edit permit(?: details)?/ })).toBeEnabled(),
+    )
+    await selectPermitDetailTab('Shipping')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
+    await userEvent.clear(screen.getByLabelText('Purchaser'))
+    await userEvent.type(screen.getByLabelText('Purchaser'), 'Shipping change after save')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save shipping' })).toBeEnabled())
     await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
     await waitFor(() => expect(mockedUpdatePermitShipping).toHaveBeenCalledTimes(1))
@@ -7235,51 +7390,21 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   )
 
-  it('saves shipping changes before completing a permit', async () => {
+  it('saves policy fields before completing a permit', async () => {
     configureEditableBlanketOicPackage()
-    const router = createMemoryRouter(
-      [
-        {
-          path: '/provincial/permit/:permitNumber',
-          element: (
-            <>
-              <ProvincialPermitDetailsPage />
-              <Link to="/next">Leave permit</Link>
-            </>
-          ),
-        },
-        { path: '/next', element: <h1>Next page</h1> },
-      ],
-      { initialEntries: ['/provincial/permit/777'] },
-    )
-    render(<RouterProvider router={router} />)
+    renderPermitDetails()
 
-    await selectPermitDetailTab('Shipping')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping details' }))
-    const destinationCountry = screen.getByRole('combobox', {
-      name: 'Final destination country',
-    })
-    await userEvent.click(destinationCountry)
-    await userEvent.click(await screen.findByRole('option', { name: 'United States (US)' }))
-    await selectPermitDetailTab('Permit')
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByLabelText('Region')).toBeDisabled()
     await userEvent.clear(screen.getByLabelText('Submit date'))
     await userEvent.type(screen.getByLabelText('Submit date'), '2026-04-11')
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'COM')
+    await userEvent.click(getActiveSectionSaveButton())
 
-    await userEvent.click(screen.getByRole('link', { name: 'Leave permit' }))
-    await screen.findByRole('dialog', { name: 'Unsaved changes' })
-    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
-
-    expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
-    expect(mockedUpdatePermitShipping).toHaveBeenCalledWith(
-      expect.objectContaining({ destinationCountry: 'US' }),
-    )
+    await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(2))
     expect(mockedUpdatePermitDetail).toHaveBeenNthCalledWith(
       1,
       expect.objectContaining({
-        destinationCountry: 'US',
         orgUnitNumber: '1903',
         permitSubmitDate: '2026-04-11',
         permitStatus: 'ACT',
@@ -7289,13 +7414,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       2,
       expect.objectContaining({ permitStatus: 'COM' }),
     )
-    expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(2)
-    expect(mockedUpdatePermitShipping.mock.invocationCallOrder[0]).toBeLessThan(
-      mockedUpdatePermitDetail.mock.invocationCallOrder[0],
-    )
-    expect(mockedUpdatePermitDetail.mock.invocationCallOrder[0]).toBeLessThan(
-      mockedUpdatePermitDetail.mock.invocationCallOrder[1],
-    )
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
   })
 
   it('limits editable Blanket OIC regions to the exemption area', async () => {
@@ -7335,7 +7454,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
-  it('requires a BOIC Region draft to be saved or discarded before creating a package', async () => {
+  it('asks to discard a BOIC Region draft before creating a package', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'ACT',
@@ -7350,20 +7469,20 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.selectOptions(screen.getByLabelText('Region'), '1904')
     await selectPermitDetailTab('Scale')
-    await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
-    const packageEditor = (await screen.findByRole('heading', { name: 'Create package' })).closest(
-      '.application-detail-edit-section',
-    ) as HTMLElement
-    await userEvent.click(within(packageEditor).getByRole('button', { name: 'Save package' }))
-
-    expect(
-      await screen.findByText('Save or discard the Region change before saving a package.'),
-    ).toBeInTheDocument()
+    await userEvent.click(await screen.findByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Region')).toHaveValue('1904')
     expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    await selectPermitDetailTab('Scale')
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Create package' }))
+    expect(await screen.findByRole('complementary', { name: 'Create package' })).toBeInTheDocument()
     await selectPermitDetailTab('Permit')
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByLabelText('Region')).toBeEnabled()
-    expect(screen.getByLabelText('Region')).toHaveValue('1904')
+    expect(screen.getByLabelText('Region')).toHaveValue(String(permitDetail.orgUnitNumber))
   })
 
   it.each([1903, 1908])(
@@ -7584,10 +7703,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(getActiveSectionSaveButton())
 
     expect(
-      (await screen.findAllByText('Permit request pieces is required.')).length,
+      (await screen.findAllByText('Permit request pieces is required')).length,
     ).toBeGreaterThan(0)
     expect(
-      (await screen.findAllByText('Permit request volume is required.')).length,
+      (await screen.findAllByText('Permit request volume is required')).length,
     ).toBeGreaterThan(0)
     expect(screen.getByLabelText('Permit request pieces')).toHaveValue('')
     expect(screen.getByLabelText('Permit request volume (m³)')).toHaveValue('')
@@ -7641,13 +7760,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    await userEvent.type(screen.getByLabelText('Remarks'), ' Updated')
     await userEvent.click(getActiveSectionSaveButton())
 
     expect(
-      (await screen.findAllByText('Permit request pieces is required.')).length,
+      (await screen.findAllByText('Permit request pieces is required')).length,
     ).toBeGreaterThan(0)
     expect(
-      (await screen.findAllByText('Permit request volume is required.')).length,
+      (await screen.findAllByText('Permit request volume is required')).length,
     ).toBeGreaterThan(0)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
@@ -7670,10 +7790,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Permit request volume (m³)'), '-1')
     await userEvent.click(getActiveSectionSaveButton())
 
-    expect(
-      (await screen.findAllByText('Permit request pieces must be a whole number.')).length,
-    ).toBeGreaterThanOrEqual(2)
-    expect(await screen.findByText('Permit request volume must be numeric.')).toBeInTheDocument()
+    // The errors show on their fields, and the first takes focus.
+    expect(await screen.findByText('Permit request pieces must be a whole number')).toBeVisible()
+    expect(await screen.findByText('Permit request volume must be numeric')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Permit request pieces')).toHaveFocus())
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
     await userEvent.clear(screen.getByLabelText('Permit request pieces'))
@@ -7683,10 +7803,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(getActiveSectionSaveButton())
 
     expect(
-      (await screen.findAllByText('Permit request pieces must be 9999999999 or less.')).length,
+      (await screen.findAllByText('Permit request pieces must be 9999999999 or less')).length,
     ).toBeGreaterThanOrEqual(1)
     expect(
-      screen.getByText('Permit request volume must have no more than 2 decimal places.'),
+      screen.getByText('Permit request volume must have no more than 2 decimal places'),
     ).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
@@ -7697,7 +7817,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(getActiveSectionSaveButton())
 
     expect(
-      (await screen.findAllByText('Permit request volume must be 9 characters or fewer.')).length,
+      (await screen.findAllByText('Permit request volume must be 9 characters or fewer')).length,
     ).toBeGreaterThanOrEqual(1)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
@@ -7733,7 +7853,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(getActiveSectionSaveButton())
 
     expect(
-      (await screen.findAllByText('Use a positive numeric value.')).length,
+      (await screen.findAllByText('Use a positive numeric value')).length,
     ).toBeGreaterThanOrEqual(2)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
@@ -7791,14 +7911,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await userEvent.clear(submitDate)
       await userEvent.clear(issueDate)
       await userEvent.tab()
-      expect(await screen.findByText('Issued date is required.')).toBeInTheDocument()
+      expect(issueDate).not.toHaveAttribute('aria-invalid', 'true')
       await userEvent.clear(expiryDate)
       await userEvent.click(
         screen.getByRole('button', { name: blanketOic ? 'Save changes' : 'Save permit' }),
       )
 
-      expect(await screen.findByText('Submit date is required.')).toBeInTheDocument()
-      expect(await screen.findByText('Expiry date is required.')).toBeInTheDocument()
+      expect(await screen.findByText('Submit date is required')).toBeInTheDocument()
+      expect(await screen.findByText('Issued date is required')).toBeInTheDocument()
+      expect(await screen.findByText('Expiry date is required')).toBeInTheDocument()
       expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
       await userEvent.selectOptions(screen.getByLabelText(statusLabel), 'ACT')
@@ -7965,19 +8086,26 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
+    await selectPermitDetailTab('Owner')
+    expect(await screen.findByRole('heading', { name: 'Applicant details' })).toBeInTheDocument()
+    expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit applicant(?: details)?/ }),
+    ).not.toBeInTheDocument()
+
     await selectPermitDetailTab('Fees')
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     expect(screen.getByText(/select Completed on the Permit tab/i)).toBeInTheDocument()
     const receiptNumber = screen.getByLabelText('Receipt number')
     await userEvent.type(receiptNumber, 'R-2')
-    expect(screen.getByRole('button', { name: 'Save permit' })).toBeDisabled()
-
-    await selectPermitDetailTab('Owner')
-    expect(screen.getByRole('heading', { name: 'Applicant details' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
     expect(
-      screen.queryByRole('button', { name: /Edit applicant(?: details)?/ }),
-    ).not.toBeInTheDocument()
+      await screen.findByText(
+        'Select Completed on the Permit tab before saving a payment-pending receipt.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
     await selectPermitDetailTab('Permit')
 
     const financialTile = screen
@@ -8131,6 +8259,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.selectOptions(screen.getByLabelText('Customs port of export'), 'VA')
 
     expect(screen.queryByLabelText('Other port of export')).not.toBeInTheDocument()
+    await userEvent.type(screen.getByLabelText('Transport name'), ' Updated')
     await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
     await waitFor(() => {
       expect(mockedUpdatePermitShipping).toHaveBeenCalledWith(
@@ -8154,7 +8283,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
   })
 
-  it('disables shipping save when a text value exceeds the frontend schema width', async () => {
+  it('rejects a shipping save when a text value exceeds the frontend schema width', async () => {
     configureActivePermit()
     mockedFetchProvincialPermitDetail.mockResolvedValueOnce({
       ...permitDetail,
@@ -8167,7 +8296,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Shipping')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
 
-    expect(screen.getByRole('button', { name: 'Save shipping' })).toBeDisabled()
+    const save = screen.getByRole('button', { name: 'Save shipping' })
+    expect(save).toBeEnabled()
+    await userEvent.type(screen.getByLabelText('Transport name'), ' Updated')
+    await userEvent.click(save)
+    const purchaser = screen.getByLabelText('Purchaser')
+    await waitFor(() => expect(purchaser).toHaveAttribute('aria-invalid', 'true'))
+    await waitFor(() => expect(purchaser).toHaveFocus())
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
   })
 
@@ -8660,7 +8795,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(saveButton).toBeEnabled()
     expect(overrideFee).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('Override fee is required.')).toBeInTheDocument()
+    expect(screen.getByText('Override fee is required')).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
     await userEvent.type(overrideFee, '1.00')
@@ -8691,7 +8826,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.clear(screen.getByLabelText('Override fee (CAD)'))
     await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
-    expect(screen.getByText('Override fee is required.')).toBeInTheDocument()
+    expect(screen.getByText('Override fee is required')).toBeInTheDocument()
     expect(screen.queryByText('Fee override saved')).not.toBeInTheDocument()
     expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1)
   })
@@ -8723,7 +8858,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(saveButton)
 
     expect(
-      await screen.findByText('Override fee must round to 9999999.99 or less.'),
+      await screen.findByText('Override fee must round to 9999999.99 or less'),
     ).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
@@ -8731,7 +8866,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(overrideFee, '0.001')
     await userEvent.click(saveButton)
 
-    expect(await screen.findByText('Override fee must round to at least 0.01.')).toBeInTheDocument()
+    expect(await screen.findByText('Override fee must round to at least 0.01')).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
 
     await userEvent.clear(overrideFee)
@@ -8740,7 +8875,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.click(saveButton)
 
     expect(
-      await screen.findByText('Override comment must be 254 characters or fewer.'),
+      await screen.findByText('Override comment must be 254 characters or fewer'),
     ).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
@@ -9261,6 +9396,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(mockedUpdateBlanketOicPackage).toHaveBeenCalledOnce()
 
       await userEvent.click(within(packageEditor).getByRole('button', { name: 'Cancel' }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
       expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Create package' }))
       expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
@@ -9928,5 +10064,198 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByText('Scale unavailable')).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Create package' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
+  })
+
+  describe('edit focus', () => {
+    it('focuses the first permit field on edit and the Edit button after Cancel', async () => {
+      configureEditableBlanketOicPackage()
+      renderPermitDetails()
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit permit details' }))
+      await waitFor(() => expect(screen.getByLabelText('Status')).toHaveFocus())
+      await userEvent.click(
+        within(screen.getByRole('tabpanel')).getByRole('button', { name: 'Cancel' }),
+      )
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Edit permit details' })).toHaveFocus(),
+      )
+    })
+
+    it('returns focus to Edit after a successful save', async () => {
+      configureActivePermit()
+      renderPermitDetails()
+
+      await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+      await userEvent.clear(screen.getByLabelText('Remarks'))
+      await userEvent.type(screen.getByLabelText('Remarks'), 'Saved remarks')
+      await userEvent.click(getActiveSectionSaveButton())
+
+      await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: /Edit permit(?: details)?/ })).toHaveFocus(),
+      )
+    })
+
+    it('focuses the Override fees? choice when editing the fee override', async () => {
+      configureActivePermit()
+      renderPermitDetails()
+
+      await selectPermitDetailTab('Fees')
+      await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
+
+      await waitFor(() => expect(screen.getByRole('radio', { name: 'No' })).toHaveFocus())
+    })
+  })
+
+  describe('panel tab changes', () => {
+    const panels = [
+      { name: 'Add scale', field: 'Timber mark' },
+      { name: 'Create package', field: 'Comments' },
+    ]
+
+    it('asks before leaving a queued permit document for another tab', async () => {
+      configureBlanketOicDocument()
+      renderPermitDetails()
+      await selectPermitDetailTab('Documents')
+      await userEvent.click(await screen.findByRole('button', { name: 'Add documents' }))
+      const panel = await screen.findByRole('complementary', { name: 'Add documents' })
+      await userEvent.upload(
+        within(panel).getByLabelText('Document File'),
+        new File(['test'], 'pending.pdf', { type: 'application/pdf' }),
+      )
+
+      await selectPermitDetailTab('Shipping')
+      await userEvent.click(await screen.findByRole('button', { name: 'Keep editing' }))
+      expect(screen.getByRole('tab', { name: 'Documents' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+      expect(within(panel).getByText('pending.pdf')).toBeInTheDocument()
+
+      await selectPermitDetailTab('Shipping')
+      await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+      expect(screen.getByRole('tab', { name: 'Shipping' })).toHaveAttribute('aria-selected', 'true')
+      expect(screen.queryByRole('complementary', { name: 'Add documents' })).not.toBeInTheDocument()
+      expect(submitAdminUpload).not.toHaveBeenCalled()
+      const unload = new Event('beforeunload', { cancelable: true })
+      window.dispatchEvent(unload)
+      expect(unload.defaultPrevented).toBe(false)
+    })
+
+    it.each(panels)(
+      'asks before leaving a changed $name panel for another tab',
+      async ({ name, field }) => {
+        configureEditableBlanketOicPackage()
+        renderPermitDetails()
+        await selectPermitDetailTab('Scale')
+        await userEvent.click(await screen.findByRole('button', { name }))
+        const panel = await screen.findByRole('complementary', { name })
+        await userEvent.type(await within(panel).findByLabelText(field), 'KEEP-ME')
+
+        await selectPermitDetailTab('Shipping')
+
+        const discard = await screen.findByRole('dialog', { name: 'Discard changes?' })
+        expect(screen.getByRole('tab', { name: 'Scale' })).toHaveAttribute('aria-selected', 'true')
+        await userEvent.click(within(discard).getByRole('button', { name: 'Keep editing' }))
+        expect(within(panel).getByLabelText(field)).toHaveValue('KEEP-ME')
+        expect(screen.getByRole('tab', { name: 'Scale' })).toHaveAttribute('aria-selected', 'true')
+
+        await selectPermitDetailTab('Shipping')
+        await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+
+        await waitFor(() =>
+          expect(screen.getByRole('tab', { name: 'Shipping' })).toHaveAttribute(
+            'aria-selected',
+            'true',
+          ),
+        )
+        expect(screen.queryByRole('complementary', { name })).not.toBeInTheDocument()
+        const unload = new Event('beforeunload', { cancelable: true })
+        window.dispatchEvent(unload)
+        expect(unload.defaultPrevented).toBe(false)
+        expect(mockedAddBlanketOicScale).not.toHaveBeenCalled()
+        expect(mockedAddBlanketOicPackage).not.toHaveBeenCalled()
+      },
+    )
+
+    it.each(panels)(
+      'leaves an unchanged $name panel for another tab without asking',
+      async ({ name }) => {
+        configureEditableBlanketOicPackage()
+        renderPermitDetails()
+        await selectPermitDetailTab('Scale')
+        await userEvent.click(await screen.findByRole('button', { name }))
+        await screen.findByRole('complementary', { name })
+
+        await selectPermitDetailTab('Shipping')
+
+        expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+        expect(screen.getByRole('tab', { name: 'Shipping' })).toHaveAttribute(
+          'aria-selected',
+          'true',
+        )
+        expect(screen.queryByRole('complementary', { name })).not.toBeInTheDocument()
+      },
+    )
+  })
+
+  it('asks before closing the Add scale panel with entered data', async () => {
+    configureEditableBlanketOicPackage()
+    renderPermitDetails()
+    await selectPermitDetailTab('Items')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Add scale' }))
+    const panel = screen.getByRole('complementary', { name: 'Add scale' })
+    await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.queryByLabelText('Timber mark')).not.toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add scale' }))
+    await userEvent.type(await screen.findByLabelText('Timber mark'), 'TM-NEW')
+    await userEvent.click(
+      within(screen.getByRole('complementary', { name: 'Add scale' })).getByRole('button', {
+        name: 'Cancel',
+      }),
+    )
+    const discard = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await userEvent.click(within(discard).getByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByLabelText('Timber mark')).toHaveValue('TM-NEW')
+  })
+
+  it('closes an unchanged Ministerial scale selection without saving it', async () => {
+    configureMinisterialActivePermit()
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [{ ...editableBlanketOicPackage, packageNumber: 'MIN-1' }],
+      items: [
+        {
+          id: 'SCALE-1',
+          packageNumber: 'MIN-1',
+          timberMark: 'TEST',
+          scaleType: 'C',
+          species: 'HE',
+          grade: 'U',
+          pieces: 1,
+          volume: 1,
+          permitNumber: '777',
+          includedInPermit: true,
+        },
+      ],
+    })
+    renderPermitDetails()
+    await selectPermitDetailTab('Scale')
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit scale selection' }))
+    await userEvent.click(
+      within(screen.getByRole('group', { name: 'Summary of scale' })).getByRole('button', {
+        name: 'Save changes',
+      }),
+    )
+
+    expect(mockedUpdatePermitScaleSelection).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Edit scale selection' })).toHaveFocus(),
+    )
   })
 })

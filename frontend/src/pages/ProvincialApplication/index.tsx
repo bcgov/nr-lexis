@@ -1090,6 +1090,7 @@ const ProvincialApplicationPage = () => {
         <ConfirmationModal
           open
           title="Create new exemption"
+          className="lexis-confirmation-modal--form"
           description="You are about to create a new exemption with the following applications:"
           confirmLabel="Create exemption"
           pendingLabel="Creating exemption…"

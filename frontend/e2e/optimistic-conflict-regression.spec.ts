@@ -219,7 +219,12 @@ for (const mode of ['add', 'edit'] as const) {
         expect(saved).toBe(0)
         await page.keyboard.press('Enter')
         await expect(confirmation).not.toBeVisible()
-        await expect(field).toBeFocused()
+        // Keep editing returns focus to where the user was: Cancel, or the field for Escape.
+        await expect(
+          closeAction === 'cancel'
+            ? panel.getByRole('button', { name: 'Cancel', exact: true })
+            : field,
+        ).toBeFocused()
         await expect(field).toHaveValue('Updated synthetic remark')
 
         await activateAction()
@@ -270,9 +275,12 @@ test('conflict recovery also releases a pending document deletion without retryi
   })
   await deletion.getByRole('button', { name: 'Delete', exact: true }).click()
 
-  const conflict = page.getByRole('dialog', { name: 'Newer changes were saved' })
+  const conflict = page.getByRole('dialog', { name: 'This application was updated' })
   const refresh = conflict.getByRole('button', { name: 'Refresh', exact: true })
   await expect(refresh).toBeFocused()
+  await expect(conflict).toContainText(
+    'after you opened this application. Your changes were not saved.',
+  )
   await expect(deletion.locator('button').filter({ hasText: 'Deleting' })).toBeDisabled()
   await expect(page.locator('.app-shell')).toHaveJSProperty('inert', true)
   const readsBeforeRefresh = fixture.reads()
@@ -291,8 +299,8 @@ test('conflict recovery also releases a pending document deletion without retryi
 })
 
 for (const { code, heading, recovery } of [
-  { code: 'STALE_RECORD', heading: 'Newer changes were saved', recovery: 'click' },
-  { code: 'STALE_RECORD', heading: 'Newer changes were saved', recovery: 'keyboard' },
+  { code: 'STALE_RECORD', heading: 'This application was updated', recovery: 'click' },
+  { code: 'STALE_RECORD', heading: 'This application was updated', recovery: 'keyboard' },
   {
     code: 'RECORD_VERSION_REQUIRED',
     heading: 'Refresh required before saving',
@@ -314,6 +322,9 @@ for (const { code, heading, recovery } of [
     const conflict = page.getByRole('dialog', { name: heading })
     const refresh = conflict.getByRole('button', { name: 'Refresh', exact: true })
     await expect(conflict).toBeVisible()
+    if (code === 'STALE_RECORD') {
+      await expect(conflict).toContainText('Your remark was not saved.')
+    }
     await expect(page.locator('.app-shell')).toHaveJSProperty('inert', true)
     await expect(refresh).toBeFocused()
     await expect(form.locator('button').filter({ hasText: 'Saving' })).toBeDisabled()

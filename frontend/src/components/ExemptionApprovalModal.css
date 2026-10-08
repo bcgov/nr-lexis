@@ -1,10 +1,18 @@
-.exemption-approval-modal .cds--modal-container {
-  max-inline-size: 42rem;
+@media (min-width: 672px) {
+  .lexis-confirmation-modal.exemption-approval-modal .cds--modal-container {
+    inline-size: 40rem;
+    max-inline-size: 100%;
+  }
 }
 .exemption-approval-modal .lexis-confirmation-modal__body {
   display: grid;
   gap: 1.5rem;
 }
+
+.exemption-approval-modal .cds--modal-scroll-content {
+  mask-image: none;
+}
+
 .exemption-approval-modal hr {
   width: 100%;
   margin: 0;
@@ -76,4 +84,26 @@
   .exemption-approval-modal__recipient-summary {
     grid-template-columns: minmax(0, 1fr);
   }
+}
+
+.exemption-approval-modal .exemption-approval-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+  block-size: auto;
+  gap: 0.5rem;
+  padding: 1rem;
+}
+
+.exemption-approval-modal .exemption-approval-modal__actions .cds--btn {
+  flex: 0 0 auto;
+  align-items: center;
+  block-size: 2.5rem;
+  inline-size: auto;
+  max-inline-size: none;
+}
+
+.exemption-approval-modal .exemption-approval-modal__actions .cds--btn:not(.cds--skeleton) {
+  padding-block: 0;
 }

@@ -1,7 +1,17 @@
 import { WarningFilled } from '@carbon/icons-react'
-import { Button, Checkbox, Loading, TextInput } from '@carbon/react'
+import {
+  Button,
+  Checkbox,
+  ComposedModal,
+  FeatureFlags,
+  Loading,
+  ModalBody,
+  ModalFooter,
+  ModalHeader,
+  TextInput,
+} from '@carbon/react'
 import { useEffect, useId, useRef, useState } from 'react'
-import Modal from '@/components/Modal'
+import PendingIcon from '@/components/PendingIcon'
 import { AppNotification } from '@/components/AppNotification'
 import {
   exemptionApprovalProblems,
@@ -16,6 +26,7 @@ import {
   type ExemptionApprovalRecipientPreview,
 } from '@/service/provincial-exemption-detail-service'
 import { formatBusinessIsoDate, formatIsoDateLabel } from '@/utils/date'
+import { fieldErrorText } from '@/utils/field-error'
 import { isValidEmail } from '@/utils/text'
 import { isClientErrorResponse } from '@/utils/http-error'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
@@ -365,214 +376,240 @@ const ExemptionApprovalModal = ({
     error && !retrying && !approvalUnconfirmed ? exemptionApprovalProblems(error) : []
 
   return (
-    <Modal
-      open
-      ref={modalRef}
-      hasScrollingContent
-      primaryButtonText={primaryLabel}
-      primaryButtonDisabled={
-        pending || queueStatusUnknown || (sendEmail && (loading || Boolean(loadError)))
-      }
-      onRequestSubmit={() => void confirm()}
-      secondaryButtonText={retrying ? 'Close' : 'Cancel'}
-      onSecondarySubmit={close}
-      loadingStatus={pending ? 'active' : 'inactive'}
-      loadingDescription={primaryLabel}
-      size="md"
-      modalHeading={title}
-      aria-label={title}
-      className="lexis-confirmation-modal exemption-approval-modal"
-      preventCloseOnClickOutside
-      selectorPrimaryFocus={`#approval-intro-${id}`}
-      onRequestClose={close}
-    >
-      <div id={`approval-intro-${id}`} tabIndex={-1} className="lexis-confirmation-modal__body">
-        {!retrying && (
-          <>
-            {plural && (
-              <p>
-                You are about to approve these exemptions: <strong>{numbers.join(', ')}.</strong>
-              </p>
-            )}
-            <p>
-              By checking the box below you certify that{' '}
-              {plural ? 'these exemptions have' : 'this exemption has'} been approved.{' '}
-              {plural ? 'They' : 'It'} will be marked with an approval date of{' '}
-              {formatIsoDateLabel(approvalDate)}.
-            </p>
-            <div>
-              <p>{requiredLabel('Certification')}</p>
-              <Checkbox
-                id={`approval-certified-${id}`}
-                checked={certified}
-                disabled={pending}
-                labelText={`I certify that ${plural ? 'these exemptions have' : 'this exemption has'} been approved`}
-                invalid={submitAttempted && !certified}
-                invalidText={`Confirm that you certify ${plural ? 'these exemptions have' : 'this exemption has'} been approved.`}
-                onChange={(_, { checked }) => setCertified(Boolean(checked))}
-              />
-            </div>
-            <hr />
-            <div className="exemption-approval-modal__send">
-              <Checkbox
-                id={`approval-send-${id}`}
-                checked={sendEmail}
-                disabled={pending}
-                labelText={plural ? 'Send approval emails' : 'Send approval email'}
-                onChange={(_, { checked }) => setSendEmail(Boolean(checked))}
-              />
-              {showEmailErrorUnderCheckbox && (
-                <p className="exemption-approval-modal__error" role="alert">
-                  <WarningFilled aria-hidden="true" />
-                  <span>
-                    Enter an email address, or clear “Send approval email to the applicant” to
-                    notify the applicant another way.
-                  </span>
+    <FeatureFlags enableFocusWrapWithoutSentinels>
+      <ComposedModal
+        open
+        ref={modalRef}
+        size="md"
+        aria-label={title}
+        className="lexis-confirmation-modal exemption-approval-modal"
+        preventCloseOnClickOutside
+        selectorPrimaryFocus={`#approval-intro-${id}`}
+        onClose={() => {
+          if (pendingRef.current) return false
+          close()
+          return true
+        }}
+      >
+        <ModalHeader title={title} />
+        <ModalBody hasScrollingContent>
+          <div id={`approval-intro-${id}`} tabIndex={-1} className="lexis-confirmation-modal__body">
+            {!retrying && (
+              <>
+                {plural && (
+                  <p>
+                    You are about to approve these exemptions:{' '}
+                    <strong>{numbers.join(', ')}.</strong>
+                  </p>
+                )}
+                <p>
+                  By checking the box below you certify that{' '}
+                  {plural ? 'these exemptions have' : 'this exemption has'} been approved.{' '}
+                  {plural ? 'They' : 'It'} will be marked with an approval date of{' '}
+                  {formatIsoDateLabel(approvalDate)}.
                 </p>
-              )}
-            </div>
-          </>
-        )}
-        {sendEmail && (
-          <>
-            <p>
-              {retrying
-                ? queueStatusUnknown
-                  ? 'Approval is complete. Notification status must be checked before sending again.'
-                  : 'Approval is complete. Retry only the notifications that were not queued.'
-                : 'Approval emails go to the recipients below. At least one email address is needed.'}
-            </p>
-            {loading && (
-              <Loading small withOverlay={false} description="Loading approval recipients…" />
-            )}
-            {loadError && (
-              <AppNotification kind="error" title="Recipients unavailable" subtitle={loadError} />
-            )}
-            {recipients.map((row) => {
-              const isEditing = editing.includes(row.exemptionNumber)
-              const showRowError =
-                submitAttempted && (plural || retrying) && row.sendable && missingAddress(row)
-              const update = (field: ContactField, value: string) =>
-                setRecipients((current) =>
-                  current.map((item) =>
-                    item.exemptionNumber === row.exemptionNumber
-                      ? { ...item, [field]: value }
-                      : item,
-                  ),
-                )
-              return (
-                <section
-                  className={`exemption-approval-modal__recipient${plural ? ' exemption-approval-modal__recipient--batch' : ''}`}
-                  key={row.exemptionNumber}
-                  aria-label={`Recipients for exemption ${row.exemptionNumber}`}
-                >
-                  {plural && <h3>{row.exemptionNumber}</h3>}
-                  <div className="exemption-approval-modal__recipient-body">
-                    {!row.sendable ? (
-                      <p className="exemption-approval-modal__error">
-                        {row.message || 'An approval email can’t be sent for this exemption.'}
-                      </p>
-                    ) : (
-                      <>
-                        {row.message && (
-                          <p className="exemption-approval-modal__note">{row.message}</p>
-                        )}
-                        {showRowError && (
-                          <p className="exemption-approval-modal__error" role="alert">
-                            {retrying
-                              ? 'Enter at least one email to retry, or close to notify the applicant another way.'
-                              : 'Enter at least one email address, or clear “Send approval emails”.'}
-                          </p>
-                        )}
-                        {isEditing ? (
-                          contactFields(row).map((field) => {
-                            const onFile =
-                              field === 'ownerEmail' ? row.ownerOnFile : row.agentOnFile
-                            return (
-                              <TextInput
-                                key={field}
-                                id={`approval-${id}-${row.exemptionNumber}-${field}`}
-                                type="email"
-                                labelText={field === 'ownerEmail' ? 'Owner email' : 'Agent email'}
-                                value={row[field]}
-                                helperText={
-                                  onFile
-                                    ? 'Changes apply to this approval only.'
-                                    : 'No email on file. The email you enter applies to this approval only.'
-                                }
-                                disabled={pending || queueStatusUnknown}
-                                invalid={
-                                  (submitAttempted ||
-                                    touchedEmails[`${row.exemptionNumber}-${field}`]) &&
-                                  !validAddress(row[field])
-                                }
-                                invalidText="Enter an email address in the correct format, like name@example.com."
-                                onChange={(event) => {
-                                  setTouchedEmails((current) => ({
-                                    ...current,
-                                    [`${row.exemptionNumber}-${field}`]: true,
-                                  }))
-                                  update(field, event.currentTarget.value)
-                                }}
-                              />
-                            )
-                          })
-                        ) : (
-                          <div className="exemption-approval-modal__recipient-summary">
-                            <dl>
-                              <dt>Owner email</dt>
-                              <dd>{displayValue(row.ownerEmail)}</dd>
-                              {row.agentApplicable && (
-                                <>
-                                  <dt>Agent email</dt>
-                                  <dd>{displayValue(row.agentEmail)}</dd>
-                                </>
-                              )}
-                            </dl>
-                            <Button
-                              kind="ghost"
-                              size="md"
-                              disabled={pending || queueStatusUnknown}
-                              onClick={() =>
-                                setEditing((current) => [...current, row.exemptionNumber])
-                              }
-                            >
-                              Edit recipients
-                            </Button>
-                          </div>
-                        )}
-                      </>
+                <div>
+                  <p>{requiredLabel('Certification')}</p>
+                  <Checkbox
+                    id={`approval-certified-${id}`}
+                    checked={certified}
+                    disabled={pending}
+                    labelText={`I certify that ${plural ? 'these exemptions have' : 'this exemption has'} been approved`}
+                    invalid={submitAttempted && !certified}
+                    invalidText={fieldErrorText(
+                      `Confirm that you certify ${plural ? 'these exemptions have' : 'this exemption has'} been approved.`,
                     )}
-                  </div>
-                </section>
-              )
-            })}
-          </>
-        )}
-      </div>
-      {error && (
-        <AppNotification
-          focusOnReveal
-          kind={approvalUnconfirmed && !retrying ? 'warning' : 'error'}
-          title={
-            retrying
-              ? 'Notification incomplete'
-              : approvalUnconfirmed
-                ? 'Approval status unconfirmed'
-                : 'Approval failed'
-          }
-          subtitle={approvalProblems.length > 1 ? undefined : (approvalProblems[0] ?? error)}
+                    onChange={(_, { checked }) => setCertified(Boolean(checked))}
+                  />
+                </div>
+                <hr />
+                <div className="exemption-approval-modal__send">
+                  <Checkbox
+                    id={`approval-send-${id}`}
+                    checked={sendEmail}
+                    disabled={pending}
+                    labelText={plural ? 'Send approval emails' : 'Send approval email'}
+                    onChange={(_, { checked }) => setSendEmail(Boolean(checked))}
+                  />
+                  {showEmailErrorUnderCheckbox && (
+                    <p className="exemption-approval-modal__error" role="alert">
+                      <WarningFilled aria-hidden="true" />
+                      <span>
+                        Enter an email address, or clear “Send approval email to the applicant” to
+                        notify the applicant another way.
+                      </span>
+                    </p>
+                  )}
+                </div>
+              </>
+            )}
+            {sendEmail && (
+              <>
+                <p>
+                  {retrying
+                    ? queueStatusUnknown
+                      ? 'Approval is complete. Notification status must be checked before sending again.'
+                      : 'Approval is complete. Retry only the notifications that were not queued.'
+                    : 'Approval emails go to the recipients below. At least one email address is needed.'}
+                </p>
+                {loading && (
+                  <Loading small withOverlay={false} description="Loading approval recipients…" />
+                )}
+                {loadError && (
+                  <AppNotification
+                    kind="error"
+                    title="Recipients unavailable"
+                    subtitle={loadError}
+                  />
+                )}
+                {recipients.map((row) => {
+                  const isEditing = editing.includes(row.exemptionNumber)
+                  const showRowError =
+                    submitAttempted && (plural || retrying) && row.sendable && missingAddress(row)
+                  const update = (field: ContactField, value: string) =>
+                    setRecipients((current) =>
+                      current.map((item) =>
+                        item.exemptionNumber === row.exemptionNumber
+                          ? { ...item, [field]: value }
+                          : item,
+                      ),
+                    )
+                  return (
+                    <section
+                      className={`exemption-approval-modal__recipient${plural ? ' exemption-approval-modal__recipient--batch' : ''}`}
+                      key={row.exemptionNumber}
+                      aria-label={`Recipients for exemption ${row.exemptionNumber}`}
+                    >
+                      {plural && <h3>{row.exemptionNumber}</h3>}
+                      <div className="exemption-approval-modal__recipient-body">
+                        {!row.sendable ? (
+                          <p className="exemption-approval-modal__error">
+                            {row.message || 'An approval email can’t be sent for this exemption.'}
+                          </p>
+                        ) : (
+                          <>
+                            {row.message && (
+                              <p className="exemption-approval-modal__note">{row.message}</p>
+                            )}
+                            {showRowError && (
+                              <p className="exemption-approval-modal__error" role="alert">
+                                {retrying
+                                  ? 'Enter at least one email to retry, or close to notify the applicant another way.'
+                                  : 'Enter at least one email address, or clear “Send approval emails”.'}
+                              </p>
+                            )}
+                            {isEditing ? (
+                              contactFields(row).map((field) => {
+                                const onFile =
+                                  field === 'ownerEmail' ? row.ownerOnFile : row.agentOnFile
+                                return (
+                                  <TextInput
+                                    key={field}
+                                    id={`approval-${id}-${row.exemptionNumber}-${field}`}
+                                    type="email"
+                                    labelText={
+                                      field === 'ownerEmail' ? 'Owner email' : 'Agent email'
+                                    }
+                                    value={row[field]}
+                                    helperText={
+                                      onFile
+                                        ? 'Changes apply to this approval only.'
+                                        : 'No email on file. The email you enter applies to this approval only.'
+                                    }
+                                    disabled={pending || queueStatusUnknown}
+                                    invalid={
+                                      (submitAttempted ||
+                                        touchedEmails[`${row.exemptionNumber}-${field}`]) &&
+                                      !validAddress(row[field])
+                                    }
+                                    invalidText="Enter an email address in the correct format, like name@example.com."
+                                    onChange={(event) => {
+                                      setTouchedEmails((current) => ({
+                                        ...current,
+                                        [`${row.exemptionNumber}-${field}`]: true,
+                                      }))
+                                      update(field, event.currentTarget.value)
+                                    }}
+                                  />
+                                )
+                              })
+                            ) : (
+                              <div className="exemption-approval-modal__recipient-summary">
+                                <dl>
+                                  <dt>Owner email</dt>
+                                  <dd>{displayValue(row.ownerEmail)}</dd>
+                                  {row.agentApplicable && (
+                                    <>
+                                      <dt>Agent email</dt>
+                                      <dd>{displayValue(row.agentEmail)}</dd>
+                                    </>
+                                  )}
+                                </dl>
+                                <Button
+                                  kind="ghost"
+                                  size="md"
+                                  disabled={pending || queueStatusUnknown}
+                                  onClick={() =>
+                                    setEditing((current) => [...current, row.exemptionNumber])
+                                  }
+                                >
+                                  Edit recipients
+                                </Button>
+                              </div>
+                            )}
+                          </>
+                        )}
+                      </div>
+                    </section>
+                  )
+                })}
+              </>
+            )}
+          </div>
+          {error && (
+            <AppNotification
+              focusOnReveal
+              kind={approvalUnconfirmed && !retrying ? 'warning' : 'error'}
+              title={
+                retrying
+                  ? 'Notification incomplete'
+                  : approvalUnconfirmed
+                    ? 'Approval status unconfirmed'
+                    : 'Approval failed'
+              }
+              subtitle={approvalProblems.length > 1 ? undefined : (approvalProblems[0] ?? error)}
+            >
+              {approvalProblems.length > 1 ? (
+                <ul className="action-result-notification__items">
+                  {approvalProblems.map((problem) => (
+                    <li key={problem}>{problem}</li>
+                  ))}
+                </ul>
+              ) : null}
+            </AppNotification>
+          )}
+        </ModalBody>
+        <ModalFooter
+          className="exemption-approval-modal__actions"
+          loadingStatus={pending ? 'active' : 'inactive'}
         >
-          {approvalProblems.length > 1 ? (
-            <ul className="action-result-notification__items">
-              {approvalProblems.map((problem) => (
-                <li key={problem}>{problem}</li>
-              ))}
-            </ul>
-          ) : null}
-        </AppNotification>
-      )}
-    </Modal>
+          <Button kind="tertiary" size="md" disabled={pending} onClick={close}>
+            {retrying ? 'Close' : 'Cancel'}
+          </Button>
+          <Button
+            kind="primary"
+            size="md"
+            disabled={
+              pending || queueStatusUnknown || (sendEmail && (loading || Boolean(loadError)))
+            }
+            renderIcon={pending ? PendingIcon : undefined}
+            onClick={() => void confirm()}
+          >
+            {primaryLabel}
+          </Button>
+        </ModalFooter>
+      </ComposedModal>
+    </FeatureFlags>
   )
 }
 

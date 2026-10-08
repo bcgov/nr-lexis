@@ -261,7 +261,7 @@ describe('Admin upload workflow smoke', () => {
 
     expect(applicationNumberInput).toHaveValue('45963x')
     expect(
-      screen.getByText('Application number must be a positive whole number.'),
+      screen.getByText('Application number must be a positive whole number'),
     ).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
@@ -495,7 +495,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.tab()
 
     expect(
-      screen.queryByText('Permit number must be a positive whole number.'),
+      screen.queryByText('Permit number must be a positive whole number'),
     ).not.toBeInTheDocument()
   })
 
@@ -626,7 +626,7 @@ describe('Admin upload workflow smoke', () => {
 
     const descriptionInput = screen.getByLabelText(/Document description for permit\.pdf/)
     fireEvent.change(descriptionInput, { target: { value: 'x'.repeat(251) } })
-    expect(screen.getByText('Document description must be 250 characters or fewer.')).toBeVisible()
+    expect(screen.getByText('Document description must be 250 characters or fewer')).toBeVisible()
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
 
     await userEvent.clear(descriptionInput)
@@ -738,7 +738,7 @@ describe('Admin upload workflow smoke', () => {
     const file = new File(['permit upload'], 'permit.pdf', { type: 'application/pdf' })
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    expect(screen.getByText('Permit number is required.')).toBeVisible()
+    expect(screen.getByText('Permit number is required')).toBeVisible()
 
     await userEvent.type(screen.getByRole('combobox', { name: 'Permit number' }), '5001')
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeEnabled()
@@ -747,10 +747,10 @@ describe('Admin upload workflow smoke', () => {
 
     await userEvent.clear(screen.getByRole('combobox', { name: 'Permit number' }))
     expect(screen.getByRole('button', { name: 'Submit upload' })).toBeDisabled()
-    expect(screen.getByText('Permit number is required.')).toBeVisible()
+    expect(screen.getByText('Permit number is required')).toBeVisible()
     await userEvent.type(screen.getByRole('combobox', { name: 'Permit number' }), 'invalid')
     expect(screen.getByRole('button', { name: 'Submit upload' })).toBeDisabled()
-    expect(screen.getByText('Permit number must be a positive whole number.')).toBeVisible()
+    expect(screen.getByText('Permit number must be a positive whole number')).toBeVisible()
 
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
 
@@ -775,7 +775,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.tab()
 
     expect(permitNumberInput).toHaveValue('5001abc')
-    expect(screen.getByText('Permit number must be a positive whole number.')).toBeInTheDocument()
+    expect(screen.getByText('Permit number must be a positive whole number')).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
@@ -788,7 +788,7 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.tab()
 
     expect(permitNumberInput).toHaveValue('12345678901')
-    expect(screen.getByText('Permit number must be 10 digits or fewer.')).toBeInTheDocument()
+    expect(screen.getByText('Permit number must be 10 digits or fewer')).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
@@ -807,8 +807,8 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.type(screen.getByLabelText('Fee in lieu'), '0')
 
     expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    expect(screen.getByText('Invoice number must be 9 characters or fewer.')).toBeInTheDocument()
-    expect(screen.getAllByText('Use a positive numeric value.').length).toBeGreaterThanOrEqual(3)
+    expect(screen.getByText('Invoice number must be 9 characters or fewer')).toBeInTheDocument()
+    expect(screen.getAllByText('Use a positive numeric value').length).toBeGreaterThanOrEqual(3)
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
 
     for (const [label, value] of [
@@ -897,13 +897,13 @@ describe('Admin upload workflow smoke', () => {
     await userEvent.tab()
 
     expect(
-      screen.getByText('Invoice export value must round to 9999999.99 or less.'),
+      screen.getByText('Invoice export value must round to 9999999.99 or less'),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Invoice conversion rate must round to 9.99999 or less.'),
+      screen.getByText('Invoice conversion rate must round to 9.99999 or less'),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Invoice fee in lieu must round to 9999999.99 or less.'),
+      screen.getByText('Invoice fee in lieu must round to 9999999.99 or less'),
     ).toBeInTheDocument()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
@@ -985,7 +985,7 @@ describe('Admin upload workflow smoke', () => {
     const emptyReviewButton = screen.getByRole('button', { name: 'Review' })
     expect(emptyReviewButton).toBeEnabled()
     await userEvent.click(emptyReviewButton)
-    expect(screen.getByText('Please upload a file before continuing.')).toBeInTheDocument()
+    expect(screen.getByText('Please upload a file before continuing')).toBeInTheDocument()
     expect(mockedValidateApplicationSubmissionUpload).not.toHaveBeenCalled()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
     expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()
@@ -1424,7 +1424,7 @@ describe('Admin upload workflow smoke', () => {
         '2 application submissions created. Verify the created application and package details.',
       ),
     ).toBeInTheDocument()
-    expect(screen.queryByText('Please upload a file before continuing.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Please upload a file before continuing')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).not.toHaveAttribute(
       'aria-invalid',
       'true',

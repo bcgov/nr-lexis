@@ -4,7 +4,7 @@ import {
   RecordFieldGrid,
   RecordFieldRow,
 } from '@/pages/shared/RecordFieldGrid'
-import { useEffect, useMemo, useReducer, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { Button, Column, Grid, TextArea, TextInput } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
@@ -13,6 +13,7 @@ import OfferScaleDetailAction from '@/components/OfferScaleDetailAction'
 import SearchableSelect from '../../components/SearchableSelect'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
+import { discardNewRecordCopy } from '@/components/DiscardChangesModal'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import {
@@ -39,6 +40,8 @@ import {
 } from '@/service/provincial-offer-create-service'
 import type { SearchOption } from '@/service/search-options-service'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { fieldErrorText } from '@/utils/field-error'
+import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
 import { requiredLabel } from '@/utils/required-label'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import { displayAuditIdentity, formatPackageNumberLabel } from '@/utils/text'
@@ -294,6 +297,15 @@ const ProvincialOfferCreatePage = () => {
   const [form, setForm] = useState<ProvincialOfferCreateForm>(() => initialForm)
   const draftBaselineRef = useRef(form)
   const [formEdited, setFormEdited] = useState(false)
+  // Values the page fills in itself belong to the starting draft, even after the user starts editing.
+  const applyLoadedFormValues = useCallback(
+    (update: (current: ProvincialOfferCreateForm) => ProvincialOfferCreateForm) => {
+      draftBaselineRef.current = update(draftBaselineRef.current)
+      setForm(update)
+    },
+    [],
+  )
+  const formRef = useRef<HTMLDivElement>(null)
   const [createdOfferNavigation, setCreatedOfferNavigation] =
     useState<CreatedOfferNavigation | null>(null)
   const [applicationContext, dispatchApplicationContext] = useReducer(
@@ -482,7 +494,7 @@ const ProvincialOfferCreatePage = () => {
             applicationValidationError:
               validation.errors[0] ?? 'This application cannot accept purchase offers.',
           })
-          setForm((current) =>
+          applyLoadedFormValues((current) =>
             normalizeProvincialApplicationNumber(current.applicationNumber) === applicationNumber
               ? { ...current, packageNumber: '' }
               : current,
@@ -505,7 +517,7 @@ const ProvincialOfferCreatePage = () => {
             applicationValidationError:
               'Application packages could not be loaded. Reload the page and try again.',
           })
-          setForm((current) =>
+          applyLoadedFormValues((current) =>
             normalizeProvincialApplicationNumber(current.applicationNumber) === applicationNumber
               ? { ...current, packageNumber: '' }
               : current,
@@ -528,7 +540,7 @@ const ProvincialOfferCreatePage = () => {
             applicationValidationError:
               'Application volume could not be loaded. Reload the page and try again.',
           })
-          setForm((current) =>
+          applyLoadedFormValues((current) =>
             normalizeProvincialApplicationNumber(current.applicationNumber) === applicationNumber
               ? { ...current, packageNumber: '' }
               : current,
@@ -544,7 +556,7 @@ const ProvincialOfferCreatePage = () => {
           applicationVolume: nextApplicationVolume ?? '',
           packageOptions: nextPackageOptions,
         })
-        setForm((current) => {
+        applyLoadedFormValues((current) => {
           if (
             normalizeProvincialApplicationNumber(current.applicationNumber) !== applicationNumber
           ) {
@@ -571,7 +583,7 @@ const ProvincialOfferCreatePage = () => {
             applicationValidationError:
               'Application eligibility could not be verified. Reload the page and try again.',
           })
-          setForm((current) =>
+          applyLoadedFormValues((current) =>
             normalizeProvincialApplicationNumber(current.applicationNumber) === applicationNumber
               ? { ...current, packageNumber: '' }
               : current,
@@ -583,7 +595,7 @@ const ProvincialOfferCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [applicationNumberForLookup, queryPackageOptions])
+  }, [applicationNumberForLookup, applyLoadedFormValues, queryPackageOptions])
 
   useEffect(() => {
     if (!packageNumberForVolumeLookup || !packageVolumeLookupTarget) {
@@ -734,24 +746,28 @@ const ProvincialOfferCreatePage = () => {
 
   const fieldError = (field: ProvincialOfferCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
-  const applicationNumberError = fieldError('applicationNumber') || applicationValidationError
-  const packageNumberError = fieldError('packageNumber') || packageVolumeError
+  const applicationNumberError =
+    fieldError('applicationNumber') || fieldErrorText(applicationValidationError)
+  const packageNumberError = fieldError('packageNumber') || fieldErrorText(packageVolumeError)
 
-  const onSave = async (navigateToCreatedRecord = true): Promise<boolean> => {
-    if (isLoadingOfferContext || scopedClientLookupPending) {
+  const onSave = async (): Promise<boolean> => {
+    const saveUnavailableReason =
+      isLoadingOfferContext || scopedClientLookupPending
+        ? 'Application and client details must finish loading before this offer can be saved.'
+        : scopedClientLookupError
+    if (saveUnavailableReason) {
+      setStatus({
+        kind: 'error',
+        title: 'Cannot save yet.',
+        message: saveUnavailableReason,
+        placement: 'inline',
+      })
       return false
     }
     if (hasValidationError) {
-      const validationMessage =
-        Object.values(fieldErrors).find((error): error is string => !!error) ??
-        'Please fix validation errors before saving.'
       setShowAllValidationErrors(true)
-      setStatus({
-        kind: 'error',
-        title: 'Validation error',
-        message: validationMessage,
-        placement: 'inline',
-      })
+      setStatus(null)
+      focusFirstInvalidFieldAfterRender(() => formRef.current)
       return false
     }
 
@@ -777,12 +793,10 @@ const ProvincialOfferCreatePage = () => {
         scopedContactBaselineRef.current = scopedContact
         setFormEdited(false)
         if (result.createdId) {
-          if (navigateToCreatedRecord) {
-            setCreatedOfferNavigation({
-              path: `/provincial/offers/${encodeURIComponent(result.createdId)}`,
-              warnings: result.warnings,
-            })
-          }
+          setCreatedOfferNavigation({
+            path: `/provincial/offers/${encodeURIComponent(result.createdId)}`,
+            warnings: result.warnings,
+          })
           return true
         }
         setStatus({
@@ -844,6 +858,7 @@ const ProvincialOfferCreatePage = () => {
         <PageHeader
           title="Create provincial offer"
           subtitle="Enter offer details and save a new offer."
+          focusTitle
           actionsLabel="Offer form actions"
           actions={
             <>
@@ -859,14 +874,8 @@ const ProvincialOfferCreatePage = () => {
                 type="button"
                 kind="primary"
                 size="md"
-                onClick={() => void onSave(true)}
-                disabled={
-                  isSubmitting ||
-                  isLoadingOfferContext ||
-                  scopedClientLookupPending ||
-                  !!applicationValidationError ||
-                  !!packageVolumeError
-                }
+                onClick={() => void onSave()}
+                disabled={isSubmitting}
                 renderIcon={isSubmitting ? PendingIcon : undefined}
               >
                 {isSubmitting ? 'Saving…' : 'Save new offer'}
@@ -900,7 +909,10 @@ const ProvincialOfferCreatePage = () => {
       )}
 
       <Column sm={4} md={8} lg={16}>
-        <div className="provincial-offer-create create-form-tile provincial-offer-sections provincial-offer-section-stack">
+        <div
+          ref={formRef}
+          className="provincial-offer-create create-form-tile provincial-offer-sections provincial-offer-section-stack"
+        >
           {status?.placement === 'inline' && (
             <AppNotification
               className="create-form-validation-notification"
@@ -1349,15 +1361,9 @@ const ProvincialOfferCreatePage = () => {
       <UnsavedChangesGuard
         isDirty={isCreateDraftDirty}
         isBusy={isSubmitting}
-        onSave={() => onSave(false)}
         onDiscard={onDiscardCreateDraft}
+        discardCopy={discardNewRecordCopy('offer')}
         subject="this new purchase offer"
-        saveUnavailableReason={
-          packageVolumeError ||
-          (isLoadingOfferContext || scopedClientLookupPending
-            ? 'Application and client details must finish loading before this offer can be saved.'
-            : undefined)
-        }
       />
     </Grid>
   )

@@ -108,6 +108,7 @@ import {
   normalizeUpperText as normalizeReviewStatus,
 } from '@/utils/text'
 import { firstStringField, isRecord } from '@/utils/record'
+import { fieldErrorText } from '@/utils/field-error'
 import { requiredLabel } from '@/utils/required-label'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
@@ -1242,7 +1243,7 @@ const ProvincialReviewPage = () => {
             maxCount={250}
             value={rejectRemark}
             invalid={rejectValidationMessage === REJECT_REMARK_REQUIRED_MESSAGE}
-            invalidText={rejectValidationMessage}
+            invalidText={fieldErrorText(rejectValidationMessage)}
             disabled={submittingReject}
             onChange={(event) => {
               setRejectRemark(event.target.value.slice(0, 250))
@@ -1276,7 +1277,7 @@ const ProvincialReviewPage = () => {
               value={rejectEmailAddress}
               disabled={loadingRejectEmail || submittingReject}
               invalid={rejectValidationMessage === REJECT_EMAIL_REQUIRED_MESSAGE}
-              invalidText={rejectValidationMessage}
+              invalidText={fieldErrorText(rejectValidationMessage)}
               onChange={(event) => {
                 setRejectEmailAddress(event.target.value)
                 setRejectValidationMessage('')

@@ -114,6 +114,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       target: { value: 'Changed location' },
     })
     await userEvent.click(itemDetails.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
 
     expect(itemDetails.queryByLabelText('Location of logs')).not.toBeInTheDocument()
     expect(itemDetails.getByRole('button', { name: 'Edit scale details' })).toBeInTheDocument()
@@ -295,7 +296,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(router.state.location.search).toBe('')
   })
 
-  it('shows missing summary options only on the editable Application tab', async () => {
+  it('shows missing summary options on the editable Application tab and when saving', async () => {
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
       exemptionTypes: [],
       exemptionReasons: [],
@@ -320,14 +321,16 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await waitFor(() => expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled())
     expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
 
-    await selectApplicationSummaryTile()
+    const summary = within(await selectApplicationSummaryTile())
     expect(await screen.findByText('Application summary options unavailable')).toBeInTheDocument()
-    expect(
-      screen.getByText(
-        'Missing required options: exemption reason. Summary changes cannot be saved.',
-      ),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    const missingOptions =
+      'Missing required options: exemption reason. Summary changes cannot be saved.'
+    expect(screen.getByText(missingOptions)).toBeInTheDocument()
+    const save = screen.getByRole('button', { name: 'Save changes' })
+    expect(save).toBeEnabled()
+    await userEvent.click(save)
+    expect(await summary.findByText(missingOptions)).toBeInTheDocument()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     await selectApplicationDetailTab('Applicant')
     expect(screen.queryByText('Application summary options unavailable')).not.toBeInTheDocument()
@@ -721,6 +724,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     let agentControls = within(getAgentDetailsTile())
     expect(agentControls.getByLabelText('Agent client')).toHaveValue('00011122')
     await userEvent.click(ownerControls.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
 
     await waitFor(() =>
       expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument(),
@@ -785,7 +789,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         level: 3,
       }),
     ).not.toBeInTheDocument()
-    expect(agentControls.getByText('01 - Agent Main Location')).toBeInTheDocument()
+    expect(await agentControls.findByText('01 - Agent Main Location')).toBeInTheDocument()
 
     await userEvent.click(
       within(getOwnerClientDetailsTile()).getByRole('button', {
@@ -862,6 +866,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(
       within(getOwnerClientDetailsTile()).getByRole('button', { name: 'Cancel' }),
     )
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
 
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     agentControls = within(getAgentDetailsTile())
@@ -1310,6 +1315,25 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
 
+    await waitFor(() => {
+      expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled()
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner', '321')
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033344', 'agent', '321')
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '02', {
+        applicationNumber: '321',
+      })
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01', {
+        applicationNumber: '321',
+      })
+    })
+    await selectApplicationDetailTab('Applicant')
+    expect(await screen.findByText('Owner Forestry Ltd. · 00011122')).toBeInTheDocument()
+    expect(screen.getByText('owner@example.test')).toBeInTheDocument()
+
+    await selectApplicationDetailTab('Applicant')
+    expect(screen.getByText('Agent Export Services · 00033344')).toBeInTheDocument()
+    expect(within(getAgentDetailsTile()).getByText('agent@example.test')).toBeInTheDocument()
+
     await selectApplicationSummaryTile()
     const summaryControls = within(await waitFor(() => getApplicationSummaryTile()))
     expect(summaryControls.queryByLabelText('Application status')).not.toBeInTheDocument()
@@ -1334,26 +1358,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByLabelText('Exemption term (months)')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Exemption term (years)')).not.toBeInTheDocument()
 
-    await waitFor(() => {
-      expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalled()
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00011122', 'owner', '321')
-      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith('00033344', 'agent', '321')
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011122', '02', {
-        applicationNumber: '321',
-      })
-      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01', {
-        applicationNumber: '321',
-      })
-    })
-    await selectApplicationDetailTab('Applicant')
-    expect(await screen.findByText('Owner Forestry Ltd. · 00011122')).toBeInTheDocument()
-    expect(screen.getByText('owner@example.test')).toBeInTheDocument()
-
-    await selectApplicationDetailTab('Applicant')
-    expect(screen.getByText('Agent Export Services · 00033344')).toBeInTheDocument()
-    expect(within(getAgentDetailsTile()).getByText('agent@example.test')).toBeInTheDocument()
-
-    await selectApplicationDetailTab('Application')
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(screen.queryByRole('dialog', { name: 'Confirm application accuracy' })).toBeNull()
 
@@ -1493,16 +1497,16 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     fireEvent.change(termDays, { target: { value: '100000' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findAllByText('Exemption term days must be 99999 or less.')).toHaveLength(2)
+    expect(await screen.findAllByText('Exemption term days must be 99999 or less')).toHaveLength(1)
+    expect(termDays).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(termDays).toHaveFocus())
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     fireEvent.change(termDays, { target: { value: '0' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findAllByText('Exemption term days must be greater than 0.')).toHaveLength(
-      2,
-    )
+    expect(await screen.findAllByText('Exemption term days must be greater than 0')).toHaveLength(1)
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
@@ -1530,7 +1534,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toHaveTextContent('251/250')
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
-    expect(itemDetails.getByText('Location of logs must be 250 characters or fewer.')).toBeVisible()
+    expect(itemDetails.getByText('Location of logs must be 250 characters or fewer')).toBeVisible()
     expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
@@ -1556,6 +1560,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
 
     await selectApplicationSummaryTile()
+    fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findByText('Action failed')).toBeVisible()
@@ -1634,6 +1639,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       '321',
     )
 
+    fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
@@ -1679,6 +1685,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(summaryControls.queryByLabelText('Jurisdiction')).not.toBeInTheDocument()
     expect(summaryControls.queryByLabelText('Applicant type')).not.toBeInTheDocument()
 
+    fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     const accuracyDialog = screen.getByRole('dialog', {
@@ -1711,6 +1718,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
     await selectApplicationSummaryTile()
+    fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
@@ -1722,6 +1730,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       ).not.toBeInTheDocument(),
     )
     await selectApplicationSummaryTile()
+    fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     expect(screen.getByRole('dialog', { name: 'Confirm application accuracy' })).toBeVisible()
     expect(screen.queryByText('The application was saved.')).not.toBeInTheDocument()
@@ -1745,6 +1754,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       </MemoryRouter>,
     )
     await selectApplicationSummaryTile()
+    fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
@@ -1788,7 +1798,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     fireEvent.change(productLocationInput, { target: { value: '' } })
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
-    expect(screen.getAllByText('Location of logs is required.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Location of logs is required').length).toBeGreaterThan(0)
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -1886,14 +1896,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(summaryControls.getByRole('radio', { name: '2011-11-25' }))
     await userEvent.click(summaryControls.getByRole('button', { name: 'Save changes' }))
 
-    await waitFor(() => {
-      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
-        expect.objectContaining({
-          applicationNumber: '321',
-          exportScheduleId: '31885',
-        }),
-      )
-    })
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Edit application details' })).toHaveFocus(),
+    )
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
   it('removes application species through the Carbon multi-select', async () => {
@@ -1944,7 +1950,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(await itemDetails.findByRole('option', { name: /FI/ }))
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
-    expect(await itemDetails.findByText('At least one species is required.')).toBeVisible()
+    expect(await itemDetails.findByText('At least one species is required')).toBeVisible()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -2138,15 +2144,16 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       .getAllByRole('radio')
       .forEach((radio) => expect(radio).not.toBeChecked())
 
+    fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
-    const blockedDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
-    await userEvent.click(within(blockedDialog).getByRole('checkbox', { name: 'I Agree' }))
-    await userEvent.click(within(blockedDialog).getByRole('button', { name: 'Save changes' }))
-    expect(await within(blockedDialog).findByText('Select a valid list date.')).toBeVisible()
+    expect(
+      screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
+    ).not.toBeInTheDocument()
+    expect(await summaryControls.findByText('Select a valid list date')).toBeVisible()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
-    await userEvent.click(within(blockedDialog).getByRole('button', { name: 'Cancel' }))
 
     await userEvent.click(within(listDate).getByRole('radio', { name: 'Jan 25, 2026' }))
+    expect(summaryControls.queryByText('Select a valid list date')).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
@@ -2190,6 +2197,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(within(listDate).getAllByRole('radio', { checked: false })[0])
     expect(within(listDate).getByRole('radio', { checked: true })).toHaveAttribute('value', '987')
 
+    fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
@@ -2230,11 +2238,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     expect(
-      screen.getAllByText('Application volume must be 9999999.99 or less.').length,
+      screen.getAllByText('Application volume must be 9999999.99 or less').length,
     ).toBeGreaterThan(0)
-    expect(screen.getAllByText('Average log volume must be 99.9 or less.').length).toBeGreaterThan(
-      0,
-    )
+    expect(screen.getAllByText('Average log volume must be 99.9 or less').length).toBeGreaterThan(0)
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -2296,7 +2302,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(saveItemDetails)
 
     expect(
-      screen.getAllByText('Application volume must have no more than two decimal places.').length,
+      screen.getAllByText('Application volume must have no more than two decimal places').length,
     ).toBeGreaterThan(0)
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
@@ -2340,10 +2346,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(screen.queryByText(message)).not.toBeInTheDocument()
       await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
 
-      expect(screen.getAllByText(message).length).toBeGreaterThan(0)
+      expect(screen.getAllByText(message)).toHaveLength(1)
       expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
       expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
       await userEvent.click(application.getByRole('button', { name: 'Cancel' }))
+      await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
       expect(screen.queryByText(message)).not.toBeInTheDocument()
     },
   )
@@ -2381,6 +2388,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(application.getByRole('button', { name: 'Save changes' })).toBeEnabled()
     expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
     await userEvent.click(application.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     expect(application.getByText('Harvested Timber', { exact: true })).toBeVisible()
   })
 
@@ -2483,6 +2491,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await chooseComboBoxOption(getSummaryComboBox(dependentScaleDetails, 'End use'), 'LU - Lumber')
 
     await userEvent.click(application.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
 
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     expect(application.getByText('Timber', { exact: true })).toBeVisible()
@@ -2493,7 +2502,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(scale.queryByText('Old Growth')).not.toBeInTheDocument()
   })
 
-  it('keeps saved scale details in the Scale tab while a product type change is unsaved', async () => {
+  it('asks before leaving an unsaved product type change and shows saved scale details', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -2511,6 +2520,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       await application.findByRole('region', { name: 'Scale details for changed product type' }),
     ).toBeInTheDocument()
 
+    await selectApplicationDetailTab('Scale')
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     const scaleTile = await selectApplicationItemDetailsTile(false)
     const detailField = (label: string): HTMLElement => {
       const field = within(scaleTile).getByText(label).closest('.record-field, .detail-field-item')
@@ -2660,15 +2671,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const application = within(await selectApplicationSummaryTile())
     await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
-    const blockedDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
-    await userEvent.click(within(blockedDialog).getByRole('checkbox', { name: 'I Agree' }))
-    await userEvent.click(within(blockedDialog).getByRole('button', { name: 'Save changes' }))
-    expect(await within(blockedDialog).findByText('Select a valid list date.')).toBeVisible()
-    await userEvent.click(within(blockedDialog).getByRole('button', { name: 'Cancel' }))
-    expect(application.getByText('Select a valid list date.')).toBeInTheDocument()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Edit application details' })).toHaveFocus(),
+    )
+    await selectApplicationSummaryTile()
 
     await chooseComboBoxOption(getSummaryComboBox(application, 'Product type'), 'Standing Timber')
-    expect(application.queryByText('Select a valid list date.')).not.toBeInTheDocument()
+    expect(application.queryByText('Select a valid list date')).not.toBeInTheDocument()
     await chooseComboBoxOption(getSummaryComboBox(application, 'Age class'), 'Old Growth')
     await waitFor(() => expect(getSummaryComboBox(application, 'End use')).toBeEnabled())
     await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'LU - Lumber')
@@ -2711,6 +2721,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const itemDetails = within(await selectApplicationItemDetailsTile())
     await itemDetails.findByLabelText('Application volume (m³)')
+    fireEvent.change(itemDetails.getByLabelText('Application volume (m³)'), {
+      target: { value: '100.1' },
+    })
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     const firstDialog = screen.getByRole('dialog', {
@@ -2781,6 +2794,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     fireEvent.change(productLocationInput, { target: { value: 'Changed location' } })
     await userEvent.click(itemDetails.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
 
     const resetItemDetails = within(await selectApplicationItemDetailsTile())
     await waitFor(() => {
@@ -2814,12 +2828,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(dirtyUnload.defaultPrevented).toBe(true)
 
     await userEvent.click(itemDetails.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     const resetUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(resetUnload)
     expect(resetUnload.defaultPrevented).toBe(false)
   })
 
-  it('saves all dirty application sections sequentially before leaving', async () => {
+  it('discards a panel draft before switching tabs and review changes before leaving', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       applicationStatusCode: 'NEW',
@@ -2842,14 +2857,13 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     render(<RouterProvider router={router} />)
 
-    const summaryControls = within(await selectApplicationSummaryTile())
-    fireEvent.change(await summaryControls.findByLabelText('Exemption term (days)'), {
-      target: { value: '31' },
-    })
     await selectApplicationRemarksForEditing()
     fireEvent.change(await screen.findByLabelText('Remark'), {
-      target: { value: 'Sequential remark' },
+      target: { value: 'Unsaved remark' },
     })
+    await selectApplicationDetailTab('Review')
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+    expect(screen.queryByLabelText('Remark')).not.toBeInTheDocument()
     const reviewTile = within(await selectApplicationReviewTile())
     await userEvent.click(reviewTile.getByRole('radio', { name: 'Rejected' }))
     fireEvent.change(reviewTile.getByLabelText('Remarks'), {
@@ -2857,20 +2871,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
 
     await userEvent.click(screen.getByRole('link', { name: 'Leave application' }))
-    await screen.findByRole('dialog', { name: 'Unsaved changes' })
-    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    expect(within(dialog).queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
 
     expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
-    expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
-    expect(mockedSaveApplicationRemark).toHaveBeenCalledTimes(1)
-    expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(1)
-    expect(mockedUpdateApplicationSummary.mock.invocationCallOrder[0]).toBeLessThan(
-      mockedSaveApplicationRemark.mock.invocationCallOrder[0],
-    )
-    expect(mockedSaveApplicationRemark.mock.invocationCallOrder[0]).toBeLessThan(
-      mockedUpdateApplicationReviewStatus.mock.invocationCallOrder[0],
-    )
-    expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+    expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
+    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
   })
 
   it('shows the saved contact name in view and edit mode without substituting a lookup contact', async () => {
