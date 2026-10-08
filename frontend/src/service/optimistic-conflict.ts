@@ -30,7 +30,7 @@ export type OptimisticConflictRequest = {
 const SAVE_SUBJECT_PATTERNS: ReadonlyArray<[RegExp, string]> = [
   [/\/(add-boic-scale|scale|package-scale)$/, 'scale'],
   [/\/(boic-package|boic-package\/update|package|package-update)$/, 'package'],
-  [/\/remark$/, 'remark'],
+  [/\/remarks?(\/[^/]+)?$/, 'remark'],
 ]
 
 export const conflictSaveSubject = (

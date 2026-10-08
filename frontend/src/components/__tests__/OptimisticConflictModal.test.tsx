@@ -122,6 +122,8 @@ describe('conflictSaveSubject', () => {
     ['post', '/lexis/rpc/permit-details/boic-package', 'package'],
     ['post', '/lexis/rpc/permit-details/boic-package/update', 'package'],
     ['post', '/lexis/rpc/application-details/remark?applicationNumber=321', 'remark'],
+    ['post', '/lexis/federal/applications/321/remarks', 'remark'],
+    ['put', '/lexis/federal/applications/321/remarks/45', 'remark'],
     ['post', '/lexis/rpc/permit-details/boic-package/delete', undefined],
     ['delete', '/lexis/rpc/application-details/scale', undefined],
     ['post', '/lexis/rpc/permit-details/update-permit', undefined],

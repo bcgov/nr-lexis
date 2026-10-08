@@ -508,6 +508,8 @@ class APIService {
       return Promise.reject(error)
     }
 
+    // The user may move to another record while the conflict is enriched.
+    const recordType = this.activeRecord()?.recordType
     const authorizationHeader = this.getHeader(originalConfig.headers, 'authorization')
     return this.enrichOptimisticConflictWithinTimeout(
       problem,
@@ -517,7 +519,7 @@ class APIService {
         new Promise<AxiosResponse<unknown>>((_, reject) => {
           const event = createOptimisticConflictEvent({
             problem: enrichedProblem,
-            recordType: this.activeRecord()?.recordType,
+            recordType,
             saveSubject: conflictSaveSubject(originalConfig.method, originalConfig.url),
             refresh: () => {
               this.clearCachedGetData()
