@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.exemption;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.assertj.core.api.Assertions.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.CALLS_REAL_METHODS;
@@ -606,7 +607,9 @@ class OracleExemptionDetailsRpcServiceTest {
         service.getApplications("EX-205", true, ignored -> true);
 
     assertThat(response.applications()).hasSize(2);
-    assertThat(response.applications().get(0).requestedVolume()).isEqualTo("95.0");
+    assertThat(response.applications())
+        .extracting("requestedVolume", "scaleVolume")
+        .containsExactly(tuple("95.04", "94.96"), tuple("11.0", "11.0"));
     assertThat(response.applications().get(0))
         .satisfies(
             application -> {
@@ -826,6 +829,30 @@ class OracleExemptionDetailsRpcServiceTest {
         .hasSize(500);
     verify(repository).findExemptionTypeCodeByExemptionNumber("BO-LARGE");
     verify(repository).findPermitsByExemptionNumber("BO-LARGE");
+  }
+
+  @Test
+  void getPermitsAndBlanketTotalsShouldKeepAStoredSecondDecimal() {
+    when(repository.findExemptionTypeCodeByExemptionNumber("EX-205")).thenReturn(Optional.of("B"));
+    when(repository.findPermitsByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.PermitSummaryRow(
+                    7000123L, 0.05d, 0.05d, "Active", "ACT", LocalDate.of(2026, 3, 10),
+                    "00077881", "00055667"),
+                new ExemptionDetailsRpcRepository.PermitSummaryRow(
+                    7000124L, 2.0d, 2.0d, "Active", "ACT", LocalDate.of(2026, 3, 10),
+                    "00077881", "00055667")));
+    when(repository.findBlanketOicTotals("EX-205"))
+        .thenReturn(new ExemptionDetailsRpcRepository.BlanketOicTotalsRow(2.0d, 0.05d));
+
+    assertThat(service.getPermits("EX-205", permit -> true))
+        .extracting(ExemptionDetailsRpcService.PermitItem::permitVolume)
+        .containsExactly("0.05", "2.0");
+    ExemptionDetailsRpcService.BlanketOicTotalsResponse totals =
+        service.getBlanketOicTotals("EX-205");
+    assertThat(totals.requestedVolume()).isEqualTo("2.0");
+    assertThat(totals.completedVolume()).isEqualTo("0.05");
   }
 
   @Test

@@ -18,7 +18,7 @@ import {
   Enterprise,
   TrashCan,
 } from '@carbon/icons-react'
-import { Invoice } from '@carbon/pictograms-react'
+import { Cardboard, Invoice } from '@carbon/pictograms-react'
 import {
   Button,
   Checkbox,
@@ -85,6 +85,7 @@ import {
   RecordFieldRow,
 } from '@/pages/shared/RecordFieldGrid'
 import { ClientDetailsRows } from '../shared/ClientDetailsRows'
+import PermitPackageSelector from './PermitPackageSelector'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { displayTableValue, displayValueText } from '@/utils/text'
 import { displayVolume, formatVolume, formatVolumeInput } from '@/utils/volume'
@@ -218,8 +219,38 @@ const formatAmount = (value: number): string => {
   })
 }
 
-// Documents results show in the Documents tab; every other result stays at page level.
-type PermitActionResult = ActionResult & { source?: 'documents' }
+/**
+ * Where a result shows: Documents results in the Documents tab, package results at the top of the
+ * Scale tab, and scale results in the package's Summary of scale. Every other result stays at page
+ * level.
+ */
+type PermitActionResultSource = 'documents' | 'scale' | 'scale-summary'
+type PermitActionResult = ActionResult & { source?: PermitActionResultSource }
+
+/** A package change, or a package change whose refresh failed, with what to do next. */
+const packageActionResult = (title: string, followUp = ''): PermitActionResult => ({
+  kind: followUp ? 'warning' : 'success',
+  title,
+  message: followUp,
+  source: 'scale',
+})
+
+/** Names a scale row in its delete confirmation. */
+const scaleDeletionLabel = (row: ProvincialPermitItemRow): string =>
+  [
+    `Timber mark ${displayValueText(row.timberMark)}`,
+    displayValueText(row.species),
+    `Grade ${displayValueText(row.grade).replace(/^Grade\s+/i, '')}`,
+    `${formatVolume(row.volume)} m³`,
+  ].join(' · ')
+
+/** A scale change, or a scale change whose refresh failed, with what to do next. */
+const scaleActionResult = (title: string, followUp = ''): PermitActionResult => ({
+  kind: followUp ? 'warning' : 'success',
+  title,
+  message: followUp,
+  source: 'scale-summary',
+})
 
 const isInvoiceDocumentRow = (row: PermitDocumentRow): boolean => {
   if (row.source?.trim().toLowerCase() === 'invoice') {
@@ -1088,7 +1119,7 @@ const ProvincialPermitDetailsPage = () => {
   )
   const [actionResult, setActionResult] = useState<PermitActionResult | null>(null)
   const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
-  const pageActionResult = actionResult?.source === 'documents' ? null : actionResult
+  const pageActionResult = actionResult?.source ? null : actionResult
   const [permitApprovalEmailErrorMessage, setPermitApprovalEmailErrorMessage] = useState('')
   const clearActionNotifications = useCallback(() => {
     setActionResult(null)
@@ -3552,6 +3583,7 @@ const ProvincialPermitDetailsPage = () => {
       setActionResult({
         kind: 'error',
         message: 'Wait for the current permit change to finish before saving again.',
+        source: 'scale-summary',
       })
       return false
     }
@@ -3573,6 +3605,7 @@ const ProvincialPermitDetailsPage = () => {
         setActionResult({
           kind: 'error',
           message: result.errors[0] || result.message || 'Unable to save scale selection.',
+          source: 'scale-summary',
         })
         return false
       }
@@ -3585,7 +3618,7 @@ const ProvincialPermitDetailsPage = () => {
       if (!isLatestRequest()) return false
       setMinisterialScaleSelectionDraft(null)
       setPermitEditSection((current) => (current === 'scaleSelection' ? null : current))
-      setActionResult({ kind: 'success', title: 'Scale selection saved', message: result.message })
+      setActionResult(scaleActionResult('Summary of scale saved.'))
       return true
     } catch (error) {
       if (isLatestRequest()) {
@@ -3597,6 +3630,7 @@ const ProvincialPermitDetailsPage = () => {
           message: saved
             ? 'Scale selection was saved, but the current totals could not be refreshed. Reload before making another change.'
             : 'Unable to confirm whether scale selection was saved. Reload before making another change.',
+          source: 'scale-summary',
         })
       }
       return false
@@ -4193,19 +4227,15 @@ const ProvincialPermitDetailsPage = () => {
       resetBlanketOicPackageForm()
       try {
         await reloadPermitTabs()
-        setActionResult({
-          kind: 'success',
-          message: result.message || 'Blanket OIC package was saved.',
-        })
+        setActionResult(packageActionResult('Package saved.'))
       } catch (refreshError) {
         console.error(refreshError)
         setPermitTablesErrorMessage(
           'The Blanket OIC package was saved, but permit tables could not be refreshed.',
         )
-        setActionResult({
-          kind: 'warning',
-          message: `${result.message || 'Blanket OIC package was saved.'} Reload before making another package change.`,
-        })
+        setActionResult(
+          packageActionResult('Package saved.', 'Reload before making another package change.'),
+        )
       }
       return true
     } catch (error) {
@@ -4258,10 +4288,7 @@ const ProvincialPermitDetailsPage = () => {
           resetBlanketOicPackageForm()
         }
         await reloadPermitTabs()
-        setActionResult({
-          kind: 'success',
-          message: result.message || 'Blanket OIC package was deleted.',
-        })
+        setActionResult(packageActionResult('Package deleted.'))
       } catch (error) {
         if (!failureMessage) {
           console.error(error)
@@ -4374,19 +4401,15 @@ const ProvincialPermitDetailsPage = () => {
       setIsAddingBoicScale(false)
       try {
         await reloadPermitScaleState()
-        setActionResult({
-          kind: 'success',
-          message: result.message || 'Blanket OIC scale detail was added.',
-        })
+        setActionResult(scaleActionResult('Scale saved.'))
       } catch (refreshError) {
         console.error(refreshError)
         setPermitTablesErrorMessage(
           'The Blanket OIC scale detail was added, but permit tables could not be refreshed.',
         )
-        setActionResult({
-          kind: 'warning',
-          message: `${result.message || 'Blanket OIC scale detail was added.'} Reload before adding another scale row.`,
-        })
+        setActionResult(
+          scaleActionResult('Scale saved.', 'Reload before adding another scale row.'),
+        )
       }
       return true
     } catch (error) {
@@ -4431,19 +4454,15 @@ const ProvincialPermitDetailsPage = () => {
 
         try {
           await reloadPermitScaleState()
-          setActionResult({
-            kind: 'success',
-            message: result.message || 'Blanket OIC scale detail was removed.',
-          })
+          setActionResult(scaleActionResult('Scale deleted.'))
         } catch (refreshError) {
           console.error(refreshError)
           setPermitTablesErrorMessage(
             'The Blanket OIC scale was removed, but permit tables could not be refreshed. Reload the page.',
           )
-          setActionResult({
-            kind: 'warning',
-            message: `${result.message || 'Blanket OIC scale detail was removed.'} Reload before changing scale rows again.`,
-          })
+          setActionResult(
+            scaleActionResult('Scale deleted.', 'Reload before changing scale rows again.'),
+          )
         }
       } catch (error) {
         console.error(error)
@@ -5978,35 +5997,65 @@ const ProvincialPermitDetailsPage = () => {
     )
   }
 
+  // A Summary of scale result moves to the top of the tab while the summary itself is hidden.
+  const scaleSummaryShown =
+    !ministerialScaleEmpty &&
+    !blanketOicPackageCreationRequired &&
+    !isPermitTablesLoading &&
+    !permitTablesErrorMessage &&
+    (!detail?.blanketOic || !!selectedBlanketOicPackage)
+  const scaleSummaryActionResult =
+    actionResult?.source === 'scale-summary' && scaleSummaryShown ? actionResult : null
+  const scaleTabActionResult =
+    actionResult?.source === 'scale' ||
+    (actionResult?.source === 'scale-summary' && !scaleSummaryShown)
+      ? actionResult
+      : null
+
   const renderScaleSummary = () => {
     if (!detail) return null
     return (
-      <fieldset
+      <section
         ref={permitEditSections.sectionRef('scaleSelection')}
-        className="legacy-form-fieldset"
+        className="permit-scale-summary"
+        aria-labelledby="permit-scale-summary-title"
         hidden={
           blanketOicPackageCreationRequired ||
           ministerialScaleEmpty ||
           (ministerialPermit && isPermitTablesLoading)
         }
       >
-        <legend>Summary of scale</legend>
-        {ministerialPermit &&
-          canEditNormalPermitScaleRows &&
-          ministerialScaleSelectionDraft === null &&
-          packageScopedItems.length > 0 && (
-            <div className="legacy-search-actions">
+        <div className="permit-scale-summary__header">
+          <h3 id="permit-scale-summary-title" className="detail-section-subtitle">
+            Summary of scale
+          </h3>
+          {ministerialPermit &&
+            canEditNormalPermitScaleRows &&
+            ministerialScaleSelectionDraft === null &&
+            packageScopedItems.length > 0 && (
               <Button
                 kind="tertiary"
-                size="sm"
+                size="md"
                 renderIcon={Edit}
                 ref={permitEditSections.editButtonRef('scaleSelection')}
                 onClick={startScaleSelectionEdit}
               >
                 Edit scale selection
               </Button>
-            </div>
+            )}
+          {canEditBlanketOicScaleRows && selectedBlanketOicPackage && (
+            <Button
+              id="add-boic-scale"
+              kind="tertiary"
+              size="md"
+              renderIcon={Add}
+              disabled={blanketOicScaleActionsDisabled || isAddingBoicScale}
+              onClick={(event) => startBlanketOicScale(event.currentTarget)}
+            >
+              Add scale
+            </Button>
           )}
+        </div>
         {detail.blanketOic && selectedBlanketOicPackage && (
           <RecordFieldGrid>
             <RecordFieldRow>
@@ -6038,17 +6087,11 @@ const ProvincialPermitDetailsPage = () => {
             </RecordFieldRow>
           </RecordFieldGrid>
         )}
-        {canEditBlanketOicScaleRows && selectedBlanketOicPackage && (
-          <Button
-            id="add-boic-scale"
-            kind="tertiary"
-            size="md"
-            renderIcon={Add}
-            disabled={blanketOicScaleActionsDisabled}
-            onClick={(event) => startBlanketOicScale(event.currentTarget)}
-          >
-            Add scale
-          </Button>
+        {scaleSummaryActionResult && (
+          <ActionResultNotification
+            result={scaleSummaryActionResult}
+            onClose={() => setActionResult(null)}
+          />
         )}
         {!permitTablesErrorMessage &&
           !ministerialScaleEmpty &&
@@ -6125,7 +6168,7 @@ const ProvincialPermitDetailsPage = () => {
                           {row.includedInPermit ? (
                             <Button
                               kind="danger--ghost"
-                              size="sm"
+                              size="md"
                               disabled={blanketOicScaleActionsDisabled}
                               renderIcon={TrashCan}
                               onClick={() => {
@@ -6133,10 +6176,10 @@ const ProvincialPermitDetailsPage = () => {
                                 setBoicScalePendingRemoval(row)
                               }}
                             >
-                              {isDeletingBoicScaleId === row.id ? 'Removing…' : 'Remove'}
+                              {isDeletingBoicScaleId === row.id ? 'Deleting…' : 'Delete'}
                             </Button>
                           ) : (
-                            '-'
+                            displayTableValue('')
                           )}
                         </TableCell>
                       )}
@@ -6145,37 +6188,20 @@ const ProvincialPermitDetailsPage = () => {
                 </TableBody>
               </Table>
             </TableFrame>
+          ) : usesReviewedPermitFlow ? (
+            <p className="permit-scale-summary__empty">No scales yet.</p>
           ) : (
             <EmptyState
-              title={usesReviewedPermitFlow ? 'No scale yet' : 'No permit items available'}
-              description={
-                ministerialPermit ? (
-                  <>
-                    Scale comes from the applications selected for this permit. Select an
-                    application on the{' '}
-                    <button
-                      type="button"
-                      className="cds--link"
-                      onClick={() => selectPermitTab('permit')}
-                    >
-                      Permit tab
-                    </button>
-                    .
-                  </>
-                ) : detail.blanketOic ? (
-                  'No scale entries are available for the selected package.'
-                ) : (
-                  'No permit item rows are available for this permit.'
-                )
-              }
+              title="No permit items available"
+              description="No permit item rows are available for this permit."
               headingLevel={3}
             />
           ))}
         {ministerialPermit && ministerialScaleSelectionDraft !== null && (
-          <div className="legacy-search-actions">
+          <div className="legacy-search-actions permit-scale-summary__actions">
             <Button
               kind="tertiary"
-              size="sm"
+              size="md"
               disabled={isSavingScaleSelection}
               onClick={permitEditSections.cancelEditing}
             >
@@ -6183,7 +6209,7 @@ const ProvincialPermitDetailsPage = () => {
             </Button>
             <Button
               kind="primary"
-              size="sm"
+              size="md"
               disabled={isSavingScaleSelection || !canEditNormalPermitScaleRows}
               renderIcon={isSavingScaleSelection ? PendingIcon : undefined}
               onClick={() => void onSaveScaleSelection()}
@@ -6192,7 +6218,7 @@ const ProvincialPermitDetailsPage = () => {
             </Button>
           </div>
         )}
-      </fieldset>
+      </section>
     )
   }
 
@@ -6216,13 +6242,12 @@ const ProvincialPermitDetailsPage = () => {
           (ministerialPermit ? ministerialPackageOptions : blanketOicPackageOptions).length > 0 &&
           (ministerialPermit ? selectedMinisterialPackage : selectedBlanketOicPackage) && (
             <>
-              <div className="legacy-search-grid">
-                <SearchableSelect
+              <div className="permit-package-toolbar">
+                <PermitPackageSelector
                   id={ministerialPermit ? 'ministerialFeesPackageNumber' : 'boicFeesPackageNumber'}
-                  labelText="Package number"
-                  value={selectedPackageNumber}
                   options={ministerialPermit ? ministerialPackageOptions : blanketOicPackageOptions}
-                  placeholder="Select package"
+                  value={selectedPackageNumber}
+                  showSinglePackage
                   disabled={
                     ministerialPermit
                       ? ministerialScaleSelectionDraft !== null
@@ -6347,6 +6372,9 @@ const ProvincialPermitDetailsPage = () => {
               </TableFrame>
             </>
           )}
+        {usesReviewedPermitFlow && !ministerialFeeShellEmpty && (
+          <h3 className="detail-section-subtitle">Fee details</h3>
+        )}
         {permitFeesErrorMessage ? (
           <EmptyState
             title="Fee details unavailable"
@@ -6430,6 +6458,8 @@ const ProvincialPermitDetailsPage = () => {
     documentRows.length === 0
   const emptyPermitScale = ministerialScaleEmpty || blanketOicPackageCreationRequired
   const ScaleContainer = detail?.blanketOic || ministerialScaleEmpty ? 'section' : Tile
+  // Blanket OIC packages need no group label; other permits label their package details.
+  const PackageDetailsContainer = detail?.blanketOic ? 'div' : 'fieldset'
   const createBlanketOicPackageButton = canEditBlanketOicPackages ? (
     <Button
       id="create-boic-package"
@@ -6666,11 +6696,6 @@ const ProvincialPermitDetailsPage = () => {
                     ref={permitEditSections.sectionRef('permit', 'newPermit')}
                     className="application-detail-tab-grid"
                   >
-                    {!detail.blanketOic && !isMinisterialPermitEdit && (
-                      <Column sm={4} md={8} lg={16}>
-                        {renderFederalPermitNotice()}
-                      </Column>
-                    )}
                     <Column sm={4} md={8} lg={16}>
                       {isReviewedPermitEdit ? (
                         <Tile className="ministerial-permit-details">
@@ -6904,7 +6929,7 @@ const ProvincialPermitDetailsPage = () => {
                         </Tile>
                       </Column>
                     )}
-                    {isMinisterialPermitEdit && (
+                    {(!detail.blanketOic || isMinisterialPermitEdit) && (
                       <Column sm={4} md={8} lg={16}>
                         {renderFederalPermitNotice()}
                       </Column>
@@ -7187,11 +7212,16 @@ const ProvincialPermitDetailsPage = () => {
                       <ScaleContainer
                         className={emptyPermitScale ? 'permit-detail-empty-section' : undefined}
                       >
+                        {scaleTabActionResult && (
+                          <ActionResultNotification
+                            result={scaleTabActionResult}
+                            onClose={() => setActionResult(null)}
+                          />
+                        )}
                         {!emptyPermitScale && !detail.blanketOic && (
-                          <h2 className="detail-tile-title">
-                            {usesReviewedPermitFlow && <Box size={24} aria-hidden="true" />}
+                          <DetailCardTitle icon={usesReviewedPermitFlow ? Box : undefined}>
                             {usesReviewedPermitFlow ? 'Scale' : 'Permit items'}
-                          </h2>
+                          </DetailCardTitle>
                         )}
                         {ministerialScaleEmpty && (
                           <EmptyState
@@ -7210,62 +7240,50 @@ const ProvincialPermitDetailsPage = () => {
                                 .
                               </>
                             }
+                            icon={<Cardboard width={48} height={48} />}
                             headingLevel={3}
+                            variant="tab"
                           />
                         )}
                         {blanketOicPackageCreationRequired && (
                           <EmptyState
                             title="No packages for this permit"
                             description="Scale is recorded by package. Create a package, then add Summary of scale."
+                            icon={<Cardboard width={48} height={48} />}
                             action={createBlanketOicPackageButton}
                             headingLevel={3}
+                            variant="tab"
                           />
                         )}
                         {!emptyPermitScale && (
-                          <fieldset className="legacy-form-fieldset">
-                            <legend>
-                              {detail.blanketOic
-                                ? 'Blanket OIC package details'
-                                : 'Package details'}
-                            </legend>
-                            {detail.blanketOic && blanketOicPackageOptions.length > 0 && (
-                              <div className="boic-package-selector">
-                                <SearchableSelect
-                                  id="boicScalePackageNumber"
-                                  labelText="Package number"
-                                  value={selectedBlanketOicPackageNumber}
-                                  options={blanketOicPackageOptions}
-                                  placeholder="Select package"
-                                  disabled={blanketOicPackageActionsDisabled}
-                                  onChange={selectBlanketOicPackage}
-                                />
-                                {canEditBlanketOicPackages && (
-                                  <Button
-                                    id="create-boic-package"
-                                    type="button"
-                                    kind="tertiary"
-                                    size="sm"
-                                    renderIcon={Add}
+                          <PackageDetailsContainer
+                            className={
+                              detail.blanketOic ? 'boic-package-scale' : 'legacy-form-fieldset'
+                            }
+                          >
+                            {!detail.blanketOic && <legend>Package details</legend>}
+                            {detail.blanketOic &&
+                              (blanketOicPackageOptions.length > 1 ||
+                                createBlanketOicPackageButton) && (
+                                <div className="permit-package-toolbar">
+                                  <PermitPackageSelector
+                                    id="boicScalePackageNumber"
+                                    options={blanketOicPackageOptions}
+                                    value={selectedBlanketOicPackageNumber}
                                     disabled={blanketOicPackageActionsDisabled}
-                                    onClick={(event) => {
-                                      packagePanelLauncherRef.current = event.currentTarget
-                                      startBlanketOicPackageCreate()
-                                    }}
-                                  >
-                                    Create package
-                                  </Button>
-                                )}
-                              </div>
-                            )}
+                                    onChange={selectBlanketOicPackage}
+                                  />
+                                  {createBlanketOicPackageButton}
+                                </div>
+                              )}
                             {ministerialPermit && ministerialPackageOptions.length > 0 && (
-                              <div className="legacy-search-grid">
-                                <SearchableSelect
+                              <div className="permit-package-toolbar">
+                                <PermitPackageSelector
                                   id="ministerialScalePackageNumber"
-                                  labelText="Package number"
+                                  options={ministerialPackageOptions}
                                   value={selectedMinisterialPackageNumber}
                                   disabled={ministerialScaleSelectionDraft !== null}
-                                  options={ministerialPackageOptions}
-                                  placeholder="Select package"
+                                  showSinglePackage
                                   onChange={setSelectedMinisterialPackageNumberState}
                                 />
                               </div>
@@ -7290,48 +7308,36 @@ const ProvincialPermitDetailsPage = () => {
                                 headerAction={
                                   canEditBlanketOicPackages ? (
                                     <div className="boic-package-summary__actions">
-                                      {selectedBlanketOicPackageHasScaleRows && (
-                                        <p
-                                          id={`boic-package-delete-help-${encodeURIComponent(selectedBlanketOicPackage.packageNumber)}`}
-                                          className="cds--visually-hidden"
+                                      {/* A package with scales can't be deleted, so Delete package
+                                          is hidden until its last scale is deleted. */}
+                                      {!selectedBlanketOicPackageHasScaleRows && (
+                                        <Button
+                                          type="button"
+                                          kind="danger--ghost"
+                                          size="md"
+                                          renderIcon={TrashCan}
+                                          disabled={blanketOicPackageActionsDisabled}
+                                          onClick={() =>
+                                            confirmPanelDiscard(() => {
+                                              discardBlanketOicScale()
+                                              resetBlanketOicPackageForm()
+                                              clearActionNotifications()
+                                              setBoicPackageNumberPendingDeletion(
+                                                selectedBlanketOicPackage.packageNumber,
+                                              )
+                                            })
+                                          }
                                         >
-                                          Delete unavailable while this package has scale details.
-                                        </p>
+                                          {isDeletingBoicPackageNumber ===
+                                          selectedBlanketOicPackage.packageNumber
+                                            ? 'Deleting…'
+                                            : 'Delete package'}
+                                        </Button>
                                       )}
                                       <Button
                                         type="button"
-                                        kind="danger--ghost"
-                                        size="sm"
-                                        renderIcon={TrashCan}
-                                        disabled={
-                                          blanketOicPackageActionsDisabled ||
-                                          selectedBlanketOicPackageHasScaleRows
-                                        }
-                                        aria-describedby={
-                                          selectedBlanketOicPackageHasScaleRows
-                                            ? `boic-package-delete-help-${encodeURIComponent(selectedBlanketOicPackage.packageNumber)}`
-                                            : undefined
-                                        }
-                                        onClick={() =>
-                                          confirmPanelDiscard(() => {
-                                            discardBlanketOicScale()
-                                            resetBlanketOicPackageForm()
-                                            clearActionNotifications()
-                                            setBoicPackageNumberPendingDeletion(
-                                              selectedBlanketOicPackage.packageNumber,
-                                            )
-                                          })
-                                        }
-                                      >
-                                        {isDeletingBoicPackageNumber ===
-                                        selectedBlanketOicPackage.packageNumber
-                                          ? 'Deleting…'
-                                          : 'Delete package'}
-                                      </Button>
-                                      <Button
-                                        type="button"
                                         kind="tertiary"
-                                        size="sm"
+                                        size="md"
                                         renderIcon={Edit}
                                         disabled={blanketOicPackageActionsDisabled}
                                         onClick={(event) => {
@@ -7526,20 +7532,10 @@ const ProvincialPermitDetailsPage = () => {
                                         )}
                                         {canEditBlanketOicPackages && (
                                           <TableCell>
-                                            {(tabsData?.items ?? []).some(
-                                              (item) => item.packageNumber === row.packageNumber,
-                                            ) && (
-                                              <p
-                                                id={`boic-package-delete-help-${encodeURIComponent(row.packageNumber)}`}
-                                              >
-                                                Delete unavailable while this package has scale
-                                                details.
-                                              </p>
-                                            )}
                                             <Button
                                               type="button"
                                               kind="ghost"
-                                              size="sm"
+                                              size="md"
                                               disabled={blanketOicPackageActionsDisabled}
                                               onClick={(event) => {
                                                 packagePanelLauncherRef.current =
@@ -7549,40 +7545,30 @@ const ProvincialPermitDetailsPage = () => {
                                             >
                                               Edit
                                             </Button>
-                                            <Button
-                                              type="button"
-                                              kind="danger--ghost"
-                                              size="sm"
-                                              aria-describedby={
-                                                (tabsData?.items ?? []).some(
-                                                  (item) =>
-                                                    item.packageNumber === row.packageNumber,
-                                                )
-                                                  ? `boic-package-delete-help-${encodeURIComponent(row.packageNumber)}`
-                                                  : undefined
-                                              }
-                                              disabled={
-                                                blanketOicPackageActionsDisabled ||
-                                                (tabsData?.items ?? []).some(
-                                                  (item) =>
-                                                    item.packageNumber === row.packageNumber,
-                                                )
-                                              }
-                                              onClick={() =>
-                                                confirmPanelDiscard(() => {
-                                                  discardBlanketOicScale()
-                                                  resetBlanketOicPackageForm()
-                                                  clearActionNotifications()
-                                                  setBoicPackageNumberPendingDeletion(
-                                                    row.packageNumber,
-                                                  )
-                                                })
-                                              }
-                                            >
-                                              {isDeletingBoicPackageNumber === row.packageNumber
-                                                ? 'Deleting…'
-                                                : 'Delete'}
-                                            </Button>
+                                            {!(tabsData?.items ?? []).some(
+                                              (item) => item.packageNumber === row.packageNumber,
+                                            ) && (
+                                              <Button
+                                                type="button"
+                                                kind="danger--ghost"
+                                                size="md"
+                                                disabled={blanketOicPackageActionsDisabled}
+                                                onClick={() =>
+                                                  confirmPanelDiscard(() => {
+                                                    discardBlanketOicScale()
+                                                    resetBlanketOicPackageForm()
+                                                    clearActionNotifications()
+                                                    setBoicPackageNumberPendingDeletion(
+                                                      row.packageNumber,
+                                                    )
+                                                  })
+                                                }
+                                              >
+                                                {isDeletingBoicPackageNumber === row.packageNumber
+                                                  ? 'Deleting…'
+                                                  : 'Delete'}
+                                              </Button>
+                                            )}
                                           </TableCell>
                                         )}
                                       </TableRow>
@@ -7598,7 +7584,9 @@ const ProvincialPermitDetailsPage = () => {
                                     ? 'Scale is recorded by package. Create a package, then add its scales.'
                                     : 'No package has been created for this Blanket OIC permit.'
                                 }
+                                icon={<Cardboard width={48} height={48} />}
                                 headingLevel={3}
+                                variant="tab"
                               />
                             ) : ministerialScaleEmpty ? null : (
                               <EmptyState
@@ -7607,24 +7595,7 @@ const ProvincialPermitDetailsPage = () => {
                                 headingLevel={3}
                               />
                             )}
-                            {canEditBlanketOicPackages && blanketOicPackageOptions.length === 0 && (
-                              <div className="application-detail-edit-section">
-                                <Button
-                                  id="create-boic-package"
-                                  type="button"
-                                  kind="primary"
-                                  size="sm"
-                                  disabled={blanketOicPackageActionsDisabled}
-                                  onClick={(event) => {
-                                    packagePanelLauncherRef.current = event.currentTarget
-                                    startBlanketOicPackageCreate()
-                                  }}
-                                >
-                                  Create package
-                                </Button>
-                              </div>
-                            )}
-                          </fieldset>
+                          </PackageDetailsContainer>
                         )}
                         {!emptyPermitScale &&
                           !(detail.blanketOic && selectedBlanketOicPackage) &&
@@ -7970,35 +7941,37 @@ const ProvincialPermitDetailsPage = () => {
         <ConfirmationModal
           open
           danger
-          title="Remove Blanket OIC scale?"
+          title="Are you sure you want to delete this scale?"
           description={
             <>
-              Scale <strong>{boicScalePendingRemoval.id}</strong> (
-              {boicScalePendingRemoval.timberMark || 'no timber mark'}) will be removed from permit{' '}
-              {detail?.permitNumber ?? permitNumber ?? ''}.
+              <strong>{scaleDeletionLabel(boicScalePendingRemoval)}</strong> will be deleted. This
+              action cannot be undone.
             </>
           }
-          confirmLabel="Remove"
-          pendingLabel="Removing…"
-          errorTitle="Failed to remove Blanket OIC scale"
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          errorTitle="Failed to delete Blanket OIC scale"
           onClose={() => setBoicScalePendingRemoval(null)}
           onConfirm={() => onDeleteBlanketOicScale(boicScalePendingRemoval)}
         />
       )}
-      <ConfirmationModal
-        open={boicPackageNumberPendingDeletion !== null}
-        danger
-        title={`Delete Blanket OIC package ${formatPackageNumberLabel(boicPackageNumberPendingDeletion ?? '')}?`}
-        description={`Delete Blanket OIC package ${formatPackageNumberLabel(boicPackageNumberPendingDeletion ?? '')}. This action cannot be undone.`}
-        confirmLabel="Delete package"
-        pendingLabel="Deleting…"
-        onClose={() => setBoicPackageNumberPendingDeletion(null)}
-        onConfirm={async () => {
-          if (boicPackageNumberPendingDeletion) {
-            await onDeleteBlanketOicPackage(boicPackageNumberPendingDeletion)
+      {boicPackageNumberPendingDeletion !== null && (
+        <ConfirmationModal
+          open
+          danger
+          title="Are you sure you want to delete this package?"
+          description={
+            <>
+              <strong>Package {formatPackageNumberLabel(boicPackageNumberPendingDeletion)}</strong>{' '}
+              will be deleted. This action cannot be undone.
+            </>
           }
-        }}
-      />
+          confirmLabel="Delete"
+          pendingLabel="Deleting…"
+          onClose={() => setBoicPackageNumberPendingDeletion(null)}
+          onConfirm={() => onDeleteBlanketOicPackage(boicPackageNumberPendingDeletion)}
+        />
+      )}
       {detail?.blanketOic && (
         <DetailSidePanel
           open={isAddingBoicScale}

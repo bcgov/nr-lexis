@@ -526,12 +526,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await selectApplicationDetailTab('Offers')
     expect(screen.queryByRole('heading', { name: 'Offers', level: 2 })).not.toBeInTheDocument()
-    expect(
-      await screen.findByRole('heading', {
-        level: 2,
-        name: 'No offers found',
-      }),
-    ).toBeInTheDocument()
+    const noOffers = await screen.findByRole('heading', { level: 2, name: 'No offers found' })
+    expect(noOffers.closest('.lexis-empty-state')).toHaveClass('lexis-empty-state--tab')
+    expect(noOffers.closest('.cds--tile')).toBeNull()
   })
 
   it('shows an explicit empty state when no agent is assigned', async () => {

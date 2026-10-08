@@ -93,7 +93,6 @@ import {
 } from '@/service/search-options-service'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { displayTableValue } from '@/utils/text'
-import { formatIsoDateLabel } from '@/utils/date'
 import IsoDateRangePicker from '@/components/IsoDateRangePicker'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import {
@@ -1037,7 +1036,7 @@ const ProvincialApplicationPage = () => {
                         )}
                       </TableCell>
                       <TableCell className="legacy-search-table-date">
-                        {displayTableValue(formatIsoDateLabel(row.listingDate))}
+                        {displayTableValue(row.listingDate)}
                       </TableCell>
                       <TableCell>{displayTableValue(row.region)}</TableCell>
                     </TableRow>

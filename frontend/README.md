@@ -135,6 +135,14 @@ Show read-only values with `displayValue()`. A blank value renders `—`, announ
 
 Show volumes with `displayVolume()` or `formatVolume()` from `@/utils/volume`: one decimal, or two when the stored value has them (`0.0`, `1,234.5`, `12.25`). Fill volume inputs with `formatVolumeInput()`, which drops the thousands separator.
 
+Set `size="md"` (40px) on every `Button`; Carbon's default is lg (48px). A unit test checks every call site.
+
+Put actions that cover the whole record (Save and Cancel on a create page, Approve exemption, Print permit) in `PageHeader`'s `actions`, on the title row above any notification. A tab's edit actions (Cancel, Save changes) go inside its card, bottom right, after the last field.
+
+Title each record card with `DetailCardTitle`, passing its tab's icon: an h2 in heading-03 led by the 24px icon. A titled section inside a card is an h3 with `detail-section-subtitle` (heading-compact-02, no icon).
+
+An empty tab has no card. Render `EmptyState` with `variant="tab"` straight in the tab panel, with the tab's pictogram: Cardboard for Scale, AddDocument for Documents, Invoice for Fees. An empty section inside a card is one line of text.
+
 Format volume values when loading an editor, including its saved snapshot, rather than on every
 keystroke. Application volume accepts two decimal places. OIC request-volume editors retain their
 existing text representation because the storage field is `VARCHAR2(9)`; format only their read-only

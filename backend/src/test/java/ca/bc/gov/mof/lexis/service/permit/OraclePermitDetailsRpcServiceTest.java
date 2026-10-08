@@ -617,7 +617,7 @@ class OraclePermitDetailsRpcServiceTest {
     PermitSummaryRpcResponseDto response =
         service.getPermitSummary(7000123L, "US", "2026-03-15", "PKG-903", true);
 
-    assertThat(response.volume()).isEqualTo("15.8");
+    assertThat(response.volume()).isEqualTo("15.75");
     assertThat(response.pieces()).isEqualTo(20L);
     assertThat(response.totalFees()).isEqualTo("$15.75");
     assertThat(response.totalFeeForPackage()).isEqualTo("$10.25");
@@ -768,7 +768,7 @@ class OraclePermitDetailsRpcServiceTest {
 
   @ParameterizedTest
   @ValueSource(booleans = {false, true})
-  void allScaleFeesShouldSumStoredVolumesBeforeRounding(boolean separatePackages) {
+  void allScaleFeesShouldKeepStoredVolumeDecimals(boolean separatePackages) {
     PermitScaleDetailRow firstScale =
         scale("101", "TM1", "HEM", "J", 1.04d, 1L, "7000123", "PKG-903");
     PermitScaleDetailRow secondScale =
@@ -784,11 +784,11 @@ class OraclePermitDetailsRpcServiceTest {
 
     PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
 
-    assertThat(response.totalVolume()).isEqualTo("2.1");
+    assertThat(response.totalVolume()).isEqualTo("2.08");
     assertThat(response.packageList()).hasSize(separatePackages ? 2 : 1);
     assertThat(response.packageList().stream().flatMap(row -> row.scaleList().stream()))
         .extracting("volume", "fee")
-        .containsExactly(tuple("1.0", "$1.04"), tuple("1.0", "$1.04"));
+        .containsExactly(tuple("1.04", "$1.04"), tuple("1.04", "$1.04"));
     if (separatePackages) {
       assertThat(response.packageList())
           .extracting("totalFeeForPackage")
@@ -802,6 +802,26 @@ class OraclePermitDetailsRpcServiceTest {
   void allScaleFeesShouldReturnZeroVolumeWhenNoScalesAreAvailable() {
     assertThat(service.getAllScaleFees(null, true).totalVolume()).isEqualTo("0.0");
     assertThat(service.getAllScaleFees(7000123L, true).totalVolume()).isEqualTo("0.0");
+  }
+
+  @Test
+  void allScaleFeesShouldShowAtLeastOneDecimalAndKeepAStoredSecondDecimal() {
+    when(repository.findPermitFeeScaleRows(7000123L))
+        .thenReturn(
+            List.of(
+                new PermitFeeScaleRow(
+                    scale("101", "TM1", "HEM", "J", 0.05d, 1L, "7000123", "PKG-903"),
+                    "T", "Hemlock", "Grade J", "S", "Second Growth", BigDecimal.ONE),
+                new PermitFeeScaleRow(
+                    scale("102", "TM2", "FIR", "K", 2.0d, 1L, "7000123", "PKG-903"),
+                    "T", "Fir", "Grade K", "S", "Second Growth", BigDecimal.ONE)));
+
+    PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
+
+    assertThat(response.packageList().get(0).scaleList())
+        .extracting("volume")
+        .containsExactly("0.05", "2.0");
+    assertThat(response.totalVolume()).isEqualTo("2.05");
   }
 
   @Test
@@ -829,8 +849,8 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.packageList().get(0).scaleList()).isEmpty();
     assertThat(response.packageList().get(1).scaleList())
         .extracting("volume", "fee")
-        .containsExactly(tuple("1.0", "$1.04"));
-    assertThat(response.totalVolume()).isEqualTo("1.0");
+        .containsExactly(tuple("1.04", "$1.04"));
+    assertThat(response.totalVolume()).isEqualTo("1.04");
     verify(repository).findCorePackageContexts(7000123L, true);
     verify(repository, never()).findScaleDetailsByPackageNumber(any());
     verify(repository, never()).findGrowthTypeDescription(any());
@@ -950,7 +970,7 @@ class OraclePermitDetailsRpcServiceTest {
     PermitDataAfterScaleUpdateRpcResponseDto response =
         service.getPermitDataAfterScaleUpdate(7000123L);
 
-    assertThat(response.packageVolume()).isEqualTo("15.8");
+    assertThat(response.packageVolume()).isEqualTo("15.75");
     assertThat(response.pieces()).isEqualTo(20L);
     assertThat(response.totalFees()).isEqualTo("$39.38");
     assertThat(response.exemptionVolume()).isEqualTo(55.5d);
@@ -967,7 +987,7 @@ class OraclePermitDetailsRpcServiceTest {
     PermitPackageVolumeSumRpcResponseDto response =
         service.getPackageVolumeSum(7000123L, "PKG-903");
 
-    assertThat(response.volume()).isEqualTo("10.3");
+    assertThat(response.volume()).isEqualTo("10.25");
   }
 
   @Test
@@ -1188,6 +1208,26 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.packageList().get(1).packageInfo().speciesCodes()).containsExactly("FI");
     assertThat(response.packageList().get(1).packageInfo().endUseCodes()).containsExactly("P");
     verify(repository, never()).findEndUsesByPackageNumber(any());
+  }
+
+  @Test
+  void blanketCoreTabsShouldKeepAStoredSecondDecimalInScaleAndCurrentPackageVolumes() {
+    var context = coreContext("PKG-100", 1000456L, true);
+    when(repository.findCorePackageContexts(7000123L, true))
+        .thenReturn(List.of(
+            new PermitCorePackageContextRow(context.packageRow(), context.applicationInfo(), "P",
+                "B", "Timber", "Timber", "Second Growth", "Second Growth", "Active", true)));
+    when(repository.findCoreScaleRows(List.of("PKG-100"), 7000123L, true))
+        .thenReturn(List.of(
+            coreScale(scale("101", "TM1", "HE", "A", 0.05d, 1L, "7000123", "PKG-100", 1000456L)),
+            coreScale(scale("102", "TM2", "FI", "B", 2d, 2L, "7000123", "PKG-100", 1000456L))));
+
+    var response = service.getCoreTabs(7000123L, true, ignored -> true);
+
+    assertThat(response.packageList().get(0).scaleList())
+        .extracting("volume")
+        .containsExactly("0.05", "2.0");
+    assertThat(response.packageList().get(0).packageDetails().scaledVolume()).isEqualTo(2.05d);
   }
 
   @Test
@@ -6409,7 +6449,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.region()).isEqualTo("Coast Region");
     assertThat(response.enduse()).isEqualTo("HE/UT");
     assertThat(response.ageclass()).isEqualTo("Standing");
-    assertThat(response.volume()).isEqualTo("10.3");
+    assertThat(response.volume()).isEqualTo("10.25");
     assertThat(response.length()).isEqualTo("6.0");
     assertThat(response.diameter()).isEqualTo("24.0");
     assertThat(response.productType()).isEqualTo("Unmanufactured Timber");
@@ -6474,6 +6514,21 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void packageDetailsShouldKeepAStoredSecondDecimalInPackageAndScaledVolumes() {
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new PackageDetailsRow("PKG-903", 2.0d, 6.0d, 24.0d, "ACT", "", "N", "S")));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 0.05d, 1L, "7000123", "PKG-903")));
+
+    PermitPackageDetailsRpcResponseDto response = service.getPackageDetails("PKG-903");
+
+    assertThat(response.volume()).isEqualTo("2.0");
+    assertThat(response.scaledVolume()).isEqualTo(0.05d);
+  }
+
+  @Test
   void packageDetailsShouldMapPackageFieldsAndScaledVolume() {
     when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
         .thenReturn(
@@ -6492,8 +6547,8 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isTrue();
     assertThat(response.packageNumber()).isEqualTo("PKG-903");
-    assertThat(response.volume()).isEqualTo("10.3");
-    assertThat(response.scaledVolume()).isEqualTo(3.6d);
+    assertThat(response.volume()).isEqualTo("10.25");
+    assertThat(response.scaledVolume()).isEqualTo(3.59d);
     assertThat(response.remainingVolume()).isEqualTo("6.66");
     assertThat(response.length()).isEqualTo("6.0");
     assertThat(response.diameter()).isEqualTo("24.0");
@@ -6517,8 +6572,8 @@ class OraclePermitDetailsRpcServiceTest {
 
     PermitPackageDetailsRpcResponseDto response = service.getPackageDetails("PKG-904");
 
-    // The displayed total rounds each scale; the save check and this limit do not.
-    assertThat(response.scaledVolume()).isEqualTo(0.6d);
+    // The total and remaining limit use the exact scale sum.
+    assertThat(response.scaledVolume()).isEqualTo(0.5d);
     assertThat(response.remainingVolume()).isEqualTo("1.5");
   }
 
