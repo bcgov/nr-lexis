@@ -411,7 +411,48 @@ describe('RTM EMS Log AMV actions', () => {
     const balsam = amvCell('Balsam (BA)', 'B')
     await user.type(balsam, '-1')
     expect(screen.getByText(/must be a number from 0 to 9999.99/i)).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
+    await user.click(amvCell('Pine', 'B'))
+    await user.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    expect(balsam).toHaveFocus()
+    expect(mockedSaveBatch).not.toHaveBeenCalled()
+  })
+
+  it('asks before Reset or a month change discards edited values', async () => {
+    const user = userEvent.setup()
+    mockRows([row('BA', 'B', 'O', CURRENT_MONTH, 10)])
+    render(<RTMEmsLogAmvPage />)
+    await waitForMonthLoad()
+
+    const balsam = amvCell('Balsam (BA)', 'B')
+    await user.clear(balsam)
+    await user.type(balsam, '12')
+
+    const reset = screen.getByRole('button', { name: 'Reset' })
+    await user.click(reset)
+    let dialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+    await waitFor(() => expect(reset).toHaveFocus())
+    expect(balsam).toHaveValue('12')
+
+    await user.click(screen.getByRole('button', { name: 'Previous month' }))
+    dialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+    expect(balsam).toHaveValue('12')
+    expect(mockedSearch).not.toHaveBeenCalledWith(
+      expect.objectContaining({ updateDate: monthOffset(CURRENT_MONTH, -1), growthIndicator: 'O' }),
+    )
+
+    await user.click(reset)
+    dialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await user.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
+    expect(balsam).toHaveValue('10')
+    await waitFor(() => expect(balsam).toHaveFocus())
+
+    // Nothing is edited now, so a month change needs no confirmation.
+    await user.click(screen.getByRole('button', { name: 'Previous month' }))
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    await waitForMonthLoad(monthOffset(CURRENT_MONTH, -1))
     expect(mockedSaveBatch).not.toHaveBeenCalled()
   })
 

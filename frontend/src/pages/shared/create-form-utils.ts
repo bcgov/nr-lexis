@@ -1,3 +1,5 @@
+import { fieldErrorText } from '@/utils/field-error'
+
 // INTENTIONAL_LEGACY_DIVERGENCE(STRICT_DATE_INPUT_VALIDATION): Reject impossible calendar dates
 // instead of allowing a date widget or lenient legacy parser to rewrite the entered value.
 export const isValidIsoDate = (value: string): boolean => {
@@ -266,5 +268,5 @@ export const getVisibleFieldError = <TField extends string>(
     return undefined
   }
 
-  return fieldErrors[field]
+  return fieldErrorText(fieldErrors[field])
 }

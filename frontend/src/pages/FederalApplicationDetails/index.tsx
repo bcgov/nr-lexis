@@ -58,6 +58,8 @@ import {
   readDetailReturnTo,
   withDetailReturnTo,
 } from '@/pages/shared/detail-navigation'
+import { useEditSections } from '@/pages/shared/useEditSections'
+import { hasFieldErrors, useFieldErrors, type FieldErrors } from '@/pages/shared/useFieldErrors'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import {
@@ -86,6 +88,8 @@ import {
   type ApplicationPackageScaleRow,
 } from '@/service/provincial-application-items-service'
 import { formatBusinessDateTime, formatBusinessIsoDate } from '@/utils/date'
+import { fieldErrorText } from '@/utils/field-error'
+import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
 import { displayAuditIdentity, displayTableValue } from '@/utils/text'
 import { requiredLabel } from '@/utils/required-label'
 import {
@@ -128,6 +132,65 @@ const FEDERAL_APPLICATION_DETAIL_TAB_SLOTS: readonly FederalApplicationDetailTab
   'documents',
   'shipping',
 ]
+
+type FederalEditSection = 'status' | 'permit' | 'new-remark' | `remark-${number}`
+
+type FederalStatusField = 'statusCode' | 'statusRemark'
+
+type FederalPermitField = Exclude<keyof FederalPermitMutation, 'permitNumber'>
+
+const isRemarkSection = (section: FederalEditSection | null): boolean =>
+  section === 'new-remark' || !!section?.startsWith('remark-')
+
+const statusRemarkRequired = (statusCode: string): boolean =>
+  statusCode === 'REJ' || statusCode === 'WDN'
+
+const federalStatusServerField = (message: string): FederalStatusField | undefined => {
+  if (message === 'Federal status must be APP, REJ, or WDN.') return 'statusCode'
+  if (
+    message === 'A remark is required when rejecting or withdrawing a federal application.' ||
+    message === 'Remark is too long to save. Shorten it and try again.'
+  ) {
+    return 'statusRemark'
+  }
+  return undefined
+}
+
+// The server names each permit field at the start of its message.
+const FEDERAL_PERMIT_SERVER_FIELD_LABELS: Record<FederalPermitField, string> = {
+  permitIssueDate: 'Permit issue date',
+  destinationCountry: 'Destination country',
+  transportType: 'Transport type',
+  transportName: 'Transport name',
+  shippingDate: 'Estimated shipping date',
+  portOfExport: 'Port of export',
+  otherPortOfExport: 'Other port of export',
+}
+
+const federalPermitServerField = (message: string): FederalPermitField | undefined =>
+  (Object.keys(FEDERAL_PERMIT_SERVER_FIELD_LABELS) as FederalPermitField[]).find((field) =>
+    message.startsWith(`${FEDERAL_PERMIT_SERVER_FIELD_LABELS[field]} `),
+  )
+
+const federalRemarkServerField = (message: string): 'remark' | undefined =>
+  message === 'Remark is required.' || message === 'Remark must not exceed 250 characters.'
+    ? 'remark'
+    : undefined
+
+/** Splits server errors into the ones that belong to a field and the rest. */
+const splitServerErrors = <F extends string>(
+  errors: string[],
+  fieldFor: (message: string) => F | undefined,
+): { fieldErrors: FieldErrors<F>; otherErrors: string[] } => {
+  const fieldErrors: FieldErrors<F> = {}
+  const otherErrors: string[] = []
+  for (const message of errors) {
+    const field = fieldFor(message)
+    if (!field) otherErrors.push(message)
+    else fieldErrors[field] ??= message
+  }
+  return { fieldErrors, otherErrors }
+}
 
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 
@@ -206,10 +269,26 @@ const FederalApplicationDetailsPage = () => {
   const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const [permitForm, setPermitForm] = useState<FederalPermitMutation>(emptyPermitForm)
-  const [isEditingFederalStatus, setIsEditingFederalStatus] = useState(false)
-  const [isEditingFederalRemarks, setIsEditingFederalRemarks] = useState(false)
+  const [editingSection, setEditingSection] = useState<FederalEditSection | null>(null)
+  const isEditingFederalStatus = editingSection === 'status'
+  const isEditingFederalRemarks = isRemarkSection(editingSection)
+  const isEditingFederalPermit = editingSection === 'permit'
   const [isEditingFederalDocuments, setIsEditingFederalDocuments] = useState(false)
-  const [isEditingFederalPermit, setIsEditingFederalPermit] = useState(false)
+  const {
+    clearFieldError: clearStatusFieldError,
+    resetFieldErrors: resetStatusFieldErrors,
+    showFieldErrors: showStatusFieldErrors,
+    invalidProps: statusInvalidProps,
+  } = useFieldErrors<FederalStatusField>()
+  const {
+    clearFieldError: clearPermitFieldError,
+    resetFieldErrors: resetPermitFieldErrors,
+    showFieldErrors: showPermitFieldErrors,
+    invalidProps: permitInvalidProps,
+  } = useFieldErrors<FederalPermitField>()
+  const statusFormRef = useRef<HTMLDivElement>(null)
+  const permitFormRef = useRef<HTMLDivElement>(null)
+  const remarkFormRef = useRef<HTMLDivElement>(null)
   const [isSavingMutation, setIsSavingMutation] = useState(false)
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -273,6 +352,12 @@ const FederalApplicationDetailsPage = () => {
     canMutateFederalApplication &&
     !!detail &&
     !formValuesEqual(permitForm, permitFormFromDetail(detail))
+  const remarkBaseline =
+    editingRemarkId === null
+      ? ''
+      : (remarkRows.find((remark) => remark.remarkId === editingRemarkId)?.remark ?? '')
+  const remarkDraftDirty =
+    canMutateFederalApplication && isEditingFederalRemarks && remarkDraft !== remarkBaseline
   const independentDraftsRef = useRef({ statusDraftDirty, permitDraftDirty, statusCode })
   useEffect(() => {
     independentDraftsRef.current = { statusDraftDirty, permitDraftDirty, statusCode }
@@ -332,7 +417,7 @@ const FederalApplicationDetailsPage = () => {
     }
   }, [])
 
-  const permitFieldErrors = useMemo(
+  const permitValidationErrors = useMemo<FieldErrors<FederalPermitField>>(
     () => ({
       permitIssueDate: firstValidationError(
         () => requiredFieldError(permitForm.permitIssueDate, 'Permit issue date'),
@@ -379,7 +464,6 @@ const FederalApplicationDetailsPage = () => {
     }),
     [permitForm],
   )
-  const hasPermitValidationError = Object.values(permitFieldErrors).some(Boolean)
 
   useEffect(() => {
     detailRef.current = detail
@@ -431,10 +515,8 @@ const FederalApplicationDetailsPage = () => {
         )
         setStatusRemark('')
         setPermitForm(response ? permitFormFromDetail(response) : emptyPermitForm())
-        setIsEditingFederalStatus(false)
-        setIsEditingFederalRemarks(false)
+        setEditingSection(null)
         setIsEditingFederalDocuments(false)
-        setIsEditingFederalPermit(false)
         if (!response) {
           setErrorMessage(`No federal application found for ${applicationNumber}.`)
           setDocumentRows([])
@@ -553,11 +635,11 @@ const FederalApplicationDetailsPage = () => {
       ) {
         setStatusCode(refreshedTransitions[0]?.code ?? '')
         setStatusRemark('')
-        setIsEditingFederalStatus(false)
+        setEditingSection((current) => (current === 'status' ? null : current))
       }
       if (savedSection === 'permit' || !canContinueEditing || !drafts.permitDraftDirty) {
         setPermitForm(refreshed ? permitFormFromDetail(refreshed) : emptyPermitForm())
-        setIsEditingFederalPermit(false)
+        setEditingSection((current) => (current === 'permit' ? null : current))
       }
       if (canViewFederalApplication) {
         try {
@@ -580,6 +662,12 @@ const FederalApplicationDetailsPage = () => {
       !statusTransitions.some((transition) => transition.code === statusCode)
     )
       return false
+    const statusRemarkError = statusRemarkRequired(statusCode)
+      ? requiredFieldError(statusRemark, 'Remark')
+      : null
+    if (!showStatusFieldErrors({ statusRemark: statusRemarkError }, () => statusFormRef.current)) {
+      return false
+    }
     setActionResult(null)
     setIsSavingMutation(true)
     try {
@@ -589,10 +677,17 @@ const FederalApplicationDetailsPage = () => {
         statusRemark,
       )
       if (!result.success) {
-        setActionResult({
-          kind: 'error',
-          message: result.errors[0] || 'Unable to update federal application status.',
-        })
+        const { fieldErrors, otherErrors } = splitServerErrors(
+          result.errors,
+          federalStatusServerField,
+        )
+        showStatusFieldErrors(fieldErrors, () => statusFormRef.current)
+        if (otherErrors.length > 0 || !hasFieldErrors(fieldErrors)) {
+          setActionResult({
+            kind: 'error',
+            message: otherErrors[0] || 'Unable to update federal application status.',
+          })
+        }
         return false
       }
       try {
@@ -608,7 +703,7 @@ const FederalApplicationDetailsPage = () => {
             'Federal application status updated, but details could not be refreshed. Reload before making more changes.',
         })
       }
-      setIsEditingFederalStatus(false)
+      setEditingSection((current) => (current === 'status' ? null : current))
       return true
     } catch (error) {
       console.error(error)
@@ -621,6 +716,7 @@ const FederalApplicationDetailsPage = () => {
     applicationNumber,
     canMutateFederalApplication,
     refreshDetail,
+    showStatusFieldErrors,
     statusCode,
     statusRemark,
     statusTransitions,
@@ -636,13 +732,14 @@ const FederalApplicationDetailsPage = () => {
       })
       return false
     }
-    if (hasPermitValidationError) {
-      setActionResult({
-        kind: 'error',
-        message:
-          Object.values(permitFieldErrors).find((error): error is string => !!error) ??
-          'Please fix the federal permit fields before saving.',
-      })
+    if (isSavingMutation) return false
+    if (detail?.federalPermit && !permitDraftDirty) {
+      resetPermitFieldErrors()
+      setActionResult(null)
+      setEditingSection(null)
+      return true
+    }
+    if (!showPermitFieldErrors(permitValidationErrors, () => permitFormRef.current)) {
       return false
     }
     setActionResult(null)
@@ -650,10 +747,17 @@ const FederalApplicationDetailsPage = () => {
     try {
       const result = await saveFederalPermit(applicationNumber, permitForm, !!detail?.federalPermit)
       if (!result.success) {
-        setActionResult({
-          kind: 'error',
-          message: result.errors[0] || 'Unable to save federal permit.',
-        })
+        const { fieldErrors, otherErrors } = splitServerErrors(
+          result.errors,
+          federalPermitServerField,
+        )
+        showPermitFieldErrors(fieldErrors, () => permitFormRef.current)
+        if (otherErrors.length > 0 || !hasFieldErrors(fieldErrors)) {
+          setActionResult({
+            kind: 'error',
+            message: otherErrors[0] || 'Unable to save federal permit.',
+          })
+        }
         return false
       }
       try {
@@ -666,7 +770,7 @@ const FederalApplicationDetailsPage = () => {
             'Federal permit saved, but details could not be refreshed. Reload before making more changes.',
         })
       }
-      setIsEditingFederalPermit(false)
+      setEditingSection((current) => (current === 'permit' ? null : current))
       return true
     } catch (error) {
       console.error(error)
@@ -676,46 +780,40 @@ const FederalApplicationDetailsPage = () => {
       setIsSavingMutation(false)
     }
   }, [
+    isSavingMutation,
+    permitDraftDirty,
+    resetPermitFieldErrors,
     applicationNumber,
     canMutateFederalApplication,
     detail?.federalPermit,
-    hasPermitValidationError,
-    permitFieldErrors,
     permitForm,
+    permitValidationErrors,
     refreshDetail,
     shippingReferences,
+    showPermitFieldErrors,
   ])
-
-  const onStartFederalPermitEdit = useCallback(() => {
-    if (
-      !canMutateFederalApplication ||
-      !detail ||
-      isShippingReferencesLoading ||
-      !shippingReferences
-    ) {
-      return
-    }
-    setPermitForm(permitFormFromDetail(detail))
-    setActionResult(withoutActionError)
-    setIsEditingFederalPermit(true)
-  }, [canMutateFederalApplication, detail, isShippingReferencesLoading, shippingReferences])
-
-  const onCancelFederalPermitEdit = useCallback(() => {
-    setPermitForm(detail ? permitFormFromDetail(detail) : emptyPermitForm())
-    setActionResult(withoutActionError)
-    setIsEditingFederalPermit(false)
-  }, [detail])
 
   const onSaveRemark = useCallback(async (): Promise<boolean> => {
     if (!applicationNumber || !canMutateFederalApplication || isSavingRemark) return false
 
-    const normalizedRemark = remarkDraft.trim()
-    if (!normalizedRemark) {
-      setRemarkValidationMessage('Remark is required.')
-      return false
+    if (editingRemarkId !== null && !remarkDraftDirty) {
+      setRemarkValidationMessage('')
+      setActionResult(null)
+      setEditingSection(null)
+      setRemarkDraft('')
+      setEditingRemarkId(null)
+      return true
     }
-    if (normalizedRemark.length > 250) {
-      setRemarkValidationMessage('Remark must not exceed 250 characters.')
+
+    const normalizedRemark = remarkDraft.trim()
+    const remarkError = !normalizedRemark
+      ? 'Remark is required.'
+      : normalizedRemark.length > 250
+        ? 'Remark must not exceed 250 characters.'
+        : ''
+    if (remarkError) {
+      setRemarkValidationMessage(remarkError)
+      focusFirstInvalidFieldAfterRender(() => remarkFormRef.current)
       return false
     }
 
@@ -729,10 +827,20 @@ const FederalApplicationDetailsPage = () => {
         editingRemarkId ?? undefined,
       )
       if (!result.success) {
-        setActionResult({
-          kind: 'error',
-          message: result.errors[0] || 'Unable to save federal application remark.',
-        })
+        const { fieldErrors, otherErrors } = splitServerErrors(
+          result.errors,
+          federalRemarkServerField,
+        )
+        if (fieldErrors.remark) {
+          setRemarkValidationMessage(fieldErrors.remark)
+          focusFirstInvalidFieldAfterRender(() => remarkFormRef.current)
+        }
+        if (otherErrors.length > 0 || !fieldErrors.remark) {
+          setActionResult({
+            kind: 'error',
+            message: otherErrors[0] || 'Unable to save federal application remark.',
+          })
+        }
         return false
       }
       try {
@@ -752,7 +860,7 @@ const FederalApplicationDetailsPage = () => {
       setEditingRemarkId(null)
       setRemarkDraft('')
       setRemarkValidationMessage('')
-      setIsEditingFederalRemarks(false)
+      setEditingSection((current) => (isRemarkSection(current) ? null : current))
       return true
     } catch (error) {
       console.error(error)
@@ -761,7 +869,14 @@ const FederalApplicationDetailsPage = () => {
     } finally {
       setIsSavingRemark(false)
     }
-  }, [applicationNumber, canMutateFederalApplication, editingRemarkId, isSavingRemark, remarkDraft])
+  }, [
+    applicationNumber,
+    canMutateFederalApplication,
+    editingRemarkId,
+    isSavingRemark,
+    remarkDraft,
+    remarkDraftDirty,
+  ])
 
   const refreshFederalApplicationDocuments = useCallback(async () => {
     if (!applicationNumber) {
@@ -773,20 +888,24 @@ const FederalApplicationDetailsPage = () => {
     setDocumentsErrorMessage('')
   }, [applicationNumber])
 
-  const onCancelFederalStatusEdit = useCallback(() => {
-    setStatusCode(statusTransitions[0]?.code ?? '')
-    setStatusRemark('')
-    setActionResult(withoutActionError)
-    setIsEditingFederalStatus(false)
-  }, [statusTransitions])
-
-  const onCancelFederalRemarkEdit = useCallback(() => {
-    setRemarkDraft('')
-    setEditingRemarkId(null)
-    setRemarkValidationMessage('')
-    setActionResult(withoutActionError)
-    setIsEditingFederalRemarks(false)
-  }, [])
+  const onDiscardFederalSection = useCallback(
+    (section: FederalEditSection) => {
+      if (section === 'status') {
+        setStatusCode(statusTransitions[0]?.code ?? '')
+        setStatusRemark('')
+        resetStatusFieldErrors()
+      } else if (section === 'permit') {
+        setPermitForm(detail ? permitFormFromDetail(detail) : emptyPermitForm())
+        resetPermitFieldErrors()
+      } else {
+        setRemarkDraft('')
+        setEditingRemarkId(null)
+        setRemarkValidationMessage('')
+      }
+      setActionResult(withoutActionError)
+    },
+    [detail, resetPermitFieldErrors, resetStatusFieldErrors, statusTransitions],
+  )
 
   const onCancelFederalDocumentEdit = useCallback(() => {
     setDocumentUploadDirty(false)
@@ -870,54 +989,10 @@ const FederalApplicationDetailsPage = () => {
     ],
   )
 
-  const remarkBaseline =
-    editingRemarkId === null
-      ? ''
-      : (remarkRows.find((remark) => remark.remarkId === editingRemarkId)?.remark ?? '')
-  const remarkDraftDirty =
-    canMutateFederalApplication && isEditingFederalRemarks && remarkDraft !== remarkBaseline
-  const independentDraftCount = [statusDraftDirty, remarkDraftDirty, permitDraftDirty].filter(
-    Boolean,
-  ).length
   const isFederalApplicationDirty =
     statusDraftDirty || remarkDraftDirty || permitDraftDirty || documentUploadDirty
-  const unsavedSaveUnavailableReason = documentUploadDirty
-    ? 'Finish or reset the queued document uploads before leaving, or discard all changes.'
-    : independentDraftCount > 1
-      ? 'Save each status, remark, and permit draft from its tab before leaving, or discard all changes.'
-      : undefined
-
-  const onSaveUnsavedFederalApplicationChanges = useCallback(async (): Promise<boolean> => {
-    if (documentUploadDirty) {
-      setActionResult({
-        kind: 'error',
-        message:
-          'Queued document uploads must be submitted or reset before leaving this federal application.',
-      })
-      return false
-    }
-    if ([statusDraftDirty, remarkDraftDirty, permitDraftDirty].filter(Boolean).length > 1) {
-      setActionResult({
-        kind: 'error',
-        message:
-          'Save each federal application draft from its tab before leaving this application.',
-      })
-      return false
-    }
-    if (statusDraftDirty) return onSaveStatus()
-    if (remarkDraftDirty) return onSaveRemark()
-    if (permitDraftDirty) return onSavePermit()
-    return true
-  }, [
-    documentUploadDirty,
-    onSavePermit,
-    onSaveRemark,
-    onSaveStatus,
-    permitDraftDirty,
-    remarkDraftDirty,
-    statusDraftDirty,
-  ])
-
+  const isFederalApplicationBusy =
+    isSavingMutation || isSavingRemark || isRemovingDocumentId !== null || documentUploadBusy
   const onDiscardFederalApplicationChanges = useCallback(() => {
     setStatusCode(statusTransitions[0]?.code ?? '')
     setStatusRemark('')
@@ -925,15 +1000,45 @@ const FederalApplicationDetailsPage = () => {
     setEditingRemarkId(null)
     setRemarkValidationMessage('')
     setPermitForm(detail ? permitFormFromDetail(detail) : emptyPermitForm())
-    setIsEditingFederalStatus(false)
-    setIsEditingFederalRemarks(false)
+    resetStatusFieldErrors()
+    resetPermitFieldErrors()
+    setEditingSection(null)
     setIsEditingFederalDocuments(false)
-    setIsEditingFederalPermit(false)
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
     setActionResult(withoutActionError)
-  }, [detail, statusTransitions])
+  }, [detail, resetPermitFieldErrors, resetStatusFieldErrors, statusTransitions])
+
+  const sections = useEditSections<FederalEditSection>({
+    isDirty: statusDraftDirty || remarkDraftDirty || permitDraftDirty,
+    onDiscard: onDiscardFederalSection,
+    state: [editingSection, setEditingSection],
+    leaveGuard: {
+      isDirty: isFederalApplicationDirty,
+      isBusy: isFederalApplicationBusy,
+      onDiscard: () => {
+        if (isEditingFederalDocuments || documentUploadDirty) onDiscardFederalApplicationChanges()
+      },
+    },
+  })
+  const editingRemarkSection = isRemarkSection(editingSection) ? editingSection : null
+
+  const onStartFederalPermitEdit = () => {
+    if (
+      !canMutateFederalApplication ||
+      !detail ||
+      isShippingReferencesLoading ||
+      !shippingReferences
+    ) {
+      return
+    }
+    sections.startEditing('permit', () => {
+      setPermitForm(permitFormFromDetail(detail))
+      resetPermitFieldErrors()
+      setActionResult(withoutActionError)
+    })
+  }
 
   const renderFederalShippingFields = () => {
     if (!detail) return null
@@ -943,7 +1048,7 @@ const FederalApplicationDetailsPage = () => {
         ?.trim()
         .toUpperCase() === 'OT'
     return (
-      <RecordFieldGrid editing={editing}>
+      <RecordFieldGrid ref={permitFormRef} editing={editing}>
         <RecordFieldRow>
           <RecordField
             label="Permit issue date"
@@ -954,14 +1059,14 @@ const FederalApplicationDetailsPage = () => {
                 labelText={requiredLabel('Permit issue date')}
                 required
                 value={permitForm.permitIssueDate}
-                invalid={!!permitFieldErrors.permitIssueDate}
-                invalidText={permitFieldErrors.permitIssueDate}
-                onChange={(value) =>
+                {...permitInvalidProps('permitIssueDate')}
+                onChange={(value) => {
                   setPermitForm((current) => ({
                     ...current,
                     permitIssueDate: value,
                   }))
-                }
+                  clearPermitFieldError('permitIssueDate')
+                }}
               />
             )}
           />
@@ -982,14 +1087,14 @@ const FederalApplicationDetailsPage = () => {
                 labelText={requiredLabel('Final destination country')}
                 aria-required="true"
                 value={permitForm.destinationCountry}
-                invalid={!!permitFieldErrors.destinationCountry}
-                invalidText={permitFieldErrors.destinationCountry}
-                onChange={(event) =>
+                {...permitInvalidProps('destinationCountry')}
+                onChange={(event) => {
                   setPermitForm((current) => ({
                     ...current,
                     destinationCountry: event.target.value,
                   }))
-                }
+                  clearPermitFieldError('destinationCountry')
+                }}
               >
                 <SelectItem value="" text="Select a final destination country" />
                 {(shippingReferences?.countries ?? []).map((option) => (
@@ -1018,14 +1123,14 @@ const FederalApplicationDetailsPage = () => {
                 labelText={requiredLabel('Transport type')}
                 aria-required="true"
                 value={permitForm.transportType}
-                invalid={!!permitFieldErrors.transportType}
-                invalidText={permitFieldErrors.transportType}
-                onChange={(event) =>
+                {...permitInvalidProps('transportType')}
+                onChange={(event) => {
                   setPermitForm((current) => ({
                     ...current,
                     transportType: event.target.value,
                   }))
-                }
+                  clearPermitFieldError('transportType')
+                }}
               >
                 <SelectItem value="" text="Select a transport type" />
                 {(shippingReferences?.transportTypes ?? []).map((option) => (
@@ -1047,15 +1152,15 @@ const FederalApplicationDetailsPage = () => {
                 labelText={requiredLabel('Transport name')}
                 aria-required="true"
                 value={permitForm.transportName}
-                invalid={!!permitFieldErrors.transportName}
-                invalidText={permitFieldErrors.transportName}
                 maxLength={26}
-                onChange={(event) =>
+                {...permitInvalidProps('transportName')}
+                onChange={(event) => {
                   setPermitForm((current) => ({
                     ...current,
                     transportName: event.target.value,
                   }))
-                }
+                  clearPermitFieldError('transportName')
+                }}
               />
             )}
           />
@@ -1070,14 +1175,14 @@ const FederalApplicationDetailsPage = () => {
                 labelText={requiredLabel('Estimated shipping date')}
                 required
                 value={permitForm.shippingDate}
-                invalid={!!permitFieldErrors.shippingDate}
-                invalidText={permitFieldErrors.shippingDate}
-                onChange={(value) =>
+                {...permitInvalidProps('shippingDate')}
+                onChange={(value) => {
                   setPermitForm((current) => ({
                     ...current,
                     shippingDate: value,
                   }))
-                }
+                  clearPermitFieldError('shippingDate')
+                }}
               />
             )}
           />
@@ -1094,8 +1199,7 @@ const FederalApplicationDetailsPage = () => {
                 labelText={requiredLabel('Customs port of export')}
                 aria-required="true"
                 value={permitForm.portOfExport}
-                invalid={!!permitFieldErrors.portOfExport}
-                invalidText={permitFieldErrors.portOfExport}
+                {...permitInvalidProps('portOfExport')}
                 onChange={(event) => {
                   const portCode = event.target.value
                   setPermitForm((current) => ({
@@ -1104,6 +1208,8 @@ const FederalApplicationDetailsPage = () => {
                     otherPortOfExport:
                       portCode.toUpperCase() === 'OT' ? current.otherPortOfExport : '',
                   }))
+                  clearPermitFieldError('portOfExport')
+                  clearPermitFieldError('otherPortOfExport')
                 }}
               >
                 <SelectItem value="" text="Select a customs port of export" />
@@ -1127,15 +1233,15 @@ const FederalApplicationDetailsPage = () => {
                 labelText={requiredLabel('Other port of export')}
                 aria-required="true"
                 value={permitForm.otherPortOfExport}
-                invalid={!!permitFieldErrors.otherPortOfExport}
-                invalidText={permitFieldErrors.otherPortOfExport}
                 maxLength={34}
-                onChange={(event) =>
+                {...permitInvalidProps('otherPortOfExport')}
+                onChange={(event) => {
                   setPermitForm((current) => ({
                     ...current,
                     otherPortOfExport: event.target.value,
                   }))
-                }
+                  clearPermitFieldError('otherPortOfExport')
+                }}
               />
             )}
           />
@@ -1231,8 +1337,10 @@ const FederalApplicationDetailsPage = () => {
             <Tabs
               selectedIndex={selectedFederalApplicationTabIndex}
               onChange={({ selectedIndex }) => {
-                selectFederalApplicationTab(
-                  FEDERAL_APPLICATION_DETAIL_TAB_SLOTS[selectedIndex] ?? 'owner',
+                sections.confirmLeave(() =>
+                  selectFederalApplicationTab(
+                    FEDERAL_APPLICATION_DETAIL_TAB_SLOTS[selectedIndex] ?? 'owner',
+                  ),
                 )
               }}
             >
@@ -1422,15 +1530,18 @@ const FederalApplicationDetailsPage = () => {
                           statusTransitions.length > 0 &&
                           !isEditingFederalStatus ? (
                             <Button
+                              ref={sections.editButtonRef('status')}
                               kind="tertiary"
                               size="md"
                               renderIcon={Edit}
-                              onClick={() => {
-                                setStatusCode(statusTransitions[0]?.code ?? '')
-                                setStatusRemark('')
-                                setActionResult(withoutActionError)
-                                setIsEditingFederalStatus(true)
-                              }}
+                              onClick={() =>
+                                sections.startEditing('status', () => {
+                                  setStatusCode(statusTransitions[0]?.code ?? '')
+                                  setStatusRemark('')
+                                  resetStatusFieldErrors()
+                                  setActionResult(withoutActionError)
+                                })
+                              }
                             >
                               Edit federal status
                             </Button>
@@ -1504,10 +1615,10 @@ const FederalApplicationDetailsPage = () => {
                       {canMutateFederalApplication &&
                         statusTransitions.length > 0 &&
                         isEditingFederalStatus && (
-                          <Tile>
+                          <Tile ref={sections.sectionRef('status')}>
                             <h2 className="detail-tile-title">Update federal status</h2>
                             <RequiredFieldsLegend />
-                            <RecordFieldGrid editing>
+                            <RecordFieldGrid editing ref={statusFormRef}>
                               <RecordFieldRow>
                                 <RecordFieldCell>
                                   <Select
@@ -1515,7 +1626,14 @@ const FederalApplicationDetailsPage = () => {
                                     labelText={requiredLabel('Status')}
                                     aria-required="true"
                                     value={statusCode}
-                                    onChange={(event) => setStatusCode(event.target.value)}
+                                    {...statusInvalidProps('statusCode')}
+                                    onChange={(event) => {
+                                      setStatusCode(event.target.value)
+                                      clearStatusFieldError('statusCode')
+                                      if (!statusRemarkRequired(event.target.value)) {
+                                        clearStatusFieldError('statusRemark')
+                                      }
+                                    }}
                                   >
                                     {statusTransitions.map((transition) => (
                                       <SelectItem
@@ -1541,7 +1659,11 @@ const FederalApplicationDetailsPage = () => {
                                         : undefined
                                     }
                                     value={statusRemark}
-                                    onChange={(event) => setStatusRemark(event.target.value)}
+                                    {...statusInvalidProps('statusRemark')}
+                                    onChange={(event) => {
+                                      setStatusRemark(event.target.value)
+                                      clearStatusFieldError('statusRemark')
+                                    }}
                                   />
                                 </RecordFieldCell>
                               </RecordFieldRow>
@@ -1551,19 +1673,14 @@ const FederalApplicationDetailsPage = () => {
                                 kind="ghost"
                                 size="md"
                                 disabled={isSavingMutation}
-                                onClick={onCancelFederalStatusEdit}
+                                onClick={sections.cancelEditing}
                               >
                                 Cancel
                               </Button>
                               <Button
                                 kind="primary"
                                 size="md"
-                                disabled={
-                                  isSavingMutation ||
-                                  !statusCode ||
-                                  ((statusCode === 'REJ' || statusCode === 'WDN') &&
-                                    !statusRemark.trim())
-                                }
+                                disabled={isSavingMutation}
                                 renderIcon={isSavingMutation ? PendingIcon : undefined}
                                 onClick={() => void onSaveStatus()}
                               >
@@ -1765,26 +1882,35 @@ const FederalApplicationDetailsPage = () => {
                   <TabPanel className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
-                        <Tile className="application-detail-section application-detail-remarks">
+                        <Tile
+                          ref={
+                            editingRemarkSection
+                              ? sections.sectionRef(editingRemarkSection)
+                              : undefined
+                          }
+                          className="application-detail-section application-detail-remarks"
+                        >
                           <div className="detail-section-card__header">
                             <h2 className="detail-tile-title">Remarks</h2>
                             {canMutateFederalApplication && !isEditingFederalRemarks && (
                               <Button
+                                ref={sections.editButtonRef('new-remark')}
                                 kind="tertiary"
                                 size="md"
-                                onClick={() => {
-                                  setRemarkDraft('')
-                                  setEditingRemarkId(null)
-                                  setRemarkValidationMessage('')
-                                  setIsEditingFederalRemarks(true)
-                                }}
+                                onClick={() =>
+                                  sections.startEditing('new-remark', () => {
+                                    setRemarkDraft('')
+                                    setEditingRemarkId(null)
+                                    setRemarkValidationMessage('')
+                                  })
+                                }
                               >
                                 Add remark
                               </Button>
                             )}
                           </div>
                           {canMutateFederalApplication && isEditingFederalRemarks && (
-                            <div className="legacy-search-actions">
+                            <div ref={remarkFormRef} className="legacy-search-actions">
                               <TextArea
                                 id="federalApplicationRemark"
                                 labelText={requiredLabel(
@@ -1794,7 +1920,7 @@ const FederalApplicationDetailsPage = () => {
                                 maxCount={250}
                                 value={remarkDraft}
                                 invalid={!!remarkValidationMessage}
-                                invalidText={remarkValidationMessage}
+                                invalidText={fieldErrorText(remarkValidationMessage)}
                                 onChange={(event) => {
                                   setRemarkDraft(event.target.value)
                                   if (remarkValidationMessage) {
@@ -1806,7 +1932,7 @@ const FederalApplicationDetailsPage = () => {
                                 kind="ghost"
                                 size="md"
                                 disabled={isSavingRemark}
-                                onClick={onCancelFederalRemarkEdit}
+                                onClick={sections.cancelEditing}
                               >
                                 Cancel
                               </Button>
@@ -1854,14 +1980,19 @@ const FederalApplicationDetailsPage = () => {
                                       {canMutateFederalApplication && (
                                         <TableCell>
                                           <Button
+                                            ref={sections.editButtonRef(`remark-${item.remarkId}`)}
                                             kind="ghost"
                                             size="md"
-                                            onClick={() => {
-                                              setEditingRemarkId(item.remarkId)
-                                              setRemarkDraft(item.remark)
-                                              setRemarkValidationMessage('')
-                                              setIsEditingFederalRemarks(true)
-                                            }}
+                                            onClick={() =>
+                                              sections.startEditing(
+                                                `remark-${item.remarkId}`,
+                                                () => {
+                                                  setEditingRemarkId(item.remarkId)
+                                                  setRemarkDraft(item.remark)
+                                                  setRemarkValidationMessage('')
+                                                },
+                                              )
+                                            }
                                           >
                                             Edit
                                           </Button>
@@ -1933,7 +2064,10 @@ const FederalApplicationDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <Tile className="detail-section-card federal-shipping-details">
+                      <Tile
+                        ref={sections.sectionRef('permit')}
+                        className="detail-section-card federal-shipping-details"
+                      >
                         {shippingReferencesErrorMessage && (
                           <InlineNotification
                             className="detail-context-notification"
@@ -1960,14 +2094,14 @@ const FederalApplicationDetailsPage = () => {
                                 kind="tertiary"
                                 size="md"
                                 disabled={isSavingMutation}
-                                onClick={onCancelFederalPermitEdit}
+                                onClick={sections.cancelEditing}
                               >
                                 Cancel
                               </Button>
                               <Button
                                 kind="primary"
                                 size="md"
-                                disabled={isSavingMutation || hasPermitValidationError}
+                                disabled={isSavingMutation}
                                 renderIcon={isSavingMutation ? PendingIcon : undefined}
                                 onClick={() => void onSavePermit()}
                               >
@@ -1981,6 +2115,7 @@ const FederalApplicationDetailsPage = () => {
                               <h2 className="detail-tile-title">Shipping details</h2>
                               {canMutateFederalApplication && (
                                 <Button
+                                  ref={sections.editButtonRef('permit')}
                                   kind="tertiary"
                                   size="md"
                                   renderIcon={Edit}
@@ -2011,14 +2146,11 @@ const FederalApplicationDetailsPage = () => {
       )}
       <UnsavedChangesGuard
         isDirty={isFederalApplicationDirty}
-        isBusy={
-          isSavingMutation || isSavingRemark || isRemovingDocumentId !== null || documentUploadBusy
-        }
-        onSave={onSaveUnsavedFederalApplicationChanges}
+        isBusy={isFederalApplicationBusy}
         onDiscard={onDiscardFederalApplicationChanges}
         subject="this federal application"
-        saveUnavailableReason={unsavedSaveUnavailableReason}
       />
+      {sections.discardModal}
     </Grid>
   )
 }

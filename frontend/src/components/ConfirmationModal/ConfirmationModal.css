@@ -1,5 +1,21 @@
+.cds--modal.lexis-confirmation-modal {
+  z-index: 9001;
+}
+
 .lexis-confirmation-modal .cds--modal-container {
   border-radius: 0.5rem;
+}
+
+/* Confirmations keep one width from tablet up; phones keep Carbon's full-width sheet. */
+@media (min-width: 672px) {
+  .lexis-confirmation-modal .cds--modal-container {
+    inline-size: 30rem;
+    max-inline-size: 100%;
+  }
+
+  .lexis-confirmation-modal.lexis-confirmation-modal--form .cds--modal-container {
+    inline-size: 36.875rem;
+  }
 }
 
 .lexis-confirmation-modal .cds--modal-content {

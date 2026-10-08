@@ -32,6 +32,7 @@ import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PendingIcon from '@/components/PendingIcon'
 import PermitCountrySelect from '@/components/PermitCountrySelect'
+import { discardNewRecordCopy } from '@/components/DiscardChangesModal'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { useAuth } from '@/context/auth/useAuth'
 import {
@@ -59,6 +60,7 @@ import {
   type ShippingReferenceOptions,
 } from '@/service/shipping-reference-service'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { fieldErrorText } from '@/utils/field-error'
 import { requiredLabel } from '@/utils/required-label'
 import { resolveBlanketOicRegionContext } from './region-context'
 
@@ -717,7 +719,7 @@ const BlanketOicPermitCreateForm = ({
     setUnknownOutcomeMessage(message)
   }
 
-  const createPermit = async (navigateToCreatedPermit = true): Promise<boolean> => {
+  const createPermit = async (): Promise<boolean> => {
     if (createPermitInFlightRef.current) return false
     createPermitInFlightRef.current = true
     setSaving(true)
@@ -819,9 +821,7 @@ const BlanketOicPermitCreateForm = ({
       }
       setForm(requestForm)
       markDraftSaved(requestForm)
-      if (navigateToCreatedPermit) {
-        setCreatedPermitNumber(permitNumber)
-      }
+      setCreatedPermitNumber(permitNumber)
       return true
     } catch (error) {
       console.error(error)
@@ -836,7 +836,7 @@ const BlanketOicPermitCreateForm = ({
   }
 
   const fieldError = (field: FormField): string | undefined =>
-    showValidationErrors ? formErrors[field] : undefined
+    showValidationErrors ? fieldErrorText(formErrors[field]) : undefined
 
   const close = () => {
     if (!saving) onCancel()
@@ -1479,15 +1479,9 @@ const BlanketOicPermitCreateForm = ({
       <UnsavedChangesGuard
         isDirty={isDraftDirty}
         isBusy={saving}
-        onSave={() => createPermit(false)}
         onDiscard={discardDraft}
+        discardCopy={discardNewRecordCopy('permit')}
         subject="this new Blanket OIC permit"
-        saveUnavailableReason={
-          shippingReferencesLoading || !shippingReferences || regionContext.options.length === 0
-            ? regionContext.errorMessage ||
-              'Required region and shipping options must load before this permit can be saved.'
-            : undefined
-        }
       />
     </section>
   )

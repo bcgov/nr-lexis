@@ -98,13 +98,14 @@ for (const width of [1440, 390]) {
     await expect.poll(readLayout).toEqual(before)
 
     await title.fill('Retain this notification draft')
-    await panel.getByRole('button', { name: 'Close', exact: true }).click()
+    const close = panel.getByRole('button', { name: 'Close', exact: true })
+    await close.click()
     const discard = page.getByRole('dialog', {
-      name: 'Discard notification changes?',
+      name: 'Discard changes?',
       exact: true,
     })
-    const cancel = discard.getByRole('button', { name: 'Cancel', exact: true })
-    await expect(cancel).toBeFocused()
+    const keepEditing = discard.getByRole('button', { name: 'Keep editing', exact: true })
+    await expect(keepEditing).toBeFocused()
     await expect(page.locator('body')).toHaveClass(/cds--body--with-modal-open/)
     await expect(page.locator('body')).toHaveCSS('overflow', 'hidden')
     await expect.poll(readLayout).toEqual(before)
@@ -116,15 +117,15 @@ for (const width of [1440, 390]) {
     await expect(
       discard.getByRole('button', { name: 'Discard changes', exact: true }),
     ).toBeFocused()
-    await cancel.click()
+    await keepEditing.click()
     await expect(discard).toBeHidden()
     await expect(title).toHaveValue('Retain this notification draft')
-    await expect(title).toBeFocused()
+    await expect(close).toBeFocused()
     await expect(page.locator('body')).not.toHaveCSS('overflow', 'hidden')
     await expect.poll(readLayout).toEqual(before)
     states.cancelled = await readLayout()
 
-    await panel.getByRole('button', { name: 'Close', exact: true }).click()
+    await close.click()
     await expect(discard).toBeVisible()
     await expect.poll(readLayout).toEqual(before)
     await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()

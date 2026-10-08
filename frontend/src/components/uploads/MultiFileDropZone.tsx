@@ -1,5 +1,6 @@
 import { useRef, useState, type DragEvent, type KeyboardEvent } from 'react'
 import { ErrorFilled, Upload } from '@carbon/icons-react'
+import { fieldErrorText } from '@/utils/field-error'
 import { requiredLabel } from '@/utils/required-label'
 
 type MultiFileDropZoneProps = {
@@ -192,7 +193,7 @@ function MultiFileDropZone({
           role="alert"
         >
           <ErrorFilled size={14} aria-hidden="true" />
-          {invalidText}
+          {fieldErrorText(invalidText)}
         </p>
       )}
     </>

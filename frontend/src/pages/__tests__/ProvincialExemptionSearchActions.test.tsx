@@ -468,13 +468,13 @@ describe('Provincial Exemption Search Actions', () => {
     expect(firstConfirm.parentElement).toHaveClass('cds--modal-footer')
     await userEvent.click(firstConfirm)
     expect(
-      within(firstDialog).getByText('Confirm that you certify this exemption has been approved.'),
+      within(firstDialog).getByText('Confirm that you certify this exemption has been approved'),
     ).toBeVisible()
     expect(mockedApproveExemptions).not.toHaveBeenCalled()
 
     await userEvent.click(firstCertification)
     expect(
-      within(firstDialog).queryByText('Confirm that you certify this exemption has been approved.'),
+      within(firstDialog).queryByText('Confirm that you certify this exemption has been approved'),
     ).not.toBeInTheDocument()
     await userEvent.click(within(firstDialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
@@ -494,7 +494,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(reopenedCertification).not.toBeChecked()
     expect(
       within(reopenedDialog).queryByText(
-        'Confirm that you certify this exemption has been approved.',
+        'Confirm that you certify this exemption has been approved',
       ),
     ).not.toBeInTheDocument()
     await userEvent.click(reopenedCertification)

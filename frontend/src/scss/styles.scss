@@ -5424,6 +5424,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
   padding-block-end: 1rem;
 }
 
+@media (min-width: 672px) {
+  .permit-creation-confirmation-modal .cds--modal-container {
+    inline-size: 36.875rem;
+    max-inline-size: 100%;
+  }
+}
+
 .permit-creation-confirmation-modal__actions {
   display: flex;
   flex-wrap: wrap;

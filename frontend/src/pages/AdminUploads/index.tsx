@@ -65,6 +65,7 @@ import {
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
 import { actionMessageResults, type ActionResult } from '@/utils/action-result'
+import { fieldErrorText } from '@/utils/field-error'
 
 type UploadWorkflowDefinition = {
   type: UploadWorkflowType
@@ -315,7 +316,7 @@ function UploadTargetNumberSelect({
       allowCustomValue
       aria-required={required || undefined}
       invalid={invalid}
-      invalidText={invalidText}
+      invalidText={fieldErrorText(invalidText)}
       disabled={disabled}
       onBlur={onBlur}
       onInputChange={(inputValue) => {
@@ -1464,7 +1465,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         value={description}
         onChange={(event) => updateFileDescription(item.id, event.target.value)}
         invalid={!!error}
-        invalidText={error}
+        invalidText={fieldErrorText(error)}
         enableCounter
         maxCount={250}
         rows={2}
