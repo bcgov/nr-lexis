@@ -61,6 +61,9 @@ jobs:
           distribution: "temurin"
           cache: maven
 
+      - name: Verify release controls
+        run: node --test .github/scripts/release-images.test.mjs
+
       - name: Maven verify
         working-directory: backend
         run: mvn -B -DskipITs verify
@@ -188,7 +191,6 @@ jobs:
       database_host: ${{ secrets.database_host }}
       database_service_name: ${{ secrets.database_service_name }}
       keystore_secret: ${{ secrets.keystore_secret }}
-      lexis_prod_rtm_only: ${{ secrets.lexis_prod_rtm_only }}
       lexis_mail_override_recipients: ${{ secrets.LEXIS_MAIL_OVERRIDE_RECIPIENTS }}
       lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}
       lexis_mail_region_rco_address: ${{ secrets.LEXIS_MAIL_REGION_RCO_ADDRESS }}

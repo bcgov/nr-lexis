@@ -11,7 +11,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
-import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
@@ -105,8 +104,7 @@ class ProvincialRegionAuthorizationTest {
         new Binder(new MapConfigurationPropertySource(yaml.getObject()))
             .bind("lexis.authz", LexisAuthorizationProperties.class)
             .get();
-    return new LexisAuthorizationService(
-        properties, new LexisFeatureProperties(), sessionService);
+    return new LexisAuthorizationService(properties, sessionService);
   }
 
   @BeforeEach

@@ -33,7 +33,6 @@ rollout but not an image rebuild.
 | `VITE_OIDC_IDIR_HINT` | Registered IDIR provider alias | azureidir |
 | `VITE_OIDC_BCEID_HINT` | Registered Business BCeID provider alias | bceidbusiness |
 | `VITE_OIDC_SITEMINDER_LOGOUT_URL` | SiteMinder `logoff.cgi` chained before Keycloak end-session | - (Keycloak only) |
-| `VITE_LEXIS_PROD_RTM_ONLY` | Restricts admins to Average Monthly Values, preserves normal read-only routes, and denies other application roles | false |
 
 Register `<origin>/authCallback` as the login callback and `<origin>` as the post-logout URL. Tokens live in sessionStorage; there is no browser client secret.
 

@@ -52,16 +52,23 @@ class DeployedSmokeWorkflowTest {
   void smokeFailureShouldBlockPrResultsAndProductionDeployment() throws IOException {
     String pullRequestWorkflow = read(".github/workflows/pr-open.yml");
     String mergeWorkflow = read(".github/workflows/merge.yml");
+    String releaseWorkflow = read(".github/workflows/release-prod.yml");
     String pullRequestResults =
         pullRequestWorkflow.substring(pullRequestWorkflow.indexOf("  results:"));
-    String productionDeployment = mergeWorkflow.substring(mergeWorkflow.indexOf("  deploy-prod:"));
+    String releaseCandidate = mergeWorkflow.substring(mergeWorkflow.indexOf("  release-candidate:"));
+    String productionDeployment = releaseWorkflow.substring(releaseWorkflow.indexOf("  deploy-prod:"));
 
     assertThat(pullRequestWorkflow).contains("uses: ./.github/workflows/reusable-tests.yml");
     assertThat(pullRequestResults)
         .contains("name: PR Results", "tests,", "if: always()")
         .contains("contains(needs.*.result, 'failure')", "exit 1");
     assertThat(mergeWorkflow).contains("uses: ./.github/workflows/reusable-tests.yml");
-    assertThat(productionDeployment).contains("needs: [tests, init]");
+    assertThat(releaseCandidate)
+        .contains("needs: [init, tests]", "CAPTURE_ATTEMPT: ${{ needs.init.outputs.capture_attempt }}")
+        .doesNotContain("if: always()", "continue-on-error:");
+    assertThat(releaseWorkflow)
+        .contains("release-images.mjs resolve", "release-images.mjs validate", "release-candidate-${{ steps.release.outputs.run_attempt }}");
+    assertThat(productionDeployment).contains("needs: [prepare]");
   }
 
   @Test

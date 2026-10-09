@@ -1,7 +1,6 @@
 package ca.bc.gov.mof.lexis.service.session;
 
 import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
-import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import ca.bc.gov.mof.lexis.security.FamRegionGrant;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
 import java.util.Collection;
@@ -21,7 +20,6 @@ public class LexisAuthorizationService {
   private static final String SCOPE_AUTHORITY_PREFIX = "SCOPE_";
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
-  private static final String ROLE_FEDERAL_READ_ONLY = "LEXIS_FEDERAL_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final Set<String> PROVINCIAL_STAFF_ROLES =
@@ -29,20 +27,16 @@ public class LexisAuthorizationService {
           ROLE_ADMIN, ROLE_READ_ONLY, ROLE_APPLICATION_APPROVER, ROLE_EXEMPTION_APPROVER);
   private static final Set<String> REGIONAL_STAFF_ROLES =
       Set.of(ROLE_READ_ONLY, ROLE_APPLICATION_APPROVER, ROLE_EXEMPTION_APPROVER);
-  private static final Set<String> PROD_RTM_ONLY_ACTIONS = Set.of("/lexisAgentAdmin");
 
   private final Set<String> configuredIndustryRoles;
   private final Map<String, List<String>> configuredRoleActions;
-  private final LexisFeatureProperties featureProperties;
   private final Map<String, List<String>> configuredScopeActions;
   private final LexisSessionService sessionService;
 
   public LexisAuthorizationService(
       LexisAuthorizationProperties authorizationProperties,
-      LexisFeatureProperties featureProperties,
       LexisSessionService sessionService) {
     this.sessionService = sessionService;
-    this.featureProperties = featureProperties;
     this.configuredIndustryRoles = Set.copyOf(sessionService.getConfiguredIndustryRoles());
     this.configuredRoleActions = normalizeRoleActions(authorizationProperties.getRoleActions());
     this.configuredScopeActions = normalizeScopeActions(authorizationProperties.getScopeActions());
@@ -68,10 +62,6 @@ public class LexisAuthorizationService {
 
     for (String scope : scopes) {
       appendScopeActions(granted, scope);
-    }
-
-    if (featureProperties.isProdRtmOnly()) {
-      restrictProdRtmOnlyActions(roles, granted);
     }
 
     return List.copyOf(granted);
@@ -215,12 +205,6 @@ public class LexisAuthorizationService {
     return roles.stream().anyMatch(configuredRoles::contains);
   }
 
-  public boolean isReadOnlyRolloutUser(List<String> rawRoles) {
-    List<String> roles = normalizeRoles(rawRoles);
-    return !roles.contains(ROLE_ADMIN)
-        && (roles.contains(ROLE_READ_ONLY) || roles.contains(ROLE_FEDERAL_READ_ONLY));
-  }
-
   public boolean hasProvincialStaffRole(List<String> rawRoles) {
     return normalizeRoles(rawRoles).stream().anyMatch(PROVINCIAL_STAFF_ROLES::contains);
   }
@@ -276,27 +260,6 @@ public class LexisAuthorizationService {
         granted.add(action);
       }
     }
-  }
-
-  private void restrictProdRtmOnlyActions(List<String> roles, Set<String> granted) {
-    if (roles.contains(ROLE_ADMIN)) {
-      granted.retainAll(PROD_RTM_ONLY_ACTIONS);
-      return;
-    }
-
-    if (roles.contains(ROLE_READ_ONLY) || roles.contains(ROLE_FEDERAL_READ_ONLY)) {
-      Set<String> readOnlyActions = new LinkedHashSet<>();
-      if (roles.contains(ROLE_READ_ONLY)) {
-        appendRoleActions(readOnlyActions, ROLE_READ_ONLY);
-      }
-      if (roles.contains(ROLE_FEDERAL_READ_ONLY)) {
-        appendRoleActions(readOnlyActions, ROLE_FEDERAL_READ_ONLY);
-      }
-      granted.retainAll(readOnlyActions);
-      return;
-    }
-
-    granted.clear();
   }
 
   private void appendScopeActions(Set<String> granted, String scope) {

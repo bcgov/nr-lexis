@@ -3,7 +3,6 @@ import { lazy, Suspense, useEffect, useState, type ReactNode } from 'react'
 import { matchRoutes, Navigate, useLocation, useNavigate, type RouteObject } from 'react-router-dom'
 import AppLayout from '../components/Layout'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
-import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import { clearLoginDestination, getLoginDestination } from '@/context/auth/login-destination'
 import LandingPage from '@/pages/Landing'
@@ -72,7 +71,6 @@ function ForestClientSelectionRoute() {
 }
 
 type RouteGuardProps = {
-  path: string
   requiredActions?: string[]
   requiredActionsMatch?: RouteActionMatch
   roleScope?: RouteDescription['roleScope']
@@ -112,7 +110,6 @@ const canAccessRoleScope = (
 
 function RouteActionGuard({
   children,
-  path,
   requiredActions,
   requiredActionsMatch = 'any',
   roleScope,
@@ -121,10 +118,6 @@ function RouteActionGuard({
   // AppRoutes mounts protected routes only after authentication and organization selection.
   // Consume pending login navigation even when the target is denied by the checks below.
   useEffect(clearLoginDestination, [])
-
-  if (!isProdRtmOnlyPathAllowed(path, capabilities.roles)) {
-    return <Navigate to="/unauthorized" replace />
-  }
 
   if (!requiredActions || requiredActions.length === 0) {
     return <>{children}</>
@@ -630,7 +623,6 @@ export const getProtectedRoutes = (): RouteDescription[] => {
     ...route,
     element: (
       <RouteActionGuard
-        path={route.path}
         requiredActions={route.requiredActions}
         requiredActionsMatch={route.requiredActionsMatch}
         roleScope={route.roleScope}

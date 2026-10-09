@@ -7,7 +7,6 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
-import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import ca.bc.gov.mof.lexis.controller.LexisSessionController;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
@@ -336,11 +335,6 @@ class KeycloakBearerAuthenticationIntegrationTest {
     @Bean
     LexisSessionService sessionService() {
       return new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER");
-    }
-
-    @Bean
-    LexisFeatureProperties featureProperties() {
-      return new LexisFeatureProperties();
     }
 
     @Bean
