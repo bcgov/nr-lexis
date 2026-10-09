@@ -103,7 +103,11 @@ public class LexisSessionService {
 
   public boolean hasConflictingApproverRoles(List<String> rawRoles) {
     List<String> roles = normalizeRoles(rawRoles);
-    return roles.contains(ROLE_APPLICATION_APPROVER) && roles.contains(ROLE_EXEMPTION_APPROVER);
+    // Bare regional parent roles count for conflicts without granting any authority themselves.
+    return (roles.contains(ROLE_APPLICATION_APPROVER)
+            || roles.contains(ROLE_APPLICATION_APPROVER + "_REGION"))
+        && (roles.contains(ROLE_EXEMPTION_APPROVER)
+            || roles.contains(ROLE_EXEMPTION_APPROVER + "_REGION"));
   }
 
   /**
