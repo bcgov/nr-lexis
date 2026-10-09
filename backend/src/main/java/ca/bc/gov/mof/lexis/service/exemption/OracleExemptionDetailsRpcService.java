@@ -998,8 +998,14 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return date.format(LEGACY_DATE_FORMATTER);
   }
 
+  /**
+   * A stored volume with one or two decimals: 2 is "2.0" and 0.05 stays "0.05". Columns hold two
+   * decimals, so only floating-point noise from sums is rounded away.
+   */
   private String formatVolume(double value) {
-    return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
+    BigDecimal stored =
+        BigDecimal.valueOf(value).setScale(2, RoundingMode.HALF_UP).stripTrailingZeros();
+    return (stored.scale() < 1 ? stored.setScale(1) : stored).toPlainString();
   }
 
   private String formatAvailableVolume(double value) {

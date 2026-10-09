@@ -304,6 +304,15 @@ describe('Provincial Exemption Search Actions', () => {
     20_000,
   )
 
+  it('shows exemption result list and expiry dates in ISO format', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    renderPage()
+    const exemption = await screen.findByText('EX-1001')
+    const row = within(exemption.closest('tr') as HTMLElement)
+    expect(row.getByRole('cell', { name: '2026-01-10' })).toBeVisible()
+    expect(row.getByRole('cell', { name: '2026-12-31' })).toBeVisible()
+  })
+
   it('uses option descriptions for raw row codes while retaining code-based eligibility, colours and requests', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchProvincialExemptionOptions.mockResolvedValue({

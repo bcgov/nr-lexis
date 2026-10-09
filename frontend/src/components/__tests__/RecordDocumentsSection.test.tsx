@@ -240,7 +240,7 @@ describe('RecordDocumentsSection', () => {
   it('titles saved documents by count', () => {
     expect(documentsSavedResult(1)).toEqual({
       kind: 'success',
-      title: 'Document saved.',
+      title: '1 document saved.',
       message: '',
     })
     expect(documentsSavedResult(2).title).toBe('2 documents saved.')
