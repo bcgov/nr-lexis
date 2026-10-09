@@ -1,29 +1,26 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
-  // Calendar,
-  Certificate,
+  ChartColumn,
   Close,
-  DataTable,
-  Dashboard,
-  DocumentAdd,
-  Finance,
+  Email,
   Folder,
   Logout,
   Moon,
   Notification,
-  Report,
-  Search,
   Settings,
   Sun,
   Switcher,
-  Tag,
-  TaskComplete,
   Tree,
-  Upload,
   UserAvatar,
   type CarbonIconType,
 } from '@carbon/icons-react'
-import { HeaderMenuButton, IconButton, SideNavItems, SkipToContent } from '@carbon/react'
+import {
+  HeaderMenuButton,
+  IconButton,
+  SideNavItems,
+  SideNavMenuItem,
+  SkipToContent,
+} from '@carbon/react'
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
 import {
   hasProvincialStaffRole,
@@ -47,7 +44,6 @@ type LayoutProps = {
 type NavigationLink = {
   to: string
   label: string
-  icon: CarbonIconType
   activePathPatterns?: string[]
   requiredActions?: string[]
   requiredActionsMatch?: RouteActionMatch
@@ -60,6 +56,8 @@ type NavigationSection = {
   links: NavigationLink[]
   standalone?: boolean
 }
+
+const SUPPORT_EMAIL = 'Heartwood@gov.bc.ca'
 
 const UI_PREFERENCE_KEYS = {
   sideNavCollapsed: 'lexis.ui.sideNavCollapsed',
@@ -107,7 +105,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
         to: '/notifications',
         requiredActions: ['viewNotifications'],
         label: 'Notifications',
-        icon: Notification,
       },
     ],
   },
@@ -118,69 +115,59 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/provincial/summary',
         label: 'Summary',
-        icon: Dashboard,
         requiredActions: ['/summary'],
         roleScope: 'provincialSubmitter',
       },
       {
         to: '/provincial/review',
         label: 'Application review',
-        icon: TaskComplete,
         requiredActions: ['/applicationsReview'],
       },
       {
         to: '/provincial/application/create',
         label: 'Create/Edit Application',
-        icon: DocumentAdd,
         requiredActions: ['/applicationSearch', 'createApplication'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/application/upload',
         label: 'Upload',
-        icon: Upload,
         requiredActions: ['uploadApplicationSubmission'],
         roleScope: 'provincialApplicationSubmission',
       },
       {
         to: '/provincial/application',
         label: 'Application search',
-        icon: Search,
         activePathPatterns: ['/provincial/application/:applicationNumber'],
         requiredActions: ['/applicationSearch'],
       },
       {
         to: '/provincial/exemption/create',
         label: 'Create/Edit Exemption',
-        icon: DocumentAdd,
         requiredActions: ['/exemptionSearch', '/createExemption'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/exemption',
         label: 'Exemption search',
-        icon: Search,
         activePathPatterns: ['/provincial/exemption/:exemptionNumber'],
         requiredActions: ['/exemptionSearch'],
       },
       {
         to: '/provincial/offers/create',
         label: 'Create/Edit Offer',
-        icon: Tag,
         requiredActions: ['/offersSearch', 'createOffer'],
         requiredActionsMatch: 'all',
       },
       {
         to: '/provincial/offers',
         label: 'Offer search',
-        icon: Search,
         activePathPatterns: ['/provincial/offers/:offerNumber'],
         requiredActions: ['/offersSearch'],
       },
       {
         to: '/provincial/permit',
         label: 'Permit search',
-        icon: Certificate,
         activePathPatterns: ['/provincial/permit/:permitNumber'],
         requiredActions: ['/permitSearch'],
       },
@@ -193,7 +180,6 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/federal',
         label: 'Application search',
-        icon: Search,
         activePathPatterns: ['/federal/application/:applicationNumber'],
         requiredActions: ['/federalApplicationSearch', 'viewFederalApplication'],
       },
@@ -201,42 +187,36 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
   },
   {
     label: 'Reports',
-    icon: Report,
+    icon: ChartColumn,
     links: [
       {
         to: '/reports/biweeklyListing',
         label: 'Advertising List',
-        icon: Report,
         requiredActions: ['mofrListing'],
       },
       {
         to: '/reports/offerReport',
         label: 'Offers Report',
-        icon: Report,
         requiredActions: ['/offerReport'],
       },
       {
         to: '/reports/permitLedgerReport',
         label: 'Permits Report',
-        icon: Report,
         requiredActions: ['/permitLedgerReport'],
       },
       {
         to: '/reports/transportReport',
         label: 'Transport Report',
-        icon: Report,
         requiredActions: ['/transportReport'],
       },
       {
         to: '/reports/speciesGradeReport',
         label: 'Species and Grade Report',
-        icon: Report,
         requiredActions: ['/speciesGradeReport'],
       },
       {
         to: '/reports/tenureReport',
         label: 'Tenure Analysis',
-        icon: Report,
         requiredActions: ['/tenureReport'],
       },
     ],
@@ -250,13 +230,11 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       {
         to: '/admin/policies/fee',
         label: 'Multiplication Factor',
-        icon: Finance,
         requiredActions: ['/lexisPolicyAdmin'],
       },
       {
         to: '/admin/policies/fil',
         label: 'Non-appraised Sec.3 FIL%',
-        icon: Finance,
         requiredActions: ['/lexisFILAdmin'],
       },
       // Export Schedule administration is disabled pending business approval. Restore this
@@ -264,13 +242,11 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       // {
       //   to: '/admin/schedules',
       //   label: 'Export Schedule',
-      //   icon: Calendar,
       //   requiredActions: ['/lexisPolicyAdmin'],
       // },
       {
         to: '/admin/rtm/emslogamv/upload',
         label: 'Average market values',
-        icon: DataTable,
         requiredActions: ['/lexisAgentAdmin'],
       },
     ],
@@ -582,20 +558,18 @@ function Layout({ children }: LayoutProps) {
     writeUiPreference(UI_PREFERENCE_KEYS.sideNavCollapsed, String(isSideNavCollapsedPreference))
   }, [isSideNavCollapsedPreference])
 
-  const renderNavigationLink = (link: NavigationLink, nested = true, showCurrent = true) => {
-    const LinkIcon = link.icon
-    const isActive = showCurrent && link.to === activeNavigationLink?.to
+  const renderNavigationLink = (link: NavigationLink, LinkIcon: CarbonIconType) => {
+    const isActive = link.to === activeNavigationLink?.to
     const showNotificationIndicator = link.to === '/notifications' && hasActiveNotifications
     const accessibleLabel = showNotificationIndicator
       ? 'Notifications, active updates available'
       : isSideNavCollapsed
         ? link.label
         : undefined
-    const nestedClassName = nested ? ' cds--side-nav__link--nested' : ''
     const renderLink = (descriptionId?: string) => (
       <Link
         to={link.to}
-        className={`cds--side-nav__link${nestedClassName} csp-side-nav__link${
+        className={`cds--side-nav__link csp-side-nav__link${
           isActive ? ' cds--side-nav__link--active' : ''
         }`}
         aria-current={isActive ? 'page' : undefined}
@@ -615,14 +589,26 @@ function Layout({ children }: LayoutProps) {
 
     return (
       <li key={link.to}>
-        {nested ? (
-          renderLink()
-        ) : (
-          <SideNavigationTooltip enabled={isSideNavCollapsed} label={link.label}>
-            {renderLink}
-          </SideNavigationTooltip>
-        )}
+        <SideNavigationTooltip enabled={isSideNavCollapsed} label={link.label}>
+          {renderLink}
+        </SideNavigationTooltip>
       </li>
+    )
+  }
+
+  const renderGroupLink = (link: NavigationLink, showCurrent: boolean) => {
+    const isActive = showCurrent && link.to === activeNavigationLink?.to
+
+    return (
+      <SideNavMenuItem
+        key={link.to}
+        as={Link}
+        to={link.to}
+        isActive={isActive}
+        aria-current={isActive ? 'page' : undefined}
+      >
+        {link.label}
+      </SideNavMenuItem>
     )
   }
 
@@ -752,51 +738,82 @@ function Layout({ children }: LayoutProps) {
           </button>
         </aside>
 
-        <nav
+        <div
           id="side-navigation"
           className={`cds--side-nav csp-side-nav${isSideNavCollapsed ? ' is-collapsed' : ''}`}
-          aria-label="Side navigation"
         >
-          <SideNavItems className="csp-side-nav__items" isSideNavExpanded={!isSideNavCollapsed}>
-            {visibleNavigationSections.map((section) => {
-              if (section.standalone) {
-                return (
-                  <li
-                    key={section.label}
-                    className="csp-side-nav__section csp-side-nav__section--standalone"
-                  >
-                    <ul className="csp-side-nav__section-list">
-                      {section.links.map((link) => renderNavigationLink(link, false))}
-                    </ul>
-                  </li>
-                )
-              }
+          <nav className="csp-side-nav__navigation" aria-label="Side navigation">
+            <SideNavItems className="csp-side-nav__items" isSideNavExpanded={!isSideNavCollapsed}>
+              {visibleNavigationSections.map((section) => {
+                if (section.standalone) {
+                  return (
+                    <li
+                      key={section.label}
+                      className="csp-side-nav__section csp-side-nav__section--standalone"
+                    >
+                      <ul className="csp-side-nav__section-list">
+                        {section.links.map((link) => renderNavigationLink(link, section.icon))}
+                      </ul>
+                    </li>
+                  )
+                }
 
-              return (
-                <SideNavigationGroup
-                  key={section.label}
-                  label={section.label}
-                  icon={section.icon}
-                  activePage={
-                    section.label === activeSectionLabel ? activeNavigationLink?.label : undefined
-                  }
-                  collapsed={isSideNavCollapsed}
-                  open={expandedSectionLabels.includes(section.label)}
-                  onToggle={() => toggleNavigationGroup(section.label)}
-                  onClose={() =>
-                    setExpandedSectionLabels((current) =>
-                      current.filter((label) => label !== section.label),
-                    )
-                  }
+                return (
+                  <SideNavigationGroup
+                    key={section.label}
+                    label={section.label}
+                    icon={section.icon}
+                    activePage={
+                      section.label === activeSectionLabel ? activeNavigationLink?.label : undefined
+                    }
+                    collapsed={isSideNavCollapsed}
+                    open={expandedSectionLabels.includes(section.label)}
+                    onToggle={() => toggleNavigationGroup(section.label)}
+                    onClose={() =>
+                      setExpandedSectionLabels((current) =>
+                        current.filter((label) => label !== section.label),
+                      )
+                    }
+                  >
+                    {(expanded) => section.links.map((link) => renderGroupLink(link, expanded))}
+                  </SideNavigationGroup>
+                )
+              })}
+            </SideNavItems>
+          </nav>
+
+          {/* Actions sit outside the navigation landmark so they aren't announced as destinations. */}
+          <div
+            className="csp-side-nav__utility"
+            role="group"
+            aria-labelledby="side-navigation-support-heading"
+          >
+            <p
+              id="side-navigation-support-heading"
+              className="csp-side-nav__utility-heading"
+              aria-hidden="true"
+            >
+              Support
+            </p>
+            <SideNavigationTooltip enabled={isSideNavCollapsed} label="Report an issue">
+              {(descriptionId) => (
+                <a
+                  href={`mailto:${SUPPORT_EMAIL}`}
+                  className="cds--side-nav__link csp-side-nav__link"
+                  aria-label={isSideNavCollapsed ? 'Report an issue' : undefined}
+                  aria-describedby={descriptionId}
                 >
-                  {(expanded) =>
-                    section.links.map((link) => renderNavigationLink(link, true, expanded))
-                  }
-                </SideNavigationGroup>
-              )
-            })}
-          </SideNavItems>
-        </nav>
+                  <span className="cds--side-nav__icon csp-side-nav__icon" aria-hidden="true">
+                    <Email size={20} />
+                  </span>
+                  <span className="cds--side-nav__link-text csp-side-nav__link-text">
+                    Report an issue
+                  </span>
+                </a>
+              )}
+            </SideNavigationTooltip>
+          </div>
+        </div>
 
         <main id="main-content" className="cds--content app-main">
           {children}

@@ -639,12 +639,28 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.locator('.csp-app-header > #navigation-toggle')).toHaveCount(1)
     await expect(page.locator('.csp-side-nav > .csp-side-nav__toggle')).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Notifications', exact: true })).toBeVisible()
+    const supportArea = page.getByRole('group', { name: 'Support', exact: true })
+    const reportIssueLink = supportArea.getByRole('link', { name: 'Report an issue', exact: true })
+    await expect(supportArea.locator('.csp-side-nav__utility-heading')).toBeVisible()
+    await expect(reportIssueLink).toHaveAttribute('href', 'mailto:Heartwood@gov.bc.ca')
+    await expect(reportIssueLink).toHaveCSS('height', '48px')
+    await expect(
+      page
+        .getByRole('navigation', { name: 'Side navigation' })
+        .getByRole('link', { name: 'Report an issue' }),
+    ).toHaveCount(0)
+    const supportFootGap = await supportArea.evaluate((area) => {
+      const panel = document.getElementById('side-navigation')
+      if (!(panel instanceof HTMLElement)) throw new Error('Side navigation panel not found')
+      return panel.getBoundingClientRect().bottom - area.getBoundingClientRect().bottom
+    })
+    expect(Math.abs(supportFootGap)).toBeLessThanOrEqual(1)
     const provincialSectionToggle = page.getByRole('button', {
       name: 'Provincial',
       exact: true,
     })
     const provincialApplicationSearchLink = page.locator(
-      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+      '#side-navigation a[href="/provincial/application"]',
     )
     await expect(provincialApplicationSearchLink).toBeVisible()
     await expect(provincialApplicationSearchLink).toHaveAttribute('aria-current', 'page')
@@ -819,31 +835,31 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'background-color',
       'rgb(244, 244, 244)',
     )
-    const activeNavLink = page.locator(
-      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
-    )
-    const inactiveNavLink = page.locator('a.csp-side-nav__link[data-label="Exemption search"]')
+    const activeNavLink = page.locator('#side-navigation a[href="/provincial/application"]')
+    const inactiveNavLink = page.locator('#side-navigation a[href="/provincial/exemption"]')
     await expect(activeNavLink).toHaveCSS('height', '48px')
     await expect(activeNavLink).toHaveCSS('font-weight', '600')
     await expect(activeNavLink).toHaveCSS('background-color', 'rgba(141, 141, 141, 0.2)')
-    await expect(activeNavLink.locator('.csp-side-nav__link-text')).toHaveCSS(
+    await expect(activeNavLink.locator('.cds--side-nav__link-text')).toHaveCSS(
       'color',
       'rgb(19, 19, 21)',
     )
     await expect(inactiveNavLink).toHaveCSS('height', '48px')
     await expect(inactiveNavLink).toHaveCSS('font-weight', '400')
-    await expect(inactiveNavLink.locator('.csp-side-nav__link-text')).toHaveCSS(
+    await expect(inactiveNavLink.locator('.cds--side-nav__link-text')).toHaveCSS(
       'color',
       'rgb(96, 96, 98)',
     )
-    await expect(activeNavLink.locator('.csp-side-nav__icon svg')).toHaveCSS(
-      'fill',
-      'rgb(0, 92, 184)',
-    )
-    await expect(inactiveNavLink.locator('.csp-side-nav__icon svg')).toHaveCSS(
-      'fill',
-      'rgb(0, 92, 184)',
-    )
+    await expect(activeNavLink.locator('svg')).toHaveCount(0)
+    await expect(inactiveNavLink.locator('svg')).toHaveCount(0)
+    const groupItemIndent = await provincialSectionToggle.evaluate((toggle, itemSelector) => {
+      const groupLabel = toggle.querySelector('.cds--side-nav__submenu-title')
+      const itemLabel = document.querySelector(`${itemSelector} .cds--side-nav__link-text`)
+      if (!(groupLabel instanceof HTMLElement)) throw new Error('Group label not found')
+      if (!(itemLabel instanceof HTMLElement)) throw new Error('Group item label not found')
+      return itemLabel.getBoundingClientRect().left - groupLabel.getBoundingClientRect().left
+    }, '#side-navigation a[href="/provincial/exemption"]')
+    expect(groupItemIndent).toBe(16)
     await provincialSectionToggle.focus()
     await provincialSectionToggle.press('Escape')
     await expect(provincialSectionToggle).toBeFocused()
@@ -870,14 +886,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await reportsToggle.click()
     await expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
     await expect(reportsMenu).toBeVisible()
-    await expect(page.locator('a.csp-side-nav__link[data-label="Application Report"]')).toHaveCount(
-      0,
-    )
-    await expect(page.locator('a.csp-side-nav__link[data-label="TEAC Package"]')).toHaveCount(0)
-    await expect(page.locator('a.csp-side-nav__link[data-label="Exemptions Report"]')).toHaveCount(
-      0,
-    )
-    await expect(page.locator('a.csp-side-nav__link[data-label="Fees Report"]')).toHaveCount(0)
+    for (const retiredReport of [
+      'Application Report',
+      'TEAC Package',
+      'Exemptions Report',
+      'Fees Report',
+    ]) {
+      await expect(page.getByRole('link', { name: retiredReport, exact: true })).toHaveCount(0)
+    }
     await expect(page.getByRole('link', { name: 'Advertising List', exact: true })).toBeVisible()
 
     const typographyFoundation = await page.evaluate(() => {
@@ -999,7 +1015,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(collapsedNav.locator('.csp-side-nav__items')).toHaveCSS('overflow-y', 'auto')
     expect(
       await collapsedNav
-        .locator('.cds--side-nav__link--nested')
+        .locator('.cds--side-nav__menu-item a')
         .evaluateAll((links) => links.every((link) => !link.checkVisibility())),
     ).toBe(true)
     await expect(collapsedNav.locator('.csp-side-nav__group')).toHaveCount(4)
@@ -1034,6 +1050,25 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         }
       })
     expect(Math.abs(collapsedGroupLayout.centerOffset)).toBeLessThanOrEqual(2)
+    const collapsedSupport = page.getByRole('group', { name: 'Support', exact: true })
+    const collapsedReportIssue = collapsedSupport.getByRole('link', {
+      name: 'Report an issue',
+      exact: true,
+    })
+    await expect(collapsedSupport.locator('.csp-side-nav__utility-heading')).toBeHidden()
+    await expect(collapsedReportIssue).toBeVisible()
+    expect(
+      await collapsedSupport.evaluate(
+        (area) => getComputedStyle(area, '::before').marginInlineStart,
+      ),
+    ).toBe('8px')
+    const reportIssueTooltip = collapsedNav
+      .locator('.csp-side-nav__tooltip', { has: collapsedReportIssue })
+      .getByRole('tooltip')
+    await collapsedReportIssue.hover()
+    await expect(reportIssueTooltip).toHaveText('Report an issue')
+    await expectTooltipOutsideRail(reportIssueTooltip)
+    await page.mouse.move(1200, 20)
     const provincialTooltip = collapsedNav
       .locator('.csp-side-nav__tooltip', { has: collapsedProvincialGroup })
       .getByRole('tooltip')
@@ -1666,11 +1701,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(table.locator('thead th').first()).toHaveCSS('background-color', 'rgb(57, 57, 57)')
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(38, 38, 38)')
     await expect(secondRowCell).toHaveCSS('background-color', 'rgb(44, 44, 44)')
-    const darkActiveNavLink = page.locator(
-      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
-    )
+    const darkActiveNavLink = page.locator('#side-navigation a[href="/provincial/application"]')
     await expect(darkActiveNavLink).toHaveCSS('background-color', 'rgba(141, 141, 141, 0.24)')
-    await expect(darkActiveNavLink.locator('.csp-side-nav__link-text')).toHaveCSS(
+    await expect(darkActiveNavLink.locator('.cds--side-nav__link-text')).toHaveCSS(
       'color',
       'rgb(244, 244, 244)',
     )
@@ -1756,10 +1789,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       const closeMenu = page.getByRole('button', { name: 'Close menu', exact: true })
       if (await closeMenu.isVisible()) await closeMenu.click()
       await page.mouse.move(width - 10, 60)
-      await expect(page.getByRole('navigation', { name: 'Side navigation' })).toHaveCSS(
-        'width',
-        '48px',
-      )
+      await expect(page.locator('#side-navigation')).toHaveCSS('width', '48px')
       await expect(page.getByRole('combobox', { name: 'Agent client', exact: true })).toBeVisible()
       expect(
         await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
@@ -1771,10 +1801,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       animations: 'disabled',
     })
     await page.setViewportSize({ width: 1440, height: 1000 })
-    await expect(page.getByRole('navigation', { name: 'Side navigation' })).toHaveCSS(
-      'width',
-      '48px',
-    )
+    await expect(page.locator('#side-navigation')).toHaveCSS('width', '48px')
     await page.screenshot({
       path: testInfo.outputPath('application-create-desktop.png'),
       fullPage: true,
@@ -1817,7 +1844,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       }),
     })
 
-    const sideNav = page.getByRole('navigation', { name: 'Side navigation' })
+    const sideNav = page.locator('#side-navigation')
     const openNavigation = page.getByRole('button', { name: 'Open menu' })
 
     await expect(openNavigation).toBeVisible()
@@ -1826,7 +1853,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(sideNav).toHaveCSS('width', '48px')
     await expect(sideNav).not.toHaveAttribute('aria-hidden')
     const provincialApplicationSearchLink = page.locator(
-      'a.csp-side-nav__link[data-label="Application search"][href="/provincial/application"]',
+      '#side-navigation a[href="/provincial/application"]',
     )
     await expect(provincialApplicationSearchLink).toBeHidden()
     await expect(page.getByRole('button', { name: 'Provincial', exact: true })).toHaveAttribute(

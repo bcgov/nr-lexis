@@ -451,6 +451,8 @@ body {
 }
 
 .csp-side-nav {
+  display: flex;
+  flex-direction: column;
   position: fixed;
   inset-block: var(--csp-header-height) 0;
   inset-inline-start: 0;
@@ -474,10 +476,17 @@ body {
   list-style: none;
 }
 
+.csp-side-nav__navigation {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
 // The list scrolls independently; Carbon auto-aligned tooltips use fixed positioning
 // so they can extend outside this clipping area without disabling vertical scrolling.
 .csp-side-nav .csp-side-nav__items {
-  block-size: 100%;
+  flex: 1 1 auto;
   min-block-size: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -510,8 +519,10 @@ button.csp-side-nav__group.cds--side-nav__submenu {
   white-space: nowrap;
 }
 
-.csp-side-nav__link.cds--side-nav__link--nested {
-  padding-left: 32px;
+// Carbon sizes group items at 32px; every LEXIS navigation row is 48px.
+.csp-side-nav .cds--side-nav__menu a.cds--side-nav__link {
+  block-size: 48px;
+  min-block-size: 48px;
 }
 
 .csp-side-nav__link:hover,
@@ -558,8 +569,10 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   fill: currentcolor;
 }
 
+// Labels start 56px in, where Carbon's own icon and gap put them, so its group-item indent
+// places item labels 16px past the group label.
 .csp-side-nav .csp-side-nav__icon:not(.cds--side-nav__submenu-chevron) {
-  margin-inline-end: 16px;
+  margin-inline-end: 20px;
 }
 
 .csp-side-nav .cds--side-nav__menu[hidden] {
@@ -610,6 +623,37 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
 
 .csp-side-nav.is-collapsed .csp-side-nav__link-text,
 .csp-side-nav.is-collapsed .cds--side-nav__submenu-chevron {
+  display: none;
+}
+
+.csp-side-nav__utility {
+  flex: 0 0 auto;
+  padding-block-end: 8px;
+}
+
+.csp-side-nav__utility::before {
+  display: block;
+  margin: 8px 16px;
+  block-size: 1px;
+  background-color: var(--csp-border-subtle-01);
+  content: '';
+}
+
+// Carbon's 16px divider inset leaves almost no line in the 48px rail.
+.csp-side-nav.is-collapsed .csp-side-nav__utility::before {
+  margin-inline: 8px;
+}
+
+.csp-side-nav__utility-heading {
+  @include carbon-type.type-style('label-01');
+
+  margin: 0;
+  padding: 4px 16px 0;
+  color: var(--csp-text-secondary);
+  white-space: nowrap;
+}
+
+.csp-side-nav.is-collapsed .csp-side-nav__utility-heading {
   display: none;
 }
 
@@ -891,11 +935,11 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   display: none;
 }
 
-.app-shell a:not(.csp-side-nav__link):not(.cds--btn):not(.csp-header-name) {
+.app-shell a:not(.cds--side-nav__link):not(.cds--btn):not(.csp-header-name) {
   color: var(--csp-link-primary);
 }
 
-.app-shell a:not(.csp-side-nav__link):not(.cds--btn):not(.csp-header-name):hover {
+.app-shell a:not(.cds--side-nav__link):not(.cds--btn):not(.csp-header-name):hover {
   color: var(--csp-link-hover);
 }
 
