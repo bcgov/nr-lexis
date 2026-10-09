@@ -375,8 +375,11 @@ cannot publish a release candidate because TEST may have advanced to another com
 
 Release manifests are retained for 90 days. A missing, expired, or mismatched manifest stops the
 release; tags from before this workflow cannot be released through it. A rollback uses the same
-manual workflow with a retained, previously tested tag. The release summary identifies the TEST
-run, commit, and deployed image digests. Production releases are serialized.
+manual workflow with a retained, previously tested tag. An older tag deploys its own templates
+through the current workflow, which ignores parameters those templates don't declare; a template
+or required parameter the current workflow no longer supplies stops the release. The release
+summary identifies the TEST run, commit, and deployed image digests. Production releases are
+serialized.
 
 The GitHub environment variable `LEXIS_EXPIRY_ENABLED` controls only the modern exemption-expiry
 job, including startup catch-up. Set it to `false` in PROD while legacy owns expiry. Set it to `true`

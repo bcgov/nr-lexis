@@ -80,7 +80,20 @@ class TestDeploymentTopologyConfigTest {
         .contains("inputs.backend_image || format(")
         .contains("inputs.frontend_image || format(")
         .contains("LEXIS_EXPIRY_ENABLED: ${{ vars.LEXIS_EXPIRY_ENABLED || (inputs.expiry_enabled && 'true' || 'false') }}")
+        .contains("true|false) echo \"enabled=$LEXIS_EXPIRY_ENABLED\" >> \"$GITHUB_OUTPUT\" ;;")
+        .contains(
+            "OC_PROCESS_FLAGS: ${{ inputs.source_ref != '' && inputs.source_ref != github.sha"
+                + " && '--ignore-unknown-parameters' || '' }}")
         .doesNotContain("LEXIS_PROD_RTM_ONLY", "lexis_prod_rtm_only");
+    assertThat(occurrences(workflow, "            $OC_PROCESS_FLAGS\n")).isEqualTo(3);
+    String backendJob = workflowJob(workflow, "backend", "frontend");
+    assertThat(
+            between(
+                backendJob, "      - name: Validate release images", "      - uses: actions/checkout@"))
+        .contains("BACKEND_IMAGE: ${{ inputs.backend_image }}")
+        .contains("FRONTEND_IMAGE: ${{ inputs.frontend_image }}");
+    assertThat(workflow.substring(workflow.indexOf("  frontend:")))
+        .doesNotContain("Validate release image");
     for (String template : new String[] {backendTemplate, frontendTemplate}) {
       assertThat(template)
           .contains("- name: IMAGE_REF", "image: ${IMAGE_REF}")
@@ -440,9 +453,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("DATABASE_USER: ${{ secrets.database_user }}")
         .contains("DATABASE_PASSWORD: ${{ secrets.database_password }}")
         .contains("KEYSTORE_SECRET: ${{ secrets.keystore_secret }}")
-        .contains(
-            "LEXIS_EXPIRY_ENABLED: ${{ vars.LEXIS_EXPIRY_ENABLED"
-                + " || (inputs.expiry_enabled && 'true' || 'false') }}")
+        .contains("LEXIS_EXPIRY_ENABLED: ${{ steps.expiry.outputs.enabled }}")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}")

@@ -15,9 +15,8 @@ KSV030
 KSV104
 
 # KSV0013: "Image tag ':latest' used" false-positive on templated image refs.
-# The canonical parameterized templates enforce REGISTRY:IMAGE_TAG. The
-# deployment pipeline sets IMAGE_TAG per build (PR number/test/prod), so
-# runtime images are always tagged explicitly.
+# The templates take a complete IMAGE_REF: the PR tag for DEV previews and a
+# SHA-256 digest for TEST and PROD, so runtime images are never :latest.
 KSV0013
 KSV-0013
 
