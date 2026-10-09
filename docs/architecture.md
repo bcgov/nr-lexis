@@ -65,15 +65,17 @@ backend validates it against the client-scoped FAM authorities before enforcing 
 protected object, child resource, download, and mutation. The frontend treats its route and action
 guards as user experience controls rather than the security boundary.
 
-Application Approver, Exemption Approver and Read Only can also be granted per Natural Resource
-Region through separate FAM roles that require a region selection:
-`LEXIS_APPLICATION_APPROVER_REGION`, `LEXIS_EXEMPTION_APPROVER_REGION` and
-`LEXIS_READ_ONLY_REGION` (created in DEV, TEST and PROD). A role without a region is
-province-wide; a regional grant such as `LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO` carries
+Application Approver, Exemption Approver and Read Only are granted per Natural Resource Region
+through the region-scoped FAM roles `LEXIS_APPLICATION_APPROVER_REGION`,
+`LEXIS_EXEMPTION_APPROVER_REGION` and `LEXIS_READ_ONLY_REGION`, displayed as Application Approver,
+Exemption Approver and Read Only. The unscoped roles `LEXIS_APPLICATION_APPROVER`,
+`LEXIS_EXEMPTION_APPROVER` and `LEXIS_READ_ONLY` are not valid and give no access. Administrator is
+province-wide. A regional grant such as `LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO` carries
 the same actions for records in its regions only (organization units 1903-1910). Each grant keeps
 its own regions, and record checks apply the regions of both the surface and the action the route
-authorized, so province-wide Read Only plus Cariboo Application Approver reads everywhere but
-writes only in Cariboo. Writing or approving a multi-region record requires every region, including
+authorized, so Read Only assigned all eight regions plus Cariboo Application Approver reads
+across the current regions but writes only in Cariboo. Writing or approving a multi-region record
+requires every region, including
 creating an application under an exemption, linking or unlinking an exemption's applications,
 removing its documents and sending its approval emails. Activating an exemption through a save or create is an approval, so it needs the regions of
 the user's Exemption Approver grants rather than those of the route's save or create action.
@@ -88,31 +90,31 @@ Business BCeID roles are never regional. Session capabilities list each region-l
 records outside them; out-of-region federal applications open read-only and offers are not
 editable.
 
+Default zone preferences are offered to Administrators and staff whose every granted search covers
+all eight current regions. For other regional staff, searches use their assigned regions without a
+saved zone preference. Selecting all eight never grants access to retired regions or records
+without a current region.
+
 ### Mixed grants
 
-In practice each user holds one LEXIS role. These rules are defensive: if someone is accidentally
-given several staff roles, some province-wide and some regional, the combination never reaches beyond
-what each grant allows on its own. Each grant carries its own reach:
+Application Approver and Exemption Approver cannot be held together, in any regions, including
+alongside Administrator. The check counts every form of both roles, including the invalid unscoped
+ones. Interactive token conversion removes all application authorities from such an account. Its capabilities response contains no roles or actions and includes
+`accessDeniedReason: INCOMPATIBLE_APPROVER_ROLES`, so the signed-in user sees the no-access page
+with a general instruction to contact their administrator, who removes one of the roles in FAM.
+Business and administration API routes remain forbidden until a new token has a compatible
+assignment.
 
-- The same role granted both without and with a region reaches only its regions (least
-  privilege): a regional grant always narrows its role, so making someone province-wide means
-  removing their regional grant of that role.
-- A province-wide grant widens only the actions that role itself holds. Province-wide Read Only
-  plus Cariboo Application Approver reads everywhere but writes only in Cariboo; province-wide
-  Read Only plus a regional Exemption Approver can read everything and approve exemptions only in
-  the approver's regions.
-- Capabilities tied to a role rather than an action stay within the regions where the user holds
-  that role, even when another province-wide role holds the route's action. Linking applications
-  to exemptions is an Application Approver capability, so province-wide Exemption Approver plus
-  Cariboo Application Approver links only Cariboo applications to exemptions wholly in Cariboo.
-  Seeing Blanket OIC exemptions and searching non-Ministerial ones belongs to Application Approver
-  and Read Only, never a pure Exemption Approver, so the same user sees Ministerial exemptions
-  everywhere but the other types only in Cariboo.
+Read Only may accompany one approver role. Each grant retains its own regions: Read Only
+assigned all eight can read current-region records while Cariboo Application Approver writes
+only in Cariboo. Capabilities tied to a role also stay within that role's regions. For example,
+Read Only in Cariboo plus Exemption Approver in Skeena sees Ministerial exemptions in both,
+approves only in Skeena, and sees other exemption types only in Cariboo. Multiple regional
+grants for the same role combine.
 
 Legacy LEXIS offers no precedent: WebADE gave each user one set of organizations that limited the
 search lists of every non-administrator role alike, and detail pages and actions never checked
-region. The per-grant model is a modern assumption agreed for the FAM regional roles; revisit it
-if FAM assignments need a different combination.
+region. The per-grant model applies to the accepted FAM regional roles.
 
 ### Interactive sign-in
 
@@ -123,7 +125,7 @@ sequenceDiagram
     participant S as BC Gov SSO (Keycloak)
     participant I as IDIR / Business BCeID
     participant B as LEXIS API
-    F->>S: Grant client roles, optionally per region
+    F->>S: Grant roles with staff regions or submitter forest clients
     U->>S: Authorization request with PKCE and kc_idp_hint
     S->>I: Federated sign-in
     I-->>S: Authenticated identity

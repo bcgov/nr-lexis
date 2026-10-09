@@ -15,11 +15,13 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
+import ca.bc.gov.mof.lexis.security.FamRegionGrant;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
@@ -133,17 +135,15 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
-  void applicationApproverShouldRetainProvincialOrganizationAccessSemantics() {
-    Authentication approver =
-        new TestingAuthenticationToken(
-            "approver", "n/a", "LEXIS_APPLICATION_APPROVER");
+  void applicationApproverReachesApplicationsOnlyThroughItsRegions() {
+    Authentication approver = staff("LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO");
+    Authentication unscoped = staff("LEXIS_APPLICATION_APPROVER");
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(applicationService.findAccessByApplicationNumber(1L))
-        .thenReturn(Optional.of(applicationAccess(1L, "00012345", null, 76L, "P")));
+        .thenReturn(Optional.of(applicationAccess(1L, "00012345", null, 1903L, "P")));
 
     assertThat(service.canAccessApplication(approver, 1L)).isTrue();
-
-    verify(applicationService).findAccessByApplicationNumber(1L);
+    assertThat(service.canAccessApplication(unscoped, 1L)).isFalse();
   }
 
   @Test
@@ -436,20 +436,20 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
-  void staffAttachmentWritersRetainGlobalAttachmentWriteScope() {
-    Authentication approver =
-        new TestingAuthenticationToken("approver", "n/a", "LEXIS_APPLICATION_APPROVER");
+  void staffAttachmentWritersWriteInsideTheirRegions() {
+    Authentication approver = staff(allRegions("LEXIS_APPLICATION_APPROVER"));
     Authentication administrator =
         new TestingAuthenticationToken("administrator", "n/a", "LEXIS_ADMIN");
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
     when(applicationService.findByApplicationNumber(1L))
-        .thenReturn(Optional.of(application(1L, "00099999", null, 76L)));
+        .thenReturn(Optional.of(application(1L, "00099999", null, 1903L)));
     when(exemptionService.findByExemptionNumber("E-1"))
         .thenReturn(Optional.of(exemption("E-1", "00099999", null, false)));
+    when(exemptionService.findAccessOrgUnitNumbers("E-1")).thenReturn(List.of(1903L));
     when(permitService.findByPermitNumber(2L))
-        .thenReturn(Optional.of(permit(2L, "00099999", "00088888", 76L)));
+        .thenReturn(Optional.of(permit(2L, "00099999", "00088888", 1903L)));
 
     assertThatCode(() -> service.requireApplicationAttachmentMutation(approver, 1L))
         .doesNotThrowAnyException();
@@ -471,21 +471,20 @@ class ProvincialAuthorizationServiceTest {
 
   @Test
   void applicationApproverAttachmentScopeDominatesConcurrentSubmitterScope() {
-    Authentication mixedRole =
-        new TestingAuthenticationToken(
-            "approver",
-            "n/a",
-            "LEXIS_APPLICATION_APPROVER",
-            "LEXIS_PROVINCIAL_SUBMITTER_00012345");
+    String[] approverGrants = allRegions("LEXIS_APPLICATION_APPROVER");
+    String[] authorities = Arrays.copyOf(approverGrants, approverGrants.length + 1);
+    authorities[approverGrants.length] = "LEXIS_PROVINCIAL_SUBMITTER_00012345";
+    Authentication mixedRole = staff(authorities);
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
     when(applicationService.findByApplicationNumber(1L))
-        .thenReturn(Optional.of(application(1L, "00099999", null, 76L, "F")));
+        .thenReturn(Optional.of(application(1L, "00099999", null, 1903L, "F")));
     when(exemptionService.findByExemptionNumber("E-1"))
         .thenReturn(Optional.of(exemption("E-1", "00099999", null, true)));
+    when(exemptionService.findAccessOrgUnitNumbers("E-1")).thenReturn(List.of(1903L));
     when(permitService.findByPermitNumber(2L))
-        .thenReturn(Optional.of(permit(2L, "00099999", null, 76L)));
+        .thenReturn(Optional.of(permit(2L, "00099999", null, 1903L)));
 
     assertThatCode(() -> service.requireApplicationAttachmentMutation(mixedRole, 1L))
         .doesNotThrowAnyException();
@@ -526,31 +525,22 @@ class ProvincialAuthorizationServiceTest {
   @Test
   void blanketOicIsVisibleToIndustryButDeniedToExemptionApprover() {
     ExemptionDetailDto blanket = blanketOic();
-    Authentication exemptionApprover =
-        new TestingAuthenticationToken(
-            "approver", "n/a", "LEXIS_EXEMPTION_APPROVER");
-    Authentication applicationApprover =
-        new TestingAuthenticationToken(
-            "reviewer", "n/a", "LEXIS_APPLICATION_APPROVER");
+    Authentication exemptionApprover = staff(allRegions("LEXIS_EXEMPTION_APPROVER"));
+    Authentication applicationApprover = staff(allRegions("LEXIS_APPLICATION_APPROVER"));
     Authentication administrator =
         new TestingAuthenticationToken("admin", "n/a", "LEXIS_ADMIN");
-    Authentication industryExemptionApprover =
-        new TestingAuthenticationToken(
-            "industry-approver",
-            "n/a",
-            "LEXIS_PROVINCIAL_SUBMITTER_00012345",
-            "LEXIS_EXEMPTION_APPROVER");
+    when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
+    when(exemptionService.findAccessOrgUnitNumbers("B-1")).thenReturn(List.of(1903L));
 
     assertThat(service.canAccessExemption(submitter("00012345"), blanket)).isTrue();
     assertThat(service.canAccessExemption(exemptionApprover, blanket)).isFalse();
     assertThat(service.canAccessExemption(applicationApprover, blanket)).isTrue();
     assertThat(service.canAccessExemption(administrator, blanket)).isTrue();
-    assertThat(service.canAccessExemption(industryExemptionApprover, blanket)).isTrue();
 
     assertThat(service.canViewBlanketOic(exemptionApprover)).isFalse();
     assertThat(service.canViewBlanketOic(applicationApprover)).isTrue();
     assertThat(service.canViewBlanketOic(administrator)).isTrue();
-    assertThat(service.canViewBlanketOic(industryExemptionApprover)).isTrue();
+    assertThat(service.canViewBlanketOic(submitter("00012345"))).isTrue();
   }
 
   @Test
@@ -592,106 +582,119 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
-  void broaderFamStaffRolesRemainGlobalAcrossEveryOrganizationUnitSurface() {
-    List<Authentication> staff =
-        List.of(
-            new TestingAuthenticationToken("admin", "n/a", "LEXIS_ADMIN"),
-            new TestingAuthenticationToken(
-                "application-approver", "n/a", "LEXIS_APPLICATION_APPROVER"),
-            new TestingAuthenticationToken("read-only", "n/a", "LEXIS_READ_ONLY"));
+  void administratorRemainsGlobalAcrossEveryOrganizationUnitSurface() {
+    Authentication administrator =
+        new TestingAuthenticationToken("admin", "n/a", "LEXIS_ADMIN");
 
-    for (Authentication authentication : staff) {
+    for (ProvincialAuthorizationService.OrgUnitSurface surface :
+        ProvincialAuthorizationService.OrgUnitSurface.values()) {
+      ProvincialAuthorizationService.OrgUnitConstraint constrained =
+          service.constrainOrgUnits(administrator, List.of(12L, 76L), surface);
+
+      assertThat(constrained.restricted()).isFalse();
+      assertThat(constrained.denied()).isFalse();
+      assertThat(constrained.orgUnitNumbers()).containsExactly(12L, 76L);
+    }
+  }
+
+  @Test
+  void unscopedStaffRolesReachNoOrganizationUnit() {
+    for (String role :
+        List.of("LEXIS_APPLICATION_APPROVER", "LEXIS_EXEMPTION_APPROVER", "LEXIS_READ_ONLY")) {
       for (ProvincialAuthorizationService.OrgUnitSurface surface :
           ProvincialAuthorizationService.OrgUnitSurface.values()) {
         ProvincialAuthorizationService.OrgUnitConstraint constrained =
-            service.constrainOrgUnits(authentication, List.of(12L, 76L), surface);
+            service.constrainOrgUnits(staff(role), List.of(1903L), surface);
 
-        assertThat(constrained.restricted()).isFalse();
-        assertThat(constrained.denied()).isFalse();
-        assertThat(constrained.orgUnitNumbers()).containsExactly(12L, 76L);
+        assertThat(constrained.restricted()).isTrue();
+        assertThat(constrained.denied()).isTrue();
       }
     }
   }
 
   @Test
-  void pureExemptionApproverSearchTreatsRequestedRegionsAsFilters() {
+  void pureExemptionApproverRequestedRegionsAreLimitedToItsGrants() {
     Authentication authentication =
-        new TestingAuthenticationToken(
-            "exemption-approver", "n/a", "LEXIS_EXEMPTION_APPROVER");
+        staff(
+            "LEXIS_EXEMPTION_APPROVER_REGION_REGION-CARIBOO",
+            "LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA");
 
     ProvincialAuthorizationService.OrgUnitConstraint searchConstraint =
         service.constrainOrgUnits(
             authentication,
-            List.of(12L, 76L),
+            List.of(1903L, 1904L),
             ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_SEARCH);
     ProvincialAuthorizationService.OrgUnitConstraint detailConstraint =
         service.constrainOrgUnits(
             authentication,
-            List.of(12L, 76L),
+            List.of(1903L, 1904L),
             ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_DETAIL);
 
-    assertThat(searchConstraint.restricted()).isFalse();
-    assertThat(searchConstraint.denied()).isFalse();
-    assertThat(searchConstraint.orgUnitNumbers()).containsExactly(12L, 76L);
-    assertThat(detailConstraint.restricted()).isFalse();
-    assertThat(detailConstraint.orgUnitNumbers()).containsExactly(12L, 76L);
+    assertThat(searchConstraint.restricted()).isTrue();
+    assertThat(searchConstraint.orgUnitNumbers()).containsExactly(1903L);
+    assertThat(detailConstraint.restricted()).isTrue();
+    assertThat(detailConstraint.orgUnitNumbers()).containsExactly(1903L);
   }
 
   @Test
-  void pureExemptionApproverSearchRemainsGlobalWithoutRequestedRegionFilters() {
+  void pureExemptionApproverSearchWithoutRequestedRegionsUsesItsGrants() {
     Authentication authentication =
-        new TestingAuthenticationToken(
-            "exemption-approver", "n/a", "LEXIS_EXEMPTION_APPROVER");
+        staff(
+            "LEXIS_EXEMPTION_APPROVER_REGION_REGION-CARIBOO",
+            "LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA");
 
     ProvincialAuthorizationService.OrgUnitConstraint constrained =
         service.resolveOrgUnitConstraint(
             authentication,
             ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_SEARCH);
 
-    assertThat(constrained.restricted()).isFalse();
+    assertThat(constrained.restricted()).isTrue();
     assertThat(constrained.denied()).isFalse();
-    assertThat(constrained.orgUnitNumbers()).isEmpty();
+    assertThat(constrained.orgUnitNumbers()).containsExactlyInAnyOrder(1903L, 1908L);
   }
 
   @Test
-  void mixedExemptionApproverIdentityRetainsBroaderOrganizationScope() {
+  void exemptionApproverAndReadOnlySearchCoversBothGrants() {
     Authentication authentication =
-        new TestingAuthenticationToken(
-            "mixed-approver", "n/a", "LEXIS_EXEMPTION_APPROVER", "LEXIS_READ_ONLY");
+        staff(
+            "LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA",
+            "LEXIS_READ_ONLY_REGION_REGION-CARIBOO");
 
     ProvincialAuthorizationService.OrgUnitConstraint constrained =
         service.resolveOrgUnitConstraint(
             authentication,
             ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_SEARCH);
 
-    assertThat(constrained.restricted()).isFalse();
-    assertThat(constrained.denied()).isFalse();
+    assertThat(constrained.restricted()).isTrue();
+    assertThat(constrained.orgUnitNumbers()).containsExactlyInAnyOrder(1903L, 1908L);
   }
 
   @Test
-  void globalStaffWritesDoNotRequireIdentityOrganizationUnitClaims() {
-    Authentication applicationApprover =
-        new TestingAuthenticationToken(
-            "application-approver", "n/a", "LEXIS_APPLICATION_APPROVER");
-    Authentication exemptionApprover =
-        new TestingAuthenticationToken(
-            "exemption-approver", "n/a", "LEXIS_EXEMPTION_APPROVER");
-    Authentication noOrgApprover =
-        new TestingAuthenticationToken(
-            "no-org", "n/a", "LEXIS_APPLICATION_APPROVER");
+  void regionalStaffWritesDoNotRequireIdentityOrganizationUnitClaims() {
+    Authentication applicationApprover = staff(allRegions("LEXIS_APPLICATION_APPROVER"));
+    Authentication exemptionApprover = staff(allRegions("LEXIS_EXEMPTION_APPROVER"));
+    Authentication oneRegionApprover = staff("LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO");
+    Authentication unscopedApprover = staff("LEXIS_APPLICATION_APPROVER");
 
     service.requireOrgUnits(
         applicationApprover,
-        List.of(76L, 1826L),
+        List.of(1903L, 1908L),
         ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
     service.requireOrgUnits(
         exemptionApprover,
-        List.of(76L, 1826L),
+        List.of(1903L, 1908L),
         ProvincialAuthorizationService.OrgUnitSurface.EXEMPTION_WRITE);
     service.requireOrgUnit(
-        noOrgApprover,
-        76L,
+        oneRegionApprover,
+        1903L,
         ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE);
+    assertThatThrownBy(
+            () ->
+                service.requireOrgUnit(
+                    unscopedApprover,
+                    1903L,
+                    ProvincialAuthorizationService.OrgUnitSurface.APPLICATION_WRITE))
+        .isInstanceOf(AccessDeniedException.class);
   }
 
   @Test
@@ -711,9 +714,8 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
-  void globalStaffSearchWithoutRequestedRegionsRemainsUnfiltered() {
-    Authentication readOnly =
-        new TestingAuthenticationToken("readonly", "n/a", "LEXIS_READ_ONLY");
+  void readOnlySearchWithoutRequestedRegionsUsesItsGrants() {
+    Authentication readOnly = staff(allRegions("LEXIS_READ_ONLY"));
 
     ProvincialAuthorizationService.OrgUnitConstraint constrained =
         service.constrainOrgUnits(
@@ -721,27 +723,27 @@ class ProvincialAuthorizationServiceTest {
             List.of(),
             ProvincialAuthorizationService.OrgUnitSurface.OFFER_SEARCH);
 
-    assertThat(constrained.restricted()).isFalse();
+    assertThat(constrained.restricted()).isTrue();
     assertThat(constrained.denied()).isFalse();
-    assertThat(constrained.orgUnitNumbers()).isEmpty();
+    assertThat(constrained.orgUnitNumbers())
+        .containsExactlyInAnyOrder(1903L, 1904L, 1905L, 1906L, 1907L, 1908L, 1909L, 1910L);
   }
 
   @Test
-  void readOnlyPermitDetailAccessIsGlobal() {
-    Authentication readOnly =
-        new TestingAuthenticationToken("readonly", "n/a", "LEXIS_READ_ONLY");
+  void readOnlyPermitDetailAccessFollowsItsRegions() {
+    Authentication readOnly = staff(allRegions("LEXIS_READ_ONLY"));
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
     when(permitService.findAccessByPermitNumber(1L))
-        .thenReturn(Optional.of(permitAccess(1L, "00012345", 76L)));
+        .thenReturn(Optional.of(permitAccess(1L, "00012345", 1903L)));
     when(permitService.findAccessByPermitNumber(2L))
-        .thenReturn(Optional.of(permitAccess(2L, "00012345", 12L)));
+        .thenReturn(Optional.of(permitAccess(2L, "00012345", 1833L)));
     when(permitService.findAccessByPermitNumber(3L))
         .thenReturn(Optional.of(permitAccess(3L, "00012345", null)));
     when(permitService.findAccessByPermitNumber(4L)).thenReturn(Optional.empty());
 
     assertThat(service.canAccessPermit(readOnly, 1L)).isTrue();
-    assertThat(service.canAccessPermit(readOnly, 2L)).isTrue();
-    assertThat(service.canAccessPermit(readOnly, 3L)).isTrue();
+    assertThat(service.canAccessPermit(readOnly, 2L)).isFalse();
+    assertThat(service.canAccessPermit(readOnly, 3L)).isFalse();
     assertThat(service.canAccessPermit(readOnly, 4L)).isFalse();
   }
 
@@ -762,18 +764,23 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
-  void readOnlyOfferDetailAccessIsGlobal() {
-    Authentication readOnly =
-        new TestingAuthenticationToken("readonly", "n/a", "LEXIS_READ_ONLY");
+  void readOnlyOfferDetailAccessFollowsItsApplicationRegions() {
+    Authentication readOnly = staff(allRegions("LEXIS_READ_ONLY"));
     when(offerServiceProvider.getIfAvailable()).thenReturn(offerService);
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(offerService.findByOfferNumber(1L)).thenReturn(Optional.of(offer(1L, 101L, "00012345")));
     when(offerService.findByOfferNumber(2L)).thenReturn(Optional.of(offer(2L, 102L, "00012345")));
     when(offerService.findByOfferNumber(3L)).thenReturn(Optional.of(offer(3L, 103L, "00012345")));
     when(offerService.findByOfferNumber(4L)).thenReturn(Optional.empty());
+    when(applicationService.findByApplicationNumber(101L))
+        .thenReturn(Optional.of(application(101L, "00012345", null, 1903L)));
+    when(applicationService.findByApplicationNumber(102L))
+        .thenReturn(Optional.of(application(102L, "00012345", null, 1833L)));
+    when(applicationService.findByApplicationNumber(103L)).thenReturn(Optional.empty());
 
     assertThat(service.canAccessOffer(readOnly, 1L)).isTrue();
-    assertThat(service.canAccessOffer(readOnly, 2L)).isTrue();
-    assertThat(service.canAccessOffer(readOnly, 3L)).isTrue();
+    assertThat(service.canAccessOffer(readOnly, 2L)).isFalse();
+    assertThat(service.canAccessOffer(readOnly, 3L)).isFalse();
     assertThat(service.canAccessOffer(readOnly, 4L)).isFalse();
   }
 
@@ -895,59 +902,56 @@ class ProvincialAuthorizationServiceTest {
 
   @Test
   void applicationApproverCanReviewApplicationsWithoutOrganizationUnitClaims() {
-    Authentication approver =
-        new TestingAuthenticationToken(
-            "approver", "n/a", "LEXIS_APPLICATION_APPROVER");
+    Authentication approver = staff("LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO");
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(applicationService.findByApplicationNumber(1L))
-        .thenReturn(Optional.of(application(1L, "00012345", null, 76L)));
+        .thenReturn(Optional.of(application(1L, "00012345", null, 1903L)));
 
     assertThat(service.canReviewApplication(approver, 1L)).isTrue();
   }
 
   @Test
-  void federalReadOnlyDetailAccessIsGlobal() {
-    Authentication readOnly =
-        new TestingAuthenticationToken("readonly", "n/a", "LEXIS_READ_ONLY");
+  void readOnlyFederalDetailAccessFollowsItsRegions() {
+    Authentication readOnly = staff(allRegions("LEXIS_READ_ONLY"));
     when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
     when(applicationService.findByApplicationNumber(1L))
-        .thenReturn(Optional.of(application(1L, "00012345", null, 76L, "F")));
+        .thenReturn(Optional.of(application(1L, "00012345", null, 1903L, "F")));
     when(applicationService.findByApplicationNumber(2L))
-        .thenReturn(Optional.of(application(2L, "00012345", null, 12L, "F")));
+        .thenReturn(Optional.of(application(2L, "00012345", null, 1833L, "F")));
 
     assertThat(service.canAccessFederalApplication(readOnly, 1L)).isTrue();
-    assertThat(service.canAccessFederalApplication(readOnly, 2L)).isTrue();
+    assertThat(service.canAccessFederalApplication(readOnly, 2L)).isFalse();
   }
 
   @Test
-  void federalApplicationApproversAndAdministratorsRetainGlobalDetailAccess() {
-    Authentication approver =
-        new TestingAuthenticationToken(
-            "approver", "n/a", "LEXIS_APPLICATION_APPROVER");
+  void federalDetailAccessFollowsApproverRegionsAndAdministratorIsGlobal() {
+    Authentication approver = staff("LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO");
     Authentication administrator =
         new TestingAuthenticationToken("admin", "n/a", "LEXIS_ADMIN");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findByApplicationNumber(999L))
+        .thenReturn(Optional.of(application(999L, "00012345", null, 1903L, "F")));
 
     assertThat(service.canAccessFederalApplication(approver, 999L)).isTrue();
-    assertThat(service.canAccessFederalApplication(administrator, 999L)).isTrue();
+    assertThat(service.canAccessFederalApplication(administrator, 998L)).isTrue();
   }
 
   @Test
-  void genericFederalAccessIsGlobalForAuthorizedStaffRoles() {
-    Authentication readOnly =
-        new TestingAuthenticationToken("readonly", "n/a", "LEXIS_READ_ONLY");
-    Authentication approver =
-        new TestingAuthenticationToken("approver", "n/a", "LEXIS_APPLICATION_APPROVER");
+  void genericFederalAccessFollowsStaffRegions() {
+    Authentication readOnly = staff(allRegions("LEXIS_READ_ONLY"));
+    Authentication approver = staff(allRegions("LEXIS_APPLICATION_APPROVER"));
     Authentication administrator =
         new TestingAuthenticationToken("admin", "n/a", "LEXIS_ADMIN");
-    LexisApplicationDetailDto authorizedFederal =
-        application(1L, "00012345", null, 76L, "F");
-    LexisApplicationDetailDto otherFederal =
-        application(2L, "00012345", null, 12L, "F");
+    LexisApplicationDetailDto currentRegionFederal =
+        application(1L, "00012345", null, 1903L, "F");
+    LexisApplicationDetailDto retiredRegionFederal =
+        application(2L, "00012345", null, 1833L, "F");
 
-    assertThat(service.canAccessApplication(readOnly, authorizedFederal)).isTrue();
-    assertThat(service.canAccessApplication(readOnly, otherFederal)).isTrue();
-    assertThat(service.canAccessApplication(approver, otherFederal)).isTrue();
-    assertThat(service.canAccessApplication(administrator, otherFederal)).isTrue();
+    assertThat(service.canAccessApplication(readOnly, currentRegionFederal)).isTrue();
+    assertThat(service.canAccessApplication(readOnly, retiredRegionFederal)).isFalse();
+    assertThat(service.canAccessApplication(approver, currentRegionFederal)).isTrue();
+    assertThat(service.canAccessApplication(approver, retiredRegionFederal)).isFalse();
+    assertThat(service.canAccessApplication(administrator, retiredRegionFederal)).isTrue();
   }
 
   @Test
@@ -962,6 +966,16 @@ class ProvincialAuthorizationServiceTest {
     assertThat(service.canAccessApplication(submitter("00012345"), unknown)).isFalse();
     assertThat(service.canAccessApplication(approver, unknown)).isFalse();
     assertThat(service.canAccessApplication(administrator, unknown)).isTrue();
+  }
+
+  private static Authentication staff(String... authorities) {
+    return new TestingAuthenticationToken("staff", "n/a", authorities);
+  }
+
+  private static String[] allRegions(String role) {
+    return Arrays.stream(FamRegionGrant.Region.values())
+        .map(region -> role + "_REGION_REGION-" + region.name())
+        .toArray(String[]::new);
   }
 
   private Authentication submitter(String clientNumber) {

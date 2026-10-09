@@ -180,21 +180,23 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void regionalApproverAlongsideProvinceWideReadOnlyHoldsBothRoles() throws Exception {
+  void readOnlyAndApproverInDifferentRegionsKeepTheirOwnRegions() throws Exception {
     var mixed = jwt().authorities(
-        new SimpleGrantedAuthority("LEXIS_READ_ONLY"),
+        new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-SKEENA"),
         new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO"));
     mockMvc.perform(get("/api/lexis/session/capabilities").with(mixed))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.roles[0]").value("LEXIS_READ_ONLY"))
         .andExpect(jsonPath("$.roles[1]").value("LEXIS_APPLICATION_APPROVER"))
         .andExpect(jsonPath("$.welcomeTarget").value("applicationApprover"))
-        // Province-wide Read Only leaves reads unlimited; only Approver-only actions carry regions.
-        .andExpect(jsonPath("$.actionRegions['/applicationSearch']").doesNotExist())
+        // Reads reach both roles' regions; Approver-only actions only the Approver's.
+        .andExpect(jsonPath("$.actionRegions['/applicationSearch'].length()").value(2))
+        .andExpect(jsonPath("$.actionRegions['createApplication'].length()").value(1))
         .andExpect(jsonPath("$.actionRegions['createApplication'][0]").value(1903));
+    // An unscoped grant has its role's actions but no region to use them in.
     mockMvc.perform(get("/api/lexis/session/capabilities").with(jwt().authorities(
             new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
-        .andExpect(jsonPath("$.actionRegions").isEmpty());
+        .andExpect(jsonPath("$.actionRegions['/applicationSearch'].length()").value(0));
   }
 
   @Test
@@ -753,11 +755,16 @@ class LexisRouteAuthorizationIntegrationTest {
   void applicationDetailsShouldAllowReadOnlyExemptionApproverAccess() throws Exception {
     mockMvc.perform(
             get("/api/lexis/applications/1000123")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+                .with(jwt().authorities(
+                    new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER_REGION_REGION-CARIBOO"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.applicationNumber").value(1000123))
         .andExpect(jsonPath("$.exemptionApprover").value(true))
         .andExpect(jsonPath("$.canEditApplicationDetails").value(false));
+    mockMvc.perform(
+            get("/api/lexis/applications/1000123")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"))))
+        .andExpect(status().isNotFound());
   }
 
   @Test
@@ -2948,20 +2955,40 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
-  void legacyReportRouteShouldAllowReadOnlyRole() throws Exception {
+  void legacyReportRouteShouldAllowReadOnlyRoleForItsRegions() throws Exception {
+    var cariboo = new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-CARIBOO");
     mockMvc.perform(
             post("/api/lexis/offerReport")
                 .param("actionMapping", "generate")
                 .param("outputFormat", "CSV")
                 .param("fromDate", "2026-01-01")
                 .param("toDate", "2026-01-31")
-                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+                .param("region", "1903")
+                .with(jwt().authorities(cariboo)))
         .andExpect(status().isOk());
+    mockMvc.perform(
+            post("/api/lexis/offerReport")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV")
+                .param("fromDate", "2026-01-01")
+                .param("toDate", "2026-01-31")
+                .with(jwt().authorities(cariboo)))
+        .andExpect(status().isForbidden());
+    mockMvc.perform(
+            post("/api/lexis/offerReport")
+                .param("actionMapping", "generate")
+                .param("outputFormat", "CSV")
+                .param("fromDate", "2026-01-01")
+                .param("toDate", "2026-01-31")
+                .param("region", "1903")
+                .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
   }
 
   @Test
   void legacyApprovedExemptionReportShouldRejectReadOnlyRole() throws Exception {
-    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
+    SimpleGrantedAuthority readOnly =
+        new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-CARIBOO");
 
     mockMvc
         .perform(

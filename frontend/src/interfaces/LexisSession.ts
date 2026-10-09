@@ -11,6 +11,7 @@ export type LexisSessionCapabilities = {
   forestClientSelectionRequired: boolean
   /** Region-limited granted actions, keyed like normalized actions; absent means province-wide. */
   actionRegions?: Record<string, string[]>
+  accessDeniedReason?: 'INCOMPATIBLE_APPROVER_ROLES' | null
 }
 
 export type LexisSessionLogoutResponse = {

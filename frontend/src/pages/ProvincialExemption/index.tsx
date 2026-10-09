@@ -50,6 +50,7 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole, isPureExemptionApprover } from '@/context/auth/role-utils'
+import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
 import { hasInvalidIsoDateValue } from '@/pages/shared/create-form-utils'
 import { batchSelectionTranslator } from '@/pages/shared/batch-selection'
 import {
@@ -254,7 +255,7 @@ const ProvincialExemptionPage = () => {
   const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
   const regionOptions = useAllowedRegionOptions(allRegionOptions, '/exemptionSearch', 'id')
   const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
-    hasProvincialStaffRole(capabilities.roles),
+    canUseDefaultRegionPreference(capabilities),
   )
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>([])

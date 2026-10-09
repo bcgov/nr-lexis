@@ -41,6 +41,7 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole } from '@/context/auth/role-utils'
+import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
 import { hasInvalidIsoDateValue } from '@/pages/shared/create-form-utils'
 import { batchSelectionTranslator } from '@/pages/shared/batch-selection'
 import {
@@ -197,7 +198,7 @@ const ProvincialApplicationPage = () => {
   const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
   const regionOptions = useAllowedRegionOptions(allRegionOptions, '/applicationSearch', 'id')
   const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
-    hasProvincialStaffRole(capabilities.roles),
+    canUseDefaultRegionPreference(capabilities),
   )
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [applicationStatusOptions, setApplicationStatusOptions] = useState<SearchOption[]>([])

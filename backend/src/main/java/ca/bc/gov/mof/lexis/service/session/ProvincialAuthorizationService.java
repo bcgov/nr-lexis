@@ -9,7 +9,6 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.dto.offer.PurchaseOfferDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
-import ca.bc.gov.mof.lexis.security.FamRegionGrant;
 import ca.bc.gov.mof.lexis.security.LexisRequestActions;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
@@ -279,8 +278,8 @@ public class ProvincialAuthorizationService {
 
   /**
    * Regions where the user may see Blanket OIC exemptions and search non-Ministerial ones: those
-   * of their Application Approver and Read Only grants. A pure Exemption Approver gets none, and a
-   * province-wide Exemption Approver grant does not widen a regional Approver or Read Only grant.
+   * of their Application Approver and Read Only grants. A pure Exemption Approver gets none, and
+   * an Exemption Approver grant does not widen an Application Approver or Read Only grant.
    */
   public OrgUnitConstraint resolveBlanketOicRegions(Authentication authentication) {
     if (!canViewBlanketOic(roles(authentication))) {
@@ -623,7 +622,7 @@ public class ProvincialAuthorizationService {
       List<Long> regionNumbers,
       List<Long> applicationNumbers) {
     List<String> authorities = sessionService.authorityNames(authentication);
-    if (!FamRegionGrant.anyIn(authorities) || roles(authentication).contains(ROLE_ADMIN)) {
+    if (!authorizationService.isRegionLimited(authorities)) {
       return true;
     }
     OrgUnitConstraint regions =
@@ -904,7 +903,7 @@ public class ProvincialAuthorizationService {
    */
   private OrgUnitConstraint roleRegions(Authentication authentication, Set<String> roles) {
     List<String> authorities = sessionService.authorityNames(authentication);
-    if (!FamRegionGrant.anyIn(authorities) || roles(authentication).contains(ROLE_ADMIN)) {
+    if (!authorizationService.isRegionLimited(authorities)) {
       return UNRESTRICTED;
     }
     return authorizationService.resolveStaffRegionConstraintForRoles(authorities, roles);
@@ -935,15 +934,15 @@ public class ProvincialAuthorizationService {
   }
 
   /**
-   * INTENTIONAL_LEGACY_DIVERGENCE(FAM_STAFF_GLOBAL_DATA_SCOPE): a staff role with no region is
-   * province-wide, and zone or region selections are only its defaults and filters. The same
-   * role granted for regions reaches only those regions' records, for the actions of both the
-   * surface and the current request. Provincial Submitter client scope is enforced separately.
+   * INTENTIONAL_LEGACY_DIVERGENCE(FAM_STAFF_GLOBAL_DATA_SCOPE): Administrator is province-wide,
+   * and zone or region selections are only defaults and filters. Approver and Read Only grants
+   * reach only their regions' records, for the actions of both the surface and the current
+   * request. Provincial Submitter client scope is enforced separately.
    */
   private OrgUnitConstraint regionConstraint(
       Authentication authentication, OrgUnitSurface surface) {
     List<String> authorities = sessionService.authorityNames(authentication);
-    if (!FamRegionGrant.anyIn(authorities) || roles(authentication).contains(ROLE_ADMIN)) {
+    if (!authorizationService.isRegionLimited(authorities)) {
       return UNRESTRICTED;
     }
     OrgUnitConstraint surfaceRegions =

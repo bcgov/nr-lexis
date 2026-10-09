@@ -6,6 +6,10 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
+import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
+import ca.bc.gov.mof.lexis.controller.LexisSessionController;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import com.nimbusds.jose.JOSEObjectType;
 import com.nimbusds.jose.JWSAlgorithm;
@@ -143,7 +147,7 @@ class KeycloakBearerAuthenticationIntegrationTest {
                             b.claim("client_roles", null)
                                 .claim(
                                     "resource_access",
-                                    Map.of(CLIENT, Map.of("roles", List.of("LEXIS_READ_ONLY")))))))
+                                    Map.of(CLIENT, Map.of("roles", List.of("LEXIS_READ_ONLY_REGION-CARIBOO")))))))
         .andExpect(status().isOk());
     mvc.perform(
             get("/staff")
@@ -156,7 +160,7 @@ class KeycloakBearerAuthenticationIntegrationTest {
                                     "resource_access",
                                     Map.of(
                                         "another-client",
-                                        Map.of("roles", List.of("LEXIS_READ_ONLY")))))))
+                                        Map.of("roles", List.of("LEXIS_READ_ONLY_REGION-CARIBOO")))))))
         .andExpect(status().isForbidden());
   }
 
@@ -164,10 +168,61 @@ class KeycloakBearerAuthenticationIntegrationTest {
   void signedRegionalGrantCannotBecomeUnscopedReadAccess() throws Exception {
     String regional = "LEXIS_READ_ONLY_REGION-CARIBOO";
     mvc.perform(get("/staff").header("Authorization", bearer(b -> b.claim("client_roles", List.of(regional)))))
-        .andExpect(status().isForbidden());
-    mvc.perform(get("/staff").header("Authorization", bearer(b -> b.claim(
-        "client_roles", List.of(regional, "LEXIS_READ_ONLY")))))
         .andExpect(status().isOk());
+    mvc.perform(get("/unscoped-staff").header("Authorization", bearer(b -> b.claim(
+        "client_roles", List.of(regional, "LEXIS_READ_ONLY")))))
+        .andExpect(status().isForbidden());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+    "LEXIS_READ_ONLY",
+    "LEXIS_APPLICATION_APPROVER",
+    "LEXIS_EXEMPTION_APPROVER"
+  })
+  void signedUnscopedStaffTokenHasNoBusinessAccess(String role) throws Exception {
+    String token = bearer(b -> b.claim("client_roles", List.of(role)));
+    mvc.perform(get("/api/lexis/session/capabilities").accept(MediaType.APPLICATION_JSON).header("Authorization", token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.authenticated").value(true))
+        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"))
+        .andExpect(jsonPath("$.roles").isEmpty())
+        .andExpect(jsonPath("$.grantedActions").isEmpty());
+    mvc.perform(get("/api/lexis/applicationSearch").header("Authorization", token))
+        .andExpect(status().isForbidden());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER",
+    "LEXIS_APPLICATION_APPROVER_REGION,LEXIS_EXEMPTION_APPROVER_REGION",
+    "LEXIS_APPLICATION_APPROVER_REGION,LEXIS_EXEMPTION_APPROVER",
+    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER_REGION",
+    "LEXIS_APPLICATION_APPROVER_REGION,LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA",
+    "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER_REGION,LEXIS_ADMIN,LEXIS_READ_ONLY_REGION-SKEENA",
+    "LEXIS_APPLICATION_APPROVER_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER",
+    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA",
+    "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA,LEXIS_ADMIN,LEXIS_READ_ONLY_REGION-CARIBOO"
+  })
+  void signedConflictingApproverTokenHasOnlyNoAccessCapabilities(String roleCsv) throws Exception {
+    String token = bearer(b -> b.claim("client_roles", List.of(roleCsv.split(","))));
+    mvc.perform(get("/api/lexis/session/capabilities").accept(MediaType.APPLICATION_JSON).header("Authorization", token))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.authenticated").value(true))
+        .andExpect(jsonPath("$.welcomeTarget").value("noAccess"))
+        .andExpect(jsonPath("$.roles").isEmpty())
+        .andExpect(jsonPath("$.grantedActions").isEmpty())
+        .andExpect(jsonPath("$.actionRegions").isEmpty())
+        .andExpect(jsonPath("$.accessDeniedReason").value("INCOMPATIBLE_APPROVER_ROLES"));
+    for (String path : List.of(
+        "/api/lexis/applicationSearch",
+        "/api/lexis/rpc/exemption-details/example",
+        "/api/lexis/session/preferences",
+        "/api/lexis/session/welcome",
+        "/api/lexis/admin/notifications",
+        "/machine")) {
+      mvc.perform(get(path).header("Authorization", token)).andExpect(status().isForbidden());
+    }
   }
 
   @Test
@@ -256,7 +311,7 @@ class KeycloakBearerAuthenticationIntegrationTest {
         .claim("identity_provider", "idir")
         .claim("idir_username", "staff.user")
         .claim("preferred_username", "user-guid@idir")
-        .claim("client_roles", List.of("LEXIS_READ_ONLY"))
+        .claim("client_roles", List.of("LEXIS_READ_ONLY_REGION-CARIBOO"))
         .build();
   }
 
@@ -275,7 +330,8 @@ class KeycloakBearerAuthenticationIntegrationTest {
   @Configuration
   @EnableWebMvc
   @EnableWebSecurity
-  @Import({Oauth2SecurityCustomizer.class, LexisPrincipalService.class, ProbeController.class})
+  @Import({Oauth2SecurityCustomizer.class, LexisPrincipalService.class, ProbeController.class,
+      LexisSessionController.class, LexisApiAuthorizationCustomizer.class, LexisAuthorizationService.class})
   static class TestConfiguration {
     @Bean
     LexisSessionService sessionService() {
@@ -283,18 +339,36 @@ class KeycloakBearerAuthenticationIntegrationTest {
     }
 
     @Bean
-    SecurityFilterChain filterChain(HttpSecurity http, Oauth2SecurityCustomizer customizer)
+    LexisFeatureProperties featureProperties() {
+      return new LexisFeatureProperties();
+    }
+
+    @Bean
+    LexisAuthorizationProperties authorizationProperties() {
+      LexisAuthorizationProperties properties = new LexisAuthorizationProperties();
+      properties.setRoleActions(Map.of(
+          "LEXIS_READ_ONLY", List.of("/applicationSearch", "/applicationDetails"),
+          "LEXIS_APPLICATION_APPROVER", List.of("/applicationSearch", "createApplication"),
+          "LEXIS_EXEMPTION_APPROVER", List.of("/exemptionDetails", "approveExemption")));
+      return properties;
+    }
+
+    @Bean
+    SecurityFilterChain filterChain(HttpSecurity http, Oauth2SecurityCustomizer customizer,
+        LexisApiAuthorizationCustomizer authorizationCustomizer)
         throws Exception {
       return http.authorizeHttpRequests(
-              r ->
+              r -> {
                   r.requestMatchers("/staff")
+                      .hasAuthority("LEXIS_READ_ONLY_REGION-CARIBOO")
+                      .requestMatchers("/unscoped-staff")
                       .hasAuthority("LEXIS_READ_ONLY")
                       .requestMatchers("/clients")
                       .hasAuthority("LEXIS_PROVINCIAL_SUBMITTER")
                       .requestMatchers("/machine")
-                      .hasAuthority("SCOPE_lexis:federal-submission:submit")
-                      .anyRequest()
-                      .denyAll())
+                      .hasAuthority("SCOPE_lexis:federal-submission:submit");
+                  authorizationCustomizer.customize(r);
+              })
           .oauth2ResourceServer(customizer)
           .build();
     }
