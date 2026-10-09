@@ -311,6 +311,7 @@ class LexisDocumentUploadMutationIntegrationTest {
         .thenReturn(Optional.of(exemption(exemptionStatus)));
     when(permitService.findByPermitNumber(PERMIT_NUMBER))
         .thenReturn(Optional.of(permit(permitStatus)));
+    when(exemptionService.findAccessOrgUnitNumbers(EXEMPTION_NUMBER)).thenReturn(List.of(1903L));
   }
 
   private LexisApplicationDetailDto application(String status) {
@@ -321,7 +322,7 @@ class LexisDocumentUploadMutationIntegrationTest {
         status,
         "00012345",
         null,
-        11L,
+        1903L,
         null,
         null,
         null,
@@ -411,6 +412,7 @@ class LexisDocumentUploadMutationIntegrationTest {
         null,
         null,
         null,
+        1903L,
         null);
   }
 
@@ -590,7 +592,8 @@ class LexisDocumentUploadMutationIntegrationTest {
                 token
                     .claim("identity_provider", "idir")
                     .claim("idir_username", "lexis-approver-test-user"))
-        .authorities(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER"));
+        .authorities(
+            new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO"));
   }
 
   private JwtRequestPostProcessor exemptionApproverJwt() {
@@ -600,7 +603,8 @@ class LexisDocumentUploadMutationIntegrationTest {
                 token
                     .claim("identity_provider", "idir")
                     .claim("idir_username", "lexis-exemption-approver-test-user"))
-        .authorities(new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER"));
+        .authorities(
+            new SimpleGrantedAuthority("LEXIS_EXEMPTION_APPROVER_REGION_REGION-CARIBOO"));
   }
 
   /** Inspection the upload service mock returns for an accepted file. */

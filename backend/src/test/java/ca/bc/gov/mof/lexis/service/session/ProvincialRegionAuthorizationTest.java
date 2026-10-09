@@ -63,11 +63,17 @@ class ProvincialRegionAuthorizationTest {
       "LEXIS_APPLICATION_APPROVER_REGION_REGION-KOOTENAY_BOUNDARY";
   private static final String READ_ONLY = "LEXIS_READ_ONLY";
   private static final String READ_ONLY_SKEENA = "LEXIS_READ_ONLY_REGION_REGION-SKEENA";
+  private static final String READ_ONLY_CARIBOO = "LEXIS_READ_ONLY_REGION_REGION-CARIBOO";
+  private static final String READ_ONLY_KOOTENAY =
+      "LEXIS_READ_ONLY_REGION_REGION-KOOTENAY_BOUNDARY";
+  private static final String ADMIN = "LEXIS_ADMIN";
   private static final String EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String EXEMPTION_APPROVER_CARIBOO =
       "LEXIS_EXEMPTION_APPROVER_REGION_REGION-CARIBOO";
   private static final String EXEMPTION_APPROVER_SKEENA =
       "LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA";
+  private static final String EXEMPTION_APPROVER_KOOTENAY =
+      "LEXIS_EXEMPTION_APPROVER_REGION_REGION-KOOTENAY_BOUNDARY";
   // Ministerial exemptions without stored OIC region rows, whose access regions are therefore
   // only those of their linked applications.
   private static final String LINKED_IN_TWO_REGIONS = "test-exemption-two-regions";
@@ -125,10 +131,11 @@ class ProvincialRegionAuthorizationTest {
   }
 
   @Test
-  void roleWithoutRegionIsProvinceWideAndRegionalRoleReachesOnlyItsRegions() {
-    OrgUnitConstraint provinceWide =
+  void roleWithoutRegionReachesNothingAndRegionalRoleReachesOnlyItsRegions() {
+    OrgUnitConstraint unscoped =
         service.constrainOrgUnits(staff(APPROVER), List.of(), OrgUnitSurface.APPLICATION_SEARCH);
-    assertThat(provinceWide.restricted()).isFalse();
+    assertThat(unscoped.restricted()).isTrue();
+    assertThat(unscoped.denied()).isTrue();
 
     Authentication oneRegion = staff(APPROVER_CARIBOO);
     assertThat(
@@ -199,12 +206,13 @@ class ProvincialRegionAuthorizationTest {
     // Records still tagged with a pre-2010 forest region are outside every FAM region.
     assertThat(service.canAccessApplication(approver, provincial(LEGACY_SOUTHERN_INTERIOR)))
         .isFalse();
-    assertThat(service.canAccessApplication(staff(APPROVER), provincial(null))).isTrue();
+    assertThat(service.canAccessApplication(staff(APPROVER), provincial(CARIBOO))).isFalse();
+    assertThat(service.canAccessApplication(staff(ADMIN), provincial(null))).isTrue();
   }
 
   @Test
-  void provinceWideReadWithRegionalApprovalWritesOnlyInsideTheApprovalRegion() {
-    Authentication mixed = staff(READ_ONLY, APPROVER_CARIBOO);
+  void readInOneRegionWithApprovalInAnotherWritesOnlyInsideTheApprovalRegion() {
+    Authentication mixed = staff(READ_ONLY_SKEENA, APPROVER_CARIBOO);
     when(permitService.findAccessByPermitNumber(10L))
         .thenReturn(Optional.of(new PermitAccessDto(10L, null, null, SKEENA)));
     when(permitService.findAccessByPermitNumber(11L))
@@ -278,8 +286,8 @@ class ProvincialRegionAuthorizationTest {
   }
 
   @Test
-  void linkingStaysInTheApproverRegionsDespiteProvinceWideExemptionApproval() {
-    Authentication mixed = staff(EXEMPTION_APPROVER, APPROVER_CARIBOO);
+  void linkingStaysInsideTheApproverRegions() {
+    Authentication approver = staff(APPROVER_CARIBOO);
     when(exemptionService.findAccessOrgUnitNumbers("EX-1")).thenReturn(List.of(CARIBOO));
     when(exemptionService.findAccessOrgUnitNumbers("EX-2")).thenReturn(List.of(CARIBOO, SKEENA));
     when(applicationService.findAccessByApplicationNumber(20L))
@@ -287,15 +295,13 @@ class ProvincialRegionAuthorizationTest {
     when(applicationService.findAccessByApplicationNumber(21L))
         .thenReturn(Optional.of(new ApplicationAccessContextDto(21L, "P", CARIBOO, null, null)));
 
-    // saveExemption is province-wide through the Exemption Approver, but linking is the
-    // Application Approver's, which this user holds only in Cariboo.
-    assertThatCode(() -> service.requireExemptionApplicationLink(mixed, "EX-1", 21L))
+    assertThatCode(() -> service.requireExemptionApplicationLink(approver, "EX-1", 21L))
         .doesNotThrowAnyException();
-    assertThatThrownBy(() -> service.requireExemptionApplicationLink(mixed, "EX-1", 20L))
+    assertThatThrownBy(() -> service.requireExemptionApplicationLink(approver, "EX-1", 20L))
         .isInstanceOf(AccessDeniedException.class);
-    assertThatThrownBy(() -> service.requireExemptionApplicationLink(mixed, "EX-2", 21L))
+    assertThatThrownBy(() -> service.requireExemptionApplicationLink(approver, "EX-2", 21L))
         .isInstanceOf(AccessDeniedException.class);
-    assertThatCode(() -> service.requireExemptionApplicationLink(staff(APPROVER), "EX-2", 20L))
+    assertThatCode(() -> service.requireExemptionApplicationLink(staff(ADMIN), "EX-2", 20L))
         .doesNotThrowAnyException();
   }
 
@@ -309,17 +315,20 @@ class ProvincialRegionAuthorizationTest {
     when(exemptionService.findAccessOrgUnitNumbers("B2")).thenReturn(List.of(CARIBOO));
     requestAuthorizedFor("/exemptionDetails");
 
-    Authentication mixed = staff(EXEMPTION_APPROVER, APPROVER_CARIBOO);
-    assertThat(service.canAccessExemption(staff(EXEMPTION_APPROVER), "B1")).isFalse();
+    Authentication mixed = staff(EXEMPTION_APPROVER_KOOTENAY, READ_ONLY_CARIBOO);
+    assertThat(service.canAccessExemption(staff(EXEMPTION_APPROVER_KOOTENAY), "B1")).isFalse();
     assertThat(service.canAccessExemption(mixed, "B1")).isFalse();
     assertThat(service.canAccessExemption(mixed, "B2")).isTrue();
-    assertThat(service.canAccessExemption(staff(READ_ONLY, EXEMPTION_APPROVER_CARIBOO), "B1"))
+    assertThat(
+            service.canAccessExemption(staff(READ_ONLY_KOOTENAY, EXEMPTION_APPROVER_CARIBOO), "B1"))
         .isTrue();
 
-    // Search: Ministerial exemptions everywhere, the other types only in Cariboo.
+    // Search: Ministerial exemptions in both regions, the other types only in Cariboo.
     assertThat(service.resolveBlanketOicRegions(mixed).orgUnitNumbers()).containsExactly(CARIBOO);
-    assertThat(service.resolveBlanketOicRegions(staff(EXEMPTION_APPROVER)).denied()).isTrue();
-    assertThat(service.resolveBlanketOicRegions(staff(READ_ONLY)).restricted()).isFalse();
+    assertThat(service.resolveBlanketOicRegions(staff(EXEMPTION_APPROVER_KOOTENAY)).denied())
+        .isTrue();
+    assertThat(service.resolveBlanketOicRegions(staff(READ_ONLY)).denied()).isTrue();
+    assertThat(service.resolveBlanketOicRegions(staff(ADMIN)).restricted()).isFalse();
 
     assertThatThrownBy(() -> service.requireBlanketOicRegions(mixed, List.of(KOOTENAY_BOUNDARY)))
         .isInstanceOf(AccessDeniedException.class);
@@ -328,8 +337,8 @@ class ProvincialRegionAuthorizationTest {
   }
 
   @Test
-  void provinceWideExemptionApprovalNeedsNoRegionLookup() {
-    assertThatCode(() -> service.requireExemptionWrite(staff(EXEMPTION_APPROVER), "EX-1"))
+  void administratorExemptionWriteNeedsNoRegionLookup() {
+    assertThatCode(() -> service.requireExemptionWrite(staff(ADMIN), "EX-1"))
         .doesNotThrowAnyException();
     verifyNoInteractions(exemptionService);
   }
@@ -454,33 +463,48 @@ class ProvincialRegionAuthorizationTest {
   }
 
   @Test
-  void provinceWideUsersReachExemptionsWithoutARegionLookup() {
+  void administratorReachesExemptionsWithoutARegionLookup() {
     ministerialExemption(LINKED_IN_TWO_REGIONS, CARIBOO, SKEENA);
     ministerialExemption(WITHOUT_REGION);
 
     requestAuthorizedFor("/exemptionDetails");
-    for (Authentication provinceWide :
-        List.of(
-            staff(APPROVER), staff(EXEMPTION_APPROVER), staff(READ_ONLY), staff("LEXIS_ADMIN"))) {
-      for (String exemptionNumber : List.of(LINKED_IN_TWO_REGIONS, WITHOUT_REGION)) {
-        assertThat(service.canAccessExemption(provinceWide, exemptionNumber))
-            .as("%s %s", provinceWide.getAuthorities(), exemptionNumber)
-            .isTrue();
-      }
+    for (String exemptionNumber : List.of(LINKED_IN_TWO_REGIONS, WITHOUT_REGION)) {
+      assertThat(service.canAccessExemption(staff(ADMIN), exemptionNumber))
+          .as(exemptionNumber)
+          .isTrue();
     }
 
     requestAuthorizedFor("saveExemption");
-    assertThatCode(() -> service.requireExemptionWrite(staff(APPROVER), WITHOUT_REGION))
+    assertThatCode(() -> service.requireExemptionWrite(staff(ADMIN), WITHOUT_REGION))
         .doesNotThrowAnyException();
     assertThatCode(
-            () -> service.requireExemptionApplicationLink(staff(APPROVER), WITHOUT_REGION, 21L))
+            () -> service.requireExemptionApplicationLink(staff(ADMIN), WITHOUT_REGION, 21L))
         .doesNotThrowAnyException();
+    requestAuthorizedFor("approveExemption");
+    assertThat(service.canApproveExemption(staff(ADMIN), WITHOUT_REGION, List.of(), List.of()))
+        .isTrue();
+    verify(exemptionService, never()).findAccessOrgUnitNumbers(anyString());
+  }
+
+  @Test
+  void unscopedStaffRolesReachNoExemption() {
+    ministerialExemption(LINKED_IN_TWO_REGIONS, CARIBOO, SKEENA);
+    ministerialExemption(WITHOUT_REGION);
+
+    requestAuthorizedFor("/exemptionDetails");
+    for (Authentication unscoped :
+        List.of(staff(APPROVER), staff(EXEMPTION_APPROVER), staff(READ_ONLY))) {
+      for (String exemptionNumber : List.of(LINKED_IN_TWO_REGIONS, WITHOUT_REGION)) {
+        assertThat(service.canAccessExemption(unscoped, exemptionNumber))
+            .as("%s %s", unscoped.getAuthorities(), exemptionNumber)
+            .isFalse();
+      }
+    }
     requestAuthorizedFor("approveExemption");
     assertThat(
             service.canApproveExemption(
-                staff(EXEMPTION_APPROVER), WITHOUT_REGION, List.of(), List.of()))
-        .isTrue();
-    verify(exemptionService, never()).findAccessOrgUnitNumbers(anyString());
+                staff(EXEMPTION_APPROVER), LINKED_IN_TWO_REGIONS, List.of(), List.of()))
+        .isFalse();
   }
 
   @Test
@@ -496,19 +520,24 @@ class ProvincialRegionAuthorizationTest {
 
   @Test
   void federalRecordsOutsideTheManageRegionAreReadOnly() {
-    Authentication mixed = staff(READ_ONLY, APPROVER_CARIBOO);
+    Authentication mixed = staff(READ_ONLY_SKEENA, APPROVER_CARIBOO);
 
     assertThat(service.canWriteRecord(mixed, SKEENA, OrgUnitSurface.FEDERAL_APPLICATION_WRITE))
         .isFalse();
     assertThat(service.canWriteRecord(mixed, CARIBOO, OrgUnitSurface.FEDERAL_APPLICATION_WRITE))
         .isTrue();
-    assertThat(service.canWriteRecord(staff(APPROVER), SKEENA, OrgUnitSurface.FEDERAL_APPLICATION_WRITE))
+    assertThat(
+            service.canWriteRecord(
+                staff(APPROVER), CARIBOO, OrgUnitSurface.FEDERAL_APPLICATION_WRITE))
+        .isFalse();
+    assertThat(
+            service.canWriteRecord(staff(ADMIN), SKEENA, OrgUnitSurface.FEDERAL_APPLICATION_WRITE))
         .isTrue();
   }
 
   @Test
-  void provinceWideFederalApprovalNeedsNoRecordLookup() {
-    assertThat(service.canAccessFederalApplication(staff(APPROVER), 20L)).isTrue();
+  void administratorFederalAccessNeedsNoRecordLookup() {
+    assertThat(service.canAccessFederalApplication(staff(ADMIN), 20L)).isTrue();
     verifyNoInteractions(applicationService);
   }
 
@@ -524,7 +553,9 @@ class ProvincialRegionAuthorizationTest {
         .isInstanceOf(AccessDeniedException.class);
     assertThatCode(() -> service.requireApplicationAttachmentMutation(staff(APPROVER_CARIBOO), 31L))
         .doesNotThrowAnyException();
-    assertThatCode(() -> service.requireApplicationAttachmentMutation(staff(APPROVER), 30L))
+    assertThatThrownBy(() -> service.requireApplicationAttachmentMutation(staff(APPROVER), 31L))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatCode(() -> service.requireApplicationAttachmentMutation(staff(ADMIN), 30L))
         .doesNotThrowAnyException();
   }
 
@@ -547,18 +578,21 @@ class ProvincialRegionAuthorizationTest {
       assertThatThrownBy(() -> service.requireReportRegions(readOnly, outside))
           .isInstanceOf(AccessDeniedException.class);
     }
-    assertThatCode(() -> service.requireReportRegions(staff(READ_ONLY), Map.of()))
+    assertThatThrownBy(
+            () -> service.requireReportRegions(staff(READ_ONLY), Map.of("region", "1908")))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatCode(() -> service.requireReportRegions(staff(ADMIN), Map.of()))
         .doesNotThrowAnyException();
   }
 
   @Test
-  void submittersAndProvinceWideStaffAreUnaffected() {
+  void submittersAndAdministratorsAreUnaffected() {
     Authentication submitter =
         staff("LEXIS_PROVINCIAL_SUBMITTER", "LEXIS_PROVINCIAL_SUBMITTER_00012345");
     for (OrgUnitSurface surface : OrgUnitSurface.values()) {
       assertThat(service.constrainOrgUnits(submitter, List.of(SKEENA), surface).restricted())
           .isFalse();
-      assertThat(service.constrainOrgUnits(staff(READ_ONLY), List.of(SKEENA), surface).restricted())
+      assertThat(service.constrainOrgUnits(staff(ADMIN), List.of(SKEENA), surface).restricted())
           .isFalse();
     }
   }

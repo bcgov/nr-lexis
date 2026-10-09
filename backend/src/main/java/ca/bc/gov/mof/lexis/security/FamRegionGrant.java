@@ -1,7 +1,6 @@
 package ca.bc.gov.mof.lexis.security;
 
 import java.util.Arrays;
-import java.util.Collection;
 import java.util.Optional;
 import java.util.Set;
 
@@ -48,12 +47,6 @@ public record FamRegionGrant(String role, Region region) {
         .filter(region -> region.name().equals(regionCode))
         .findFirst()
         .map(region -> new FamRegionGrant(baseRole, region));
-  }
-
-  /** Whether any authority is a regional grant, i.e. whether region limits apply at all. */
-  public static boolean anyIn(Collection<String> authorities) {
-    return authorities != null
-        && authorities.stream().anyMatch(authority -> parse(authority).isPresent());
   }
 
   /**
