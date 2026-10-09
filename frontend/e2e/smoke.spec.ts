@@ -34,7 +34,7 @@ test.describe('frontend smoke coverage', () => {
     await expect(
       page.getByText('Manage provincial log applications for exemptions, offers and permits.'),
     ).toBeVisible()
-    await expect(page.getByAltText('Government of British Columbia')).toBeVisible()
+    await expect(page.getByRole('img', { name: 'Government of British Columbia' })).toBeVisible()
     const supportingImage = page.locator('.landing-img')
     await expect(supportingImage).toBeVisible()
     await expect(supportingImage).toHaveAttribute('alt', '')
@@ -67,7 +67,7 @@ test.describe('frontend smoke coverage', () => {
   })
 
   test('lays out the desktop landing page', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.setViewportSize({ width: 1584, height: 1080 })
     await gotoSyntheticRoute(page, '/', {
       waitUntil: 'domcontentloaded',
       ready: page.getByRole('heading', { level: 1, name: 'LEXIS', exact: true }),
@@ -77,6 +77,7 @@ test.describe('frontend smoke coverage', () => {
     const layout = await page.evaluate(() => {
       const content = document.querySelector('.landing-content-col')
       const image = document.querySelector('.landing-img-col')
+      const logo = document.querySelector('.landing-logo')
       const textContent = document.querySelector('.landing-text-content')
       const title = document.querySelector('.landing-title')
       const subtitle = document.querySelector('.landing-subtitle')
@@ -87,6 +88,7 @@ test.describe('frontend smoke coverage', () => {
       const requestAccessNote = document.querySelector('.landing-request-access__note')
       if (!(content instanceof HTMLElement)) throw new Error('Landing content not found')
       if (!(image instanceof HTMLElement)) throw new Error('Landing image not found')
+      if (!(logo instanceof SVGElement)) throw new Error('Landing logo not found')
       if (!(textContent instanceof HTMLElement)) throw new Error('Landing text not found')
       if (!(title instanceof HTMLElement)) throw new Error('Landing title not found')
       if (!(subtitle instanceof HTMLElement)) throw new Error('Landing subtitle not found')
@@ -112,6 +114,8 @@ test.describe('frontend smoke coverage', () => {
         contentWidth: contentBounds.width,
         imageLeft: imageBounds.left,
         imageWidth: imageBounds.width,
+        logoWidth: logo.getBoundingClientRect().width,
+        logoHeight: logo.getBoundingClientRect().height,
         contentPaddingLeft: getComputedStyle(content).paddingLeft,
         titleSubtitleGap: subtitleBounds.top - titleBounds.bottom,
         subtitleDescriptionGap: descriptionBounds.top - subtitleBounds.bottom,
@@ -120,6 +124,8 @@ test.describe('frontend smoke coverage', () => {
         linkNoteGap: noteBounds.top - linkBounds.bottom,
         actionHeight: actionBounds.height,
         actionFontSize: getComputedStyle(primaryAction).fontSize,
+        actionColor: getComputedStyle(primaryAction).backgroundColor,
+        linkColor: getComputedStyle(requestAccessLink).color,
         textCentreOffset:
           titleBounds.top - textBounds.top - (textBounds.bottom - requestAccessBounds.bottom),
         titleColor: getComputedStyle(title).color,
@@ -132,17 +138,21 @@ test.describe('frontend smoke coverage', () => {
     })
 
     expect(layout.contentLeft).toBe(0)
-    expect(layout.contentWidth).toBe(900)
-    expect(layout.imageLeft).toBe(900)
-    expect(layout.imageWidth).toBe(540)
+    expect(layout.contentWidth).toBe(945)
+    expect(layout.imageLeft).toBe(951)
+    expect(layout.imageWidth).toBe(633)
+    expect(layout.logoWidth).toBe(160)
+    expect(layout.logoHeight).toBe(46)
     expect(layout.contentPaddingLeft).toBe('40px')
     expect(layout.titleSubtitleGap).toBe(16)
     expect(layout.subtitleDescriptionGap).toBe(40)
     expect(layout.descriptionActionGap).toBe(40)
     expect(layout.actionRequestAccessGap).toBe(40)
     expect(layout.linkNoteGap).toBe(8)
-    expect(layout.actionHeight).toBe(40)
-    expect(layout.actionFontSize).toBe('14px')
+    expect(layout.actionHeight).toBe(48)
+    expect(layout.actionFontSize).toBe('16px')
+    expect(layout.actionColor).toBe('rgb(0, 115, 230)')
+    expect(layout.linkColor).toBe('rgb(0, 92, 184)')
     expect(Math.abs(layout.textCentreOffset)).toBeLessThanOrEqual(1)
     expect(layout.titleColor).toBe('rgb(19, 19, 21)')
     expect(layout.subtitleColor).toBe('rgb(96, 96, 98)')
@@ -153,7 +163,7 @@ test.describe('frontend smoke coverage', () => {
   })
 
   test('opens the request access dialog from the landing link', async ({ page }) => {
-    await page.setViewportSize({ width: 1440, height: 900 })
+    await page.setViewportSize({ width: 1584, height: 1080 })
     await gotoSyntheticRoute(page, '/', {
       waitUntil: 'domcontentloaded',
       ready: page.getByRole('heading', { level: 1, name: 'LEXIS', exact: true }),
@@ -165,6 +175,8 @@ test.describe('frontend smoke coverage', () => {
 
     const dialog = page.getByRole('dialog', { name: 'Request access to LEXIS' })
     await expect(dialog).toBeVisible()
+    await expect(dialog).toHaveCSS('width', '590px')
+    await expect(dialog).toHaveCSS('height', '406px')
     await expect(dialog.getByRole('heading', { level: 3 })).toHaveText([
       'Where to send your request',
       'What to include',
@@ -173,6 +185,7 @@ test.describe('frontend smoke coverage', () => {
       dialog.getByRole('link', { name: 'Provincial.Log.Export.Analyst@gov.bc.ca' }),
     ).toBeFocused()
     await expect(dialog.getByRole('link')).toHaveCount(3)
+    await expect(dialog.getByRole('link').first()).toHaveCSS('color', 'rgb(0, 92, 184)')
     await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible()
 
     await page.keyboard.press('Escape')

@@ -1322,6 +1322,36 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 // The logo sits at the top of the content column; the text and actions are centred in the
 // space below it with 40px between blocks.
+.login-landing,
+.landing-request-access-dialog {
+  --cds-button-primary: var(--csp-button-primary);
+  --cds-button-primary-hover: var(--csp-button-primary-hover);
+  --cds-button-primary-active: var(--csp-button-primary-active);
+  --cds-button-tertiary: var(--csp-interactive);
+  --cds-button-tertiary-hover: var(--csp-interactive-hover);
+  --cds-button-tertiary-active: var(--csp-interactive-active);
+  --cds-link-primary: var(--csp-link-primary);
+  --cds-link-primary-hover: var(--csp-link-hover);
+  --cds-focus: var(--csp-focus);
+}
+
+.login-landing .landing-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1056px) {
+  .login-landing .landing-grid {
+    grid-template-columns: minmax(0, 945fr) minmax(0, 633fr);
+    column-gap: 6px;
+  }
+}
+
+.login-landing .landing-logo {
+  width: 10rem;
+  height: 2.875rem;
+}
+
 .login-landing .landing-content-col {
   align-items: stretch;
   margin: 0;
@@ -1331,7 +1361,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .login-landing .landing-content-wrapper {
   width: 100%;
-  gap: 2.5rem;
+  gap: 0;
 }
 
 .landing-text-content {
@@ -1376,6 +1406,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-start: 0;
 }
 
+.login-landing .landing-actions .cds--btn {
+  min-block-size: 3rem;
+  font-size: 1rem;
+}
+
 .landing-request-access {
   display: flex;
   flex-direction: column;
@@ -1392,6 +1427,23 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin: 0;
   color: var(--csp-text-secondary);
   @include carbon-type.type-style('body-compact-02');
+}
+
+.landing-request-access-dialog .cds--modal-container {
+  inline-size: min(100%, 36.875rem);
+  min-block-size: min(25.375rem, 72vh);
+  border: 0;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 30%);
+}
+
+.landing-request-access-dialog .cds--modal-header {
+  min-block-size: 4rem;
+  margin-block-end: 0;
+  padding-block-end: 1rem;
+}
+
+.landing-request-access-dialog .cds--modal-content {
+  padding-block: 0 2.5rem;
 }
 
 .landing-request-access-modal {

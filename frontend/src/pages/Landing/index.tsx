@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { Button, Column, Grid, InlineNotification, Link } from '@carbon/react'
+import { Button, InlineNotification, Link } from '@carbon/react'
 import { Login } from '@carbon/icons-react'
 import { AppNotification } from '../../components/AppNotification'
 import Modal from '@/components/Modal'
@@ -70,11 +70,19 @@ const LandingPage = ({ loginDestination }: { loginDestination?: string }) => {
 
   return (
     <main className="landing-grid-container login-landing" id="main-content" aria-busy={isLoading}>
-      <Grid fullWidth className="landing-grid">
-        <Column className="landing-content-col" sm={4} md={8} lg={10}>
+      <div className="landing-grid">
+        <div className="landing-content-col">
           <div className="landing-content-wrapper">
             <div className="landing-logo-mark">
-              <img src={logoSource} alt="Government of British Columbia" className="landing-logo" />
+              {/* Both logo assets include transparent padding around the artwork. */}
+              <svg
+                role="img"
+                aria-label="Government of British Columbia"
+                className="landing-logo"
+                viewBox="70 70 710 188"
+              >
+                <image href={logoSource} width="848" height="327" />
+              </svg>
             </div>
 
             <div className="landing-text-content">
@@ -103,7 +111,8 @@ const LandingPage = ({ loginDestination }: { loginDestination?: string }) => {
                   <>
                     <Button
                       kind="primary"
-                      size="md"
+                      size="lg"
+                      isExpressive
                       renderIcon={Login}
                       onClick={() => void onLogin('idir')}
                       disabled={isLoading || !usesExternalLogin}
@@ -113,7 +122,8 @@ const LandingPage = ({ loginDestination }: { loginDestination?: string }) => {
                     </Button>
                     <Button
                       kind="tertiary"
-                      size="md"
+                      size="lg"
+                      isExpressive
                       renderIcon={Login}
                       onClick={() => void onLogin('business-bceid')}
                       disabled={isLoading || !usesExternalLogin}
@@ -162,17 +172,18 @@ const LandingPage = ({ loginDestination }: { loginDestination?: string }) => {
               )}
             </div>
           </div>
-        </Column>
+        </div>
 
-        <Column className="landing-img-col" sm={4} md={8} lg={6}>
+        <div className="landing-img-col">
           <img src={landingImage} alt="" className="landing-img" aria-hidden="true" />
-        </Column>
-      </Grid>
+        </div>
+      </div>
 
       <Modal
         open={isRequestAccessOpen}
         passiveModal
         size="sm"
+        className="landing-request-access-dialog"
         modalHeading="Request access to LEXIS"
         launcherButtonRef={requestAccessLinkRef}
         selectorPrimaryFocus=".landing-request-access-modal a"

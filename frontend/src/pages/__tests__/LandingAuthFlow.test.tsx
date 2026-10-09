@@ -81,9 +81,10 @@ describe('Landing auth flow smoke', () => {
     expect(supportingImage).toHaveAttribute('aria-hidden', 'true')
 
     const loginButton = screen.getByRole('button', { name: 'Log in with IDIR' })
-    expect(loginButton).toHaveClass('cds--btn--md')
+    expect(loginButton).toHaveClass('cds--layout--size-lg', 'cds--btn--expressive')
     expect(screen.getByRole('button', { name: 'Log in with Business BCeID' })).toHaveClass(
-      'cds--btn--md',
+      'cds--layout--size-lg',
+      'cds--btn--expressive',
     )
     await userEvent.click(loginButton)
 
@@ -174,7 +175,10 @@ describe('Landing auth flow smoke', () => {
 
     expect(document.documentElement).toHaveAttribute('data-carbon-theme', 'g100')
     expect(
-      screen.getByRole('img', { name: 'Government of British Columbia' }).getAttribute('src'),
+      screen
+        .getByRole('img', { name: 'Government of British Columbia' })
+        .querySelector('image')
+        ?.getAttribute('href'),
     ).toContain('gov-bc-logo-horiz')
   })
 
