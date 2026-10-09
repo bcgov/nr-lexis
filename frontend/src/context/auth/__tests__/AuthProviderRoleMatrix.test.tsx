@@ -56,6 +56,7 @@ function AuthProbe({ actionChecks }: ProbeProps) {
       <div data-testid="is-logged-in">{String(isLoggedIn)}</div>
       <div data-testid="has-any-role">{String(hasAnyRole)}</div>
       <div data-testid="roles">{capabilities.roles.join(',')}</div>
+      <div data-testid="access-denied-reason">{capabilities.accessDeniedReason ?? ''}</div>
       <div data-testid="forest-client">{capabilities.forestClientNumber ?? ''}</div>
       <div data-testid="available-forest-clients">
         {capabilities.availableForestClientNumbers.join(',')}
@@ -101,6 +102,29 @@ describe('Auth Provider Role Matrix', () => {
     vi.clearAllMocks()
     window.config = {}
     clearActiveForestClientNumber()
+  })
+
+  it('keeps an incompatible approver session signed in on the no-access route with its reason', async () => {
+    mockSessionCapabilities({
+      authenticated: true,
+      principal: 'IDIR\\staff',
+      roles: [],
+      grantedActions: [],
+      welcomeTarget: 'noAccess',
+      legacyPath: null,
+      accessDeniedReason: 'INCOMPATIBLE_APPROVER_ROLES',
+    })
+    renderProbe(['createApplication', 'approveExemption'])
+    await waitForAuthLoad()
+
+    expect(screen.getByTestId('is-logged-in')).toHaveTextContent('true')
+    expect(screen.getByTestId('has-any-role')).toHaveTextContent('false')
+    expect(screen.getByTestId('default-route')).toHaveTextContent('/unauthorized')
+    expect(screen.getByTestId('access-denied-reason')).toHaveTextContent(
+      'INCOMPATIBLE_APPROVER_ROLES',
+    )
+    expect(screen.getByTestId('action-createApplication')).toHaveTextContent('false')
+    expect(screen.getByTestId('action-approveExemption')).toHaveTextContent('false')
   })
 
   it('supports unscoped Federal Read Only', async () => {

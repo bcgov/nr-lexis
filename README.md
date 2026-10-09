@@ -171,7 +171,8 @@ The GitHub environment variable `LEXIS_EXPIRY_ENABLED` controls nightly expiry a
 independently of application access. Set it to `false` in PROD while legacy owns the job. To enable
 modern expiry after ownership transfers, set it to `true` and run a manual tagged release; no code
 change is required. If the variable is unset, PROD defaults to disabled. All modules use their normal
-role permissions. This variable replaces the former `lexis_prod_rtm_only` secret, which the new
+role permissions; Application Approver, Exemption Approver and Read Only need regional FAM
+assignments. This variable replaces the former `lexis_prod_rtm_only` secret, which the new
 workflow no longer consumes.
 
 ## Component docs

@@ -15,4 +15,5 @@ public record LexisSessionCapabilitiesDto(
     boolean forestClientSelectionRequired,
     String orgUnitNo,
     // Region-limited granted actions only; an absent action is province-wide.
-    Map<String, List<Long>> actionRegions) {}
+    Map<String, List<Long>> actionRegions,
+    String accessDeniedReason) {}

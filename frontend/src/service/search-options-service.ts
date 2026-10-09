@@ -1,6 +1,7 @@
 import apiService from '@/service/api-service'
 import { isRecord, mapRecordArray, stringField } from '@/utils/record'
 import { SEARCH_OPTIONS_UNAVAILABLE_MESSAGE } from '@/constants/search-options'
+import { NATURAL_RESOURCE_REGION_CODES } from '@/constants/regions'
 
 export { SEARCH_OPTIONS_UNAVAILABLE_MESSAGE } from '@/constants/search-options'
 
@@ -15,17 +16,6 @@ export class SearchOptionsUnavailableError extends Error {
     this.name = 'SearchOptionsUnavailableError'
   }
 }
-
-const NATURAL_RESOURCE_REGION_CODES = new Set([
-  '1903',
-  '1904',
-  '1905',
-  '1906',
-  '1907',
-  '1908',
-  '1909',
-  '1910',
-])
 
 const DISALLOWED_APPLICATION_STATUS_CODE = 'DAL'
 const DISALLOWED_APPLICATION_STATUS_LABEL = 'disallowed'

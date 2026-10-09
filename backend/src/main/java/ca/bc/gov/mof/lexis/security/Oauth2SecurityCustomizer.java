@@ -52,12 +52,7 @@ public class Oauth2SecurityCustomizer
   private static final String IDP_BCEID_BUSINESS = "bceidbusiness";
   private static final String ROLE_PROVINCIAL_SUBMITTER = "LEXIS_PROVINCIAL_SUBMITTER";
   private static final String ROLE_FEDERAL_READ_ONLY = "LEXIS_FEDERAL_READ_ONLY";
-  private static final Set<String> STAFF_ROLES =
-      Set.of(
-          "LEXIS_ADMIN",
-          "LEXIS_READ_ONLY",
-          "LEXIS_APPLICATION_APPROVER",
-          "LEXIS_EXEMPTION_APPROVER");
+  private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final int JWKS_CONNECT_TIMEOUT_MILLIS = (int) Duration.ofSeconds(10).toMillis();
   private static final int JWKS_READ_TIMEOUT_MILLIS = (int) Duration.ofSeconds(15).toMillis();
   private static final int JWKS_SIZE_LIMIT_BYTES = 50 * 1024;
@@ -131,9 +126,16 @@ public class Oauth2SecurityCustomizer
 
     if (interactiveIssuerUri.equals(tokenIssuer)
         && expectedClientId.equals(jwt.getClaimAsString("azp"))) {
-      authorities.addAll(
-          sessionService.parseGrantedAuthorities(
-              identityCompatibleFamRoles(clientRoles(jwt), jwt.getClaimAsString("identity_provider"))));
+      List<String> roles = clientRoles(jwt);
+      String identityProvider = jwt.getClaimAsString("identity_provider");
+      if (isStaffIdentityProvider(identityProvider)
+          && sessionService.hasConflictingApproverRoles(roles)) {
+        authorities.add(LexisSessionService.APPROVER_CONFLICT_AUTHORITY);
+      } else {
+        authorities.addAll(
+            sessionService.parseGrantedAuthorities(
+                identityCompatibleFamRoles(roles, identityProvider)));
+      }
     } else if (keycloakIssuerUri != null && keycloakIssuerUri.equals(tokenIssuer)) {
       authorities.addAll(normalizedScopeAuthorities(jwt));
     }
@@ -176,11 +178,12 @@ public class Oauth2SecurityCustomizer
     // Preserve the approved IDIR staff / Business BCeID separation and the internal
     // forest-client authority contract used throughout business authorization.
     if (isStaffIdentityProvider(identityProvider)) {
+      // Staff grants require a current region; only Administrator remains province-wide.
       // Retain the concrete regional grant without adding its unscoped base role. The grant
       // passes route checks with its role's actions; only ProvincialAuthorizationService limits
       // it to its regions, so every record endpoint must apply those checks.
       return roles.stream()
-          .filter(role -> STAFF_ROLES.contains(role) || FamRegionGrant.parse(role).isPresent())
+          .filter(role -> ROLE_ADMIN.equals(role) || FamRegionGrant.parse(role).isPresent())
           .toList();
     }
     if (!IDP_BCEID_BUSINESS.equals(identityProvider)) {

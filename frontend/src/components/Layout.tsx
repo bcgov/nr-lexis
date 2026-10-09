@@ -25,11 +25,8 @@ import {
 } from '@carbon/icons-react'
 import { HeaderMenuButton, IconButton, SideNavItems, SkipToContent } from '@carbon/react'
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
-import {
-  hasProvincialStaffRole,
-  hasProvincialSubmitterRole,
-  hasRole,
-} from '@/context/auth/role-utils'
+import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
+import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
 import OptimisticConflictModal from '@/components/OptimisticConflictModal'
 import UserRegionPreference from '@/components/UserRegionPreference'
 import SideNavigationGroup from '@/components/SideNavigationGroup'
@@ -723,7 +720,7 @@ function Layout({ children }: LayoutProps) {
                 )}
               </div>
             </div>
-            {hasProvincialStaffRole(capabilities.roles) && (
+            {canUseDefaultRegionPreference(capabilities) && (
               <UserRegionPreference active={isProfileOpen} />
             )}
           </div>

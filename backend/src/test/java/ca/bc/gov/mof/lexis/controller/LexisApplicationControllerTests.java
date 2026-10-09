@@ -36,7 +36,9 @@ class LexisApplicationControllerTests {
                 .param("size", "10")
                 .with(
                     jwt("orgUnitNo", 12L)
-                        .authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+                        .authorities(
+                            new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-CARIBOO"),
+                            new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-SKEENA"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.total").value(1))
         .andExpect(jsonPath("$.results[0].application").value(1000456));
@@ -52,7 +54,9 @@ class LexisApplicationControllerTests {
                 .param("size", "10")
                 .with(
                     jwt("orgUnitNo", 11L)
-                        .authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+                        .authorities(
+                            new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-CARIBOO"),
+                            new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-SKEENA"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.total").value(1))
         .andExpect(jsonPath("$.results[0].application").value(1000123));
@@ -65,7 +69,9 @@ class LexisApplicationControllerTests {
             get("/api/lexis/applications/1000123")
                 .with(
                     jwt("orgUnitNo", 11L)
-                        .authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+                        .authorities(
+                            new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-CARIBOO"),
+                            new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-SKEENA"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.applicationNumber").value(1000123))
         .andExpect(jsonPath("$.ownerClientNumber").value("00012345"));
@@ -79,7 +85,9 @@ class LexisApplicationControllerTests {
                 .param("applications", "1000123,1000456")
                 .with(
                     jwt("orgUnitNos", java.util.List.of(11L, 12L))
-                        .authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+                        .authorities(
+                            new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-CARIBOO"),
+                            new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-SKEENA"))))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.clientsMatch").value(false));
   }
