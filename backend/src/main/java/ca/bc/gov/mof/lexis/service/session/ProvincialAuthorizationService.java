@@ -279,8 +279,8 @@ public class ProvincialAuthorizationService {
 
   /**
    * Regions where the user may see Blanket OIC exemptions and search non-Ministerial ones: those
-   * of their Application Approver and Read Only grants. A pure Exemption Approver gets none, and a
-   * province-wide Exemption Approver grant does not widen a regional Approver or Read Only grant.
+   * of their Application Approver and Read Only grants. A pure Exemption Approver gets none, and
+   * an Exemption Approver grant does not widen an Application Approver or Read Only grant.
    */
   public OrgUnitConstraint resolveBlanketOicRegions(Authentication authentication) {
     if (!canViewBlanketOic(roles(authentication))) {
@@ -935,10 +935,10 @@ public class ProvincialAuthorizationService {
   }
 
   /**
-   * INTENTIONAL_LEGACY_DIVERGENCE(FAM_STAFF_GLOBAL_DATA_SCOPE): a staff role with no region is
-   * province-wide, and zone or region selections are only its defaults and filters. The same
-   * role granted for regions reaches only those regions' records, for the actions of both the
-   * surface and the current request. Provincial Submitter client scope is enforced separately.
+   * INTENTIONAL_LEGACY_DIVERGENCE(FAM_STAFF_GLOBAL_DATA_SCOPE): Administrator is province-wide,
+   * and zone or region selections are only defaults and filters. Approver and Read Only grants
+   * reach only their regions' records, for the actions of both the surface and the current
+   * request. Provincial Submitter client scope is enforced separately.
    */
   private OrgUnitConstraint regionConstraint(
       Authentication authentication, OrgUnitSurface surface) {

@@ -33,8 +33,8 @@ export const normalizeActionRegions = (value: unknown): Record<string, string[]>
 }
 
 /**
- * The regions a user may use for any of these actions, or null when one of them is
- * province-wide. A role with no region is province-wide, so only regional grants restrict.
+ * The regions a user may use for any of these actions, or null when one of them has no region
+ * limit. Administrator and non-staff actions have none; staff actions list their granted regions.
  */
 export const allowedRegions = (
   capabilities:

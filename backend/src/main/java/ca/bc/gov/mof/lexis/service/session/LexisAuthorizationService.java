@@ -80,9 +80,9 @@ public class LexisAuthorizationService {
   }
 
   /**
-   * Resolves staff region access for one action, preserving each grant's role/region pair. A
-   * role with no region is province-wide; a role granted for regions reaches only those, even if
-   * it is also granted without a region (least privilege).
+   * Resolves staff region access for one action, preserving each grant's role/region pair.
+   * Administrator is province-wide. Token conversion drops unscoped Approver and Read Only grants,
+   * so their regional grants are their whole reach.
    */
   public OrgUnitConstraint resolveStaffRegionConstraint(
       List<String> authorities, String action) {
@@ -111,7 +111,6 @@ public class LexisAuthorizationService {
       } else if (isProvinceWideGrant(authority, regionalRoles)
           && canPerformAnyAction(authority, actions)) {
         // Only a recognized unscoped grant for THIS action makes its region access global.
-        // A province-wide Read Only grant cannot widen a regional Approver's write access.
         return new OrgUnitConstraint(false, List.of());
       }
     }
@@ -200,8 +199,8 @@ public class LexisAuthorizationService {
   }
 
   /**
-   * An unscoped staff grant is province-wide unless the same role is also granted for regions;
-   * then the regional grants are that role's whole reach (least privilege).
+   * Token conversion admits only Administrator without a region. Any other unscoped staff grant
+   * is province-wide only when the same role has no regional grant.
    */
   private static boolean isProvinceWideGrant(String authority, Set<String> regionalRoles) {
     return PROVINCIAL_STAFF_ROLES.contains(authority) && !regionalRoles.contains(authority);

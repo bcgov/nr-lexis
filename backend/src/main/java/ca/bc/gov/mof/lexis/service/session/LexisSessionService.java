@@ -103,11 +103,21 @@ public class LexisSessionService {
 
   public boolean hasConflictingApproverRoles(List<String> rawRoles) {
     List<String> roles = normalizeRoles(rawRoles);
-    // Bare regional parent roles count for conflicts without granting any authority themselves.
-    return (roles.contains(ROLE_APPLICATION_APPROVER)
-            || roles.contains(ROLE_APPLICATION_APPROVER + "_REGION"))
-        && (roles.contains(ROLE_EXEMPTION_APPROVER)
-            || roles.contains(ROLE_EXEMPTION_APPROVER + "_REGION"));
+    return holdsAnyVariant(roles, ROLE_APPLICATION_APPROVER)
+        && holdsAnyVariant(roles, ROLE_EXEMPTION_APPROVER);
+  }
+
+  // Unscoped, bare regional parent and unrecognized-region assignments count for conflicts
+  // without granting any authority themselves.
+  private static boolean holdsAnyVariant(List<String> roles, String role) {
+    String regional = role + "_REGION";
+    return roles.stream()
+        .anyMatch(
+            entry ->
+                entry.equals(role)
+                    || entry.equals(regional)
+                    || entry.startsWith(regional + "-")
+                    || entry.startsWith(regional + "_"));
   }
 
   /**
