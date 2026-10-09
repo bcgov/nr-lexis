@@ -6,9 +6,7 @@ const SOURCE_ROOT = join(__dirname, '..', '..')
 
 // Buttons in sections that haven't moved to md yet, counted per file. Lower the count as each
 // section moves, and remove the entry once it reaches zero.
-const PENDING_NON_MD_BUTTONS: Record<string, number> = {
-  'pages/ProvincialPermitDetails/index.tsx': 10,
-}
+const PENDING_NON_MD_BUTTONS: Record<string, number> = {}
 
 const sourceFiles = (directory: string): string[] =>
   readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {

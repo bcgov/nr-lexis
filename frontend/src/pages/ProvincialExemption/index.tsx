@@ -112,7 +112,6 @@ import { isClientErrorResponse } from '@/utils/http-error'
 import { firstStringField, isRecord } from '@/utils/record'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { displayTableValue } from '@/utils/text'
-import { formatIsoDateLabel } from '@/utils/date'
 import './ProvincialExemption.scss'
 import { formatVolume } from '@/utils/volume'
 
@@ -1190,10 +1189,10 @@ const ProvincialExemptionPage = () => {
                         <TableCell>{formatVolume(row.approvedVolume)}</TableCell>
                         <TableCell>{row.balanceRemaining.toFixed(1)}</TableCell>
                         <TableCell className="legacy-search-table-date">
-                          {displayTableValue(formatIsoDateLabel(row.listingDate))}
+                          {displayTableValue(row.listingDate)}
                         </TableCell>
                         <TableCell className="legacy-search-table-date">
-                          {displayTableValue(formatIsoDateLabel(row.expiryDate))}
+                          {displayTableValue(row.expiryDate)}
                         </TableCell>
                         <TableCell>{displayTableValue(row.region)}</TableCell>
                       </TableRow>

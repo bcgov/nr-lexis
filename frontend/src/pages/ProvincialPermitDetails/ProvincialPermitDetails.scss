@@ -34,19 +34,32 @@
   gap: 0.5rem;
 }
 
-.boic-package-selector {
+// The package selector on the left and Create package on the right, or Create package alone.
+.permit-package-toolbar {
   display: flex;
   flex-wrap: wrap;
-  align-items: end;
+  align-items: flex-end;
   gap: 1rem;
-}
-
-.boic-package-selector .cds--dropdown__wrapper {
-  flex: 1 1 min(100%, 20rem);
-}
-
-.boic-package-selector {
   margin-block-end: 1.5rem;
+
+  > .cds--btn {
+    margin-inline-start: auto;
+  }
+}
+
+// One column of the record grid: lg 4 of 16, md 4 of 8, and the full width on small screens.
+.permit-package-selector {
+  flex: 0 1 100%;
+  min-inline-size: 0;
+  margin: 0;
+
+  @media (min-width: 672px) {
+    flex-basis: calc(50% - 0.5rem);
+  }
+
+  @media (min-width: 1056px) {
+    flex-basis: calc(25% - 0.75rem);
+  }
 }
 
 .permit-client-editor__required-hint {
@@ -154,6 +167,38 @@
   }
 }
 
+// A divider separates the package's fields from its Summary of scale.
 .boic-package-summary__scale {
   margin-block-start: 1.5rem;
+  padding-block-start: 1.5rem;
+  border-block-start: 1px solid var(--cds-border-subtle-01);
+}
+
+.permit-scale-summary__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  margin-block-end: 1.5rem;
+
+  .detail-section-subtitle {
+    margin: 0;
+  }
+}
+
+.permit-scale-summary__empty {
+  margin: 0;
+}
+
+.permit-scale-summary__actions {
+  justify-content: flex-end;
+  margin-block-start: 1.5rem;
+}
+
+// An empty Scale tab has no padding, so its result keeps the tab's own inset.
+@media (min-width: 672px) {
+  .permit-detail-empty-section > .app-notification-container {
+    margin: 2.5rem 2.5rem 0;
+  }
 }

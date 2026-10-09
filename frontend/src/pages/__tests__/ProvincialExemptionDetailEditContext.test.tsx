@@ -1576,6 +1576,10 @@ describe('Provincial exemption edit context', () => {
     expect(screen.getByRole('heading', { name: 'Exemption details', level: 2 })).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('tab', { name: 'Permits' }))
+    expect(
+      screen.getByRole('heading', { name: 'No permits for this exemption', level: 3 }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Permits' })).toHaveAttribute('aria-selected', 'true')
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))

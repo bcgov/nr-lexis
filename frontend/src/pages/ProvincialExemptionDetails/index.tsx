@@ -25,6 +25,7 @@ import {
   TrashCan,
   type CarbonIconType,
 } from '@carbon/icons-react'
+import { DocumentSecurity_02 } from '@carbon/pictograms-react'
 import {
   Button,
   Column,
@@ -140,13 +141,11 @@ import {
   addApplicationToExemption,
   approveExemptions,
   fetchExemptionApplications,
-  fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
   removeApplicationFromExemption,
   updateExemption,
   type ExemptionApplicationRow,
-  type ExemptionBlanketOicTotals,
   type ExemptionEditContext,
   type ExemptionPermitRow,
 } from '@/service/provincial-exemption-detail-service'
@@ -570,7 +569,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [applications, setApplications] = useState<ExemptionApplicationRow[]>([])
   const [exemptionHolder, setExemptionHolder] = useState('')
   const [permitRows, setPermitRows] = useState<ExemptionPermitRow[]>([])
-  const [blanketOicTotals, setBlanketOicTotals] = useState<ExemptionBlanketOicTotals | null>(null)
+  const [permitsLoaded, setPermitsLoaded] = useState(false)
   const [containsUnmanu, setContainsUnmanu] = useState<boolean | null>(null)
   const [editContext, setEditContext] = useState<ExemptionEditContext>(EMPTY_EDIT_CONTEXT)
   const [editContextLoaded, setEditContextLoaded] = useState(false)
@@ -630,7 +629,6 @@ const ProvincialExemptionDetailsPage = () => {
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [applicationsErrorMessage, setApplicationsErrorMessage] = useState('')
   const [permitsErrorMessage, setPermitsErrorMessage] = useState('')
-  const [blanketOicTotalsErrorMessage, setBlanketOicTotalsErrorMessage] = useState('')
   const [actionResult, setActionResult] = useState<ExemptionActionResult | null>(null)
   const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
   const pageActionResult =
@@ -832,6 +830,7 @@ const ProvincialExemptionDetailsPage = () => {
   useEffect(() => {
     const load = async () => {
       const isLatestRequest = beginDetailRequest()
+      setPermitsLoaded(false)
       setRenamedExemptionNumber(null)
       const isRefreshingCurrentExemption =
         detailRef.current !== null && String(detailRef.current.exemptionNumber) === exemptionNumber
@@ -856,7 +855,6 @@ const ProvincialExemptionDetailsPage = () => {
         setApplications([])
         setExemptionHolder('')
         setPermitRows([])
-        setBlanketOicTotals(null)
         setContainsUnmanu(null)
         setEditContext(EMPTY_EDIT_CONTEXT)
         setEditContextLoaded(false)
@@ -866,7 +864,6 @@ const ProvincialExemptionDetailsPage = () => {
         setDocumentsErrorMessage('')
         setApplicationsErrorMessage('')
         setPermitsErrorMessage('')
-        setBlanketOicTotalsErrorMessage('')
         setActionResult(null)
         setLoading(false)
         return
@@ -877,7 +874,6 @@ const ProvincialExemptionDetailsPage = () => {
       setDocumentsErrorMessage('')
       setApplicationsErrorMessage('')
       setPermitsErrorMessage('')
-      setBlanketOicTotalsErrorMessage('')
       const showCreationNotice = createdExemptionNumberRef.current === exemptionNumber
       if (!showCreationNotice) createdExemptionNumberRef.current = ''
       setActionResult(
@@ -891,7 +887,6 @@ const ProvincialExemptionDetailsPage = () => {
         setApplications([])
         setExemptionHolder('')
         setPermitRows([])
-        setBlanketOicTotals(null)
         setContainsUnmanu(null)
         setEditContext(EMPTY_EDIT_CONTEXT)
         setEditContextLoaded(false)
@@ -911,32 +906,22 @@ const ProvincialExemptionDetailsPage = () => {
           setApplications([])
           setExemptionHolder('')
           setPermitRows([])
-          setBlanketOicTotals(null)
           setContainsUnmanu(null)
           setEditContext(EMPTY_EDIT_CONTEXT)
           setEditContextLoaded(false)
           setEditForm(null)
           setApplicationsErrorMessage('')
           setPermitsErrorMessage('')
-          setBlanketOicTotalsErrorMessage('')
           return
         }
 
-        const [
-          documentsResult,
-          applicationsResult,
-          editContextResult,
-          permitsResult,
-          blanketOicTotalsResult,
-        ] = await Promise.allSettled([
-          fetchExemptionDocuments(exemptionNumber),
-          fetchExemptionApplications(exemptionNumber),
-          fetchExemptionEditContext(exemptionNumber),
-          fetchExemptionPermits(exemptionNumber),
-          response.blanketOic
-            ? fetchExemptionBlanketOicTotals(exemptionNumber)
-            : Promise.resolve(null),
-        ])
+        const [documentsResult, applicationsResult, editContextResult, permitsResult] =
+          await Promise.allSettled([
+            fetchExemptionDocuments(exemptionNumber),
+            fetchExemptionApplications(exemptionNumber),
+            fetchExemptionEditContext(exemptionNumber),
+            fetchExemptionPermits(exemptionNumber),
+          ])
         if (!isLatestRequest()) {
           return
         }
@@ -977,20 +962,12 @@ const ProvincialExemptionDetailsPage = () => {
 
         if (permitsResult.status === 'fulfilled') {
           setPermitRows(permitsResult.value)
+          setPermitsLoaded(true)
           setPermitsErrorMessage('')
         } else {
           console.error(permitsResult.reason)
           setPermitRows([])
           setPermitsErrorMessage('Unable to retrieve permits associated with this exemption.')
-        }
-
-        if (blanketOicTotalsResult.status === 'fulfilled') {
-          setBlanketOicTotals(blanketOicTotalsResult.value)
-          setBlanketOicTotalsErrorMessage('')
-        } else {
-          console.error(blanketOicTotalsResult.reason)
-          setBlanketOicTotals(null)
-          setBlanketOicTotalsErrorMessage('Unable to retrieve Blanket OIC permit volume totals.')
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -1001,7 +978,6 @@ const ProvincialExemptionDetailsPage = () => {
             setApplications([])
             setExemptionHolder('')
             setPermitRows([])
-            setBlanketOicTotals(null)
             setContainsUnmanu(null)
             setEditContext(EMPTY_EDIT_CONTEXT)
             setEditContextLoaded(false)
@@ -1009,7 +985,6 @@ const ProvincialExemptionDetailsPage = () => {
             setDocumentsErrorMessage('')
             setApplicationsErrorMessage('')
             setPermitsErrorMessage('')
-            setBlanketOicTotalsErrorMessage('')
           }
         }
       } finally {
@@ -1461,33 +1436,18 @@ const ProvincialExemptionDetailsPage = () => {
     editContextLoaded &&
     !exemptionEditLocked
 
-  const refreshPermitData = useCallback(
-    async (currentExemptionNumber: string, blanketOic: boolean) => {
-      const [permitsResult, blanketOicTotalsResult] = await Promise.allSettled([
-        fetchExemptionPermits(currentExemptionNumber),
-        blanketOic ? fetchExemptionBlanketOicTotals(currentExemptionNumber) : Promise.resolve(null),
-      ])
-
-      if (permitsResult.status === 'fulfilled') {
-        setPermitRows(permitsResult.value)
-        setPermitsErrorMessage('')
-      } else {
-        console.error(permitsResult.reason)
-        setPermitRows([])
-        setPermitsErrorMessage('Unable to retrieve permits associated with this exemption.')
-      }
-
-      if (blanketOicTotalsResult.status === 'fulfilled') {
-        setBlanketOicTotals(blanketOicTotalsResult.value)
-        setBlanketOicTotalsErrorMessage('')
-      } else {
-        console.error(blanketOicTotalsResult.reason)
-        setBlanketOicTotals(null)
-        setBlanketOicTotalsErrorMessage('Unable to retrieve Blanket OIC permit volume totals.')
-      }
-    },
-    [],
-  )
+  const refreshPermitData = useCallback(async (currentExemptionNumber: string) => {
+    setPermitsLoaded(false)
+    try {
+      setPermitRows(await fetchExemptionPermits(currentExemptionNumber))
+      setPermitsLoaded(true)
+      setPermitsErrorMessage('')
+    } catch (error) {
+      console.error(error)
+      setPermitRows([])
+      setPermitsErrorMessage('Unable to retrieve permits associated with this exemption.')
+    }
+  }, [])
 
   const refreshEditableData = useCallback(
     async (preserveCurrentStateOnFailure = false) => {
@@ -1511,7 +1471,7 @@ const ProvincialExemptionDetailsPage = () => {
         setEditContext(nextContext)
         setEditContextLoaded(true)
         setEditForm(toEditForm(nextDetail, nextContext))
-        await refreshPermitData(nextDetail.exemptionNumber, nextDetail.blanketOic)
+        await refreshPermitData(nextDetail.exemptionNumber)
       } catch (error) {
         if (!preserveCurrentStateOnFailure) {
           setApplications([])
@@ -2144,13 +2104,9 @@ const ProvincialExemptionDetailsPage = () => {
         {creatingPermit ? 'Creating permit…' : 'Apply for new permit'}
       </Button>
     ) : undefined
-  const completedBlanketVolume = Number(blanketOicTotals?.completedVolume)
-  const blanketBalanceRemaining =
-    currentDetail?.approvedVolume != null &&
-    blanketOicTotals?.completedVolume.trim() &&
-    Number.isFinite(completedBlanketVolume)
-      ? currentDetail.approvedVolume - completedBlanketVolume
-      : null
+  const emptyBlanketOicPermits =
+    currentDetail?.blanketOic && permitsLoaded && permitRows.length === 0
+  const PermitsContainer = emptyBlanketOicPermits ? 'section' : Tile
 
   const sectionResult = (source: ExemptionActionResult['source']) =>
     actionResult && actionResult.source === source ? (
@@ -2921,42 +2877,25 @@ const ProvincialExemptionDetailsPage = () => {
                     </Grid>
                   </TabPanel>
                 )}
-                <TabPanel key="permits" className="application-detail-tab-panel">
+                <TabPanel
+                  key="permits"
+                  className={`application-detail-tab-panel${emptyBlanketOicPermits ? ' application-detail-tab-panel--empty' : ''}`}
+                >
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <div className="detail-section-card__header">
-                          <DetailCardTitle icon={Certificate}>Permits</DetailCardTitle>
-                          {(visiblePermitRows.length > 0 || Boolean(permitsErrorMessage)) &&
-                            applyForPermitButton}
-                        </div>
-                        {detail.blanketOic && blanketOicTotalsErrorMessage && (
-                          <InlineNotification
-                            className="detail-context-notification"
-                            kind="warning"
-                            title="Blanket OIC totals unavailable"
-                            subtitle={blanketOicTotalsErrorMessage}
-                            lowContrast
-                            hideCloseButton
-                          />
+                      <PermitsContainer>
+                        {!emptyBlanketOicPermits && (
+                          <div className="detail-section-card__header">
+                            <DetailCardTitle icon={Certificate}>Permits</DetailCardTitle>
+                            {(visiblePermitRows.length > 0 || Boolean(permitsErrorMessage)) &&
+                              applyForPermitButton}
+                          </div>
                         )}
-                        {detail.blanketOic && blanketOicTotals && (
-                          <RecordFieldGrid aria-label="Blanket OIC permit volume totals">
-                            <RecordFieldRow>
-                              <RecordField
-                                label="Approved volume (m³)"
-                                value={formatExemptionVolume(detail.approvedVolume)}
-                              />
-                              <RecordField
-                                label="Sum of completed permits (m³)"
-                                value={formatExemptionVolume(blanketOicTotals.completedVolume)}
-                              />
-                              <RecordField
-                                label="Balance remaining (m³)"
-                                value={formatExemptionVolume(blanketBalanceRemaining)}
-                              />
-                            </RecordFieldRow>
-                          </RecordFieldGrid>
+                        {editing && !emptyBlanketOicPermits && (
+                          <p className="detail-read-only-note">
+                            Permit records are read-only. Use the Exemption details or Fees tab to
+                            edit exemption values.
+                          </p>
                         )}
                         {!detail.blanketOic && (
                           <RecordFieldGrid aria-label="Exemption permit volume totals">
@@ -3056,12 +2995,13 @@ const ProvincialExemptionDetailsPage = () => {
                                   ? 'Permits can be requested once the exemption is approved.'
                                   : 'Permits requested against this exemption will appear here.'
                             }
-                            icon={<Certificate size={48} aria-hidden="true" />}
+                            icon={<DocumentSecurity_02 width={48} height={48} />}
                             action={applyForPermitButton}
                             headingLevel={3}
+                            variant={emptyBlanketOicPermits ? 'tab' : undefined}
                           />
                         )}
-                      </Tile>
+                      </PermitsContainer>
                     </Column>
                   </Grid>
                 </TabPanel>

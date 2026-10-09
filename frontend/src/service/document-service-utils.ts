@@ -63,7 +63,7 @@ export const DOCUMENTS_EMPTY_DESCRIPTION =
   'Documents stay with the record as it moves through the application, exemption and permit stages.'
 
 export const savedDocumentsTitle = (savedCount: number): string =>
-  savedCount > 1 ? `${savedCount} documents saved.` : 'Document saved.'
+  `${savedCount} ${savedCount === 1 ? 'document' : 'documents'} saved.`
 
 export const parseRemoveDocumentSuccess = (payload: unknown): boolean => {
   if (typeof payload === 'boolean') {

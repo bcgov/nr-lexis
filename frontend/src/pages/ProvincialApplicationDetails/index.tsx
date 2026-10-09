@@ -3594,6 +3594,7 @@ const ProvincialApplicationDetailsPage = () => {
           title="No offers found"
           description="No offers are linked to this application."
           headingLevel={2}
+          variant="tab"
         />
       )}
     </section>
