@@ -96,7 +96,7 @@ describe('document-service-utils', () => {
   })
 
   it('titles saved documents with the Figma count', () => {
-    expect(savedDocumentsTitle(1)).toBe('Document saved.')
+    expect(savedDocumentsTitle(1)).toBe('1 document saved.')
     expect(savedDocumentsTitle(2)).toBe('2 documents saved.')
   })
 })

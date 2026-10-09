@@ -132,6 +132,7 @@ const BlanketOicPermitCreateContent = ({
     <Column sm={4} md={8} lg={16} className="detail-page-header">
       <PageHeader
         title="Apply for new permit"
+        focusTitle
         actions={actions}
         actionsLabel="Blanket OIC permit actions"
       />
@@ -188,6 +189,8 @@ const BlanketOicPermitCreateContent = ({
       {formReady && detail && editContext && (
         <BlanketOicPermitCreateForm
           exemptionNumber={detail.exemptionNumber}
+          approvedExemptionVolume={detail.approvedVolume}
+          exemptionVolumeRemaining={detail.remainingVolume}
           regionOptions={regionOptions}
           defaultRegionNumbers={editContext.regionNumbers}
           onCancel={onCancel}

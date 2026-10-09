@@ -5,6 +5,7 @@ import {
   searchProvincialApplicationNumberOptions,
   type ProvincialApplicationNumberOption,
 } from '@/service/provincial-application-search-service'
+import { fieldErrorText } from '@/utils/field-error'
 import { leadingDigits } from '@/utils/text'
 
 type ApplicationNumberSelectProps = {
@@ -108,7 +109,7 @@ export default function ApplicationNumberSelect({
       aria-required={required || undefined}
       disabled={disabled}
       invalid={invalid}
-      invalidText={invalidText}
+      invalidText={fieldErrorText(invalidText)}
       onBlur={onBlur}
       onInputChange={(inputValue) => {
         setInputText(inputValue)

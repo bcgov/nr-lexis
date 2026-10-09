@@ -2,6 +2,7 @@ import { ComboBox, Loading } from '@carbon/react'
 import { use, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { AuthContext } from '@/context/auth/AuthContext'
 import { searchForestClients, type ForestClientSuggestion } from '@/service/client-search-service'
+import { fieldErrorText } from '@/utils/field-error'
 import './ForestClientComboBox.scss'
 
 type ForestClientComboBoxProps = {
@@ -145,7 +146,7 @@ function ClientInput({
         aria-required={required || undefined}
         disabled={disabled}
         invalid={invalid}
-        invalidText={invalidText}
+        invalidText={fieldErrorText(invalidText)}
         onBlur={onBlur}
         onFocus={onFocus}
         onChange={({ selectedItem }) => {

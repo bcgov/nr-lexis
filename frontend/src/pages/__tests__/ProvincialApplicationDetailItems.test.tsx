@@ -390,7 +390,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         target: { value: 'Comment edit' },
       })
       await userEvent.click(controls.getByRole('button', { name: 'Save package' }))
-      expect(screen.getAllByText('Age class is required.').length).toBeGreaterThan(0)
+      expect(screen.getAllByText('Age class is required').length).toBeGreaterThan(0)
       expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
     },
   )
@@ -594,13 +594,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const packageComments = await screen.findByLabelText('Package comments')
     fireEvent.change(packageComments, { target: { value: 'Unsaved package draft' } })
     expect(packageComments).toHaveValue('Unsaved package draft')
-    await waitFor(() => {
-      expect(
-        applicationItemDetails.queryByRole('button', {
-          name: 'Edit scale details',
-        }),
-      ).not.toBeInTheDocument()
-    })
+    expect(applicationItemDetails.getByRole('button', { name: 'Edit scale details' })).toBeEnabled()
 
     await userEvent.click(
       within(document.querySelector('.application-items-drawer') as HTMLElement).getByRole(
@@ -667,7 +661,8 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await userEvent.type(volume, '75')
     await userEvent.click(within(drawer).getByRole('button', { name: 'Cancel' }))
 
-    expect(screen.getByText('Discard unsaved changes?')).toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Discard changes?' })
+    expect(dialog).toHaveAccessibleDescription('Your changes will be lost.')
     expect(volume).toHaveValue('75')
     await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
     await waitFor(() =>
@@ -682,13 +677,13 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(packageNumber, { target: { value: 'KEEP-PACKAGE' } })
     const cancel = drawer.getByRole('button', { name: 'Cancel' })
     await userEvent.click(cancel)
-    const dialog = await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
     await waitFor(() => expect(cancel).toHaveFocus())
     expect(packageNumber).toHaveValue('KEEP-PACKAGE')
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
     await userEvent.click(cancel)
-    const discard = await screen.findByRole('dialog', { name: 'Discard unsaved changes?' })
+    const discard = await screen.findByRole('dialog', { name: 'Discard changes?' })
     await userEvent.click(within(discard).getByRole('button', { name: 'Discard changes' }))
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Create package' })).toHaveFocus(),
@@ -765,7 +760,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => expect(launcherButton).toHaveFocus())
   })
 
-  it('keeps an active package draft while competing item actions are disabled', async () => {
+  it('keeps an active package draft when replacement actions are declined', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321?tab=items']}>
         <Routes>
@@ -786,13 +781,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const deleteScale = within(
       document.getElementById('application-items-scales') as HTMLElement,
     ).getByRole('button', { name: 'Delete' })
-    expect(createPackage).toBeDisabled()
-    expect(addScale).toBeDisabled()
-    expect(deleteScale).toBeDisabled()
-
-    fireEvent.click(createPackage)
-    fireEvent.click(addScale)
-    fireEvent.click(deleteScale)
+    for (const action of [createPackage, addScale, deleteScale]) {
+      expect(action).toBeEnabled()
+      await userEvent.click(action)
+      expect(screen.getAllByRole('dialog')).toHaveLength(1)
+      await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+    }
     expect(comments).toHaveValue('Keep this draft')
     expect(screen.getByRole('heading', { name: 'Edit package' })).toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'Delete scale' })).not.toBeInTheDocument()
@@ -1068,8 +1062,8 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(screen.queryByText('Loading authoritative item options…')).not.toBeInTheDocument()
       expect(screen.queryByText('Item options unavailable')).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Save package' })).toBeEnabled()
-      expect(screen.getByRole('button', { name: 'Create package' })).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Add scale' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Create package' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: 'Add scale' })).toBeEnabled()
     })
   })
 
@@ -1353,7 +1347,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     expect(comments).toHaveAttribute('aria-invalid', 'true')
     expect(document.getElementById('applicationItemsPackageComments-error-msg')).toHaveTextContent(
-      'Package comments must be 180 characters or fewer.',
+      'Package comments must be 180 characters or fewer',
     )
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
   })
@@ -1570,7 +1564,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI'])
       expect(packageDetailsControls.getByRole('combobox', { name: 'End use' })).toBeEnabled()
       expect(savePackage).toBeEnabled()
-      expect(addScale).toBeDisabled()
+      expect(addScale).toBeEnabled()
     })
 
     const packageSelector = screen.getByRole('combobox', { name: 'Selected package' })
@@ -1580,14 +1574,15 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
       expect(packageDetailsControls.getByRole('combobox', { name: 'End use' })).toBeDisabled()
-      expect(savePackage).toBeDisabled()
-      expect(addScale).toBeDisabled()
+      expect(savePackage).toBeEnabled()
+      expect(addScale).toBeEnabled()
       expect(
         screen.getByText('Package saves are disabled because end use options could not be loaded.'),
       ).toBeInTheDocument()
     })
 
     await userEvent.click(savePackage)
+    expect(await packageDetailsControls.findByText('Package save failed')).toBeInTheDocument()
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
 
     await chooseComboBoxOption(packageSelector, 'PKG-1')
@@ -1599,7 +1594,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         )
         expect(packageDetailsControls.getByRole('combobox', { name: 'End use' })).toBeEnabled()
         expect(savePackage).toBeEnabled()
-        expect(addScale).toBeDisabled()
+        expect(addScale).toBeEnabled()
       },
       { timeout: 5_000 },
     )
@@ -1638,7 +1633,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => {
       expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI'])
       expect(endUse).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Save package' })).toBeDisabled()
+      expect(screen.getByRole('button', { name: 'Save package' })).toBeEnabled()
     })
     expect(screen.queryByRole('textbox', { name: 'End use' })).not.toBeInTheDocument()
 
@@ -1724,12 +1719,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     fireEvent.change(comments, { target: { value: 'Unsaved package draft' } })
     await userEvent.click(screen.getByRole('link', { name: 'Leave application' }))
 
-    const dialog = await screen.findByRole('dialog', {
-      name: 'Unsaved changes',
-    })
-    expect(dialog).toHaveAccessibleDescription(/Scale tab/)
+    const dialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    expect(dialog).toHaveAccessibleDescription('Your changes will be lost.')
     expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Stay' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
     await userEvent.click(
       within(document.querySelector('.application-items-drawer') as HTMLElement).getByRole(
         'button',
@@ -1929,7 +1922,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(mockedFetchApplicationPackageScales).not.toHaveBeenCalled()
   })
 
-  it('disables package and scale mutations when authoritative item options fail', async () => {
+  it('explains on save that package and scale changes need the item options', async () => {
     mockedFetchApplicationPackageStatusCodes.mockRejectedValue(
       new Error('Oracle package status lookup failed'),
     )
@@ -1953,13 +1946,13 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         'Package saves, package creation, and scale additions are disabled because item options could not be loaded.',
       ),
     ).toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Save package' })).toBeDisabled())
-    await userEvent.click(
-      within(document.querySelector('.application-items-drawer') as HTMLElement).getByRole(
-        'button',
-        { name: 'Cancel' },
-      ),
-    )
+    const optionsMessage =
+      'Package saves, package creation, and scale additions are disabled because item options could not be loaded.'
+    const editControls = within(document.querySelector('.application-items-drawer') as HTMLElement)
+    await userEvent.click(editControls.getByRole('button', { name: 'Save package' }))
+    expect(await editControls.findByText('Package save failed')).toBeInTheDocument()
+    expect(editControls.getByText(optionsMessage)).toBeInTheDocument()
+    await userEvent.click(editControls.getByRole('button', { name: 'Cancel' }))
     const createControls = await openCreatePackageControls()
     expect(createControls.getByRole('button', { name: 'Save package' })).toBeEnabled()
     fillNewPackage(createControls, 'PKG-NEW')
@@ -2000,6 +1993,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
   it('shows a server package-volume rejection on Volume and focuses it', async () => {
     const message = 'The total package volume must not exceed the application volume (100.0).'
+    const fieldError = 'The total package volume must not exceed the application volume (100.0)'
     mockedAddApplicationPackage.mockResolvedValueOnce({
       valid: false,
       packageNumber: 'PKG-NEW',
@@ -2013,11 +2007,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     const volume = drawer.getByLabelText('Volume (m³)')
     await waitFor(() => expect(volume).toHaveAttribute('aria-invalid', 'true'))
-    expect(drawer.getByText(message)).toBeInTheDocument()
+    expect(drawer.getByText(fieldError)).toBeInTheDocument()
     expect(drawer.queryByText('Package creation failed')).not.toBeInTheDocument()
     await waitFor(() => expect(volume).toHaveFocus())
     fireEvent.change(volume, { target: { value: '1.0' } })
-    expect(drawer.queryByText(message)).not.toBeInTheDocument()
+    expect(drawer.queryByText(fieldError)).not.toBeInTheDocument()
   })
 
   it('hides package status and reprocessed fields while preserving their saved values', async () => {
@@ -2077,13 +2071,13 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => expect(save).toBeEnabled())
     await userEvent.click(save)
 
-    expect(screen.getAllByText('Package number is required.').length).toBeGreaterThan(0)
-    expect(createPackageControls.getByText('Volume must be greater than 0.')).toBeInTheDocument()
+    expect(screen.getAllByText('Package number is required').length).toBeGreaterThan(0)
+    expect(createPackageControls.getByText('Volume must be greater than 0')).toBeInTheDocument()
     expect(
-      createPackageControls.getByText('Average length must be greater than 0.'),
+      createPackageControls.getByText('Average length must be greater than 0'),
     ).toBeInTheDocument()
     expect(
-      createPackageControls.getByText('Average diameter must be greater than 0.'),
+      createPackageControls.getByText('Average diameter must be greater than 0'),
     ).toBeInTheDocument()
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
     expect(createPackageControls.queryByText('Package creation failed')).not.toBeInTheDocument()
@@ -2113,7 +2107,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(packageNumberInput.value).toBe('PKG-1')
     await userEvent.click(createPackageControls.getByRole('button', { name: 'Save package' }))
 
-    expect(screen.getAllByText('Package PKG-1 already exists.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Package PKG-1 already exists').length).toBeGreaterThan(0)
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
   })
 
@@ -2148,10 +2142,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await userEvent.click(save)
 
     expect(
-      screen.getAllByText('Volume must have no more than one decimal place.').length,
+      screen.getAllByText('Volume must have no more than one decimal place').length,
     ).toBeGreaterThan(0)
-    expect(screen.getByText('Average length must be 99 or less.')).toBeInTheDocument()
-    expect(screen.getByText('Average diameter must be 99.99 or less.')).toBeInTheDocument()
+    expect(screen.getByText('Average length must be 99 or less')).toBeInTheDocument()
+    expect(screen.getByText('Average diameter must be 99.99 or less')).toBeInTheDocument()
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
   })
 
@@ -2238,7 +2232,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(
       screen.getByText('Package saved.').closest('.application-items-section--package-details'),
     ).not.toBeNull()
-    expect(createPackageControls.queryByText('Package number is required.')).not.toBeInTheDocument()
+    expect(createPackageControls.queryByText('Package number is required')).not.toBeInTheDocument()
   })
 
   it('replaces an item result with a later page action result', async () => {
@@ -2579,11 +2573,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
     fireEvent.click(secondPackageRadio)
 
-    const confirmation = await screen.findByRole('dialog', {
-      name: 'Discard package drafts?',
-    })
-    expect(confirmation).toHaveAccessibleDescription(/discard unsaved package, species, and scale/)
-    await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
+    const confirmation = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    expect(confirmation).toHaveAccessibleDescription('Your changes will be lost.')
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Keep editing' }))
     expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue('PKG-1')
     expect(
       within(packagesSection as HTMLElement).getByRole('radio', {
@@ -2594,7 +2586,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.getByLabelText('Timber mark')).toHaveValue('DRAFT-A')
 
     fireEvent.click(secondPackageRadio)
-    await userEvent.click(screen.getByRole('button', { name: 'Discard and switch' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     await waitFor(() => {
       expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue('PKG-2')
       expect(screen.getByLabelText('Timber mark')).toHaveValue('')
@@ -2691,7 +2683,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(
       screen.getByText('Scale saved.').closest('.application-items-section--scales'),
     ).not.toBeNull()
-    expect(screen.queryByText('Timber mark is required.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Timber mark is required')).not.toBeInTheDocument()
 
     const scaleRow = screen.getByText('TM001').closest('tr')
     expect(scaleRow).toBeTruthy()
@@ -2762,7 +2754,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
       if (exceedsPackage) {
         expect(
-          screen.getAllByText('Must be less than or equal to remaining package volume (1.0 m³).')
+          screen.getAllByText('Must be less than or equal to remaining package volume (1.0 m³)')
             .length,
         ).toBeGreaterThan(0)
         expect(screen.getByLabelText('Volume (m³)')).toHaveValue(volume)
@@ -2794,7 +2786,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
 
     expect(
-      drawer.getAllByText('Volume must have no more than two decimal places.').length,
+      drawer.getAllByText('Volume must have no more than two decimal places').length,
     ).toBeGreaterThan(0)
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
@@ -2856,6 +2848,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   )
 
   it('keeps a failed package save in its drawer and clears it when the drawer is discarded', async () => {
+    mockedUpdateApplicationPackage.mockRejectedValueOnce(new Error('Package service unavailable'))
     render(
       <ItemsPanelWithActionResult
         detail={applicationDetail}
@@ -2879,10 +2872,21 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
     fireEvent.change(comments, { target: { value: 'Café delivery' } })
     await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+    expect(
+      await drawer.findByText(
+        'Package comments contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
+    ).toBeInTheDocument()
+    await waitFor(() => expect(comments).toHaveFocus())
+    expect(drawer.queryByText('Package save failed')).not.toBeInTheDocument()
+    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+
+    fireEvent.change(comments, { target: { value: 'Cafe delivery' } })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
     // The page behind an open drawer is inert, so the failure must stay in the drawer.
     expect(await drawer.findByText('Package save failed')).toBeInTheDocument()
+    expect(drawer.getByText('Unable to save package details.')).toBeInTheDocument()
     expect(screen.queryByText('Item action failed')).not.toBeInTheDocument()
-    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
 
     await userEvent.click(drawer.getByRole('button', { name: 'Cancel' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
@@ -2972,10 +2976,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     ).toBeInTheDocument()
     await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
 
-    expect(drawer.getAllByText('Timber mark is required.').length).toBeGreaterThan(0)
-    expect(drawer.getByText('Species is required.')).toBeInTheDocument()
+    expect(drawer.getAllByText('Timber mark is required').length).toBeGreaterThan(0)
+    expect(drawer.getByText('Species is required')).toBeInTheDocument()
     expect(drawer.queryByText('Grade is required.')).not.toBeInTheDocument()
-    expect(drawer.getByText('Pieces is required.')).toBeInTheDocument()
+    expect(drawer.getByText('Pieces is required')).toBeInTheDocument()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
     expect(drawer.queryByText('Scale creation failed')).not.toBeInTheDocument()
     await waitFor(() => expect(drawer.getByLabelText('Timber mark')).toHaveFocus())
@@ -2984,22 +2988,25 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   it.each([
     {
       message: 'Timber mark TM002 is not valid for this scale due to a status of ZZ.',
+      fieldError: 'Timber mark TM002 is not valid for this scale due to a status of ZZ',
       label: 'Timber mark',
       corrected: 'TM003',
     },
     {
       message: 'The scale volume must be less than 5.0.',
+      fieldError: 'The scale volume must be less than 5.0',
       label: 'Volume (m³)',
       corrected: '1.0',
     },
     {
       message: 'A scale with this timber mark, species, and grade already exists.',
+      fieldError: 'A scale with this timber mark, species, and grade already exists',
       label: 'Timber mark',
       corrected: 'TM003',
     },
   ])(
     'attaches the server scale error to $label: $message',
-    async ({ message, label, corrected }) => {
+    async ({ message, fieldError, label, corrected }) => {
       mockedAddApplicationScaleToPackage.mockResolvedValueOnce({
         valid: false,
         errors: [message],
@@ -3013,11 +3020,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
       const field = drawer.getByLabelText(label)
       await waitFor(() => expect(field).toHaveAttribute('aria-invalid', 'true'))
-      expect(drawer.getByText(message)).toBeInTheDocument()
+      expect(drawer.getByText(fieldError)).toBeInTheDocument()
       expect(drawer.queryByText('Scale creation failed')).not.toBeInTheDocument()
       await waitFor(() => expect(field).toHaveFocus())
       fireEvent.change(field, { target: { value: corrected } })
-      expect(drawer.queryByText(message)).not.toBeInTheDocument()
+      expect(drawer.queryByText(fieldError)).not.toBeInTheDocument()
     },
   )
 
@@ -3057,8 +3064,8 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await fillNewScale(drawer, { pieces: '1.5', volume: '100000' })
     await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
 
-    expect(drawer.getAllByText('Pieces must be a whole number.').length).toBeGreaterThan(0)
-    expect(drawer.getByText('Volume must be 99999.9 or less.')).toBeInTheDocument()
+    expect(drawer.getAllByText('Pieces must be a whole number').length).toBeGreaterThan(0)
+    expect(drawer.getByText('Volume must be 99999.9 or less')).toBeInTheDocument()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
@@ -3080,7 +3087,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
 
     expect(
-      drawer.getAllByText('Must be less than or equal to remaining package volume (80.0 m³).')
+      drawer.getAllByText('Must be less than or equal to remaining package volume (80.0 m³)')
         .length,
     ).toBeGreaterThan(0)
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
@@ -3103,6 +3110,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const itemDetails = within(await selectApplicationItemDetailsTile())
     await itemDetails.findByLabelText('Application volume (m³)')
 
+    fireEvent.change(itemDetails.getByLabelText('Application volume (m³)'), {
+      target: { value: '100.1' },
+    })
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     expect(

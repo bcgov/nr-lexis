@@ -104,10 +104,14 @@ const fillRequiredPermitAndShippingFields = async (user: ReturnType<typeof userE
 }
 
 const clientControl = (party: 'owner' | 'agent') =>
-  screen.getByLabelText('Client', { selector: `#boic-permit-${party}-client` })
+  screen.getByLabelText(party === 'agent' ? 'Agent client' : 'Client', {
+    selector: `#boic-permit-${party}-client`,
+  })
 
 const clientLocationControl = (party: 'owner' | 'agent') =>
-  screen.getByLabelText('Client location', { selector: `#boic-permit-${party}-location` })
+  screen.getByLabelText(party === 'agent' ? 'Agent client location' : 'Client location', {
+    selector: `#boic-permit-${party}-location`,
+  })
 
 const selectForestClient = async (
   user: ReturnType<typeof userEvent.setup>,
@@ -188,7 +192,7 @@ describe('BlanketOicPermitCreateForm', () => {
       ['Current permit pieces', '0'],
       ['Current permit volume (m³)', '0.0'],
     ]) {
-      const field = screen.getByText(label).closest('.detail-field-item')
+      const field = screen.getByText(label).closest('.record-field, .detail-field-item')
       expect(field).toBeTruthy()
       expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
     }
@@ -229,8 +233,8 @@ describe('BlanketOicPermitCreateForm', () => {
         'Complete the required fields in Permit, Applicant and Shipping tabs.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByText('Permit request pieces is required.')).toBeInTheDocument()
-    expect(screen.getByText('Permit request volume is required.')).toBeInTheDocument()
+    expect(screen.getByText('Permit request pieces is required')).toBeInTheDocument()
+    expect(screen.getByText('Permit request volume is required')).toBeInTheDocument()
     expect(summary).toHaveFocus()
     expect(
       screen.queryByText(/The permit number is assigned when you save/),
@@ -377,8 +381,64 @@ describe('BlanketOicPermitCreateForm', () => {
     await user.click(screen.getByRole('button', { name: 'Cancel' }))
 
     expect(router.state.location.pathname).toBe('/elsewhere')
-    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('leaves without asking when only the pre-filled values are present', async () => {
+    const user = userEvent.setup()
+    const { router } = renderForm()
+    await user.click(screen.getByRole('tab', { name: /^Shipping(?:,|$)/ }))
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Transport type' })).toHaveValue('B'),
+    )
+
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/elsewhere'))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  })
+
+  it('asks before discarding an entered permit on Cancel', async () => {
+    const user = userEvent.setup()
+    const { router } = renderForm()
+    const remarks = screen.getByLabelText('Remarks')
+    await user.type(remarks, 'Draft remarks')
+    const cancel = screen.getByRole('button', { name: 'Cancel' })
+
+    await user.click(cancel)
+
+    const dialog = await screen.findByRole('dialog', { name: 'Discard this permit?' })
+    expect(dialog).toHaveTextContent(
+      "The permit hasn't been created yet. Everything you've entered will be lost.",
+    )
+    await user.click(within(dialog).getByRole('button', { name: 'Keep editing' }))
+    await waitFor(() => expect(cancel).toHaveFocus())
+    expect(router.state.location.pathname).toBe('/')
+    expect(remarks).toHaveValue('Draft remarks')
+
+    await user.click(cancel)
+    await user.click(
+      within(await screen.findByRole('dialog', { name: 'Discard this permit?' })).getByRole(
+        'button',
+        { name: 'Discard' },
+      ),
+    )
+    await waitFor(() => expect(router.state.location.pathname).toBe('/elsewhere'))
+    expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('keeps entered values when switching tabs without asking', async () => {
+    const user = userEvent.setup()
+    renderForm()
+    await user.type(screen.getByLabelText('Remarks'), 'Draft remarks')
+
+    await user.click(screen.getByRole('tab', { name: /^Shipping(?:,|$)/ }))
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    await user.click(screen.getByRole('tab', { name: /^Permit(?:,|$)/ }))
+
+    expect(screen.getByLabelText('Remarks')).toHaveValue('Draft remarks')
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('reveals Agent information only when the applicant identifies as an agent', async () => {
@@ -388,24 +448,32 @@ describe('BlanketOicPermitCreateForm', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
     await user.click(screen.getByRole('tab', { name: 'Applicant' }))
 
-    expect(screen.queryByRole('heading', { name: 'Agent information' })).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Owner' })).toBeInTheDocument()
+    expect(
+      screen.getByText('Enter name, acronym, or client number (min. 3 characters)'),
+    ).toBeInTheDocument()
+    expect(clientLocationControl('owner')).toBeDisabled()
+    expect(screen.getByText('Available once a client is selected.')).toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Agent' })).not.toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
 
-    expect(screen.getByRole('heading', { name: 'Agent information' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Agent' })).toBeInTheDocument()
     expect(clientControl('agent')).toBeInTheDocument()
     expect(clientLocationControl('agent')).toBeInTheDocument()
     await selectForestClient(user, 'agent', '12345678')
     // The Client field shows the company name, so the details start at the address.
-    const agentDetails = await screen.findByRole('region', { name: 'Agent details' })
-    expect(agentDetails).toHaveTextContent('Address')
-    expect(agentDetails).not.toHaveTextContent('Test client')
+    const agentSection = screen.getByRole('region', { name: 'Agent' })
+    expect(await within(agentSection).findByText('Address')).toBeInTheDocument()
+    expect(agentSection).not.toHaveTextContent('Test client')
 
     await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
     expect(clientControl('agent')).toHaveValue('')
     expect(clientLocationControl('agent')).toHaveValue('')
-    expect(screen.queryByRole('region', { name: 'Agent details' })).not.toBeInTheDocument()
+    expect(
+      within(screen.getByRole('region', { name: 'Agent' })).queryByText('Address'),
+    ).not.toBeInTheDocument()
   })
 
   it.each(['Applicant', 'Agent'])(
@@ -423,8 +491,18 @@ describe('BlanketOicPermitCreateForm', () => {
 
       await user.click(screen.getByRole('tab', { name: 'Applicant' }))
       if (kind === 'Agent') await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+      const labels =
+        kind === 'Agent'
+          ? { client: 'Agent client', location: 'Agent client location', section: 'Agent' }
+          : { client: 'Client', location: 'Client location', section: 'Applicant' }
+      const section = () =>
+        kind === 'Agent'
+          ? screen.getByRole('region', { name: labels.section })
+          : screen.getByRole('group', { name: labels.section })
+      expect(within(section()).queryByText('Address')).not.toBeInTheDocument()
       await selectForestClient(user, kind === 'Agent' ? 'agent' : 'owner', '12345678')
-      const firstDetails = await screen.findByRole('region', { name: `${kind} details` })
+      expect(await within(section()).findByText('City of 12345678')).toBeInTheDocument()
+      const firstDetails = section()
       expect(firstDetails).toHaveTextContent('City of 12345678')
       expect(firstDetails).not.toHaveTextContent('Resolved client 12345678')
       expect(firstDetails).toHaveTextContent('Phone number')
@@ -432,10 +510,8 @@ describe('BlanketOicPermitCreateForm', () => {
       expect(within(firstDetails).queryByRole('textbox')).not.toBeInTheDocument()
 
       await user.selectOptions(clientLocationControl(kind === 'Agent' ? 'agent' : 'owner'), '02')
-      expect(await screen.findByRole('region', { name: `${kind} details` })).toHaveTextContent(
-        'Address 02',
-      )
-      expect(screen.getByRole('region', { name: `${kind} details` })).toHaveTextContent('Phone 02')
+      expect(await within(section()).findByText('Address 02')).toBeInTheDocument()
+      expect(section()).toHaveTextContent('Phone 02')
       expect(fetchExemptionClientData).toHaveBeenCalledWith('12345678', '02')
       expect(screen.queryByText('Address 01')).not.toBeInTheDocument()
     },
@@ -461,18 +537,16 @@ describe('BlanketOicPermitCreateForm', () => {
     await selectForestClient(user, 'owner', '12345678')
     await screen.findByText('Address 01')
     await user.selectOptions(clientLocationControl('owner'), '02')
-    expect(screen.queryByRole('region', { name: 'Applicant details' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Address 01')).not.toBeInTheDocument()
+    expect(screen.getByText('Address').nextElementSibling).toHaveTextContent('Loading…')
     await user.clear(clientControl('owner'))
     expect(clientLocationControl('owner')).toHaveValue('')
+    expect(screen.queryByText('Address')).not.toBeInTheDocument()
     await selectForestClient(user, 'owner', '87654321')
-    expect(await screen.findByRole('region', { name: 'Applicant details' })).toHaveTextContent(
-      'City of 87654321',
-    )
+    expect(await screen.findByText('City of 87654321')).toBeInTheDocument()
 
     await act(async () => resolveOldLocation(clientDetails('12345678', '02')))
-    expect(screen.getByRole('region', { name: 'Applicant details' })).toHaveTextContent(
-      'City of 87654321',
-    )
+    expect(screen.getByText('City of 87654321')).toBeInTheDocument()
     expect(screen.queryByText('Address 02')).not.toBeInTheDocument()
     expect(clientLocationControl('owner')).toHaveValue('01')
   })
@@ -538,13 +612,13 @@ describe('BlanketOicPermitCreateForm', () => {
       kind: 'applicant',
       blockedClientNumber: '12345678',
       party: 'owner' as const,
-      errorMessage: 'No verified locations were found for this applicant.',
+      errorMessage: 'No verified locations were found for this applicant',
     },
     {
-      kind: 'agent',
+      kind: 'agent' as const,
       blockedClientNumber: '87654321',
       party: 'agent' as const,
-      errorMessage: 'No verified locations were found for this agent.',
+      errorMessage: 'No verified locations were found for this agent',
     },
   ])('does not submit a permit with only a synthetic $kind location', async (scenario) => {
     const user = userEvent.setup()
@@ -567,8 +641,12 @@ describe('BlanketOicPermitCreateForm', () => {
     }
 
     await waitFor(() => expect(screen.getByText(scenario.errorMessage)).toBeInTheDocument())
-    expect(clientLocationControl(scenario.party)).toBeDisabled()
-    expect(clientLocationControl(scenario.party).querySelector('option[value="0"]')).toBeNull()
+    expect(clientLocationControl(scenario.kind === 'agent' ? 'agent' : 'owner')).toBeDisabled()
+    expect(
+      clientLocationControl(scenario.kind === 'agent' ? 'agent' : 'owner').querySelector(
+        'option[value="0"]',
+      ),
+    ).toBeNull()
 
     await user.click(screen.getByRole('tab', { name: 'Permit' }))
     await fillRequiredPermitAndShippingFields(user)

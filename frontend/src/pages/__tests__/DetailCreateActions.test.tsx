@@ -203,7 +203,7 @@ describe('Detail Quick Action Smoke', () => {
       'Date and time received',
     ])
     expect(offers.getByText('Example Lumber')).toBeInTheDocument()
-    expect(offers.getByText('Jan 4, 2026')).toBeInTheDocument()
+    expect(offers.getByText('2026-01-04')).toBeInTheDocument()
     expect(offers.queryByRole('button')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create offer' })).not.toBeInTheDocument()
   })
@@ -283,19 +283,18 @@ describe('Detail Quick Action Smoke', () => {
     await userEvent.click(await screen.findByRole('tab', { name: 'Remarks' }))
     await userEvent.click(screen.getByRole('button', { name: 'Add remark' }))
     await userEvent.type(screen.getByLabelText('Remark'), 'Unsaved draft')
-    await openOffersTab()
     await userEvent.click(screen.getByRole('link', { name: 'Create/Edit Offer' }))
 
-    expect(await screen.findByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
+    expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/provincial/application/321')
-    await userEvent.click(screen.getByRole('button', { name: 'Stay' }))
-    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
     expect(screen.getByLabelText('Remark')).toHaveValue('Unsaved draft')
     expect(router.state.location.pathname).toBe('/provincial/application/321')
 
     await userEvent.click(screen.getByRole('link', { name: 'Create/Edit Offer' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Unsaved changes' })
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard and leave' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Discard changes' }))
     expect(await screen.findByTestId('location')).toHaveTextContent('/provincial/offers/create')
   })
 
@@ -319,7 +318,7 @@ describe('Detail Quick Action Smoke', () => {
     expect(summary).toBeTruthy()
     const approvedVolume = within(summary as HTMLElement)
       .getByText('Approval volume (m³)')
-      .closest('.detail-field-item')
+      .closest('.record-field')
     expect(within(approvedVolume as HTMLElement).getByText('99.0')).toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Permits' }))
     const permitTotals = screen.getByRole('tabpanel', { name: 'Permits' })
@@ -328,7 +327,7 @@ describe('Detail Quick Action Smoke', () => {
       ['Scale volume assigned to permits (m³)', '5.0'],
       ['Balance remaining (m³)', '94.0'],
     ]) {
-      const field = within(permitTotals).getByText(label).closest('.detail-field-item')
+      const field = within(permitTotals).getByText(label).closest('.record-field')
       expect(field).toBeTruthy()
       expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
     }

@@ -229,6 +229,16 @@ const chooseExemptionType = async (name: string) => {
   await userEvent.click(await screen.findByRole('radio', { name }))
 }
 
+// Save reports what is still loading instead of saving until options and client details arrive.
+const waitForApplicationCreateLoads = async (...clientDetails: string[]) => {
+  await waitFor(() =>
+    expect(screen.getByRole('combobox', { name: 'Product type', hidden: true })).toBeEnabled(),
+  )
+  for (const name of clientDetails) {
+    await screen.findByRole('region', { name, hidden: true })
+  }
+}
+
 describe('Create Page Core Flows', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -569,7 +579,7 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(species).toBeEnabled())
     // Carbon keeps the multiselect open while selections change.
     await userEvent.click(await screen.findByRole('option', { name: /BA/ }))
-    expect(await screen.findByText('At least one species is required.')).toBeVisible()
+    expect(await screen.findByText('At least one species is required')).toBeVisible()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   }, 20_000)
 
@@ -684,7 +694,7 @@ describe('Create Page Core Flows', () => {
     )
 
     const saveButton = await screen.findByRole('button', { name: 'Save application' })
-    await waitFor(() => expect(saveButton).toBeEnabled())
+    await waitForApplicationCreateLoads('Applicant client details')
     await userEvent.click(saveButton)
     const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
@@ -738,7 +748,7 @@ describe('Create Page Core Flows', () => {
     )
 
     const saveButton = await screen.findByRole('button', { name: 'Save application' })
-    await waitFor(() => expect(saveButton).toBeEnabled())
+    await waitForApplicationCreateLoads('Applicant client details')
     await userEvent.click(saveButton)
 
     const firstDialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
@@ -1052,7 +1062,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     await selectApplicationCreateTab('Application')
     const save = screen.getByRole('button', { name: 'Save application' })
-    await waitFor(() => expect(save).toBeEnabled())
+    await waitForApplicationCreateLoads('Applicant client details')
     await userEvent.click(save)
     expect(await screen.findByText('Cannot save yet.')).toBeVisible()
     const applicant = screen.getByRole('tab', { name: 'Applicant, 3 fields need attention' })
@@ -1071,7 +1081,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('region', { name: 'Agent information' })).not.toBeInTheDocument()
     expect(applicant).toHaveAccessibleName('Applicant')
     expect(screen.queryByText('Cannot save yet.')).not.toBeInTheDocument()
-    await waitFor(() => expect(save).toBeEnabled())
+    await waitForApplicationCreateLoads('Applicant client details')
     await userEvent.click(save)
     await waitFor(() =>
       expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
@@ -1105,7 +1115,7 @@ describe('Create Page Core Flows', () => {
         </MemoryRouter>,
       )
       const save = screen.getByRole('button', { name: 'Save application' })
-      await waitFor(() => expect(save).toBeEnabled())
+      await waitForApplicationCreateLoads('Applicant client details')
       const contact = screen.getByRole('textbox', { name: 'Contact name' })
       await userEvent.clear(contact)
       for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -1335,7 +1345,7 @@ describe('Create Page Core Flows', () => {
       await userEvent.click(submitButton)
 
       expect(
-        await screen.findAllByText('Applicant client number must be 1 to 8 digits.'),
+        await screen.findAllByText('Applicant client number must be 1 to 8 digits'),
       ).not.toHaveLength(0)
       expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
       expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
@@ -1384,7 +1394,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('region', { name: 'Agent client details' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
-    expect(await screen.findAllByText('Agent client number is required.')).not.toHaveLength(0)
+    expect(await screen.findAllByText('Agent client number is required')).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   }, 20_000)
 
@@ -1442,9 +1452,7 @@ describe('Create Page Core Flows', () => {
     expect(
       locationOfLogs.closest('.cds--form-item')?.querySelector('.cds--text-area__label-counter'),
     ).toHaveTextContent('251/250')
-    expect(
-      screen.getByText('Location of logs must be 250 characters or fewer.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText('Location of logs must be 250 characters or fewer')).toBeInTheDocument()
     await selectApplicationCreateTab('Remarks')
     expect(screen.queryByRole('textbox', { name: 'Remarks' })).not.toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
@@ -1560,7 +1568,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByRole('region', { name: 'Offers' })).toBeInTheDocument()
 
     const saveButton = screen.getByRole('button', { name: 'Save application' })
-    await waitFor(() => expect(saveButton).toBeEnabled())
+    await waitForApplicationCreateLoads('Applicant client details')
     await userEvent.click(saveButton)
 
     await waitFor(() => expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledTimes(1))
@@ -1594,7 +1602,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
 
     expect(
-      await screen.findAllByText('Applicant client location code is required.'),
+      await screen.findAllByText('Applicant client location code is required'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
@@ -1641,8 +1649,8 @@ describe('Create Page Core Flows', () => {
       )
       expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
       expect(screen.queryByRole('textbox', { name: /Date received/i })).not.toBeInTheDocument()
-      expect(screen.getByRole('radio', { name: 'Aug 5, 2026' })).toBeChecked()
-      expect(screen.getByRole('radio', { name: 'Aug 12, 2026' })).not.toBeChecked()
+      expect(screen.getByRole('radio', { name: '2026-08-05' })).toBeChecked()
+      expect(screen.getByRole('radio', { name: '2026-08-12' })).not.toBeChecked()
       expect(screen.getByRole('radio', { name: 'No list date' })).not.toBeChecked()
     })
 
@@ -1705,8 +1713,8 @@ describe('Create Page Core Flows', () => {
     })
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
     expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
-    expect(screen.getByRole('radio', { name: 'Oct 7, 2026' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: 'Oct 14, 2026' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: '2026-10-07' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: '2026-10-14' })).not.toBeChecked()
     expect(screen.queryByRole('radio', { name: 'No list date' })).not.toBeInTheDocument()
 
     await selectApplicationCreateTab('Applicant')
@@ -1850,10 +1858,10 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
 
     expect(
-      await screen.findAllByText('Application volume must have no more than two decimal places.'),
+      await screen.findAllByText('Application volume must have no more than two decimal places'),
     ).not.toHaveLength(0)
     expect(
-      screen.getByText('Average log volume must have no more than one decimal place.'),
+      screen.getByText('Average log volume must have no more than one decimal place'),
     ).toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
@@ -1880,7 +1888,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
 
     expect(
-      screen.getAllByText('Application volume must be 9999999.99 or less.').length,
+      screen.getAllByText('Application volume must be 9999999.99 or less').length,
     ).toBeGreaterThan(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
@@ -2001,7 +2009,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(submitButton)
 
     const speciesErrors = await screen.findAllByText(
-      'At least one species is required, but no species are available for the selected region and product type.',
+      'At least one species is required, but no species are available for the selected region and product type',
     )
     expect(speciesErrors.length).toBeGreaterThan(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
@@ -2027,7 +2035,7 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
-    expect(await screen.findAllByText('Exemption reason is required.')).not.toHaveLength(0)
+    expect(await screen.findAllByText('Exemption reason is required')).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
@@ -2068,7 +2076,9 @@ describe('Create Page Core Flows', () => {
     await selectExemptionCreateTab('Exemption details')
     const exemptionDetails = screen.getByRole('group', { name: 'Exemption details' })
     expect(exemptionDetails).toHaveClass('create-form-section')
-    expect(exemptionDetails.querySelector('.legacy-search-grid')).toHaveClass('create-form-grid')
+    expect(exemptionDetails.querySelector('.record-field-grid')).toHaveClass(
+      'record-field-grid--editing',
+    )
     expect(screen.getByLabelText('Approval volume (m³)')).toBeInTheDocument()
     expect(screen.queryByLabelText('Approved volumeume (m³)')).not.toBeInTheDocument()
     const exemptionFormActions = screen.getByRole('group', { name: 'Page actions' })
@@ -2285,9 +2295,7 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled(),
-    )
+    await screen.findByRole('radio', { name: 'Section 1', hidden: true })
     await selectExemptionCreateTab('Permits')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
@@ -2297,7 +2305,9 @@ describe('Create Page Core Flows', () => {
         'true',
       ),
     )
-    expect(screen.getAllByText('Approval volume is required.').length).toBeGreaterThan(0)
+    expect(screen.getByText('Approval volume is required')).toBeInTheDocument()
+    expect(screen.queryByText('Validation error')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Approval volume (m³)')).toHaveFocus())
   })
 
   it('displays every application selected from provincial search', async () => {
@@ -2385,7 +2395,7 @@ describe('Create Page Core Flows', () => {
     )
 
     const saveButton = screen.getByRole('button', { name: 'Save exemption' })
-    await waitFor(() => expect(saveButton).toBeEnabled())
+    expect(saveButton).toBeEnabled()
     await userEvent.click(saveButton)
 
     expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
@@ -2569,7 +2579,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(screen.getByLabelText('Exemption number'), 'BOIC-1')
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
-    const regionComboBox = screen.getByRole('combobox', { name: /^Regions/ })
+    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
     await userEvent.click(regionComboBox)
     fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
     await userEvent.click(
@@ -2616,7 +2626,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(screen.getByLabelText('Exemption number'), 'BOIC-1')
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
-    const regionComboBox = screen.getByRole('combobox', { name: /^Regions/ })
+    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
     await userEvent.click(regionComboBox)
     fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
     await userEvent.click(
@@ -2632,7 +2642,7 @@ describe('Create Page Core Flows', () => {
 
     expect(screen.getByRole('tab', { name: 'Fees' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByLabelText('Fee rate ($/m³)')).toBeVisible()
-    expect(screen.getAllByText('Fee rate is required.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Fee rate is required').length).toBeGreaterThan(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
@@ -2662,7 +2672,8 @@ describe('Create Page Core Flows', () => {
     expect(
       screen.queryByText('Add or clear the pending application number before saving.'),
     ).not.toBeInTheDocument()
-    expect(screen.getByText('Validation error')).toBeInTheDocument()
+    expect(screen.getByText('Exemption number is required')).toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Exemption number')).toHaveFocus())
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
@@ -2708,7 +2719,7 @@ describe('Create Page Core Flows', () => {
     fireEvent.change(exemptionNumber, { target: { value: 'OIC-12345' } })
     fireEvent.blur(exemptionNumber)
     expect(
-      screen.queryByText('Exemption number must be 8 characters or fewer.'),
+      screen.queryByText('Exemption number must be 8 characters or fewer'),
     ).not.toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
     await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
@@ -2716,7 +2727,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
-      await screen.findAllByText('Exemption number must be 8 characters or fewer.'),
+      await screen.findAllByText('Exemption number must be 8 characters or fewer'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
@@ -2738,7 +2749,7 @@ describe('Create Page Core Flows', () => {
     fireEvent.blur(applicationNumber)
 
     expect(
-      screen.queryByText('Application number must be a positive whole number.'),
+      screen.queryByText('Application number must be a positive whole number'),
     ).not.toBeInTheDocument()
 
     const addApplication = screen.getByRole('button', { name: 'Add application' })
@@ -2746,11 +2757,11 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(addApplication)
 
     expect(
-      await screen.findByText('Application number must be a positive whole number.'),
+      await screen.findByText('Application number must be a positive whole number'),
     ).toBeInTheDocument()
   })
 
-  it('keeps save disabled after unavailable option warning is dismissed', async () => {
+  it('reports unavailable exemption options on Save after the warning is dismissed', async () => {
     mockedFetchProvincialExemptionOptions.mockResolvedValueOnce({
       exemptionTypes: [],
       exemptionStatuses: [],
@@ -2772,7 +2783,15 @@ describe('Create Page Core Flows', () => {
     const closeButton = notification?.querySelector<HTMLButtonElement>('button')
     expect(closeButton).toBeTruthy()
     await userEvent.click(closeButton as HTMLButtonElement)
-    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
+    const saveButton = screen.getByRole('button', { name: 'Save exemption' })
+    expect(saveButton).toBeEnabled()
+    await userEvent.click(saveButton)
+    expect(
+      await screen.findByText(
+        'Authoritative exemption options must load before this exemption can be saved.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
   it('fails application creation closed when authoritative options cannot be loaded', async () => {
@@ -2792,10 +2811,16 @@ describe('Create Page Core Flows', () => {
     expect(await screen.findByText('Options unavailable')).toBeInTheDocument()
     await selectApplicationCreateTab('Application')
     expect(screen.getByRole('combobox', { name: 'Product type' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Save application' })).toBeDisabled()
     expect(
       screen.getByText('Options unavailable').closest('[role="status"]')?.querySelector('button'),
     ).toBeNull()
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+    expect(
+      await screen.findByText(
+        'Authoritative application options must load before this application can be saved.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
   it('preserves federal multi-application query prefill in the successful create payload', async () => {
@@ -2877,7 +2902,12 @@ describe('Create Page Core Flows', () => {
         'Your session cannot create an exemption from the selected federal applications.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+    expect(
+      await screen.findByText(
+        'Authorization to create this exemption is required before it can be saved.',
+      ),
+    ).toBeInTheDocument()
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
@@ -2906,7 +2936,9 @@ describe('Create Page Core Flows', () => {
         screen.queryByText('Application 321 must have a status of approved.'),
       ).not.toBeInTheDocument(),
     )
-    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+    expect(await screen.findByText('Exemption preview required')).toBeInTheDocument()
+    expect(screen.getByText('Application 321 must have a status of approved.')).toBeInTheDocument()
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
 
     await selectExemptionCreateTab('Applications')
@@ -2926,7 +2958,8 @@ describe('Create Page Core Flows', () => {
     expect(
       await screen.findByText('Application 654 must have a status of approved.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save exemption' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+    expect(await screen.findByText('Exemption preview required')).toBeInTheDocument()
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
@@ -3010,7 +3043,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(screen.getByLabelText(/Approval Volume/i), '500')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
-    expect(screen.getAllByText('Exemption status is required.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Exemption status is required').length).toBeGreaterThan(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
@@ -3036,7 +3069,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
-      await screen.findAllByText('Approval volume must be 9999999.99 or less.'),
+      await screen.findAllByText('Approval volume must be 9999999.99 or less'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
@@ -3059,14 +3092,14 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '500')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
-    expect(screen.getAllByText('Expiry date is required.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Expiry date is required').length).toBeGreaterThan(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
 
     await userEvent.type(expiryDate, '2026-07-01')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
-      screen.getAllByText('Expiry date must be after the approval date.').length,
+      screen.getAllByText('Expiry date must be after the approval date').length,
     ).toBeGreaterThan(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
 
@@ -3100,7 +3133,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(
-      screen.getAllByText('Approval volume must have no more than two decimal places.').length,
+      screen.getAllByText('Approval volume must have no more than two decimal places').length,
     ).toBeGreaterThan(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
@@ -3191,7 +3224,7 @@ describe('Create Page Core Flows', () => {
       expect(section).toHaveClass('create-form-section')
       expect(section).toHaveClass('offer-form-section')
       expect(section.parentElement).toBe(offerSectionStack)
-      expect(section.querySelector('.legacy-search-grid')).toHaveClass('create-form-grid')
+      expect(section.querySelector('.record-field-grid')).toHaveClass('record-field-grid--editing')
     }
     expect(screen.getByRole('button', { name: 'See scale detail' })).toBeEnabled()
     expect(await screen.findByDisplayValue('PKG-9')).toBeInTheDocument()
@@ -3363,8 +3396,10 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
 
     expect(
-      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
-    ).not.toHaveLength(0)
+      await screen.findByText('Offer volume cannot exceed the application/package volume'),
+    ).toBeInTheDocument()
+    expect(screen.queryByText('Validation error')).not.toBeInTheDocument()
+    await waitFor(() => expect(screen.getByLabelText('Offer volume (m³)')).toHaveFocus())
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
 
@@ -3397,8 +3432,14 @@ describe('Create Page Core Flows', () => {
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Package number' }), 'PKG-11')
 
     await waitFor(() => expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith('PKG-11'))
-    expect(saveButton).toBeDisabled()
     expect(screen.queryByDisplayValue('120.0')).not.toBeInTheDocument()
+    expect(saveButton).toBeEnabled()
+    await userEvent.click(saveButton)
+    expect(
+      await screen.findByText(
+        'Application and client details must finish loading before this offer can be saved.',
+      ),
+    ).toBeInTheDocument()
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
 
     await act(async () => resolveSelectedPackageVolume('80.0'))
@@ -3407,7 +3448,7 @@ describe('Create Page Core Flows', () => {
     expect(saveButton).toBeEnabled()
     await userEvent.click(saveButton)
     expect(
-      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
@@ -3432,7 +3473,10 @@ describe('Create Page Core Flows', () => {
         'Application/package volume could not be loaded. Reload the page to try again.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Package number' })).toHaveFocus(),
+    )
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
 
@@ -3456,7 +3500,10 @@ describe('Create Page Core Flows', () => {
         'Application/package volume could not be loaded. Reload the page to try again.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Package number' })).toHaveFocus(),
+    )
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
 
@@ -3480,7 +3527,8 @@ describe('Create Page Core Flows', () => {
         'Application packages could not be loaded. Reload the page and try again.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await waitFor(() => expect(screen.getByLabelText('Application number')).toHaveFocus())
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
 
@@ -3505,7 +3553,8 @@ describe('Create Page Core Flows', () => {
         'Application volume could not be loaded. Reload the page and try again.',
       ),
     ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await waitFor(() => expect(screen.getByLabelText('Application number')).toHaveFocus())
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
 
@@ -3530,7 +3579,7 @@ describe('Create Page Core Flows', () => {
 
     await waitFor(() => expect(mockedFetchOfferPackageVolume).toHaveBeenCalledWith('PKG-9'))
     const saveButton = screen.getByRole('button', { name: 'Save new offer' })
-    expect(saveButton).toBeDisabled()
+    expect(saveButton).toBeEnabled()
 
     const offerVolumeInput = screen.getByLabelText('Offer volume (m³)')
     await userEvent.type(offerVolumeInput, '95.54')
@@ -3543,7 +3592,7 @@ describe('Create Page Core Flows', () => {
     expect(saveButton).toBeEnabled()
     await userEvent.click(saveButton)
     expect(
-      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
@@ -3569,7 +3618,7 @@ describe('Create Page Core Flows', () => {
 
     expect(offerVolumeInput).toHaveValue('95.54')
     expect(
-      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
@@ -3625,7 +3674,7 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
 
     expect(
-      screen.getAllByText('Application number must be a positive whole number.'),
+      screen.getAllByText('Application number must be a positive whole number'),
     ).not.toHaveLength(0)
     await new Promise((resolve) => window.setTimeout(resolve, 350))
     expect(mockedValidateOfferApplication).not.toHaveBeenCalled()
@@ -3648,7 +3697,8 @@ describe('Create Page Core Flows', () => {
     )
 
     expect(await screen.findByText(eligibilityError)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Save new offer' })).toBeDisabled()
+    await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
+    await waitFor(() => expect(screen.getByLabelText('Application number')).toHaveFocus())
     expect(mockedFetchOfferApplicationDetails).not.toHaveBeenCalled()
     expect(mockedFetchOfferPackageList).not.toHaveBeenCalled()
     expect(mockedFetchOfferApplicationVolume).not.toHaveBeenCalled()
@@ -3817,7 +3867,12 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByDisplayValue('Forged Contact')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Save new offer' }))
-    expect(await screen.findAllByText('Company name is required.')).not.toHaveLength(0)
+    expect(await screen.findByText('Cannot save yet.')).toBeInTheDocument()
+    expect(
+      screen.getAllByText(
+        'The offering company could not be loaded from the authenticated forest client.',
+      ),
+    ).toHaveLength(2)
     expect(mockedSubmitProvincialOfferCreate).not.toHaveBeenCalled()
   })
 

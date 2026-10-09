@@ -57,4 +57,45 @@ describe('PageHeader', () => {
     )
     expect(screen.getByTestId('reports-header')).toHaveAttribute('aria-describedby', 'reports-help')
   })
+
+  it('focuses the title when the page opens only when asked', () => {
+    const { unmount } = render(<PageHeader title="Apply for new permit" focusTitle />)
+
+    const heading = screen.getByRole('heading', { level: 1, name: 'Apply for new permit' })
+    expect(heading).toHaveFocus()
+    expect(heading).toHaveAttribute('tabindex', '-1')
+    unmount()
+
+    render(<PageHeader title="Permit 9021022" />)
+    const detailHeading = screen.getByRole('heading', { level: 1, name: 'Permit 9021022' })
+    expect(detailHeading).not.toHaveFocus()
+    expect(detailHeading).not.toHaveAttribute('tabindex')
+  })
+
+  it('focuses the title once per visit unless a remount lost focus', () => {
+    window.history.replaceState({ key: 'visit-1', idx: 0 }, '')
+    const first = render(<PageHeader title="Apply for new permit" focusTitle />)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveFocus()
+    first.unmount()
+
+    // The page replaced its header while loading, so the new title takes focus back.
+    const reloaded = render(<PageHeader title="Apply for new permit" focusTitle />)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveFocus()
+    reloaded.unmount()
+
+    // The user has moved on, so a later remount leaves focus where it is.
+    const field = document.createElement('input')
+    document.body.append(field)
+    field.focus()
+    const remount = render(<PageHeader title="Apply for new permit" focusTitle />)
+    expect(screen.getByRole('heading', { level: 1 })).not.toHaveFocus()
+    expect(field).toHaveFocus()
+    remount.unmount()
+    field.remove()
+
+    window.history.replaceState({ key: 'visit-2', idx: 1 }, '')
+    render(<PageHeader title="Apply for new permit" focusTitle />)
+    expect(screen.getByRole('heading', { level: 1 })).toHaveFocus()
+    window.history.replaceState(null, '')
+  })
 })

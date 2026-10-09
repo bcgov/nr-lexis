@@ -3,6 +3,7 @@ import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
+import { discardNewRecordCopy } from '@/components/DiscardChangesModal'
 import { authorizePageUnload } from '@/utils/page-unload'
 
 import UnsavedChangesGuard, { formValuesEqual } from './index'
@@ -10,21 +11,10 @@ import UnsavedChangesGuard, { formValuesEqual } from './index'
 type HarnessProps = {
   isBusy?: boolean
   onDiscard?: () => void
-  onSave: () => Promise<boolean>
-  saveUnavailableReason?: string
-  saveAcknowledgement?: {
-    description: string
-    label: string
-  }
+  newRecord?: boolean
 }
 
-const GuardHarness = ({
-  isBusy = false,
-  onDiscard,
-  onSave,
-  saveUnavailableReason,
-  saveAcknowledgement,
-}: HarnessProps) => {
+const GuardHarness = ({ isBusy = false, onDiscard, newRecord = false }: HarnessProps) => {
   const [value, setValue] = useState('saved')
   const isDirty = !formValuesEqual({ value }, { value: 'saved' })
 
@@ -38,28 +28,22 @@ const GuardHarness = ({
       <UnsavedChangesGuard
         isDirty={isDirty}
         isBusy={isBusy}
-        onSave={onSave}
         onDiscard={() => {
           setValue('saved')
           onDiscard?.()
         }}
+        discardCopy={newRecord ? discardNewRecordCopy('record') : undefined}
         subject="the test record"
-        saveUnavailableReason={saveUnavailableReason}
-        saveAcknowledgement={saveAcknowledgement}
       />
     </>
   )
 }
 
-const renderGuard = (
-  onSave: () => Promise<boolean>,
-  options: Omit<HarnessProps, 'onSave'> = {},
-) => {
+const renderGuard = (options: HarnessProps = {}) => {
   const router = createMemoryRouter(
     [
-      { path: '/edit/:recordId', element: <GuardHarness onSave={onSave} {...options} /> },
+      { path: '/edit/:recordId', element: <GuardHarness {...options} /> },
       { path: '/next', element: <h1>Next page</h1> },
-      { path: '/other', element: <h1>Other page</h1> },
     ],
     { initialEntries: ['/edit/one'] },
   )
@@ -67,155 +51,122 @@ const renderGuard = (
   return router
 }
 
-const makeDirtyAndLeave = async () => {
+const changeValue = async () => {
   await userEvent.clear(screen.getByLabelText('Record value'))
   await userEvent.type(screen.getByLabelText('Record value'), 'changed')
+}
+
+const makeDirtyAndLeave = async (title = 'Discard changes?') => {
+  await changeValue()
   await userEvent.click(screen.getByRole('link', { name: 'Next page' }))
-  await screen.findByRole('dialog', { name: 'Unsaved changes' })
+  return screen.findByRole('dialog', { name: title })
 }
 
 describe('UnsavedChangesGuard', () => {
   it('allows clean navigation without opening the dialog', async () => {
-    const router = renderGuard(vi.fn().mockResolvedValue(true))
+    const router = renderGuard()
 
     await userEvent.click(screen.getByRole('link', { name: 'Next page' }))
 
     expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/next')
-    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('stays on the dirty page when Stay is selected', async () => {
-    const router = renderGuard(vi.fn().mockResolvedValue(true))
+  it('asks to discard changes with Keep editing focused and no save option', async () => {
+    renderGuard()
+
+    const dialog = await makeDirtyAndLeave()
+
+    expect(dialog).toHaveAccessibleDescription('Your changes will be lost.')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Keep editing' })).toHaveFocus())
+    expect(screen.getByRole('button', { name: 'Discard changes' })).toHaveClass('cds--btn--danger')
+    expect(screen.queryByRole('button', { name: /Save/ })).not.toBeInTheDocument()
+  })
+
+  it('stays on the page and returns focus to where the user was on Keep editing', async () => {
+    const router = renderGuard()
     await makeDirtyAndLeave()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Stay' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
 
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
     expect(router.state.location.pathname).toBe('/edit/one')
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument(),
-    )
     expect(screen.getByLabelText('Record value')).toHaveValue('changed')
-    expect(screen.getByRole('link', { name: 'Next page' })).toHaveFocus()
+    await waitFor(() => expect(screen.getByRole('link', { name: 'Next page' })).toHaveFocus())
   })
 
-  it('discards changes and proceeds with the blocked navigation', async () => {
+  it('discards changes and completes the navigation', async () => {
     const onDiscard = vi.fn()
-    const router = renderGuard(vi.fn().mockResolvedValue(true), { onDiscard })
+    const router = renderGuard({ onDiscard })
     await makeDirtyAndLeave()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Discard and leave' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
 
     expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
     expect(onDiscard).toHaveBeenCalledTimes(1)
     expect(router.state.location.pathname).toBe('/next')
   })
 
+  it('uses the new record copy on create pages', async () => {
+    const router = renderGuard({ newRecord: true })
+
+    const dialog = await makeDirtyAndLeave('Discard this record?')
+
+    expect(dialog).toHaveAccessibleDescription(
+      "The record hasn't been created yet. Everything you've entered will be lost.",
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Discard' }))
+    expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/next')
+  })
+
   it('resets drafts before navigating between records that reuse the same route component', async () => {
     const onDiscard = vi.fn()
-    const router = renderGuard(vi.fn().mockResolvedValue(true), { onDiscard })
-    await userEvent.clear(screen.getByLabelText('Record value'))
-    await userEvent.type(screen.getByLabelText('Record value'), 'changed')
+    const router = renderGuard({ onDiscard })
+    await changeValue()
 
     await userEvent.click(screen.getByRole('link', { name: 'Other record' }))
-    await screen.findByRole('dialog', { name: 'Unsaved changes' })
-    await userEvent.click(screen.getByRole('button', { name: 'Discard and leave' }))
+    await screen.findByRole('dialog', { name: 'Discard changes?' })
+    await userEvent.click(screen.getByRole('button', { name: 'Discard changes' }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/edit/two'))
     expect(screen.getByLabelText('Record value')).toHaveValue('saved')
     expect(onDiscard).toHaveBeenCalledTimes(1)
   })
 
-  it('allows same-record query and hash changes without blocking filter navigation', async () => {
-    const router = renderGuard(vi.fn().mockResolvedValue(true))
-    await userEvent.clear(screen.getByLabelText('Record value'))
-    await userEvent.type(screen.getByLabelText('Record value'), 'changed')
+  it('allows same-record query and hash changes without asking', async () => {
+    const router = renderGuard()
+    await changeValue()
 
     await userEvent.click(screen.getByRole('link', { name: 'Filter this record' }))
 
     await waitFor(() => expect(router.state.location.search).toBe('?filter=active'))
     expect(router.state.location.pathname).toBe('/edit/one')
-    expect(screen.queryByRole('dialog', { name: 'Unsaved changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
-  it('saves successfully before proceeding', async () => {
-    const onSave = vi.fn().mockResolvedValue(true)
-    const router = renderGuard(onSave)
-    await makeDirtyAndLeave()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
-
-    expect(await screen.findByRole('heading', { name: 'Next page' })).toBeInTheDocument()
-    expect(onSave).toHaveBeenCalledTimes(1)
-    expect(router.state.location.pathname).toBe('/next')
-  })
-
-  it('keeps the blocked navigation open when save fails', async () => {
-    const onSave = vi.fn().mockResolvedValue(false)
-    const router = renderGuard(onSave)
-    await makeDirtyAndLeave()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
-
-    expect(await screen.findByText('Could not finish saving changes')).toBeInTheDocument()
-    expect(screen.getByText(/Some changes may already have been saved/)).toBeInTheDocument()
-    expect(onSave).toHaveBeenCalledTimes(1)
-    expect(router.state.location.pathname).toBe('/edit/one')
-    expect(screen.getByRole('dialog', { name: 'Unsaved changes' })).toBeInTheDocument()
-  })
-
-  it('requires and resets an optional save acknowledgement', async () => {
-    const onSave = vi.fn().mockResolvedValue(false)
-    renderGuard(onSave, {
-      saveAcknowledgement: {
-        description: 'Confirm that the record is accurate.',
-        label: 'I Agree',
-      },
-    })
-    await makeDirtyAndLeave()
-
-    const acknowledgement = screen.getByRole('checkbox', { name: 'I Agree' })
-    const saveButton = screen.getByRole('button', { name: 'Save and leave' })
-    expect(acknowledgement).not.toBeChecked()
-    expect(saveButton).toBeDisabled()
-    await userEvent.click(saveButton)
-    expect(onSave).not.toHaveBeenCalled()
-
-    await userEvent.click(acknowledgement)
-    expect(saveButton).toBeEnabled()
-    await userEvent.click(saveButton)
-
-    expect(await screen.findByText('Could not finish saving changes')).toBeInTheDocument()
-    expect(onSave).toHaveBeenCalledTimes(1)
-    expect(screen.getByRole('checkbox', { name: 'I Agree' })).not.toBeChecked()
-    expect(screen.getByRole('button', { name: 'Save and leave' })).toBeDisabled()
-  })
-
-  it('prevents save and discard while the page reports another mutation in flight', async () => {
-    const onSave = vi.fn().mockResolvedValue(true)
+  it('prevents discarding while the page reports another change in flight', async () => {
     const onDiscard = vi.fn()
-    const router = renderGuard(onSave, { isBusy: true, onDiscard })
+    const router = renderGuard({ isBusy: true, onDiscard })
     await makeDirtyAndLeave()
 
-    expect(screen.getByRole('button', { name: 'Save and leave' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Discard and leave' })).toBeDisabled()
-    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Discard and leave' }))
+    const discard = screen.getByRole('button', { name: 'Discard changes' })
+    expect(discard).toBeDisabled()
+    await userEvent.click(discard)
 
-    expect(onSave).not.toHaveBeenCalled()
     expect(onDiscard).not.toHaveBeenCalled()
     expect(router.state.location.pathname).toBe('/edit/one')
   })
 
-  it('blocks navigation and native unload while externally busy even after drafts are clean', async () => {
-    const router = renderGuard(vi.fn().mockResolvedValue(true), { isBusy: true })
+  it('blocks navigation and native unload while busy even when nothing changed', async () => {
+    const router = renderGuard({ isBusy: true })
 
     await userEvent.click(screen.getByRole('link', { name: 'Next page' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Change in progress' })
     expect(dialog).toHaveAccessibleDescription(/is still being completed/)
-    expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Discard and leave' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Discard changes' })).not.toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/edit/one')
     const busyUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(busyUnload)
@@ -225,12 +176,12 @@ describe('UnsavedChangesGuard', () => {
     expect(router.state.location.pathname).toBe('/edit/one')
   })
 
-  it('closes a blocked busy dialog when the external operation finishes', async () => {
+  it('closes a blocked busy dialog when the change finishes', async () => {
     let updateBusyExternally: ((busy: boolean) => void) | undefined
     const ExternalBusyHarness = () => {
       const [busy, setBusy] = useState(true)
       updateBusyExternally = setBusy
-      return <GuardHarness isBusy={busy} onSave={vi.fn().mockResolvedValue(true)} />
+      return <GuardHarness isBusy={busy} />
     }
     const router = createMemoryRouter(
       [
@@ -252,64 +203,14 @@ describe('UnsavedChangesGuard', () => {
     expect(screen.getByRole('link', { name: 'Next page' })).toHaveFocus()
   })
 
-  it('does not offer Save and leave when the page cannot safely automate its draft', async () => {
-    const onSave = vi.fn().mockResolvedValue(true)
-    renderGuard(onSave, {
-      saveUnavailableReason: 'Finish or reset the queued upload before leaving.',
-    })
-    await makeDirtyAndLeave()
-
-    expect(screen.getByRole('dialog', { name: 'Unsaved changes' })).toHaveAccessibleDescription(
-      /Finish or reset the queued upload/,
-    )
-    expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
-    expect(onSave).not.toHaveBeenCalled()
-  })
-
-  it('does not follow a superseded navigation target after an awaited save', async () => {
-    let resolveSave: ((saved: boolean) => void) | undefined
-    const onSave = vi.fn(
-      () =>
-        new Promise<boolean>((resolve) => {
-          resolveSave = resolve
-        }),
-    )
-    const router = renderGuard(onSave)
-    await makeDirtyAndLeave()
-    await userEvent.click(screen.getByRole('button', { name: 'Save and leave' }))
-    await waitFor(() => expect(onSave).toHaveBeenCalledTimes(1))
-    const savingButton = screen.getByRole('button', { name: 'Saving…' })
-    expect(savingButton).toBeDisabled()
-    expect(savingButton.querySelector('.cds--loading')).toBeInTheDocument()
-
-    await act(async () => {
-      void router.navigate('/other')
-    })
-    await act(async () => resolveSave?.(true))
-
-    await waitFor(() => expect(router.state.location.pathname).toBe('/edit/one'))
-    expect(screen.queryByRole('heading', { name: 'Next page' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Other page' })).not.toBeInTheDocument()
-  })
-
-  it('associates the visible explanation with the Carbon dialog', async () => {
-    renderGuard(vi.fn().mockResolvedValue(true))
-    await makeDirtyAndLeave()
-
-    expect(screen.getByRole('dialog', { name: 'Unsaved changes' })).toHaveAccessibleDescription(
-      /You have unsaved changes to the test record/,
-    )
-  })
-
-  it('prevents dirty native unload unless it was explicitly authorized', async () => {
-    renderGuard(vi.fn().mockResolvedValue(true))
+  it('prevents a changed native unload unless it was explicitly authorized', async () => {
+    renderGuard()
 
     const cleanUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(cleanUnload)
     expect(cleanUnload.defaultPrevented).toBe(false)
 
-    await userEvent.clear(screen.getByLabelText('Record value'))
-    await userEvent.type(screen.getByLabelText('Record value'), 'changed')
+    await changeValue()
     const dirtyUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(dirtyUnload)
     expect(dirtyUnload.defaultPrevented).toBe(true)

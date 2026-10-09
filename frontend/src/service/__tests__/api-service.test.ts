@@ -1440,6 +1440,67 @@ describe('api-service cached GET support', () => {
     window.history.replaceState({}, '', previousPath)
   })
 
+  it('keeps the record type of the rejected save when the page changes during enrichment', async () => {
+    vi.useFakeTimers()
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/application/999000001')
+    let receivedRecordType: OptimisticConflictEvent['detail']['recordType']
+    const conflictListener = (event: Event) => {
+      event.preventDefault()
+      receivedRecordType = (event as OptimisticConflictEvent).detail.recordType
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+    try {
+      apiService.registerRecordVersion(
+        'application',
+        '999000001',
+        {
+          headers: { [RECORD_VERSION_HEADER]: 'version-1' },
+          data: { applicationNumber: '999000001', remarks: 'Original remarks' },
+        } as unknown as AxiosResponse<unknown>,
+        '/lexis/applications/999000001',
+      )
+      getMock.mockImplementationOnce(
+        () =>
+          new Promise((resolve) => {
+            window.setTimeout(
+              () =>
+                resolve({
+                  ...buildResponse({ applicationNumber: '999000001', remarks: 'Newer remarks' }),
+                  headers: { [RECORD_VERSION_HEADER]: 'version-2' },
+                }),
+              4_000,
+            )
+          }),
+      )
+
+      void registeredResponseRejectedInterceptor()({
+        config: {
+          method: 'put',
+          url: '/lexis/applications/999000001',
+          headers: {
+            [RECORD_VERSION_HEADER]: 'version-1',
+            Authorization: 'Bearer existing-request-token',
+          },
+        },
+        response: {
+          status: 409,
+          data: { code: 'STALE_RECORD', currentVersion: 'version-1.5' },
+        },
+      })
+      window.history.replaceState({}, '', '/provincial/permit/123')
+
+      await vi.advanceTimersByTimeAsync(4_000)
+
+      expect(receivedRecordType).toBe('application')
+    } finally {
+      window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+      window.history.replaceState({}, '', previousPath)
+      vi.useRealTimers()
+    }
+  })
+
   it('falls back to the server conflict when detail enrichment exceeds its deadline', async () => {
     vi.useFakeTimers()
     const previousPath = window.location.pathname

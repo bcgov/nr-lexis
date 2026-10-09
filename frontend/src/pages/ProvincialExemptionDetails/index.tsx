@@ -1,4 +1,10 @@
 import {
+  RecordField,
+  RecordFieldCell,
+  RecordFieldGrid,
+  RecordFieldRow,
+} from '@/pages/shared/RecordFieldGrid'
+import {
   isValidElement,
   type ReactNode,
   useCallback,
@@ -19,6 +25,7 @@ import {
   TrashCan,
   type CarbonIconType,
 } from '@carbon/icons-react'
+import { DocumentSecurity_02 } from '@carbon/pictograms-react'
 import {
   Button,
   Column,
@@ -51,6 +58,7 @@ import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailCardTitle from '@/components/DetailCardTitle'
 import DetailLoadError from '@/components/DetailLoadError'
 import DetailSidePanel from '@/components/DetailSidePanel'
+import { useDiscardPrompt } from '@/components/DiscardChangesModal'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import ExemptionApprovalModal, {
   type ExemptionApprovalOutcome,
@@ -73,7 +81,7 @@ import RecordDocumentsSection, {
 } from '@/components/documents/RecordDocumentsSection'
 import { useDocumentOpener } from '@/components/documents/useDocumentOpener'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
-import { DetailFieldGrid, type DetailField } from '../shared/DetailSections'
+import type { DetailField } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { appendSearchParamsToPath } from '@/pages/shared/search-query-utils'
 import {
@@ -82,6 +90,8 @@ import {
   readDetailReturnTo,
   withDetailReturnTo,
 } from '@/pages/shared/detail-navigation'
+import { useEditSections } from '@/pages/shared/useEditSections'
+import { useFieldErrors, type FieldErrors } from '@/pages/shared/useFieldErrors'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import {
@@ -131,19 +141,17 @@ import {
   addApplicationToExemption,
   approveExemptions,
   fetchExemptionApplications,
-  fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
   removeApplicationFromExemption,
   updateExemption,
   type ExemptionApplicationRow,
-  type ExemptionBlanketOicTotals,
   type ExemptionEditContext,
   type ExemptionPermitRow,
 } from '@/service/provincial-exemption-detail-service'
 import { ReportRequestError, runReport } from '@/service/report-service'
 import { requiredLabel } from '@/utils/required-label'
-import { formatIsoDateLabel } from '@/utils/date'
+import { fieldErrorText } from '@/utils/field-error'
 import './ProvincialExemptionDetails.scss'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
@@ -219,8 +227,16 @@ type ExemptionEditForm = {
   regionNumbers: string[]
 }
 
+type ExemptionEditField = keyof ExemptionEditForm
+
 // Exemption details and Fees are edited one at a time, each with its own Save and Cancel.
 type ExemptionEditSection = 'summary' | 'fees'
+
+// The Fees section edits these fields; Exemption details edits the rest.
+const sectionEditValues = (form: ExemptionEditForm, section: ExemptionEditSection) => {
+  const { enableRateOverride, feeRate, ...summary } = form
+  return section === 'fees' ? { enableRateOverride, feeRate } : summary
+}
 
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 
@@ -247,6 +263,12 @@ const toEditForm = (
   feeRate: context.fixedFeeRate,
   regionNumbers: context.regionNumbers,
 })
+
+const exemptionTypeValue = (detail: ProvincialExemptionDetail) =>
+  displayValue(detail.exemptionTypeDescription ?? detail.exemptionTypeCode)
+
+const approvalDateValue = (detail: ProvincialExemptionDetail) =>
+  detail.approvalDate ? detail.approvalDate : 'Not approved'
 
 const feeRateFieldError = (value: string): string => {
   const normalized = value.trim()
@@ -435,14 +457,15 @@ const exemptionClientFields = ({
   return [
     { label: 'Contact name', value: loadingValue(contactName) },
     { label: 'Applicant type', value: loadingValue(applicantTypeLabel(applicantType)) },
-    { label: 'Client', value: loadingValue(identity) },
+    { label: 'Client', value: loadingValue(identity), span: 'wide' as const },
     {
       label: 'Client location',
       value: loadingValue(
         clientLocationLabel(locationCode, locationName, clientData?.locationName ?? ''),
       ),
+      span: 'wide' as const,
     },
-    { label: 'Address', value: loadingValue(clientData?.address) },
+    { label: 'Address', value: loadingValue(clientData?.address), span: 'wide' as const },
     { label: 'City', value: loadingValue(clientData?.city) },
     { label: 'Province', value: loadingValue(clientData?.province) },
     { label: 'Country', value: loadingValue(clientData?.country) },
@@ -457,12 +480,48 @@ const exemptionClientFields = ({
 const ExemptionClientFields = (client: ExemptionClient) => {
   const fields = exemptionClientFields(client)
   return (
-    <div className="exemption-field-groups">
-      <DetailFieldGrid fields={fields.slice(0, 2)} />
-      <DetailFieldGrid fields={fields.slice(2, 4)} />
-      <DetailFieldGrid fields={fields.slice(4, 9)} />
-      <DetailFieldGrid fields={fields.slice(9)} />
-    </div>
+    <RecordFieldGrid>
+      <RecordFieldRow>
+        {fields.slice(0, 2).map((field: DetailField) => (
+          <RecordField
+            key={field.label}
+            label={field.label}
+            value={field.value}
+            span={field.span}
+          />
+        ))}
+      </RecordFieldRow>
+      <RecordFieldRow>
+        {fields.slice(2, 4).map((field: DetailField) => (
+          <RecordField
+            key={field.label}
+            label={field.label}
+            value={field.value}
+            span={field.span}
+          />
+        ))}
+      </RecordFieldRow>
+      <RecordFieldRow>
+        {fields.slice(4, 9).map((field: DetailField) => (
+          <RecordField
+            key={field.label}
+            label={field.label}
+            value={field.value}
+            span={field.span}
+          />
+        ))}
+      </RecordFieldRow>
+      <RecordFieldRow>
+        {fields.slice(9).map((field: DetailField) => (
+          <RecordField
+            key={field.label}
+            label={field.label}
+            value={field.value}
+            span={field.span}
+          />
+        ))}
+      </RecordFieldRow>
+    </RecordFieldGrid>
   )
 }
 
@@ -510,12 +569,25 @@ const ProvincialExemptionDetailsPage = () => {
   const [applications, setApplications] = useState<ExemptionApplicationRow[]>([])
   const [exemptionHolder, setExemptionHolder] = useState('')
   const [permitRows, setPermitRows] = useState<ExemptionPermitRow[]>([])
-  const [blanketOicTotals, setBlanketOicTotals] = useState<ExemptionBlanketOicTotals | null>(null)
+  const [permitsLoaded, setPermitsLoaded] = useState(false)
   const [containsUnmanu, setContainsUnmanu] = useState<boolean | null>(null)
   const [editContext, setEditContext] = useState<ExemptionEditContext>(EMPTY_EDIT_CONTEXT)
   const [editContextLoaded, setEditContextLoaded] = useState(false)
   const [editContextRefreshing, setEditContextRefreshing] = useState(false)
   const [editForm, setEditForm] = useState<ExemptionEditForm | null>(null)
+  const { fieldErrors, clearFieldError, resetFieldErrors, showFieldErrors } =
+    useFieldErrors<ExemptionEditField>()
+  const [saveAttempted, setSaveAttempted] = useState(false)
+  const previousEditFormRef = useRef(editForm)
+  useEffect(() => {
+    // A field's error clears once the user changes that field.
+    const previous = previousEditFormRef.current
+    previousEditFormRef.current = editForm
+    if (!previous || !editForm) return
+    for (const field of Object.keys(editForm) as ExemptionEditField[]) {
+      if (!formValuesEqual(previous[field], editForm[field])) clearFieldError(field)
+    }
+  }, [clearFieldError, editForm])
   const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
   const regionOptions = useAllowedRegionOptions(
     allRegionOptions,
@@ -537,20 +609,19 @@ const ProvincialExemptionDetailsPage = () => {
   const approvalTargetRef = useRef<string | null>(null)
   const [approvalDialogBusy, setApprovalDialogBusy] = useState(false)
   const [permitCreationConfirmationOpen, setPermitCreationConfirmationOpen] = useState(false)
-  const [permitCreationUnsavedChangesOpen, setPermitCreationUnsavedChangesOpen] = useState(false)
-  const [savingPermitCreationChanges, setSavingPermitCreationChanges] = useState(false)
-  const [permitCreationSaveFailed, setPermitCreationSaveFailed] = useState(false)
-  const [permitCreationSavedRequiresReload, setPermitCreationSavedRequiresReload] = useState(false)
   const [creatingPermit, setCreatingPermit] = useState(false)
   const [permitCreationDestination, setPermitCreationDestination] = useState<string | null>(null)
   const [createdMinisterialPermit, setCreatedMinisterialPermit] = useState(false)
   const [permitCreationRequiresReload, setPermitCreationRequiresReload] = useState(false)
   const [generatingReport, setGeneratingReport] = useState(false)
   const [applicationNumberToAdd, setApplicationNumberToAdd] = useState('')
+  // The number checked by the last Save click; its error shows until the number changes.
+  const [checkedApplicationNumber, setCheckedApplicationNumber] = useState<string | null>(null)
   const [addApplicationError, setAddApplicationError] = useState('')
   const [isAddingApplication, setIsAddingApplication] = useState(false)
   const addApplicationButtonRef = useRef<HTMLButtonElement>(null)
   const addApplicationInputRef = useRef<HTMLInputElement>(null)
+  const tabsColumnRef = useRef<HTMLDivElement>(null)
   const [applicationMutationNumber, setApplicationMutationNumber] = useState<string | null>(null)
   const [applicationPendingRemoval, setApplicationPendingRemoval] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
@@ -558,7 +629,6 @@ const ProvincialExemptionDetailsPage = () => {
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [applicationsErrorMessage, setApplicationsErrorMessage] = useState('')
   const [permitsErrorMessage, setPermitsErrorMessage] = useState('')
-  const [blanketOicTotalsErrorMessage, setBlanketOicTotalsErrorMessage] = useState('')
   const [actionResult, setActionResult] = useState<ExemptionActionResult | null>(null)
   const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
   const pageActionResult =
@@ -760,6 +830,7 @@ const ProvincialExemptionDetailsPage = () => {
   useEffect(() => {
     const load = async () => {
       const isLatestRequest = beginDetailRequest()
+      setPermitsLoaded(false)
       setRenamedExemptionNumber(null)
       const isRefreshingCurrentExemption =
         detailRef.current !== null && String(detailRef.current.exemptionNumber) === exemptionNumber
@@ -768,10 +839,6 @@ const ProvincialExemptionDetailsPage = () => {
         setApprovalConfirmationOpen(false)
         setApprovalConfirmationTarget(null)
         setPermitCreationConfirmationOpen(false)
-        setPermitCreationUnsavedChangesOpen(false)
-        setSavingPermitCreationChanges(false)
-        setPermitCreationSaveFailed(false)
-        setPermitCreationSavedRequiresReload(false)
         setCreatingPermit(false)
         setPermitCreationDestination(null)
         setCreatedMinisterialPermit(false)
@@ -788,7 +855,6 @@ const ProvincialExemptionDetailsPage = () => {
         setApplications([])
         setExemptionHolder('')
         setPermitRows([])
-        setBlanketOicTotals(null)
         setContainsUnmanu(null)
         setEditContext(EMPTY_EDIT_CONTEXT)
         setEditContextLoaded(false)
@@ -798,7 +864,6 @@ const ProvincialExemptionDetailsPage = () => {
         setDocumentsErrorMessage('')
         setApplicationsErrorMessage('')
         setPermitsErrorMessage('')
-        setBlanketOicTotalsErrorMessage('')
         setActionResult(null)
         setLoading(false)
         return
@@ -809,7 +874,6 @@ const ProvincialExemptionDetailsPage = () => {
       setDocumentsErrorMessage('')
       setApplicationsErrorMessage('')
       setPermitsErrorMessage('')
-      setBlanketOicTotalsErrorMessage('')
       const showCreationNotice = createdExemptionNumberRef.current === exemptionNumber
       if (!showCreationNotice) createdExemptionNumberRef.current = ''
       setActionResult(
@@ -823,7 +887,6 @@ const ProvincialExemptionDetailsPage = () => {
         setApplications([])
         setExemptionHolder('')
         setPermitRows([])
-        setBlanketOicTotals(null)
         setContainsUnmanu(null)
         setEditContext(EMPTY_EDIT_CONTEXT)
         setEditContextLoaded(false)
@@ -843,32 +906,22 @@ const ProvincialExemptionDetailsPage = () => {
           setApplications([])
           setExemptionHolder('')
           setPermitRows([])
-          setBlanketOicTotals(null)
           setContainsUnmanu(null)
           setEditContext(EMPTY_EDIT_CONTEXT)
           setEditContextLoaded(false)
           setEditForm(null)
           setApplicationsErrorMessage('')
           setPermitsErrorMessage('')
-          setBlanketOicTotalsErrorMessage('')
           return
         }
 
-        const [
-          documentsResult,
-          applicationsResult,
-          editContextResult,
-          permitsResult,
-          blanketOicTotalsResult,
-        ] = await Promise.allSettled([
-          fetchExemptionDocuments(exemptionNumber),
-          fetchExemptionApplications(exemptionNumber),
-          fetchExemptionEditContext(exemptionNumber),
-          fetchExemptionPermits(exemptionNumber),
-          response.blanketOic
-            ? fetchExemptionBlanketOicTotals(exemptionNumber)
-            : Promise.resolve(null),
-        ])
+        const [documentsResult, applicationsResult, editContextResult, permitsResult] =
+          await Promise.allSettled([
+            fetchExemptionDocuments(exemptionNumber),
+            fetchExemptionApplications(exemptionNumber),
+            fetchExemptionEditContext(exemptionNumber),
+            fetchExemptionPermits(exemptionNumber),
+          ])
         if (!isLatestRequest()) {
           return
         }
@@ -909,20 +962,12 @@ const ProvincialExemptionDetailsPage = () => {
 
         if (permitsResult.status === 'fulfilled') {
           setPermitRows(permitsResult.value)
+          setPermitsLoaded(true)
           setPermitsErrorMessage('')
         } else {
           console.error(permitsResult.reason)
           setPermitRows([])
           setPermitsErrorMessage('Unable to retrieve permits associated with this exemption.')
-        }
-
-        if (blanketOicTotalsResult.status === 'fulfilled') {
-          setBlanketOicTotals(blanketOicTotalsResult.value)
-          setBlanketOicTotalsErrorMessage('')
-        } else {
-          console.error(blanketOicTotalsResult.reason)
-          setBlanketOicTotals(null)
-          setBlanketOicTotalsErrorMessage('Unable to retrieve Blanket OIC permit volume totals.')
         }
       } catch (error) {
         if (isLatestRequest()) {
@@ -933,7 +978,6 @@ const ProvincialExemptionDetailsPage = () => {
             setApplications([])
             setExemptionHolder('')
             setPermitRows([])
-            setBlanketOicTotals(null)
             setContainsUnmanu(null)
             setEditContext(EMPTY_EDIT_CONTEXT)
             setEditContextLoaded(false)
@@ -941,7 +985,6 @@ const ProvincialExemptionDetailsPage = () => {
             setDocumentsErrorMessage('')
             setApplicationsErrorMessage('')
             setPermitsErrorMessage('')
-            setBlanketOicTotalsErrorMessage('')
           }
         }
       } finally {
@@ -1019,16 +1062,70 @@ const ProvincialExemptionDetailsPage = () => {
   const canSaveExemption = hasExemptionEditPermission && editContextLoaded && !exemptionEditLocked
   const isExemptionFormDirty = useMemo(
     () =>
-      editing &&
+      !!editingSection &&
       !!currentDetail &&
       !!editForm &&
-      !formValuesEqual(editForm, toEditForm(currentDetail, editContext)),
-    [currentDetail, editContext, editForm, editing],
+      !formValuesEqual(
+        sectionEditValues(editForm, editingSection),
+        sectionEditValues(toEditForm(currentDetail, editContext), editingSection),
+      ),
+    [currentDetail, editContext, editForm, editingSection],
   )
   const applicationRelationshipDraftDirty =
     isApplicationApprover && applicationNumberToAdd.trim().length > 0
   const isExemptionDirty =
     isExemptionFormDirty || applicationRelationshipDraftDirty || documentUploadDirty
+  const isExemptionBusy =
+    saving ||
+    approving ||
+    approvalDialogBusy ||
+    creatingPermit ||
+    applicationMutationNumber !== null ||
+    isRemovingDocumentId !== null ||
+    documentUploadBusy
+  const onDiscardExemptionChanges = useCallback(() => {
+    if (detail) {
+      setEditForm(toEditForm(detail, editContext))
+    }
+    setEditingSection(null)
+    setIsAddingApplication(false)
+    setIsAddingDocuments(false)
+    setActionResult(withoutActionError)
+    setDocumentUploadDirty(false)
+    setDocumentUploadBusy(false)
+    setDocumentUploadResetKey((current) => current + 1)
+    setApplicationNumberToAdd('')
+    setAddApplicationError('')
+    resetFieldErrors()
+  }, [detail, editContext, resetFieldErrors])
+
+  const sections = useEditSections<ExemptionEditSection>({
+    isDirty: isExemptionFormDirty,
+    onDiscard: () => {
+      if (currentDetail) setEditForm(toEditForm(currentDetail, editContext))
+      resetFieldErrors()
+    },
+    state: [editingSection, setEditingSection],
+    leaveGuard: {
+      isDirty: isExemptionDirty,
+      isBusy: isExemptionBusy,
+      onDiscard: () => {
+        if (
+          isAddingApplication ||
+          applicationRelationshipDraftDirty ||
+          isAddingDocuments ||
+          documentUploadDirty
+        )
+          onDiscardExemptionChanges()
+      },
+    },
+  })
+  const {
+    confirmDiscard: confirmApplicationDraftDiscard,
+    discardModal: applicationDraftDiscardModal,
+  } = useDiscardPrompt(applicationRelationshipDraftDirty)
+  const { confirmDiscard: confirmPermitCreationDiscard, discardModal: permitCreationDiscardModal } =
+    useDiscardPrompt(isExemptionDirty)
   // The regions come from the edit context, so its failure is reported by role alone.
   const editContextUnavailableMessage =
     hasExemptionEditRole && !editContextLoaded && !editContextRefreshing && !isRefreshingDetail
@@ -1075,7 +1172,6 @@ const ProvincialExemptionDetailsPage = () => {
   const permitCreationActionBusy =
     creatingPermit ||
     saving ||
-    savingPermitCreationChanges ||
     applicationMutationNumber !== null ||
     isRemovingDocumentId !== null ||
     documentUploadBusy
@@ -1094,11 +1190,11 @@ const ProvincialExemptionDetailsPage = () => {
     !isExemptionFormDirty &&
     !documentUploadDirty
   const applicationNumberToAddError =
-    provincialApplicationNumberFieldError(applicationNumberToAdd) ?? ''
-  const addApplicationDisabled =
-    Boolean(applicationMutationNumber) ||
-    !applicationNumberToAdd.trim() ||
-    Boolean(applicationNumberToAddError)
+    checkedApplicationNumber === applicationNumberToAdd
+      ? (fieldErrorText(
+          provincialApplicationNumberFieldError(applicationNumberToAdd, 'Application number', true),
+        ) ?? '')
+      : ''
   const cancelledBlanketOic = persistedTypeCode === 'B' && persistedStatusCode === 'CAN'
   const cancelledExemption = persistedStatusCode === 'CAN'
   const approvalDateRequired =
@@ -1111,6 +1207,11 @@ const ProvincialExemptionDetailsPage = () => {
     currentTypeCode === 'O' &&
     editForm?.exemptionNumber.trim() !== currentDetail?.exemptionNumber
   const canEditStatus = editingSection === 'summary' && canSaveExemption
+  const canEditExemptionType =
+    optionsAvailability === 'available' &&
+    exemptionTypeOptions.length > 0 &&
+    persistedTypeCode !== 'B' &&
+    persistedTypeCode !== 'O'
   const canEditApprovalDate =
     canEditSummaryFields &&
     (currentTypeCode === 'O' ||
@@ -1217,55 +1318,52 @@ const ProvincialExemptionDetailsPage = () => {
       exemptionStatusOptions.length === 0 ||
       (currentTypeCode === 'B' && regionOptions.length === 0))
 
-  const feeRateValidationMessage = editForm?.enableRateOverride
-    ? feeRateFieldError(editForm.feeRate)
-    : ''
-  const summaryValidationMessage = useMemo(() => {
-    if (!editForm) return 'Exemption values are unavailable.'
+  // Each section saves only its own fields, so only those fields can block its Save.
+  const sectionFieldErrors = useMemo((): FieldErrors<ExemptionEditField> => {
+    if (!editForm) return {}
+    if (editingSection === 'fees') {
+      return editForm.enableRateOverride ? { feeRate: feeRateFieldError(editForm.feeRate) } : {}
+    }
+    const errors: FieldErrors<ExemptionEditField> = {}
     if (!exemptionTypeOptions.some((option) => option.value === editForm.exemptionTypeCode)) {
-      return 'Select a valid exemption type.'
+      errors.exemptionTypeCode = 'Select a valid exemption type.'
     }
     if (!exemptionStatusOptions.some((option) => option.value === editForm.exemptionStatusCode)) {
-      return 'Select a valid exemption status.'
+      errors.exemptionStatusCode = 'Select a valid exemption status.'
+    } else if (
+      persistedStatusCode === 'CAN' &&
+      editForm.exemptionStatusCode.trim().toUpperCase() !== 'NEW'
+    ) {
+      errors.exemptionStatusCode = 'Select New to reopen this cancelled exemption.'
     }
-    if (persistedStatusCode === 'CAN') {
-      // Legacy reopening changes only status; the backend preserves the locked summary fields.
-      return editForm.exemptionStatusCode.trim().toUpperCase() === 'NEW'
-        ? ''
-        : 'Select New to reopen this cancelled exemption.'
-    }
+    // Legacy reopening changes only status; the backend preserves the locked summary fields.
+    if (persistedStatusCode === 'CAN') return errors
     if (currentTypeCode === 'O') {
-      if (!editForm.exemptionNumber.trim()) return 'Exemption number is required.'
-      if (editForm.exemptionNumber.trim().length > 8) {
-        return 'Exemption number must be 8 characters or fewer.'
-      }
-      if (!ASCII_PATTERN.test(editForm.exemptionNumber.trim())) {
-        return 'Exemption number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
-      }
-      if (isExemptionNumberChanged) {
-        if (documentUploadDirty) {
-          return 'Submit or reset queued document uploads before changing the exemption number.'
-        }
-        if (applicationRelationshipDraftDirty) {
-          return 'Add or clear the typed application number before changing the exemption number.'
-        }
-        if (
-          documentUploadBusy ||
-          applicationMutationNumber !== null ||
-          isRemovingDocumentId !== null
-        ) {
-          return 'Wait for the current document or application change to finish before changing the exemption number.'
-        }
+      const number = editForm.exemptionNumber.trim()
+      if (!number) {
+        errors.exemptionNumber = 'Exemption number is required.'
+      } else if (number.length > 8) {
+        errors.exemptionNumber = 'Exemption number must be 8 characters or fewer.'
+      } else if (!ASCII_PATTERN.test(number)) {
+        errors.exemptionNumber =
+          'Exemption number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
       }
     }
     if ((currentTypeCode === 'O' || currentTypeCode === 'B') && !editForm.approvalDate.trim()) {
-      return 'Approval date is required.'
-    }
-    if (isoDateFieldError(editForm.approvalDate)) {
-      return 'Approval date must be YYYY-MM-DD.'
+      errors.approvalDate = 'Approval date is required.'
+    } else if (isoDateFieldError(editForm.approvalDate)) {
+      errors.approvalDate = 'Approval date must be YYYY-MM-DD.'
     }
     if (isoDateFieldError(editForm.expiryDate)) {
-      return 'Expiry date must be YYYY-MM-DD.'
+      errors.expiryDate = 'Expiry date must be YYYY-MM-DD.'
+    } else if (!editForm.expiryDate.trim()) {
+      errors.expiryDate = 'Expiry date is required.'
+    } else if (
+      !errors.approvalDate &&
+      editForm.approvalDate &&
+      editForm.expiryDate <= editForm.approvalDate
+    ) {
+      errors.expiryDate = 'Expiry date must be after the approval date.'
     }
     const approvedVolume = Number(editForm.approvedVolume)
     if (
@@ -1274,59 +1372,54 @@ const ProvincialExemptionDetailsPage = () => {
       approvedVolume > 9_999_999.99 ||
       !/^\d{1,7}(\.\d{1,2})?$/.test(editForm.approvedVolume.trim())
     ) {
-      return 'Approval volume must be greater than 0, at most 9,999,999.99, and have at most two decimal places.'
-    }
-    if (!editForm.expiryDate.trim()) return 'Expiry date is required.'
-    if (editForm.approvalDate && editForm.expiryDate <= editForm.approvalDate) {
-      return 'Expiry date must be after the approval date.'
+      errors.approvedVolume =
+        'Approval volume must be greater than 0, at most 9,999,999.99, and have at most two decimal places.'
     }
     if (editForm.otherConditions.length > 250) {
-      return 'Conditions must contain at most 250 characters.'
-    }
-    if (!ASCII_PATTERN.test(editForm.otherConditions.trim())) {
-      return 'Conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
+      errors.otherConditions = 'Conditions must contain at most 250 characters.'
+    } else if (!ASCII_PATTERN.test(editForm.otherConditions.trim())) {
+      errors.otherConditions =
+        'Conditions contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
     }
     if (currentTypeCode === 'B' && editForm.regionNumbers.length === 0) {
-      return 'Select at least one region for a Blanket Order in Council exemption.'
-    }
-    if (
+      errors.regionNumbers = 'Select at least one region for a Blanket Order in Council exemption.'
+    } else if (
       currentTypeCode === 'B' &&
       editForm.regionNumbers.some(
         (regionNumber) => !regionOptions.some((option) => option.id === regionNumber),
       )
     ) {
-      return 'Select valid regions for a Blanket Order in Council exemption.'
+      errors.regionNumbers = 'Select valid regions for a Blanket Order in Council exemption.'
     }
-    return ''
+    return errors
   }, [
     currentTypeCode,
     editForm,
+    editingSection,
     exemptionStatusOptions,
     exemptionTypeOptions,
     persistedStatusCode,
     regionOptions,
-    isExemptionNumberChanged,
-    documentUploadDirty,
-    applicationRelationshipDraftDirty,
-    documentUploadBusy,
-    applicationMutationNumber,
-    isRemovingDocumentId,
   ])
-  // Each section saves only its own fields, so only those fields can block its Save.
-  const formValidationMessage =
-    editingSection === 'fees' ? feeRateValidationMessage : summaryValidationMessage
-
-  const unsavedExemptionSaveUnavailableReason =
-    (optionsAvailability !== 'available' || requiredExemptionOptionsMissing) && isExemptionFormDirty
+  // Problems no field can fix stop a Save before its fields are checked.
+  const saveBlocker = !editForm
+    ? 'Exemption values are unavailable.'
+    : optionsAvailability !== 'available' || requiredExemptionOptionsMissing
       ? 'Authoritative exemption options must load before these changes can be saved.'
-      : documentUploadDirty
-        ? 'Finish or reset the queued document uploads before leaving, or discard all changes.'
-        : applicationRelationshipDraftDirty
-          ? 'Add or clear the typed application number before leaving, or discard all changes.'
-          : undefined
+      : !isExemptionNumberChanged
+        ? ''
+        : documentUploadDirty
+          ? 'Submit or reset queued document uploads before changing the exemption number.'
+          : applicationRelationshipDraftDirty
+            ? 'Add or clear the typed application number before changing the exemption number.'
+            : documentUploadBusy ||
+                applicationMutationNumber !== null ||
+                isRemovingDocumentId !== null
+              ? 'Wait for the current document or application change to finish before changing the exemption number.'
+              : ''
+  const feeRateValidationMessage = fieldErrorText(fieldErrors.feeRate) ?? ''
+  const formValidationMessage = saveAttempted ? saveBlocker : ''
 
-  // INTENTIONAL_LEGACY_DIVERGENCE(SUBMITTER_EXEMPTION_ATTACHMENTS): as on the server, submitters
-  // cannot attach documents to new or Blanket OIC exemptions.
   const submitterAttachmentBlocked =
     isProvincialSubmitter &&
     !isApplicationApprover &&
@@ -1343,33 +1436,18 @@ const ProvincialExemptionDetailsPage = () => {
     editContextLoaded &&
     !exemptionEditLocked
 
-  const refreshPermitData = useCallback(
-    async (currentExemptionNumber: string, blanketOic: boolean) => {
-      const [permitsResult, blanketOicTotalsResult] = await Promise.allSettled([
-        fetchExemptionPermits(currentExemptionNumber),
-        blanketOic ? fetchExemptionBlanketOicTotals(currentExemptionNumber) : Promise.resolve(null),
-      ])
-
-      if (permitsResult.status === 'fulfilled') {
-        setPermitRows(permitsResult.value)
-        setPermitsErrorMessage('')
-      } else {
-        console.error(permitsResult.reason)
-        setPermitRows([])
-        setPermitsErrorMessage('Unable to retrieve permits associated with this exemption.')
-      }
-
-      if (blanketOicTotalsResult.status === 'fulfilled') {
-        setBlanketOicTotals(blanketOicTotalsResult.value)
-        setBlanketOicTotalsErrorMessage('')
-      } else {
-        console.error(blanketOicTotalsResult.reason)
-        setBlanketOicTotals(null)
-        setBlanketOicTotalsErrorMessage('Unable to retrieve Blanket OIC permit volume totals.')
-      }
-    },
-    [],
-  )
+  const refreshPermitData = useCallback(async (currentExemptionNumber: string) => {
+    setPermitsLoaded(false)
+    try {
+      setPermitRows(await fetchExemptionPermits(currentExemptionNumber))
+      setPermitsLoaded(true)
+      setPermitsErrorMessage('')
+    } catch (error) {
+      console.error(error)
+      setPermitRows([])
+      setPermitsErrorMessage('Unable to retrieve permits associated with this exemption.')
+    }
+  }, [])
 
   const refreshEditableData = useCallback(
     async (preserveCurrentStateOnFailure = false) => {
@@ -1393,7 +1471,7 @@ const ProvincialExemptionDetailsPage = () => {
         setEditContext(nextContext)
         setEditContextLoaded(true)
         setEditForm(toEditForm(nextDetail, nextContext))
-        await refreshPermitData(nextDetail.exemptionNumber, nextDetail.blanketOic)
+        await refreshPermitData(nextDetail.exemptionNumber)
       } catch (error) {
         if (!preserveCurrentStateOnFailure) {
           setApplications([])
@@ -1414,196 +1492,151 @@ const ProvincialExemptionDetailsPage = () => {
     [exemptionNumber, refreshPermitData],
   )
 
-  const onSaveExemption = useCallback(
-    async (
-      followRenamedRecord = true,
-      onSaved?: (savedDetail: ProvincialExemptionDetail) => void,
-    ): Promise<boolean> => {
-      if (
-        !detail ||
-        !editContextLoaded ||
-        !editForm ||
-        formValidationMessage ||
-        saving ||
-        requiredExemptionOptionsMissing ||
-        optionsAvailability !== 'available'
-      )
-        return false
-      const resultSource = editingSection === 'fees' ? 'fees' : 'summary'
-      setSaving(true)
+  const onSaveExemption = useCallback(async (): Promise<boolean> => {
+    if (!detail || !editContextLoaded || saving) return false
+    setSaveAttempted(true)
+    if (saveBlocker || !editForm) {
+      resetFieldErrors()
+      return false
+    }
+    if (!canSaveExemption) return false
+    if (!isExemptionFormDirty) {
+      resetFieldErrors()
+      setSaveAttempted(false)
       setActionResult(null)
-      // A Fees save changes only the fee fields; every other value is sent as loaded.
-      const submittedForm: ExemptionEditForm =
-        editingSection === 'fees'
-          ? {
-              ...toEditForm(detail, editContext),
-              enableRateOverride: editForm.enableRateOverride,
-              feeRate: editForm.feeRate,
-            }
-          : editForm
-      try {
-        const nextExemptionNumber =
-          currentTypeCode === 'O' && canEditSummaryFields
-            ? submittedForm.exemptionNumber.trim()
-            : detail.exemptionNumber
-        const result = await updateExemption({
-          exemptionNumber: nextExemptionNumber,
-          previousExemptionNumber: detail.exemptionNumber,
-          approvedVolume: submittedForm.approvedVolume,
-          approvalDate: submittedForm.approvalDate,
-          expiryDate: submittedForm.expiryDate,
-          otherConditions: submittedForm.otherConditions,
-          exemptionTypeCode: submittedForm.exemptionTypeCode,
-          exemptionStatusCode: submittedForm.exemptionStatusCode,
-          manageFeeRate: canManageFeeRate,
-          enableRateOverride: submittedForm.enableRateOverride,
-          feeRate: submittedForm.feeRate,
-          regionNumbers: submittedForm.regionNumbers,
-        })
-        if (!result.success) {
-          setActionResult({
-            source: resultSource,
-            kind: 'error',
-            message: result.errors.join(' ') || result.message,
-          })
-          return false
-        }
-        const committedDetail: ProvincialExemptionDetail = {
-          ...detail,
-          exemptionNumber: result.exemptionNumber.trim() || nextExemptionNumber,
-          exemptionTypeCode: submittedForm.exemptionTypeCode,
-          exemptionStatusCode: submittedForm.exemptionStatusCode,
-          approvalDate: submittedForm.approvalDate || null,
-          expiryDate: submittedForm.expiryDate || null,
-          approvedVolume: Number(submittedForm.approvedVolume),
-          otherConditions: submittedForm.otherConditions || null,
-          blanketOic: submittedForm.exemptionTypeCode.trim().toUpperCase() === 'B',
-        }
-        const committedContext: ExemptionEditContext = {
-          ...editContext,
-          rateOverrideEnabled: submittedForm.enableRateOverride,
-          fixedFeeRate: submittedForm.enableRateOverride ? submittedForm.feeRate : '',
-          regionNumbers: submittedForm.regionNumbers,
-        }
-        setEditingSection(null)
-        if (committedDetail.exemptionNumber !== detail.exemptionNumber) {
-          // The old identifier no longer exists. Let the new route reload all linked data.
-          if (followRenamedRecord) setRenamedExemptionNumber(committedDetail.exemptionNumber)
-          setActionResult({
-            source: resultSource,
-            kind: 'success',
-            title: resultSource === 'fees' ? 'Fees saved.' : 'Exemption details saved.',
-            message: '',
-          })
-          return true
-        }
-        setDetail(committedDetail)
-        setEditContext(committedContext)
-        setEditForm(toEditForm(committedDetail, committedContext))
-        try {
-          await refreshEditableData()
-          setActionResult({
-            source: resultSource,
-            kind: 'success',
-            title: resultSource === 'fees' ? 'Fees saved.' : 'Exemption details saved.',
-            message: '',
-          })
-        } catch (refreshError) {
-          console.error(refreshError)
-          setApplicationsErrorMessage(
-            'Application links changed, but the current links could not be refreshed. Reload the page.',
-          )
-          setActionResult({
-            source: resultSource,
-            kind: 'warning',
-            message: `${result.message || 'The exemption was saved.'} Current data could not be refreshed; reload before making another change.`,
-          })
-          return true
-        }
-        onSaved?.(committedDetail)
-        return true
-      } catch (error) {
-        console.error(error)
+      sections.finishEditing()
+      return true
+    }
+    if (!showFieldErrors(sectionFieldErrors, () => tabsColumnRef.current)) return false
+    const resultSource = editingSection === 'fees' ? 'fees' : 'summary'
+    setSaving(true)
+    setActionResult(null)
+    // A Fees save changes only the fee fields; every other value is sent as loaded.
+    const submittedForm: ExemptionEditForm =
+      editingSection === 'fees'
+        ? {
+            ...toEditForm(detail, editContext),
+            enableRateOverride: editForm.enableRateOverride,
+            feeRate: editForm.feeRate,
+          }
+        : editForm
+    try {
+      const nextExemptionNumber =
+        currentTypeCode === 'O' && canEditSummaryFields
+          ? submittedForm.exemptionNumber.trim()
+          : detail.exemptionNumber
+      const result = await updateExemption({
+        exemptionNumber: nextExemptionNumber,
+        previousExemptionNumber: detail.exemptionNumber,
+        approvedVolume: submittedForm.approvedVolume,
+        approvalDate: submittedForm.approvalDate,
+        expiryDate: submittedForm.expiryDate,
+        otherConditions: submittedForm.otherConditions,
+        exemptionTypeCode: submittedForm.exemptionTypeCode,
+        exemptionStatusCode: submittedForm.exemptionStatusCode,
+        manageFeeRate: canManageFeeRate,
+        enableRateOverride: submittedForm.enableRateOverride,
+        feeRate: submittedForm.feeRate,
+        regionNumbers: submittedForm.regionNumbers,
+      })
+      if (!result.success) {
         setActionResult({
           source: resultSource,
           kind: 'error',
-          message: 'Unable to save the exemption.',
+          message: result.errors.join(' ') || result.message,
         })
         return false
-      } finally {
-        setSaving(false)
       }
-    },
-    [
-      detail,
-      editContextLoaded,
-      editForm,
-      formValidationMessage,
-      refreshEditableData,
-      saving,
-      canManageFeeRate,
-      editContext,
-      optionsAvailability,
-      requiredExemptionOptionsMissing,
-      canEditSummaryFields,
-      currentTypeCode,
-      editingSection,
-    ],
-  )
-
-  const onDiscardExemptionChanges = useCallback(() => {
-    if (detail) {
-      setEditForm(toEditForm(detail, editContext))
+      const committedDetail: ProvincialExemptionDetail = {
+        ...detail,
+        exemptionNumber: result.exemptionNumber.trim() || nextExemptionNumber,
+        exemptionTypeCode: submittedForm.exemptionTypeCode,
+        exemptionStatusCode: submittedForm.exemptionStatusCode,
+        approvalDate: submittedForm.approvalDate || null,
+        expiryDate: submittedForm.expiryDate || null,
+        approvedVolume: Number(submittedForm.approvedVolume),
+        otherConditions: submittedForm.otherConditions || null,
+        blanketOic: submittedForm.exemptionTypeCode.trim().toUpperCase() === 'B',
+      }
+      const committedContext: ExemptionEditContext = {
+        ...editContext,
+        rateOverrideEnabled: submittedForm.enableRateOverride,
+        fixedFeeRate: submittedForm.enableRateOverride ? submittedForm.feeRate : '',
+        regionNumbers: submittedForm.regionNumbers,
+      }
+      setEditingSection(null)
+      if (committedDetail.exemptionNumber !== detail.exemptionNumber) {
+        // The old identifier no longer exists. Let the new route reload all linked data.
+        setRenamedExemptionNumber(committedDetail.exemptionNumber)
+        setActionResult({
+          source: resultSource,
+          kind: 'success',
+          title: resultSource === 'fees' ? 'Fees saved.' : 'Exemption details saved.',
+          message: '',
+        })
+        return true
+      }
+      setDetail(committedDetail)
+      setEditContext(committedContext)
+      setEditForm(toEditForm(committedDetail, committedContext))
+      try {
+        await refreshEditableData()
+        setActionResult({
+          source: resultSource,
+          kind: 'success',
+          title: resultSource === 'fees' ? 'Fees saved.' : 'Exemption details saved.',
+          message: '',
+        })
+      } catch (refreshError) {
+        console.error(refreshError)
+        setApplicationsErrorMessage(
+          'Application links changed, but the current links could not be refreshed. Reload the page.',
+        )
+        setActionResult({
+          source: resultSource,
+          kind: 'warning',
+          message: `${result.message || 'The exemption was saved.'} Current data could not be refreshed; reload before making another change.`,
+        })
+        return true
+      }
+      return true
+    } catch (error) {
+      console.error(error)
+      setActionResult({
+        source: resultSource,
+        kind: 'error',
+        message: 'Unable to save the exemption.',
+      })
+      return false
+    } finally {
+      setSaving(false)
     }
-    setEditingSection(null)
-    setIsAddingDocuments(false)
-    setActionResult(withoutActionError)
-    setDocumentUploadDirty(false)
-    setDocumentUploadBusy(false)
-    setDocumentUploadResetKey((current) => current + 1)
-    setApplicationNumberToAdd('')
-    setAddApplicationError('')
-  }, [detail, editContext])
+  }, [
+    canSaveExemption,
+    isExemptionFormDirty,
+    sections,
+    detail,
+    editContextLoaded,
+    editForm,
+    saveBlocker,
+    sectionFieldErrors,
+    resetFieldErrors,
+    showFieldErrors,
+    refreshEditableData,
+    saving,
+    canManageFeeRate,
+    editContext,
+    canEditSummaryFields,
+    currentTypeCode,
+    editingSection,
+  ])
 
-  const startEditingSection = useCallback(
-    (section: ExemptionEditSection) => {
+  const startEditingSection = (section: ExemptionEditSection) =>
+    sections.startEditing(section, () => {
       if (currentDetail) setEditForm(toEditForm(currentDetail, editContext))
-      setEditingSection(section)
-    },
-    [currentDetail, editContext],
-  )
-
-  const onSaveUnsavedExemptionChanges = useCallback(
-    async (
-      followRenamedRecord = false,
-      onSaved?: (savedDetail: ProvincialExemptionDetail) => void,
-    ): Promise<boolean> => {
-      if (documentUploadDirty) {
-        setActionResult({
-          kind: 'error',
-          message:
-            'Queued document uploads must be submitted or reset before leaving this exemption.',
-        })
-        return false
-      }
-      if (applicationRelationshipDraftDirty) {
-        selectExemptionTab('applications')
-        setActionResult({
-          kind: 'error',
-          message: 'Add the typed application number or clear it before leaving.',
-        })
-        return false
-      }
-      return isExemptionFormDirty ? onSaveExemption(followRenamedRecord, onSaved) : true
-    },
-    [
-      applicationRelationshipDraftDirty,
-      documentUploadDirty,
-      isExemptionFormDirty,
-      onSaveExemption,
-      selectExemptionTab,
-    ],
-  )
+      resetFieldErrors()
+      setSaveAttempted(false)
+    })
 
   const closeApprovalConfirmation = useCallback((targetNumber: string) => {
     if (approvalTargetRef.current !== targetNumber) return
@@ -1719,13 +1752,6 @@ const ProvincialExemptionDetailsPage = () => {
     [canStartApplicationBackedPermitCreation, canStartBlanketOicPermitCreation, currentDetail],
   )
 
-  const closePermitCreationUnsavedChanges = useCallback(() => {
-    if (savingPermitCreationChanges) return
-    setPermitCreationUnsavedChangesOpen(false)
-    setPermitCreationSaveFailed(false)
-    setPermitCreationSavedRequiresReload(false)
-  }, [savingPermitCreationChanges])
-
   const onRequestPermitCreation = useCallback(() => {
     if (
       permitCreationActionBusy ||
@@ -1733,11 +1759,12 @@ const ProvincialExemptionDetailsPage = () => {
     ) {
       return
     }
-    setPermitCreationSaveFailed(false)
-    setPermitCreationSavedRequiresReload(false)
     setActionResult(null)
     if (isExemptionDirty) {
-      setPermitCreationUnsavedChangesOpen(true)
+      confirmPermitCreationDiscard(() => {
+        onDiscardExemptionChanges()
+        continuePermitCreation()
+      })
       return
     }
     setEditingSection(null)
@@ -1745,61 +1772,11 @@ const ProvincialExemptionDetailsPage = () => {
   }, [
     canStartApplicationBackedPermitCreation,
     canStartBlanketOicPermitCreation,
+    confirmPermitCreationDiscard,
     continuePermitCreation,
     isExemptionDirty,
-    permitCreationActionBusy,
-  ])
-
-  const onDiscardChangesBeforePermitCreation = useCallback(() => {
-    if (savingPermitCreationChanges || permitCreationActionBusy) return
-    onDiscardExemptionChanges()
-    setPermitCreationUnsavedChangesOpen(false)
-    setPermitCreationSaveFailed(false)
-    setPermitCreationSavedRequiresReload(false)
-    continuePermitCreation()
-  }, [
-    continuePermitCreation,
     onDiscardExemptionChanges,
     permitCreationActionBusy,
-    savingPermitCreationChanges,
-  ])
-
-  const onSaveChangesBeforePermitCreation = useCallback(async () => {
-    if (savingPermitCreationChanges || permitCreationActionBusy) return
-    const renamedExemption = isExemptionNumberChanged
-    let savedDetail: ProvincialExemptionDetail | null = null
-    setSavingPermitCreationChanges(true)
-    setPermitCreationSaveFailed(false)
-    setPermitCreationSavedRequiresReload(false)
-    try {
-      const saved = await onSaveUnsavedExemptionChanges(true, (nextDetail) => {
-        savedDetail = nextDetail
-      })
-      if (!saved) {
-        setPermitCreationSaveFailed(true)
-        return
-      }
-      if (renamedExemption) {
-        setPermitCreationUnsavedChangesOpen(false)
-        return
-      }
-      if (!savedDetail) {
-        setPermitCreationSavedRequiresReload(true)
-        return
-      }
-      setPermitCreationUnsavedChangesOpen(false)
-      continuePermitCreation(savedDetail)
-    } catch {
-      setPermitCreationSaveFailed(true)
-    } finally {
-      setSavingPermitCreationChanges(false)
-    }
-  }, [
-    continuePermitCreation,
-    isExemptionNumberChanged,
-    onSaveUnsavedExemptionChanges,
-    permitCreationActionBusy,
-    savingPermitCreationChanges,
   ])
 
   const onCreatePermitFromExemption = useCallback(async () => {
@@ -1876,13 +1853,12 @@ const ProvincialExemptionDetailsPage = () => {
   }, [detail, generatingReport])
 
   const onAddApplication = useCallback(async () => {
-    if (
-      !detail ||
-      !applicationNumberToAdd.trim() ||
-      applicationNumberToAddError ||
-      applicationMutationNumber
-    )
+    if (!detail || applicationMutationNumber) return
+    setCheckedApplicationNumber(applicationNumberToAdd)
+    if (provincialApplicationNumberFieldError(applicationNumberToAdd, 'Application number', true)) {
+      addApplicationInputRef.current?.focus()
       return
+    }
     const enteredNumber = applicationNumberToAdd.trim()
     const number = normalizeProvincialApplicationNumber(enteredNumber)
     const showFailure = async (kind: AddApplicationFailure, serverMessage = '') => {
@@ -1902,12 +1878,14 @@ const ProvincialExemptionDetailsPage = () => {
         }
       }
       setAddApplicationError(
-        addApplicationFailureMessage(
-          kind,
-          enteredNumber,
-          exemptionClientNumber,
-          assignedExemptionNumber,
-          serverMessage,
+        fieldErrorText(
+          addApplicationFailureMessage(
+            kind,
+            enteredNumber,
+            exemptionClientNumber,
+            assignedExemptionNumber,
+            serverMessage,
+          ),
         ),
       )
     }
@@ -1963,12 +1941,17 @@ const ProvincialExemptionDetailsPage = () => {
   }, [
     applicationMutationNumber,
     applicationNumberToAdd,
-    applicationNumberToAddError,
     applications,
     detail,
     exemptionClientNumber,
     refreshEditableData,
   ])
+
+  const closeAddApplication = () => {
+    setApplicationNumberToAdd('')
+    setAddApplicationError('')
+    setIsAddingApplication(false)
+  }
 
   useEffect(() => {
     // Carbon's invalid text isn't announced, so focus the field it describes.
@@ -2121,13 +2104,9 @@ const ProvincialExemptionDetailsPage = () => {
         {creatingPermit ? 'Creating permit…' : 'Apply for new permit'}
       </Button>
     ) : undefined
-  const completedBlanketVolume = Number(blanketOicTotals?.completedVolume)
-  const blanketBalanceRemaining =
-    currentDetail?.approvedVolume != null &&
-    blanketOicTotals?.completedVolume.trim() &&
-    Number.isFinite(completedBlanketVolume)
-      ? currentDetail.approvedVolume - completedBlanketVolume
-      : null
+  const emptyBlanketOicPermits =
+    currentDetail?.blanketOic && permitsLoaded && permitRows.length === 0
+  const PermitsContainer = emptyBlanketOicPermits ? 'section' : Tile
 
   const sectionResult = (source: ExemptionActionResult['source']) =>
     actionResult && actionResult.source === source ? (
@@ -2257,21 +2236,19 @@ const ProvincialExemptionDetailsPage = () => {
                 />
               </div>
             )}
-          {editing &&
-            !!formValidationMessage &&
-            // The Fees section shows its fee rate error on the field itself.
-            editingSection !== 'fees' && (
-              <InlineNotification
-                className="detail-context-notification"
-                kind="warning"
-                title="Review exemption values"
-                subtitle={formValidationMessage}
-                lowContrast
-                hideCloseButton
-              />
-            )}
+          {editing && !!formValidationMessage && (
+            <InlineNotification
+              className="detail-context-notification"
+              kind="warning"
+              title="Review exemption values"
+              subtitle={formValidationMessage}
+              lowContrast
+              hideCloseButton
+            />
+          )}
 
           <Column
+            ref={tabsColumnRef}
             sm={4}
             md={8}
             lg={16}
@@ -2288,7 +2265,9 @@ const ProvincialExemptionDetailsPage = () => {
             <Tabs
               selectedIndex={selectedExemptionTabIndex}
               onChange={({ selectedIndex }) => {
-                selectExemptionTab(exemptionDetailTabs[selectedIndex] ?? 'summary')
+                sections.confirmLeave(() =>
+                  selectExemptionTab(exemptionDetailTabs[selectedIndex] ?? 'summary'),
+                )
               }}
             >
               <TabList
@@ -2324,7 +2303,11 @@ const ProvincialExemptionDetailsPage = () => {
                   </TabPanel>
                 )}
                 <TabPanel key="summary" className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
+                  <Grid
+                    ref={sections.sectionRef('summary')}
+                    fullWidth
+                    className="application-detail-tab-grid"
+                  >
                     {editingSection === 'summary' && editForm ? (
                       <>
                         <Column sm={4} md={8} lg={16}>
@@ -2332,184 +2315,222 @@ const ProvincialExemptionDetailsPage = () => {
                             <DetailCardTitle icon={Rule}>Exemption details</DetailCardTitle>
                             {sectionResult('summary')}
                             <RequiredFieldsLegend className="application-detail-required" />
-                            <div className="legacy-search-grid">
-                              {currentTypeCode === 'O' && (
-                                <TextInput
-                                  id="exemptionDetailNumber"
-                                  labelText={requiredLabel('Exemption number')}
-                                  required
-                                  maxLength={8}
-                                  value={editForm.exemptionNumber}
-                                  disabled={!canEditSummaryFields}
-                                  onChange={(event) =>
-                                    setEditForm((current) =>
-                                      current
-                                        ? {
-                                            ...current,
-                                            exemptionNumber: event.target.value.toUpperCase(),
-                                          }
-                                        : current,
-                                    )
-                                  }
-                                />
-                              )}
-                              <SearchableSelect
-                                id="exemptionDetailType"
-                                labelText={requiredLabel('Exemption type')}
-                                required
-                                value={editForm.exemptionTypeCode}
-                                options={editableTypeOptions}
-                                disabled={
-                                  optionsAvailability !== 'available' ||
-                                  exemptionTypeOptions.length === 0 ||
-                                  persistedTypeCode === 'B' ||
-                                  persistedTypeCode === 'O'
-                                }
-                                onChange={(value) =>
-                                  setEditForm((current) =>
-                                    current ? { ...current, exemptionTypeCode: value } : current,
-                                  )
-                                }
-                              />
-                              <SearchableSelect
-                                id="exemptionDetailStatus"
-                                labelText={requiredLabel('Status')}
-                                required
-                                value={editForm.exemptionStatusCode}
-                                options={editableStatusOptions}
-                                disabled={
-                                  optionsAvailability !== 'available' ||
-                                  exemptionStatusOptions.length === 0 ||
-                                  !canEditStatus
-                                }
-                                onChange={(value) =>
-                                  setEditForm((current) =>
-                                    current ? { ...current, exemptionStatusCode: value } : current,
-                                  )
-                                }
-                              />
-                              <IsoDatePicker
-                                id="exemptionDetailApprovalDate"
-                                labelText={requiredLabel('Approval date', approvalDateRequired)}
-                                required={approvalDateRequired}
-                                value={editForm.approvalDate}
-                                invalid={
-                                  (approvalDateRequired && !editForm.approvalDate.trim()) ||
-                                  !!isoDateFieldError(editForm.approvalDate)
-                                }
-                                invalidText={
-                                  !editForm.approvalDate.trim()
-                                    ? 'Approval date is required.'
-                                    : 'Approval date must be YYYY-MM-DD.'
-                                }
-                                disabled={!canEditApprovalDate}
-                                onChange={(value) =>
-                                  setEditForm((current) =>
-                                    current ? { ...current, approvalDate: value } : current,
-                                  )
-                                }
-                              />
-                              <IsoDatePicker
-                                id="exemptionDetailExpiryDate"
-                                labelText={requiredLabel('Expiry date', expiryDateRequired)}
-                                required={expiryDateRequired}
-                                value={editForm.expiryDate}
-                                invalid={
-                                  (expiryDateRequired && !editForm.expiryDate.trim()) ||
-                                  !!isoDateFieldError(editForm.expiryDate)
-                                }
-                                invalidText={
-                                  !editForm.expiryDate.trim()
-                                    ? 'Expiry date is required.'
-                                    : 'Expiry date must be YYYY-MM-DD.'
-                                }
-                                disabled={!canEditExpiryDate}
-                                onChange={(value) =>
-                                  setEditForm((current) =>
-                                    current ? { ...current, expiryDate: value } : current,
-                                  )
-                                }
-                              />
-                              <TextInput
-                                id="exemptionDetailApprovedVolume"
-                                labelText={requiredLabel('Approval volume (m³)')}
-                                aria-required="true"
-                                value={editForm.approvedVolume}
-                                disabled={!canEditApprovedVolume}
-                                onChange={(event) =>
-                                  setEditForm((current) =>
-                                    current
-                                      ? { ...current, approvedVolume: event.target.value }
-                                      : current,
-                                  )
-                                }
-                              />
-                              {currentTypeCode === 'B' && (
-                                <div className="detail-field-item--full">
-                                  <RegionMultiSelect
-                                    id="exemptionDetailRegions"
-                                    titleText={requiredLabel('Regions')}
+                            <RecordFieldGrid editing>
+                              <RecordFieldRow>
+                                <RecordFieldCell>
+                                  <SearchableSelect
+                                    id="exemptionDetailStatus"
+                                    labelText={requiredLabel('Status')}
                                     required
-                                    items={regionOptions}
-                                    selectedItems={selectedRegions}
+                                    value={editForm.exemptionStatusCode}
+                                    options={editableStatusOptions}
                                     disabled={
                                       optionsAvailability !== 'available' ||
-                                      !canEditSummaryFields ||
-                                      regionOptions.length === 0
+                                      exemptionStatusOptions.length === 0 ||
+                                      !canEditStatus
                                     }
-                                    onChange={(selectedItems) =>
+                                    invalid={!!fieldErrors.exemptionStatusCode}
+                                    invalidText={fieldErrorText(fieldErrors.exemptionStatusCode)}
+                                    onChange={(value) =>
                                       setEditForm((current) =>
                                         current
-                                          ? {
-                                              ...current,
-                                              regionNumbers: selectedItems.map((item) => item.id),
-                                            }
+                                          ? { ...current, exemptionStatusCode: value }
                                           : current,
                                       )
                                     }
                                   />
-                                </div>
-                              )}
-                              <div className="detail-field-item--full">
-                                <TextArea
-                                  id="exemptionDetailOtherConditions"
-                                  labelText="Conditions"
-                                  enableCounter
-                                  maxCount={250}
-                                  maxLength={250}
-                                  value={editForm.otherConditions}
-                                  disabled={!canEditSummaryFields}
-                                  onChange={(event) =>
-                                    setEditForm((current) =>
-                                      current
-                                        ? { ...current, otherConditions: event.target.value }
-                                        : current,
-                                    )
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                              <RecordFieldRow>
+                                {canEditExemptionType ? (
+                                  <RecordFieldCell>
+                                    <SearchableSelect
+                                      id="exemptionDetailType"
+                                      labelText={requiredLabel('Exemption type')}
+                                      required
+                                      value={editForm.exemptionTypeCode}
+                                      options={editableTypeOptions}
+                                      invalid={!!fieldErrors.exemptionTypeCode}
+                                      invalidText={fieldErrorText(fieldErrors.exemptionTypeCode)}
+                                      onChange={(value) =>
+                                        setEditForm((current) =>
+                                          current
+                                            ? { ...current, exemptionTypeCode: value }
+                                            : current,
+                                        )
+                                      }
+                                    />
+                                  </RecordFieldCell>
+                                ) : (
+                                  <RecordField
+                                    label="Exemption type"
+                                    value={exemptionTypeValue(detail)}
+                                  />
+                                )}
+                                <RecordField
+                                  label="Exemption holder"
+                                  value={
+                                    detail.blanketOic
+                                      ? 'Blanket OIC'
+                                      : exemptionHolder.trim() ||
+                                        detail.ownerClientNumber?.trim() ||
+                                        exemptionOwnerClientNumber
                                   }
                                 />
-                              </div>
-                            </div>
+                                {currentTypeCode === 'O' && (
+                                  <RecordFieldCell>
+                                    <TextInput
+                                      id="exemptionDetailNumber"
+                                      labelText={requiredLabel('Exemption number')}
+                                      required
+                                      maxLength={8}
+                                      value={editForm.exemptionNumber}
+                                      disabled={!canEditSummaryFields}
+                                      invalid={!!fieldErrors.exemptionNumber}
+                                      invalidText={fieldErrorText(fieldErrors.exemptionNumber)}
+                                      onChange={(event) =>
+                                        setEditForm((current) =>
+                                          current
+                                            ? {
+                                                ...current,
+                                                exemptionNumber: event.target.value.toUpperCase(),
+                                              }
+                                            : current,
+                                        )
+                                      }
+                                    />
+                                  </RecordFieldCell>
+                                )}
+                              </RecordFieldRow>
+                              <RecordFieldRow>
+                                {canEditApprovalDate ? (
+                                  <RecordFieldCell>
+                                    <IsoDatePicker
+                                      id="exemptionDetailApprovalDate"
+                                      labelText={requiredLabel(
+                                        'Approval date',
+                                        approvalDateRequired,
+                                      )}
+                                      required={approvalDateRequired}
+                                      value={editForm.approvalDate}
+                                      invalid={!!fieldErrors.approvalDate}
+                                      invalidText={fieldErrorText(fieldErrors.approvalDate)}
+                                      onChange={(value) =>
+                                        setEditForm((current) =>
+                                          current ? { ...current, approvalDate: value } : current,
+                                        )
+                                      }
+                                    />
+                                  </RecordFieldCell>
+                                ) : (
+                                  <RecordField
+                                    label="Approval date"
+                                    value={approvalDateValue(detail)}
+                                  />
+                                )}
+                                <RecordFieldCell>
+                                  <IsoDatePicker
+                                    id="exemptionDetailExpiryDate"
+                                    labelText={requiredLabel('Expiry date', expiryDateRequired)}
+                                    required={expiryDateRequired}
+                                    value={editForm.expiryDate}
+                                    invalid={!!fieldErrors.expiryDate}
+                                    invalidText={fieldErrorText(fieldErrors.expiryDate)}
+                                    disabled={!canEditExpiryDate}
+                                    onChange={(value) =>
+                                      setEditForm((current) =>
+                                        current ? { ...current, expiryDate: value } : current,
+                                      )
+                                    }
+                                  />
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                              <RecordFieldRow>
+                                <RecordFieldCell>
+                                  <TextInput
+                                    id="exemptionDetailApprovedVolume"
+                                    labelText={requiredLabel('Approval volume (m³)')}
+                                    aria-required="true"
+                                    value={editForm.approvedVolume}
+                                    disabled={!canEditApprovedVolume}
+                                    invalid={!!fieldErrors.approvedVolume}
+                                    invalidText={fieldErrorText(fieldErrors.approvedVolume)}
+                                    onChange={(event) =>
+                                      setEditForm((current) =>
+                                        current
+                                          ? { ...current, approvedVolume: event.target.value }
+                                          : current,
+                                      )
+                                    }
+                                  />
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                              <RecordFieldRow>
+                                {currentTypeCode === 'B' && (
+                                  <RecordFieldCell span="wide">
+                                    <RegionMultiSelect
+                                      id="exemptionDetailRegions"
+                                      titleText={requiredLabel('Region')}
+                                      required
+                                      items={regionOptions}
+                                      selectedItems={selectedRegions}
+                                      disabled={
+                                        optionsAvailability !== 'available' ||
+                                        !canEditSummaryFields ||
+                                        regionOptions.length === 0
+                                      }
+                                      invalid={!!fieldErrors.regionNumbers}
+                                      invalidText={fieldErrorText(fieldErrors.regionNumbers)}
+                                      onChange={(selectedItems) =>
+                                        setEditForm((current) =>
+                                          current
+                                            ? {
+                                                ...current,
+                                                regionNumbers: selectedItems.map((item) => item.id),
+                                              }
+                                            : current,
+                                        )
+                                      }
+                                    />
+                                  </RecordFieldCell>
+                                )}
+                              </RecordFieldRow>
+                              <RecordFieldRow>
+                                <RecordFieldCell span="full">
+                                  <TextArea
+                                    id="exemptionDetailOtherConditions"
+                                    labelText="Conditions"
+                                    enableCounter
+                                    maxCount={250}
+                                    maxLength={250}
+                                    value={editForm.otherConditions}
+                                    disabled={!canEditSummaryFields}
+                                    invalid={!!fieldErrors.otherConditions}
+                                    invalidText={fieldErrorText(fieldErrors.otherConditions)}
+                                    onChange={(event) =>
+                                      setEditForm((current) =>
+                                        current
+                                          ? { ...current, otherConditions: event.target.value }
+                                          : current,
+                                      )
+                                    }
+                                  />
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                            </RecordFieldGrid>
                             <div className="legacy-search-actions">
                               <Button
                                 kind="tertiary"
                                 size="md"
                                 disabled={saving}
-                                onClick={() => {
-                                  setEditForm(toEditForm(currentDetail, editContext))
-                                  setEditingSection(null)
-                                }}
+                                onClick={sections.cancelEditing}
                               >
                                 Cancel
                               </Button>
                               <Button
                                 kind="primary"
                                 size="md"
-                                disabled={
-                                  saving ||
-                                  Boolean(formValidationMessage) ||
-                                  requiredExemptionOptionsMissing ||
-                                  optionsAvailability !== 'available'
-                                }
+                                disabled={saving}
                                 renderIcon={saving ? PendingIcon : undefined}
                                 onClick={() => void onSaveExemption()}
                               >
@@ -2526,6 +2547,7 @@ const ProvincialExemptionDetailsPage = () => {
                             <DetailCardTitle icon={Rule}>Exemption details</DetailCardTitle>
                             {canSaveExemption && !editing && (
                               <Button
+                                ref={sections.editButtonRef('summary')}
                                 kind="tertiary"
                                 size="md"
                                 renderIcon={Edit}
@@ -2536,24 +2558,29 @@ const ProvincialExemptionDetailsPage = () => {
                             )}
                           </div>
                           {sectionResult('summary')}
-                          <div className="exemption-field-groups">
-                            <DetailFieldGrid
-                              fields={[
+                          <RecordFieldGrid>
+                            <RecordFieldRow>
+                              {[
                                 {
                                   label: 'Status',
                                   value: displayValue(
                                     detail.exemptionStatusDescription ?? detail.exemptionStatusCode,
                                   ),
                                 },
-                              ]}
-                            />
-                            <DetailFieldGrid
-                              fields={[
+                              ].map((field: DetailField) => (
+                                <RecordField
+                                  key={field.label}
+                                  label={field.label}
+                                  value={field.value}
+                                  span={field.span}
+                                />
+                              ))}
+                            </RecordFieldRow>
+                            <RecordFieldRow>
+                              {[
                                 {
                                   label: 'Exemption type',
-                                  value: displayValue(
-                                    detail.exemptionTypeDescription ?? detail.exemptionTypeCode,
-                                  ),
+                                  value: exemptionTypeValue(detail),
                                 },
                                 {
                                   label: 'Exemption holder',
@@ -2565,41 +2592,86 @@ const ProvincialExemptionDetailsPage = () => {
                                           exemptionOwnerClientNumber,
                                       ),
                                 },
-                              ]}
-                            />
-                            <DetailFieldGrid
-                              fields={[
+                              ].map((field: DetailField) => (
+                                <RecordField
+                                  key={field.label}
+                                  label={field.label}
+                                  value={field.value}
+                                  span={field.span}
+                                />
+                              ))}
+                            </RecordFieldRow>
+                            <RecordFieldRow>
+                              {[
                                 {
                                   label: 'Approval date',
-                                  value: detail.approvalDate
-                                    ? formatIsoDateLabel(detail.approvalDate)
-                                    : 'Not approved',
+                                  value: approvalDateValue(detail),
                                 },
                                 {
                                   label: 'Expiry date',
-                                  value: displayValue(formatIsoDateLabel(detail.expiryDate)),
+                                  value: displayValue(detail.expiryDate),
                                 },
-                              ]}
-                            />
-                            <DetailFieldGrid
-                              fields={[
+                              ].map((field: DetailField) => (
+                                <RecordField
+                                  key={field.label}
+                                  label={field.label}
+                                  value={field.value}
+                                  span={field.span}
+                                />
+                              ))}
+                            </RecordFieldRow>
+                            <RecordFieldRow>
+                              {[
                                 {
                                   label: 'Approval volume (m³)',
                                   value: formatExemptionVolume(detail.approvedVolume),
                                 },
-                              ]}
-                            />
+                              ].map((field: DetailField) => (
+                                <RecordField
+                                  key={field.label}
+                                  label={field.label}
+                                  value={field.value}
+                                  span={field.span}
+                                />
+                              ))}
+                            </RecordFieldRow>
                             {!!exemptionRegionNames && (
-                              <DetailFieldGrid
-                                fields={[{ label: 'Region', value: exemptionRegionNames }]}
-                              />
+                              <RecordFieldRow>
+                                {[
+                                  {
+                                    label: 'Region',
+                                    value: exemptionRegionNames,
+                                    span: 'wide' as const,
+                                  },
+                                ].map((field: DetailField) => (
+                                  <RecordField
+                                    key={field.label}
+                                    label={field.label}
+                                    value={field.value}
+                                    span={field.span}
+                                  />
+                                ))}
+                              </RecordFieldRow>
                             )}
                             {!!detail.otherConditions && (
-                              <DetailFieldGrid
-                                fields={[{ label: 'Conditions', value: detail.otherConditions }]}
-                              />
+                              <RecordFieldRow>
+                                {[
+                                  {
+                                    label: 'Conditions',
+                                    value: detail.otherConditions,
+                                    span: 'full' as const,
+                                  },
+                                ].map((field: DetailField) => (
+                                  <RecordField
+                                    key={field.label}
+                                    label={field.label}
+                                    value={field.value}
+                                    span={field.span}
+                                  />
+                                ))}
+                              </RecordFieldRow>
                             )}
-                          </div>
+                          </RecordFieldGrid>
                         </Tile>
                       </Column>
                     )}
@@ -2620,6 +2692,7 @@ const ProvincialExemptionDetailsPage = () => {
                                 ref={addApplicationButtonRef}
                                 onClick={() => {
                                   setAddApplicationError('')
+                                  setCheckedApplicationNumber(null)
                                   setIsAddingApplication(true)
                                 }}
                               >
@@ -2648,24 +2721,17 @@ const ProvincialExemptionDetailsPage = () => {
                                   label: 'Cancel',
                                   kind: 'tertiary',
                                   disabled: Boolean(applicationMutationNumber),
-                                  onClick: () => {
-                                    setApplicationNumberToAdd('')
-                                    setAddApplicationError('')
-                                    setIsAddingApplication(false)
-                                  },
+                                  onClick: () =>
+                                    confirmApplicationDraftDiscard(closeAddApplication),
                                 },
                                 {
                                   label: applicationMutationNumber ? 'Saving…' : 'Save application',
                                   kind: 'primary',
-                                  disabled: addApplicationDisabled,
+                                  disabled: Boolean(applicationMutationNumber),
                                   onClick: () => void onAddApplication(),
                                 },
                               ]}
-                              onClose={() => {
-                                setApplicationNumberToAdd('')
-                                setAddApplicationError('')
-                                setIsAddingApplication(false)
-                              }}
+                              onClose={() => confirmApplicationDraftDiscard(closeAddApplication)}
                             >
                               <TextInput
                                 ref={addApplicationInputRef}
@@ -2811,84 +2877,44 @@ const ProvincialExemptionDetailsPage = () => {
                     </Grid>
                   </TabPanel>
                 )}
-                <TabPanel key="permits" className="application-detail-tab-panel">
+                <TabPanel
+                  key="permits"
+                  className={`application-detail-tab-panel${emptyBlanketOicPermits ? ' application-detail-tab-panel--empty' : ''}`}
+                >
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <div className="detail-section-card__header">
-                          <DetailCardTitle icon={Certificate}>Permits</DetailCardTitle>
-                          {(visiblePermitRows.length > 0 || Boolean(permitsErrorMessage)) &&
-                            applyForPermitButton}
-                        </div>
-                        {editing && (
+                      <PermitsContainer>
+                        {!emptyBlanketOicPermits && (
+                          <div className="detail-section-card__header">
+                            <DetailCardTitle icon={Certificate}>Permits</DetailCardTitle>
+                            {(visiblePermitRows.length > 0 || Boolean(permitsErrorMessage)) &&
+                              applyForPermitButton}
+                          </div>
+                        )}
+                        {editing && !emptyBlanketOicPermits && (
                           <p className="detail-read-only-note">
                             Permit records are read-only. Use the Exemption details or Fees tab to
                             edit exemption values.
                           </p>
                         )}
-                        {detail.blanketOic && blanketOicTotalsErrorMessage && (
-                          <InlineNotification
-                            className="detail-context-notification"
-                            kind="warning"
-                            title="Blanket OIC totals unavailable"
-                            subtitle={blanketOicTotalsErrorMessage}
-                            lowContrast
-                            hideCloseButton
-                          />
-                        )}
-                        {detail.blanketOic && blanketOicTotals && (
-                          <dl
-                            className="detail-field-grid"
-                            aria-label="Blanket OIC permit volume totals"
-                          >
-                            <div className="detail-field-item">
-                              <dt className="detail-field-label">Approved volume (m³)</dt>
-                              <dd className="detail-field-value">
-                                {formatExemptionVolume(detail.approvedVolume)}
-                              </dd>
-                            </div>
-                            <div className="detail-field-item">
-                              <dt className="detail-field-label">Sum of completed permits (m³)</dt>
-                              <dd className="detail-field-value">
-                                {formatExemptionVolume(blanketOicTotals.completedVolume)}
-                              </dd>
-                            </div>
-                            <div className="detail-field-item">
-                              <dt className="detail-field-label">Balance remaining (m³)</dt>
-                              <dd className="detail-field-value">
-                                {formatExemptionVolume(blanketBalanceRemaining)}
-                              </dd>
-                            </div>
-                          </dl>
-                        )}
                         {!detail.blanketOic && (
-                          <dl
-                            className="detail-field-grid"
-                            aria-label="Exemption permit volume totals"
-                          >
-                            <div className="detail-field-item">
-                              <dt className="detail-field-label">Approved volume (m³)</dt>
-                              <dd className="detail-field-value">
-                                {formatExemptionVolume(detail.approvedVolume)}
-                              </dd>
-                            </div>
-                            <div className="detail-field-item">
-                              {/* INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_PERMIT_TOTALS) */}
-                              {/* Every permit's volume, pending ones included; Balance subtracts it. */}
-                              <dt className="detail-field-label">
-                                Scale volume assigned to permits (m³)
-                              </dt>
-                              <dd className="detail-field-value">
-                                {formatExemptionVolume(detail.usedVolume)}
-                              </dd>
-                            </div>
-                            <div className="detail-field-item">
-                              <dt className="detail-field-label">Balance remaining (m³)</dt>
-                              <dd className="detail-field-value">
-                                {formatExemptionVolume(detail.remainingVolume)}
-                              </dd>
-                            </div>
-                          </dl>
+                          <RecordFieldGrid aria-label="Exemption permit volume totals">
+                            <RecordFieldRow>
+                              <RecordField
+                                label="Approved volume (m³)"
+                                value={formatExemptionVolume(detail.approvedVolume)}
+                              />
+                              {/* INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_PERMIT_TOTALS): Every permit's volume contributes to the balance, including pending permits. */}
+                              <RecordField
+                                label="Scale volume assigned to permits (m³)"
+                                value={formatExemptionVolume(detail.usedVolume)}
+                              />
+                              <RecordField
+                                label="Balance remaining (m³)"
+                                value={formatExemptionVolume(detail.remainingVolume)}
+                              />
+                            </RecordFieldRow>
+                          </RecordFieldGrid>
                         )}
                         {permitsErrorMessage ? (
                           <EmptyState
@@ -2948,9 +2974,7 @@ const ProvincialExemptionDetailsPage = () => {
                                           fallbackLabel="Not provided"
                                         />
                                       </TableCell>
-                                      <TableCell>
-                                        {displayValue(formatIsoDateLabel(row.permitIssueDate))}
-                                      </TableCell>
+                                      <TableCell>{displayValue(row.permitIssueDate)}</TableCell>
                                     </TableRow>
                                   )
                                 })}
@@ -2971,18 +2995,23 @@ const ProvincialExemptionDetailsPage = () => {
                                   ? 'Permits can be requested once the exemption is approved.'
                                   : 'Permits requested against this exemption will appear here.'
                             }
-                            icon={<Certificate size={48} aria-hidden="true" />}
+                            icon={<DocumentSecurity_02 width={48} height={48} />}
                             action={applyForPermitButton}
                             headingLevel={3}
+                            variant={emptyBlanketOicPermits ? 'tab' : undefined}
                           />
                         )}
-                      </Tile>
+                      </PermitsContainer>
                     </Column>
                   </Grid>
                 </TabPanel>
                 {showFees && (
                   <TabPanel key="fees" className="application-detail-tab-panel">
-                    <Grid fullWidth className="application-detail-tab-grid">
+                    <Grid
+                      ref={sections.sectionRef('fees')}
+                      fullWidth
+                      className="application-detail-tab-grid"
+                    >
                       <Column sm={4} md={8} lg={16}>
                         {applicationsErrorMessage || !editContextLoaded ? (
                           <Tile>
@@ -3006,77 +3035,77 @@ const ProvincialExemptionDetailsPage = () => {
                             <DetailCardTitle icon={Currency}>Fees</DetailCardTitle>
                             {sectionResult('fees')}
                             <RequiredFieldsLegend className="application-detail-required" />
-                            <div className="legacy-search-grid">
-                              <RadioButtonGroup
-                                legendText="Override fee rate?"
-                                name="exemptionFeeRateOverride"
-                                valueSelected={editForm.enableRateOverride ? 'yes' : 'no'}
-                                orientation="horizontal"
-                                disabled={saving}
-                                onChange={(value) => {
-                                  const enabled = String(value) === 'yes'
-                                  setEditForm((current) =>
-                                    current
-                                      ? {
-                                          ...current,
-                                          enableRateOverride: enabled,
-                                          feeRate: enabled ? current.feeRate : '',
-                                        }
-                                      : current,
-                                  )
-                                }}
-                              >
-                                <RadioButton
-                                  id="exemptionFeeRateOverride-no"
-                                  labelText="No"
-                                  value="no"
-                                />
-                                <RadioButton
-                                  id="exemptionFeeRateOverride-yes"
-                                  labelText="Yes"
-                                  value="yes"
-                                />
-                              </RadioButtonGroup>
-                              {editForm.enableRateOverride && (
-                                <TextInput
-                                  id="exemptionFeeRate"
-                                  labelText={requiredLabel('Fee rate ($/m³)')}
-                                  aria-required="true"
-                                  value={editForm.feeRate}
-                                  invalid={Boolean(feeRateValidationMessage)}
-                                  invalidText={feeRateValidationMessage}
-                                  disabled={saving}
-                                  onChange={(event) =>
-                                    setEditForm((current) =>
-                                      current
-                                        ? { ...current, feeRate: event.target.value }
-                                        : current,
-                                    )
-                                  }
-                                />
-                              )}
-                            </div>
+                            <RecordFieldGrid editing>
+                              <RecordFieldRow>
+                                <RecordFieldCell>
+                                  <RadioButtonGroup
+                                    legendText="Override fee rate?"
+                                    name="exemptionFeeRateOverride"
+                                    valueSelected={editForm.enableRateOverride ? 'yes' : 'no'}
+                                    orientation="horizontal"
+                                    disabled={saving}
+                                    onChange={(value) => {
+                                      const enabled = String(value) === 'yes'
+                                      setEditForm((current) =>
+                                        current
+                                          ? {
+                                              ...current,
+                                              enableRateOverride: enabled,
+                                              feeRate: enabled ? current.feeRate : '',
+                                            }
+                                          : current,
+                                      )
+                                    }}
+                                  >
+                                    <RadioButton
+                                      id="exemptionFeeRateOverride-no"
+                                      labelText="No"
+                                      value="no"
+                                    />
+                                    <RadioButton
+                                      id="exemptionFeeRateOverride-yes"
+                                      labelText="Yes"
+                                      value="yes"
+                                    />
+                                  </RadioButtonGroup>
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                              <RecordFieldRow>
+                                {editForm.enableRateOverride && (
+                                  <RecordFieldCell>
+                                    <TextInput
+                                      id="exemptionFeeRate"
+                                      labelText={requiredLabel('Fee rate ($/m³)')}
+                                      aria-required="true"
+                                      value={editForm.feeRate}
+                                      invalid={Boolean(feeRateValidationMessage)}
+                                      invalidText={feeRateValidationMessage}
+                                      disabled={saving}
+                                      onChange={(event) =>
+                                        setEditForm((current) =>
+                                          current
+                                            ? { ...current, feeRate: event.target.value }
+                                            : current,
+                                        )
+                                      }
+                                    />
+                                  </RecordFieldCell>
+                                )}
+                              </RecordFieldRow>
+                            </RecordFieldGrid>
                             <div className="legacy-search-actions">
                               <Button
                                 kind="tertiary"
                                 size="md"
                                 disabled={saving}
-                                onClick={() => {
-                                  setEditForm(toEditForm(currentDetail, editContext))
-                                  setEditingSection(null)
-                                }}
+                                onClick={sections.cancelEditing}
                               >
                                 Cancel
                               </Button>
                               <Button
                                 kind="primary"
                                 size="md"
-                                disabled={
-                                  saving ||
-                                  Boolean(formValidationMessage) ||
-                                  requiredExemptionOptionsMissing ||
-                                  optionsAvailability !== 'available'
-                                }
+                                disabled={saving}
                                 renderIcon={saving ? PendingIcon : undefined}
                                 onClick={() => void onSaveExemption()}
                               >
@@ -3090,6 +3119,7 @@ const ProvincialExemptionDetailsPage = () => {
                               <DetailCardTitle icon={Currency}>Fees</DetailCardTitle>
                               {canEditFeeOverride && !editing && (
                                 <Button
+                                  ref={sections.editButtonRef('fees')}
                                   kind="tertiary"
                                   size="md"
                                   renderIcon={Edit}
@@ -3100,22 +3130,20 @@ const ProvincialExemptionDetailsPage = () => {
                               )}
                             </div>
                             {sectionResult('fees')}
-                            <DetailFieldGrid
-                              fields={[
-                                {
-                                  label: 'Override fee rate?',
-                                  value: editContext.rateOverrideEnabled ? 'Yes' : 'No',
-                                },
-                                ...(editContext.rateOverrideEnabled
-                                  ? [
-                                      {
-                                        label: 'Fee rate ($/m³)',
-                                        value: displayValue(editContext.fixedFeeRate),
-                                      },
-                                    ]
-                                  : []),
-                              ]}
-                            />
+                            <RecordFieldGrid>
+                              <RecordFieldRow>
+                                <RecordField
+                                  label="Override fee rate?"
+                                  value={editContext.rateOverrideEnabled ? 'Yes' : 'No'}
+                                />
+                              </RecordFieldRow>
+                              <RecordFieldRow hidden={!editContext.rateOverrideEnabled}>
+                                <RecordField
+                                  label="Fee rate ($/m³)"
+                                  value={editContext.fixedFeeRate}
+                                />
+                              </RecordFieldRow>
+                            </RecordFieldGrid>
                           </Tile>
                         )}
                       </Column>
@@ -3207,72 +3235,6 @@ const ProvincialExemptionDetailsPage = () => {
             onBusyChange={setApprovalDialogBusy}
           />
         )}
-      {permitCreationUnsavedChangesOpen && (
-        <Modal
-          open
-          passiveModal
-          size="sm"
-          modalHeading={permitCreationSavedRequiresReload ? 'Reload required' : 'Unsaved changes'}
-          aria-label={permitCreationSavedRequiresReload ? 'Reload required' : 'Unsaved changes'}
-          aria-describedby="permit-creation-unsaved-changes-description"
-          className="lexis-unsaved-changes-modal"
-          preventCloseOnClickOutside
-          onRequestClose={closePermitCreationUnsavedChanges}
-        >
-          <div className="lexis-unsaved-changes-modal__body">
-            <p
-              id="permit-creation-unsaved-changes-description"
-              className="lexis-unsaved-changes-modal__description"
-            >
-              {permitCreationSavedRequiresReload
-                ? 'The exemption was saved, but its current data could not be refreshed. Reload the page before creating a permit.'
-                : unsavedExemptionSaveUnavailableReason
-                  ? `You have unsaved changes to this exemption. ${unsavedExemptionSaveUnavailableReason}`
-                  : 'You have unsaved changes to this exemption. Save them before creating a permit, discard them and continue, or cancel.'}
-            </p>
-            {permitCreationSaveFailed && (
-              <InlineNotification
-                kind="error"
-                lowContrast
-                hideCloseButton
-                title="Could not finish saving changes"
-                subtitle="Review the page messages, then correct any remaining problem and try again or cancel."
-              />
-            )}
-          </div>
-          <div className="lexis-unsaved-changes-modal__actions">
-            <Button
-              kind="tertiary"
-              size="md"
-              disabled={savingPermitCreationChanges}
-              onClick={closePermitCreationUnsavedChanges}
-            >
-              {permitCreationSavedRequiresReload ? 'Close' : 'Cancel'}
-            </Button>
-            {!permitCreationSavedRequiresReload && (
-              <Button
-                kind="danger--tertiary"
-                size="md"
-                disabled={permitCreationActionBusy}
-                onClick={onDiscardChangesBeforePermitCreation}
-              >
-                Discard changes
-              </Button>
-            )}
-            {!permitCreationSavedRequiresReload && !unsavedExemptionSaveUnavailableReason && (
-              <Button
-                kind="primary"
-                size="md"
-                disabled={permitCreationActionBusy}
-                renderIcon={savingPermitCreationChanges ? PendingIcon : undefined}
-                onClick={() => void onSaveChangesBeforePermitCreation()}
-              >
-                {savingPermitCreationChanges ? 'Saving…' : 'Save changes'}
-              </Button>
-            )}
-          </div>
-        </Modal>
-      )}
       {showPermitCreationConfirmation && currentDetail && (
         <Modal
           open
@@ -3342,21 +3304,14 @@ const ProvincialExemptionDetailsPage = () => {
           </div>
         </Modal>
       )}
+      {sections.discardModal}
+      {applicationDraftDiscardModal}
+      {permitCreationDiscardModal}
       <UnsavedChangesGuard
         isDirty={isExemptionDirty}
-        isBusy={
-          saving ||
-          approving ||
-          approvalDialogBusy ||
-          creatingPermit ||
-          applicationMutationNumber !== null ||
-          isRemovingDocumentId !== null ||
-          documentUploadBusy
-        }
-        onSave={onSaveUnsavedExemptionChanges}
+        isBusy={isExemptionBusy}
         onDiscard={onDiscardExemptionChanges}
         subject="this exemption"
-        saveUnavailableReason={unsavedExemptionSaveUnavailableReason}
       />
     </Grid>
   )

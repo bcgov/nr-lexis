@@ -1,5 +1,6 @@
 import { ComboBox } from '@carbon/react'
 import { useMemo, useState, type ReactNode } from 'react'
+import { fieldErrorText } from '@/utils/field-error'
 import './PermitCountrySelect.scss'
 
 export type PermitCountrySelectOption = {
@@ -110,7 +111,7 @@ export default function PermitCountrySelect({
       aria-required={required || undefined}
       disabled={disabled}
       invalid={invalid}
-      invalidText={invalidText}
+      invalidText={fieldErrorText(invalidText)}
       onBlur={onBlur}
       onInputChange={setInputText}
       onChange={({ selectedItem: nextSelectedItem }) => {

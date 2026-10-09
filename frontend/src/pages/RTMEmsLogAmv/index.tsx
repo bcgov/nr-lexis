@@ -15,9 +15,11 @@ import {
 } from '@carbon/react'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import { useDiscardPrompt } from '@/components/DiscardChangesModal'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
 import TableFrame from '@/components/TableFrame'
+import UnsavedChangesGuard from '@/components/UnsavedChangesGuard'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   saveRtmEmsLogAmvBatch,
@@ -27,6 +29,7 @@ import {
   type RtmEmsLogAmvSaveRequest,
 } from '@/service/rtm-emslogamv-service'
 import { formatBusinessIsoDate } from '@/utils/date'
+import { focusFirstEditableField, focusFirstInvalidField } from '@/utils/focus'
 import { requiredLabel } from '@/utils/required-label'
 
 type RtmGrowthIndicator = 'O' | 'S'
@@ -376,6 +379,8 @@ const RTMEmsLogAmvPage = () => {
   const [loadError, setLoadError] = useState('')
   const [notification, setNotification] = useState<NotificationState | null>(null)
   const loadRequestIdRef = useRef(0)
+  const monthInputRef = useRef<HTMLInputElement>(null)
+  const tableRef = useRef<HTMLElement>(null)
 
   const currentMonth = currentMonthDate()
   const selectedDateIsPast = isMonthStartDate(targetDate) && targetDate < currentMonth
@@ -492,8 +497,27 @@ const RTMEmsLogAmvPage = () => {
   })
   const hasAuthoritativeBaseline = !loadError && loadedDate === targetDate
   const isReadOnly = !canManage || isLoading || isSaving || !hasAuthoritativeBaseline
-  const saveDisabled =
-    isReadOnly || !hasPendingChanges || validationErrors.length > 0 || !isMonthStartDate(targetDate)
+  const saveDisabled = isReadOnly || !hasPendingChanges || !isMonthStartDate(targetDate)
+  const { confirmDiscard, discardModal } = useDiscardPrompt(hasExplicitEdits)
+
+  // Runs an action that replaces the values on screen, asking first when the user has edited them.
+  // Focus then returns to the control, or to the fallback when the control is no longer available.
+  const replaceValuesThen = (
+    control: HTMLElement,
+    action: () => void,
+    fallback: () => void = () => monthInputRef.current?.focus(),
+  ) => {
+    confirmDiscard(() => {
+      action()
+      requestAnimationFrame(() => {
+        if (control.isConnected && !control.matches(':disabled')) {
+          control.focus()
+        } else {
+          fallback()
+        }
+      })
+    })
+  }
 
   const updateCellValue = (key: string, value: string) => {
     setEditedValues((current) => ({
@@ -623,6 +647,10 @@ const RTMEmsLogAmvPage = () => {
 
   const requestSave = () => {
     setNotification(null)
+    if (validationErrors.length > 0) {
+      focusFirstInvalidField(tableRef.current)
+      return
+    }
     if (selectedDateIsPast) {
       setShowWarningConfirmation(true)
       return
@@ -648,6 +676,7 @@ const RTMEmsLogAmvPage = () => {
         >
           <div className="rtm-amv-toolbar__controls">
             <TextInput
+              ref={monthInputRef}
               id="rtm-amv-effective-date"
               type="month"
               labelText={requiredLabel('Effective month')}
@@ -655,25 +684,31 @@ const RTMEmsLogAmvPage = () => {
               value={isMonthStartDate(targetDate) ? targetDate.slice(0, 7) : ''}
               onChange={(event) => {
                 const month = event.target.value
-                setTargetDate(/^\d{4}-\d{2}$/.test(month) ? `${month}-01` : '')
+                replaceValuesThen(event.currentTarget, () =>
+                  setTargetDate(/^\d{4}-\d{2}$/.test(month) ? `${month}-01` : ''),
+                )
               }}
-              disabled={isSaving || hasExplicitEdits}
+              disabled={isSaving}
             />
             <Button
               kind="tertiary"
               size="md"
-              onClick={() => setTargetDate(currentMonth)}
-              disabled={isSaving || hasExplicitEdits || targetDate === currentMonth}
+              onClick={(event) =>
+                replaceValuesThen(event.currentTarget, () => setTargetDate(currentMonth))
+              }
+              disabled={isSaving || targetDate === currentMonth}
             >
               Current month
             </Button>
             <Button
               kind="tertiary"
               size="md"
-              onClick={() => setTargetDate(previousMonthDate(currentMonth))}
-              disabled={
-                isSaving || hasExplicitEdits || targetDate === previousMonthDate(currentMonth)
+              onClick={(event) =>
+                replaceValuesThen(event.currentTarget, () =>
+                  setTargetDate(previousMonthDate(currentMonth)),
+                )
               }
+              disabled={isSaving || targetDate === previousMonthDate(currentMonth)}
             >
               Previous month
             </Button>
@@ -681,10 +716,12 @@ const RTMEmsLogAmvPage = () => {
               kind="tertiary"
               size="md"
               renderIcon={Renew}
-              onClick={() => {
-                void loadRows()
-              }}
-              disabled={isLoading || isSaving || hasExplicitEdits || !isMonthStartDate(targetDate)}
+              onClick={(event) =>
+                replaceValuesThen(event.currentTarget, () => {
+                  void loadRows()
+                })
+              }
+              disabled={isLoading || isSaving || !isMonthStartDate(targetDate)}
             >
               Reload
             </Button>
@@ -791,7 +828,7 @@ const RTMEmsLogAmvPage = () => {
           </div>
         )}
 
-        <section className="admin-upload-panel rtm-amv-table-panel">
+        <section ref={tableRef} className="admin-upload-panel rtm-amv-table-panel">
           <div className="admin-upload-section-heading rtm-amv-table-heading">
             <h2 id="rtm-amv-table-title">Average monthly values table</h2>
             <p>Each cell represents one species and grade for the selected effective month.</p>
@@ -870,7 +907,11 @@ const RTMEmsLogAmvPage = () => {
             kind="ghost"
             size="md"
             renderIcon={Renew}
-            onClick={resetChanges}
+            onClick={(event) =>
+              replaceValuesThen(event.currentTarget, resetChanges, () =>
+                focusFirstEditableField(tableRef.current),
+              )
+            }
             disabled={!hasPendingChanges || isSaving}
           >
             Reset
@@ -896,6 +937,14 @@ const RTMEmsLogAmvPage = () => {
           </div>
         </div>
       </Column>
+
+      <UnsavedChangesGuard
+        isDirty={hasExplicitEdits}
+        isBusy={isSaving}
+        onDiscard={resetChanges}
+        subject="the average monthly values"
+      />
+      {discardModal}
 
       {showWarningConfirmation && (
         <ConfirmationModal

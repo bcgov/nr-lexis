@@ -99,3 +99,14 @@
 .notification-editor__content ol {
   list-style: decimal;
 }
+
+.notification-editor--invalid {
+  border-color: var(--cds-support-error, #da1e28);
+}
+
+.notification-editor__error {
+  padding: 0 1rem 1rem;
+  color: var(--cds-text-error, #da1e28);
+  font-size: 0.75rem;
+  line-height: 1rem;
+}

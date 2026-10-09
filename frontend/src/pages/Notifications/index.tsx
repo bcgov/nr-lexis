@@ -20,11 +20,12 @@ import {
 } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import { useDiscardPrompt } from '@/components/DiscardChangesModal'
 import DetailSidePanel from '@/components/DetailSidePanel'
 import PendingIcon from '@/components/PendingIcon'
 import NotificationEditor from '@/components/NotificationEditor'
 import PageHeader from '@/components/PageHeader'
-import { formValuesEqual } from '@/components/UnsavedChangesGuard'
+import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { hasRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import type {
@@ -43,6 +44,8 @@ import {
 } from '@/service/notification-service'
 import { formatBusinessIsoDate, formatLocalIsoDate } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
+import { fieldErrorText } from '@/utils/field-error'
+import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import './Notifications.scss'
 
@@ -259,9 +262,9 @@ export default function NotificationsPage() {
   const [message, setMessage] = useState<NotificationMessage | null>(null)
   const [notificationPendingDeletion, setNotificationPendingDeletion] =
     useState<LexisNotification | null>(null)
-  const [showDiscardConfirmation, setShowDiscardConfirmation] = useState(false)
   const editorLauncherRef = useRef<HTMLElement>(null)
   const editorBaselineRef = useRef<NotificationForm>(emptyForm())
+  const [showValidationErrors, setShowValidationErrors] = useState(false)
 
   const loadNotifications = useCallback(
     async (clearMessage = true) => {
@@ -309,6 +312,7 @@ export default function NotificationsPage() {
       document.activeElement instanceof HTMLElement ? document.activeElement : null
     const nextForm = emptyForm()
     editorBaselineRef.current = nextForm
+    setShowValidationErrors(false)
     setForm(nextForm)
     setMessage(null)
     setShowEditor(true)
@@ -319,6 +323,7 @@ export default function NotificationsPage() {
       document.activeElement instanceof HTMLElement ? document.activeElement : null
     const nextForm = toForm(notification)
     editorBaselineRef.current = nextForm
+    setShowValidationErrors(false)
     setForm(nextForm)
     setMessage(null)
     setShowEditor(true)
@@ -327,24 +332,42 @@ export default function NotificationsPage() {
   const resetForm = (): void => {
     const nextForm = emptyForm()
     editorBaselineRef.current = nextForm
+    setShowValidationErrors(false)
     setForm(nextForm)
     setShowEditor(false)
-    setShowDiscardConfirmation(false)
     setMessage(null)
   }
 
+  const editorDirty = showEditor && !formValuesEqual(form, editorBaselineRef.current)
+  const { confirmDiscard, discardModal } = useDiscardPrompt(editorDirty)
+  const validationErrors = {
+    title: !form.title.trim()
+      ? 'Title is required.'
+      : form.title.trim().length > MAX_NOTIFICATION_TITLE_LENGTH
+        ? 'Notification titles cannot exceed 80 characters.'
+        : '',
+    contentHtml: !contentText(form.contentHtml)
+      ? 'Message is required.'
+      : contentCharacterCount > MAX_NOTIFICATION_CONTENT_LENGTH
+        ? 'Notification content cannot exceed 4,000 characters.'
+        : '',
+    displayStartDate: form.displayStartDate ? '' : 'Start date is required.',
+    displayEndDate: !form.displayEndDate
+      ? 'End date is required.'
+      : form.displayEndDate < form.displayStartDate
+        ? 'The end date cannot be before the start date.'
+        : '',
+    audienceRoles:
+      form.audienceMode === 'ROLES' && form.audienceRoles.length === 0
+        ? 'Select at least one role or use all authenticated LEXIS roles.'
+        : '',
+  }
+  const fieldError = (field: keyof typeof validationErrors) =>
+    showValidationErrors ? fieldErrorText(validationErrors[field]) : ''
+
   const requestCloseEditor = (): void => {
     if (saving) return
-    if (!formValuesEqual(form, editorBaselineRef.current)) {
-      setShowDiscardConfirmation(true)
-      return
-    }
-    resetForm()
-  }
-
-  const closeDiscardConfirmation = (): void => {
-    setShowDiscardConfirmation(false)
-    window.setTimeout(() => document.getElementById('notification-title')?.focus())
+    confirmDiscard(resetForm)
   }
 
   const toggleAudienceRole = (role: string, selected: boolean): void => {
@@ -358,49 +381,17 @@ export default function NotificationsPage() {
   }
 
   const save = async (): Promise<void> => {
-    if (
-      !form.title.trim() ||
-      !form.displayStartDate ||
-      !form.displayEndDate ||
-      !contentText(form.contentHtml)
-    ) {
-      setMessage({
-        kind: 'error',
-        title: 'Complete the required fields',
-        subtitle: 'Title, content, notification level, and display dates are required.',
-      })
+    if (!isAdmin || saving) return
+    if (isEditing && !editorDirty) {
+      resetForm()
       return
     }
-    if (form.title.trim().length > MAX_NOTIFICATION_TITLE_LENGTH) {
-      setMessage({
-        kind: 'error',
-        title: 'Shorten the notification title',
-        subtitle: 'Notification titles cannot exceed 80 characters.',
-      })
-      return
-    }
-    if (form.displayEndDate < form.displayStartDate) {
-      setMessage({
-        kind: 'error',
-        title: 'Check the display period',
-        subtitle: 'The end date cannot be before the start date.',
-      })
-      return
-    }
-    if (contentTextLength(form.contentHtml) > MAX_NOTIFICATION_CONTENT_LENGTH) {
-      setMessage({
-        kind: 'error',
-        title: 'Shorten the notification content',
-        subtitle: 'Notification content cannot exceed 4,000 characters.',
-      })
-      return
-    }
-    if (form.audienceMode === 'ROLES' && form.audienceRoles.length === 0) {
-      setMessage({
-        kind: 'error',
-        title: 'Choose an audience',
-        subtitle: 'Select at least one role or use all authenticated LEXIS roles.',
-      })
+    if (Object.values(validationErrors).some(Boolean)) {
+      setShowValidationErrors(true)
+      setMessage(null)
+      focusFirstInvalidFieldAfterRender(() =>
+        document.querySelector('.notifications-page__editor-panel'),
+      )
       return
     }
 
@@ -424,6 +415,7 @@ export default function NotificationsPage() {
       }
       const nextForm = emptyForm()
       editorBaselineRef.current = nextForm
+      setShowValidationErrors(false)
       setForm(nextForm)
       setShowEditor(false)
       await loadNotifications(false)
@@ -539,6 +531,8 @@ export default function NotificationsPage() {
               value={form.title}
               maxLength={MAX_NOTIFICATION_TITLE_LENGTH}
               required
+              invalid={!!fieldError('title')}
+              invalidText={fieldError('title')}
               disabled={saving}
               onChange={(event) =>
                 setForm((current) => ({ ...current, title: event.target.value }))
@@ -553,6 +547,8 @@ export default function NotificationsPage() {
                 value={form.contentHtml}
                 disabled={saving}
                 required
+                invalid={!!fieldError('contentHtml')}
+                invalidText={fieldError('contentHtml')}
                 onChange={(contentHtml) => setForm((current) => ({ ...current, contentHtml }))}
               />
               <p className="notifications-page__character-count" aria-live="polite">
@@ -614,6 +610,8 @@ export default function NotificationsPage() {
             <Checkbox
               id="notification-audience-all"
               labelText="All roles"
+              invalid={!!fieldError('audienceRoles')}
+              invalidText={fieldError('audienceRoles')}
               checked={form.audienceMode === 'ALL'}
               disabled={saving}
               onChange={(_, { checked }) =>
@@ -649,6 +647,8 @@ export default function NotificationsPage() {
                 type="date"
                 labelText={requiredLabel('Start date')}
                 value={form.displayStartDate}
+                invalid={!!fieldError('displayStartDate')}
+                invalidText={fieldError('displayStartDate')}
                 required
                 disabled={saving}
                 readOnly={isEditing}
@@ -665,6 +665,8 @@ export default function NotificationsPage() {
                 type="date"
                 labelText={requiredLabel('End date')}
                 value={form.displayEndDate}
+                invalid={!!fieldError('displayEndDate')}
+                invalidText={fieldError('displayEndDate')}
                 min={form.displayStartDate}
                 required
                 disabled={saving}
@@ -809,16 +811,13 @@ export default function NotificationsPage() {
         />
       )}
 
-      {showDiscardConfirmation && (
-        <ConfirmationModal
-          open
-          title="Discard notification changes?"
-          description="Your unsaved notification changes will be lost."
-          confirmLabel="Discard changes"
-          onConfirm={resetForm}
-          onClose={closeDiscardConfirmation}
-        />
-      )}
+      <UnsavedChangesGuard
+        isDirty={editorDirty}
+        isBusy={saving}
+        onDiscard={resetForm}
+        subject="this notification"
+      />
+      {discardModal}
     </div>
   )
 }

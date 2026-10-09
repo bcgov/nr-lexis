@@ -174,6 +174,13 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
+  it('shows application result list dates in ISO format', async () => {
+    renderPage()
+    const application = await screen.findByText('321')
+    const row = within(application.closest('tr') as HTMLElement)
+    expect(row.getByRole('cell', { name: '2026-01-10' })).toBeVisible()
+  })
+
   it('submits and restores None as literal NULL', async () => {
     const page = renderPage()
     await screen.findByText('321')
@@ -811,7 +818,7 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.getByRole('heading', { name: 'Application search' })).toBeVisible()
     expect(row.getByText('New')).toBeVisible()
     expect(row.getByText('100.0')).toBeVisible()
-    expect(row.getByText('Jan 10, 2026')).toBeVisible()
+    expect(row.getByText('2026-01-10')).toBeVisible()
     expect(screen.getByText('Application volume (m³)')).toBeVisible()
     expect(screen.getAllByText('2 results found')).toHaveLength(2)
   })

@@ -323,7 +323,7 @@ describe('Provincial Offer Detail Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
-      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
@@ -345,7 +345,7 @@ describe('Provincial Offer Detail Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
-      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
@@ -367,7 +367,7 @@ describe('Provincial Offer Detail Actions', () => {
 
     expect(offerVolumeInput).toHaveValue('12.24')
     expect(
-      await screen.findAllByText('Offer volume cannot exceed the application/package volume.'),
+      await screen.findAllByText('Offer volume cannot exceed the application/package volume'),
     ).not.toHaveLength(0)
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
@@ -550,6 +550,7 @@ describe('Provincial Offer Detail Actions', () => {
     expect(dirtyUnload.defaultPrevented).toBe(true)
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     const cancelledUnload = new Event('beforeunload', { cancelable: true })
     window.dispatchEvent(cancelledUnload)
     expect(cancelledUnload.defaultPrevented).toBe(false)
@@ -632,9 +633,7 @@ describe('Provincial Offer Detail Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     await waitFor(() => {
-      expect(screen.getAllByText('Offer amount must be 99999.99 or less.').length).toBeGreaterThan(
-        0,
-      )
+      expect(screen.getAllByText('Offer amount must be 99999.99 or less').length).toBeGreaterThan(0)
     })
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })
@@ -665,7 +664,7 @@ describe('Provincial Offer Detail Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(
-      screen.getAllByText('Offer volume must be a number with up to two decimal places.').length,
+      screen.getAllByText('Offer volume must be a number with up to two decimal places').length,
     ).toBeGreaterThan(0)
     expect(mockedSubmitProvincialOfferUpdate).not.toHaveBeenCalled()
   })

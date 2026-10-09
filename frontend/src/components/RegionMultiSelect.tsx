@@ -1,5 +1,6 @@
 import { FilterableMultiSelect } from '@carbon/react'
 import type { ReactNode } from 'react'
+import { fieldErrorText } from '@/utils/field-error'
 
 export type RegionMultiSelectOption = {
   id: string
@@ -45,7 +46,7 @@ export default function RegionMultiSelect({
         inputProps={{ 'aria-required': required || undefined }}
         disabled={disabled}
         invalid={invalid}
-        invalidText={invalidText}
+        invalidText={fieldErrorText(invalidText)}
         onChange={({ selectedItems: nextSelectedItems }) => {
           onChange(nextSelectedItems)
         }}

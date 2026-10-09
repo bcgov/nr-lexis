@@ -552,17 +552,6 @@ const selectTab = async (page: Page, name: string): Promise<void> => {
   await page.getByRole('tab', { name, exact: true }).click()
 }
 
-const chooseComboBoxOption = async (
-  page: Page,
-  name: string,
-  optionName: string,
-): Promise<void> => {
-  const combobox = page.getByRole('combobox', { name, exact: true })
-  await combobox.click()
-  await combobox.fill(optionName)
-  await page.getByRole('option', { name: optionName, exact: true }).click()
-}
-
 test.describe('Provincial permit parity regressions', () => {
   test('shows submitter BOIC validation, country choices and client details before opening the saved permit', async ({
     page,
@@ -673,7 +662,7 @@ test.describe('Provincial permit parity regressions', () => {
     await selectTab(page, 'Scale')
     await expect(page.getByRole('heading', { name: 'No packages yet', exact: true })).toBeVisible()
     await expect(page.getByRole('button', { name: 'Create package', exact: true })).toBeVisible()
-    await expect(page.getByRole('group', { name: 'Summary of scale', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('region', { name: 'Summary of scale', exact: true })).toHaveCount(0)
     await selectTab(page, 'Fees')
     await expect(page.getByRole('heading', { name: 'Permit fees', exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Package fees', exact: true })).toBeVisible()
@@ -772,7 +761,7 @@ test.describe('Provincial permit parity regressions', () => {
     await page.getByLabel('Remarks', { exact: true }).fill('')
     await page.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(page).toHaveURL(/\/provincial\/exemption\/EX-BOIC-91002$/)
-    await expect(page.getByRole('dialog', { name: 'Unsaved changes', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('dialog', { name: 'Discard changes?', exact: true })).toHaveCount(0)
     expect(fixture.writes).toEqual([])
     expect(fixture.unexpectedRequests).toEqual([])
   })
@@ -811,21 +800,39 @@ test.describe('Provincial permit parity regressions', () => {
     const scaleRows = page.getByRole('region', { name: 'Scale rows', exact: true })
     await expect(scaleRows).toContainText('TM-A')
     await expect(scaleRows).not.toContainText('TM-B')
-    await chooseComboBoxOption(page, 'Package number', 'PKG-B')
+    await page.getByRole('combobox', { name: 'Package number', exact: true }).click()
+    await page.getByRole('option', { name: 'PKG-B', exact: true }).click()
     await expect(scaleRows).toContainText('TM-B')
     await expect(scaleRows).not.toContainText('TM-A')
     await selectTab(page, 'Fees')
     const feeRows = page.getByRole('region', { name: 'Permit fee rows', exact: true })
-    await expect(page.getByRole('combobox', { name: 'Package number', exact: true })).toHaveValue(
-      'PKG-B',
-    )
+    const feesPackage = page.getByRole('combobox', { name: 'Package number', exact: true })
+    await expect(feesPackage).toHaveText(/PKG-B/)
     await expect(feeRows).toContainText('TM-B')
     await expect(feeRows).not.toContainText('TM-A')
-    await chooseComboBoxOption(page, 'Package number', 'PKG-A')
+    await feesPackage.click()
+    await page.getByRole('option', { name: 'PKG-A', exact: true }).click()
     await expect(feeRows).toContainText('TM-A')
     await expect(feeRows).not.toContainText('TM-B')
+    const editFeeOverride = page.getByRole('button', { name: 'Edit fee override', exact: true })
+    await editFeeOverride.click()
+    await expect(page.getByRole('radio', { name: 'No', exact: true })).toBeFocused()
+    await page
+      .getByRole('group', { name: 'Permit fee summary', exact: true })
+      .getByRole('button', { name: 'Save changes', exact: true })
+      .click()
+    await expect(editFeeOverride).toBeFocused()
+    expect(fixture.writes).toEqual([])
     await page.setViewportSize({ width: 390, height: 844 })
     await expect(page.getByRole('combobox', { name: 'Package number', exact: true })).toBeVisible()
+    await editFeeOverride.click()
+    await expect(page.getByRole('radio', { name: 'No', exact: true })).toBeFocused()
+    await page
+      .getByRole('group', { name: 'Permit fee summary', exact: true })
+      .getByRole('button', { name: 'Save changes', exact: true })
+      .click()
+    await expect(editFeeOverride).toBeFocused()
+    expect(fixture.writes).toEqual([])
     await page
       .getByRole('combobox', { name: 'Package number', exact: true })
       .scrollIntoViewIfNeeded()
@@ -844,7 +851,7 @@ test.describe('Provincial permit parity regressions', () => {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
     })
     await selectTab(page, 'Scale')
-    await expect(page.getByRole('group', { name: 'Summary of scale' })).toBeVisible()
+    await expect(page.getByRole('region', { name: 'Summary of scale' })).toBeVisible()
     await page.getByRole('button', { name: 'Add scale', exact: true }).click()
     const panel = page.locator('.permit-scale-panel')
     await expect(panel.getByLabel('Timber mark', { exact: true })).toBeFocused()
@@ -875,9 +882,7 @@ test.describe('Provincial permit parity regressions', () => {
     await panel.getByRole('button', { name: 'Save scale', exact: true }).click()
 
     await expect(panel).toHaveCount(0)
-    await expect(
-      page.getByText('Blanket OIC scale detail was added.', { exact: true }),
-    ).toBeVisible()
+    await expect(page.getByText('Scale saved.', { exact: true })).toBeVisible()
     expect(fixture.writes).toEqual([
       expect.objectContaining({
         method: 'POST',
@@ -975,7 +980,7 @@ test.describe('Provincial permit parity regressions', () => {
 
     const packageNumber = panel.getByLabel('Package number', { exact: true })
     await panel.getByRole('button', { name: 'Save package', exact: true }).click()
-    await expect(panel.getByText('Package number is required.', { exact: true })).toBeVisible()
+    await expect(panel.getByText('Enter a package number', { exact: true })).toBeVisible()
     await expect(packageNumber).toBeFocused()
     await page.setViewportSize({ width: 390, height: 844 })
     await expect
@@ -1001,6 +1006,12 @@ test.describe('Provincial permit parity regressions', () => {
       .toBe(true)
     await expect(packageNumber).toHaveValue('RESIZE-DRAFT')
     await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
+    const discard = page.getByRole('dialog', { name: 'Discard changes?', exact: true })
+    await expect(discard).toBeVisible()
+    await discard.getByRole('button', { name: 'Keep editing', exact: true }).click()
+    await expect(packageNumber).toHaveValue('RESIZE-DRAFT')
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()
     await expect(panel).toHaveCount(0)
     await expect(trigger).toBeFocused()
     expect(
@@ -1035,6 +1046,13 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(panel).toBeVisible()
     await panel.getByLabel('Package number', { exact: true }).fill('DRAFT-CANCEL')
     await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
+    const discard = page.getByRole('dialog', { name: 'Discard changes?', exact: true })
+    await expect(discard).toBeVisible()
+    await discard.getByRole('button', { name: 'Keep editing', exact: true }).click()
+    await expect(panel.getByLabel('Package number', { exact: true })).toHaveValue('DRAFT-CANCEL')
+    await expect(panel.getByRole('button', { name: 'Cancel', exact: true })).toBeFocused()
+    await panel.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()
     await expect(panel).toHaveCount(0)
     await expect(trigger).toBeFocused()
 
@@ -1042,6 +1060,8 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(panel.getByLabel('Package number', { exact: true })).toHaveValue('')
     await panel.getByLabel('Package number', { exact: true }).fill('DRAFT-ESCAPE')
     await page.keyboard.press('Escape')
+    await expect(discard).toBeVisible()
+    await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()
     await expect(panel).toHaveCount(0)
     await expect(trigger).toBeFocused()
 
@@ -1097,7 +1117,7 @@ test.describe('Provincial permit parity regressions', () => {
 
     await expect(panel).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Create package', exact: true })).toBeFocused()
-    await expect(page.getByText('Blanket OIC package was created.', { exact: true })).toBeVisible()
+    await expect(page.getByText('Package saved.', { exact: true })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'Package BOIC-NEW', exact: true })).toBeVisible()
     expect(fixture.writes).toEqual([
       expect.objectContaining({
@@ -1151,6 +1171,14 @@ test.describe('Provincial permit parity regressions', () => {
       await expect(packageNumber).toHaveValue('DRAFT-ESCAPE')
       await packageNumber.focus()
       await page.keyboard.press('Escape')
+      const discard = page.getByRole('dialog', { name: 'Discard changes?', exact: true })
+      await expect(discard).toBeVisible()
+      await expect(panel).toBeVisible()
+      await discard.getByRole('button', { name: 'Keep editing', exact: true }).click()
+      await expect(packageNumber).toHaveValue('DRAFT-ESCAPE')
+      await packageNumber.focus()
+      await page.keyboard.press('Escape')
+      await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()
       await expect(panel).toHaveCount(0)
       await expect(trigger).toBeFocused()
       expect(fixture.writes).toEqual([])

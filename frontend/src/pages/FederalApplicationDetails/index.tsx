@@ -1,3 +1,9 @@
+import {
+  RecordField,
+  RecordFieldCell,
+  RecordFieldGrid,
+  RecordFieldRow,
+} from '@/pages/shared/RecordFieldGrid'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Edit } from '@carbon/icons-react'
 import {
@@ -52,6 +58,8 @@ import {
   readDetailReturnTo,
   withDetailReturnTo,
 } from '@/pages/shared/detail-navigation'
+import { useEditSections } from '@/pages/shared/useEditSections'
+import { hasFieldErrors, useFieldErrors, type FieldErrors } from '@/pages/shared/useFieldErrors'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
 import {
@@ -80,6 +88,8 @@ import {
   type ApplicationPackageScaleRow,
 } from '@/service/provincial-application-items-service'
 import { formatBusinessDateTime, formatBusinessIsoDate } from '@/utils/date'
+import { fieldErrorText } from '@/utils/field-error'
+import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
 import { displayAuditIdentity, displayTableValue } from '@/utils/text'
 import { requiredLabel } from '@/utils/required-label'
 import {
@@ -122,6 +132,65 @@ const FEDERAL_APPLICATION_DETAIL_TAB_SLOTS: readonly FederalApplicationDetailTab
   'documents',
   'shipping',
 ]
+
+type FederalEditSection = 'status' | 'permit' | 'new-remark' | `remark-${number}`
+
+type FederalStatusField = 'statusCode' | 'statusRemark'
+
+type FederalPermitField = Exclude<keyof FederalPermitMutation, 'permitNumber'>
+
+const isRemarkSection = (section: FederalEditSection | null): boolean =>
+  section === 'new-remark' || !!section?.startsWith('remark-')
+
+const statusRemarkRequired = (statusCode: string): boolean =>
+  statusCode === 'REJ' || statusCode === 'WDN'
+
+const federalStatusServerField = (message: string): FederalStatusField | undefined => {
+  if (message === 'Federal status must be APP, REJ, or WDN.') return 'statusCode'
+  if (
+    message === 'A remark is required when rejecting or withdrawing a federal application.' ||
+    message === 'Remark is too long to save. Shorten it and try again.'
+  ) {
+    return 'statusRemark'
+  }
+  return undefined
+}
+
+// The server names each permit field at the start of its message.
+const FEDERAL_PERMIT_SERVER_FIELD_LABELS: Record<FederalPermitField, string> = {
+  permitIssueDate: 'Permit issue date',
+  destinationCountry: 'Destination country',
+  transportType: 'Transport type',
+  transportName: 'Transport name',
+  shippingDate: 'Estimated shipping date',
+  portOfExport: 'Port of export',
+  otherPortOfExport: 'Other port of export',
+}
+
+const federalPermitServerField = (message: string): FederalPermitField | undefined =>
+  (Object.keys(FEDERAL_PERMIT_SERVER_FIELD_LABELS) as FederalPermitField[]).find((field) =>
+    message.startsWith(`${FEDERAL_PERMIT_SERVER_FIELD_LABELS[field]} `),
+  )
+
+const federalRemarkServerField = (message: string): 'remark' | undefined =>
+  message === 'Remark is required.' || message === 'Remark must not exceed 250 characters.'
+    ? 'remark'
+    : undefined
+
+/** Splits server errors into the ones that belong to a field and the rest. */
+const splitServerErrors = <F extends string>(
+  errors: string[],
+  fieldFor: (message: string) => F | undefined,
+): { fieldErrors: FieldErrors<F>; otherErrors: string[] } => {
+  const fieldErrors: FieldErrors<F> = {}
+  const otherErrors: string[] = []
+  for (const message of errors) {
+    const field = fieldFor(message)
+    if (!field) otherErrors.push(message)
+    else fieldErrors[field] ??= message
+  }
+  return { fieldErrors, otherErrors }
+}
 
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 
@@ -200,10 +269,26 @@ const FederalApplicationDetailsPage = () => {
   const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const [permitForm, setPermitForm] = useState<FederalPermitMutation>(emptyPermitForm)
-  const [isEditingFederalStatus, setIsEditingFederalStatus] = useState(false)
-  const [isEditingFederalRemarks, setIsEditingFederalRemarks] = useState(false)
+  const [editingSection, setEditingSection] = useState<FederalEditSection | null>(null)
+  const isEditingFederalStatus = editingSection === 'status'
+  const isEditingFederalRemarks = isRemarkSection(editingSection)
+  const isEditingFederalPermit = editingSection === 'permit'
   const [isEditingFederalDocuments, setIsEditingFederalDocuments] = useState(false)
-  const [isEditingFederalPermit, setIsEditingFederalPermit] = useState(false)
+  const {
+    clearFieldError: clearStatusFieldError,
+    resetFieldErrors: resetStatusFieldErrors,
+    showFieldErrors: showStatusFieldErrors,
+    invalidProps: statusInvalidProps,
+  } = useFieldErrors<FederalStatusField>()
+  const {
+    clearFieldError: clearPermitFieldError,
+    resetFieldErrors: resetPermitFieldErrors,
+    showFieldErrors: showPermitFieldErrors,
+    invalidProps: permitInvalidProps,
+  } = useFieldErrors<FederalPermitField>()
+  const statusFormRef = useRef<HTMLDivElement>(null)
+  const permitFormRef = useRef<HTMLDivElement>(null)
+  const remarkFormRef = useRef<HTMLDivElement>(null)
   const [isSavingMutation, setIsSavingMutation] = useState(false)
   const [isSavingRemark, setIsSavingRemark] = useState(false)
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
@@ -267,6 +352,12 @@ const FederalApplicationDetailsPage = () => {
     canMutateFederalApplication &&
     !!detail &&
     !formValuesEqual(permitForm, permitFormFromDetail(detail))
+  const remarkBaseline =
+    editingRemarkId === null
+      ? ''
+      : (remarkRows.find((remark) => remark.remarkId === editingRemarkId)?.remark ?? '')
+  const remarkDraftDirty =
+    canMutateFederalApplication && isEditingFederalRemarks && remarkDraft !== remarkBaseline
   const independentDraftsRef = useRef({ statusDraftDirty, permitDraftDirty, statusCode })
   useEffect(() => {
     independentDraftsRef.current = { statusDraftDirty, permitDraftDirty, statusCode }
@@ -326,7 +417,7 @@ const FederalApplicationDetailsPage = () => {
     }
   }, [])
 
-  const permitFieldErrors = useMemo(
+  const permitValidationErrors = useMemo<FieldErrors<FederalPermitField>>(
     () => ({
       permitIssueDate: firstValidationError(
         () => requiredFieldError(permitForm.permitIssueDate, 'Permit issue date'),
@@ -373,7 +464,6 @@ const FederalApplicationDetailsPage = () => {
     }),
     [permitForm],
   )
-  const hasPermitValidationError = Object.values(permitFieldErrors).some(Boolean)
 
   useEffect(() => {
     detailRef.current = detail
@@ -425,10 +515,8 @@ const FederalApplicationDetailsPage = () => {
         )
         setStatusRemark('')
         setPermitForm(response ? permitFormFromDetail(response) : emptyPermitForm())
-        setIsEditingFederalStatus(false)
-        setIsEditingFederalRemarks(false)
+        setEditingSection(null)
         setIsEditingFederalDocuments(false)
-        setIsEditingFederalPermit(false)
         if (!response) {
           setErrorMessage(`No federal application found for ${applicationNumber}.`)
           setDocumentRows([])
@@ -547,11 +635,11 @@ const FederalApplicationDetailsPage = () => {
       ) {
         setStatusCode(refreshedTransitions[0]?.code ?? '')
         setStatusRemark('')
-        setIsEditingFederalStatus(false)
+        setEditingSection((current) => (current === 'status' ? null : current))
       }
       if (savedSection === 'permit' || !canContinueEditing || !drafts.permitDraftDirty) {
         setPermitForm(refreshed ? permitFormFromDetail(refreshed) : emptyPermitForm())
-        setIsEditingFederalPermit(false)
+        setEditingSection((current) => (current === 'permit' ? null : current))
       }
       if (canViewFederalApplication) {
         try {
@@ -574,6 +662,12 @@ const FederalApplicationDetailsPage = () => {
       !statusTransitions.some((transition) => transition.code === statusCode)
     )
       return false
+    const statusRemarkError = statusRemarkRequired(statusCode)
+      ? requiredFieldError(statusRemark, 'Remark')
+      : null
+    if (!showStatusFieldErrors({ statusRemark: statusRemarkError }, () => statusFormRef.current)) {
+      return false
+    }
     setActionResult(null)
     setIsSavingMutation(true)
     try {
@@ -583,10 +677,17 @@ const FederalApplicationDetailsPage = () => {
         statusRemark,
       )
       if (!result.success) {
-        setActionResult({
-          kind: 'error',
-          message: result.errors[0] || 'Unable to update federal application status.',
-        })
+        const { fieldErrors, otherErrors } = splitServerErrors(
+          result.errors,
+          federalStatusServerField,
+        )
+        showStatusFieldErrors(fieldErrors, () => statusFormRef.current)
+        if (otherErrors.length > 0 || !hasFieldErrors(fieldErrors)) {
+          setActionResult({
+            kind: 'error',
+            message: otherErrors[0] || 'Unable to update federal application status.',
+          })
+        }
         return false
       }
       try {
@@ -602,7 +703,7 @@ const FederalApplicationDetailsPage = () => {
             'Federal application status updated, but details could not be refreshed. Reload before making more changes.',
         })
       }
-      setIsEditingFederalStatus(false)
+      setEditingSection((current) => (current === 'status' ? null : current))
       return true
     } catch (error) {
       console.error(error)
@@ -615,6 +716,7 @@ const FederalApplicationDetailsPage = () => {
     applicationNumber,
     canMutateFederalApplication,
     refreshDetail,
+    showStatusFieldErrors,
     statusCode,
     statusRemark,
     statusTransitions,
@@ -630,13 +732,14 @@ const FederalApplicationDetailsPage = () => {
       })
       return false
     }
-    if (hasPermitValidationError) {
-      setActionResult({
-        kind: 'error',
-        message:
-          Object.values(permitFieldErrors).find((error): error is string => !!error) ??
-          'Please fix the federal permit fields before saving.',
-      })
+    if (isSavingMutation) return false
+    if (detail?.federalPermit && !permitDraftDirty) {
+      resetPermitFieldErrors()
+      setActionResult(null)
+      setEditingSection(null)
+      return true
+    }
+    if (!showPermitFieldErrors(permitValidationErrors, () => permitFormRef.current)) {
       return false
     }
     setActionResult(null)
@@ -644,10 +747,17 @@ const FederalApplicationDetailsPage = () => {
     try {
       const result = await saveFederalPermit(applicationNumber, permitForm, !!detail?.federalPermit)
       if (!result.success) {
-        setActionResult({
-          kind: 'error',
-          message: result.errors[0] || 'Unable to save federal permit.',
-        })
+        const { fieldErrors, otherErrors } = splitServerErrors(
+          result.errors,
+          federalPermitServerField,
+        )
+        showPermitFieldErrors(fieldErrors, () => permitFormRef.current)
+        if (otherErrors.length > 0 || !hasFieldErrors(fieldErrors)) {
+          setActionResult({
+            kind: 'error',
+            message: otherErrors[0] || 'Unable to save federal permit.',
+          })
+        }
         return false
       }
       try {
@@ -660,7 +770,7 @@ const FederalApplicationDetailsPage = () => {
             'Federal permit saved, but details could not be refreshed. Reload before making more changes.',
         })
       }
-      setIsEditingFederalPermit(false)
+      setEditingSection((current) => (current === 'permit' ? null : current))
       return true
     } catch (error) {
       console.error(error)
@@ -670,46 +780,40 @@ const FederalApplicationDetailsPage = () => {
       setIsSavingMutation(false)
     }
   }, [
+    isSavingMutation,
+    permitDraftDirty,
+    resetPermitFieldErrors,
     applicationNumber,
     canMutateFederalApplication,
     detail?.federalPermit,
-    hasPermitValidationError,
-    permitFieldErrors,
     permitForm,
+    permitValidationErrors,
     refreshDetail,
     shippingReferences,
+    showPermitFieldErrors,
   ])
-
-  const onStartFederalPermitEdit = useCallback(() => {
-    if (
-      !canMutateFederalApplication ||
-      !detail ||
-      isShippingReferencesLoading ||
-      !shippingReferences
-    ) {
-      return
-    }
-    setPermitForm(permitFormFromDetail(detail))
-    setActionResult(withoutActionError)
-    setIsEditingFederalPermit(true)
-  }, [canMutateFederalApplication, detail, isShippingReferencesLoading, shippingReferences])
-
-  const onCancelFederalPermitEdit = useCallback(() => {
-    setPermitForm(detail ? permitFormFromDetail(detail) : emptyPermitForm())
-    setActionResult(withoutActionError)
-    setIsEditingFederalPermit(false)
-  }, [detail])
 
   const onSaveRemark = useCallback(async (): Promise<boolean> => {
     if (!applicationNumber || !canMutateFederalApplication || isSavingRemark) return false
 
-    const normalizedRemark = remarkDraft.trim()
-    if (!normalizedRemark) {
-      setRemarkValidationMessage('Remark is required.')
-      return false
+    if (editingRemarkId !== null && !remarkDraftDirty) {
+      setRemarkValidationMessage('')
+      setActionResult(null)
+      setEditingSection(null)
+      setRemarkDraft('')
+      setEditingRemarkId(null)
+      return true
     }
-    if (normalizedRemark.length > 250) {
-      setRemarkValidationMessage('Remark must not exceed 250 characters.')
+
+    const normalizedRemark = remarkDraft.trim()
+    const remarkError = !normalizedRemark
+      ? 'Remark is required.'
+      : normalizedRemark.length > 250
+        ? 'Remark must not exceed 250 characters.'
+        : ''
+    if (remarkError) {
+      setRemarkValidationMessage(remarkError)
+      focusFirstInvalidFieldAfterRender(() => remarkFormRef.current)
       return false
     }
 
@@ -723,10 +827,20 @@ const FederalApplicationDetailsPage = () => {
         editingRemarkId ?? undefined,
       )
       if (!result.success) {
-        setActionResult({
-          kind: 'error',
-          message: result.errors[0] || 'Unable to save federal application remark.',
-        })
+        const { fieldErrors, otherErrors } = splitServerErrors(
+          result.errors,
+          federalRemarkServerField,
+        )
+        if (fieldErrors.remark) {
+          setRemarkValidationMessage(fieldErrors.remark)
+          focusFirstInvalidFieldAfterRender(() => remarkFormRef.current)
+        }
+        if (otherErrors.length > 0 || !fieldErrors.remark) {
+          setActionResult({
+            kind: 'error',
+            message: otherErrors[0] || 'Unable to save federal application remark.',
+          })
+        }
         return false
       }
       try {
@@ -746,7 +860,7 @@ const FederalApplicationDetailsPage = () => {
       setEditingRemarkId(null)
       setRemarkDraft('')
       setRemarkValidationMessage('')
-      setIsEditingFederalRemarks(false)
+      setEditingSection((current) => (isRemarkSection(current) ? null : current))
       return true
     } catch (error) {
       console.error(error)
@@ -755,7 +869,14 @@ const FederalApplicationDetailsPage = () => {
     } finally {
       setIsSavingRemark(false)
     }
-  }, [applicationNumber, canMutateFederalApplication, editingRemarkId, isSavingRemark, remarkDraft])
+  }, [
+    applicationNumber,
+    canMutateFederalApplication,
+    editingRemarkId,
+    isSavingRemark,
+    remarkDraft,
+    remarkDraftDirty,
+  ])
 
   const refreshFederalApplicationDocuments = useCallback(async () => {
     if (!applicationNumber) {
@@ -767,20 +888,24 @@ const FederalApplicationDetailsPage = () => {
     setDocumentsErrorMessage('')
   }, [applicationNumber])
 
-  const onCancelFederalStatusEdit = useCallback(() => {
-    setStatusCode(statusTransitions[0]?.code ?? '')
-    setStatusRemark('')
-    setActionResult(withoutActionError)
-    setIsEditingFederalStatus(false)
-  }, [statusTransitions])
-
-  const onCancelFederalRemarkEdit = useCallback(() => {
-    setRemarkDraft('')
-    setEditingRemarkId(null)
-    setRemarkValidationMessage('')
-    setActionResult(withoutActionError)
-    setIsEditingFederalRemarks(false)
-  }, [])
+  const onDiscardFederalSection = useCallback(
+    (section: FederalEditSection) => {
+      if (section === 'status') {
+        setStatusCode(statusTransitions[0]?.code ?? '')
+        setStatusRemark('')
+        resetStatusFieldErrors()
+      } else if (section === 'permit') {
+        setPermitForm(detail ? permitFormFromDetail(detail) : emptyPermitForm())
+        resetPermitFieldErrors()
+      } else {
+        setRemarkDraft('')
+        setEditingRemarkId(null)
+        setRemarkValidationMessage('')
+      }
+      setActionResult(withoutActionError)
+    },
+    [detail, resetPermitFieldErrors, resetStatusFieldErrors, statusTransitions],
+  )
 
   const onCancelFederalDocumentEdit = useCallback(() => {
     setDocumentUploadDirty(false)
@@ -864,54 +989,10 @@ const FederalApplicationDetailsPage = () => {
     ],
   )
 
-  const remarkBaseline =
-    editingRemarkId === null
-      ? ''
-      : (remarkRows.find((remark) => remark.remarkId === editingRemarkId)?.remark ?? '')
-  const remarkDraftDirty =
-    canMutateFederalApplication && isEditingFederalRemarks && remarkDraft !== remarkBaseline
-  const independentDraftCount = [statusDraftDirty, remarkDraftDirty, permitDraftDirty].filter(
-    Boolean,
-  ).length
   const isFederalApplicationDirty =
     statusDraftDirty || remarkDraftDirty || permitDraftDirty || documentUploadDirty
-  const unsavedSaveUnavailableReason = documentUploadDirty
-    ? 'Finish or reset the queued document uploads before leaving, or discard all changes.'
-    : independentDraftCount > 1
-      ? 'Save each status, remark, and permit draft from its tab before leaving, or discard all changes.'
-      : undefined
-
-  const onSaveUnsavedFederalApplicationChanges = useCallback(async (): Promise<boolean> => {
-    if (documentUploadDirty) {
-      setActionResult({
-        kind: 'error',
-        message:
-          'Queued document uploads must be submitted or reset before leaving this federal application.',
-      })
-      return false
-    }
-    if ([statusDraftDirty, remarkDraftDirty, permitDraftDirty].filter(Boolean).length > 1) {
-      setActionResult({
-        kind: 'error',
-        message:
-          'Save each federal application draft from its tab before leaving this application.',
-      })
-      return false
-    }
-    if (statusDraftDirty) return onSaveStatus()
-    if (remarkDraftDirty) return onSaveRemark()
-    if (permitDraftDirty) return onSavePermit()
-    return true
-  }, [
-    documentUploadDirty,
-    onSavePermit,
-    onSaveRemark,
-    onSaveStatus,
-    permitDraftDirty,
-    remarkDraftDirty,
-    statusDraftDirty,
-  ])
-
+  const isFederalApplicationBusy =
+    isSavingMutation || isSavingRemark || isRemovingDocumentId !== null || documentUploadBusy
   const onDiscardFederalApplicationChanges = useCallback(() => {
     setStatusCode(statusTransitions[0]?.code ?? '')
     setStatusRemark('')
@@ -919,15 +1000,255 @@ const FederalApplicationDetailsPage = () => {
     setEditingRemarkId(null)
     setRemarkValidationMessage('')
     setPermitForm(detail ? permitFormFromDetail(detail) : emptyPermitForm())
-    setIsEditingFederalStatus(false)
-    setIsEditingFederalRemarks(false)
+    resetStatusFieldErrors()
+    resetPermitFieldErrors()
+    setEditingSection(null)
     setIsEditingFederalDocuments(false)
-    setIsEditingFederalPermit(false)
     setDocumentUploadDirty(false)
     setDocumentUploadBusy(false)
     setDocumentUploadResetKey((current) => current + 1)
     setActionResult(withoutActionError)
-  }, [detail, statusTransitions])
+  }, [detail, resetPermitFieldErrors, resetStatusFieldErrors, statusTransitions])
+
+  const sections = useEditSections<FederalEditSection>({
+    isDirty: statusDraftDirty || remarkDraftDirty || permitDraftDirty,
+    onDiscard: onDiscardFederalSection,
+    state: [editingSection, setEditingSection],
+    leaveGuard: {
+      isDirty: isFederalApplicationDirty,
+      isBusy: isFederalApplicationBusy,
+      onDiscard: () => {
+        if (isEditingFederalDocuments || documentUploadDirty) onDiscardFederalApplicationChanges()
+      },
+    },
+  })
+  const editingRemarkSection = isRemarkSection(editingSection) ? editingSection : null
+
+  const onStartFederalPermitEdit = () => {
+    if (
+      !canMutateFederalApplication ||
+      !detail ||
+      isShippingReferencesLoading ||
+      !shippingReferences
+    ) {
+      return
+    }
+    sections.startEditing('permit', () => {
+      setPermitForm(permitFormFromDetail(detail))
+      resetPermitFieldErrors()
+      setActionResult(withoutActionError)
+    })
+  }
+
+  const renderFederalShippingFields = () => {
+    if (!detail) return null
+    const editing = isEditingFederalPermit && canMutateFederalApplication
+    const otherPortSelected =
+      (editing ? permitForm.portOfExport : detail.federalPermit?.portOfExport)
+        ?.trim()
+        .toUpperCase() === 'OT'
+    return (
+      <RecordFieldGrid ref={permitFormRef} editing={editing}>
+        <RecordFieldRow>
+          <RecordField
+            label="Permit issue date"
+            value={displayValue(detail.federalPermit?.permitIssueDate)}
+            edit={() => (
+              <IsoDatePicker
+                id="federalPermitIssueDate"
+                labelText={requiredLabel('Permit issue date')}
+                required
+                value={permitForm.permitIssueDate}
+                {...permitInvalidProps('permitIssueDate')}
+                onChange={(value) => {
+                  setPermitForm((current) => ({
+                    ...current,
+                    permitIssueDate: value,
+                  }))
+                  clearPermitFieldError('permitIssueDate')
+                }}
+              />
+            )}
+          />
+        </RecordFieldRow>
+        <RecordFieldRow>
+          <RecordField
+            label="Final destination country"
+            value={displayValue(
+              shippingReferenceLabel(
+                shippingReferences?.countries,
+                detail.federalPermit?.destinationCountry,
+              ),
+            )}
+            span="wide"
+            edit={() => (
+              <Select
+                id="federalPermitDestinationCountry"
+                labelText={requiredLabel('Final destination country')}
+                aria-required="true"
+                value={permitForm.destinationCountry}
+                {...permitInvalidProps('destinationCountry')}
+                onChange={(event) => {
+                  setPermitForm((current) => ({
+                    ...current,
+                    destinationCountry: event.target.value,
+                  }))
+                  clearPermitFieldError('destinationCountry')
+                }}
+              >
+                <SelectItem value="" text="Select a final destination country" />
+                {(shippingReferences?.countries ?? []).map((option) => (
+                  <SelectItem
+                    key={option.code}
+                    value={option.code}
+                    text={formatShippingReferenceOption(option)}
+                  />
+                ))}
+              </Select>
+            )}
+          />
+        </RecordFieldRow>
+        <RecordFieldRow>
+          <RecordField
+            label="Transport type"
+            value={displayValue(
+              shippingReferenceLabel(
+                shippingReferences?.transportTypes,
+                detail.federalPermit?.transportType,
+              ),
+            )}
+            edit={() => (
+              <Select
+                id="federalPermitTransportType"
+                labelText={requiredLabel('Transport type')}
+                aria-required="true"
+                value={permitForm.transportType}
+                {...permitInvalidProps('transportType')}
+                onChange={(event) => {
+                  setPermitForm((current) => ({
+                    ...current,
+                    transportType: event.target.value,
+                  }))
+                  clearPermitFieldError('transportType')
+                }}
+              >
+                <SelectItem value="" text="Select a transport type" />
+                {(shippingReferences?.transportTypes ?? []).map((option) => (
+                  <SelectItem
+                    key={option.code}
+                    value={option.code}
+                    text={formatShippingReferenceOption(option)}
+                  />
+                ))}
+              </Select>
+            )}
+          />
+          <RecordField
+            label="Transport name"
+            value={displayValue(detail.federalPermit?.transportName)}
+            edit={() => (
+              <TextInput
+                id="federalPermitTransportName"
+                labelText={requiredLabel('Transport name')}
+                aria-required="true"
+                value={permitForm.transportName}
+                maxLength={26}
+                {...permitInvalidProps('transportName')}
+                onChange={(event) => {
+                  setPermitForm((current) => ({
+                    ...current,
+                    transportName: event.target.value,
+                  }))
+                  clearPermitFieldError('transportName')
+                }}
+              />
+            )}
+          />
+        </RecordFieldRow>
+        <RecordFieldRow>
+          <RecordField
+            label="Estimated shipping date"
+            value={displayValue(detail.federalPermit?.shippingDate)}
+            edit={() => (
+              <IsoDatePicker
+                id="federalPermitShippingDate"
+                labelText={requiredLabel('Estimated shipping date')}
+                required
+                value={permitForm.shippingDate}
+                {...permitInvalidProps('shippingDate')}
+                onChange={(value) => {
+                  setPermitForm((current) => ({
+                    ...current,
+                    shippingDate: value,
+                  }))
+                  clearPermitFieldError('shippingDate')
+                }}
+              />
+            )}
+          />
+        </RecordFieldRow>
+        <RecordFieldRow>
+          <RecordField
+            label="Customs port of export"
+            value={displayValue(
+              shippingReferenceLabel(shippingReferences?.ports, detail.federalPermit?.portOfExport),
+            )}
+            edit={() => (
+              <Select
+                id="federalPermitPortOfExport"
+                labelText={requiredLabel('Customs port of export')}
+                aria-required="true"
+                value={permitForm.portOfExport}
+                {...permitInvalidProps('portOfExport')}
+                onChange={(event) => {
+                  const portCode = event.target.value
+                  setPermitForm((current) => ({
+                    ...current,
+                    portOfExport: portCode,
+                    otherPortOfExport:
+                      portCode.toUpperCase() === 'OT' ? current.otherPortOfExport : '',
+                  }))
+                  clearPermitFieldError('portOfExport')
+                  clearPermitFieldError('otherPortOfExport')
+                }}
+              >
+                <SelectItem value="" text="Select a customs port of export" />
+                {(shippingReferences?.ports ?? []).map((option) => (
+                  <SelectItem
+                    key={option.code}
+                    value={option.code}
+                    text={formatShippingReferenceOption(option)}
+                  />
+                ))}
+              </Select>
+            )}
+          />
+          <RecordField
+            label="Other port of export"
+            value={displayValue(detail.federalPermit?.otherPortOfExport)}
+            hidden={!otherPortSelected}
+            edit={() => (
+              <TextInput
+                id="federalPermitOtherPort"
+                labelText={requiredLabel('Other port of export')}
+                aria-required="true"
+                value={permitForm.otherPortOfExport}
+                maxLength={34}
+                {...permitInvalidProps('otherPortOfExport')}
+                onChange={(event) => {
+                  setPermitForm((current) => ({
+                    ...current,
+                    otherPortOfExport: event.target.value,
+                  }))
+                  clearPermitFieldError('otherPortOfExport')
+                }}
+              />
+            )}
+          />
+        </RecordFieldRow>
+      </RecordFieldGrid>
+    )
+  }
 
   return (
     <Grid fullWidth className="default-grid detail-page-grid">
@@ -1016,8 +1337,10 @@ const FederalApplicationDetailsPage = () => {
             <Tabs
               selectedIndex={selectedFederalApplicationTabIndex}
               onChange={({ selectedIndex }) => {
-                selectFederalApplicationTab(
-                  FEDERAL_APPLICATION_DETAIL_TAB_SLOTS[selectedIndex] ?? 'owner',
+                sections.confirmLeave(() =>
+                  selectFederalApplicationTab(
+                    FEDERAL_APPLICATION_DETAIL_TAB_SLOTS[selectedIndex] ?? 'owner',
+                  ),
                 )
               }}
             >
@@ -1042,58 +1365,71 @@ const FederalApplicationDetailsPage = () => {
                       <DetailFieldTile
                         title="Applicant"
                         fields={[
-                          {
-                            label: 'Client',
-                            value: displayValue(
-                              [detail.ownerCompanyName?.trim(), detail.ownerClientNumber?.trim()]
-                                .filter(Boolean)
-                                .join(' · '),
-                            ),
-                          },
-                          {
-                            label: 'Applicant type',
-                            value: displayValue(applicantTypeLabel(detail.ownerApplicantType)),
-                          },
-                          {
-                            label: 'Client location',
-                            value: displayValue(detail.ownerClientLocationCode),
-                          },
-                          {
-                            label: 'Contact name',
-                            value: displayValue(detail.ownerContactName),
-                          },
-                          {
-                            label: 'Address',
-                            value: displayValue(detail.ownerClientContext?.address),
-                          },
-                          {
-                            label: 'City',
-                            value: displayValue(detail.ownerClientContext?.city),
-                          },
-                          {
-                            label: 'Province',
-                            value: displayValue(detail.ownerClientContext?.province),
-                          },
-                          {
-                            label: 'Postal code',
-                            value: displayValue(detail.ownerClientContext?.postalCode),
-                          },
-                          {
-                            label: 'Country',
-                            value: displayValue(detail.ownerClientContext?.country),
-                          },
-                          {
-                            label: 'Phone number',
-                            value: displayValue(detail.ownerClientContext?.phone),
-                          },
-                          {
-                            label: 'Fax number',
-                            value: displayValue(detail.ownerClientContext?.fax),
-                          },
-                          {
-                            label: 'Email address',
-                            value: displayValue(detail.ownerClientContext?.email),
-                          },
+                          [
+                            {
+                              label: 'Contact name',
+                              value: displayValue(detail.ownerContactName),
+                            },
+                            {
+                              label: 'Applicant type',
+                              value: displayValue(applicantTypeLabel(detail.ownerApplicantType)),
+                            },
+                          ],
+                          [
+                            {
+                              label: 'Client',
+                              span: 'wide',
+                              value: displayValue(
+                                [detail.ownerCompanyName?.trim(), detail.ownerClientNumber?.trim()]
+                                  .filter(Boolean)
+                                  .join(' · '),
+                              ),
+                            },
+                            {
+                              label: 'Client location',
+                              value: displayValue(detail.ownerClientLocationCode),
+                              span: 'wide',
+                            },
+                          ],
+                          [
+                            {
+                              label: 'Address',
+                              value: displayValue(detail.ownerClientContext?.address),
+                              span: 'wide',
+                            },
+                            {
+                              label: 'City',
+                              value: displayValue(detail.ownerClientContext?.city),
+                            },
+                            {
+                              label: 'Province',
+                              value: displayValue(detail.ownerClientContext?.province),
+                            },
+                          ],
+                          [
+                            {
+                              label: 'Country',
+                              value: displayValue(detail.ownerClientContext?.country),
+                            },
+                            {
+                              label: 'Postal code',
+                              value: displayValue(detail.ownerClientContext?.postalCode),
+                            },
+                          ],
+                          [
+                            {
+                              label: 'Phone number',
+                              value: displayValue(detail.ownerClientContext?.phone),
+                            },
+                            {
+                              label: 'Fax number',
+                              value: displayValue(detail.ownerClientContext?.fax),
+                            },
+                            {
+                              label: 'Email address',
+                              value: displayValue(detail.ownerClientContext?.email),
+                            },
+                          ],
                         ]}
                       />
                     </Column>
@@ -1107,60 +1443,76 @@ const FederalApplicationDetailsPage = () => {
                         <DetailFieldTile
                           title="Agent"
                           fields={[
-                            {
-                              label: 'Client',
-                              value: displayValue(
-                                [detail.agentCompanyName?.trim(), detail.agentClientNumber?.trim()]
-                                  .filter(Boolean)
-                                  .join(' · '),
-                              ),
-                            },
-                            {
-                              label: 'Applicant type',
-                              value: displayValue(
-                                applicantTypeLabel(detail.agentApplicantType ?? 'A'),
-                              ),
-                            },
-                            {
-                              label: 'Client location',
-                              value: displayValue(detail.agentClientLocationCode),
-                            },
-                            {
-                              label: 'Contact name',
-                              value: displayValue(detail.agentContactName),
-                            },
-                            {
-                              label: 'Address',
-                              value: displayValue(detail.agentClientContext?.address),
-                            },
-                            {
-                              label: 'City',
-                              value: displayValue(detail.agentClientContext?.city),
-                            },
-                            {
-                              label: 'Province',
-                              value: displayValue(detail.agentClientContext?.province),
-                            },
-                            {
-                              label: 'Postal code',
-                              value: displayValue(detail.agentClientContext?.postalCode),
-                            },
-                            {
-                              label: 'Country',
-                              value: displayValue(detail.agentClientContext?.country),
-                            },
-                            {
-                              label: 'Phone number',
-                              value: displayValue(detail.agentClientContext?.phone),
-                            },
-                            {
-                              label: 'Fax number',
-                              value: displayValue(detail.agentClientContext?.fax),
-                            },
-                            {
-                              label: 'Email address',
-                              value: displayValue(detail.agentClientContext?.email),
-                            },
+                            [
+                              {
+                                label: 'Contact name',
+                                value: displayValue(detail.agentContactName),
+                              },
+                              {
+                                label: 'Applicant type',
+                                value: displayValue(
+                                  applicantTypeLabel(detail.agentApplicantType ?? 'A'),
+                                ),
+                              },
+                            ],
+                            [
+                              {
+                                label: 'Client',
+                                span: 'wide',
+                                value: displayValue(
+                                  [
+                                    detail.agentCompanyName?.trim(),
+                                    detail.agentClientNumber?.trim(),
+                                  ]
+                                    .filter(Boolean)
+                                    .join(' · '),
+                                ),
+                              },
+                              {
+                                label: 'Client location',
+                                value: displayValue(detail.agentClientLocationCode),
+                                span: 'wide',
+                              },
+                            ],
+                            [
+                              {
+                                label: 'Address',
+                                value: displayValue(detail.agentClientContext?.address),
+                                span: 'wide',
+                              },
+                              {
+                                label: 'City',
+                                value: displayValue(detail.agentClientContext?.city),
+                              },
+                              {
+                                label: 'Province',
+                                value: displayValue(detail.agentClientContext?.province),
+                              },
+                            ],
+                            [
+                              {
+                                label: 'Country',
+                                value: displayValue(detail.agentClientContext?.country),
+                              },
+                              {
+                                label: 'Postal code',
+                                value: displayValue(detail.agentClientContext?.postalCode),
+                              },
+                            ],
+                            [
+                              {
+                                label: 'Phone number',
+                                value: displayValue(detail.agentClientContext?.phone),
+                              },
+                              {
+                                label: 'Fax number',
+                                value: displayValue(detail.agentClientContext?.fax),
+                              },
+                              {
+                                label: 'Email address',
+                                value: displayValue(detail.agentClientContext?.email),
+                              },
+                            ],
                           ]}
                         />
                       </Column>
@@ -1178,129 +1530,157 @@ const FederalApplicationDetailsPage = () => {
                           statusTransitions.length > 0 &&
                           !isEditingFederalStatus ? (
                             <Button
+                              ref={sections.editButtonRef('status')}
                               kind="tertiary"
                               size="md"
                               renderIcon={Edit}
-                              onClick={() => {
-                                setStatusCode(statusTransitions[0]?.code ?? '')
-                                setStatusRemark('')
-                                setActionResult(withoutActionError)
-                                setIsEditingFederalStatus(true)
-                              }}
+                              onClick={() =>
+                                sections.startEditing('status', () => {
+                                  setStatusCode(statusTransitions[0]?.code ?? '')
+                                  setStatusRemark('')
+                                  resetStatusFieldErrors()
+                                  setActionResult(withoutActionError)
+                                })
+                              }
                             >
                               Edit federal status
                             </Button>
                           ) : undefined
                         }
                         fields={[
-                          {
-                            label: 'Region',
-                            value: displayValue(detail.region),
-                          },
-                          {
-                            label: 'Product type',
-                            value: displayValue(detail.productType),
-                          },
-                          {
-                            label: 'Application date',
-                            value: displayValue(detail.applicationDate),
-                          },
-                          {
-                            label: 'Date received',
-                            value: displayValue(detail.receivedDate),
-                          },
-                          {
-                            label: 'List date',
-                            value: displayValue(detail.listingDate),
-                          },
-                          {
-                            label: 'Federal application number',
-                            value: displayValue(detail.federalApplicationNumber),
-                          },
-                          {
-                            label: 'Status',
-                            value: (
-                              <StatusTag
-                                status={detail.statusDescription ?? detail.statusCode ?? ''}
-                                fallbackLabel="Not provided"
-                              />
-                            ),
-                          },
-                          {
-                            label: 'Author',
-                            value: displayAuditIdentity(detail.author),
-                          },
-                          {
-                            label: 'Exemption number',
-                            value: displayValue(detail.exemptionNumber),
-                          },
-                          {
-                            label: 'Exemption type',
-                            value: displayValue(detail.exemptionType),
-                          },
-                          {
-                            label: 'Exemption reason',
-                            value: displayValue(detail.exemptionReason),
-                          },
-                          {
-                            label: 'Exemption term (days)',
-                            value: displayValue(detail.termDays),
-                          },
+                          [
+                            {
+                              label: 'Region',
+                              value: displayValue(detail.region),
+                              span: 'wide',
+                            },
+                            {
+                              label: 'Product type',
+                              value: displayValue(detail.productType),
+                            },
+                          ],
+                          [
+                            {
+                              label: 'Application date',
+                              value: displayValue(detail.applicationDate),
+                            },
+                            {
+                              label: 'Date received',
+                              value: displayValue(detail.receivedDate),
+                            },
+                            {
+                              label: 'List date',
+                              value: displayValue(detail.listingDate),
+                            },
+                          ],
+                          [
+                            {
+                              label: 'Federal application number',
+                              value: displayValue(detail.federalApplicationNumber),
+                            },
+                            {
+                              label: 'Status',
+                              value: (
+                                <StatusTag
+                                  status={detail.statusDescription ?? detail.statusCode ?? ''}
+                                  fallbackLabel="Not provided"
+                                />
+                              ),
+                            },
+                            {
+                              label: 'Author',
+                              value: displayAuditIdentity(detail.author),
+                            },
+                          ],
+                          [
+                            {
+                              label: 'Exemption number',
+                              value: displayValue(detail.exemptionNumber),
+                            },
+                            {
+                              label: 'Exemption type',
+                              value: displayValue(detail.exemptionType),
+                            },
+                            {
+                              label: 'Exemption reason',
+                              value: displayValue(detail.exemptionReason),
+                            },
+                            {
+                              label: 'Exemption term (days)',
+                              value: displayValue(detail.termDays),
+                            },
+                          ],
                         ]}
                       />
                       {canMutateFederalApplication &&
                         statusTransitions.length > 0 &&
                         isEditingFederalStatus && (
-                          <Tile>
+                          <Tile ref={sections.sectionRef('status')}>
                             <h2 className="detail-tile-title">Update federal status</h2>
                             <RequiredFieldsLegend />
-                            <div className="legacy-search-grid">
-                              <Select
-                                id="federalApplicationStatus"
-                                labelText={requiredLabel('Status')}
-                                aria-required="true"
-                                value={statusCode}
-                                onChange={(event) => setStatusCode(event.target.value)}
-                              >
-                                {statusTransitions.map((transition) => (
-                                  <SelectItem
-                                    key={transition.code}
-                                    value={transition.code}
-                                    text={transition.label}
+                            <RecordFieldGrid editing ref={statusFormRef}>
+                              <RecordFieldRow>
+                                <RecordFieldCell>
+                                  <Select
+                                    id="federalApplicationStatus"
+                                    labelText={requiredLabel('Status')}
+                                    aria-required="true"
+                                    value={statusCode}
+                                    {...statusInvalidProps('statusCode')}
+                                    onChange={(event) => {
+                                      setStatusCode(event.target.value)
+                                      clearStatusFieldError('statusCode')
+                                      if (!statusRemarkRequired(event.target.value)) {
+                                        clearStatusFieldError('statusRemark')
+                                      }
+                                    }}
+                                  >
+                                    {statusTransitions.map((transition) => (
+                                      <SelectItem
+                                        key={transition.code}
+                                        value={transition.code}
+                                        text={transition.label}
+                                      />
+                                    ))}
+                                  </Select>
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                              <RecordFieldRow>
+                                <RecordFieldCell span="full">
+                                  <TextArea
+                                    id="federalApplicationStatusRemark"
+                                    labelText={requiredLabel(
+                                      'Remark',
+                                      statusCode === 'REJ' || statusCode === 'WDN',
+                                    )}
+                                    aria-required={
+                                      statusCode === 'REJ' || statusCode === 'WDN'
+                                        ? 'true'
+                                        : undefined
+                                    }
+                                    value={statusRemark}
+                                    {...statusInvalidProps('statusRemark')}
+                                    onChange={(event) => {
+                                      setStatusRemark(event.target.value)
+                                      clearStatusFieldError('statusRemark')
+                                    }}
                                   />
-                                ))}
-                              </Select>
-                              <TextArea
-                                id="federalApplicationStatusRemark"
-                                labelText={requiredLabel(
-                                  'Remark',
-                                  statusCode === 'REJ' || statusCode === 'WDN',
-                                )}
-                                aria-required={
-                                  statusCode === 'REJ' || statusCode === 'WDN' ? 'true' : undefined
-                                }
-                                value={statusRemark}
-                                onChange={(event) => setStatusRemark(event.target.value)}
-                              />
-                            </div>
+                                </RecordFieldCell>
+                              </RecordFieldRow>
+                            </RecordFieldGrid>
                             <div className="legacy-search-actions">
                               <Button
                                 kind="ghost"
                                 size="md"
                                 disabled={isSavingMutation}
-                                onClick={onCancelFederalStatusEdit}
+                                onClick={sections.cancelEditing}
                               >
                                 Cancel
                               </Button>
                               <Button
                                 kind="primary"
                                 size="md"
-                                disabled={
-                                  isSavingMutation ||
-                                  !statusCode ||
-                                  ((statusCode === 'REJ' || statusCode === 'WDN') &&
-                                    !statusRemark.trim())
-                                }
+                                disabled={isSavingMutation}
                                 renderIcon={isSavingMutation ? PendingIcon : undefined}
                                 onClick={() => void onSaveStatus()}
                               >
@@ -1319,26 +1699,34 @@ const FederalApplicationDetailsPage = () => {
                       <DetailFieldTile
                         title="Items"
                         fields={[
-                          {
-                            label: 'Location of logs',
-                            value: displayValue(detail.logLocation),
-                          },
-                          {
-                            label: 'Age class',
-                            value: displayValue(detail.ageClass),
-                          },
-                          {
-                            label: 'Average log volume (m³)',
-                            value: displayVolume(detail.averageLogVolume),
-                          },
-                          {
-                            label: 'Application volume (m³)',
-                            value: displayVolume(detail.applicationVolume),
-                          },
-                          {
-                            label: 'Species and end use sort',
-                            value: displayValue(detail.endUse),
-                          },
+                          [
+                            {
+                              label: 'Location of logs',
+                              value: displayValue(detail.logLocation),
+                            },
+                          ],
+                          [
+                            {
+                              label: 'Age class',
+                              value: displayValue(detail.ageClass),
+                            },
+                          ],
+                          [
+                            {
+                              label: 'Average log volume (m³)',
+                              value: displayVolume(detail.averageLogVolume),
+                            },
+                            {
+                              label: 'Application volume (m³)',
+                              value: displayVolume(detail.applicationVolume),
+                            },
+                          ],
+                          [
+                            {
+                              label: 'Species and end use sort',
+                              value: displayValue(detail.endUse),
+                            },
+                          ],
                         ]}
                       />
                     </Column>
@@ -1494,26 +1882,35 @@ const FederalApplicationDetailsPage = () => {
                   <TabPanel className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
-                        <Tile className="application-detail-section application-detail-remarks">
+                        <Tile
+                          ref={
+                            editingRemarkSection
+                              ? sections.sectionRef(editingRemarkSection)
+                              : undefined
+                          }
+                          className="application-detail-section application-detail-remarks"
+                        >
                           <div className="detail-section-card__header">
                             <h2 className="detail-tile-title">Remarks</h2>
                             {canMutateFederalApplication && !isEditingFederalRemarks && (
                               <Button
+                                ref={sections.editButtonRef('new-remark')}
                                 kind="tertiary"
                                 size="md"
-                                onClick={() => {
-                                  setRemarkDraft('')
-                                  setEditingRemarkId(null)
-                                  setRemarkValidationMessage('')
-                                  setIsEditingFederalRemarks(true)
-                                }}
+                                onClick={() =>
+                                  sections.startEditing('new-remark', () => {
+                                    setRemarkDraft('')
+                                    setEditingRemarkId(null)
+                                    setRemarkValidationMessage('')
+                                  })
+                                }
                               >
                                 Add remark
                               </Button>
                             )}
                           </div>
                           {canMutateFederalApplication && isEditingFederalRemarks && (
-                            <div className="legacy-search-actions">
+                            <div ref={remarkFormRef} className="legacy-search-actions">
                               <TextArea
                                 id="federalApplicationRemark"
                                 labelText={requiredLabel(
@@ -1523,7 +1920,7 @@ const FederalApplicationDetailsPage = () => {
                                 maxCount={250}
                                 value={remarkDraft}
                                 invalid={!!remarkValidationMessage}
-                                invalidText={remarkValidationMessage}
+                                invalidText={fieldErrorText(remarkValidationMessage)}
                                 onChange={(event) => {
                                   setRemarkDraft(event.target.value)
                                   if (remarkValidationMessage) {
@@ -1535,7 +1932,7 @@ const FederalApplicationDetailsPage = () => {
                                 kind="ghost"
                                 size="md"
                                 disabled={isSavingRemark}
-                                onClick={onCancelFederalRemarkEdit}
+                                onClick={sections.cancelEditing}
                               >
                                 Cancel
                               </Button>
@@ -1583,14 +1980,19 @@ const FederalApplicationDetailsPage = () => {
                                       {canMutateFederalApplication && (
                                         <TableCell>
                                           <Button
+                                            ref={sections.editButtonRef(`remark-${item.remarkId}`)}
                                             kind="ghost"
                                             size="md"
-                                            onClick={() => {
-                                              setEditingRemarkId(item.remarkId)
-                                              setRemarkDraft(item.remark)
-                                              setRemarkValidationMessage('')
-                                              setIsEditingFederalRemarks(true)
-                                            }}
+                                            onClick={() =>
+                                              sections.startEditing(
+                                                `remark-${item.remarkId}`,
+                                                () => {
+                                                  setEditingRemarkId(item.remarkId)
+                                                  setRemarkDraft(item.remark)
+                                                  setRemarkValidationMessage('')
+                                                },
+                                              )
+                                            }
                                           >
                                             Edit
                                           </Button>
@@ -1662,7 +2064,10 @@ const FederalApplicationDetailsPage = () => {
                 <TabPanel className="application-detail-tab-panel">
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <Tile className="detail-section-card federal-shipping-details">
+                      <Tile
+                        ref={sections.sectionRef('permit')}
+                        className="detail-section-card federal-shipping-details"
+                      >
                         {shippingReferencesErrorMessage && (
                           <InlineNotification
                             className="detail-context-notification"
@@ -1683,155 +2088,20 @@ const FederalApplicationDetailsPage = () => {
                               </h2>
                             </div>
                             <RequiredFieldsLegend />
-                            <div className="federal-shipping-details__form">
-                              <IsoDatePicker
-                                id="federalPermitIssueDate"
-                                labelText={requiredLabel('Permit issue date')}
-                                required
-                                value={permitForm.permitIssueDate}
-                                invalid={!!permitFieldErrors.permitIssueDate}
-                                invalidText={permitFieldErrors.permitIssueDate}
-                                onChange={(value) =>
-                                  setPermitForm((current) => ({
-                                    ...current,
-                                    permitIssueDate: value,
-                                  }))
-                                }
-                              />
-                              <Select
-                                id="federalPermitDestinationCountry"
-                                labelText={requiredLabel('Final destination country')}
-                                aria-required="true"
-                                value={permitForm.destinationCountry}
-                                invalid={!!permitFieldErrors.destinationCountry}
-                                invalidText={permitFieldErrors.destinationCountry}
-                                onChange={(event) =>
-                                  setPermitForm((current) => ({
-                                    ...current,
-                                    destinationCountry: event.target.value,
-                                  }))
-                                }
-                              >
-                                <SelectItem value="" text="Select a final destination country" />
-                                {(shippingReferences?.countries ?? []).map((option) => (
-                                  <SelectItem
-                                    key={option.code}
-                                    value={option.code}
-                                    text={formatShippingReferenceOption(option)}
-                                  />
-                                ))}
-                              </Select>
-                              <Select
-                                id="federalPermitTransportType"
-                                labelText={requiredLabel('Transport type')}
-                                aria-required="true"
-                                value={permitForm.transportType}
-                                invalid={!!permitFieldErrors.transportType}
-                                invalidText={permitFieldErrors.transportType}
-                                onChange={(event) =>
-                                  setPermitForm((current) => ({
-                                    ...current,
-                                    transportType: event.target.value,
-                                  }))
-                                }
-                              >
-                                <SelectItem value="" text="Select a transport type" />
-                                {(shippingReferences?.transportTypes ?? []).map((option) => (
-                                  <SelectItem
-                                    key={option.code}
-                                    value={option.code}
-                                    text={formatShippingReferenceOption(option)}
-                                  />
-                                ))}
-                              </Select>
-                              <TextInput
-                                id="federalPermitTransportName"
-                                labelText={requiredLabel('Transport name')}
-                                aria-required="true"
-                                value={permitForm.transportName}
-                                invalid={!!permitFieldErrors.transportName}
-                                invalidText={permitFieldErrors.transportName}
-                                maxLength={26}
-                                onChange={(event) =>
-                                  setPermitForm((current) => ({
-                                    ...current,
-                                    transportName: event.target.value,
-                                  }))
-                                }
-                              />
-                              <IsoDatePicker
-                                id="federalPermitShippingDate"
-                                labelText={requiredLabel('Estimated shipping date')}
-                                required
-                                value={permitForm.shippingDate}
-                                invalid={!!permitFieldErrors.shippingDate}
-                                invalidText={permitFieldErrors.shippingDate}
-                                onChange={(value) =>
-                                  setPermitForm((current) => ({
-                                    ...current,
-                                    shippingDate: value,
-                                  }))
-                                }
-                              />
-                              <Select
-                                id="federalPermitPortOfExport"
-                                labelText={requiredLabel('Customs port of export')}
-                                aria-required="true"
-                                value={permitForm.portOfExport}
-                                invalid={!!permitFieldErrors.portOfExport}
-                                invalidText={permitFieldErrors.portOfExport}
-                                onChange={(event) => {
-                                  const portCode = event.target.value
-                                  setPermitForm((current) => ({
-                                    ...current,
-                                    portOfExport: portCode,
-                                    otherPortOfExport:
-                                      portCode.toUpperCase() === 'OT'
-                                        ? current.otherPortOfExport
-                                        : '',
-                                  }))
-                                }}
-                              >
-                                <SelectItem value="" text="Select a customs port of export" />
-                                {(shippingReferences?.ports ?? []).map((option) => (
-                                  <SelectItem
-                                    key={option.code}
-                                    value={option.code}
-                                    text={formatShippingReferenceOption(option)}
-                                  />
-                                ))}
-                              </Select>
-                              {permitForm.portOfExport.trim().toUpperCase() === 'OT' && (
-                                <TextInput
-                                  id="federalPermitOtherPort"
-                                  labelText={requiredLabel('Other port of export')}
-                                  aria-required="true"
-                                  value={permitForm.otherPortOfExport}
-                                  invalid={!!permitFieldErrors.otherPortOfExport}
-                                  invalidText={permitFieldErrors.otherPortOfExport}
-                                  maxLength={34}
-                                  onChange={(event) =>
-                                    setPermitForm((current) => ({
-                                      ...current,
-                                      otherPortOfExport: event.target.value,
-                                    }))
-                                  }
-                                />
-                              )}
-                            </div>
+                            {renderFederalShippingFields()}
                             <div className="federal-shipping-details__actions">
                               <Button
                                 kind="tertiary"
                                 size="md"
                                 disabled={isSavingMutation}
-                                onClick={onCancelFederalPermitEdit}
+                                onClick={sections.cancelEditing}
                               >
                                 Cancel
                               </Button>
                               <Button
                                 kind="primary"
                                 size="md"
-                                disabled={isSavingMutation || hasPermitValidationError}
+                                disabled={isSavingMutation}
                                 renderIcon={isSavingMutation ? PendingIcon : undefined}
                                 onClick={() => void onSavePermit()}
                               >
@@ -1845,6 +2115,7 @@ const FederalApplicationDetailsPage = () => {
                               <h2 className="detail-tile-title">Shipping details</h2>
                               {canMutateFederalApplication && (
                                 <Button
+                                  ref={sections.editButtonRef('permit')}
                                   kind="tertiary"
                                   size="md"
                                   renderIcon={Edit}
@@ -1861,65 +2132,7 @@ const FederalApplicationDetailsPage = () => {
                                 </Button>
                               )}
                             </div>
-                            <dl className="detail-field-grid federal-shipping-details__field-grid">
-                              {[
-                                {
-                                  label: 'Permit issue date',
-                                  value: displayValue(detail.federalPermit?.permitIssueDate),
-                                },
-                                {
-                                  label: 'Final destination country',
-                                  value: displayValue(
-                                    shippingReferenceLabel(
-                                      shippingReferences?.countries,
-                                      detail.federalPermit?.destinationCountry,
-                                    ),
-                                  ),
-                                },
-                                {
-                                  label: 'Transport type',
-                                  value: displayValue(
-                                    shippingReferenceLabel(
-                                      shippingReferences?.transportTypes,
-                                      detail.federalPermit?.transportType,
-                                    ),
-                                  ),
-                                },
-                                {
-                                  label: 'Transport name',
-                                  value: displayValue(detail.federalPermit?.transportName),
-                                },
-                                {
-                                  label: 'Estimated shipping date',
-                                  value: displayValue(detail.federalPermit?.shippingDate),
-                                },
-                                {
-                                  label: 'Customs port of export',
-                                  value: displayValue(
-                                    shippingReferenceLabel(
-                                      shippingReferences?.ports,
-                                      detail.federalPermit?.portOfExport,
-                                    ),
-                                  ),
-                                },
-                                ...(detail.federalPermit?.portOfExport?.trim().toUpperCase() ===
-                                'OT'
-                                  ? [
-                                      {
-                                        label: 'Other port of export',
-                                        value: displayValue(
-                                          detail.federalPermit?.otherPortOfExport,
-                                        ),
-                                      },
-                                    ]
-                                  : []),
-                              ].map((field) => (
-                                <div key={field.label} className="detail-field-item">
-                                  <dt className="detail-field-label">{field.label}</dt>
-                                  <dd className="detail-field-value">{field.value}</dd>
-                                </div>
-                              ))}
-                            </dl>
+                            {renderFederalShippingFields()}
                           </>
                         )}
                       </Tile>
@@ -1933,14 +2146,11 @@ const FederalApplicationDetailsPage = () => {
       )}
       <UnsavedChangesGuard
         isDirty={isFederalApplicationDirty}
-        isBusy={
-          isSavingMutation || isSavingRemark || isRemovingDocumentId !== null || documentUploadBusy
-        }
-        onSave={onSaveUnsavedFederalApplicationChanges}
+        isBusy={isFederalApplicationBusy}
         onDiscard={onDiscardFederalApplicationChanges}
         subject="this federal application"
-        saveUnavailableReason={unsavedSaveUnavailableReason}
       />
+      {sections.discardModal}
     </Grid>
   )
 }
