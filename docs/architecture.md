@@ -101,21 +101,22 @@ without a current region.
 
 ### Mixed grants
 
-Application Approver and Exemption Approver cannot be held together, even for different regions
-or alongside Administrator. The check counts every variant of both roles, including obsolete
+Application Approver and Exemption Approver cannot be held together, in any regions, including
+alongside Administrator. The check counts every variant of both roles, including obsolete
 unscoped assignments that otherwise grant nothing, so accounts holding both must be resolved in FAM
 before the regional-only contract is deployed. Interactive token conversion removes all application authorities
 from such an account. Its capabilities response contains no roles or actions and includes
 `accessDeniedReason: INCOMPATIBLE_APPROVER_ROLES`, so the signed-in user sees the no-access page
-and an instruction to ask their administrator to remove one role. Business and administration
-API routes remain forbidden until a new token has a compatible assignment.
+with a general instruction to contact their administrator, who removes one of the roles in FAM.
+Business and administration API routes remain forbidden until a new token has a compatible
+assignment.
 
 Read Only may accompany one approver role. Each grant retains its own regions: Read Only
 assigned all eight can read current-region records while Cariboo Application Approver writes
 only in Cariboo. Capabilities tied to a role also stay within that role's regions. For example,
 Read Only in Cariboo plus Exemption Approver in Skeena sees Ministerial exemptions in both,
 approves only in Skeena, and sees other exemption types only in Cariboo. Multiple regional
-grants for the same role combine; obsolete unscoped grants are otherwise ignored.
+grants for the same role combine; an unscoped grant of these roles reaches no region.
 
 Legacy LEXIS offers no precedent: WebADE gave each user one set of organizations that limited the
 search lists of every non-administrator role alike, and detail pages and actions never checked

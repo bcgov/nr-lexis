@@ -62,10 +62,11 @@ describe('Unauthorized page actions', () => {
     expect(screen.getByRole('heading', { name: 'Access not granted' })).toBeInTheDocument()
   })
 
-  it('explains the conflicting approver roles and directs the user to their administrator', () => {
+  it('directs an account with both approver roles to its administrator without naming them', () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
+          principal: 'IDIR\\staff',
           roles: [],
           accessDeniedReason: 'INCOMPATIBLE_APPROVER_ROLES',
         }),
@@ -74,8 +75,12 @@ describe('Unauthorized page actions', () => {
 
     renderPage()
 
-    expect(screen.getByText(/both Application Approver and Exemption Approver roles/)).toBeVisible()
-    expect(screen.getByText(/Contact your administrator to remove one role/)).toBeVisible()
+    expect(
+      screen.getByText(
+        'You’re signed in as IDIR\\staff, but your account is not authorized to use LEXIS. Contact your administrator.',
+      ),
+    ).toBeVisible()
+    expect(screen.queryByText(/Approver/)).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible()
   })
 })
