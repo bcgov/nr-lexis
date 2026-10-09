@@ -1062,8 +1062,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         (area) => getComputedStyle(area, '::before').marginInlineStart,
       ),
     ).toBe('8px')
-    const reportIssueTooltip = collapsedNav
-      .locator('.csp-side-nav__tooltip', { has: collapsedReportIssue })
+    const reportIssueTooltip = collapsedSupport
+      .locator('.csp-side-nav__tooltip')
       .getByRole('tooltip')
     await collapsedReportIssue.hover()
     await expect(reportIssueTooltip).toHaveText('Report an issue')
