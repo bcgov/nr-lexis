@@ -1024,9 +1024,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       within(permitSummaryTile as HTMLElement).getByText('Application number(s)'),
     ).toBeInTheDocument()
     expect(
-      within(permitSummaryTile as HTMLElement).getByText('Package number(s)'),
-    ).toBeInTheDocument()
-    expect(within(permitSummaryTile as HTMLElement).getByText('PKG-9')).toBeInTheDocument()
+      within(permitSummaryTile as HTMLElement).queryByText('Package number(s)'),
+    ).not.toBeInTheDocument()
+    expect(within(permitSummaryTile as HTMLElement).queryByText('PKG-9')).not.toBeInTheDocument()
     expect(
       within(permitSummaryTile as HTMLElement).getByRole('link', { name: 'EX-9' }),
     ).toHaveAttribute('href', '/provincial/exemption/EX-9')
@@ -1860,7 +1860,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     consoleWarn.mockRestore()
   })
 
-  it('shows all associated application and package numbers in the permit summary', async () => {
+  it('shows all associated application numbers and no package numbers in the permit summary', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       applicationNumber: null,
@@ -1881,14 +1881,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
       await screen.findByRole('heading', { name: 'Permit summary' })
     ).closest('.cds--tile') as HTMLElement
     expect(within(permitSummaryTile).getByText('1000456, 1000457')).toBeInTheDocument()
-    expect(within(permitSummaryTile).getByText('PKG-9, PKG-10')).toBeInTheDocument()
+    expect(within(permitSummaryTile).queryByText('Package number(s)')).not.toBeInTheDocument()
+    expect(within(permitSummaryTile).queryByText('PKG-9, PKG-10')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: /Edit permit(?: details)?/ }))
     const permitSummaryEditor = screen
       .getByRole('heading', { name: 'Permit summary' })
       .closest('.cds--tile') as HTMLElement
     expect(within(permitSummaryEditor).getByText('1000456, 1000457')).toBeInTheDocument()
-    expect(within(permitSummaryEditor).getByText('PKG-9, PKG-10')).toBeInTheDocument()
+    expect(within(permitSummaryEditor).queryByText('Package number(s)')).not.toBeInTheDocument()
+    expect(within(permitSummaryEditor).queryByText('PKG-9, PKG-10')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Application number(s)')).not.toBeInTheDocument()
   })
 

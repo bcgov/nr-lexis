@@ -41,7 +41,6 @@ import {
   fetchApplicationSpecies,
   fetchApplicationSpeciesCodes,
   fetchApplicationSummarySnapshot,
-  fetchApplicationUniqueScales,
   saveApplicationRemark,
   type ApplicationSummarySnapshot,
   updateApplicationSummary,
@@ -99,7 +98,6 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationSpecies: vi.fn(),
   fetchApplicationSpeciesCodes: vi.fn(),
   fetchApplicationSummarySnapshot: vi.fn(),
-  fetchApplicationUniqueScales: vi.fn(),
   saveApplicationRemark: vi.fn(),
   updateApplicationSummary: vi.fn(),
   updateApplicationPackage: vi.fn(),
@@ -195,7 +193,6 @@ const mockedFetchApplicationScaleDetails = vi.mocked(fetchApplicationScaleDetail
 const mockedFetchApplicationSpecies = vi.mocked(fetchApplicationSpecies)
 const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
 const mockedFetchApplicationSummarySnapshot = vi.mocked(fetchApplicationSummarySnapshot)
-const mockedFetchApplicationUniqueScales = vi.mocked(fetchApplicationUniqueScales)
 const mockedSaveApplicationRemark = vi.mocked(saveApplicationRemark)
 const mockedUpdateApplicationSummary = vi.mocked(updateApplicationSummary)
 const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
@@ -605,7 +602,6 @@ export const setupApplicationDetailTests = (): void => {
       cascadeSplitCode: 'S',
     },
   ])
-  mockedFetchApplicationUniqueScales.mockResolvedValue([])
   mockedFetchApplicationSpeciesCodes.mockResolvedValue([
     { code: 'FI', description: 'Douglas-fir' },
     { code: 'CE', description: 'Cedar' },
@@ -706,7 +702,6 @@ export {
   mockedFetchApplicationScaleDetails,
   mockedFetchApplicationSpecies,
   mockedFetchApplicationSummarySnapshot,
-  mockedFetchApplicationUniqueScales,
   mockedFetchProvincialApplicationDetail,
   mockedFetchProvincialApplicationOptions,
   mockedFetchProvincialExemptionDetail,

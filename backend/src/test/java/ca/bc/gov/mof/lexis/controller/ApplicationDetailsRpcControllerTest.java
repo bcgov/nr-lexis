@@ -2747,10 +2747,18 @@ class ApplicationDetailsRpcControllerTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"T", "S"})
-  void directAddScaleShouldRejectNonHarvestedProvincialApplicationsBeforeMutation(
+  void directAddScaleShouldAllowStandingAndUnmanufacturedProvincialApplications(
       String productTypeCode) {
     TestingAuthenticationToken authentication = authorized("createApplication");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.addScaleToPackage(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.ScalePersistenceResult(
+                true,
+                new ApplicationDetailsRpcService.ApplicationPackageScaleItem(
+                    false, "TM001", "Douglas-fir", 10L, "Sawlog", "12.5", "55", ""),
+                List.of(),
+                List.of()));
     when(service.getApplicationEditContext(1000456L))
         .thenReturn(
             Optional.of(
@@ -2787,10 +2795,13 @@ class ApplicationDetailsRpcControllerTest {
     parameters.add("applicationNumber", "1000456");
     parameters.add("packageNumber", "PKG-903");
 
-    assertThatThrownBy(() -> policyEnforcingController.addScaleToPackage(parameters, authentication))
-        .isInstanceOf(AccessDeniedException.class);
+    ResponseEntity<ApplicationDetailsRpcController.ScalePersistenceResponseDto> response =
+        policyEnforcingController.addScaleToPackage(parameters, authentication);
 
-    verify(service, never()).addScaleToPackage(any(), any());
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().valid()).isTrue();
+    verify(service).addScaleToPackage(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
   }
 
   @Test

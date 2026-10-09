@@ -15,14 +15,8 @@ export type FederalApplicationSearchItem = {
   status: string
   clientNumber: string
   reason: string
-  exemptionType: string
-  exemptionNumber: string
   receivedDate: string
   listingDate: string
-  packageNumber: string
-  eligibleForExemption: boolean
-  locked: boolean
-  allowCreateExemption: boolean
 }
 
 export type FederalApplicationSearchRequest = {

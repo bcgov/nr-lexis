@@ -817,7 +817,7 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
                 getLocalDate(rs, "RECEIVED_DATE"),
                 getDouble(rs, "EXEMPTION_APPLICATION_VOLUME"),
                 getDouble(rs, "AVERAGE_LOG_VOLUME"),
-                // Oracle stores a single-space sentinel for non-harvested applications because
+                // Oracle stores a single-space placeholder for a blank location because
                 // PRODUCT_LOCATION is NOT NULL. Preserve it through a status transition.
                 getRawString(rs, "PRODUCT_LOCATION"),
                 getString(rs, "ENTRY_USERID"),

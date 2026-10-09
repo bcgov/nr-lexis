@@ -317,29 +317,36 @@ describe('Provincial Permit Search Actions', () => {
     })
   })
 
-  it('submits the invoice number then clears the search without another request', async () => {
+  it('ignores an invoice number in the page URL and clears a submitted search without another request', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage(
-      '/provincial/permit?invoiceNumber=SI-99881&region=11&sortField=permitStatus&sortDirection=desc&page=3&pageSize=25',
+      '/provincial/permit?invoiceNumber=SI-99881&permitNumber=7001&region=11&sortField=permitStatus&sortDirection=desc&page=3&pageSize=25',
     )
 
-    const invoiceNumber = await screen.findByLabelText('Invoice number')
-    expect(invoiceNumber).toHaveValue('SI-99881')
+    const permitNumber = await screen.findByLabelText('Permit number')
+    expect(permitNumber).toHaveValue('7001')
+    expect(screen.queryByLabelText('Invoice number')).not.toBeInTheDocument()
     await waitFor(() => {
       expect(
         mockedSearchProvincialPermits.mock.calls.some(
-          ([request]) => request.filters.invoiceNumber === 'SI-99881',
+          ([request]) => request.filters.permitNumber === '7001',
         ),
       ).toBe(true)
     })
+    for (const [request] of [
+      ...mockedSearchProvincialPermits.mock.calls,
+      ...mockedCountProvincialPermits.mock.calls,
+    ]) {
+      expect(request.filters).not.toHaveProperty('invoiceNumber')
+    }
 
     mockedSearchProvincialPermits.mockClear()
-    fireEvent.change(invoiceNumber, { target: { value: 'GBMS-4402' } })
+    fireEvent.change(permitNumber, { target: { value: '7002' } })
     let currentParams = new URLSearchParams(
       screen.getByTestId('permit-search-location').textContent ?? '',
     )
-    expect(currentParams.get('invoiceNumber')).toBe('SI-99881')
+    expect(currentParams.get('permitNumber')).toBe('7001')
     expect(currentParams.get('page')).toBe('3')
     expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
 
@@ -349,20 +356,21 @@ describe('Provincial Permit Search Actions', () => {
       currentParams = new URLSearchParams(
         screen.getByTestId('permit-search-location').textContent ?? '',
       )
-      expect(currentParams.get('invoiceNumber')).toBe('GBMS-4402')
+      expect(currentParams.get('permitNumber')).toBe('7002')
       expect(currentParams.get('page')).toBe('1')
       expect(
         mockedSearchProvincialPermits.mock.calls.some(
-          ([request]) => request.filters.invoiceNumber === 'GBMS-4402',
+          ([request]) => request.filters.permitNumber === '7002',
         ),
       ).toBe(true)
     })
+    expect(currentParams.has('invoiceNumber')).toBe(false)
 
     const resultsTable = screen.getByRole('region', { name: 'Search results table' })
     const searchCallsBeforeClear = mockedSearchProvincialPermits.mock.calls.length
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
-    expect(invoiceNumber).toHaveValue('')
+    expect(permitNumber).toHaveValue('')
     await waitFor(() => {
       const currentParams = new URLSearchParams(
         screen.getByTestId('permit-search-location').textContent ?? '',
@@ -504,7 +512,7 @@ describe('Provincial Permit Search Actions', () => {
     expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
-  it('preserves the legacy permit filter order with visible invoice number', async () => {
+  it('shows the permit filters in order without an invoice number filter', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage()
@@ -524,7 +532,6 @@ describe('Provincial Permit Search Actions', () => {
       'Issued to date',
       'Permit status',
       'Permit number',
-      'Invoice number',
       'Applicant client number',
       'Owner client number',
     ])

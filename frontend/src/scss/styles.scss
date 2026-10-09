@@ -1791,14 +1791,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   }
 }
 
-.federal-application-lock {
-  display: inline-flex;
-  align-items: center;
-  color: var(--fds-text-secondary, var(--cds-text-secondary));
-  font-size: 0.875rem;
-  gap: 0.25rem;
-}
-
 .provincial-exemption-search-row-action {
   display: inline-flex;
   align-items: center;
@@ -1998,11 +1990,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   width: 100%;
   inline-size: 100%;
   max-inline-size: 100%;
-}
-
-.create-form-grid .selected-application-numbers .cds--text-area {
-  block-size: auto;
-  min-block-size: calc(2 * var(--cds-layout-size-height-md, 2.5rem));
 }
 
 .exemption-create-application-field {
@@ -5760,35 +5747,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   padding: 0;
 }
 
-.application-items-package-workspace {
-  display: grid;
-  gap: 1.25rem;
-  grid-template-columns: minmax(0, 1fr);
-}
-
-.application-items-package-edit-panel,
-.application-items-species-panel,
-.application-items-timber-marks-panel {
-  min-width: 0;
-}
-
 .application-items-package-edit-panel {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
-}
-
-.application-items-species-panel,
-.application-items-timber-marks-panel {
-  border-block-start: 1px solid var(--csp-tile-border);
-  padding-block-start: 0.75rem;
-}
-
-.application-items-species-panel h4,
-.application-items-timber-marks-panel h4 {
-  font-size: 0.875rem;
-  font-weight: 600;
-  margin: 0 0 0.75rem;
+  min-width: 0;
 }
 
 .application-items-form {
@@ -5800,22 +5763,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .application-items-section--create-package .application-items-form {
   grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-}
-
-.application-items-inline-form {
-  align-items: start;
-  display: grid;
-  gap: 0.75rem;
-  grid-template-columns: minmax(0, 1fr);
-  margin-bottom: 0.75rem;
-}
-
-.application-items-inline-form > * {
-  min-width: 0;
-}
-
-.application-items-inline-form > .cds--btn {
-  align-self: end;
 }
 
 .exemption-application-add-form {
@@ -5832,11 +5779,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .exemption-application-add-form .cds--btn {
   min-inline-size: 8rem;
-}
-
-.application-items-section--create-package .application-items-inline-form {
-  border-block-start: 1px solid var(--csp-tile-border);
-  padding-block-start: 0.75rem;
 }
 
 .application-items-section .cds--data-table-container {
@@ -5888,7 +5830,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   flex: 0 0 auto;
 }
 
-.provincial-application-detail .application-items-inline-form .cds--btn,
 .provincial-application-detail .application-items-section .legacy-search-actions .cds--btn {
   max-inline-size: none;
   min-inline-size: 8rem;
@@ -5908,23 +5849,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   .application-items-card {
     padding: 1.5rem 2rem 1.75rem;
   }
-
-  .application-items-inline-form {
-    grid-template-columns: minmax(0, 1fr) auto;
-  }
 }
 
 @media (min-width: 1056px) {
   .application-items-section-header {
     grid-template-columns: minmax(0, 1fr) minmax(280px, 0.35fr);
-  }
-
-  .application-items-package-workspace {
-    grid-template-columns: minmax(0, 1fr) minmax(320px, 0.45fr);
-  }
-
-  .application-items-package-edit-panel {
-    grid-row: 1 / span 2;
   }
 }
 

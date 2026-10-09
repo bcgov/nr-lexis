@@ -142,7 +142,6 @@ import {
   productTypeRequiresGrowthType,
   productTypeRequiresLogDetails,
   resolveClientLocationCode,
-  toApplicationCodeOption,
   toSearchOption,
 } from '@/pages/shared/application-form-utils'
 import {
@@ -260,8 +259,6 @@ const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
 const REVIEW_EMAIL_PREVIEW_HELPER = "Editing this address won't change the client's record."
 const APPROVABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND'])
 const REVIEWABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND', 'APP'])
-const productTypeSupportsPackages = (productTypeCode?: string | null): boolean =>
-  ['H', 'T'].includes((productTypeCode ?? '').trim().toUpperCase())
 const APPLICATION_STATUS_LABELS: Record<string, string> = {
   APP: 'Approved',
   EXP: 'Expired',
@@ -1220,18 +1217,14 @@ const ProvincialApplicationDetailsPage = () => {
     documentLookupAvailability === 'available' && documentRows.length > 0
   const canViewRemarks = canPerform('/applicationRemarks')
   const isApplicationExpired = isExpiredApplication(detail)
-  const applicationProductSupportsPackages = productTypeSupportsPackages(detail?.productTypeCode)
   const canUseApplicationMutations =
     canPerform('createApplication', applicationOrgUnit) &&
     !detail?.locked &&
     !detail?.readOnly &&
     !isApplicationExpired
-  const canEditPackages =
-    applicationProductSupportsPackages && canUseApplicationMutations && !!detail?.canEditPackages
-  const canAddPackages =
-    applicationProductSupportsPackages && canUseApplicationMutations && !!detail?.canAddPackages
-  const canAddScales =
-    applicationProductSupportsPackages && canUseApplicationMutations && !!detail?.canAddScales
+  const canEditPackages = canUseApplicationMutations && !!detail?.canEditPackages
+  const canAddPackages = canUseApplicationMutations && !!detail?.canAddPackages
+  const canAddScales = canUseApplicationMutations && !!detail?.canAddScales
   const canEditSummary = canUseApplicationMutations && !!detail?.canEditApplicationDetails
   const needsApplicationOptions =
     Boolean(summaryForm) || canEditSummary || canEditPackages || canAddPackages || canAddScales
@@ -1350,14 +1343,6 @@ const ProvincialApplicationDetailsPage = () => {
   const growthTypeOptions = optionsWithCurrentValue(
     summaryGrowthTypeOptions,
     summaryForm?.growthTypeCode ?? '',
-  )
-  const packageProductTypeOptions = useMemo(
-    () => productTypeOptions.map(toApplicationCodeOption),
-    [productTypeOptions],
-  )
-  const packageGrowthTypeOptions = useMemo(
-    () => growthTypeOptions.map(toApplicationCodeOption),
-    [growthTypeOptions],
   )
   const regionOptions = optionsWithCurrentValue(
     summaryRegionOptions,
@@ -1558,12 +1543,6 @@ const ProvincialApplicationDetailsPage = () => {
           summaryProductTypeOptions.some((option) => option.value === summaryForm.productTypeCode)
             ? null
             : 'Select a valid product type.',
-        () =>
-          summaryForm.productTypeCode === 'S' &&
-          detail?.productTypeCode !== 'S' &&
-          (detail?.packages.length ?? 0) > 0
-            ? 'Product type cannot be changed to Standing Timber while packages exist. Remove the packages first.'
-            : null,
       ),
       growthTypeCode: productTypeRequiresGrowthType(summaryForm.productTypeCode)
         ? firstValidationError(
@@ -1627,14 +1606,12 @@ const ProvincialApplicationDetailsPage = () => {
           ))
           ? undefined
           : 'Select a valid list date.',
-      productLocation: productTypeRequiresLogDetails(summaryForm.productTypeCode)
-        ? applicationTextStorageFieldError(
-            summaryForm.productLocation,
-            APPLICATION_PRODUCT_LOCATION_MAX_LENGTH,
-            'Location of logs',
-            true,
-          )
-        : undefined,
+      productLocation: applicationTextStorageFieldError(
+        summaryForm.productLocation,
+        APPLICATION_PRODUCT_LOCATION_MAX_LENGTH,
+        'Location of logs',
+        productTypeRequiresLogDetails(summaryForm.productTypeCode),
+      ),
       applicationVolume: firstValidationError(
         () => requiredFieldError(summaryForm.applicationVolume, 'Application volume'),
         () => positiveNumericFieldError(summaryForm.applicationVolume),
@@ -1646,13 +1623,15 @@ const ProvincialApplicationDetailsPage = () => {
           ),
         () => atMostTwoDecimalFieldError(summaryForm.applicationVolume, 'Application volume'),
       ),
-      averageLogVolume: productTypeRequiresLogDetails(summaryForm.productTypeCode)
-        ? averageLogVolumeFieldError(summaryForm.averageLogVolume)
-        : undefined,
+      // Any entered value must fit the stored column; only Harvested Timber requires one.
+      averageLogVolume:
+        productTypeRequiresLogDetails(summaryForm.productTypeCode) ||
+        summaryForm.averageLogVolume.trim()
+          ? averageLogVolumeFieldError(summaryForm.averageLogVolume)
+          : undefined,
     }
   }, [
     canReviewApplication,
-    detail,
     summaryExemptionReasonOptions,
     summaryForm,
     summaryGrowthTypeOptions,
@@ -2627,15 +2606,6 @@ const ProvincialApplicationDetailsPage = () => {
             agentClientLocationCode: '',
           }
         }
-        if (key === 'productTypeCode') {
-          return {
-            ...current,
-            productTypeCode: value,
-            growthTypeCode: productTypeRequiresGrowthType(value) ? current.growthTypeCode : '',
-            endUseCode: productTypeRequiresGrowthType(value) ? current.endUseCode : '',
-          }
-        }
-
         const next = { ...current, [key]: value }
         return key === 'applicantTypeCode' ? normalizeSummaryAgentFields(next) : next
       })
@@ -2837,11 +2807,7 @@ const ProvincialApplicationDetailsPage = () => {
           return { ...current, ownerClientNumber, agentClientNumber }
         })
 
-        if (
-          (source === 'items' || source === 'summary-items') &&
-          ['H', 'T'].includes(summaryRequestForm.productTypeCode.trim().toUpperCase()) &&
-          !summaryVolumeWarningAccepted
-        ) {
+        if ((source === 'items' || source === 'summary-items') && !summaryVolumeWarningAccepted) {
           const volumeUsage = await checkApplicationVolumeUsage(String(detail.applicationNumber))
           if (!volumeUsage.volumeUsed) {
             setSummaryVolumeWarningAccepted(true)
@@ -3490,17 +3456,14 @@ const ProvincialApplicationDetailsPage = () => {
     summaryForm?.productTypeCode ?? detail?.productTypeCode,
   )
   const summaryProductTypeCode = summaryForm?.productTypeCode ?? detail?.productTypeCode ?? ''
-  const summaryProductTypeHasGrowthDetails = productTypeRequiresGrowthType(summaryProductTypeCode)
-  const summaryProductTypeHasLogDetails = productTypeRequiresLogDetails(summaryProductTypeCode)
+  const summaryAgeClassRequired = productTypeRequiresGrowthType(summaryProductTypeCode)
+  const summaryLogDetailsRequired = productTypeRequiresLogDetails(summaryProductTypeCode)
   const summaryRegionDescription =
     optionDescription(regionOptions, summaryForm?.orgUnitNumber) ||
     detail?.orgUnitName ||
     String(detail?.orgUnitNumber ?? '')
   // Read-only Scale details show saved values while the Application editor holds a product change.
   const savedScaleForm = summaryBaselineForm ?? summaryForm
-  const savedProductTypeCode = savedScaleForm?.productTypeCode ?? detail?.productTypeCode ?? ''
-  const savedProductTypeHasGrowthDetails = productTypeRequiresGrowthType(savedProductTypeCode)
-  const savedProductTypeHasLogDetails = productTypeRequiresLogDetails(savedProductTypeCode)
   const savedGrowthTypeDescription = optionDescription(
     optionsWithCurrentValue(summaryGrowthTypeOptions, savedScaleForm?.growthTypeCode ?? ''),
     savedScaleForm?.growthTypeCode,
@@ -3606,62 +3569,56 @@ const ProvincialApplicationDetailsPage = () => {
   const applicationScaleForm = summaryForm && (
     <RecordFieldGrid editing>
       <RecordFieldRow>
-        {summaryProductTypeHasLogDetails && (
-          <RecordFieldCell>
-            <TextArea
-              className="application-scale-form__location"
-              id="applicationSummaryProductLocation"
-              labelText={requiredLabel('Location of logs')}
-              aria-required="true"
-              enableCounter
-              maxCount={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
-              maxLength={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
-              value={summaryForm.productLocation}
-              invalid={Boolean(visibleSummaryFieldError('productLocation'))}
-              invalidText={visibleSummaryFieldError('productLocation')}
-              onChange={(event) => onSummaryFormChange('productLocation', event.target.value)}
-            />
-          </RecordFieldCell>
-        )}
+        <RecordFieldCell>
+          <TextArea
+            className="application-scale-form__location"
+            id="applicationSummaryProductLocation"
+            labelText={requiredLabel('Location of logs', summaryLogDetailsRequired)}
+            aria-required={summaryLogDetailsRequired}
+            enableCounter
+            maxCount={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
+            maxLength={APPLICATION_PRODUCT_LOCATION_MAX_LENGTH}
+            value={summaryForm.productLocation}
+            invalid={Boolean(visibleSummaryFieldError('productLocation'))}
+            invalidText={visibleSummaryFieldError('productLocation')}
+            onChange={(event) => onSummaryFormChange('productLocation', event.target.value)}
+          />
+        </RecordFieldCell>
       </RecordFieldRow>
       <RecordFieldRow>
-        {summaryProductTypeHasGrowthDetails && (
-          <RecordFieldCell>
-            <SearchableSelect
-              id="applicationSummaryGrowthType"
-              labelText={requiredLabel('Age class')}
-              required
-              value={summaryForm.growthTypeCode}
-              invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
-              invalidText={visibleSummaryFieldError('growthTypeCode')}
-              disabled={
-                summaryOptionsAvailability !== 'available' || summaryGrowthTypeOptions.length === 0
-              }
-              placeholder="Select age class"
-              options={optionsWithCurrentValue(growthTypeOptions, summaryForm.growthTypeCode)}
-              onChange={(value) => onSummaryFormChange('growthTypeCode', value.toUpperCase())}
-            />
-          </RecordFieldCell>
-        )}
+        <RecordFieldCell>
+          <SearchableSelect
+            id="applicationSummaryGrowthType"
+            labelText={requiredLabel('Age class', summaryAgeClassRequired)}
+            required={summaryAgeClassRequired}
+            value={summaryForm.growthTypeCode}
+            invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
+            invalidText={visibleSummaryFieldError('growthTypeCode')}
+            disabled={
+              summaryOptionsAvailability !== 'available' || summaryGrowthTypeOptions.length === 0
+            }
+            placeholder="Select age class"
+            options={optionsWithCurrentValue(growthTypeOptions, summaryForm.growthTypeCode)}
+            onChange={(value) => onSummaryFormChange('growthTypeCode', value.toUpperCase())}
+          />
+        </RecordFieldCell>
       </RecordFieldRow>
       <RecordFieldRow>
-        {summaryProductTypeHasLogDetails && (
-          <RecordFieldCell>
-            <TextInput
-              id="applicationSummaryAverageLogVolume"
-              labelText={requiredLabel('Average log volume (m³)')}
-              aria-required="true"
-              type="number"
-              min={0}
-              max={99.9}
-              step="0.1"
-              value={summaryForm.averageLogVolume}
-              invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
-              invalidText={visibleSummaryFieldError('averageLogVolume')}
-              onChange={(event) => onSummaryFormChange('averageLogVolume', event.target.value)}
-            />
-          </RecordFieldCell>
-        )}
+        <RecordFieldCell>
+          <TextInput
+            id="applicationSummaryAverageLogVolume"
+            labelText={requiredLabel('Average log volume (m³)', summaryLogDetailsRequired)}
+            aria-required={summaryLogDetailsRequired}
+            type="number"
+            min={0}
+            max={99.9}
+            step="0.1"
+            value={summaryForm.averageLogVolume}
+            invalid={Boolean(visibleSummaryFieldError('averageLogVolume'))}
+            invalidText={visibleSummaryFieldError('averageLogVolume')}
+            onChange={(event) => onSummaryFormChange('averageLogVolume', event.target.value)}
+          />
+        </RecordFieldCell>
         <RecordFieldCell>
           <TextInput
             id="applicationSummaryVolume"
@@ -3709,32 +3666,28 @@ const ProvincialApplicationDetailsPage = () => {
             </p>
           )}
         </RecordFieldCell>
-        {summaryProductTypeHasGrowthDetails && (
-          <RecordFieldCell>
-            <SearchableSelect
-              id="applicationSummaryEndUse"
-              labelText={requiredLabel('End use')}
-              required
-              value={summaryForm.endUseCode}
-              disabled={
-                summaryForm.speciesCodes.length === 0 || applicationEndUseSelectOptions.length === 0
-              }
-              placeholder={endUsePlaceholder}
-              options={applicationEndUseSelectOptions}
-              onChange={(value) => onSummaryFormChange('endUseCode', value)}
-            />
-          </RecordFieldCell>
-        )}
+        <RecordFieldCell>
+          <SearchableSelect
+            id="applicationSummaryEndUse"
+            labelText={requiredLabel('End use')}
+            required
+            value={summaryForm.endUseCode}
+            disabled={
+              summaryForm.speciesCodes.length === 0 || applicationEndUseSelectOptions.length === 0
+            }
+            placeholder={endUsePlaceholder}
+            options={applicationEndUseSelectOptions}
+            onChange={(value) => onSummaryFormChange('endUseCode', value)}
+          />
+        </RecordFieldCell>
       </RecordFieldRow>
       <RecordFieldRow>
-        {productTypeSupportsPackages(summaryProductTypeCode) && (
-          <RecordFieldCell>
-            <dl className="detail-field-item">
-              <dt className="detail-field-label">Total pieces</dt>
-              <dd className="detail-field-value">{applicationTotalPieces.toLocaleString()}</dd>
-            </dl>
-          </RecordFieldCell>
-        )}
+        <RecordFieldCell>
+          <dl className="detail-field-item">
+            <dt className="detail-field-label">Total pieces</dt>
+            <dd className="detail-field-value">{applicationTotalPieces.toLocaleString()}</dd>
+          </dl>
+        </RecordFieldCell>
       </RecordFieldRow>
     </RecordFieldGrid>
   )
@@ -4805,26 +4758,13 @@ const ProvincialApplicationDetailsPage = () => {
                         ) : (
                           <RecordFieldGrid>
                             {[
-                              savedProductTypeHasLogDetails
-                                ? [
-                                    [
-                                      'Location of logs',
-                                      displayValue(savedScaleForm?.productLocation),
-                                    ],
-                                  ]
-                                : [],
-                              savedProductTypeHasGrowthDetails
-                                ? [['Age class', displayValue(savedGrowthTypeDescription)]]
-                                : [],
+                              [['Location of logs', displayValue(savedScaleForm?.productLocation)]],
+                              [['Age class', displayValue(savedGrowthTypeDescription)]],
                               [
-                                ...(savedProductTypeHasLogDetails
-                                  ? [
-                                      [
-                                        'Average log volume (m³)',
-                                        displayVolume(savedScaleForm?.averageLogVolume),
-                                      ],
-                                    ]
-                                  : []),
+                                [
+                                  'Average log volume (m³)',
+                                  displayVolume(savedScaleForm?.averageLogVolume),
+                                ],
                                 [
                                   'Application volume (m³)',
                                   displayVolume(savedScaleForm?.applicationVolume),
@@ -4835,27 +4775,21 @@ const ProvincialApplicationDetailsPage = () => {
                                   'Species list',
                                   displayValue(savedScaleForm?.speciesCodes.join(', ')),
                                 ],
-                                ...(savedProductTypeHasGrowthDetails
-                                  ? [['End use', displayValue(savedEndUseDescription)]]
-                                  : []),
+                                ['End use', displayValue(savedEndUseDescription)],
                               ],
-                              applicationProductSupportsPackages
-                                ? [['Total pieces', applicationTotalPieces.toLocaleString()]]
-                                : [],
-                            ]
-                              .filter((row) => row.length > 0)
-                              .map((row) => (
-                                <RecordFieldRow key={String(row[0][0])}>
-                                  {row.map(([label, value]) => (
-                                    <RecordField key={String(label)} label={label} value={value} />
-                                  ))}
-                                </RecordFieldRow>
-                              ))}
+                              [['Total pieces', applicationTotalPieces.toLocaleString()]],
+                            ].map((row) => (
+                              <RecordFieldRow key={String(row[0][0])}>
+                                {row.map(([label, value]) => (
+                                  <RecordField key={String(label)} label={label} value={value} />
+                                ))}
+                              </RecordFieldRow>
+                            ))}
                           </RecordFieldGrid>
                         )}
                       </Tile>
                     </Column>
-                    {applicationProductSupportsPackages && detail.packages.length > 1 && (
+                    {detail.packages.length > 1 && (
                       <Column sm={4} md={8} lg={16}>
                         <Tile
                           id="application-packages"
@@ -4902,12 +4836,8 @@ const ProvincialApplicationDetailsPage = () => {
                         canAddPackages={canAddPackages}
                         canAddScales={canAddScales}
                         canUpdatePackageNumber={canUpdatePackageNumber}
-                        hideMutationActions={
-                          isApplicationExpired || !applicationProductSupportsPackages
-                        }
+                        hideMutationActions={isApplicationExpired}
                         authoritativeOptionsAvailability={packageReferenceOptionsAvailability}
-                        productTypeOptions={packageProductTypeOptions}
-                        growthTypeOptions={packageGrowthTypeOptions}
                         applicationGrowthTypeCode={
                           summaryBaselineForm?.oicIndicator === 'N' &&
                           summaryBaselineForm.productTypeCode === detail.productTypeCode

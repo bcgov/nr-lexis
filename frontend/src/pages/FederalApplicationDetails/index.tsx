@@ -1592,24 +1592,6 @@ const FederalApplicationDetailsPage = () => {
                               value: displayAuditIdentity(detail.author),
                             },
                           ],
-                          [
-                            {
-                              label: 'Exemption number',
-                              value: displayValue(detail.exemptionNumber),
-                            },
-                            {
-                              label: 'Exemption type',
-                              value: displayValue(detail.exemptionType),
-                            },
-                            {
-                              label: 'Exemption reason',
-                              value: displayValue(detail.exemptionReason),
-                            },
-                            {
-                              label: 'Exemption term (days)',
-                              value: displayValue(detail.termDays),
-                            },
-                          ],
                         ]}
                       />
                       {canMutateFederalApplication &&

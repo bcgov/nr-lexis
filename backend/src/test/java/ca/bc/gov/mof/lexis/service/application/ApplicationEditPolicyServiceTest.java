@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatCode;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
@@ -22,6 +23,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.security.authentication.TestingAuthenticationToken;
 
@@ -184,48 +186,51 @@ class ApplicationEditPolicyServiceTest {
     assertThat(policy.canUpdatePackageNumber()).isTrue();
   }
 
-  @Test
-  void standingTimberAllowsSummaryEditsButDeniesPackageAndScaleMutations() {
-    allowRoles("LEXIS_APPLICATION_APPROVER");
-    context("NEW", TODAY.plusDays(1), false, false, false, false, "S");
+  @ParameterizedTest
+  @CsvSource({
+    "LEXIS_APPLICATION_APPROVER,S",
+    "LEXIS_APPLICATION_APPROVER,T",
+    "LEXIS_PROVINCIAL_SUBMITTER_00012345,S",
+    "LEXIS_PROVINCIAL_SUBMITTER_00012345,T"
+  })
+  void standingAndUnmanufacturedTimberAllowPackageAndScaleMutations(
+      String role, String productTypeCode) {
+    allowRoles(role);
+    context("NEW", TODAY.plusDays(1), false, false, false, false, productTypeCode);
 
     ApplicationEditPolicy policy =
         policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
 
     assertThat(policy.canEditApplicationDetails()).isTrue();
-    assertThat(policy.canEditPackages()).isFalse();
-    assertThat(policy.canAddPackages()).isFalse();
-    assertThat(policy.canAddScales()).isFalse();
-    assertThat(policy.canUpdatePackageNumber()).isFalse();
-    assertThatThrownBy(
-            () ->
-                policyService.requirePackageAddOrDelete(
-                    authentication, applicationService, APPLICATION_NUMBER))
-        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
-    assertThatThrownBy(
-            () ->
-                policyService.requireScaleAddOrDelete(
-                    authentication, applicationService, APPLICATION_NUMBER))
-        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canAddScales()).isTrue();
+    assertThat(policy.canUpdatePackageNumber()).isTrue();
+    assertThatCode(
+            () -> {
+              policyService.requirePackageEdit(
+                  authentication, applicationService, APPLICATION_NUMBER);
+              policyService.requirePackageAddOrDelete(
+                  authentication, applicationService, APPLICATION_NUMBER);
+              policyService.requireScaleAddOrDelete(
+                  authentication, applicationService, APPLICATION_NUMBER);
+              policyService.requirePackageNumberUpdate(
+                  authentication, applicationService, APPLICATION_NUMBER);
+            })
+        .doesNotThrowAnyException();
   }
 
   @Test
-  void unmanufacturedTimberAllowsPackageMutationsButDeniesScaleMutations() {
+  void standingTimberKeepsCompletePermitItemLock() {
     allowRoles("LEXIS_APPLICATION_APPROVER");
-    context("NEW", TODAY.plusDays(1), false, false, false, false, "T");
+    context("PMT", TODAY.minusDays(30), true, true, true, false, "S");
 
     ApplicationEditPolicy policy =
         policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
 
-    assertThat(policy.canEditPackages()).isTrue();
-    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canEditPackages()).isFalse();
+    assertThat(policy.canAddPackages()).isFalse();
     assertThat(policy.canAddScales()).isFalse();
-    assertThat(policy.canUpdatePackageNumber()).isTrue();
-    assertThatThrownBy(
-            () ->
-                policyService.requireScaleAddOrDelete(
-                    authentication, applicationService, APPLICATION_NUMBER))
-        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
   }
 
   @ParameterizedTest
@@ -235,7 +240,7 @@ class ApplicationEditPolicyServiceTest {
         "LEXIS_APPLICATION_APPROVER",
         "LEXIS_PROVINCIAL_SUBMITTER_00012345"
       })
-  void interiorMinisterialOverrideKeepsUnmanufacturedTimberScaleMutationsDenied(String role) {
+  void interiorMinisterialOverrideAllowsUnmanufacturedTimberScaleMutations(String role) {
     allowRoles(role);
     context("PMT", TODAY.minusDays(30), true, true, true, true, "T");
 
@@ -244,7 +249,7 @@ class ApplicationEditPolicyServiceTest {
 
     assertThat(policy.canEditPackages()).isTrue();
     assertThat(policy.canAddPackages()).isTrue();
-    assertThat(policy.canAddScales()).isFalse();
+    assertThat(policy.canAddScales()).isTrue();
   }
 
   @Test

@@ -11,7 +11,6 @@ import {
   fetchApplicationSummarySnapshot,
   fetchApplicationRemainingSpecies,
   fetchApplicationEndUsesForSpeciesRegion,
-  fetchApplicationUniqueScales,
   saveApplicationRemark,
   updateApplicationSummary,
   updateApplicationPackage,
@@ -131,25 +130,6 @@ describe('provincial-application-items-service', () => {
         },
       },
       { ttlMs: 0 },
-    )
-  })
-
-  it('loads unique application timber marks from the application detail RPC endpoint', async () => {
-    getCachedResponseMock.mockResolvedValue({
-      data: [{ timberMark: 'TM001' }, { timberMark: 'TM002' }, { timberMark: '' }],
-    })
-
-    const result = await fetchApplicationUniqueScales('321')
-
-    expect(result).toEqual([{ timberMark: 'TM001' }, { timberMark: 'TM002' }])
-    expect(getCachedResponseMock).toHaveBeenCalledWith(
-      '/lexis/rpc/application-details/unique-scales',
-      {
-        params: {
-          applicationNumber: '321',
-        },
-      },
-      { ttlMs: 30000 },
     )
   })
 

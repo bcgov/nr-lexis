@@ -18,7 +18,6 @@ import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepositor
 import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
 import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
-import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.review.ApplicationApprovalEligibilityService;
@@ -33,7 +32,6 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
-import java.util.Set;
 import java.util.TreeMap;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
@@ -58,7 +56,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
   private final ApplicationReviewRepository applicationReviewRepository;
   private final ApplicationApprovalEligibilityService approvalEligibilityService;
   private final ClientLookupService clientLookupService;
-  private final ApplicationEditLockService editLockService;
   private final Clock clock;
 
   @Autowired
@@ -69,8 +66,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       ApplicationDetailsRpcService applicationDetailsService,
       ApplicationReviewRepository applicationReviewRepository,
       ApplicationApprovalEligibilityService approvalEligibilityService,
-      ClientLookupService clientLookupService,
-      ApplicationEditLockService editLockService) {
+      ClientLookupService clientLookupService) {
     this(
         repository,
         permitRepository,
@@ -79,7 +75,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
         applicationReviewRepository,
         approvalEligibilityService,
         clientLookupService,
-        editLockService,
         LexisBusinessTime.systemClock());
   }
 
@@ -91,7 +86,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       ApplicationReviewRepository applicationReviewRepository,
       ApplicationApprovalEligibilityService approvalEligibilityService,
       ClientLookupService clientLookupService,
-      ApplicationEditLockService editLockService,
       Clock clock) {
     this.repository = repository;
     this.permitRepository = permitRepository;
@@ -100,7 +94,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
     this.applicationReviewRepository = applicationReviewRepository;
     this.approvalEligibilityService = approvalEligibilityService;
     this.clientLookupService = clientLookupService;
-    this.editLockService = editLockService;
     this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
   }
 
@@ -129,25 +122,8 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       throw new DataRetrievalFailureException(
           "Federal application search returned no authoritative Oracle page.");
     }
-    List<FederalApplicationSearchResultDto> repositoryResults = safeList(searchPage.getContent());
-    Set<Long> lockedApplicationNumbers =
-        editLockService.lockedApplicationNumbers(
-            repositoryResults.stream()
-                .map(FederalApplicationSearchResultDto::applicationNumber)
-                .toList());
-    if (lockedApplicationNumbers == null) {
-      throw new IllegalStateException("Application editability check returned no state.");
-    }
-    List<FederalApplicationSearchResultDto> results =
-        repositoryResults.stream()
-            .map(
-                result ->
-                    result.withLocked(
-                        lockedApplicationNumbers.contains(result.applicationNumber())))
-            .toList();
-
     return new FederalApplicationSearchResponseDto(
-        results,
+        safeList(searchPage.getContent()),
         (int) Math.min(Integer.MAX_VALUE, searchPage.getTotalElements()),
         page,
         size);
@@ -250,15 +226,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
             .sorted(Comparator.comparing(FederalApplicationRemarkDto::remarkId))
             .toList();
     return Optional.of(remarks);
-  }
-
-  @Override
-  public boolean verifyApplicationClients(List<Long> applicationNumbers) {
-    List<Long> validNumbers = positiveDistinctLongs(applicationNumbers);
-    if (validNumbers.isEmpty()) {
-      return false;
-    }
-    return repository.verifyApplicationClientsRequired(validNumbers);
   }
 
   @Override

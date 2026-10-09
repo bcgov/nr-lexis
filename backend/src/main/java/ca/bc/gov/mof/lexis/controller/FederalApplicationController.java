@@ -1,7 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.firstPresent;
-import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseApplicationNumbers;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
@@ -12,7 +11,6 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationRemarkDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResponseDto;
-import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationValidationDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
@@ -385,22 +383,6 @@ public class FederalApplicationController {
             }));
   }
 
-  @GetMapping("/search/verify-clients")
-  public ResponseEntity<FederalApplicationValidationDto> verifyClients(
-      @RequestParam(name = "applications") String applications,
-      Authentication authentication) {
-    FederalApplicationService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Federal application service unavailable - returning no content for verify clients");
-      return ResponseEntity.noContent().build();
-    }
-    List<Long> ids = parseApplicationNumbers(applications);
-    ids.forEach(
-        applicationNumber ->
-            authorization().requireFederalApplication(authentication, applicationNumber));
-    return ResponseEntity.ok(new FederalApplicationValidationDto(service.verifyApplicationClients(ids)));
-  }
-
   private FederalApplicationSearchCriteria buildCriteria(
       String federalApplicationNumber,
       String federalApplicationNumberAlias,
@@ -417,7 +399,7 @@ public class FederalApplicationController {
       Integer page,
       Integer size) {
     return new FederalApplicationSearchCriteria(
-        firstPresent(federalApplicationNumberAlias, federalApplicationNumber),
+        withoutHyphens(firstPresent(federalApplicationNumberAlias, federalApplicationNumber)),
         packageNumber,
         exemptionNumber,
         applicationStatus,
@@ -430,6 +412,12 @@ public class FederalApplicationController {
         regionNumbers == null ? List.of() : regionNumbers,
         page,
         size);
+  }
+
+  // INTENTIONAL_LEGACY_DIVERGENCE(FEDERAL_SEARCH_HYPHENATED_REF_ID): NEXCOL shows the Ref ID with a
+  // hyphen; the stored federal application number is digits only.
+  private static String withoutHyphens(String value) {
+    return value == null ? null : value.replace("-", "");
   }
 
   private OrgUnitConstraint federalSearchOrgUnits() {

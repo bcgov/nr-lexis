@@ -1247,23 +1247,23 @@ const ProvincialApplicationCreatePage = () => {
         currentSchedules.some((option) => option.value === form.exportScheduleId)
           ? undefined
           : 'Select a valid list date.',
-      productLocation: productTypeRequiresLogDetails(form.productTypeCode)
-        ? applicationTextStorageFieldError(
-            form.productLocation,
-            APPLICATION_PRODUCT_LOCATION_MAX_LENGTH,
-            'Location of logs',
-            true,
-          )
-        : undefined,
+      productLocation: applicationTextStorageFieldError(
+        form.productLocation,
+        APPLICATION_PRODUCT_LOCATION_MAX_LENGTH,
+        'Location of logs',
+        productTypeRequiresLogDetails(form.productTypeCode),
+      ),
       applicationVolume: firstValidationError(
         () => requiredFieldError(form.applicationVolume, 'Application volume'),
         () => positiveNumericFieldError(form.applicationVolume),
         () => maxNumericValueFieldError(form.applicationVolume, 9999999.99, 'Application volume'),
         () => atMostTwoDecimalFieldError(form.applicationVolume, 'Application volume'),
       ),
-      averageLogVolume: productTypeRequiresLogDetails(form.productTypeCode)
-        ? averageLogVolumeFieldError(form.averageLogVolume)
-        : undefined,
+      // Any entered value must fit the stored column; only Harvested Timber requires one.
+      averageLogVolume:
+        productTypeRequiresLogDetails(form.productTypeCode) || form.averageLogVolume.trim()
+          ? averageLogVolumeFieldError(form.averageLogVolume)
+          : undefined,
     }),
     [
       applicationSpeciesOptions.length,
@@ -1290,13 +1290,15 @@ const ProvincialApplicationCreatePage = () => {
       setStatus(null)
     }
   }, [hasValidationError, status])
+  const logDetailsRequired = productTypeRequiresLogDetails(form.productTypeCode)
+  const ageClassRequired = productTypeRequiresGrowthType(form.productTypeCode)
   const requiredApplicationOptionsMissing =
     optionsLoaded &&
     !optionsUnavailable &&
     (productTypes.length === 0 ||
       exemptionReasons.length === 0 ||
       regions.length === 0 ||
-      (productTypeRequiresGrowthType(form.productTypeCode) && growthTypes.length === 0))
+      (ageClassRequired && growthTypes.length === 0))
   const missingRequiredOptions = requiredApplicationOptionsMissing && showMissingRequiredOptions
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
@@ -1994,15 +1996,7 @@ const ProvincialApplicationCreatePage = () => {
                             if (current.productTypeCode === value) {
                               return current
                             }
-                            return {
-                              ...current,
-                              productTypeCode: value,
-                              ageClass: productTypeRequiresGrowthType(value)
-                                ? current.ageClass
-                                : '',
-                              speciesCodes: [],
-                              endUseCode: '',
-                            }
+                            return { ...current, productTypeCode: value }
                           })
                         }}
                       />
@@ -2124,77 +2118,71 @@ const ProvincialApplicationCreatePage = () => {
                   <RequiredFieldsLegend className="application-create-required" />
                   <RecordFieldGrid editing>
                     <RecordFieldRow>
-                      {productTypeRequiresLogDetails(form.productTypeCode) && (
-                        <RecordFieldCell>
-                          <TextArea
-                            id="productLocation"
-                            labelText={requiredLabel('Location of logs')}
-                            aria-required="true"
-                            enableCounter
-                            maxCount={250}
-                            maxLength={250}
-                            value={form.productLocation}
-                            invalid={!!fieldError('productLocation')}
-                            invalidText={fieldError('productLocation')}
-                            onBlur={() => markFieldTouched('productLocation')}
-                            onChange={(event) => {
-                              markFormEdited()
-                              setForm((current) => ({
-                                ...current,
-                                productLocation: event.target.value,
-                              }))
-                            }}
-                          />
-                        </RecordFieldCell>
-                      )}
+                      <RecordFieldCell>
+                        <TextArea
+                          id="productLocation"
+                          labelText={requiredLabel('Location of logs', logDetailsRequired)}
+                          aria-required={logDetailsRequired}
+                          enableCounter
+                          maxCount={250}
+                          maxLength={250}
+                          value={form.productLocation}
+                          invalid={!!fieldError('productLocation')}
+                          invalidText={fieldError('productLocation')}
+                          onBlur={() => markFieldTouched('productLocation')}
+                          onChange={(event) => {
+                            markFormEdited()
+                            setForm((current) => ({
+                              ...current,
+                              productLocation: event.target.value,
+                            }))
+                          }}
+                        />
+                      </RecordFieldCell>
                     </RecordFieldRow>
                     <RecordFieldRow>
-                      {productTypeRequiresGrowthType(form.productTypeCode) && (
-                        <RecordFieldCell>
-                          <SearchableSelect
-                            id="ageClass"
-                            labelText={requiredLabel('Age class')}
-                            required
-                            value={form.ageClass}
-                            disabled={!optionsLoaded || optionsUnavailable}
-                            invalid={!!fieldError('ageClass')}
-                            invalidText={fieldError('ageClass')}
-                            placeholder="Select age class"
-                            options={growthTypes}
-                            onBlur={() => markFieldTouched('ageClass')}
-                            onChange={(value) => {
-                              markFormEdited()
-                              setForm((current) => ({ ...current, ageClass: value }))
-                            }}
-                          />
-                        </RecordFieldCell>
-                      )}
+                      <RecordFieldCell>
+                        <SearchableSelect
+                          id="ageClass"
+                          labelText={requiredLabel('Age class', ageClassRequired)}
+                          required={ageClassRequired}
+                          value={form.ageClass}
+                          disabled={!optionsLoaded || optionsUnavailable}
+                          invalid={!!fieldError('ageClass')}
+                          invalidText={fieldError('ageClass')}
+                          placeholder="Select age class"
+                          options={growthTypes}
+                          onBlur={() => markFieldTouched('ageClass')}
+                          onChange={(value) => {
+                            markFormEdited()
+                            setForm((current) => ({ ...current, ageClass: value }))
+                          }}
+                        />
+                      </RecordFieldCell>
                     </RecordFieldRow>
                     <RecordFieldRow>
-                      {productTypeRequiresLogDetails(form.productTypeCode) && (
-                        <RecordFieldCell>
-                          <TextInput
-                            id="averageLogVolume"
-                            labelText={requiredLabel('Average log volume (m³)')}
-                            aria-required="true"
-                            type="number"
-                            min={0}
-                            max={99.9}
-                            step="0.1"
-                            value={form.averageLogVolume}
-                            invalid={!!fieldError('averageLogVolume')}
-                            invalidText={fieldError('averageLogVolume')}
-                            onBlur={() => markFieldTouched('averageLogVolume')}
-                            onChange={(event) => {
-                              markFormEdited()
-                              setForm((current) => ({
-                                ...current,
-                                averageLogVolume: event.target.value,
-                              }))
-                            }}
-                          />
-                        </RecordFieldCell>
-                      )}
+                      <RecordFieldCell>
+                        <TextInput
+                          id="averageLogVolume"
+                          labelText={requiredLabel('Average log volume (m³)', logDetailsRequired)}
+                          aria-required={logDetailsRequired}
+                          type="number"
+                          min={0}
+                          max={99.9}
+                          step="0.1"
+                          value={form.averageLogVolume}
+                          invalid={!!fieldError('averageLogVolume')}
+                          invalidText={fieldError('averageLogVolume')}
+                          onBlur={() => markFieldTouched('averageLogVolume')}
+                          onChange={(event) => {
+                            markFormEdited()
+                            setForm((current) => ({
+                              ...current,
+                              averageLogVolume: event.target.value,
+                            }))
+                          }}
+                        />
+                      </RecordFieldCell>
                       <RecordFieldCell>
                         <TextInput
                           id="applicationVolume"

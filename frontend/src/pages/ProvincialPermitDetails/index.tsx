@@ -339,8 +339,7 @@ const PERMIT_DETAIL_TABS = [
   { id: 'documents', label: 'Documents', icon: DocumentAttachment },
   { id: 'fees', label: 'Fees', icon: Currency },
   { id: 'gbms', label: 'GBMS', icon: undefined },
-  // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_INVOICE_VISIBILITY):
-  // Modern permit detail exposes the invoice workflow that legacy keeps hidden.
+  // Not shown in navigation; see permitDetailTabs.
   { id: 'invoices', label: 'Invoices', icon: undefined },
 ] as const
 
@@ -1957,15 +1956,6 @@ const ProvincialPermitDetailsPage = () => {
     associatedPermitApplications.length > 0
       ? associatedPermitApplications.join(', ')
       : detail?.applicationNumber
-  const associatedPermitPackageNumbers = Array.from(
-    new Set((tabsData?.packages ?? []).map((row) => row.packageNumber).filter(Boolean)),
-  )
-  const permitPackageNumberSummary =
-    associatedPermitPackageNumbers.length > 0
-      ? associatedPermitPackageNumbers.map(formatPackageNumberLabel).join(', ')
-      : detail?.packageNumber
-        ? formatPackageNumberLabel(detail.packageNumber)
-        : detail?.packageNumber
 
   const permitFeeRows = tabsData?.fees ?? []
   const showMinistryFeeColumn = permitFeeRows.some((row) => row.ministryUser)
@@ -5430,7 +5420,6 @@ const ProvincialPermitDetailsPage = () => {
             )}
           />
           <RecordField label="Application number(s)" value={permitApplicationNumberSummary} />
-          <RecordField label="Package number(s)" value={permitPackageNumberSummary} />
         </RecordFieldRow>
         <RecordFieldRow>
           <RecordField label="Exemption number" value={permitExemptionLink} />
