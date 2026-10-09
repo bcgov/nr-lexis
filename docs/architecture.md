@@ -65,16 +65,12 @@ backend validates it against the client-scoped FAM authorities before enforcing 
 protected object, child resource, download, and mutation. The frontend treats its route and action
 guards as user experience controls rather than the security boundary.
 
-Application Approver, Exemption Approver and Read Only require Natural Resource Region
-assignments through the three region-scoped FAM roles:
-`LEXIS_APPLICATION_APPROVER_REGION`, `LEXIS_EXEMPTION_APPROVER_REGION` and
-`LEXIS_READ_ONLY_REGION`, displayed as Application Approver, Exemption Approver and Read Only.
-The province-wide variants must be retired from the FAM role catalog after their assignments
-and delegated permissions have been migrated. Unscoped-only assignments move to all eight
-current regions; existing regional assignments keep their regions and expiry dates. The FAM
-migration must precede deployment of this token contract. A staff role without a
-region grants no application authority; Administrator remains province-wide. A regional grant
-such as `LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO` carries
+Application Approver, Exemption Approver and Read Only are granted per Natural Resource Region
+through the region-scoped FAM roles `LEXIS_APPLICATION_APPROVER_REGION`,
+`LEXIS_EXEMPTION_APPROVER_REGION` and `LEXIS_READ_ONLY_REGION`, displayed as Application Approver,
+Exemption Approver and Read Only. The unscoped roles `LEXIS_APPLICATION_APPROVER`,
+`LEXIS_EXEMPTION_APPROVER` and `LEXIS_READ_ONLY` are not valid and give no access. Administrator is
+province-wide. A regional grant such as `LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO` carries
 the same actions for records in its regions only (organization units 1903-1910). Each grant keeps
 its own regions, and record checks apply the regions of both the surface and the action the route
 authorized, so Read Only assigned all eight regions plus Cariboo Application Approver reads
@@ -102,10 +98,8 @@ without a current region.
 ### Mixed grants
 
 Application Approver and Exemption Approver cannot be held together, in any regions, including
-alongside Administrator. The check counts every variant of both roles, including obsolete
-unscoped assignments that otherwise grant nothing, so accounts holding both must be resolved in FAM
-before the regional-only contract is deployed. Interactive token conversion removes all application authorities
-from such an account. Its capabilities response contains no roles or actions and includes
+alongside Administrator. The check counts every form of both roles, including the invalid unscoped
+ones. Interactive token conversion removes all application authorities from such an account. Its capabilities response contains no roles or actions and includes
 `accessDeniedReason: INCOMPATIBLE_APPROVER_ROLES`, so the signed-in user sees the no-access page
 with a general instruction to contact their administrator, who removes one of the roles in FAM.
 Business and administration API routes remain forbidden until a new token has a compatible
@@ -116,7 +110,7 @@ assigned all eight can read current-region records while Cariboo Application App
 only in Cariboo. Capabilities tied to a role also stay within that role's regions. For example,
 Read Only in Cariboo plus Exemption Approver in Skeena sees Ministerial exemptions in both,
 approves only in Skeena, and sees other exemption types only in Cariboo. Multiple regional
-grants for the same role combine; an unscoped grant of these roles reaches no region.
+grants for the same role combine.
 
 Legacy LEXIS offers no precedent: WebADE gave each user one set of organizations that limited the
 search lists of every non-administrator role alike, and detail pages and actions never checked

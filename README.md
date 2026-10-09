@@ -167,8 +167,7 @@ Production RTM-only rollout is controlled by the optional GitHub environment sec
 `VITE_LEXIS_PROD_RTM_ONLY` to the frontend. In that mode, LEXIS admins retain normal Average Monthly
 Values access, users with a regional `LEXIS_READ_ONLY_REGION` grant retain their read-only experience
 within their regions, and users with `LEXIS_FEDERAL_READ_ONLY` retain federal application search and
-read-only details. An unscoped `LEXIS_READ_ONLY` assignment grants no access, so PROD FAM assignments
-must be migrated to regional grants before this build is deployed there. Administrator
+read-only details. An unscoped `LEXIS_READ_ONLY` assignment grants no access. Administrator
 access takes precedence over either read-only role and remains limited to Average Monthly Values.
 All other application roles are denied. The deployment also forces `LEXIS_EXPIRY_ENABLED=false`;
 changing the secret takes effect on the next deployment.
