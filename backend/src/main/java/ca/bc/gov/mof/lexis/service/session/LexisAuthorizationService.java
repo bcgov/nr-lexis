@@ -1,7 +1,6 @@
 package ca.bc.gov.mof.lexis.service.session;
 
 import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
-import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import ca.bc.gov.mof.lexis.security.FamRegionGrant;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
 import java.util.Collection;
@@ -21,26 +20,23 @@ public class LexisAuthorizationService {
   private static final String SCOPE_AUTHORITY_PREFIX = "SCOPE_";
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
-  private static final String ROLE_FEDERAL_READ_ONLY = "LEXIS_FEDERAL_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
   private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final Set<String> PROVINCIAL_STAFF_ROLES =
       Set.of(
           ROLE_ADMIN, ROLE_READ_ONLY, ROLE_APPLICATION_APPROVER, ROLE_EXEMPTION_APPROVER);
-  private static final Set<String> PROD_RTM_ONLY_ACTIONS = Set.of("/lexisAgentAdmin");
+  private static final Set<String> REGIONAL_STAFF_ROLES =
+      Set.of(ROLE_READ_ONLY, ROLE_APPLICATION_APPROVER, ROLE_EXEMPTION_APPROVER);
 
   private final Set<String> configuredIndustryRoles;
   private final Map<String, List<String>> configuredRoleActions;
-  private final LexisFeatureProperties featureProperties;
   private final Map<String, List<String>> configuredScopeActions;
   private final LexisSessionService sessionService;
 
   public LexisAuthorizationService(
       LexisAuthorizationProperties authorizationProperties,
-      LexisFeatureProperties featureProperties,
       LexisSessionService sessionService) {
     this.sessionService = sessionService;
-    this.featureProperties = featureProperties;
     this.configuredIndustryRoles = Set.copyOf(sessionService.getConfiguredIndustryRoles());
     this.configuredRoleActions = normalizeRoleActions(authorizationProperties.getRoleActions());
     this.configuredScopeActions = normalizeScopeActions(authorizationProperties.getScopeActions());
@@ -68,10 +64,6 @@ public class LexisAuthorizationService {
       appendScopeActions(granted, scope);
     }
 
-    if (featureProperties.isProdRtmOnly()) {
-      restrictProdRtmOnlyActions(roles, granted);
-    }
-
     return List.copyOf(granted);
   }
 
@@ -80,9 +72,9 @@ public class LexisAuthorizationService {
   }
 
   /**
-   * Resolves staff region access for one action, preserving each grant's role/region pair. A
-   * role with no region is province-wide; a role granted for regions reaches only those, even if
-   * it is also granted without a region (least privilege).
+   * Resolves staff region access for one action, preserving each grant's role/region pair.
+   * Administrator is province-wide; Approver and Read Only reach only their granted regions, so an
+   * unscoped grant of those roles reaches none.
    */
   public OrgUnitConstraint resolveStaffRegionConstraint(
       List<String> authorities, String action) {
@@ -97,7 +89,6 @@ public class LexisAuthorizationService {
     if (authorities == null || actions == null) {
       return new OrgUnitConstraint(true, List.of());
     }
-    Set<String> regionalRoles = regionalRoles(authorities);
     for (String authority : authorities) {
       if (authority == null) {
         continue;
@@ -108,10 +99,7 @@ public class LexisAuthorizationService {
         if (canPerformAnyAction(grant.role(), actions)) {
           orgUnits.add(grant.region().orgUnitNumber());
         }
-      } else if (isProvinceWideGrant(authority, regionalRoles)
-          && canPerformAnyAction(authority, actions)) {
-        // Only a recognized unscoped grant for THIS action makes its region access global.
-        // A province-wide Read Only grant cannot widen a regional Approver's write access.
+      } else if (ROLE_ADMIN.equals(authority) && canPerformAnyAction(authority, actions)) {
         return new OrgUnitConstraint(false, List.of());
       }
     }
@@ -121,7 +109,7 @@ public class LexisAuthorizationService {
   /**
    * As {@link #resolveStaffRegionConstraintForAny}, for grants of the named staff roles. Used where
    * a capability belongs to a role rather than an action, so another role holding the route's
-   * action province-wide does not widen it.
+   * action does not widen it.
    */
   public OrgUnitConstraint resolveStaffRegionConstraintForRoles(
       List<String> authorities, Collection<String> roles) {
@@ -129,7 +117,6 @@ public class LexisAuthorizationService {
     if (authorities == null || roles == null) {
       return new OrgUnitConstraint(true, List.of());
     }
-    Set<String> regionalRoles = regionalRoles(authorities);
     for (String authority : authorities) {
       if (authority == null) {
         continue;
@@ -139,7 +126,7 @@ public class LexisAuthorizationService {
         if (roles.contains(regionalGrant.get().role())) {
           orgUnits.add(regionalGrant.get().region().orgUnitNumber());
         }
-      } else if (isProvinceWideGrant(authority, regionalRoles) && roles.contains(authority)) {
+      } else if (ROLE_ADMIN.equals(authority) && roles.contains(authority)) {
         return new OrgUnitConstraint(false, List.of());
       }
     }
@@ -147,64 +134,45 @@ public class LexisAuthorizationService {
   }
 
   /**
-   * The organization units each granted action is limited to, for actions a regional grant
-   * limits. Actions absent from the result are province-wide; users without a regional grant get
-   * an empty map.
+   * The organization units each granted action is limited to. Users without region limits get an
+   * empty map; for others every granted action is listed, empty where no regional grant reaches it.
    */
   public Map<String, List<Long>> resolveActionRegions(
       List<String> authorities, List<String> grantedActions) {
     Map<String, List<Long>> actionRegions = new LinkedHashMap<>();
-    if (!FamRegionGrant.anyIn(authorities) || grantedActions == null) {
+    if (grantedActions == null || !isRegionLimited(authorities)) {
       return actionRegions;
     }
     // Same answer as resolveStaffRegionConstraint per action, resolving each grant's actions once.
-    Set<String> provinceWide = new LinkedHashSet<>();
     Map<String, Set<Long>> regionsByAction = new LinkedHashMap<>();
-    Set<String> regionalRoles = regionalRoles(authorities);
     for (String authority : authorities) {
-      if (authority == null) {
+      var regionalGrant = FamRegionGrant.parse(authority);
+      if (regionalGrant.isEmpty()) {
         continue;
       }
-      var regionalGrant = FamRegionGrant.parse(authority);
-      if (regionalGrant.isPresent()) {
-        FamRegionGrant grant = regionalGrant.get();
-        Set<String> roleActions = Set.copyOf(resolveGrantedActions(List.of(grant.role())));
-        for (String action : grantedActions) {
-          if (grantsAction(roleActions, action)) {
-            regionsByAction
-                .computeIfAbsent(action, ignored -> new LinkedHashSet<>())
-                .add(grant.region().orgUnitNumber());
-          }
+      FamRegionGrant grant = regionalGrant.get();
+      Set<String> roleActions = Set.copyOf(resolveGrantedActions(List.of(grant.role())));
+      for (String action : grantedActions) {
+        if (grantsAction(roleActions, action)) {
+          regionsByAction
+              .computeIfAbsent(action, ignored -> new LinkedHashSet<>())
+              .add(grant.region().orgUnitNumber());
         }
-      } else if (isProvinceWideGrant(authority, regionalRoles)) {
-        Set<String> roleActions = Set.copyOf(resolveGrantedActions(List.of(authority)));
-        grantedActions.stream()
-            .filter(action -> grantsAction(roleActions, action))
-            .forEach(provinceWide::add);
       }
     }
     for (String action : grantedActions) {
-      if (!provinceWide.contains(action)) {
-        actionRegions.put(action, List.copyOf(regionsByAction.getOrDefault(action, Set.of())));
-      }
+      actionRegions.put(action, List.copyOf(regionsByAction.getOrDefault(action, Set.of())));
     }
     return actionRegions;
   }
 
-  /** The staff roles granted for at least one region. */
-  private static Set<String> regionalRoles(Collection<String> authorities) {
-    Set<String> roles = new LinkedHashSet<>();
-    authorities.forEach(
-        authority -> FamRegionGrant.parse(authority).ifPresent(grant -> roles.add(grant.role())));
-    return roles;
-  }
-
   /**
-   * An unscoped staff grant is province-wide unless the same role is also granted for regions;
-   * then the regional grants are that role's whole reach (least privilege).
+   * Whether region limits apply: the user holds Read Only or an Approver role, with or without a
+   * region, and not Administrator, the only province-wide staff role.
    */
-  private static boolean isProvinceWideGrant(String authority, Set<String> regionalRoles) {
-    return PROVINCIAL_STAFF_ROLES.contains(authority) && !regionalRoles.contains(authority);
+  public boolean isRegionLimited(List<String> authorities) {
+    List<String> roles = normalizeRoles(authorities);
+    return !roles.contains(ROLE_ADMIN) && roles.stream().anyMatch(REGIONAL_STAFF_ROLES::contains);
   }
 
   private boolean canPerformAnyAction(String role, Collection<String> actions) {
@@ -235,12 +203,6 @@ public class LexisAuthorizationService {
     }
     Set<String> configuredRoles = getConfiguredRoles();
     return roles.stream().anyMatch(configuredRoles::contains);
-  }
-
-  public boolean isReadOnlyRolloutUser(List<String> rawRoles) {
-    List<String> roles = normalizeRoles(rawRoles);
-    return !roles.contains(ROLE_ADMIN)
-        && (roles.contains(ROLE_READ_ONLY) || roles.contains(ROLE_FEDERAL_READ_ONLY));
   }
 
   public boolean hasProvincialStaffRole(List<String> rawRoles) {
@@ -298,27 +260,6 @@ public class LexisAuthorizationService {
         granted.add(action);
       }
     }
-  }
-
-  private void restrictProdRtmOnlyActions(List<String> roles, Set<String> granted) {
-    if (roles.contains(ROLE_ADMIN)) {
-      granted.retainAll(PROD_RTM_ONLY_ACTIONS);
-      return;
-    }
-
-    if (roles.contains(ROLE_READ_ONLY) || roles.contains(ROLE_FEDERAL_READ_ONLY)) {
-      Set<String> readOnlyActions = new LinkedHashSet<>();
-      if (roles.contains(ROLE_READ_ONLY)) {
-        appendRoleActions(readOnlyActions, ROLE_READ_ONLY);
-      }
-      if (roles.contains(ROLE_FEDERAL_READ_ONLY)) {
-        appendRoleActions(readOnlyActions, ROLE_FEDERAL_READ_ONLY);
-      }
-      granted.retainAll(readOnlyActions);
-      return;
-    }
-
-    granted.clear();
   }
 
   private void appendScopeActions(Set<String> granted, String scope) {

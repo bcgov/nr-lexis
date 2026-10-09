@@ -22,16 +22,12 @@ import {
   SkipToContent,
 } from '@carbon/react'
 import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
-import {
-  hasProvincialStaffRole,
-  hasProvincialSubmitterRole,
-  hasRole,
-} from '@/context/auth/role-utils'
+import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
+import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
 import OptimisticConflictModal from '@/components/OptimisticConflictModal'
 import UserRegionPreference from '@/components/UserRegionPreference'
 import SideNavigationGroup from '@/components/SideNavigationGroup'
 import SideNavigationTooltip from '@/components/SideNavigationTooltip'
-import { isProdRtmOnlyPathAllowed } from '@/config/features'
 import { useAuth } from '@/context/auth/useAuth'
 import { useTheme } from '@/context/theme/useTheme'
 import type { NavigationRoleScope, RouteActionMatch } from '@/routes/routeAccessTypes'
@@ -365,10 +361,6 @@ function Layout({ children }: LayoutProps) {
     const isProvincialSubmitter =
       hasProvincialSubmitterRole(capabilities.roles) && !hasRole(capabilities.roles, 'ADMIN')
     const canShowLink = (link: NavigationLink): boolean => {
-      if (!isProdRtmOnlyPathAllowed(link.to, capabilities.roles)) {
-        return false
-      }
-
       if (!canShowRoleScopedLink(link, capabilities.roles)) {
         return false
       }
@@ -714,7 +706,7 @@ function Layout({ children }: LayoutProps) {
                 )}
               </div>
             </div>
-            {hasProvincialStaffRole(capabilities.roles) && (
+            {canUseDefaultRegionPreference(capabilities) && (
               <UserRegionPreference active={isProfileOpen} />
             )}
           </div>

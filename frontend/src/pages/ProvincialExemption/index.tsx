@@ -50,6 +50,7 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole, isPureExemptionApprover } from '@/context/auth/role-utils'
+import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
 import { hasInvalidIsoDateValue } from '@/pages/shared/create-form-utils'
 import { batchSelectionTranslator } from '@/pages/shared/batch-selection'
 import {
@@ -111,7 +112,6 @@ import { isClientErrorResponse } from '@/utils/http-error'
 import { firstStringField, isRecord } from '@/utils/record'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { displayTableValue } from '@/utils/text'
-import { formatIsoDateLabel } from '@/utils/date'
 import './ProvincialExemption.scss'
 import { formatVolume } from '@/utils/volume'
 
@@ -255,7 +255,7 @@ const ProvincialExemptionPage = () => {
   const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
   const regionOptions = useAllowedRegionOptions(allRegionOptions, '/exemptionSearch', 'id')
   const { defaultRegion: defaultZone, preferenceLoading } = useDefaultRegionPreference(
-    hasProvincialStaffRole(capabilities.roles),
+    canUseDefaultRegionPreference(capabilities),
   )
   const [exemptionTypeOptions, setExemptionTypeOptions] = useState<SearchOption[]>([])
   const [exemptionStatusOptions, setExemptionStatusOptions] = useState<SearchOption[]>([])
@@ -1189,10 +1189,10 @@ const ProvincialExemptionPage = () => {
                         <TableCell>{formatVolume(row.approvedVolume)}</TableCell>
                         <TableCell>{row.balanceRemaining.toFixed(1)}</TableCell>
                         <TableCell className="legacy-search-table-date">
-                          {displayTableValue(formatIsoDateLabel(row.listingDate))}
+                          {displayTableValue(row.listingDate)}
                         </TableCell>
                         <TableCell className="legacy-search-table-date">
-                          {displayTableValue(formatIsoDateLabel(row.expiryDate))}
+                          {displayTableValue(row.expiryDate)}
                         </TableCell>
                         <TableCell>{displayTableValue(row.region)}</TableCell>
                       </TableRow>

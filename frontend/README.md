@@ -33,7 +33,6 @@ rollout but not an image rebuild.
 | `VITE_OIDC_IDIR_HINT` | Registered IDIR provider alias | azureidir |
 | `VITE_OIDC_BCEID_HINT` | Registered Business BCeID provider alias | bceidbusiness |
 | `VITE_OIDC_SITEMINDER_LOGOUT_URL` | SiteMinder `logoff.cgi` chained before Keycloak end-session | - (Keycloak only) |
-| `VITE_LEXIS_PROD_RTM_ONLY` | Restricts admins to Average Monthly Values, preserves normal read-only routes, and denies other application roles | false |
 
 Register `<origin>/authCallback` as the login callback and `<origin>` as the post-logout URL. Tokens live in sessionStorage; there is no browser client secret.
 
@@ -134,6 +133,14 @@ Mark required fields with `requiredLabel()`. Its stylesheet draws a plain red `*
 Show read-only values with `displayValue()`. A blank value renders `—`, announced as "Not provided". Where a string is needed (template literals, `aria-label`, input values), use `displayValueText()`; a unit test rejects `displayValue()` in string contexts.
 
 Show volumes with `displayVolume()` or `formatVolume()` from `@/utils/volume`: one decimal, or two when the stored value has them (`0.0`, `1,234.5`, `12.25`). Fill volume inputs with `formatVolumeInput()`, which drops the thousands separator.
+
+Set `size="md"` (40px) on every `Button`; Carbon's default is lg (48px). A unit test checks every call site.
+
+Put actions that cover the whole record (Save and Cancel on a create page, Approve exemption, Print permit) in `PageHeader`'s `actions`, on the title row above any notification. A tab's edit actions (Cancel, Save changes) go inside its card, bottom right, after the last field.
+
+Title each record card with `DetailCardTitle`, passing its tab's icon: an h2 in heading-03 led by the 24px icon. A titled section inside a card is an h3 with `detail-section-subtitle` (heading-compact-02, no icon).
+
+An empty tab has no card. Render `EmptyState` with `variant="tab"` straight in the tab panel, with the tab's pictogram: Cardboard for Scale, AddDocument for Documents, Invoice for Fees. An empty section inside a card is one line of text.
 
 Format volume values when loading an editor, including its saved snapshot, rather than on every
 keystroke. Application volume accepts two decimal places. OIC request-volume editors retain their

@@ -14,7 +14,6 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.configuration.LexisAuthorizationProperties;
-import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.report.LexisReportRequestDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
@@ -97,7 +96,7 @@ class RegionalAuthorizationRegressionTest {
     var properties = new Binder(new MapConfigurationPropertySource(yaml.getObject()))
         .bind("lexis.authz", LexisAuthorizationProperties.class).get();
     var session = new LexisSessionService("LEXIS_PROVINCIAL_SUBMITTER");
-    var authorization = new LexisAuthorizationService(properties, new LexisFeatureProperties(), session);
+    var authorization = new LexisAuthorizationService(properties, session);
     var beans = new StaticListableBeanFactory();
     beans.addBean("exemptions", exemptions);
     beans.addBean("exemptionRpc", exemptionRpc);
@@ -179,8 +178,8 @@ class RegionalAuthorizationRegressionTest {
   }
 
   @Test
-  void provinceWideReportsCanStillOmitRegions() {
-    requestAuthorizedFor("/offerReport", staff("LEXIS_READ_ONLY"));
+  void administratorReportsCanStillOmitRegions() {
+    requestAuthorizedFor("/offerReport", staff("LEXIS_ADMIN"));
     when(reports.generateReport(eq("offerReport"), any())).thenReturn(Optional.empty());
 
     assertThat(reportController.offerReport(new LexisReportRequestDto(Map.of(), "PDF")).getStatusCode())
@@ -195,8 +194,7 @@ class RegionalAuthorizationRegressionTest {
     requestAuthorizedFor("saveExemption", authentication);
     when(exemptions.findAccessByExemptionNumber("EX-1"))
         .thenReturn(Optional.of(new ExemptionAccessDto("EX-1", "M", "NEW", false)));
-    // Province-wide grants deliberately skip region lookups.
-    lenient().when(exemptions.findAccessOrgUnitNumbers("EX-1")).thenReturn(recordRegions);
+    when(exemptions.findAccessOrgUnitNumbers("EX-1")).thenReturn(recordRegions);
     when(exemptionRpc.updateExemption(any(), anyString(), anyBoolean()))
         .thenReturn(new ExemptionDetailsRpcService.CreateExemptionResult(
             true, "Saved", "EX-1", false, List.of(), List.of()));
@@ -215,13 +213,10 @@ class RegionalAuthorizationRegressionTest {
   static Stream<Arguments> approvalGrants() {
     return Stream.of(
         Arguments.of(List.of(APPLICATION_CARIBOO, EXEMPTION_SKEENA), List.of(1903L), false),
-        Arguments.of(List.of(APPLICATION_APPROVER, EXEMPTION_SKEENA), List.of(1903L), false),
         Arguments.of(List.of(APPLICATION_CARIBOO, EXEMPTION_CARIBOO), List.of(1903L), true),
-        Arguments.of(List.of(APPLICATION_APPROVER, EXEMPTION_CARIBOO), List.of(1903L, 1908L), false),
-        Arguments.of(List.of(APPLICATION_APPROVER, EXEMPTION_CARIBOO, EXEMPTION_SKEENA),
-            List.of(1903L, 1908L), true),
-        Arguments.of(List.of(APPLICATION_CARIBOO, EXEMPTION_APPROVER), List.of(1903L, 1908L), true),
-        Arguments.of(List.of(APPLICATION_APPROVER, EXEMPTION_CARIBOO), List.of(), false));
+        Arguments.of(List.of(APPLICATION_CARIBOO), List.of(1903L), false),
+        Arguments.of(List.of(EXEMPTION_CARIBOO), List.of(1903L), true),
+        Arguments.of(List.of(EXEMPTION_CARIBOO, EXEMPTION_SKEENA), List.of(1903L, 1908L), true));
   }
 
   @ParameterizedTest

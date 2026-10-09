@@ -25,15 +25,12 @@ parameters:
     value: "200m"
   - name: MAX_MEM
     value: "128Mi"
-  - name: IMAGE_TAG
-    description: Container image tag (PR number, 'test', or 'prod')
-    value: latest
+  - name: IMAGE_REF
+    description: Complete container image reference (tag or digest)
+    required: true
   - name: ROLLOUT_TRIGGER
     description: Value placed on the pod template to force rollout when a reused image tag is rebuilt
     value: ""
-  - name: REGISTRY
-    description: Image registry path (no tag)
-    value: ghcr.io/bcgov/nr-lexis/frontend
   - name: FRONTEND_LOG_LEVEL
     value: INFO
   - name: VITE_OIDC_ISSUER_URI
@@ -49,8 +46,6 @@ parameters:
   - name: VITE_OIDC_SITEMINDER_LOGOUT_URL
     description: SiteMinder logoff.cgi chained before Keycloak end-session so Business BCeID logout ends the upstream session
     value: ""
-  - name: VITE_LEXIS_PROD_RTM_ONLY
-    value: "false"
   - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
     value: /api
   - name: VITE_LEXIS_REPORT_API_BASE
@@ -83,7 +78,7 @@ objects:
             runAsNonRoot: true
           initContainers:
             - name: seed-srv
-              image: ${REGISTRY}:${IMAGE_TAG}
+              image: ${IMAGE_REF}
               imagePullPolicy: Always
               command:
                 - sh
@@ -109,7 +104,7 @@ objects:
                   drop: ["ALL"]
           containers:
             - name: ${NAME}-frontend
-              image: ${REGISTRY}:${IMAGE_TAG}
+              image: ${IMAGE_REF}
               imagePullPolicy: Always
               ports:
                 - name: http
@@ -135,8 +130,6 @@ objects:
                   value: ${VITE_OIDC_BCEID_HINT}
                 - name: VITE_OIDC_SITEMINDER_LOGOUT_URL
                   value: ${VITE_OIDC_SITEMINDER_LOGOUT_URL}
-                - name: VITE_LEXIS_PROD_RTM_ONLY
-                  value: ${VITE_LEXIS_PROD_RTM_ONLY}
                 - name: VITE_LEXIS_REPORT_ENDPOINT_BASE
                   value: ${VITE_LEXIS_REPORT_ENDPOINT_BASE}
                 - name: VITE_LEXIS_REPORT_API_BASE

@@ -672,7 +672,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
               nonNull(growthTypeByPackage.get(packageNumber))));
     }
     return new PermitAllScaleFeesRpcResponseDto(
-        List.copyOf(packages), totalVolume.setScale(1, RoundingMode.HALF_UP).toPlainString());
+        List.copyOf(packages), formatVolume(totalVolume));
   }
 
   @Override
@@ -3430,19 +3430,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return emptyPackageDetails();
     }
 
-    BigDecimal scaledVolume = BigDecimal.ZERO.setScale(1, RoundingMode.HALF_UP);
-    BigDecimal exactScaledVolume = BigDecimal.ZERO;
+    BigDecimal scaledVolume = BigDecimal.ZERO;
     for (PermitScaleDetailRow scale : scaleRows) {
-      BigDecimal speciesGradeVolume =
-          BigDecimal.valueOf(scale.speciesGradeVolume()).setScale(1, RoundingMode.HALF_UP);
-      scaledVolume = scaledVolume.add(speciesGradeVolume).setScale(1, RoundingMode.HALF_UP);
-      exactScaledVolume = exactScaledVolume.add(BigDecimal.valueOf(scale.speciesGradeVolume()));
+      scaledVolume = scaledVolume.add(BigDecimal.valueOf(scale.speciesGradeVolume()));
     }
     // The scale save check compares exact sums, so its limit must not use the rounded totals.
     BigDecimal remainingVolume =
         BigDecimal.valueOf(packageDetails.packageVolume())
-            .subtract(exactScaledVolume)
+            .subtract(scaledVolume)
             .max(BigDecimal.ZERO);
+    scaledVolume = scaledVolume.setScale(2, RoundingMode.HALF_UP);
 
     return new PermitPackageDetailsRpcResponseDto(
         true,
@@ -5298,7 +5295,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private String formatVolume(double value) {
-    return BigDecimal.valueOf(value).setScale(1, RoundingMode.HALF_UP).toPlainString();
+    return formatVolume(BigDecimal.valueOf(value));
+  }
+
+  /**
+   * A stored volume or measurement with one or two decimals: 2 is "2.0" and 0.05 stays "0.05".
+   * Columns hold two decimals, so only floating-point noise from sums is rounded away.
+   */
+  private String formatVolume(BigDecimal value) {
+    BigDecimal stored = value.setScale(2, RoundingMode.HALF_UP).stripTrailingZeros();
+    return (stored.scale() < 1 ? stored.setScale(1) : stored).toPlainString();
   }
 
   private String formatCurrency(BigDecimal value) {

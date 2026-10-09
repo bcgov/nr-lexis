@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   allowedRegions,
+  canUseDefaultRegionPreference,
   filterRegionOptions,
   normalizeActionRegions,
   withinRegions,
 } from '@/context/auth/region-utils'
+import { createTestCapabilities } from '@/test-utils/auth'
 
 const regional = {
   grantedActions: ['/applicationSearch', 'createApplication', 'savePermit'],
@@ -60,5 +62,65 @@ describe('region utils', () => {
     expect(filterRegionOptions(options, new Set(['1908']), (option) => option.value)).toEqual([
       { value: '1908', label: 'Skeena' },
     ])
+  })
+
+  it('offers zone preferences to Administrators and staff covering all eight current regions', () => {
+    expect(canUseDefaultRegionPreference(createTestCapabilities({ roles: ['LEXIS_ADMIN'] }))).toBe(
+      true,
+    )
+    const regions = ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910']
+    for (const role of [
+      'LEXIS_READ_ONLY',
+      'LEXIS_APPLICATION_APPROVER',
+      'LEXIS_EXEMPTION_APPROVER',
+    ]) {
+      expect(
+        canUseDefaultRegionPreference(
+          createTestCapabilities({
+            roles: [role],
+            grantedActions: ['/exemptionSearch'],
+            actionRegions: { exemptionsearch: regions },
+          }),
+        ),
+      ).toBe(true)
+    }
+  })
+
+  it('does not offer zone preferences for partial, missing or industry region grants', () => {
+    for (const regions of [
+      [],
+      ['1903'],
+      ['1903', '1904', '1905', '1906', '1907', '1908', '1909'],
+    ]) {
+      expect(
+        canUseDefaultRegionPreference(
+          createTestCapabilities({
+            roles: ['LEXIS_APPLICATION_APPROVER'],
+            grantedActions: ['/applicationSearch'],
+            actionRegions: { applicationsearch: regions },
+          }),
+        ),
+      ).toBe(false)
+    }
+    expect(
+      canUseDefaultRegionPreference(
+        createTestCapabilities({
+          roles: ['LEXIS_READ_ONLY', 'LEXIS_EXEMPTION_APPROVER'],
+          grantedActions: ['/applicationSearch', '/exemptionSearch'],
+          actionRegions: {
+            applicationsearch: ['1903', '1904', '1905', '1906'],
+            exemptionsearch: ['1903', '1904', '1905', '1906', '1907', '1908', '1909', '1910'],
+          },
+        }),
+      ),
+    ).toBe(false)
+    expect(
+      canUseDefaultRegionPreference(createTestCapabilities({ roles: ['LEXIS_READ_ONLY'] })),
+    ).toBe(false)
+    expect(
+      canUseDefaultRegionPreference(
+        createTestCapabilities({ roles: ['LEXIS_PROVINCIAL_SUBMITTER'] }),
+      ),
+    ).toBe(false)
   })
 })

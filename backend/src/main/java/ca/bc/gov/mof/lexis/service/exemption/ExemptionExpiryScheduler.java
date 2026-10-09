@@ -2,7 +2,6 @@ package ca.bc.gov.mof.lexis.service.exemption;
 
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 
-import ca.bc.gov.mof.lexis.configuration.LexisFeatureProperties;
 import io.micrometer.core.instrument.Counter;
 import io.micrometer.core.instrument.Gauge;
 import io.micrometer.core.instrument.MeterRegistry;
@@ -45,7 +44,6 @@ public class ExemptionExpiryScheduler {
 
   private final ExemptionExpiryService expiryService;
   private final LockProvider lockProvider;
-  private final LexisFeatureProperties featureProperties;
   private final Clock clock;
   private final ZoneId expiryZone;
   private final Duration lockAtMostFor;
@@ -66,7 +64,6 @@ public class ExemptionExpiryScheduler {
       ExemptionExpiryService expiryService,
       @Qualifier("expiryLockProvider") LockProvider lockProvider,
       MeterRegistry meterRegistry,
-      LexisFeatureProperties featureProperties,
       @Value("${lexis.expiry.zone:America/Vancouver}") String expiryZone,
       @Value("${lexis.expiry.lock-at-most-for:PT6H}") String lockAtMostFor,
       @Value("${lexis.expiry.lock-at-least-for:PT5M}") String lockAtLeastFor) {
@@ -74,7 +71,6 @@ public class ExemptionExpiryScheduler {
         expiryService,
         lockProvider,
         meterRegistry,
-        featureProperties,
         Clock.systemUTC(),
         ZoneId.of(expiryZone),
         Duration.parse(lockAtMostFor),
@@ -85,14 +81,12 @@ public class ExemptionExpiryScheduler {
       ExemptionExpiryService expiryService,
       LockProvider lockProvider,
       MeterRegistry meterRegistry,
-      LexisFeatureProperties featureProperties,
       Clock clock,
       ZoneId expiryZone,
       Duration lockAtMostFor,
       Duration lockAtLeastFor) {
     this.expiryService = Objects.requireNonNull(expiryService, "expiryService");
     this.lockProvider = Objects.requireNonNull(lockProvider, "lockProvider");
-    this.featureProperties = Objects.requireNonNull(featureProperties, "featureProperties");
     MeterRegistry registry = Objects.requireNonNull(meterRegistry, "meterRegistry");
     this.clock = Objects.requireNonNull(clock, "clock");
     this.expiryZone = Objects.requireNonNull(expiryZone, "expiryZone");
@@ -132,13 +126,6 @@ public class ExemptionExpiryScheduler {
   }
 
   private void runForCurrentLocalDate(String operation) {
-    if (featureProperties.isProdRtmOnly()) {
-      skippedRuns.increment();
-      LOGGER.info(
-          "event=lexis_exemption_expiry operation={} outcome=skipped reason=prod_rtm_only",
-          operation);
-      return;
-    }
     if (!running.compareAndSet(false, true)) {
       skippedRuns.increment();
       LOGGER.info(

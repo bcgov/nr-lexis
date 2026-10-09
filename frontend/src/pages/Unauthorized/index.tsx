@@ -13,6 +13,10 @@ const UnauthorizedPage = () => {
   const signedInDescription = capabilities.principal
     ? `You’re signed in as ${capabilities.principal}, but your account is not authorized to use LEXIS.`
     : 'Your account is signed in, but it is not authorized to use LEXIS.'
+  const description =
+    capabilities.accessDeniedReason === 'INCOMPATIBLE_APPROVER_ROLES'
+      ? `${signedInDescription} Contact your administrator.`
+      : signedInDescription
 
   return (
     <main
@@ -29,7 +33,7 @@ const UnauthorizedPage = () => {
 
             <div className="landing-title-group">
               <h1 className="landing-title">Access not granted</h1>
-              <p className="landing-subtitle">{signedInDescription}</p>
+              <p className="landing-subtitle">{description}</p>
             </div>
 
             <div className="landing-actions">

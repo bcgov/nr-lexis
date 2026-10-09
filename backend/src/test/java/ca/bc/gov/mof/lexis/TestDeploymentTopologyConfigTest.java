@@ -33,8 +33,13 @@ class TestDeploymentTopologyConfigTest {
   @Test
   void productionShouldRetainQuotaBoundedReplicaAndExpiryConfiguration() throws IOException {
     String mergeWorkflow = Files.readString(resolve(".github/workflows/merge.yml"));
-    String prodDeploy = workflowJob(mergeWorkflow, "deploy-prod", "monitor-prod");
-    String promote = mergeWorkflow.substring(mergeWorkflow.indexOf("  promote:"));
+    String releaseWorkflow = Files.readString(resolve(".github/workflows/release-prod.yml"));
+    String prodDeploy = workflowJob(releaseWorkflow, "deploy-prod", "monitor-prod");
+
+    assertThat(mergeWorkflow).doesNotContain("  deploy-prod:", "  monitor-prod:", "  promote:");
+    assertThat(releaseWorkflow)
+        .contains("  workflow_dispatch:", "      release_tag:", "  cancel-in-progress: false")
+        .doesNotContain("  push:", "  release:", "if: ${{ false }}");
 
     assertThat(prodDeploy)
         .doesNotContain("if: false")
@@ -45,7 +50,10 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_memory_request: \"1Gi\"")
         .contains("backend_cpu_limit: \"1500m\"")
         .contains("backend_memory_limit: \"1536Mi\"")
-        .contains("expiry_enabled: true")
+        .contains("expiry_enabled: false")
+        .contains("backend_image: ${{ needs.prepare.outputs.backend_image }}")
+        .contains("frontend_image: ${{ needs.prepare.outputs.frontend_image }}")
+        .contains("source_ref: ${{ needs.prepare.outputs.sha }}")
         .contains("lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}")
         .contains("lexis_mail_region_rco_address: ${{ secrets.LEXIS_MAIL_REGION_RCO_ADDRESS }}")
         .contains("lexis_mail_region_rni_address: ${{ secrets.LEXIS_MAIL_REGION_RNI_ADDRESS }}")
@@ -57,9 +65,40 @@ class TestDeploymentTopologyConfigTest {
             "lexis_mail_region_rni_recipients",
             "lexis_mail_region_rsi_recipients",
             "lexis_mail_permit_request_recipients");
-    assertThat(promote)
-        .contains("needs: [deploy-prod, init]")
-        .doesNotContain("if: false");
+  }
+
+  @Test
+  void deploymentShouldUseSelectedReleaseTemplatesAndIndependentExpiryFlag() throws IOException {
+    String workflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
+    String backendTemplate = Files.readString(resolve("backend/openshift.deploy.yml"));
+    String frontendTemplate = Files.readString(resolve("frontend/openshift.deploy.yml"));
+
+    assertThat(workflow)
+        .contains("ref: ${{ inputs.source_ref || github.sha }}")
+        .contains("cp backend/openshift.deploy.yml")
+        .contains("cp frontend/openshift.deploy.yml")
+        .contains("inputs.backend_image || format(")
+        .contains("inputs.frontend_image || format(")
+        .contains("LEXIS_EXPIRY_ENABLED: ${{ vars.LEXIS_EXPIRY_ENABLED || (inputs.expiry_enabled && 'true' || 'false') }}")
+        .contains("true|false) echo \"enabled=$LEXIS_EXPIRY_ENABLED\" >> \"$GITHUB_OUTPUT\" ;;")
+        .contains(
+            "OC_PROCESS_FLAGS: ${{ inputs.source_ref != '' && inputs.source_ref != github.sha"
+                + " && '--ignore-unknown-parameters' || '' }}")
+        .doesNotContain("LEXIS_PROD_RTM_ONLY", "lexis_prod_rtm_only");
+    assertThat(occurrences(workflow, "            $OC_PROCESS_FLAGS\n")).isEqualTo(3);
+    String backendJob = workflowJob(workflow, "backend", "frontend");
+    assertThat(
+            between(
+                backendJob, "      - name: Validate release images", "      - uses: actions/checkout@"))
+        .contains("BACKEND_IMAGE: ${{ inputs.backend_image }}")
+        .contains("FRONTEND_IMAGE: ${{ inputs.frontend_image }}");
+    assertThat(workflow.substring(workflow.indexOf("  frontend:")))
+        .doesNotContain("Validate release image");
+    for (String template : new String[] {backendTemplate, frontendTemplate}) {
+      assertThat(template)
+          .contains("- name: IMAGE_REF", "image: ${IMAGE_REF}")
+          .doesNotContain("- name: IMAGE_TAG", "- name: REGISTRY");
+    }
   }
 
   @Test
@@ -81,7 +120,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("expiry_enabled: false")
         .contains("lexis_mail_from: ${{ secrets.LEXIS_MAIL_FROM }}");
     assertThat(backendDeploy)
-        .contains("file: backend/openshift.deploy.yml")
+        .contains("file: ${{ runner.temp }}/lexis-deploy/backend.yml")
         .contains("lite_mode: false");
   }
 
@@ -104,7 +143,8 @@ class TestDeploymentTopologyConfigTest {
         .contains("name: Record deployment result")
         .contains("needs: [backend, frontend]")
         .contains("if: ${{ always() }}")
-        .contains("environment: ${{ inputs.environment }}")
+        .contains("name: ${{ inputs.environment }}")
+        .contains("deployment: ${{ inputs.environment != 'prod' }}")
         .contains("permissions: {}")
         .contains(
             "if: ${{ needs.backend.result != 'success'"
@@ -162,14 +202,14 @@ class TestDeploymentTopologyConfigTest {
         .contains("backend_max_replicas:")
         .contains(
             "expiry_enabled:\n"
-                + "        description: Enable exemption expiry; false is an explicit operational kill switch\n"
+                + "        description: Default expiry setting when the environment LEXIS_EXPIRY_ENABLED variable is unset\n"
                 + "        default: true")
         .doesNotContain("Enforce single-backend lock topology", "inputs.backend_replicas")
         .contains("-p MIN_REPLICAS=\"${{ inputs.backend_min_replicas }}\"")
         .contains("-p MAX_REPLICAS=\"${{ inputs.backend_max_replicas }}\"")
         .contains(
-            "LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled"
-                + " && secrets.lexis_prod_rtm_only != 'true' && 'true' || 'false' }}")
+            "LEXIS_EXPIRY_ENABLED: ${{ vars.LEXIS_EXPIRY_ENABLED"
+                + " || (inputs.expiry_enabled && 'true' || 'false') }}")
         .contains("LEXIS_EXPIRY_CRON: ${{ vars.LEXIS_EXPIRY_CRON || '30 0 0 * * *' }}")
         .contains("LEXIS_EXPIRY_ZONE: ${{ vars.LEXIS_EXPIRY_ZONE || 'America/Vancouver' }}")
         .contains(
@@ -338,7 +378,7 @@ class TestDeploymentTopologyConfigTest {
         between(
             backendJob,
             "      - uses: actions/checkout@",
-            "      - name: Ensure Keycloak scopes and NEXCOL client");
+            "      - name: Stage backend template");
     String keycloakStep =
         between(
             backendJob,
@@ -399,7 +439,6 @@ class TestDeploymentTopologyConfigTest {
             "DATABASE_PASSWORD",
             "KEYSTORE_SECRET",
             "LEXIS_PROD_RTM_ONLY",
-            "LEXIS_EXPIRY_ENABLED",
             "LEXIS_PERMIT_INVOICE_MODE",
             "LEXIS_PERMIT_INVOICE_GBMS_TIMEOUT_SECONDS",
             "LEXIS_MAIL_NON_PRODUCTION",
@@ -414,10 +453,7 @@ class TestDeploymentTopologyConfigTest {
         .contains("DATABASE_USER: ${{ secrets.database_user }}")
         .contains("DATABASE_PASSWORD: ${{ secrets.database_password }}")
         .contains("KEYSTORE_SECRET: ${{ secrets.keystore_secret }}")
-        .contains("LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}")
-        .contains(
-            "LEXIS_EXPIRY_ENABLED: ${{ inputs.expiry_enabled"
-                + " && secrets.lexis_prod_rtm_only != 'true' && 'true' || 'false' }}")
+        .contains("LEXIS_EXPIRY_ENABLED: ${{ steps.expiry.outputs.enabled }}")
         .contains(
             "LEXIS_PERMIT_INVOICE_MODE:"
                 + " ${{ vars.LEXIS_PERMIT_INVOICE_MODE || 'legacy-best-effort' }}")
@@ -453,7 +489,6 @@ class TestDeploymentTopologyConfigTest {
         .contains("-p LEXIS_OIDC_CLIENT_ID=\"${{ vars.LEXIS_OIDC_CLIENT_ID }}\"")
         .contains("-p KEYCLOAK_ISSUER_URI=\"${{ vars.KEYCLOAK_ISSUER_URI }}\"");
     assertThat(frontendDeployStep)
-        .contains("LEXIS_PROD_RTM_ONLY: ${{ secrets.lexis_prod_rtm_only || 'false' }}")
         .contains("-p VITE_OIDC_ISSUER_URI=\"${{ vars.LEXIS_OIDC_ISSUER_URI }}\"")
         .contains("-p VITE_OIDC_CLIENT_ID=\"${{ vars.LEXIS_OIDC_CLIENT_ID }}\"")
         .contains("-p VITE_OIDC_IDIR_HINT=\"${{ vars.LEXIS_OIDC_IDIR_HINT || 'azureidir' }}\"")
@@ -471,10 +506,10 @@ class TestDeploymentTopologyConfigTest {
     String workflow = Files.readString(resolve(".github/workflows/reusable-deploy.yml"));
 
     assertThat(workflow)
-        .containsOnlyOnce("file: backend/openshift.deploy.yml")
-        .containsOnlyOnce("file: frontend/openshift.deploy.yml")
-        .containsOnlyOnce("file: frontend/openshift.route.yml")
-        .containsOnlyOnce("file: frontend/openshift.vanity-route.yml")
+        .containsOnlyOnce("file: ${{ runner.temp }}/lexis-deploy/backend.yml")
+        .containsOnlyOnce("file: ${{ runner.temp }}/lexis-deploy/frontend.yml")
+        .containsOnlyOnce("file: ${{ runner.temp }}/lexis-deploy/route.yml")
+        .containsOnlyOnce("file: ${{ runner.temp }}/lexis-deploy/vanity-route.yml")
         .doesNotContain("openshift/deployment.yaml");
     assertThat(resolve("backend/openshift/deployment.yaml")).doesNotExist();
     assertThat(resolve("frontend/openshift/deployment.yaml")).doesNotExist();
@@ -511,10 +546,10 @@ class TestDeploymentTopologyConfigTest {
         .contains(
             "- name: Default Route (non-PROD)\n"
                 + "        if: ${{ inputs.target != 'prod' }}",
-            "file: frontend/openshift.route.yml",
+            "file: ${{ runner.temp }}/lexis-deploy/route.yml",
             "- name: Vanity Route (PROD)\n"
                 + "        if: ${{ inputs.target == 'prod' }}",
-            "file: frontend/openshift.vanity-route.yml",
+            "file: ${{ runner.temp }}/lexis-deploy/vanity-route.yml",
             "- name: Validate PROD vanity Route configuration",
             "for setting in VANITY_HOST VANITY_TLS_CERTIFICATE VANITY_TLS_KEY"
                 + " VANITY_TLS_CA_CERTIFICATE")

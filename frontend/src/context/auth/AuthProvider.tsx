@@ -8,7 +8,6 @@ import {
   restoreOidcUser,
   startOidcLogin,
 } from '@/service/oidc-service'
-import { isProdRtmOnlyMode, PROD_RTM_ONLY_ROUTE } from '@/config/features'
 import { AppToastNotification } from '@/components/AppToastNotification'
 import SessionTimeoutWarning from '@/components/SessionTimeoutWarning'
 import { AuthContext } from '@/context/auth/AuthContext'
@@ -119,7 +118,6 @@ const APPLICATION_ROLE_NAMES = new Set([
   ROLE_APPLICATION_APPROVER,
   ROLE_EXEMPTION_APPROVER,
 ])
-const PROD_RTM_ONLY_ACTION = '/lexisAgentAdmin'
 
 const INDUSTRY_ROLE_NAMES = new Set<string>([ROLE_PROVINCIAL_SUBMITTER])
 const SESSION_ACTIVITY_EVENTS = [
@@ -204,12 +202,12 @@ const sanitizeCapabilities = (
     availableForestClientNumbers,
     forestClientSelectionRequired: Boolean(payload.forestClientSelectionRequired),
     actionRegions: normalizeActionRegions(payload.actionRegions),
+    accessDeniedReason: payload.accessDeniedReason ?? null,
   }
 }
 
 const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => {
   const isReadOnlyUser = isPureReadOnlyRole(capabilities.roles)
-  const hasReadOnlyRole = hasRole(capabilities.roles, ROLE_READ_ONLY)
   const isIndustryUser = capabilities.roles.some((role) => isIndustryRole(role))
   const isProvincialSubmitterUser = capabilities.roles.some((role) => {
     return role === ROLE_PROVINCIAL_SUBMITTER || role.startsWith('PROVINCIAL_SUBMITTER_')
@@ -222,16 +220,6 @@ const resolveDefaultRoute = (capabilities: LexisSessionCapabilities): string => 
   const reportRoute = Object.entries(REPORT_ACTION_ROUTE_MAP).find(([action]) =>
     grantedSet.has(action),
   )?.[1]
-
-  if (isProdRtmOnlyMode()) {
-    if (isAdminUser) {
-      return PROD_RTM_ONLY_ROUTE
-    }
-    // Preserve the RTM-only read route for any READ_ONLY assignment; backend capabilities
-    // continue to limit the actions available in this mode.
-    if (hasReadOnlyRole) return '/provincial/application'
-    return hasRole(capabilities.roles, ROLE_FEDERAL_READ_ONLY) ? '/federal' : '/unauthorized'
-  }
 
   if (isAdminUser) {
     return '/provincial/review'
@@ -662,17 +650,6 @@ export function AuthProvider({ children }: AuthProviderProps) {
 
   const canPerformAction = useCallback(
     (action: string): boolean => {
-      if (isProdRtmOnlyMode()) {
-        if (hasRole(capabilities.roles, ROLE_ADMIN)) {
-          return normalizeAction(action) === normalizeAction(PROD_RTM_ONLY_ACTION)
-        }
-        if (
-          !hasRole(capabilities.roles, ROLE_READ_ONLY) &&
-          !hasRole(capabilities.roles, ROLE_FEDERAL_READ_ONLY)
-        ) {
-          return false
-        }
-      }
       if (hasRole(capabilities.roles, ROLE_ADMIN)) {
         return true
       }

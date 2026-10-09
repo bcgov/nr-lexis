@@ -574,6 +574,31 @@ describe('permit creation from an exemption', () => {
     expect(screen.getByText('9020933')).toBeInTheDocument()
   })
 
+  it('keeps a stored second decimal in related permit volumes', async () => {
+    vi.mocked(fetchExemptionPermits).mockResolvedValue([
+      {
+        permitNumber: '9020935',
+        permitVolume: '0.05',
+        permitStatus: 'Complete',
+        permitIssueDate: '2026-03-19',
+        canViewPermit: true,
+      },
+      {
+        permitNumber: '9020936',
+        permitVolume: '2',
+        permitStatus: 'Complete',
+        permitIssueDate: '2026-03-19',
+        canViewPermit: true,
+      },
+    ])
+    renderPage(activeMinisterialExemption)
+    await openPermitsTab()
+
+    const table = await screen.findByRole('region', { name: 'Related exemption permits' })
+    expect(within(table).getByRole('cell', { name: '0.05' })).toBeVisible()
+    expect(within(table).getByRole('cell', { name: '2.0' })).toBeVisible()
+  })
+
   it('renders the legacy permit issue date in ISO format without shifting its day', async () => {
     const actualService = await vi.importActual<{
       fetchExemptionPermits: typeof fetchExemptionPermits
@@ -664,11 +689,82 @@ describe('permit creation from an exemption', () => {
     expect(router.state.location.state.permitCreated).toBe(false)
   })
 
+  it('keeps the Permits card until a successful empty request completes', async () => {
+    mockRole(['ADMIN'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    let resolvePermits: (rows: Awaited<ReturnType<typeof fetchExemptionPermits>>) => void = () =>
+      undefined
+    const pendingPermits = new Promise<Awaited<ReturnType<typeof fetchExemptionPermits>>>(
+      (resolve) => {
+        resolvePermits = resolve
+      },
+    )
+    vi.mocked(fetchExemptionPermits).mockReturnValueOnce(pendingPermits)
+    renderPage(activeBlanketOicExemption, '', { lexisDetailTab: 'permits' })
+
+    expect(await screen.findByRole('heading', { name: 'Permits', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('Refreshing provincial exemption detail')
+
+    await act(async () => resolvePermits([]))
+
+    const emptyTitle = await screen.findByRole('heading', { name: 'No permits for this exemption' })
+    expect(emptyTitle.closest('.cds--tile')).toBeNull()
+    expect(screen.queryByRole('heading', { name: 'Permits', level: 2 })).not.toBeInTheDocument()
+  })
+
+  it('keeps permission-filtered permits in their read-only card', async () => {
+    mockRole(['ADMIN'], ['saveExemption'])
+    configureBlanketOicCreationDependencies()
+    vi.mocked(fetchExemptionPermits).mockResolvedValue([
+      {
+        permitNumber: 'HIDDEN-1',
+        permitVolume: '10.0',
+        permitStatus: 'Active',
+        permitIssueDate: '2026-10-01',
+        canViewPermit: false,
+      },
+    ])
+    renderPage(activeBlanketOicExemption)
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    await openPermitsTab()
+
+    expect(screen.getByRole('heading', { name: 'Permits', level: 2 })).toBeInTheDocument()
+    const emptyTitle = screen.getByRole('heading', { name: 'No permits available' })
+    expect(emptyTitle.closest('.cds--tile')).not.toBeNull()
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(screen.queryByText(/HIDDEN-1/)).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit exemption details' })).not.toBeInTheDocument()
+    expect(updateExemption).not.toHaveBeenCalled()
+    await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
+    expect(screen.getByRole('button', { name: 'Edit exemption details' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Save changes' })).not.toBeInTheDocument()
+  })
+
+  it('keeps a failed permit request in its error card', async () => {
+    mockRole(['ADMIN'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    vi.mocked(fetchExemptionPermits).mockRejectedValueOnce(new Error('Permits unavailable'))
+    renderPage(activeBlanketOicExemption)
+    await openPermitsTab()
+
+    const errorTitle = await screen.findByRole('heading', { name: 'Permits unavailable' })
+    expect(errorTitle.closest('.cds--tile')).not.toBeNull()
+    expect(screen.getByRole('heading', { name: 'Permits', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('alert')).toHaveTextContent(
+      'Unable to retrieve permits associated with this exemption.',
+    )
+  })
+
   it('cancels the Blanket OIC start confirmation without opening or persisting a draft', async () => {
     mockRole(['ADMIN'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
+    vi.mocked(fetchExemptionPermits).mockResolvedValue([])
     const router = renderPage(activeBlanketOicExemption)
     await openPermitsTab()
+    const emptyTitle = await screen.findByRole('heading', { name: 'No permits for this exemption' })
+    expect(emptyTitle.closest('.cds--tile')).toBeNull()
+    expect(emptyTitle.closest('.lexis-empty-state--tab')).not.toBeNull()
     await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
     const dialog = await screen.findByRole('dialog', { name: 'Apply for new permit' })
     expect(within(dialog).getByText(/created when you save it/)).toBeInTheDocument()

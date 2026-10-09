@@ -10,15 +10,12 @@ parameters:
   - name: ZONE
     description: PR number, 'test', or 'prod'
     required: true
-  - name: IMAGE_TAG
-    description: Container image tag (PR number, 'test', or 'prod')
-    value: latest
+  - name: IMAGE_REF
+    description: Complete container image reference (tag for PR previews, digest for releases)
+    required: true
   - name: ROLLOUT_TRIGGER
     description: Value placed on pod templates to force rollout when a reused image tag is rebuilt
     value: ""
-  - name: REGISTRY
-    description: Image registry path (no tag)
-    value: ghcr.io/bcgov/nr-lexis/backend
   - name: SPRING_PROFILES_ACTIVE
     value: oracle
   - name: MIN_REPLICAS
@@ -51,10 +48,8 @@ parameters:
     value: INFO
   - name: SPRING_BOOT_AUTOCONFIG_LOG_LEVEL
     value: INFO
-  - name: LEXIS_PROD_RTM_ONLY
-    value: "false"
   - name: LEXIS_EXPIRY_ENABLED
-    description: Enable exemption expiry; set false only as an explicit operational kill switch
+    description: Enable scheduled and startup exemption expiry independently of application access
     value: "true"
   - name: LEXIS_EXPIRY_CRON
     description: Daily expiry scheduler cron expression
@@ -213,7 +208,7 @@ objects:
                   drop: ["ALL"]
           containers:
             - name: ${NAME}-backend
-              image: ${REGISTRY}:${IMAGE_TAG}
+              image: ${IMAGE_REF}
               imagePullPolicy: Always
               ports:
                 - containerPort: 8080
@@ -265,8 +260,6 @@ objects:
                   value: ${SPRING_WEB_LOG_LEVEL}
                 - name: LOGGING_LEVEL_ORG_SPRINGFRAMEWORK_BOOT_AUTOCONFIGURE
                   value: ${SPRING_BOOT_AUTOCONFIG_LOG_LEVEL}
-                - name: LEXIS_PROD_RTM_ONLY
-                  value: ${LEXIS_PROD_RTM_ONLY}
                 - name: LEXIS_EXPIRY_ENABLED
                   value: ${LEXIS_EXPIRY_ENABLED}
                 - name: LEXIS_EXPIRY_CRON

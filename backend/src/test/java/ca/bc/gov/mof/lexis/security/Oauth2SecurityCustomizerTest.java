@@ -16,6 +16,7 @@ import com.sun.net.httpserver.HttpServer;
 import java.net.InetSocketAddress;
 import java.nio.charset.StandardCharsets;
 import java.time.Instant;
+import java.util.Arrays;
 import java.util.Date;
 import java.util.HashMap;
 import java.util.List;
@@ -50,7 +51,8 @@ class Oauth2SecurityCustomizerTest {
                             "LEXIS_ADMIN",
                             "LEXIS_READ_ONLY",
                             "LEXIS_APPLICATION_APPROVER",
-                            "LEXIS_EXEMPTION_APPROVER",
+                            "LEXIS_READ_ONLY_REGION_REGION-SKEENA",
+                            "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO",
                             "LEXIS_FEDERAL_READ_ONLY",
                             "LEXIS_PROVINCIAL_SUBMITTER_FOREST_CLIENT-00001018",
                             "DELEGATED_ADMIN",
@@ -58,9 +60,8 @@ class Oauth2SecurityCustomizerTest {
                     "scope", "lexis:federal-submission:submit")))
         .containsExactly(
             "LEXIS_ADMIN",
-            "LEXIS_READ_ONLY",
-            "LEXIS_APPLICATION_APPROVER",
-            "LEXIS_EXEMPTION_APPROVER");
+            "LEXIS_READ_ONLY_REGION_REGION-SKEENA",
+            "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO");
   }
 
   @Test
@@ -169,10 +170,10 @@ class Oauth2SecurityCustomizerTest {
                 Map.of(
                     "resource_access",
                         Map.of(
-                            CLIENT, Map.of("roles", List.of("LEXIS_READ_ONLY")),
+                            CLIENT, Map.of("roles", List.of("LEXIS_READ_ONLY_REGION_REGION-CARIBOO")),
                             "other-client", Map.of("roles", List.of("LEXIS_ADMIN"))),
                     "realm_access", Map.of("roles", List.of("LEXIS_ADMIN")))))
-        .containsExactly("LEXIS_READ_ONLY");
+        .containsExactly("LEXIS_READ_ONLY_REGION_REGION-CARIBOO");
     assertThat(
             authorities(
                 Map.of(
@@ -186,9 +187,9 @@ class Oauth2SecurityCustomizerTest {
     assertThat(
             authorities(
                 Map.of(
-                    "client_roles", List.of("LEXIS_READ_ONLY"),
+                    "client_roles", List.of("LEXIS_READ_ONLY_REGION_REGION-CARIBOO"),
                     "resource_access", Map.of(CLIENT, Map.of("roles", List.of("LEXIS_ADMIN"))))))
-        .containsExactly("LEXIS_READ_ONLY");
+        .containsExactly("LEXIS_READ_ONLY_REGION_REGION-CARIBOO");
     assertThat(
             authorities(
                 Map.of("client_roles", "LEXIS_ADMIN", "resource_access", List.of("LEXIS_ADMIN"))))
@@ -316,7 +317,6 @@ class Oauth2SecurityCustomizerTest {
   void regionalStaffAuthoritiesRetainTheRoleRegionPairWithoutGrantingAnUnscopedRole(String provider) {
     List<String> roles = List.of(
         "LEXIS_APPLICATION_APPROVER_REGION-CARIBOO",
-        "LEXIS_EXEMPTION_APPROVER_REGION-SKEENA",
         "LEXIS_READ_ONLY_REGION-SOUTH_COAST");
     assertThat(authorities(Map.of("identity_provider", provider, "client_roles", roles)))
         .containsExactlyElementsOf(roles);
@@ -324,6 +324,64 @@ class Oauth2SecurityCustomizerTest {
         "identity_provider", provider,
         "resource_access", Map.of(CLIENT, Map.of("roles", roles)))))
         .containsExactlyElementsOf(roles);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+    "LEXIS_APPLICATION_APPROVER",
+    "LEXIS_EXEMPTION_APPROVER",
+    "LEXIS_READ_ONLY",
+    "LEXIS_APPLICATION_APPROVER_REGION",
+    "LEXIS_EXEMPTION_APPROVER_REGION",
+    "LEXIS_READ_ONLY_REGION"
+  })
+  void staffRolesWithoutARegionGrantNoAuthority(String role) {
+    for (String provider : List.of("idir", "azureidir")) {
+      assertThat(authorities(Map.of("identity_provider", provider, "client_roles", List.of(role))))
+          .isEmpty();
+    }
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER",
+    "LEXIS_APPLICATION_APPROVER_REGION,LEXIS_EXEMPTION_APPROVER_REGION",
+    "LEXIS_APPLICATION_APPROVER_REGION,LEXIS_EXEMPTION_APPROVER",
+    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER_REGION",
+    " lexis_application_approver_region ,LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA",
+    "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER_REGION,LEXIS_ADMIN,LEXIS_READ_ONLY_REGION-SKEENA",
+    "LEXIS_APPLICATION_APPROVER_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER",
+    "LEXIS_APPLICATION_APPROVER,LEXIS_EXEMPTION_APPROVER_REGION_REGION-SKEENA",
+    "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER_REGION_REGION-CARIBOO",
+    "LEXIS_APPLICATION_APPROVER_REGION-CARIBOO,LEXIS_EXEMPTION_APPROVER_REGION_REGION-NORTHERN_INTERIOR",
+    "LEXIS_APPLICATION_APPROVER_REGION-RETIRED,LEXIS_EXEMPTION_APPROVER_REGION-SKEENA",
+    " lexis_application_approver_region-cariboo ,Lexis_Exemption_Approver_Region-Skeena,LEXIS_ADMIN,LEXIS_READ_ONLY_REGION-CARIBOO"
+  })
+  void conflictingApproverRolesRetainOnlyTheDenialDiagnostic(String roleCsv) {
+    List<String> roles = List.of(roleCsv.split(","));
+    for (String provider : List.of("idir", "azureidir")) {
+      assertThat(authorities(Map.of("identity_provider", provider, "client_roles", roles)))
+          .containsExactly(LexisSessionService.APPROVER_CONFLICT_AUTHORITY);
+      assertThat(authorities(Map.of(
+          "identity_provider", provider,
+          "resource_access", Map.of(CLIENT, Map.of("roles", roles)))))
+          .containsExactly(LexisSessionService.APPROVER_CONFLICT_AUTHORITY);
+    }
+    assertThat(sessionService.parseRoleHeader(LexisSessionService.APPROVER_CONFLICT_AUTHORITY))
+        .isEmpty();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+    "LEXIS_APPLICATION_APPROVER",
+    "LEXIS_EXEMPTION_APPROVER",
+    "LEXIS_READ_ONLY"
+  })
+  void allEightRegionsRemainConcreteGrants(String role) {
+    List<String> roles = Arrays.stream(FamRegionGrant.Region.values())
+        .map(region -> role + "_REGION_REGION-" + region.name())
+        .toList();
+    assertThat(authorities(Map.of("client_roles", roles))).containsExactlyElementsOf(roles);
   }
 
   @ParameterizedTest

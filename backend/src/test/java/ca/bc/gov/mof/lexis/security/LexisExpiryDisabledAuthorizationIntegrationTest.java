@@ -14,6 +14,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.AutoConfigureMockMvc;
 import org.springframework.boot.test.context.SpringBootTest;
@@ -30,16 +33,16 @@ import org.springframework.test.web.servlet.MockMvc;
       "spring.security.oauth2.resourceserver.jwt.issuer-uri=https://loginproxy.example.test/auth/realms/standard",
       "spring.security.oauth2.resourceserver.jwt.jwk-set-uri=https://loginproxy.example.test/auth/realms/standard/protocol/openid-connect/certs",
       "ALLOWED_ORIGINS=http://localhost:3000",
-      "LEXIS_PROD_RTM_ONLY=true"
+      "LEXIS_EXPIRY_ENABLED=false"
     })
 @AutoConfigureMockMvc
-@DisplayName("Integration Test | PROD RTM-only authorization")
-class LexisProdRtmOnlyAuthorizationIntegrationTest {
+@DisplayName("Integration Test | Authorization with exemption expiry disabled")
+class LexisExpiryDisabledAuthorizationIntegrationTest {
 
   @Autowired private MockMvc mockMvc;
 
   @Test
-  void federalReadOnlyShouldRetainOnlyFederalReadsDuringTheReadOnlyRollout() throws Exception {
+  void federalReadOnlyShouldRetainOnlyFederalReads() throws Exception {
     var role = new SimpleGrantedAuthority("LEXIS_FEDERAL_READ_ONLY");
     mockMvc.perform(get("/api/lexis/session/capabilities").with(jwt().authorities(role)))
         .andExpect(status().isOk())
@@ -58,7 +61,7 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
   }
 
   @Test
-  void prodRtmOnlyModeShouldExposeOnlyExactGetHealthProbes() throws Exception {
+  void shouldExposeOnlyExactGetHealthProbesToAnonymousUsers() throws Exception {
     SimpleGrantedAuthority admin = new SimpleGrantedAuthority("LEXIS_ADMIN");
 
     mockMvc.perform(get("/actuator/health/liveness")).andExpect(status().isOk());
@@ -73,11 +76,11 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
             post("/actuator/health/liveness")
                 .with(csrf())
                 .with(jwt().authorities(admin)))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isMethodNotAllowed());
   }
 
   @Test
-  void prodRtmOnlyModeShouldAllowFederalValidationButRejectSubmissionForNexcolScope()
+  void shouldAllowFederalValidationAndSubmissionForNexcolScope()
       throws Exception {
     SimpleGrantedAuthority federalSubmissionScope =
         new SimpleGrantedAuthority("SCOPE_lexis:federal-submission:submit");
@@ -137,14 +140,15 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
             post("/api/lexis/federal/submissions")
                 .param("userReference", "NEXCOL-SUBMISSION-1")
                 .param("originalFileName", "federal-submission.xml")
+                .header("X-Idempotency-Key", "EXPIRY-DISABLED-SUBMISSION-1")
                 .contentType(MediaType.APPLICATION_XML)
                 .content("<xml />")
                 .with(jwt().authorities(federalSubmissionScope)))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isUnprocessableEntity());
   }
 
   @Test
-  void prodRtmOnlyModeShouldRejectFederalValidationWithoutNexcolScope() throws Exception {
+  void shouldRejectFederalValidationWithoutNexcolScope() throws Exception {
     mockMvc
         .perform(
             post("/api/lexis/federal/submissions/validation")
@@ -163,7 +167,7 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
   }
 
   @Test
-  void prodRtmOnlyModeShouldExposeRtmAmvTableAndRequiredSupportApisToAdmins()
+  void shouldKeepRtmAmvAndNormalAdministratorCapabilitiesAvailable()
       throws Exception {
     SimpleGrantedAuthority admin = new SimpleGrantedAuthority("LEXIS_ADMIN");
     String nextMonth =
@@ -172,9 +176,11 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
     mockMvc
         .perform(get("/api/lexis/session/capabilities").with(jwt().authorities(admin)))
         .andExpect(status().isOk())
-        .andExpect(jsonPath("$.grantedActions").isArray())
-        .andExpect(jsonPath("$.grantedActions.length()").value(1))
-        .andExpect(jsonPath("$.grantedActions[0]").value("/lexisAgentAdmin"));
+        .andExpect(
+            jsonPath("$.grantedActions")
+                .value(hasItems(
+                    "/lexisAgentAdmin", "/applicationSearch", "/exemptionSearch", "/permitDetails",
+                    "/federalApplicationSearch", "/lexisPolicyAdmin", "/applicationReport")));
 
     mockMvc
         .perform(get("/api/lexis/rtm/emslogamv").with(jwt().authorities(admin)))
@@ -238,11 +244,38 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
 
     mockMvc
         .perform(get("/api/lexis/applications/search").with(jwt().authorities(admin)))
-        .andExpect(status().isForbidden());
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+    "/api/lexis/applications/search",
+    "/api/lexis/exemptions/search",
+    "/api/lexis/permits/search",
+    "/api/lexis/federal/applications/search",
+    "/api/lexis/admin/policies/fee",
+    "/api/lexis/admin/notifications"
+  })
+  void shouldKeepModuleReadsAvailableToAdministrators(String path) throws Exception {
+    mockMvc
+        .perform(get(path).with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_ADMIN"))))
+        .andExpect(status().is2xxSuccessful());
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "LEXIS_APPLICATION_APPROVER, /api/lexis/applications/search",
+    "LEXIS_EXEMPTION_APPROVER, /api/lexis/exemptions/search",
+    "LEXIS_PROVINCIAL_SUBMITTER_00012345, /api/lexis/applications/search"
+  })
+  void shouldKeepApproverAndSubmitterReadsAvailable(String role, String path) throws Exception {
+    mockMvc
+        .perform(get(path).with(jwt().authorities(new SimpleGrantedAuthority(role))))
+        .andExpect(status().is2xxSuccessful());
   }
 
   @Test
-  void prodRtmOnlyModeShouldPreserveNormalReadOnlyAccess() throws Exception {
+  void shouldPreserveNormalReadOnlyAccessAndDenyMutations() throws Exception {
     SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
 
     mockMvc
@@ -285,25 +318,32 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
   }
 
   @Test
-  void prodRtmOnlyModeShouldRejectOtherRolesAndKeepAdminPrecedence() throws Exception {
+  void shouldKeepApproverReadsAndWritesAndCombinedAdministratorAccess() throws Exception {
     SimpleGrantedAuthority admin = new SimpleGrantedAuthority("LEXIS_ADMIN");
     SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
     SimpleGrantedAuthority approver = new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER");
 
     mockMvc
         .perform(get("/api/lexis/applications/search").with(jwt().authorities(approver)))
-        .andExpect(status().isForbidden());
+        .andExpect(status().is2xxSuccessful());
+    mockMvc
+        .perform(
+            post("/api/lexis/exemptionDetailsRPC")
+                .param("actionMapping", "addExemption")
+                .param("exemptionNumber", "EX-100")
+                .with(jwt().authorities(approver)))
+        .andExpect(status().isNoContent());
     mockMvc
         .perform(
             get("/api/lexis/applications/search").with(jwt().authorities(admin, readOnly)))
-        .andExpect(status().isForbidden());
+        .andExpect(status().is2xxSuccessful());
     mockMvc
         .perform(get("/api/lexis/rtm/emslogamv").with(jwt().authorities(admin, readOnly)))
         .andExpect(status().isOk());
   }
 
   @Test
-  void prodRtmOnlyModeShouldExposeOnlyCapabilitiesToAuthenticatedNoRoleUsers()
+  void shouldExposeOnlyCapabilitiesToAuthenticatedNoRoleUsers()
       throws Exception {
     SimpleGrantedAuthority noLexisRole = new SimpleGrantedAuthority("SCOPE_openid");
 
@@ -330,7 +370,7 @@ class LexisProdRtmOnlyAuthorizationIntegrationTest {
   }
 
   @Test
-  void prodRtmOnlyModeShouldRejectRtmForNonAdminRoles() throws Exception {
+  void shouldRejectRtmForNonAdminRoles() throws Exception {
     SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
 
     mockMvc

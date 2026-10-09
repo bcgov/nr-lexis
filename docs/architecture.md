@@ -65,15 +65,17 @@ backend validates it against the client-scoped FAM authorities before enforcing 
 protected object, child resource, download, and mutation. The frontend treats its route and action
 guards as user experience controls rather than the security boundary.
 
-Application Approver, Exemption Approver and Read Only can also be granted per Natural Resource
-Region through separate FAM roles that require a region selection:
-`LEXIS_APPLICATION_APPROVER_REGION`, `LEXIS_EXEMPTION_APPROVER_REGION` and
-`LEXIS_READ_ONLY_REGION` (created in DEV, TEST and PROD). A role without a region is
-province-wide; a regional grant such as `LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO` carries
+Application Approver, Exemption Approver and Read Only are granted per Natural Resource Region
+through the region-scoped FAM roles `LEXIS_APPLICATION_APPROVER_REGION`,
+`LEXIS_EXEMPTION_APPROVER_REGION` and `LEXIS_READ_ONLY_REGION`, displayed as Application Approver,
+Exemption Approver and Read Only. The unscoped roles `LEXIS_APPLICATION_APPROVER`,
+`LEXIS_EXEMPTION_APPROVER` and `LEXIS_READ_ONLY` are not valid and give no access. Administrator is
+province-wide. A regional grant such as `LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO` carries
 the same actions for records in its regions only (organization units 1903-1910). Each grant keeps
 its own regions, and record checks apply the regions of both the surface and the action the route
-authorized, so province-wide Read Only plus Cariboo Application Approver reads everywhere but
-writes only in Cariboo. Writing or approving a multi-region record requires every region, including
+authorized, so Read Only assigned all eight regions plus Cariboo Application Approver reads
+across the current regions but writes only in Cariboo. Writing or approving a multi-region record
+requires every region, including
 creating an application under an exemption, linking or unlinking an exemption's applications,
 removing its documents and sending its approval emails. Activating an exemption through a save or create is an approval, so it needs the regions of
 the user's Exemption Approver grants rather than those of the route's save or create action.
@@ -88,31 +90,31 @@ Business BCeID roles are never regional. Session capabilities list each region-l
 records outside them; out-of-region federal applications open read-only and offers are not
 editable.
 
+Default zone preferences are offered to Administrators and staff whose every granted search covers
+all eight current regions. For other regional staff, searches use their assigned regions without a
+saved zone preference. Selecting all eight never grants access to retired regions or records
+without a current region.
+
 ### Mixed grants
 
-In practice each user holds one LEXIS role. These rules are defensive: if someone is accidentally
-given several staff roles, some province-wide and some regional, the combination never reaches beyond
-what each grant allows on its own. Each grant carries its own reach:
+Application Approver and Exemption Approver cannot be held together, in any regions, including
+alongside Administrator. The check counts every form of both roles, including the invalid unscoped
+ones. Interactive token conversion removes all application authorities from such an account. Its capabilities response contains no roles or actions and includes
+`accessDeniedReason: INCOMPATIBLE_APPROVER_ROLES`, so the signed-in user sees the no-access page
+with a general instruction to contact their administrator, who removes one of the roles in FAM.
+Business and administration API routes remain forbidden until a new token has a compatible
+assignment.
 
-- The same role granted both without and with a region reaches only its regions (least
-  privilege): a regional grant always narrows its role, so making someone province-wide means
-  removing their regional grant of that role.
-- A province-wide grant widens only the actions that role itself holds. Province-wide Read Only
-  plus Cariboo Application Approver reads everywhere but writes only in Cariboo; province-wide
-  Read Only plus a regional Exemption Approver can read everything and approve exemptions only in
-  the approver's regions.
-- Capabilities tied to a role rather than an action stay within the regions where the user holds
-  that role, even when another province-wide role holds the route's action. Linking applications
-  to exemptions is an Application Approver capability, so province-wide Exemption Approver plus
-  Cariboo Application Approver links only Cariboo applications to exemptions wholly in Cariboo.
-  Seeing Blanket OIC exemptions and searching non-Ministerial ones belongs to Application Approver
-  and Read Only, never a pure Exemption Approver, so the same user sees Ministerial exemptions
-  everywhere but the other types only in Cariboo.
+Read Only may accompany one approver role. Each grant retains its own regions: Read Only
+assigned all eight can read current-region records while Cariboo Application Approver writes
+only in Cariboo. Capabilities tied to a role also stay within that role's regions. For example,
+Read Only in Cariboo plus Exemption Approver in Skeena sees Ministerial exemptions in both,
+approves only in Skeena, and sees other exemption types only in Cariboo. Multiple regional
+grants for the same role combine.
 
 Legacy LEXIS offers no precedent: WebADE gave each user one set of organizations that limited the
 search lists of every non-administrator role alike, and detail pages and actions never checked
-region. The per-grant model is a modern assumption agreed for the FAM regional roles; revisit it
-if FAM assignments need a different combination.
+region. The per-grant model applies to the accepted FAM regional roles.
 
 ### Interactive sign-in
 
@@ -123,7 +125,7 @@ sequenceDiagram
     participant S as BC Gov SSO (Keycloak)
     participant I as IDIR / Business BCeID
     participant B as LEXIS API
-    F->>S: Grant client roles, optionally per region
+    F->>S: Grant roles with staff regions or submitter forest clients
     U->>S: Authorization request with PKCE and kc_idp_hint
     S->>I: Federated sign-in
     I-->>S: Authenticated identity
@@ -342,36 +344,68 @@ action (v4.2.2 or later) keeps rendered templates, which include Secret values, 
 logs; don't pin an older version or print rendered templates from other steps.
 
 Pull requests deploy an isolated DEV preview after their required builds and tests pass. A merge to
-`main` deploys the accepted images to the persistent TEST environment, runs the smoke suite, and then
-deploys and promotes the same images to PROD. The PROD GitHub Environment remains the operational
-gate; do not merge a deployment-enabling change until production readiness is approved.
+`main` deploys the accepted images to TEST and runs the smoke suite. PROD deployment requires a
+user to run **Release PROD** from `main` with an existing Git tag. Merges and tag creation do not
+start PROD deployments. The PROD GitHub Environment must allow deployments from the `main`
+branch, because the release tag is an input to that workflow.
 
 ### Image promotion model
 
-LEXIS intentionally follows the
-[BC Gov quickstart-openshift](https://github.com/bcgov/quickstart-openshift) build-once/promote
-model. The pull-request workflow builds frontend and backend images and applies the PR number as a
-mutable image tag. After merge, `.github/workflows/merge.yml` resolves that PR number, deploys the
-same images through TEST and PROD, and then promotes them with the `prod` tag. It does not rebuild
-images from the merged `main` commit SHA.
+LEXIS follows the [BC Gov quickstart-openshift](https://github.com/bcgov/quickstart-openshift)
+build-once/promote model. Pull requests build frontend and backend images with PR-number tags.
+The Merge workflow resolves those tags to immutable digests before deploying TEST. After the
+smoke suite passes, it records the commit and exact image pair in a release-candidate artifact.
+Release PROD requires a tag on a commit in `main`, a successful Merge run for that commit, and its
+matching release-candidate artifact. It deploys the recorded digests and the tagged commit's
+OpenShift templates. It does not rebuild images or resolve the mutable PR tags again.
 
-This model has an accepted provenance risk: if multiple PRs were built from the same earlier `main`
-and are then merged in sequence, a later PR image can omit changes from an earlier merge and can
-temporarily roll those changes back when deployed. A previously green PR is therefore not sufficient
-merge evidence after `main` advances.
+PR images are built before merge. Before merging another application PR after `main` changes,
+synchronize the branch with `main`, wait for its checks, and confirm that both images include the
+current baseline. Otherwise a later PR image can omit earlier merged changes. Digest pinning
+preserves the tested images; it does not remove this build-baseline requirement.
 
-Before merging another application PR after `main` changes:
+To release:
 
-1. Synchronize the PR branch with current `main`.
-2. Wait for the resulting PR workflow and required checks to complete.
-3. Confirm its PR-numbered frontend and backend images were rebuilt or deliberately recycled from
-   the current baseline; do not rely on images produced before the synchronization.
-4. Let the preceding merge workflow finish TEST, PROD, and image promotion before merging the next
-   release PR.
+1. Wait for the candidate commit's Merge workflow, including TEST smoke tests, to succeed.
+2. Create a Git tag on that exact commit, for example `v1.0.0`.
+3. In GitHub Actions, choose **Release PROD**, **Run workflow**, branch **main**, and enter the tag.
+4. Complete any configured PROD environment approval and verify the deployment and both login
+   providers at the vanity URL.
 
-If those checks cannot be established, stop and rebuild the candidate images. Building and promoting
-images from the immutable merged `main` SHA would remove this risk, but that is a separate,
-template-level CI change rather than part of the current LEXIS delivery model.
+If a Merge run fails, use **Re-run all jobs** to redeploy and retest its images. Partial reruns
+cannot publish a release candidate because TEST may have advanced to another commit.
+
+Release manifests are retained for 90 days. A missing, expired, or mismatched manifest stops the
+release. A rollback uses the same
+manual workflow with a retained, previously tested tag. An older tag deploys its own templates
+through the current workflow, which ignores parameters those templates don't declare; a template
+or required parameter the current workflow no longer supplies stops the release. The release
+summary identifies the TEST run, commit, and deployed image digests. Production releases are
+serialized.
+
+The GitHub environment variable `LEXIS_EXPIRY_ENABLED` controls only the exemption-expiry job,
+including startup catch-up, and has no effect on pages, roles, APIs, or manual writes. A change
+takes effect on the next deployment. The variable is resolved inside the deployment job's
+environment and must be exactly `true` or `false`; invalid values stop the deployment before
+provisioning or rollout. An unset variable uses the caller's `expiry_enabled` default: PROD and DEV
+disabled, TEST enabled. Keep this variable environment-specific.
+
+### Interactive production authentication
+
+Backend and frontend receive the same GitHub PROD environment variables, `LEXIS_OIDC_ISSUER_URI`
+and `LEXIS_OIDC_CLIENT_ID`. The browser uses provider hints `azureidir` and `bceidbusiness` by
+default; optional overrides are `LEXIS_OIDC_IDIR_HINT` and `LEXIS_OIDC_BCEID_HINT`.
+The browser uses authorization code with PKCE and does not need a client secret. A replacement
+client or realm requires updating both shared variables to match its registration.
+
+The registered browser client must allow the PROD vanity origin, its `/authCallback` redirect, and
+its root URL for post-logout redirect. Business BCeID logout defaults to the production SiteMinder
+endpoint; `LEXIS_OIDC_SITEMINDER_LOGOUT_URL` can override it. FAM must grant users the production
+LEXIS roles, including forest-client scopes where required.
+
+The `KEYCLOAK_ISSUER_URI`, `NEXCOL_KEYCLOAK_CLIENT_ID`, `keycloak_sa_client_id`, and
+`keycloak_sa_client_secret` settings belong to the separate machine-client provisioning path.
+They are not browser BCeID credentials.
 
 ### PROD vanity route
 

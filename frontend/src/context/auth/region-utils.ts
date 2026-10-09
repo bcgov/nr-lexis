@@ -1,4 +1,6 @@
 import type { LexisSessionCapabilities } from '@/interfaces/LexisSession'
+import { hasProvincialStaffRole, hasRole } from '@/context/auth/role-utils'
+import { NATURAL_RESOURCE_REGION_CODES } from '@/constants/regions'
 
 /** A record's organization units, as detail pages hold them. */
 export type RecordOrgUnits =
@@ -31,8 +33,8 @@ export const normalizeActionRegions = (value: unknown): Record<string, string[]>
 }
 
 /**
- * The regions a user may use for any of these actions, or null when one of them is
- * province-wide. A role with no region is province-wide, so only regional grants restrict.
+ * The regions a user may use for any of these actions, or null when one of them has no region
+ * limit. Administrator and non-staff actions have none; staff actions list their granted regions.
  */
 export const allowedRegions = (
   capabilities:
@@ -58,6 +60,38 @@ export const allowedRegions = (
     limited.forEach((region) => regions.add(region))
   }
   return regions
+}
+
+const ZONE_PREFERENCE_SEARCH_ACTIONS = [
+  '/applicationSearch',
+  '/applicationsReview',
+  '/exemptionSearch',
+  '/offersSearch',
+  '/permitSearch',
+]
+
+/** Zone preferences suit Administrators and staff whose every granted search covers all eight regions. */
+export const canUseDefaultRegionPreference = (capabilities: LexisSessionCapabilities): boolean => {
+  if (hasRole(capabilities.roles, 'ADMIN')) {
+    return true
+  }
+  if (!hasProvincialStaffRole(capabilities.roles)) {
+    return false
+  }
+  const granted = new Set(capabilities.grantedActions.map(normalizeAction))
+  const searches = ZONE_PREFERENCE_SEARCH_ACTIONS.filter((action) =>
+    granted.has(normalizeAction(action)),
+  )
+  return (
+    searches.length > 0 &&
+    searches.every((action) => {
+      const regions = allowedRegions(capabilities, action)
+      return (
+        regions !== null &&
+        Array.from(NATURAL_RESOURCE_REGION_CODES).every((region) => regions.has(region))
+      )
+    })
+  )
 }
 
 /** Every organization unit of the record must be allowed; a record without one is outside. */

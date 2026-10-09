@@ -1153,7 +1153,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument()
   })
 
-  it('shows the Figma Blanket OIC permit volume totals', async () => {
+  it('omits placeholder totals and their lookup for Blanket OIC permits', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue({
       ...exemptionDetail,
       exemptionTypeCode: 'B',
@@ -1173,12 +1173,16 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Permits')
-    const totals = await screen.findByLabelText('Blanket OIC permit volume totals')
-    expect(within(totals).queryByText('Requested permit volume (m³)')).not.toBeInTheDocument()
-    expect(within(totals).queryByText('500.0')).not.toBeInTheDocument()
-    expect(within(totals).getByText('Sum of completed permits (m³)')).toBeInTheDocument()
-    expect(within(totals).getByText('125.5')).toBeInTheDocument()
-    expect(mockedFetchExemptionBlanketOicTotals).toHaveBeenCalledWith('EX-777')
+    expect(await screen.findByText('P1 (Pending)')).toBeInTheDocument()
+    const permits = within(screen.getByRole('tabpanel'))
+    expect(permits.getByRole('heading', { name: 'Permits' })).toBeInTheDocument()
+    expect(permits.queryByRole('heading', { name: 'Exemption details' })).not.toBeInTheDocument()
+    expect(permits.queryByLabelText('Blanket OIC permit volume totals')).not.toBeInTheDocument()
+    expect(permits.queryByText('Approved volume (m³)')).not.toBeInTheDocument()
+    expect(permits.queryByText('Sum of completed permits (m³)')).not.toBeInTheDocument()
+    expect(permits.queryByText('Balance remaining (m³)')).not.toBeInTheDocument()
+    expect(permits.queryByText('Blanket OIC totals unavailable')).not.toBeInTheDocument()
+    expect(mockedFetchExemptionBlanketOicTotals).not.toHaveBeenCalled()
   })
 
   it('keeps application and fee eligibility unavailable when associated applications fail', async () => {
@@ -1682,9 +1686,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
         }),
       )
     })
-    expect(await screen.findByText('Document saved.')).toBeInTheDocument()
+    expect(await screen.findByText('1 document saved.')).toBeInTheDocument()
     expect(
-      within(screen.getByRole('tabpanel', { name: 'Documents' })).getByText('Document saved.'),
+      within(screen.getByRole('tabpanel', { name: 'Documents' })).getByText('1 document saved.'),
     ).toBeInTheDocument()
     expect(screen.queryByText('Exemption upload persisted.')).not.toBeInTheDocument()
     expect(screen.queryByRole('complementary', { name: 'Add documents' })).not.toBeInTheDocument()
@@ -3078,7 +3082,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
     await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
 
-    expect(await within(documentsSection).findByText('Document saved.')).toBeInTheDocument()
+    expect(await within(documentsSection).findByText('1 document saved.')).toBeInTheDocument()
     expect(screen.queryByText('Document deleted.')).not.toBeInTheDocument()
     expect(screen.queryByText('Upload submitted')).not.toBeInTheDocument()
     expect(document.querySelectorAll('.app-inline-notification')).toHaveLength(1)
