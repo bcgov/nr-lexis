@@ -563,7 +563,7 @@ const expectLoginShell = async (page: Page, source: string): Promise<void> => {
   await expect(
     page.getByText('Manage provincial log applications for exemptions, offers and permits.'),
   ).toBeVisible()
-  await expect(page.getByAltText('Government of British Columbia')).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Government of British Columbia' })).toBeVisible()
   const supportingImage = page.locator('.landing-img')
   await expect(supportingImage).toBeVisible()
   await expect(supportingImage).toHaveAttribute('alt', '')
