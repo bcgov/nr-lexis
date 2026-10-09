@@ -359,10 +359,10 @@ Release PROD requires a tag on a commit in `main`, a successful Merge run for th
 matching release-candidate artifact. It deploys the recorded digests and the tagged commit's
 OpenShift templates. It does not rebuild images or resolve the mutable PR tags again.
 
-PR images are still built before merge. Before merging another application PR after `main`
-changes, synchronize the branch with `main`, wait for its checks, and confirm that both images
-include the current baseline. Otherwise a later PR image can omit earlier merged changes. Digest
-pinning preserves the tested images; it does not remove this existing build-baseline requirement.
+PR images are built before merge. Before merging another application PR after `main` changes,
+synchronize the branch with `main`, wait for its checks, and confirm that both images include the
+current baseline. Otherwise a later PR image can omit earlier merged changes. Digest pinning
+preserves the tested images; it does not remove this build-baseline requirement.
 
 To release:
 
@@ -376,43 +376,36 @@ If a Merge run fails, use **Re-run all jobs** to redeploy and retest its images.
 cannot publish a release candidate because TEST may have advanced to another commit.
 
 Release manifests are retained for 90 days. A missing, expired, or mismatched manifest stops the
-release; tags from before this workflow cannot be released through it. A rollback uses the same
+release. A rollback uses the same
 manual workflow with a retained, previously tested tag. An older tag deploys its own templates
 through the current workflow, which ignores parameters those templates don't declare; a template
 or required parameter the current workflow no longer supplies stops the release. The release
 summary identifies the TEST run, commit, and deployed image digests. Production releases are
 serialized.
 
-The GitHub environment variable `LEXIS_EXPIRY_ENABLED` controls only the modern exemption-expiry
-job, including startup catch-up. Set it to `false` in PROD while legacy owns expiry. Set it to `true`
-and redeploy to enable both triggers after the legacy expiry job has stopped. The variable is resolved
-inside the deployment job's environment and must be exactly `true` or `false`; invalid values stop
-the deployment before provisioning or rollout. An unset variable uses the caller's `expiry_enabled`
-default: PROD and DEV disabled, TEST enabled. Keep this variable environment-specific.
-
-This flag replaces the former `LEXIS_PROD_RTM_ONLY` secret and has no effect on pages, roles, APIs,
-or manual writes. The frontend flag `VITE_LEXIS_PROD_RTM_ONLY` is retired. Keep the old secret until
-the previous build is no longer needed for rollback; the new workflow does not consume it.
+The GitHub environment variable `LEXIS_EXPIRY_ENABLED` controls only the exemption-expiry job,
+including startup catch-up, and has no effect on pages, roles, APIs, or manual writes. A change
+takes effect on the next deployment. The variable is resolved inside the deployment job's
+environment and must be exactly `true` or `false`; invalid values stop the deployment before
+provisioning or rollout. An unset variable uses the caller's `expiry_enabled` default: PROD and DEV
+disabled, TEST enabled. Keep this variable environment-specific.
 
 ### Interactive production authentication
 
 Backend and frontend receive the same GitHub PROD environment variables, `LEXIS_OIDC_ISSUER_URI`
 and `LEXIS_OIDC_CLIENT_ID`. The browser uses provider hints `azureidir` and `bceidbusiness` by
 default; optional overrides are `LEXIS_OIDC_IDIR_HINT` and `LEXIS_OIDC_BCEID_HINT`.
-The browser uses authorization code with PKCE and does not need a client secret. Enabling Business
-BCeID on the existing SSO client does not require replacing these values. A replacement client or
-realm does require updating both shared variables to match its registration.
+The browser uses authorization code with PKCE and does not need a client secret. A replacement
+client or realm requires updating both shared variables to match its registration.
 
 The registered browser client must allow the PROD vanity origin, its `/authCallback` redirect, and
 its root URL for post-logout redirect. Business BCeID logout defaults to the production SiteMinder
 endpoint; `LEXIS_OIDC_SITEMINDER_LOGOUT_URL` can override it. FAM must grant users the production
-LEXIS roles, including forest-client scopes where required. IDIR and Business BCeID login, role
-access, and logout still require credentialed acceptance after deployment.
+LEXIS roles, including forest-client scopes where required.
 
 The `KEYCLOAK_ISSUER_URI`, `NEXCOL_KEYCLOAK_CLIENT_ID`, `keycloak_sa_client_id`, and
 `keycloak_sa_client_secret` settings belong to the separate machine-client provisioning path.
-They are not browser BCeID credentials. Old Cognito environment variables are unused by the new
-SSO build and can be removed after the production migration is verified.
+They are not browser BCeID credentials.
 
 ### PROD vanity route
 

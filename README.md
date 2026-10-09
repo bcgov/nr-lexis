@@ -167,13 +167,9 @@ from `main` and supply that tag. The workflow deploys the exact frontend/backend
 recorded by the successful TEST run. Merges and tag creation do not deploy PROD. See
 [the release procedure](docs/architecture.md#image-promotion-model) for prerequisites and rollback.
 
-The GitHub environment variable `LEXIS_EXPIRY_ENABLED` controls nightly expiry and startup catch-up
-independently of application access. Set it to `false` in PROD while legacy owns the job. To enable
-modern expiry after ownership transfers, set it to `true` and run a manual tagged release; no code
-change is required. If the variable is unset, PROD defaults to disabled. All modules use their normal
-role permissions; Application Approver, Exemption Approver and Read Only need regional FAM
-assignments. This variable replaces the former `lexis_prod_rtm_only` secret, which the new
-workflow no longer consumes.
+The GitHub environment variable `LEXIS_EXPIRY_ENABLED` turns nightly exemption expiry and its startup
+catch-up on (`true`) or off (`false`), independently of application access. A change takes effect on
+the next deployment. If the variable is unset, PROD and DEV default to off and TEST to on.
 
 ## Component docs
 

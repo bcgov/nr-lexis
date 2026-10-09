@@ -29,8 +29,8 @@ idempotent expiry service as the nightly trigger, so only a lock holder runs it 
 were already processed are harmlessly ignored. Lock contention or a failed startup reconciliation
 does not fail pod startup or claim the local run date, so another replica or a later trigger can
 retry. Setting `LEXIS_EXPIRY_ENABLED=false` removes the scheduler and its startup listener, so
-neither trigger can lock or mutate records. Keep it false while the legacy application remains
-responsible for expiry. This setting does not affect application modules or role-based access.
+neither trigger can lock or mutate records. This setting does not affect application modules or
+role-based access.
 
 ## Configuration
 
@@ -48,10 +48,8 @@ GitHub environment, validates it, and passes it to the backend. Changing the var
 on the next deployment; it does not change running pods immediately.
 
 If the variable is unset, the workflow uses its `expiry_enabled` input: PROD and DEV default to
-disabled, TEST to enabled. While legacy owns expiry, keep the PROD variable `false`. After legacy
-expiry stops, set it to `true` and run a manual tagged release without editing code. Missed exemptions
-remain eligible for startup catch-up and the next nightly run. This replaces the former RTM-only
-flag without restricting application access.
+disabled, TEST to enabled. Once expiry is enabled, missed exemptions are picked up by startup
+catch-up and the next nightly run.
 
 ## Operations
 

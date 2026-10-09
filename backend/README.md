@@ -68,7 +68,7 @@ OpenShift receives sensitive values from Secrets and ordinary settings from temp
 | `LEXIS_OIDC_JWK_SET_URI` | Optional signing-key endpoint override | `<issuer>/protocol/openid-connect/certs` |
 | `KEYCLOAK_ISSUER_URI` | Keycloak issuer URI for machine-to-machine NEXCOL service-client tokens; optional locally and required for TEST/PROD deployment | - |
 | `KEYCLOAK_JWK_SET_URI` | Optional override for Keycloak JWKS URI; defaults to `<KEYCLOAK_ISSUER_URI>/protocol/openid-connect/certs` when the issuer is set | - |
-| `LEXIS_EXPIRY_ENABLED` | Enables startup and daily exemption expiry independently of application access. Set false while legacy owns expiry or to stop the job. | true |
+| `LEXIS_EXPIRY_ENABLED` | Enables startup and daily exemption expiry independently of application access; false turns both off. | true |
 | `LEXIS_EXPIRY_CRON` | Spring six-field cron expression for the expiry scheduler | `30 0 0 * * *` |
 | `LEXIS_EXPIRY_ZONE` | Business time zone for the expiry scheduler | America/Vancouver |
 | `LEXIS_EXPIRY_LOCK_AT_MOST_FOR` | Maximum Oracle ShedLock duration; releases a crashed run | PT6H |
