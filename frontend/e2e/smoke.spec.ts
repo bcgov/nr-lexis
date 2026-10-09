@@ -32,7 +32,7 @@ test.describe('frontend smoke coverage', () => {
       page.getByRole('heading', { level: 2, name: 'Log Exemption Information System' }),
     ).toBeVisible()
     await expect(
-      page.getByText('LEXIS helps you create and manage applications and view offers and permits.'),
+      page.getByText('Manage provincial log applications for exemptions, offers and permits.'),
     ).toBeVisible()
     await expect(page.getByAltText('Government of British Columbia')).toBeVisible()
     const supportingImage = page.locator('.landing-img')
@@ -66,7 +66,7 @@ test.describe('frontend smoke coverage', () => {
     expect(layoutBounds.imageFollowsContent).toBe(true)
   })
 
-  test('matches the FSPTS desktop landing composition', async ({ page }) => {
+  test('lays out the desktop landing page', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/', {
       waitUntil: 'domcontentloaded',
@@ -77,58 +77,110 @@ test.describe('frontend smoke coverage', () => {
     const layout = await page.evaluate(() => {
       const content = document.querySelector('.landing-content-col')
       const image = document.querySelector('.landing-img-col')
-      const wrapper = document.querySelector('.landing-content-wrapper')
+      const textContent = document.querySelector('.landing-text-content')
       const title = document.querySelector('.landing-title')
       const subtitle = document.querySelector('.landing-subtitle')
       const description = document.querySelector('.landing-description')
       const primaryAction = document.querySelector('[data-testid="landing-button__idir"]')
+      const requestAccess = document.querySelector('.landing-request-access')
+      const requestAccessLink = document.querySelector('.landing-request-access__link')
+      const requestAccessNote = document.querySelector('.landing-request-access__note')
       if (!(content instanceof HTMLElement)) throw new Error('Landing content not found')
       if (!(image instanceof HTMLElement)) throw new Error('Landing image not found')
-      if (!(wrapper instanceof HTMLElement)) throw new Error('Landing wrapper not found')
+      if (!(textContent instanceof HTMLElement)) throw new Error('Landing text not found')
       if (!(title instanceof HTMLElement)) throw new Error('Landing title not found')
       if (!(subtitle instanceof HTMLElement)) throw new Error('Landing subtitle not found')
       if (!(description instanceof HTMLElement)) throw new Error('Landing description not found')
       if (!(primaryAction instanceof HTMLElement)) throw new Error('Landing action not found')
+      if (!(requestAccess instanceof HTMLElement)) throw new Error('Request access not found')
+      if (!(requestAccessLink instanceof HTMLElement)) throw new Error('Request link not found')
+      if (!(requestAccessNote instanceof HTMLElement)) throw new Error('Request note not found')
 
       const contentBounds = content.getBoundingClientRect()
       const imageBounds = image.getBoundingClientRect()
+      const textBounds = textContent.getBoundingClientRect()
       const titleBounds = title.getBoundingClientRect()
       const subtitleBounds = subtitle.getBoundingClientRect()
       const descriptionBounds = description.getBoundingClientRect()
       const actionBounds = primaryAction.getBoundingClientRect()
-      const contentStyle = getComputedStyle(content)
-      const wrapperStyle = getComputedStyle(wrapper)
-      const titleStyle = getComputedStyle(title)
-      const subtitleStyle = getComputedStyle(subtitle)
+      const requestAccessBounds = requestAccess.getBoundingClientRect()
+      const linkBounds = requestAccessLink.getBoundingClientRect()
+      const noteBounds = requestAccessNote.getBoundingClientRect()
 
       return {
         contentLeft: contentBounds.left,
         contentWidth: contentBounds.width,
         imageLeft: imageBounds.left,
         imageWidth: imageBounds.width,
-        contentPaddingLeft: contentStyle.paddingLeft,
-        wrapperGap: wrapperStyle.gap,
+        contentPaddingLeft: getComputedStyle(content).paddingLeft,
         titleSubtitleGap: subtitleBounds.top - titleBounds.bottom,
         subtitleDescriptionGap: descriptionBounds.top - subtitleBounds.bottom,
         descriptionActionGap: actionBounds.top - descriptionBounds.bottom,
-        titleColor: titleStyle.color,
-        subtitleColor: subtitleStyle.color,
+        actionRequestAccessGap: requestAccessBounds.top - actionBounds.bottom,
+        linkNoteGap: noteBounds.top - linkBounds.bottom,
+        actionHeight: actionBounds.height,
+        actionFontSize: getComputedStyle(primaryAction).fontSize,
+        textCentreOffset:
+          titleBounds.top - textBounds.top - (textBounds.bottom - requestAccessBounds.bottom),
+        titleColor: getComputedStyle(title).color,
+        subtitleColor: getComputedStyle(subtitle).color,
+        descriptionColor: getComputedStyle(description).color,
+        descriptionFontSize: getComputedStyle(description).fontSize,
+        noteColor: getComputedStyle(requestAccessNote).color,
+        linkTextDecoration: getComputedStyle(requestAccessLink).textDecorationLine,
       }
     })
 
     expect(layout.contentLeft).toBe(0)
-    expect(layout.contentWidth).toBe(720)
-    expect(layout.imageLeft).toBe(720)
-    expect(layout.imageWidth).toBe(720)
-    expect(layout.contentPaddingLeft).toBe('32px')
-    expect(layout.wrapperGap).toBe('96px')
-    expect(layout.titleSubtitleGap).toBe(96)
-    expect(layout.subtitleDescriptionGap).toBe(6)
-    expect(layout.descriptionActionGap).toBe(64)
-    expect(layout.subtitleColor).toBe(layout.titleColor)
+    expect(layout.contentWidth).toBe(900)
+    expect(layout.imageLeft).toBe(900)
+    expect(layout.imageWidth).toBe(540)
+    expect(layout.contentPaddingLeft).toBe('40px')
+    expect(layout.titleSubtitleGap).toBe(16)
+    expect(layout.subtitleDescriptionGap).toBe(40)
+    expect(layout.descriptionActionGap).toBe(40)
+    expect(layout.actionRequestAccessGap).toBe(40)
+    expect(layout.linkNoteGap).toBe(8)
+    expect(layout.actionHeight).toBe(40)
+    expect(layout.actionFontSize).toBe('14px')
+    expect(Math.abs(layout.textCentreOffset)).toBeLessThanOrEqual(1)
+    expect(layout.titleColor).toBe('rgb(19, 19, 21)')
+    expect(layout.subtitleColor).toBe('rgb(96, 96, 98)')
+    expect(layout.descriptionColor).toBe('rgb(96, 96, 98)')
+    expect(layout.descriptionFontSize).toBe('20px')
+    expect(layout.noteColor).toBe('rgb(96, 96, 98)')
+    expect(layout.linkTextDecoration).toBe('underline')
   })
 
-  test('keeps the session-expiry notice in the FSPTS landing rhythm', async ({ page }) => {
+  test('opens the request access dialog from the landing link', async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 })
+    await gotoSyntheticRoute(page, '/', {
+      waitUntil: 'domcontentloaded',
+      ready: page.getByRole('heading', { level: 1, name: 'LEXIS', exact: true }),
+    })
+
+    const requestAccess = page.getByRole('button', { name: 'Request access to LEXIS' })
+    await expect(page.getByText('An active Business BCeID account is required.')).toBeVisible()
+    await requestAccess.click()
+
+    const dialog = page.getByRole('dialog', { name: 'Request access to LEXIS' })
+    await expect(dialog).toBeVisible()
+    await expect(dialog.getByRole('heading', { level: 3 })).toHaveText([
+      'Where to send your request',
+      'What to include',
+    ])
+    await expect(
+      dialog.getByRole('link', { name: 'Provincial.Log.Export.Analyst@gov.bc.ca' }),
+    ).toBeFocused()
+    await expect(dialog.getByRole('link')).toHaveCount(3)
+    await expect(dialog.getByRole('button', { name: 'Close' })).toBeVisible()
+
+    await page.keyboard.press('Escape')
+    await expect(dialog).toBeHidden()
+    await expect(requestAccess).toBeFocused()
+  })
+
+  test('keeps the session-expiry notice in the landing rhythm', async ({ page }) => {
     await page.addInitScript(() => {
       window.sessionStorage.setItem('lexis.session-expired-login-notice', 'true')
     })
@@ -161,8 +213,8 @@ test.describe('frontend smoke coverage', () => {
     })
 
     expect(layout.notificationMarginTop).toBe('0px')
-    expect(layout.descriptionNotificationGap).toBe(96)
-    expect(layout.notificationActionGap).toBe(64)
+    expect(layout.descriptionNotificationGap).toBe(40)
+    expect(layout.notificationActionGap).toBe(40)
 
     await page.getByRole('button', { name: /close notification/i }).click()
     await expect(notice).toBeHidden()
