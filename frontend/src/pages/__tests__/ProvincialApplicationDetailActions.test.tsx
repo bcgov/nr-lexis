@@ -1325,11 +1325,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     await selectApplicationDetailTab('Applicant')
     expect(await screen.findByText('Owner Forestry Ltd. · 00011122')).toBeInTheDocument()
-    expect(screen.getByText('owner@example.test')).toBeInTheDocument()
+    expect(await screen.findByText('owner@example.test')).toBeInTheDocument()
 
     await selectApplicationDetailTab('Applicant')
     expect(screen.getByText('Agent Export Services · 00033344')).toBeInTheDocument()
-    expect(within(getAgentDetailsTile()).getByText('agent@example.test')).toBeInTheDocument()
+    expect(await within(getAgentDetailsTile()).findByText('agent@example.test')).toBeInTheDocument()
 
     await selectApplicationSummaryTile()
     const summaryControls = within(await waitFor(() => getApplicationSummaryTile()))
