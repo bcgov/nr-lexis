@@ -2356,7 +2356,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await selectApplicationDetailTab('Scale')
-    await userEvent.click(screen.getByRole('button', { name: 'Delete package' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete package' }))
     const confirmation = await screen.findByRole('dialog', { name: 'Delete package' })
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 

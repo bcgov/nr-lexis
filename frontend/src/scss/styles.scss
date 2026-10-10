@@ -451,6 +451,8 @@ body {
 }
 
 .csp-side-nav {
+  display: flex;
+  flex-direction: column;
   position: fixed;
   inset-block: var(--csp-header-height) 0;
   inset-inline-start: 0;
@@ -474,10 +476,17 @@ body {
   list-style: none;
 }
 
+.csp-side-nav__navigation {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  min-block-size: 0;
+}
+
 // The list scrolls independently; Carbon auto-aligned tooltips use fixed positioning
 // so they can extend outside this clipping area without disabling vertical scrolling.
 .csp-side-nav .csp-side-nav__items {
-  block-size: 100%;
+  flex: 1 1 auto;
   min-block-size: 0;
   overflow-x: hidden;
   overflow-y: auto;
@@ -510,8 +519,10 @@ button.csp-side-nav__group.cds--side-nav__submenu {
   white-space: nowrap;
 }
 
-.csp-side-nav__link.cds--side-nav__link--nested {
-  padding-left: 32px;
+// Carbon sizes group items at 32px; every LEXIS navigation row is 48px.
+.csp-side-nav .cds--side-nav__menu a.cds--side-nav__link {
+  block-size: 48px;
+  min-block-size: 48px;
 }
 
 .csp-side-nav__link:hover,
@@ -558,8 +569,10 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   fill: currentcolor;
 }
 
+// Labels start 56px in, where Carbon's own icon and gap put them, so its group-item indent
+// places item labels 16px past the group label.
 .csp-side-nav .csp-side-nav__icon:not(.cds--side-nav__submenu-chevron) {
-  margin-inline-end: 16px;
+  margin-inline-end: 20px;
 }
 
 .csp-side-nav .cds--side-nav__menu[hidden] {
@@ -610,6 +623,37 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
 
 .csp-side-nav.is-collapsed .csp-side-nav__link-text,
 .csp-side-nav.is-collapsed .cds--side-nav__submenu-chevron {
+  display: none;
+}
+
+.csp-side-nav__utility {
+  flex: 0 0 auto;
+  padding-block-end: 8px;
+}
+
+.csp-side-nav__utility::before {
+  display: block;
+  margin: 8px 16px;
+  block-size: 1px;
+  background-color: var(--csp-border-subtle-01);
+  content: '';
+}
+
+// Carbon's 16px divider inset leaves almost no line in the 48px rail.
+.csp-side-nav.is-collapsed .csp-side-nav__utility::before {
+  margin-inline: 8px;
+}
+
+.csp-side-nav__utility-heading {
+  @include carbon-type.type-style('label-01');
+
+  margin: 0;
+  padding: 4px 16px 0;
+  color: var(--csp-text-secondary);
+  white-space: nowrap;
+}
+
+.csp-side-nav.is-collapsed .csp-side-nav__utility-heading {
   display: none;
 }
 
@@ -891,11 +935,11 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   display: none;
 }
 
-.app-shell a:not(.csp-side-nav__link):not(.cds--btn):not(.csp-header-name) {
+.app-shell a:not(.cds--side-nav__link):not(.cds--btn):not(.csp-header-name) {
   color: var(--csp-link-primary);
 }
 
-.app-shell a:not(.csp-side-nav__link):not(.cds--btn):not(.csp-header-name):hover {
+.app-shell a:not(.cds--side-nav__link):not(.cds--btn):not(.csp-header-name):hover {
   color: var(--csp-link-hover);
 }
 
@@ -1276,40 +1320,73 @@ $notification-types: 'error', 'info', 'success', 'warning';
   object-position: center;
 }
 
-// Match the FSPTS public entry composition: equal desktop columns, a compact
-// content inset, and one consistent vertical rhythm between the logo, product
-// name, full system name, notices, and login actions.
+// The logo sits at the top of the content column; the text and actions are centred in the
+// space below it with 40px between blocks.
+.login-landing,
+.landing-request-access-dialog {
+  --cds-button-primary: var(--csp-button-primary);
+  --cds-button-primary-hover: var(--csp-button-primary-hover);
+  --cds-button-primary-active: var(--csp-button-primary-active);
+  --cds-button-tertiary: var(--csp-interactive);
+  --cds-button-tertiary-hover: var(--csp-interactive-hover);
+  --cds-button-tertiary-active: var(--csp-interactive-active);
+  --cds-link-primary: var(--csp-link-primary);
+  --cds-link-primary-hover: var(--csp-link-hover);
+  --cds-focus: var(--csp-focus);
+}
+
+.login-landing .landing-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@media (min-width: 1056px) {
+  .login-landing .landing-grid {
+    grid-template-columns: minmax(0, 945fr) minmax(0, 633fr);
+    column-gap: 6px;
+  }
+}
+
+.login-landing .landing-logo {
+  width: 10rem;
+  height: 2.875rem;
+}
+
 .login-landing .landing-content-col {
+  align-items: stretch;
   margin: 0;
-  padding: 2rem;
-  padding-inline: 2rem;
+  padding: 2.5rem;
+  padding-inline: 2.5rem;
 }
 
 .login-landing .landing-content-wrapper {
   width: 100%;
-  gap: 6rem;
+  gap: 0;
 }
 
-.login-landing .landing-logo {
-  margin-block-start: 1.2rem;
+.landing-text-content {
+  display: flex;
+  flex: 1 0 auto;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2.5rem;
 }
 
 .login-landing .landing-title-group {
   display: flex;
   flex-direction: column;
-  gap: 0.375rem;
+  gap: 1rem;
   margin-top: 0;
 }
 
 .login-landing .landing-subtitle {
-  color: var(--csp-text-primary);
+  color: var(--csp-text-secondary);
 }
 
 .landing-description {
-  max-width: 36rem;
   margin: 0;
-  color: var(--csp-text-primary);
-  @include carbon-type.type-style('body-02');
+  color: var(--csp-text-secondary);
+  @include carbon-type.type-style('heading-03');
 }
 
 .login-landing .landing-session-expired-notification {
@@ -1326,7 +1403,71 @@ $notification-types: 'error', 'info', 'success', 'warning';
 .login-landing .landing-actions,
 .login-landing .landing-session-expired-notification + .landing-actions {
   gap: 1rem;
-  margin-block-start: -2rem;
+  margin-block-start: 0;
+}
+
+.login-landing .landing-actions .cds--btn {
+  min-block-size: 3rem;
+  font-size: 1rem;
+}
+
+.landing-request-access {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.landing-request-access__link {
+  background: none;
+  cursor: pointer;
+}
+
+.landing-request-access__note {
+  margin: 0;
+  color: var(--csp-text-secondary);
+  @include carbon-type.type-style('body-compact-02');
+}
+
+.landing-request-access-dialog .cds--modal-container {
+  inline-size: min(100%, 36.875rem);
+  min-block-size: min(25.375rem, 72vh);
+  border: 0;
+  box-shadow: 0 2px 6px rgb(0 0 0 / 30%);
+}
+
+.landing-request-access-dialog .cds--modal-header {
+  min-block-size: 4rem;
+  margin-block-end: 0;
+  padding-block-end: 1rem;
+}
+
+.landing-request-access-dialog .cds--modal-content {
+  padding-block: 0 2.5rem;
+}
+
+.landing-request-access-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  color: var(--csp-text-primary);
+}
+
+.landing-request-access-modal h3 {
+  margin: 0;
+  @include carbon-type.type-style('heading-compact-02');
+}
+
+.landing-request-access-modal p,
+.landing-request-access-modal li {
+  margin: 0;
+  @include carbon-type.type-style('body-compact-02');
+}
+
+.landing-request-access-modal ul {
+  margin: 0;
+  padding-inline-start: 1.5rem;
+  list-style: disc;
 }
 
 @media (max-width: 1055px) {
