@@ -17,11 +17,6 @@ type BackendFederalApplicationSearchResult = {
   status: string
   client: string
   reason: string
-  exemptionType?: string | null
-  exemptionNumber?: string | null
-  selectable?: boolean | null
-  showCheckbox?: boolean | null
-  locked?: boolean | null
   receivedDate: string
   listingDate: string
 }
@@ -49,30 +44,15 @@ const parseBackendResponse = (payload: unknown): FederalApplicationSearchRespons
   return parsePagedSearchResponse<
     BackendFederalApplicationSearchResult,
     FederalApplicationSearchResponse['content'][number]
-  >(payload, (row) => {
-    const hasExemptionNumber =
-      typeof row.exemptionNumber === 'string' && row.exemptionNumber.trim().length > 0
-    const eligibleForExemption =
-      Boolean(row.selectable ?? row.showCheckbox ?? false) && !hasExemptionNumber
-    // Only an explicit false from the authoritative backend snapshot means unlocked.
-    const locked = row.locked !== false
-
-    return {
-      applicationNumber: String(row.applicationNumber ?? ''),
-      federalApplicationNumber: row.federalApplicationNumber ?? '',
-      status: row.status ?? '',
-      clientNumber: row.client ?? '',
-      reason: row.reason ?? '',
-      exemptionType: row.exemptionType ?? '',
-      exemptionNumber: row.exemptionNumber ?? '',
-      receivedDate: row.receivedDate ?? '',
-      listingDate: row.listingDate ?? '',
-      packageNumber: '',
-      eligibleForExemption,
-      locked,
-      allowCreateExemption: eligibleForExemption && !locked,
-    }
-  })
+  >(payload, (row) => ({
+    applicationNumber: String(row.applicationNumber ?? ''),
+    federalApplicationNumber: row.federalApplicationNumber ?? '',
+    status: row.status ?? '',
+    clientNumber: row.client ?? '',
+    reason: row.reason ?? '',
+    receivedDate: row.receivedDate ?? '',
+    listingDate: row.listingDate ?? '',
+  }))
 }
 
 export const searchFederalApplications = async (

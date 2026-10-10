@@ -1853,7 +1853,6 @@ test.describe('TEST IDIR admin regression', () => {
       ['application', 'Application upload', 'Application number'],
       ['exemption', 'Exemption upload', 'Exemption number'],
       ['permit', 'Permit upload', 'Permit number'],
-      ['invoice', 'Invoice upload', 'Permit number'],
     ] as const) {
       await expectAccessiblePage(page, `/admin/uploads?type=${workflowType}`, /data upload/i)
       await expect.poll(() => new URL(page.url()).searchParams.get('type')).toBe(workflowType)
@@ -1862,31 +1861,18 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(page.getByRole('combobox', { name: targetLabel })).toBeVisible()
       await expect(page.getByRole('textbox', { name: /Document description/ })).toHaveCount(0)
       await expect(
-        page.getByRole('button', {
-          name:
-            workflowType === 'invoice'
-              ? 'Choose file for Upload documents'
-              : 'Choose files for Upload documents',
-        }),
+        page.getByRole('button', { name: 'Choose files for Upload documents' }),
       ).toBeEnabled()
-      if (workflowType === 'invoice') {
-        await expect(page.locator('input[type="file"]')).not.toHaveAttribute('multiple')
-      } else {
-        await expect(page.locator('input[type="file"]')).toHaveAttribute('multiple')
-      }
+      await expect(page.locator('input[type="file"]')).toHaveAttribute('multiple')
       await expect(page.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-
-      if (workflowType === 'invoice') {
-        for (const fieldLabel of [
-          'Invoice number',
-          'Export value (CAD)',
-          'Conversion rate',
-          'Fee in lieu',
-        ]) {
-          await expect(page.getByRole('textbox', { name: fieldLabel })).toBeVisible()
-        }
-      }
     }
+
+    await expectAccessiblePage(page, '/admin/uploads?type=invoice', /data upload/i)
+    await expect(
+      page.getByRole('heading', { name: 'Application upload', exact: true }),
+    ).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Invoice upload', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('textbox', { name: 'Invoice number' })).toHaveCount(0)
 
     expect(apiServerErrors).toEqual([])
   })

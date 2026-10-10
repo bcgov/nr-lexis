@@ -354,120 +354,8 @@ describe('Admin upload workflow smoke', () => {
     })
   })
 
-  it('rejects multiple invoice files dropped together before submission', () => {
-    mockUploadAccess('/fileInvoiceUpload')
-    renderPage(
-      '/admin/uploads?type=invoice&permitNumber=5001&salesInvoiceNumber=INV001&invoiceExportValue=100',
-    )
-    expect(screen.getByLabelText('Document File')).not.toHaveAttribute('multiple')
-    expect(screen.queryByText(/Multiple files can be queued/)).not.toBeInTheDocument()
-
-    fireEvent.drop(screen.getByRole('button', { name: 'Choose file for Upload documents' }), {
-      dataTransfer: {
-        files: [
-          new File(['first'], 'first.pdf', { type: 'application/pdf' }),
-          new File(['second'], 'second.pdf', { type: 'application/pdf' }),
-        ],
-      },
-    })
-
-    expect(screen.getByText('Choose one file per invoice.')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    expect(screen.queryByText('first.pdf')).not.toBeInTheDocument()
-    expect(screen.queryByText('second.pdf')).not.toBeInTheDocument()
-    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
-  })
-
-  it.each(['selection', 'drop'])(
-    'replaces the invoice file on a later %s and submits only the replacement',
-    async (selectionMethod) => {
-      mockUploadAccess('/fileInvoiceUpload')
-      renderPage(
-        '/admin/uploads?type=invoice&permitNumber=5001&salesInvoiceNumber=INV001&invoiceExportValue=100',
-      )
-      const firstFile = new File(['first'], 'first.pdf', { type: 'application/pdf' })
-      const replacementFile = new File(['replacement'], 'replacement.pdf', {
-        type: 'application/pdf',
-      })
-      await userEvent.upload(screen.getByLabelText('Document File'), firstFile)
-      if (selectionMethod === 'drop') {
-        fireEvent.drop(screen.getByRole('button', { name: 'Choose file for Upload documents' }), {
-          dataTransfer: { files: [replacementFile] },
-        })
-      } else {
-        await userEvent.upload(screen.getByLabelText('Document File'), replacementFile)
-      }
-      expect(screen.queryByText('first.pdf')).not.toBeInTheDocument()
-      expect(screen.getAllByText('replacement.pdf').length).toBeGreaterThan(0)
-      await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-      await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
-
-      await waitFor(() => expect(screen.getByText('Upload submitted')).toBeVisible())
-      expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1)
-      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
-        'invoice',
-        expect.objectContaining({
-          permitNumber: '5001',
-          salesInvoiceNumber: 'INV001',
-          file: replacementFile,
-        }),
-      )
-    },
-  )
-
-  it('searches permit numbers for invoice uploads', async () => {
-    mockUploadAccess('/fileInvoiceUpload')
-    mockedSearchProvincialPermitNumberOptions.mockResolvedValue([
-      {
-        value: '7000123',
-        label: '7000123 - Active - Owner 00001012 - Region RSC',
-        status: 'Active',
-        applicantClientNumber: '00001012',
-        ownerClientNumber: '00001012',
-        totalVolume: 25,
-        issueDate: '2026-06-10',
-        region: 'RSC',
-      },
-    ])
-
-    renderPage('/admin/uploads?type=invoice')
-
-    const permitNumberInput = screen.getByRole('combobox', {
-      name: 'Permit number',
-    })
-    await userEvent.type(permitNumberInput, '7000123')
-
-    await waitFor(() => {
-      expect(mockedSearchProvincialPermitNumberOptions).toHaveBeenLastCalledWith('7000123')
-    })
-
-    await userEvent.click(
-      await screen.findByRole('option', {
-        name: '7000123 - Active - Owner 00001012 - Region RSC',
-      }),
-    )
-
-    const file = new File(['invoice upload'], 'invoice.pdf', { type: 'application/pdf' })
-    await userEvent.upload(screen.getByLabelText('Document File'), file)
-    await userEvent.type(screen.getByLabelText('Invoice number'), 'INV123')
-    await userEvent.type(screen.getByLabelText('Export value (CAD)'), '1000')
-    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Submit upload' }))
-
-    await waitFor(() => {
-      expect(mockedSubmitAdminUpload).toHaveBeenCalledWith(
-        'invoice',
-        expect.objectContaining({
-          permitNumber: '7000123',
-          salesInvoiceNumber: 'INV123',
-          file,
-        }),
-      )
-    })
-  })
-
-  it('keeps the numeric permit value when the selected invoice target label is rendered', async () => {
-    mockUploadAccess('/fileInvoiceUpload')
+  it('keeps the numeric permit value when the selected permit target label is rendered', async () => {
+    mockUploadAccess('/filePermitUpload')
     const permitOption = {
       value: '7000123',
       label: '7000123 - Active - Owner 00001012 - Region RSC',
@@ -480,7 +368,7 @@ describe('Admin upload workflow smoke', () => {
     }
     mockedSearchProvincialPermitNumberOptions.mockResolvedValue([permitOption])
 
-    renderPage('/admin/uploads?type=invoice')
+    renderPage('/admin/uploads?type=permit')
 
     const permitNumberInput = screen.getByRole('combobox', {
       name: 'Permit number',
@@ -499,16 +387,33 @@ describe('Admin upload workflow smoke', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('blocks invoice workflow when upload action is not granted', () => {
-    mockUploadAccess(null)
+  it('offers no invoice upload in Data upload', async () => {
+    mockUploadAccess('/fileInvoiceUpload')
 
-    renderPage('/admin/uploads?type=invoice')
+    renderPage(
+      '/admin/uploads?type=invoice&permitNumber=5001&salesInvoiceNumber=INV001&invoiceExportValue=100',
+    )
 
+    expect(screen.getByRole('heading', { name: 'Application upload' })).toBeInTheDocument()
+    for (const label of [
+      'Invoice number',
+      'Export value (CAD)',
+      'Conversion rate',
+      'Fee in lieu',
+    ]) {
+      expect(screen.queryByLabelText(label)).not.toBeInTheDocument()
+    }
+
+    const uploadType = screen.getByRole('combobox', { name: 'Upload type' })
+    await userEvent.click(uploadType)
+    const listboxId = uploadType.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+    expect(listbox).not.toBeNull()
     expect(
-      screen.getByText('Attach an invoice file and invoice values to an existing permit.'),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Submit upload' })).not.toBeInTheDocument()
+      within(listbox as HTMLElement)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Application upload', 'Exemption upload', 'Permit upload'])
   })
 
   it('keeps the review area collapsed before files are selected', () => {
@@ -792,41 +697,6 @@ describe('Admin upload workflow smoke', () => {
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
-  it('blocks invoice uploads that fail legacy invoice validation rules', async () => {
-    mockUploadAccess('/fileInvoiceUpload')
-
-    renderPage('/admin/uploads?type=invoice&permitNumber=5001')
-
-    const file = new File(['invoice upload'], 'invoice.pdf', { type: 'application/pdf' })
-    await userEvent.upload(screen.getByLabelText('Document File'), file)
-    await userEvent.type(screen.getByLabelText('Invoice number'), '1234567890')
-    await userEvent.type(screen.getByLabelText('Export value (CAD)'), '0')
-    await userEvent.clear(screen.getByLabelText('Conversion rate'))
-    await userEvent.type(screen.getByLabelText('Conversion rate'), '0')
-    await userEvent.clear(screen.getByLabelText('Fee in lieu'))
-    await userEvent.type(screen.getByLabelText('Fee in lieu'), '0')
-
-    expect(screen.getByRole('button', { name: 'Review upload' })).toBeDisabled()
-    expect(screen.getByText('Invoice number must be 9 characters or fewer')).toBeInTheDocument()
-    expect(screen.getAllByText('Use a positive numeric value').length).toBeGreaterThanOrEqual(3)
-    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
-
-    for (const [label, value] of [
-      ['Invoice number', 'INV001'],
-      ['Export value (CAD)', '100'],
-      ['Conversion rate', '1'],
-      ['Fee in lieu', '1'],
-    ]) {
-      await userEvent.clear(screen.getByLabelText(label))
-      await userEvent.type(screen.getByLabelText(label), value)
-    }
-    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
-    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeEnabled()
-    await userEvent.clear(screen.getByLabelText('Export value (CAD)'))
-    expect(screen.getByRole('button', { name: 'Submit upload' })).toBeDisabled()
-    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
-  })
-
   it('locks document targets and the whole queue while a batch is submitting', async () => {
     mockUploadAccess('/filePermitUpload')
     let completeFirstUpload!: () => void
@@ -882,45 +752,6 @@ describe('Admin upload workflow smoke', () => {
     await waitFor(() => expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(1))
     expect(mockedSubmitAdminUpload).toHaveBeenCalledWith('applicationSubmission', { file: valid })
     expect(mockedValidateApplicationSubmissionUpload).toHaveBeenCalledTimes(1)
-  })
-
-  it('blocks invoice values that overflow after Oracle rounding', async () => {
-    mockUploadAccess('/fileInvoiceUpload')
-    renderPage('/admin/uploads?type=invoice&permitNumber=5001')
-
-    await userEvent.type(screen.getByLabelText('Invoice number'), 'INV123')
-    await userEvent.type(screen.getByLabelText('Export value (CAD)'), '10000000')
-    await userEvent.clear(screen.getByLabelText('Conversion rate'))
-    await userEvent.type(screen.getByLabelText('Conversion rate'), '10')
-    await userEvent.clear(screen.getByLabelText('Fee in lieu'))
-    await userEvent.type(screen.getByLabelText('Fee in lieu'), '10000000')
-    await userEvent.tab()
-
-    expect(
-      screen.getByText('Invoice export value must round to 9999999.99 or less'),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('Invoice conversion rate must round to 9.99999 or less'),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('Invoice fee in lieu must round to 9999999.99 or less'),
-    ).toBeInTheDocument()
-    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
-  })
-
-  it('rejects invoice numbers that cannot fit Oracle byte storage', async () => {
-    mockUploadAccess('/fileInvoiceUpload')
-    renderPage('/admin/uploads?type=invoice&permitNumber=5001')
-
-    await userEvent.type(screen.getByLabelText('Invoice number'), 'é'.repeat(9))
-    await userEvent.tab()
-
-    expect(
-      screen.getByText(
-        'Invoice number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
-      ),
-    ).toBeInTheDocument()
-    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
   })
 
   it('validates LEXIS XML before submitting an application submission', async () => {

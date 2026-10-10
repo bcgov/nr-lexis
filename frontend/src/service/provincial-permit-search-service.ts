@@ -48,7 +48,6 @@ const DEFAULT_PERMIT_SEARCH_FILTERS = {
   issuedToDate: '',
   permitStatus: '',
   permitNumber: '',
-  invoiceNumber: '',
   ownerClientNumber: '',
   applicantClientNumber: '',
 }
@@ -61,7 +60,6 @@ const buildBackendParams = (request: ProvincialPermitSearchRequest): URLSearchPa
       ['applicationNumber', filters.applicationNumber],
       ['packageNumber', filters.packageNumber],
       ['permitNumber', filters.permitNumber],
-      ['invoiceNumber', filters.invoiceNumber],
       ['issuedFromDate', filters.issuedFromDate],
       ['issuedToDate', filters.issuedToDate],
       ['permitStatus', filters.permitStatus],

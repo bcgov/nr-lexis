@@ -58,13 +58,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String EXPORT_PRODUCT_TYPE_HARVESTED = "H";
   private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
-  private static final String SCALE_REQUIRES_HARVESTED_APPLICATION_MESSAGE =
-      "Summary of Scale entries can only be added to Harvested applications.";
-  private static final String PRODUCT_TYPE_CHANGE_WITH_SCALES_MESSAGE =
-      "Product type cannot be changed to Unmanufactured Timber while Summary of Scale records exist. "
-          + "Remove the Summary of Scale records first.";
-  private static final String PRODUCT_TYPE_CHANGE_WITH_PACKAGES_MESSAGE =
-      "Product type cannot be changed to Standing Timber while packages exist. Remove the packages first.";
   private static final String UNMANUFACTURED_TIMBER_MARK = "UNMANU";
   private static final Set<String> VALID_TIMBER_MARK_STATUSES =
       Set.of("HI", "HA", "HB", "HC", "HN", "HP", "LC", "HX", "ACT");
@@ -375,8 +368,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (normalized.speciesCodes() != null
         && !repository.replaceApplicationEndUses(
             applicationNumber,
-            toApplicationEndUses(
-                normalized.speciesCodes(), normalized.endUseCode(), normalized.productTypeCode()))) {
+            toEndUses(normalized.speciesCodes(), normalized.endUseCode()))) {
       markRollbackOnly();
       return new CreateApplicationResult(
           false,
@@ -476,8 +468,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (scoped.speciesCodes() != null
         && !repository.replaceApplicationEndUses(
             scoped.applicationNumber(),
-            toApplicationEndUses(
-                scoped.speciesCodes(), scoped.endUseCode(), updateRecord.productTypeCode()))) {
+            toEndUses(scoped.speciesCodes(), scoped.endUseCode()))) {
       markRollbackOnly();
       return new CreateApplicationResult(
           false,
@@ -1514,10 +1505,19 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         firstNonBlank(request.productType(), existing == null ? null : existing.productTypeCode());
     String effectiveAgeClass =
         firstNonBlank(request.ageClass(), existing == null ? null : existing.growthTypeCode());
-    if (effectiveProductType == null) {
+    // An application package edit doesn't check the stored classification again; it checks only
+    // what the edit changes.
+    boolean editKeepsStoredValues = update && existing != null && !hiddenBlanketOicWorkflow;
+    boolean productTypeKept =
+        editKeepsStoredValues && keepsStoredCode(request.productType(), existing.productTypeCode());
+    boolean ageClassKept =
+        editKeepsStoredValues && keepsStoredCode(request.ageClass(), existing.growthTypeCode());
+    if (effectiveProductType == null && !productTypeKept) {
       errors.add(required("package product type code"));
     }
-    if (requiresGrowthType(effectiveProductType) && effectiveAgeClass == null) {
+    if (requiresGrowthType(effectiveProductType)
+        && effectiveAgeClass == null
+        && !(productTypeKept && ageClassKept)) {
       errors.add(required("package growth type code"));
     }
 
@@ -1525,7 +1525,14 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("package status code"));
     }
 
-    validatePackageReferenceCodes(request, existing, referenceOrgUnitNumber, errors);
+    validatePackageReferenceCodes(
+        request,
+        existing,
+        referenceOrgUnitNumber,
+        productTypeKept,
+        ageClassKept,
+        productTypeKept && keepsStoredSpeciesEndUse(request, existing),
+        errors);
 
     if (update && packageNumber != null && request.volume() != null) {
       List<ApplicationDetailsRpcRepository.ApplicationScaleDetailRow> scaleRows =
@@ -1557,6 +1564,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       PackageMutationRequest request,
       ApplicationDetailsRpcRepository.PackageMutationRow existing,
       Long referenceOrgUnitNumber,
+      boolean productTypeKept,
+      boolean ageClassKept,
+      boolean speciesEndUseKept,
       List<String> errors) {
     String packageStatus =
         firstNonBlank(request.status(), existing == null ? null : existing.packageStatusCode());
@@ -1566,18 +1576,22 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     String productType =
         firstNonBlank(request.productType(), existing == null ? null : existing.productTypeCode());
-    if (productType != null && !repository.isProductTypeCodeValidRequired(productType)) {
+    if (productType != null
+        && !productTypeKept
+        && !repository.isProductTypeCodeValidRequired(productType)) {
       errors.add("Package product type code does not exist.");
     }
 
     String growthType =
         firstNonBlank(request.ageClass(), existing == null ? null : existing.growthTypeCode());
-    if (growthType != null && !repository.isGrowthTypeCodeValidRequired(growthType)) {
+    if (growthType != null
+        && !ageClassKept
+        && !repository.isGrowthTypeCodeValidRequired(growthType)) {
       errors.add("Package growth type code does not exist.");
     }
 
     List<String> speciesCodes = normalizeCodes(request.speciesCodes());
-    if (speciesCodes.isEmpty()) {
+    if (speciesCodes.isEmpty() || speciesEndUseKept) {
       return;
     }
 
@@ -1631,6 +1645,32 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (!matchesCandidate) {
       errors.add("The package species/enduse sort is not valid for the selected region.");
     }
+  }
+
+  // A blank request code keeps the stored one.
+  private boolean keepsStoredCode(String requestedCode, String storedCode) {
+    String requested = trimToNull(requestedCode);
+    return requested == null || requested.equalsIgnoreCase(trimToNull(storedCode));
+  }
+
+  private boolean keepsStoredSpeciesEndUse(
+      PackageMutationRequest request, ApplicationDetailsRpcRepository.PackageMutationRow existing) {
+    List<String> speciesCodes = normalizeCodes(request.speciesCodes());
+    if (existing == null || speciesCodes.isEmpty()) {
+      return false;
+    }
+    List<ApplicationDetailsRpcRepository.EndUseRow> storedEndUses =
+        repository.findEndUsesByPackageNumberRequired(existing.packageNumber());
+    Set<String> storedSpeciesCodes =
+        storedEndUses.stream()
+            .map(ApplicationDetailsRpcRepository.EndUseRow::speciesCode)
+            .map(TextUtils::trimToNull)
+            .filter(value -> value != null)
+            .collect(java.util.stream.Collectors.toSet());
+    String endUseCode = firstNonBlank(request.endUseCode(), EXPORT_SPECIES_ENDUSE_OTHER);
+    return storedSpeciesCodes.equals(Set.copyOf(speciesCodes))
+        && storedEndUses.stream()
+            .allMatch(row -> endUseCode.equalsIgnoreCase(trimToNull(row.endUseCode())));
   }
 
   private void validatePackageApplicationVolume(
@@ -1920,13 +1960,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         .toList();
   }
 
-  private List<ApplicationDetailsRpcRepository.EndUseMutationRecord> toApplicationEndUses(
-      List<String> speciesCodes, String endUseCode, String productTypeCode) {
-    return toEndUses(
-        speciesCodes,
-        EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(trimToNull(productTypeCode)) ? null : endUseCode);
-  }
-
   private boolean renamePackage(
       String currentPackageNumber,
       ApplicationDetailsRpcRepository.PackageMutationRecord record,
@@ -2026,11 +2059,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add("Application " + request.applicationNumber() + " could not be verified.");
     } else if (isSystemOwnedOicApplication(application.get())) {
       errors.add(SYSTEM_OIC_APPLICATION_MESSAGE);
-    } else if (JURISDICTION_PROVINCIAL.equalsIgnoreCase(
-            trimToNull(application.get().jurisdictionCode()))
-        && !EXPORT_PRODUCT_TYPE_HARVESTED.equalsIgnoreCase(
-            trimToNull(application.get().productTypeCode()))) {
-      errors.add(SCALE_REQUIRES_HARVESTED_APPLICATION_MESSAGE);
     }
 
     if (packageNumber == null) {
@@ -2743,12 +2771,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (trimToNull(request.productTypeCode()) == null) {
       errors.add(required("product type code"));
     }
-    if (isHarvestedProductType(request.productTypeCode())) {
-      validateOptionalVolumeRange(
-          request.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
-      if (trimToNull(request.productLocation()) == null) {
-        errors.add(required("location of logs"));
-      }
+    validateOptionalVolumeRange(
+        request.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
+    if (isHarvestedProductType(request.productTypeCode())
+        && trimToNull(request.productLocation()) == null) {
+      errors.add(required("location of logs"));
     }
     if (requiresGrowthType(request.productTypeCode())
         && trimToNull(request.growthTypeCode()) == null) {
@@ -2826,24 +2853,23 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
       ApplicationSummaryUpdateRequest request) {
     return switch (request.saveSource()) {
-      case FULL -> validateFullApplicationUpdate(existing, record, request);
+      case FULL -> validateFullApplicationUpdate(record, request);
       case SUMMARY -> validateSummaryApplicationUpdate(existing, record, request);
       case SUMMARY_ITEMS -> {
         List<String> errors = validateSummaryApplicationUpdate(existing, record, request);
         if (errors.isEmpty()) {
-          errors.addAll(validateItemsApplicationUpdate(existing, record, request));
+          errors.addAll(validateItemsApplicationUpdate(record, request));
         }
         yield errors;
       }
       case OWNER -> validateOwnerApplicationUpdate(existing, record, request);
       case AGENT -> validateAgentApplicationUpdate(record);
       case OWNER_AGENT -> validateOwnerAgentApplicationUpdate(record);
-      case ITEMS -> validateItemsApplicationUpdate(existing, record, request);
+      case ITEMS -> validateItemsApplicationUpdate(record, request);
     };
   }
 
   private List<String> validateFullApplicationUpdate(
-      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
       ApplicationSummaryUpdateRequest request) {
     List<String> errors = new ArrayList<>();
@@ -2887,12 +2913,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (trimToNull(record.productTypeCode()) == null) {
       errors.add(required("product type code"));
     }
-    if (isHarvestedProductType(record.productTypeCode())) {
-      validateOptionalVolumeRange(
-          record.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
-      if (trimToNull(record.productLocation()) == null) {
-        errors.add(required("location of logs"));
-      }
+    validateOptionalVolumeRange(
+        record.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
+    if (isHarvestedProductType(record.productTypeCode())
+        && trimToNull(record.productLocation()) == null) {
+      errors.add(required("location of logs"));
     }
     if (requiresGrowthType(record.productTypeCode())
         && trimToNull(record.growthTypeCode()) == null) {
@@ -2938,7 +2963,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     }
     if (errors.isEmpty()) {
       validateApplicationReferences(record, errors);
-      validateProductTypeTransition(existing, record, errors);
       validateStoredPackageVolume(record, errors);
       validateFirstScaleRegion(record, errors);
       validateMergedApplicationSpeciesEndUse(record, request, errors);
@@ -3040,7 +3064,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private List<String> validateItemsApplicationUpdate(
-      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
       ApplicationSummaryUpdateRequest request) {
     List<String> errors = validateScopedApplicationFixedFields(record);
@@ -3050,7 +3073,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     validateItemFields(record, errors);
     if (errors.isEmpty()) {
       validateItemReferences(record, errors);
-      validateProductTypeTransition(existing, record, errors);
       validateStoredPackageVolume(record, errors);
       validateFirstScaleRegion(record, errors);
       validateMergedApplicationSpeciesEndUse(record, request, errors);
@@ -3159,14 +3181,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (trimToNull(record.productTypeCode()) == null) {
       errors.add(required("product type code"));
     }
-    if (isHarvestedProductType(record.productTypeCode())) {
-      validateOptionalVolumeRange(
-          record.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
-      if (trimToNull(record.productLocation()) == null) {
-        errors.add(required("location of logs"));
-      }
-      validateOracleText(record.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
+    validateOptionalVolumeRange(
+        record.averageLogVolume(), "average log volume", MAX_AVERAGE_LOG_VOLUME, errors);
+    if (isHarvestedProductType(record.productTypeCode())
+        && trimToNull(record.productLocation()) == null) {
+      errors.add(required("location of logs"));
     }
+    validateOracleText(record.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
     if (requiresGrowthType(record.productTypeCode())
         && trimToNull(record.growthTypeCode()) == null) {
       errors.add(required("growth type code"));
@@ -3181,32 +3202,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (requiresGrowthType(record.productTypeCode())
         && !repository.isGrowthTypeCodeValidRequired(record.growthTypeCode())) {
       errors.add("Application growth type code does not exist.");
-    }
-  }
-
-  private void validateProductTypeTransition(
-      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
-      ApplicationDetailsRpcRepository.ApplicationUpdateRecord updated,
-      List<String> errors) {
-    String existingProductType = trimToNull(existing.productTypeCode());
-    String updatedProductType = trimToNull(updated.productTypeCode());
-    if (existingProductType == null
-        || updatedProductType == null
-        || existingProductType.equalsIgnoreCase(updatedProductType)) {
-      return;
-    }
-
-    if (EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equalsIgnoreCase(updatedProductType)
-        && !repository
-            .findScaleMutationsByApplicationNumber(updated.applicationNumber())
-            .isEmpty()) {
-      errors.add(PRODUCT_TYPE_CHANGE_WITH_SCALES_MESSAGE);
-    }
-    if (EXPORT_PRODUCT_TYPE_STANDING.equalsIgnoreCase(updatedProductType)
-        && !repository
-            .findPackageMutationsByApplicationNumber(updated.applicationNumber())
-            .isEmpty()) {
-      errors.add(PRODUCT_TYPE_CHANGE_WITH_PACKAGES_MESSAGE);
     }
   }
 
@@ -3408,8 +3403,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     boolean unmanufacturedTimber =
         EXPORT_PRODUCT_TYPE_UNMANUFACTURED.equals(normalizedProductTypeCode);
     if (unmanufacturedTimber) {
-      // Unmanufactured timber has no editable end use. Validate its selected species against every
-      // exact regional combination rather than the hidden OT sentinel or a stale submitted value.
+      // An unmanufactured timber sort ignores the end use, so its species are checked against every
+      // exact regional combination.
       Set<String> candidateEndUseCodes = new LinkedHashSet<>();
       for (ApplicationDetailsRpcRepository.ExcolValidationRow row :
           repository.findCandidateEndUseCodesRequired(
@@ -3498,8 +3493,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         request.termDays(),
         request.receivedDate(),
         request.applicationVolume(),
-        averageLogVolumeForStorage(request.productTypeCode(), request.averageLogVolume()),
-        productLocationForStorage(request.productTypeCode(), request.productLocation()),
+        averageLogVolumeForStorage(request.averageLogVolume()),
+        productLocationForStorage(request.productLocation()),
         entryUserId,
         request.exportScheduleId(),
         request.agentClientNumber(),
@@ -3547,12 +3542,15 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         !updatesItemFields || request.productTypeCode() == null
             ? existing.productTypeCode()
             : request.productTypeCode();
+    // A Harvested Timber save without these values keeps the stored ones. Other product types store
+    // what was entered, so a cleared value is stored blank.
+    boolean keepsStoredLogDetails = isHarvestedProductType(productTypeCode);
     Double averageLogVolume =
-        !updatesItemFields || request.averageLogVolume() == null
+        !updatesItemFields || (keepsStoredLogDetails && request.averageLogVolume() == null)
             ? existing.averageLogVolume()
             : request.averageLogVolume();
     String productLocation =
-        !updatesItemFields || request.productLocation() == null
+        !updatesItemFields || (keepsStoredLogDetails && request.productLocation() == null)
             ? existing.productLocation()
             : request.productLocation();
     return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
@@ -3569,10 +3567,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             ? existing.applicationVolume()
             : request.applicationVolume(),
         updatesItemFields
-            ? averageLogVolumeForStorage(productTypeCode, averageLogVolume)
+            ? averageLogVolumeForStorage(averageLogVolume)
             : existing.averageLogVolume(),
         updatesItemFields
-            ? productLocationForStorage(productTypeCode, productLocation)
+            ? productLocationForStorage(productLocation)
             : existing.productLocation(),
         existing.entryUserId(),
         existing.entryTimestamp(),
@@ -3672,10 +3670,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private void validateApplicationStorageText(
       CreateApplicationRequest request, List<String> errors) {
-    if (isHarvestedProductType(request.productTypeCode())) {
-      validateOracleText(
-          request.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
-    }
+    validateOracleText(
+        request.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
     validateOracleText(
         request.ownerContactName(), "Owner contact name", CONTACT_NAME_MAX_BYTES, errors);
     validateOracleText(
@@ -3686,10 +3682,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private void validateApplicationStorageText(
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, List<String> errors) {
-    if (isHarvestedProductType(record.productTypeCode())) {
-      validateOracleText(
-          record.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
-    }
+    validateOracleText(
+        record.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
     validateOracleText(
         record.ownerContactName(), "Owner contact name", CONTACT_NAME_MAX_BYTES, errors);
     validateOracleText(
@@ -3727,12 +3721,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return EXPORT_PRODUCT_TYPE_HARVESTED.equalsIgnoreCase(trimToNull(productTypeCode));
   }
 
-  private Double averageLogVolumeForStorage(String productTypeCode, Double value) {
-    return isHarvestedProductType(productTypeCode) ? value : 0.0d;
+  private Double averageLogVolumeForStorage(Double value) {
+    return value == null ? 0.0d : value;
   }
 
-  private String productLocationForStorage(String productTypeCode, String value) {
-    return isHarvestedProductType(productTypeCode) ? value : ORACLE_IGNORED_PRODUCT_LOCATION;
+  // PRODUCT_LOCATION is NOT NULL, so a blank location is stored as the placeholder.
+  private String productLocationForStorage(String value) {
+    return trimToNull(value) == null ? ORACLE_IGNORED_PRODUCT_LOCATION : value;
   }
 
   private String defaultMutationUser(String userId) {

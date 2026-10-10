@@ -1313,14 +1313,6 @@ const ProvincialOfferCreatePage = () => {
                 <RecordFieldRow>
                   <RecordFieldCell>
                     <TextInput
-                      id="teacReviewDate"
-                      labelText="TEAC review date"
-                      value={applicationDetails?.teacReviewDate || 'Not scheduled'}
-                      readOnly
-                    />
-                  </RecordFieldCell>
-                  <RecordFieldCell>
-                    <TextInput
                       id="fairOfferIndicator"
                       labelText="Fair market value"
                       value="No"

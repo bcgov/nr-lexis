@@ -153,6 +153,41 @@ describe('Provincial Offer Detail Actions', () => {
     }
   })
 
+  it('omits offering client, manufacturing facility and jurisdiction and saves the loaded client', async () => {
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    const expectHiddenFields = () => {
+      for (const label of [
+        'Offering client number',
+        'Manufacturing facility',
+        'Export jurisdiction',
+      ]) {
+        expect(screen.queryByText(label)).not.toBeInTheDocument()
+      }
+      expect(screen.queryByDisplayValue('00077881')).not.toBeInTheDocument()
+      expect(screen.queryByText('Mill details')).not.toBeInTheDocument()
+    }
+    expectHiddenFields()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    expectHiddenFields()
+
+    const amountInput = screen.getByLabelText('Offer amount ($/m³)')
+    await userEvent.clear(amountInput)
+    await userEvent.type(amountInput, '13000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialOfferUpdate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          offeringClientNumber: '00077881',
+          purchaseOfferAmount: '13000',
+        }),
+      )
+    })
+  })
+
   it('shows the TEAC review date for authorized staff and updates editable offer fields', async () => {
     renderPage()
 

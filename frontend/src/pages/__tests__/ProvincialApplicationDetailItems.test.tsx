@@ -36,9 +36,7 @@ import {
   mockedFetchApplicationPackageSpecies,
   mockedFetchApplicationPackageStatusCodes,
   mockedFetchApplicationPermits,
-  mockedFetchApplicationRemainingSpecies,
   mockedFetchApplicationSummarySnapshot,
-  mockedFetchApplicationUniqueScales,
   mockedFetchProvincialApplicationDetail,
   mockedFetchProvincialApplicationOptions,
   mockedUpdateApplicationPackage,
@@ -385,13 +383,16 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       await waitFor(() =>
         expect(controls.getByRole('button', { name: 'Save package' })).toBeEnabled(),
       )
-      expect(controls.getByRole('combobox', { name: 'Age class' })).toHaveValue('')
+      expect(controls.queryByRole('combobox', { name: 'Age class' })).not.toBeInTheDocument()
       fireEvent.change(controls.getByLabelText('Package comments'), {
         target: { value: 'Comment edit' },
       })
       await userEvent.click(controls.getByRole('button', { name: 'Save package' }))
-      expect(screen.getAllByText('Age class is required').length).toBeGreaterThan(0)
-      expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+      await waitFor(() =>
+        expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
+          expect.objectContaining({ comments: 'Comment edit', ageClass: '', productType }),
+        ),
+      )
     },
   )
 
@@ -1102,60 +1103,104 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.queryByRole('button', { name: 'Add scale' })).not.toBeInTheDocument()
   })
 
-  it('hides package and scale mutations for standing timber applications', async () => {
-    mockedFetchProvincialApplicationDetail.mockResolvedValue({
-      ...applicationDetail,
-      productTypeCode: 'S',
-      packages: [],
-      canEditPackages: true,
-      canAddPackages: true,
-      canAddScales: true,
-      canUpdatePackageNumber: true,
-    })
+  it.each(['S', 'T'])(
+    'shows the harvested Scale layout with package and scale actions for product type %s',
+    async (productTypeCode) => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        productTypeCode,
+      })
+      mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+        ...applicationSummarySnapshot,
+        productTypeCode,
+      })
 
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
 
-    await selectApplicationDetailTab('Scale')
-    expect(await screen.findByRole('heading', { name: 'Scale details' })).toBeVisible()
-    expect(await screen.findByRole('heading', { name: 'Timber marks' })).toBeVisible()
-    expect(screen.queryByRole('heading', { name: /^Package PKG-/ })).not.toBeInTheDocument()
-    expect(screen.queryByText('Summary of scale')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit package' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save package' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete package' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add scale' })).not.toBeInTheDocument()
-  })
+      const scaleDetailsTile = await selectApplicationItemDetailsTile(false)
+      await waitFor(() =>
+        expect(
+          Array.from(scaleDetailsTile.querySelectorAll('.detail-field-label')).map(
+            (field) => field.textContent,
+          ),
+        ).toEqual([
+          'Location of logs',
+          'Age class',
+          'Average log volume (m³)',
+          'Application volume (m³)',
+          'Species list',
+          'End use',
+          'Total pieces',
+        ]),
+      )
+      const packageSection = (
+        await screen.findByRole('heading', { name: 'Package PKG-1' })
+      ).closest('section') as HTMLElement
+      expect(
+        Array.from(packageSection.querySelectorAll('.detail-field-label')).map(
+          (field) => field.textContent,
+        ),
+      ).toEqual([
+        'Package number',
+        'Package volume (m³)',
+        'Total scale volume (m³)',
+        'Total pieces',
+        'Average length (m)',
+        'Average top diameter (rads)',
+        'Comments',
+      ])
+      expect(screen.getByRole('heading', { name: 'Summary of scale' })).toBeVisible()
+      expect(screen.queryByRole('heading', { name: 'Timber marks' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('heading', { name: 'Package species' })).not.toBeInTheDocument()
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Edit package' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Add scale' })).toBeEnabled()
+      })
+      expect(screen.getByRole('button', { name: 'Create package' })).toBeEnabled()
 
-  it('keeps the item editor closed for standing timber when mutation permissions are supplied', () => {
-    render(
-      <ItemsPanelWithActionResult
-        detail={{ ...applicationDetail, productTypeCode: 'S', packages: [] }}
-        canEditPackages
-        canAddPackages
-        canAddScales
-        canUpdatePackageNumber
-        hideMutationActions={false}
-        authoritativeOptionsAvailability="available"
-        productTypeOptions={[]}
-        growthTypeOptions={[]}
-        onDetailChanged={vi.fn().mockResolvedValue(undefined)}
-      />,
-    )
+      await userEvent.click(
+        within(scaleDetailsTile).getByRole('button', { name: 'Edit scale details' }),
+      )
+      const scaleDetails = within(scaleDetailsTile)
+      expect(scaleDetails.getByLabelText('Location of logs')).toHaveValue('BC')
+      expect(scaleDetails.getByRole('combobox', { name: 'Age class' })).toBeInTheDocument()
+      expect(scaleDetails.getByLabelText('Average log volume (m³)')).toHaveValue(2)
+      expect(scaleDetails.getByLabelText('Application volume (m³)')).toHaveValue(100)
+      expect(scaleDetails.getByRole('combobox', { name: 'End use' })).toBeInTheDocument()
+    },
+  )
 
-    expect(screen.queryByRole('button', { name: 'Edit package' })).not.toBeInTheDocument()
-  })
+  it.each(['S', 'T'])(
+    'lets a product type %s application with no packages create one',
+    async (productTypeCode) => {
+      render(
+        <ItemsPanelWithActionResult
+          detail={{ ...applicationDetail, productTypeCode, packages: [] }}
+          canEditPackages
+          canAddPackages
+          canAddScales
+          canUpdatePackageNumber
+          hideMutationActions={false}
+          authoritativeOptionsAvailability="available"
+          onDetailChanged={vi.fn().mockResolvedValue(undefined)}
+        />,
+      )
 
-  it('keeps the item editor closed for Timber when only scale permission is supplied', () => {
+      expect(screen.getByText('No packages for this application')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Create package' })).toBeEnabled()
+    },
+  )
+
+  it('lets a Timber application add scales when only scale permission is supplied', async () => {
     render(
       <ItemsPanelWithActionResult
         detail={{ ...applicationDetail, productTypeCode: 'T' }}
@@ -1165,28 +1210,36 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         canUpdatePackageNumber={false}
         hideMutationActions={false}
         authoritativeOptionsAvailability="available"
-        productTypeOptions={[]}
-        growthTypeOptions={[]}
         onDetailChanged={vi.fn().mockResolvedValue(undefined)}
       />,
     )
 
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add scale' })).toBeEnabled())
     expect(screen.queryByRole('button', { name: 'Edit package' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
   })
 
-  it('shows package details without Summary of scale for Timber applications', async () => {
-    mockedFetchProvincialApplicationDetail.mockResolvedValue({
-      ...applicationDetail,
-      productTypeCode: 'T',
+  it("saves package edits with the package's stored classification, end use and species", async () => {
+    mockedFetchApplicationPackageDetails.mockResolvedValue({
+      success: true,
+      packageNumber: 'PKG-1',
+      volume: '100.0',
+      scaledVolume: 20,
+      length: '12.0',
+      diameter: '24.0',
+      status: 'ACT',
+      comments: 'Ready',
+      statusDescription: 'Active',
+      reprocessed: 'N',
+      ageClass: 'M',
+      ageClassDescription: 'Mature',
+      productType: 'S',
+      productTypeDescription: 'Standing Timber',
     })
-    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
-      ...applicationSummarySnapshot,
-      productTypeCode: 'T',
-      productLocation: '',
-      growthTypeCode: '',
-      averageLogVolume: '',
-      endUseCode: '',
-    })
+    mockedFetchApplicationPackageSpecies.mockResolvedValue([
+      { species: 'FI', endUse: 'SA', endUseDescription: 'Sawlog' },
+      { species: 'CE', endUse: 'SA', endUseDescription: 'Sawlog' },
+    ])
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -1200,86 +1253,32 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     )
 
     await selectApplicationDetailTab('Scale')
-    expect(await screen.findByRole('heading', { name: /^Package PKG-/ })).toBeVisible()
-    expect(screen.queryByRole('heading', { name: 'Summary of scale' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Timber marks' })).not.toBeInTheDocument()
-    expect(await screen.findByRole('button', { name: 'Edit package' })).toBeInTheDocument()
-  })
-
-  it('keeps authoritative empty remaining-species results empty', async () => {
-    mockedFetchApplicationRemainingSpecies.mockResolvedValue([])
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
+    const packageDetailsSection = (
+      await screen.findByRole('heading', { name: 'Package PKG-1' })
+    ).closest('section') as HTMLElement
+    const packageDetails = within(packageDetailsSection)
+    for (const hidden of ['Product type', 'Age class', 'End use']) {
+      expect(packageDetails.queryByText(hidden)).not.toBeInTheDocument()
+    }
+    expect(screen.queryByText('FI - Douglas-fir, CE - Cedar')).not.toBeInTheDocument()
 
     await selectApplicationItemsForEditing()
-    await waitFor(() => {
-      expect(mockedFetchApplicationRemainingSpecies).toHaveBeenCalled()
-    })
-
-    const packageSpecies = screen.getAllByRole('combobox', { name: 'Species' })[0]
-    await userEvent.click(packageSpecies)
-    expect(screen.queryByRole('option', { name: 'CE - Cedar' })).not.toBeInTheDocument()
-  })
-
-  it('edits package species and saves application item details', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
+    const drawer = within(
+      (await screen.findByLabelText('Package comments')).closest(
+        '.application-items-drawer',
+      ) as HTMLElement,
     )
+    for (const hidden of ['Product type', 'Age class', 'End use', 'Species']) {
+      expect(drawer.queryByRole('combobox', { name: hidden })).not.toBeInTheDocument()
+    }
+    expect(drawer.queryByRole('heading', { name: 'Package species' })).not.toBeInTheDocument()
+    expect(drawer.queryByRole('button', { name: 'Add Species' })).not.toBeInTheDocument()
 
-    await selectApplicationItemsForEditing()
-    expect(await screen.findByRole('heading', { name: /^Package PKG-/ })).toBeInTheDocument()
-    await waitFor(() => {
-      expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
-    })
-    expect(screen.queryByLabelText('Application item summary')).not.toBeInTheDocument()
-    const packageDetailsSection = screen
-      .getByRole('heading', { name: /^Package PKG-/ })
-      .closest('section')
-    expect(packageDetailsSection).toBeTruthy()
-    expect(packageDetailsSection).toHaveClass('application-items-card')
-    expect(
-      within(packageDetailsSection as HTMLElement).getByText('Total scale volume (m³)'),
-    ).toBeInTheDocument()
-    expect(within(packageDetailsSection as HTMLElement).getByText('20.0')).toBeInTheDocument()
-    expect(
-      within(packageDetailsSection as HTMLElement).getByText('Total pieces'),
-    ).toBeInTheDocument()
-    expect(within(packageDetailsSection as HTMLElement).getByText('5')).toBeInTheDocument()
-    expect(
-      within(packageDetailsSection as HTMLElement).getByLabelText('Average top diameter (rads)'),
-    ).toBeInTheDocument()
-
-    await chooseComboBoxOption(
-      screen.getAllByRole('combobox', { name: 'Species' })[0],
-      'CE - Cedar',
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Add Species' }))
-    await waitFor(() => {
-      expect(screen.getAllByText('CE - Cedar').some((element) => element.tagName === 'TD')).toBe(
-        true,
-      )
-    })
-
-    fireEvent.change(screen.getByLabelText('Package comments'), {
+    await waitFor(() => expect(drawer.getByRole('button', { name: 'Save package' })).toBeEnabled())
+    fireEvent.change(drawer.getByLabelText('Package comments'), {
       target: { value: 'Updated package' },
     })
-    await userEvent.click(screen.getByRole('button', { name: 'Save package' }))
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
 
     await waitFor(() => {
       expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
@@ -1287,13 +1286,88 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
           packageNumber: 'PKG-1',
           applicationNumber: '321',
           comments: 'Updated package',
-          endUseCode: 'LU',
+          productType: 'S',
+          ageClass: 'M',
+          endUseCode: 'SA',
           speciesCodes: ['FI', 'CE'],
         }),
       )
     })
     expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
   })
+
+  it.each([
+    { relation: 'differs from', productTypeCode: 'T', growthTypeCode: '', expectedAgeClass: '' },
+    { relation: 'matches', productTypeCode: 'H', growthTypeCode: 'O', expectedAgeClass: 'O' },
+  ])(
+    "saves a package with no age class, species or end use whose product type $relation the application's",
+    async ({ productTypeCode, growthTypeCode, expectedAgeClass }) => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        productTypeCode,
+      })
+      mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+        ...applicationSummarySnapshot,
+        productTypeCode,
+        growthTypeCode,
+      })
+      mockedFetchApplicationPackageDetails.mockResolvedValue({
+        success: true,
+        packageNumber: 'PKG-1',
+        volume: '100.0',
+        scaledVolume: 20,
+        length: '12.0',
+        diameter: '24.0',
+        status: 'ACT',
+        comments: '',
+        statusDescription: 'Active',
+        reprocessed: 'N',
+        ageClass: '',
+        ageClassDescription: '',
+        productType: 'H',
+        productTypeDescription: 'Harvested Timber',
+      })
+      mockedFetchApplicationPackageSpecies.mockResolvedValue([])
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectApplicationItemsForEditing()
+      const drawer = within(
+        (await screen.findByLabelText('Package comments')).closest(
+          '.application-items-drawer',
+        ) as HTMLElement,
+      )
+      await waitFor(() =>
+        expect(drawer.getByRole('button', { name: 'Save package' })).toBeEnabled(),
+      )
+      fireEvent.change(drawer.getByLabelText('Package comments'), {
+        target: { value: 'Legacy package' },
+      })
+      await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+
+      await waitFor(() =>
+        expect(mockedUpdateApplicationPackage).toHaveBeenCalledWith(
+          expect.objectContaining({
+            comments: 'Legacy package',
+            productType: 'H',
+            ageClass: expectedAgeClass,
+            endUseCode: '',
+            speciesCodes: [],
+          }),
+        ),
+      )
+      expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
+    },
+  )
 
   it('caps package comments at 180 ASCII characters and saves the capped value', async () => {
     render(
@@ -1505,152 +1579,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     },
   )
 
-  it.each(['failed', 'empty'])('recovers %s selected End Use', async (lookupResult) => {
-    let failNextSelectedEndUseLookup = false
-    mockedFetchProvincialApplicationDetail.mockResolvedValue({
-      ...applicationDetail,
-      packages: [
-        { packageNumber: 'PKG-1', volume: 100, pieceCount: 5 },
-        { packageNumber: 'PKG-2', volume: 50, pieceCount: 3 },
-      ],
-    })
-    mockedFetchApplicationPackageDetails.mockImplementation(async (packageNumber) => ({
-      success: true,
-      packageNumber,
-      volume: packageNumber === 'PKG-2' ? '50.0' : '100.0',
-      scaledVolume: packageNumber === 'PKG-2' ? 10 : 20,
-      length: '12.0',
-      diameter: '24.0',
-      status: 'ACT',
-      comments: 'Ready',
-      statusDescription: 'Active',
-      reprocessed: 'N',
-      ageClass: 'O',
-      ageClassDescription: 'Old',
-      productType: 'H',
-      productTypeDescription: 'Harvested Timber',
-    }))
-    mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation((_region, speciesCodes) => {
-      if (speciesCodes.includes('FI') && failNextSelectedEndUseLookup) {
-        failNextSelectedEndUseLookup = false
-        return lookupResult === 'empty'
-          ? Promise.resolve([])
-          : Promise.reject(new Error('Temporary selected end use lookup failure'))
-      }
-      return Promise.resolve([{ code: 'LU', description: 'Lumber' }])
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectApplicationItemsForEditing()
-    const packageDetailsSection = (
-      await screen.findByRole('heading', { name: /^Package PKG-/ })
-    ).closest('section')
-    expect(packageDetailsSection).toBeTruthy()
-    const packageDetailsControls = within(packageDetailsSection as HTMLElement)
-    const savePackage = packageDetailsControls.getByRole('button', { name: 'Save package' })
-    const addScale = screen.getByRole('button', { name: 'Add scale' })
-
-    await waitFor(() => {
-      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI'])
-      expect(packageDetailsControls.getByRole('combobox', { name: 'End use' })).toBeEnabled()
-      expect(savePackage).toBeEnabled()
-      expect(addScale).toBeEnabled()
-    })
-
-    const packageSelector = screen.getByRole('combobox', { name: 'Selected package' })
-    failNextSelectedEndUseLookup = true
-    await chooseComboBoxOption(packageSelector, 'PKG-2')
-
-    await waitFor(() => {
-      expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
-      expect(packageDetailsControls.getByRole('combobox', { name: 'End use' })).toBeDisabled()
-      expect(savePackage).toBeEnabled()
-      expect(addScale).toBeEnabled()
-      expect(
-        screen.getByText('Package saves are disabled because end use options could not be loaded.'),
-      ).toBeInTheDocument()
-    })
-
-    await userEvent.click(savePackage)
-    expect(await packageDetailsControls.findByText('Package save failed')).toBeInTheDocument()
-    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
-
-    await chooseComboBoxOption(packageSelector, 'PKG-1')
-    // Package reload and Carbon's selected-label effect can exceed 1s under CI coverage.
-    await waitFor(
-      () => {
-        expect(packageDetailsControls.getByRole('combobox', { name: 'End use' })).toHaveValue(
-          'LU - Lumber',
-        )
-        expect(packageDetailsControls.getByRole('combobox', { name: 'End use' })).toBeEnabled()
-        expect(savePackage).toBeEnabled()
-        expect(addScale).toBeEnabled()
-      },
-      { timeout: 5_000 },
-    )
-  })
-
-  it('preserves a selected package end use while dependent options are loading', async () => {
-    let resolveSelectedEndUseOptions: ((options: ApplicationCodeOption[]) => void) | undefined
-    mockedFetchApplicationEndUsesForSpeciesRegion.mockImplementation((_region, speciesCodes) => {
-      if (speciesCodes.includes('FI')) {
-        return new Promise((resolve) => {
-          resolveSelectedEndUseOptions = resolve
-        })
-      }
-      return Promise.resolve([{ code: 'LU', description: 'Lumber' }])
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectApplicationItemsForEditing()
-    const packageDetailsSection = (
-      await screen.findByRole('heading', { name: /^Package PKG-/ })
-    ).closest('section')
-    expect(packageDetailsSection).toBeTruthy()
-    const packageDetailsControls = within(packageDetailsSection as HTMLElement)
-    const endUse = packageDetailsControls.getByRole('combobox', { name: 'End use' })
-
-    await waitFor(() => {
-      expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('12', ['FI'])
-      expect(endUse).toBeDisabled()
-      expect(screen.getByRole('button', { name: 'Save package' })).toBeEnabled()
-    })
-    expect(screen.queryByRole('textbox', { name: 'End use' })).not.toBeInTheDocument()
-
-    await act(async () => {
-      resolveSelectedEndUseOptions?.([
-        { code: 'PL', description: 'Pulp' },
-        { code: 'LU', description: 'Lumber' },
-      ])
-    })
-
-    await waitFor(() => {
-      expect(endUse).toHaveValue('LU - Lumber')
-      expect(endUse).toBeEnabled()
-      expect(screen.getByRole('button', { name: 'Save package' })).toBeEnabled()
-    })
-  })
-
   it('displays legacy scale types for cascade split codes', async () => {
     mockedFetchApplicationPackageScales.mockResolvedValue([
       {
@@ -1758,38 +1686,20 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: /^Package PKG-/ })
     ).closest('section')
-    const packageSpeciesSection = screen.getByRole('heading', {
-      name: 'Package species',
-    }).parentElement
     const scalesSection = screen
       .getByRole('heading', { name: 'Summary of scale' })
       .closest('section')
     expect(packageDetailsSection).toBeTruthy()
-    expect(packageSpeciesSection).toBeTruthy()
     expect(scalesSection).toBeTruthy()
 
     expect(await screen.findByText('Selected package data unavailable')).toBeInTheDocument()
+    expect(screen.getByText('Package species could not be loaded.')).toBeInTheDocument()
     expect(
       within(packageDetailsSection as HTMLElement)
         .getByText('Comments')
         .parentElement?.querySelector('dd'),
     ).toHaveTextContent('Ready')
     expect(within(scalesSection as HTMLElement).getByText('TM001')).toBeInTheDocument()
-    expect(
-      within(packageSpeciesSection as HTMLElement).getByText(
-        'Package species could not be loaded.',
-      ),
-    ).toBeInTheDocument()
-    expect(
-      within(packageSpeciesSection as HTMLElement).queryByText(
-        'No species assigned to this package.',
-      ),
-    ).not.toBeInTheDocument()
-    expect(
-      within(packageDetailsSection as HTMLElement)
-        .getByText('End use', { selector: 'dt' })
-        .parentElement?.querySelector('dd'),
-    ).toHaveTextContent('Not available')
     expect(screen.getByRole('button', { name: 'Edit package' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Delete package' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Add scale' })).toBeDisabled()
@@ -1835,7 +1745,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.getByText('Selected package data unavailable')).toBeInTheDocument()
   })
 
-  it('retains package details and species when package scales cannot be loaded', async () => {
+  it('retains package details when package scales cannot be loaded', async () => {
     mockedFetchApplicationPackageScales.mockRejectedValue(new Error('Package scale lookup failed'))
 
     render(
@@ -1854,14 +1764,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const packageDetailsSection = (
       await screen.findByRole('heading', { name: /^Package PKG-/ })
     ).closest('section')
-    const packageSpeciesSection = screen.getByRole('heading', {
-      name: 'Package species',
-    }).parentElement
     const scalesSection = screen
       .getByRole('heading', { name: 'Summary of scale' })
       .closest('section')
     expect(packageDetailsSection).toBeTruthy()
-    expect(packageSpeciesSection).toBeTruthy()
     expect(scalesSection).toBeTruthy()
 
     expect(await screen.findByText('Selected package data unavailable')).toBeInTheDocument()
@@ -1870,9 +1776,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         .getByText('Comments')
         .parentElement?.querySelector('dd'),
     ).toHaveTextContent('Ready')
-    expect(
-      within(packageSpeciesSection as HTMLElement).getByText('FI - Douglas-fir'),
-    ).toBeInTheDocument()
     expect(
       within(scalesSection as HTMLElement).getByText('Package scales could not be loaded.'),
     ).toBeInTheDocument()
@@ -2595,36 +2498,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 
-  it('shows legacy timber mark summaries for application scales', async () => {
-    mockedFetchProvincialApplicationDetail.mockResolvedValue({
-      ...applicationDetail,
-      productTypeCode: 'S',
-      packages: [],
-    })
-    mockedFetchApplicationUniqueScales.mockResolvedValue([{ timberMark: 'TM-SUMMARY' }])
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectApplicationDetailTab('Scale')
-    const timberMarksSection = (
-      await screen.findByRole('heading', { name: 'Timber marks' })
-    ).closest('div')
-    expect(timberMarksSection).toBeTruthy()
-    expect(
-      await within(timberMarksSection as HTMLElement).findByText('TM-SUMMARY'),
-    ).toBeInTheDocument()
-    expect(mockedFetchApplicationUniqueScales).toHaveBeenCalledWith('321')
-  })
-
   it('adds and deletes package scales', async () => {
     const initialDetail = {
       ...applicationDetail,
@@ -2742,8 +2615,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
           canUpdatePackageNumber
           hideMutationActions={false}
           authoritativeOptionsAvailability="available"
-          productTypeOptions={[]}
-          growthTypeOptions={[]}
           onDetailChanged={vi.fn().mockResolvedValue(undefined)}
         />,
       )
@@ -2804,8 +2675,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
           canUpdatePackageNumber
           hideMutationActions={false}
           authoritativeOptionsAvailability="available"
-          productTypeOptions={[{ code: 'H', description: 'Harvested Timber' }]}
-          growthTypeOptions={[{ code: 'S', description: 'Second Growth' }]}
           applicationGrowthTypeCode="S"
           onDetailChanged={onDetailChanged}
         />,
@@ -2858,8 +2727,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         canUpdatePackageNumber
         hideMutationActions={false}
         authoritativeOptionsAvailability="available"
-        productTypeOptions={[]}
-        growthTypeOptions={[]}
         onDetailChanged={vi.fn().mockResolvedValue(undefined)}
       />,
     )
@@ -2910,8 +2777,6 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         canUpdatePackageNumber
         hideMutationActions={false}
         authoritativeOptionsAvailability="available"
-        productTypeOptions={[]}
-        growthTypeOptions={[]}
         onDetailChanged={onDetailChanged}
       />,
     )

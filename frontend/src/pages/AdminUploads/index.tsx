@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
-import { Button, Column, ComboBox, Grid, TextArea, TextInput } from '@carbon/react'
+import { Button, Column, ComboBox, Grid, TextArea } from '@carbon/react'
 import {
   ArrowRight,
   CheckmarkFilled,
@@ -49,14 +49,6 @@ import {
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
 import {
-  INVOICE_AMOUNT_DECIMAL_PLACES,
-  INVOICE_AMOUNT_MAX,
-  INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
-  INVOICE_CONVERSION_RATE_MAX,
-  invoiceDecimalStorageFieldError,
-  invoiceNumberStorageFieldError,
-} from '@/pages/shared/invoice-storage-validation'
-import {
   submitAdminUpload,
   validateApplicationSubmissionUpload,
   type AdminUploadResult,
@@ -67,8 +59,10 @@ import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit
 import { actionMessageResults, type ActionResult } from '@/utils/action-result'
 import { fieldErrorText } from '@/utils/field-error'
 
+type DataUploadWorkflowType = Exclude<UploadWorkflowType, 'invoice'>
+
 type UploadWorkflowDefinition = {
-  type: UploadWorkflowType
+  type: DataUploadWorkflowType
   label: string
   requiredAction: string
   numberFieldLabel: string
@@ -76,7 +70,7 @@ type UploadWorkflowDefinition = {
 }
 
 type AdminUploadsPageProps = {
-  lockedWorkflowType?: UploadWorkflowType
+  lockedWorkflowType?: DataUploadWorkflowType
   pageTitle?: string
 }
 
@@ -109,13 +103,6 @@ const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
     numberFieldLabel: 'Permit number',
     numberFieldPlaceholder: 'Enter permit number',
   },
-  {
-    type: 'invoice',
-    label: 'Invoice upload',
-    requiredAction: '/fileInvoiceUpload',
-    numberFieldLabel: 'Permit number',
-    numberFieldPlaceholder: 'Enter permit number for invoice',
-  },
 ]
 
 const DOCUMENT_UPLOAD_WORKFLOW_DEFINITIONS = UPLOAD_WORKFLOW_DEFINITIONS.filter(
@@ -136,10 +123,6 @@ type UploadFormState = {
   applicationNumber: string
   exemptionNumber: string
   permitNumber: string
-  salesInvoiceNumber: string
-  invoiceExportValue: string
-  invoiceConversionRate: string
-  invoiceFeeInLieu: string
 }
 
 type UploadField = keyof UploadFormState | 'uploadFile'
@@ -186,23 +169,14 @@ const INITIAL_FORM_STATE: UploadFormState = {
   applicationNumber: '',
   exemptionNumber: '',
   permitNumber: '',
-  salesInvoiceNumber: '',
-  invoiceExportValue: '',
-  invoiceConversionRate: '1.00',
-  invoiceFeeInLieu: '1.00',
 }
 
 const getWorkflowFromQuery = (
   value: string | null,
-  fallback: UploadWorkflowType = 'application',
+  fallback: DataUploadWorkflowType = 'application',
   allowApplicationSubmission = true,
-): UploadWorkflowType => {
-  if (
-    value === 'application' ||
-    value === 'exemption' ||
-    value === 'permit' ||
-    value === 'invoice'
-  ) {
+): DataUploadWorkflowType => {
+  if (value === 'application' || value === 'exemption' || value === 'permit') {
     return value
   }
 
@@ -217,21 +191,11 @@ const normalizeQueryValue = (value: string | null): string => {
   return (value ?? '').trim()
 }
 
-const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState => {
-  const invoiceConversionRate = normalizeQueryValue(query.get('invoiceConversionRate'))
-  const invoiceFeeInLieu = normalizeQueryValue(query.get('invoiceFeeInLieu'))
-
-  return {
-    ...INITIAL_FORM_STATE,
-    applicationNumber: normalizeQueryValue(query.get('applicationNumber')),
-    exemptionNumber: normalizeQueryValue(query.get('exemptionNumber')),
-    permitNumber: normalizeQueryValue(query.get('permitNumber')),
-    salesInvoiceNumber: normalizeQueryValue(query.get('salesInvoiceNumber')),
-    invoiceExportValue: normalizeQueryValue(query.get('invoiceExportValue')),
-    invoiceConversionRate: invoiceConversionRate || INITIAL_FORM_STATE.invoiceConversionRate,
-    invoiceFeeInLieu: invoiceFeeInLieu || INITIAL_FORM_STATE.invoiceFeeInLieu,
-  }
-}
+const buildInitialFormStateFromQuery = (query: URLSearchParams): UploadFormState => ({
+  applicationNumber: normalizeQueryValue(query.get('applicationNumber')),
+  exemptionNumber: normalizeQueryValue(query.get('exemptionNumber')),
+  permitNumber: normalizeQueryValue(query.get('permitNumber')),
+})
 
 const trimTargetNumberInput = (input: string): string => input.trim()
 
@@ -340,7 +304,7 @@ function UploadTargetNumberSelect({
   )
 }
 
-const validateQueuedFile = (file: File, workflowType: UploadWorkflowType): string => {
+const validateQueuedFile = (file: File, workflowType: DataUploadWorkflowType): string => {
   if (!file.name.trim()) {
     return 'File name is required.'
   }
@@ -361,12 +325,9 @@ const validateQueuedFile = (file: File, workflowType: UploadWorkflowType): strin
   return validateDocumentUploadFile(file)
 }
 
-const workflowDescription = (workflowType: UploadWorkflowType): string => {
+const workflowDescription = (workflowType: DataUploadWorkflowType): string => {
   if (workflowType === 'applicationSubmission') {
     return 'Upload ESF LEXIS XML or GeoJSON application submissions, including package, species, and scale rows.'
-  }
-  if (workflowType === 'invoice') {
-    return 'Attach an invoice file and invoice values to an existing permit.'
   }
   if (workflowType === 'application') {
     return 'Attach one or more documents to an existing provincial application.'
@@ -378,7 +339,7 @@ const workflowDescription = (workflowType: UploadWorkflowType): string => {
 }
 
 const uploadTargetSummary = (
-  workflowType: UploadWorkflowType,
+  workflowType: DataUploadWorkflowType,
   formState: UploadFormState,
 ): string => {
   if (workflowType === 'applicationSubmission') {
@@ -394,20 +355,10 @@ const uploadTargetSummary = (
       ? `Exemption ${formState.exemptionNumber}`
       : 'Exemption not selected'
   }
-  if (workflowType === 'permit') {
-    return formState.permitNumber ? `Permit ${formState.permitNumber}` : 'Permit not selected'
-  }
-
-  const permitTarget = formState.permitNumber
-    ? `Permit ${formState.permitNumber}`
-    : 'Permit not selected'
-  const invoiceTarget = formState.salesInvoiceNumber
-    ? `invoice ${formState.salesInvoiceNumber}`
-    : 'invoice not selected'
-  return `${permitTarget}; ${invoiceTarget}`
+  return formState.permitNumber ? `Permit ${formState.permitNumber}` : 'Permit not selected'
 }
 
-const defaultSuccessTitle = (workflowType: UploadWorkflowType): string =>
+const defaultSuccessTitle = (workflowType: DataUploadWorkflowType): string =>
   workflowType === 'applicationSubmission' ? 'Application submission complete' : 'Upload submitted'
 
 type ApplicationSubmissionValidationContentProps = {
@@ -639,7 +590,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const initialWorkflow =
     lockedWorkflowType ?? getWorkflowFromQuery(searchParams.get('type'), 'application', false)
   const [selectedWorkflowType, setSelectedWorkflowType] =
-    useState<UploadWorkflowType>(initialWorkflow)
+    useState<DataUploadWorkflowType>(initialWorkflow)
   const [formState, setFormState] = useState<UploadFormState>(() =>
     buildInitialFormStateFromQuery(searchParams),
   )
@@ -757,40 +708,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           ? (requiredFieldError(formState.exemptionNumber, 'Exemption number') ?? undefined)
           : undefined,
       permitNumber:
-        selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice'
+        selectedWorkflowType === 'permit'
           ? (provincialApplicationNumberFieldError(formState.permitNumber, 'Permit number', true) ??
             undefined)
-          : undefined,
-      salesInvoiceNumber:
-        selectedWorkflowType === 'invoice'
-          ? invoiceNumberStorageFieldError(formState.salesInvoiceNumber)
-          : undefined,
-      invoiceExportValue:
-        selectedWorkflowType === 'invoice'
-          ? invoiceDecimalStorageFieldError(
-              formState.invoiceExportValue,
-              'Invoice export value',
-              INVOICE_AMOUNT_MAX,
-              INVOICE_AMOUNT_DECIMAL_PLACES,
-            )
-          : undefined,
-      invoiceConversionRate:
-        selectedWorkflowType === 'invoice'
-          ? invoiceDecimalStorageFieldError(
-              formState.invoiceConversionRate,
-              'Invoice conversion rate',
-              INVOICE_CONVERSION_RATE_MAX,
-              INVOICE_CONVERSION_RATE_DECIMAL_PLACES,
-            )
-          : undefined,
-      invoiceFeeInLieu:
-        selectedWorkflowType === 'invoice'
-          ? invoiceDecimalStorageFieldError(
-              formState.invoiceFeeInLieu,
-              'Invoice fee in lieu',
-              INVOICE_AMOUNT_MAX,
-              INVOICE_AMOUNT_DECIMAL_PLACES,
-            )
           : undefined,
     }),
     [
@@ -815,7 +735,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const fieldError = (field: UploadField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showValidationErrors)
 
-  const setWorkflowType = (workflowType: UploadWorkflowType): void => {
+  const setWorkflowType = (workflowType: DataUploadWorkflowType): void => {
     if (lockedWorkflowType || isSubmitting) {
       return
     }
@@ -834,12 +754,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
   const addFilesToQueue = (files: FileList | null): void => {
     if (isSubmitting || !files || files.length === 0) {
-      return
-    }
-    if (selectedWorkflowType === 'invoice' && files.length > 1) {
-      setSuccessMessage('')
-      setErrorMessage('Choose one file per invoice.')
-      setFileInputKey((current) => current + 1)
       return
     }
     if (selectedWorkflowType === 'applicationSubmission') {
@@ -878,14 +792,10 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     const nextItems = Array.from(nextItemsByFileName.values())
     const replacementFileNames = new Set(nextItems.map((item) => uploadQueueFileKey(item.file)))
 
-    setUploadQueue((current) =>
-      selectedWorkflowType === 'invoice'
-        ? nextItems
-        : [
-            ...current.filter((item) => !replacementFileNames.has(uploadQueueFileKey(item.file))),
-            ...nextItems,
-          ],
-    )
+    setUploadQueue((current) => [
+      ...current.filter((item) => !replacementFileNames.has(uploadQueueFileKey(item.file))),
+      ...nextItems,
+    ])
     if (selectedWorkflowType === 'applicationSubmission') {
       nextItems
         .filter((item) => item.status === 'queued')
@@ -1047,33 +957,12 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       }
     }
 
-    if (selectedWorkflowType === 'permit') {
-      const result = await submitAdminUpload('permit', {
-        permitNumber: formState.permitNumber.trim(),
-        file,
-        fileDescription: (item.fileDescription ?? '').trim(),
-      })
-      const message = buildUploadResultMessage(
-        'permit',
-        'Permit document upload submitted.',
-        result,
-      )
-      return {
-        message,
-        details: buildUploadReviewDetails(message, result),
-      }
-    }
-
-    const result = await submitAdminUpload('invoice', {
+    const result = await submitAdminUpload('permit', {
       permitNumber: formState.permitNumber.trim(),
-      salesInvoiceNumber: formState.salesInvoiceNumber.trim(),
-      invoiceExportValue: formState.invoiceExportValue.trim(),
-      invoiceConversionRate: formState.invoiceConversionRate.trim(),
-      invoiceFeeInLieu: formState.invoiceFeeInLieu.trim(),
       file,
       fileDescription: (item.fileDescription ?? '').trim(),
     })
-    const message = buildUploadResultMessage('invoice', 'Invoice upload submitted.', result)
+    const message = buildUploadResultMessage('permit', 'Permit document upload submitted.', result)
     return {
       message,
       details: buildUploadReviewDetails(message, result),
@@ -1555,7 +1444,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           />
         )}
 
-        {(selectedWorkflowType === 'permit' || selectedWorkflowType === 'invoice') && (
+        {selectedWorkflowType === 'permit' && (
           <UploadTargetNumberSelect
             id="permitNumber"
             labelText={selectedWorkflow.numberFieldLabel}
@@ -1575,75 +1464,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             }
           />
         )}
-
-        {selectedWorkflowType === 'invoice' && (
-          <>
-            <TextInput
-              id="salesInvoiceNumber"
-              labelText="Invoice number"
-              disabled={isSubmitting}
-              aria-required="true"
-              value={formState.salesInvoiceNumber}
-              invalid={!!fieldError('salesInvoiceNumber')}
-              invalidText={fieldError('salesInvoiceNumber')}
-              onBlur={() => markFieldTouched('salesInvoiceNumber')}
-              onChange={(event) =>
-                setFormState((current) => ({
-                  ...current,
-                  salesInvoiceNumber: event.target.value,
-                }))
-              }
-            />
-            <TextInput
-              id="invoiceExportValue"
-              labelText="Export value (CAD)"
-              disabled={isSubmitting}
-              aria-required="true"
-              value={formState.invoiceExportValue}
-              invalid={!!fieldError('invoiceExportValue')}
-              invalidText={fieldError('invoiceExportValue')}
-              onBlur={() => markFieldTouched('invoiceExportValue')}
-              onChange={(event) =>
-                setFormState((current) => ({
-                  ...current,
-                  invoiceExportValue: event.target.value,
-                }))
-              }
-            />
-            <TextInput
-              id="invoiceConversionRate"
-              labelText="Conversion rate"
-              disabled={isSubmitting}
-              aria-required="true"
-              value={formState.invoiceConversionRate}
-              invalid={!!fieldError('invoiceConversionRate')}
-              invalidText={fieldError('invoiceConversionRate')}
-              onBlur={() => markFieldTouched('invoiceConversionRate')}
-              onChange={(event) =>
-                setFormState((current) => ({
-                  ...current,
-                  invoiceConversionRate: event.target.value,
-                }))
-              }
-            />
-            <TextInput
-              id="invoiceFeeInLieu"
-              labelText="Fee in lieu"
-              disabled={isSubmitting}
-              aria-required="true"
-              value={formState.invoiceFeeInLieu}
-              invalid={!!fieldError('invoiceFeeInLieu')}
-              invalidText={fieldError('invoiceFeeInLieu')}
-              onBlur={() => markFieldTouched('invoiceFeeInLieu')}
-              onChange={(event) =>
-                setFormState((current) => ({
-                  ...current,
-                  invoiceFeeInLieu: event.target.value,
-                }))
-              }
-            />
-          </>
-        )}
       </div>
 
       <MultiFileDropZone
@@ -1651,7 +1471,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           selectedWorkflowType === 'applicationSubmission' ? 'Submission file' : 'Upload documents'
         }
         description={uploadFormatText}
-        multiple={selectedWorkflowType !== 'invoice'}
         inputId="uploadFile"
         inputKey={fileInputKey}
         inputLabel={uploadInputLabel}
