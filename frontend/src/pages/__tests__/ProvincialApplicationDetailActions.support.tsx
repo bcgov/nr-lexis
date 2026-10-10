@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { expect, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
@@ -287,11 +287,6 @@ const applicationSummarySnapshot: ApplicationSummarySnapshot = {
   oicIndicator: 'N',
   endUseCode: 'LU',
   speciesCodes: ['FI'],
-}
-
-const LocationProbe = () => {
-  const location = useLocation()
-  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
 }
 
 const NavigateButton = ({ to }: { to: string }) => {
@@ -673,7 +668,6 @@ export const setupApplicationDetailTests = (): void => {
 }
 
 export {
-  LocationProbe,
   NavigateButton,
   applicationDetail,
   applicationSummarySnapshot,
@@ -697,9 +691,7 @@ export {
   mockedFetchApplicationPackageSpecies,
   mockedFetchApplicationPackageStatusCodes,
   mockedFetchApplicationPermits,
-  mockedFetchApplicationRemainingSpecies,
   mockedFetchApplicationReviewOptions,
-  mockedFetchApplicationScaleDetails,
   mockedFetchApplicationSpecies,
   mockedFetchApplicationSummarySnapshot,
   mockedFetchProvincialApplicationDetail,
