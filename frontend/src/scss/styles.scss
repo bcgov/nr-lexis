@@ -519,10 +519,12 @@ button.csp-side-nav__group.cds--side-nav__submenu {
   white-space: nowrap;
 }
 
-// Carbon sizes group items at 32px; every LEXIS navigation row is 48px.
+// Carbon sizes group items at 32px; every LEXIS navigation row is 48px. The narrower end padding
+// keeps the longest group label whole after Carbon's 72px item indent.
 .csp-side-nav .cds--side-nav__menu a.cds--side-nav__link {
   block-size: 48px;
   min-block-size: 48px;
+  padding-inline-end: 8px;
 }
 
 .csp-side-nav__link:hover,

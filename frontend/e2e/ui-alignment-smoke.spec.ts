@@ -886,6 +886,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await reportsToggle.click()
     await expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
     await expect(reportsMenu).toBeVisible()
+    expect(
+      await reportsMenu
+        .locator('.cds--side-nav__link-text')
+        .evaluateAll((labels) =>
+          labels
+            .filter((label) => label.scrollWidth > label.clientWidth)
+            .map((label) => label.textContent),
+        ),
+    ).toEqual([])
     for (const retiredReport of [
       'Application Report',
       'TEAC Package',
