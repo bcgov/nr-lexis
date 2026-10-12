@@ -1310,7 +1310,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     ApplicationDetailsRpcRepository.ScaleMutationRecord record =
         new ApplicationDetailsRpcRepository.ScaleMutationRecord(
             null,
-            normalized.timberMark(),
+            storedTimberMark(normalized),
             normalized.pieces(),
             normalized.volume(),
             normalized.packageNumber(),
@@ -2204,6 +2204,22 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     String requestedOicIndicator = trimToNull(request.oicIndicator());
     return requestedOicIndicator != null
         && !requestedOicIndicator.equalsIgnoreCase(trimToNull(existing.oicIndicator()));
+  }
+
+  // An unmanufactured timber scale entered as UNMANU is stored without a timber mark; UNMANU is
+  // not a hauling authority.
+  private String storedTimberMark(ScaleMutationRequest request) {
+    if (!UNMANUFACTURED_TIMBER_MARK.equalsIgnoreCase(trimToNull(request.timberMark()))) {
+      return request.timberMark();
+    }
+    boolean unmanufactured =
+        repository
+            .findApplicationUpdateRecord(request.applicationNumber())
+            .map(ApplicationDetailsRpcRepository.ApplicationUpdateRecord::productTypeCode)
+            .map(TextUtils::trimToNull)
+            .filter(EXPORT_PRODUCT_TYPE_UNMANUFACTURED::equals)
+            .isPresent();
+    return unmanufactured ? null : request.timberMark();
   }
 
   private void validateTimberMarkForContext(

@@ -3177,6 +3177,40 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void addScaleToPackageShouldStoreUnmanuScaleWithoutTimberMarkForUnmanufacturedTimber() {
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(
+            Optional.of(applicationUpdateRecordWithProductFields("T", null, 1.5d, "Camp 1")));
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
+        .thenReturn(Optional.of(packageDetailsRow("PKG-903", 100.0d)));
+    when(repository.findGradeCodeRequired("1"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
+    when(repository.insertScaleDetail(any()))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "55", null, "FI", "1", 12.5d, 10L, 1000456L, null, "PKG-903", "")));
+
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addScaleToPackage(
+            new ApplicationDetailsRpcService.ScaleMutationRequest(
+                "UNMANU", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
+            "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ScaleMutationRecord> inserted =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ScaleMutationRecord.class);
+    verify(repository).insertScaleDetail(inserted.capture());
+    assertThat(inserted.getValue().timberMark()).isNull();
+    verify(repository, never()).findTimberMarkByOrgUnit(any(), any());
+  }
+
+  @Test
   void addScaleToPackageShouldApplyLegacyFederalScaleRulesForUnmanufacturedTimber() {
     ApplicationDetailsRpcRepository.TimberMarkRow federalTimberMark =
         new ApplicationDetailsRpcRepository.TimberMarkRow("TM001", "ACT", "FF-1", "B08");
