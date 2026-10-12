@@ -53,7 +53,6 @@ const applicationRequest = {
     receivedToDate: '2025-12-31',
     listingFromDate: '2026-01-01',
     listingToDate: '2026-01-31',
-    exportScheduleId: '31916',
     applicantClientNumber: '00012345',
     ownerClientNumber: '00054321',
     agentClientNumber: '00067890',
@@ -70,8 +69,6 @@ const exemptionRequest = {
     packageNumber: 'PKG-2',
     exemptionNumber: 'EX-2',
     region: ['22'],
-    approvalFromDate: '2026-01-01',
-    approvalToDate: '2026-01-31',
     listFromDate: '2026-02-01',
     listToDate: '2026-02-28',
     exemptionTypeCode: 'LOG',
@@ -262,7 +259,6 @@ describe('search-service contracts', () => {
     expect(params.get('region')).toBe('12')
     expect(params.get('receivedFromDate')).toBe('2025-12-01')
     expect(params.get('receivedToDate')).toBe('2025-12-31')
-    expect(params.get('exportScheduleId')).toBe('31916')
     expect(params.get('sortField')).toBe('applicationNumber DESC')
     expect(result.page.totalElements).toBe(12)
     expect(result.content[0]).toEqual(
@@ -354,8 +350,7 @@ describe('search-service contracts', () => {
     const params = readParams()
     expect(params.get('exemptionStatusCode')).toBe('NEW')
     expect(params.get('region')).toBe('22')
-    expect(params.get('approvalFromDate')).toBe('2026-01-01')
-    expect(params.get('approvalToDate')).toBe('2026-01-31')
+    expect(params.has('approvalFromDate')).toBe(false)
     expect(params.get('sortField')).toBe('exemptionNumber')
     expect(result.content[0]).toEqual(
       expect.objectContaining({

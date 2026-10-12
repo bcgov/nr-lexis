@@ -1,17 +1,14 @@
 package ca.bc.gov.mof.lexis.controller;
 
 import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.parsePositiveLong;
-import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseApplicationNumbers;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
 
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
-import ca.bc.gov.mof.lexis.dto.application.LexisApplicationOfferValidationDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
-import ca.bc.gov.mof.lexis.dto.application.LexisApplicationValidationDto;
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
@@ -231,24 +228,6 @@ public class LexisApplicationController {
         .filter(detail -> provincialAuthorizationService.canAccessApplication(authentication, detail))
         .map(detail -> ResponseEntity.ok(withEditLock(detail, authentication)))
         .orElseGet(() -> ResponseEntity.notFound().build());
-  }
-
-  @GetMapping("/search/verify-clients")
-  public ResponseEntity<LexisApplicationValidationDto> verifyClients(
-      @RequestParam(name = "applications") String applications,
-      Authentication authentication) {
-    List<Long> ids = parseApplicationNumbers(applications);
-    ids.forEach(id -> provincialAuthorizationService.requireApplication(authentication, id));
-    return ResponseEntity.ok(new LexisApplicationValidationDto(service.verifyApplicationClients(ids)));
-  }
-
-  @GetMapping("/search/has-valid-offer")
-  public ResponseEntity<LexisApplicationOfferValidationDto> hasValidOffer(
-      @RequestParam(name = "applications") String applications,
-      Authentication authentication) {
-    List<Long> ids = parseApplicationNumbers(applications);
-    ids.forEach(id -> provincialAuthorizationService.requireApplication(authentication, id));
-    return ResponseEntity.ok(new LexisApplicationOfferValidationDto(service.hasValidOffer(ids)));
   }
 
   private LexisApplicationSearchCriteria buildCriteria(

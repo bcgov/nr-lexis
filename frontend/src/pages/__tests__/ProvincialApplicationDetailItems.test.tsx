@@ -396,7 +396,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     },
   )
 
-  it('keeps all package rows and totals despite retired filters and package selection', async () => {
+  it('lists every package in the selector and keeps totals despite retired filters and package selection', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       packages: [
@@ -457,20 +457,17 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         .slice(-3),
     ).toEqual(['Species list', 'End use', 'Total pieces'])
 
-    const packagesSection = (await screen.findByRole('heading', { name: 'Packages' })).closest(
-      '.cds--tile',
-    )
-    expect(packagesSection).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'Packages' })).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Application packages')).not.toBeInTheDocument()
+    expect(screen.queryByRole('radio', { name: /^Select package / })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Filter packages')).not.toBeInTheDocument()
     expect(
       screen.queryByRole('group', { name: 'Application packages toolbar' }),
     ).not.toBeInTheDocument()
-    expect(within(packagesSection as HTMLElement).getByText('PKG-1')).toBeInTheDocument()
-    expect(within(packagesSection as HTMLElement).getByText('PKG-2')).toBeInTheDocument()
 
-    const packageDetailsSection = screen
-      .getByRole('heading', { name: /^Package PKG-/ })
-      .closest('section')
+    const packageDetailsSection = (
+      await screen.findByRole('heading', { name: 'Package PKG-1' })
+    ).closest('section')
     expect(packageDetailsSection).toBeTruthy()
     expect(
       within(packageDetailsSection as HTMLElement).getByText('Average top diameter (rads)'),
@@ -482,11 +479,23 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => expect(selectedPackageTotalPieces()).toHaveTextContent('5'))
 
     const packageSelector = screen.getByRole('combobox', { name: 'Selected package' })
-    await chooseComboBoxOption(packageSelector, 'PKG-2')
+    expect(packageSelector).toHaveValue('PKG-1')
+    await userEvent.click(packageSelector)
+    const packageOptions = within(
+      document.getElementById(packageSelector.getAttribute('aria-controls') ?? '') as HTMLElement,
+    )
+    await waitFor(() =>
+      expect(packageOptions.getAllByRole('option').map((option) => option.textContent)).toEqual([
+        'PKG-1',
+        'PKG-2',
+      ]),
+    )
+    await userEvent.click(packageOptions.getByRole('option', { name: 'PKG-2' }))
     await waitFor(() => {
       expect(packageSelector).toHaveValue('PKG-2')
       expect(selectedPackageTotalPieces()).toHaveTextContent('3')
     })
+    expect(screen.getByRole('heading', { name: 'Package PKG-2' })).toBeInTheDocument()
     expect(applicationTotalPieces()).toHaveTextContent('8')
 
     await userEvent.click(
@@ -496,6 +505,77 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(applicationItemDetails.getAllByText('Total pieces')).toHaveLength(1)
       expect(applicationTotalPieces()).toHaveTextContent('8')
     })
+  })
+
+  it('edits and adds scales to a package chosen from the selector', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [
+        { packageNumber: 'PKG-1', volume: 100, pieceCount: 5 },
+        { packageNumber: 'PKG-2', volume: 50, pieceCount: 3 },
+      ],
+    })
+    mockedFetchApplicationPackageDetails.mockImplementation(async (packageNumber) => ({
+      success: true,
+      packageNumber,
+      volume: packageNumber === 'PKG-2' ? '50.0' : '100.0',
+      scaledVolume: packageNumber === 'PKG-2' ? 10 : 20,
+      length: '12.0',
+      diameter: '24.0',
+      status: 'ACT',
+      comments: `${packageNumber} comments`,
+      statusDescription: 'Active',
+      reprocessed: 'N',
+      ageClass: 'O',
+      ageClassDescription: 'Old',
+      productType: 'H',
+      productTypeDescription: 'Harvested Timber',
+    }))
+    mockedFetchApplicationPackageScales.mockImplementation(async (packageNumber) => [
+      {
+        permitted: false,
+        timberMark: packageNumber === 'PKG-2' ? 'TM020' : 'TM010',
+        species: 'Fir',
+        grade: 'Sawlog',
+        pieces: packageNumber === 'PKG-2' ? 3 : 5,
+        volume: packageNumber === 'PKG-2' ? '10.0' : '20.0',
+        id: packageNumber === 'PKG-2' ? '56' : '55',
+        cascadeSplitCode: 'S',
+      },
+    ])
+
+    renderApplicationItems()
+
+    await selectApplicationDetailTab('Scale')
+    const packageSelector = await screen.findByRole('combobox', { name: 'Selected package' })
+    await waitFor(() => expect(packageSelector).toHaveValue('PKG-1'))
+    await chooseComboBoxOption(packageSelector, 'PKG-2')
+
+    expect(await screen.findByRole('heading', { name: 'Package PKG-2' })).toBeInTheDocument()
+    const summaryOfScale = document.getElementById('application-items-scales') as HTMLElement
+    await waitFor(() => {
+      expect(within(summaryOfScale).getByText('TM020')).toBeInTheDocument()
+      expect(within(summaryOfScale).queryByText('TM010')).not.toBeInTheDocument()
+    })
+
+    await userEvent.click(screen.getByRole('button', { name: 'Edit package' }))
+    const packageDrawer = within(
+      (await screen.findByLabelText('Package comments')).closest(
+        '.application-items-drawer',
+      ) as HTMLElement,
+    )
+    expect(packageDrawer.getByLabelText('Package comments')).toHaveValue('PKG-2 comments')
+    await userEvent.click(packageDrawer.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByLabelText('Package comments')).not.toBeInTheDocument())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add scale' }))
+    await fillNewScale(screen)
+    fireEvent.click(screen.getByRole('button', { name: 'Save scale' }))
+    await waitFor(() =>
+      expect(mockedAddApplicationScaleToPackage).toHaveBeenCalledWith(
+        expect.objectContaining({ packageNumber: 'PKG-2', timberMark: 'TM002' }),
+      ),
+    )
   })
 
   it.each([
@@ -2374,22 +2454,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-1')
     })
 
-    const packagesSection = (await screen.findByRole('heading', { name: 'Packages' })).closest(
-      '.cds--tile',
-    )
-    expect(packagesSection).toBeTruthy()
-    const secondPackageRow = within(packagesSection as HTMLElement)
-      .getByText('PKG-2')
-      .closest('tr')
-    expect(secondPackageRow).toBeTruthy()
-    expect(within(secondPackageRow as HTMLElement).getByText('200.0')).toBeInTheDocument()
-    expect(within(secondPackageRow as HTMLElement).getByText('8')).toBeInTheDocument()
-
-    const secondPackageRadio = within(secondPackageRow as HTMLElement).getByRole('radio', {
-      name: 'Select package PKG-2',
-    })
-    expect(secondPackageRadio).not.toBeChecked()
-    fireEvent.click(secondPackageRadio)
+    const packageSelector = screen.getByRole('combobox', { name: 'Selected package' })
+    expect(packageSelector).toHaveValue('PKG-1')
+    await chooseComboBoxOption(packageSelector, 'PKG-2')
 
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
@@ -2397,7 +2464,10 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         'Second package',
       )
     })
-    expect(secondPackageRadio).toBeChecked()
+    expect(packageSelector).toHaveValue('PKG-2')
+    expect(
+      screen.getByText('Package volume (m³)').parentElement?.querySelector('dd'),
+    ).toHaveTextContent('200.0')
 
     await act(async () => {
       resolveFirstPackageDetails?.({
@@ -2467,34 +2537,23 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await openScaleControls()
     fireEvent.change(screen.getByLabelText('Timber mark'), { target: { value: 'DRAFT-A' } })
-    const packagesSection = (await screen.findByRole('heading', { name: 'Packages' })).closest(
-      '.cds--tile',
-    )
-    expect(packagesSection).toBeTruthy()
-    const secondPackageRadio = within(packagesSection as HTMLElement).getByRole('radio', {
-      name: 'Select package PKG-2',
-    })
-    fireEvent.click(secondPackageRadio)
+    const packageSelector = screen.getByRole('combobox', { name: 'Selected package' })
+    await chooseComboBoxOption(packageSelector, 'PKG-2')
 
     const confirmation = await screen.findByRole('dialog', { name: 'Discard changes?' })
     expect(confirmation).toHaveAccessibleDescription('Your changes will be lost.')
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Keep editing' }))
-    expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue('PKG-1')
-    expect(
-      within(packagesSection as HTMLElement).getByRole('radio', {
-        name: 'Select package PKG-1',
-      }),
-    ).toBeChecked()
-    expect(secondPackageRadio).not.toBeChecked()
+    expect(packageSelector).toHaveValue('PKG-1')
+    expect(screen.getByRole('heading', { name: 'Package PKG-1' })).toBeInTheDocument()
     expect(screen.getByLabelText('Timber mark')).toHaveValue('DRAFT-A')
 
-    fireEvent.click(secondPackageRadio)
+    await chooseComboBoxOption(packageSelector, 'PKG-2')
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue('PKG-2')
+      expect(packageSelector).toHaveValue('PKG-2')
       expect(screen.getByLabelText('Timber mark')).toHaveValue('')
     })
-    expect(secondPackageRadio).toBeChecked()
+    expect(screen.getByRole('heading', { name: 'Package PKG-2' })).toBeInTheDocument()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 

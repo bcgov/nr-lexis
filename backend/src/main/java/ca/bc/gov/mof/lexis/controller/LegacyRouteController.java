@@ -36,8 +36,6 @@ public class LegacyRouteController {
   private static final String ACTION_SEND_STATUS_EMAIL = "sendStatusEmail";
   private static final String ACTION_SEARCH = "search";
   private static final String ACTION_UPDATE_PAGING = "updatePaging";
-  private static final String ACTION_VERIFY_APPLICATION_CLIENTS = "verifyApplicationClients";
-  private static final String ACTION_HAS_VALID_OFFER = "hasValidOffer";
   private static final String ACTION_GET_APPLICATIONS = "getApplications";
   private static final String ACTION_GET_EXEMPTIONS = "getExemptions";
   private static final String ACTION_GET_OFFERS = "getOffers";
@@ -56,19 +54,16 @@ public class LegacyRouteController {
   private static final String ACTION_GET_PACKAGE_VOLUME = "getPackageVolume";
   private static final String ACTION_GET_APPLICATION_VOLUME = "getApplicationVolume";
   private static final String ACTION_GET_CLIENT_DATA = "getClientData";
-  private static final String ACTION_GET_CLIENT_LOCATIONS = "getClientLocations";
   private static final String ACTION_ADD_OFFER = "addOffer";
   private static final String ACTION_UPDATE_OFFER = "updateOffer";
   private static final String ACTION_GET_PERMIT_SUMMARY = "getPermitSummary";
   private static final String ACTION_GET_TOTAL_FEES_FOR_PERMIT = "getTotalFeesForPermit";
   private static final String ACTION_GET_SCALE_FEES_FOR_PACKAGE = "getScaleFeesForPackage";
-  private static final String ACTION_GET_PERMIT_DATA_AFTER_SCALE_UPDATE = "getPermitDataAfterScaleUpdate";
   private static final String ACTION_GET_PACKAGE_VOLUME_SUM = "getPackageVolumeSum";
   private static final String ACTION_GET_PACKAGE_INFO = "getPackageInfo";
   private static final String ACTION_GET_PACKAGE_DETAILS = "getPackageDetails";
   private static final String ACTION_GET_OIC_PACKAGE_LIST = "getOICPackageList";
   private static final String ACTION_GET_SCALES_FOR_PACKAGE = "getScalesForPackage";
-  private static final String ACTION_CHECK_PERMIT_NUMBER = "checkPermitNumber";
   private static final String ACTION_ADD_PERMIT = "addPermit";
   private static final String ACTION_UPDATE_PERMIT = "updatePermit";
   private static final String ACTION_UPDATE_SHIPPING = "updateShipping";
@@ -76,17 +71,11 @@ public class LegacyRouteController {
   private static final String ACTION_REMOVE_APPLICATION_FROM_PERMIT = "removeApplicationFromPermit";
   private static final String ACTION_GET_APPLICATION_LIST = "getApplicationList";
   private static final String ACTION_GET_AVAILABLE_APPLICATION_LIST = "getAvailableApplicationList";
-  private static final String ACTION_GET_AVAILABLE_PACKAGE_LIST = "getAvailablePackageList";
   private static final String ACTION_GET_APPROVED_EXEMPTION_VOLUME = "getApprovedExemptionVolume";
   private static final String ACTION_GET_EXEMPTION_VOLUME_REMAINING = "getExemptionVolumeRemaining";
   private static final String ACTION_GET_PERMIT_HAS_APPLICATIONS = "getPermitHasApplications";
-  private static final String ACTION_ADD_INVOICE = "addInvoice";
-  private static final String ACTION_GET_INVOICES_FOR_PERMIT = "getInvoicesForPermit";
-  private static final String ACTION_GET_INVOICE_DETAILS = "getInvoiceDetails";
   private static final String ACTION_GET_GBMS_INVOICE_HISTORY = "getGBMSInvoiceHistory";
-  private static final String ACTION_GET_CONVERSION_RATE = "getConversionRate";
   private static final String ACTION_GET_COUNTRY_LIST = "getCountryList";
-  private static final String ACTION_GET_FILE_TYPES = "getFileTypes";
   private static final String ACTION_CHECK_FORM_CHANGES = "checkFormChanges";
   private static final String ACTION_RELEASE_LOCK = "releaseLock";
   private static final String ACTION_GET_DOCUMENT = "getDocument";
@@ -108,34 +97,25 @@ public class LegacyRouteController {
           ACTION_GET_PACKAGE_LIST,
           ACTION_GET_PACKAGE_VOLUME,
           ACTION_GET_APPLICATION_VOLUME,
-          ACTION_GET_CLIENT_DATA,
-          ACTION_GET_CLIENT_LOCATIONS);
+          ACTION_GET_CLIENT_DATA);
   private static final Set<String> PERMIT_DETAILS_SAFE_GET_ACTIONS =
       Set.of(
           ACTION_VIEW,
           ACTION_GET_PERMIT_SUMMARY,
           ACTION_GET_TOTAL_FEES_FOR_PERMIT,
           ACTION_GET_SCALE_FEES_FOR_PACKAGE,
-          ACTION_GET_PERMIT_DATA_AFTER_SCALE_UPDATE,
           ACTION_GET_PACKAGE_VOLUME_SUM,
-          ACTION_GET_PACKAGE_LIST,
           ACTION_GET_PACKAGE_INFO,
           ACTION_GET_PACKAGE_DETAILS,
           ACTION_GET_OIC_PACKAGE_LIST,
           ACTION_GET_SCALES_FOR_PACKAGE,
-          ACTION_CHECK_PERMIT_NUMBER,
           ACTION_GET_APPLICATION_LIST,
           ACTION_GET_AVAILABLE_APPLICATION_LIST,
-          ACTION_GET_AVAILABLE_PACKAGE_LIST,
           ACTION_GET_APPROVED_EXEMPTION_VOLUME,
           ACTION_GET_EXEMPTION_VOLUME_REMAINING,
           ACTION_GET_PERMIT_HAS_APPLICATIONS,
-          ACTION_GET_INVOICES_FOR_PERMIT,
-          ACTION_GET_INVOICE_DETAILS,
           ACTION_GET_GBMS_INVOICE_HISTORY,
-          ACTION_GET_CONVERSION_RATE,
           ACTION_GET_COUNTRY_LIST,
-          ACTION_GET_FILE_TYPES,
           ACTION_CHECK_FORM_CHANGES,
           ACTION_GET_DOCUMENT,
           ACTION_GET_DOCUMENT_DETAILS);
@@ -197,18 +177,11 @@ public class LegacyRouteController {
       @RequestParam(name = "exportScheduleId", required = false) String exportScheduleId,
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
-      @RequestParam(name = "applications", required = false) String applications,
       @RequestParam(name = "page", defaultValue = "0") @PositiveOrZero Integer page,
       @RequestParam(name = "size", defaultValue = "25") @Min(1) @Max(200) Integer size,
       Authentication authentication) {
     if (ACTION_VIEW.equalsIgnoreCase(actionMapping)) {
       return applicationController.searchOptions(authentication);
-    }
-    if (ACTION_VERIFY_APPLICATION_CLIENTS.equalsIgnoreCase(actionMapping)) {
-      return applicationController.verifyClients(applications, authentication);
-    }
-    if (ACTION_HAS_VALID_OFFER.equalsIgnoreCase(actionMapping)) {
-      return applicationController.hasValidOffer(applications, authentication);
     }
     return applicationController.search(
         applicationNumber,
@@ -305,8 +278,6 @@ public class LegacyRouteController {
       @RequestParam(name = "exemptionTypeCode", required = false) String exemptionTypeCode,
       @RequestParam(name = "exemptionStatus", required = false) String exemptionStatus,
       @RequestParam(name = "exemptionStatusCode", required = false) String exemptionStatusCode,
-      @RequestParam(name = "approvalFromDate", required = false) String approvalFromDate,
-      @RequestParam(name = "approvalToDate", required = false) String approvalToDate,
       @RequestParam(name = "listingFromDate", required = false) String listingFromDate,
       @RequestParam(name = "listFromDate", required = false) String listFromDate,
       @RequestParam(name = "listingToDate", required = false) String listingToDate,
@@ -329,8 +300,6 @@ public class LegacyRouteController {
         exemptionTypeCode,
         exemptionStatus,
         exemptionStatusCode,
-        approvalFromDate,
-        approvalToDate,
         listingFromDate,
         listFromDate,
         listingToDate,
@@ -547,9 +516,6 @@ public class LegacyRouteController {
     if (ACTION_GET_CLIENT_DATA.equalsIgnoreCase(actionMapping)) {
       return offerDetailsRpcController.getClientData(clientNumber, clientLocationCode);
     }
-    if (ACTION_GET_CLIENT_LOCATIONS.equalsIgnoreCase(actionMapping)) {
-      return offerDetailsRpcController.getClientLocations(clientNumber);
-    }
     if (ACTION_ADD_OFFER.equalsIgnoreCase(actionMapping)) {
       return offerDetailsRpcController.addOfferLegacy(requestParameters, authentication);
     }
@@ -571,11 +537,6 @@ public class LegacyRouteController {
       @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
       @RequestParam(name = "selectedApplications", required = false) String selectedApplications,
       @RequestParam(name = "applicationNumber", required = false) Long permitApplicationNumber,
-      @RequestParam(name = "selectedPackages", required = false) String selectedPackages,
-      @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber,
-      @RequestParam(name = "invoiceExportValue", required = false) String invoiceExportValue,
-      @RequestParam(name = "invoiceConversionRate", required = false) String invoiceConversionRate,
-      @RequestParam(name = "invoiceFeeInLieu", required = false) String invoiceFeeInLieu,
       @RequestParam(name = "receiptNumber", required = false) String receiptNumber,
       @RequestParam(name = "fileID", required = false) String fileId,
       @RequestParam(name = "fileName", required = false) String fileName,
@@ -603,14 +564,8 @@ public class LegacyRouteController {
       return permitDetailsRpcController.getScaleFeesForPackage(
           packageNumber, permitNumber, authentication);
     }
-    if (ACTION_GET_PERMIT_DATA_AFTER_SCALE_UPDATE.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getPermitDataAfterScaleUpdate(permitNumber);
-    }
     if (ACTION_GET_PACKAGE_VOLUME_SUM.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPackageVolumeSum(permitNumber, packageNumber);
-    }
-    if (ACTION_GET_PACKAGE_LIST.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getPackageList(permitNumber);
     }
     if (ACTION_GET_OIC_PACKAGE_LIST.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getOicPackageList(permitNumber);
@@ -623,9 +578,6 @@ public class LegacyRouteController {
     }
     if (ACTION_GET_SCALES_FOR_PACKAGE.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getScalesForPackage(packageNumber, permitNumber);
-    }
-    if (ACTION_CHECK_PERMIT_NUMBER.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.checkPermitNumber(permitNumber);
     }
     if (ACTION_ADD_PERMIT.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.addPermit(request, authentication);
@@ -651,10 +603,6 @@ public class LegacyRouteController {
       return permitDetailsRpcController.getAvailableApplicationList(
           exemptionNumber, selectedApplications, authentication);
     }
-    if (ACTION_GET_AVAILABLE_PACKAGE_LIST.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getAvailablePackageList(
-          exemptionNumber, selectedPackages, authentication);
-    }
     if (ACTION_GET_APPROVED_EXEMPTION_VOLUME.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getApprovedExemptionVolume(exemptionNumber);
     }
@@ -664,39 +612,18 @@ public class LegacyRouteController {
     if (ACTION_GET_PERMIT_HAS_APPLICATIONS.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getPermitHasApplications(permitNumber);
     }
-    if (ACTION_ADD_INVOICE.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.addInvoice(
-          permitNumber,
-          salesInvoiceNumber,
-          invoiceExportValue,
-          invoiceConversionRate,
-          invoiceFeeInLieu,
-          authentication);
-    }
     if (ACTION_CHECK_FORM_CHANGES.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.checkFormChanges(request);
     }
     if (ACTION_RELEASE_LOCK.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.releaseLock(request);
     }
-    if (ACTION_GET_INVOICES_FOR_PERMIT.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getInvoicesForPermit(permitNumber);
-    }
-    if (ACTION_GET_INVOICE_DETAILS.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getInvoiceDetails(permitNumber, salesInvoiceNumber);
-    }
     if (ACTION_GET_GBMS_INVOICE_HISTORY.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getGbmsInvoiceHistory(
           receiptNumber, permitNumber, authentication);
     }
-    if (ACTION_GET_CONVERSION_RATE.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getConversionRate();
-    }
     if (ACTION_GET_COUNTRY_LIST.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.getCountryList();
-    }
-    if (ACTION_GET_FILE_TYPES.equalsIgnoreCase(actionMapping)) {
-      return permitDetailsRpcController.getFileTypes();
     }
     if (ACTION_GET_DOCUMENT.equalsIgnoreCase(actionMapping)) {
       return permitDetailsRpcController.streamDocument(
@@ -786,7 +713,6 @@ public class LegacyRouteController {
     return ACTION_ADD_PERMIT.equalsIgnoreCase(actionMapping)
         || ACTION_UPDATE_PERMIT.equalsIgnoreCase(actionMapping)
         || ACTION_UPDATE_SHIPPING.equalsIgnoreCase(actionMapping)
-        || ACTION_ADD_INVOICE.equalsIgnoreCase(actionMapping)
         || ACTION_REMOVE_PERMIT_DOCUMENT.equalsIgnoreCase(actionMapping)
         || ACTION_REMOVE_APPLICATION_DOCUMENT.equalsIgnoreCase(actionMapping)
         || ACTION_REMOVE_INVOICE_DOCUMENT.equalsIgnoreCase(actionMapping);

@@ -40,11 +40,6 @@ export type ExemptionPermitRow = {
   canViewPermit: boolean
 }
 
-export type ExemptionBlanketOicTotals = {
-  requestedVolume: string
-  completedVolume: string
-}
-
 export type ExemptionRegionContext = {
   exemptionNumber: string
   regionNumbers: string[]
@@ -237,28 +232,6 @@ export const fetchExemptionPermits = async (
       canViewPermit: item.canViewPermit,
     }
   })
-}
-
-export const fetchExemptionBlanketOicTotals = async (
-  exemptionNumber: string,
-): Promise<ExemptionBlanketOicTotals> => {
-  const response = await apiService
-    .getAxiosInstance()
-    .get<unknown>('/lexis/rpc/exemption-details/blanket-oic-totals', {
-      params: { exemptionNumber: exemptionNumber.trim() },
-    })
-  if (
-    !isRecord(response.data) ||
-    !Object.hasOwn(response.data, 'requestedVolume') ||
-    !Object.hasOwn(response.data, 'completedVolume')
-  ) {
-    throw new Error('Unexpected Blanket OIC totals payload.')
-  }
-
-  return {
-    requestedVolume: asString(response.data.requestedVolume),
-    completedVolume: asString(response.data.completedVolume),
-  }
 }
 
 export const fetchExemptionRegionContext = async (

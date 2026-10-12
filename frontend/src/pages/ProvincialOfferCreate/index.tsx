@@ -665,9 +665,6 @@ const ProvincialOfferCreatePage = () => {
             ? 'Select a package from this application.'
             : null,
       ),
-      offeringClientNumber: isScopedProvincialSubmitter
-        ? (requiredFieldError(effectiveOfferingClientNumber, 'Offering client number') ?? undefined)
-        : undefined,
       companyName:
         offerTextStorageFieldError(
           effectiveCompanyName,
@@ -727,10 +724,8 @@ const ProvincialOfferCreatePage = () => {
       contextVolume,
       effectiveCompanyName,
       effectiveContactName,
-      effectiveOfferingClientNumber,
       form,
       isLoadingApplicationContext,
-      isScopedProvincialSubmitter,
       packageOptions,
       packageVolumeError,
     ],
@@ -994,20 +989,6 @@ const ProvincialOfferCreatePage = () => {
             <legend>Offering company details</legend>
             <RecordFieldGrid editing>
               <RecordFieldRow>
-                {isScopedProvincialSubmitter && (
-                  <RecordFieldCell>
-                    <TextInput
-                      id="offeringClientNumber"
-                      labelText={requiredLabel('Offering client number')}
-                      aria-required="true"
-                      value={effectiveOfferingClientNumber}
-                      invalid={!!fieldError('offeringClientNumber')}
-                      invalidText={fieldError('offeringClientNumber')}
-                      readOnly
-                      helperText="Loaded from your authenticated forest client access."
-                    />
-                  </RecordFieldCell>
-                )}
                 <RecordFieldCell>
                   <TextInput
                     id="companyName"
@@ -1127,15 +1108,6 @@ const ProvincialOfferCreatePage = () => {
                 </RecordFieldCell>
               </RecordFieldRow>
               <RecordFieldRow>
-                <RecordFieldCell span="wide">
-                  <TextInput
-                    id="region"
-                    labelText="Region"
-                    value={applicationDetails?.region || 'Not available'}
-                    helperText="Derived from the selected application."
-                    readOnly
-                  />
-                </RecordFieldCell>
                 <RecordFieldCell>
                   <TextInput
                     id="purchaseOfferDate"

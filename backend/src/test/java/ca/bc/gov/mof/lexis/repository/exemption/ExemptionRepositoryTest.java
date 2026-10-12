@@ -46,7 +46,7 @@ class ExemptionRepositoryTest {
     TestExemptionRepository repository = new TestExemptionRepository();
     ExemptionSearchCriteria criteria = new ExemptionSearchCriteria(
         null, null, null, null, null, null, null,
-        null, null, null, null, List.of(), false, false, false,
+        null, null, List.of(), false, false, false,
         null, 0, 25, null, "00012345");
 
     repository.search(criteria);
@@ -259,7 +259,7 @@ class ExemptionRepositoryTest {
     ExemptionSearchCriteria criteria =
         new ExemptionSearchCriteria(
             null, null, null, " NULL ", "NULL", "00012345", null,
-            null, null, null, null, List.of(76L), 0, 10);
+            null, null, List.of(76L), 0, 10);
 
     repository.search(criteria);
 
@@ -288,7 +288,7 @@ class ExemptionRepositoryTest {
     ExemptionSearchCriteria criteria =
         new ExemptionSearchCriteria(
             null, null, null, "NULL", null, null, null,
-            null, null, null, null, List.of(), 0, 10);
+            null, null, List.of(), 0, 10);
 
     repository.search(criteria);
 
@@ -308,7 +308,7 @@ class ExemptionRepositoryTest {
     repository.search(
         new ExemptionSearchCriteria(
             null, null, null, type, null, null, null,
-            null, null, null, null, List.of(), 0, 10));
+            null, null, List.of(), 0, 10));
 
     assertThat(repository.whereSql()).doesNotContain("EE.EXPORT_EXEMPTION_TYPE_CODE");
     assertThat(repository.countWhereSql).doesNotContain("EE.EXPORT_EXEMPTION_TYPE_CODE");
@@ -329,8 +329,6 @@ class ExemptionRepositoryTest {
             "NEW",
             "00055667",
             "00077881",
-            LocalDate.of(2026, 1, 1),
-            LocalDate.of(2026, 1, 31),
             LocalDate.of(2026, 2, 1),
             LocalDate.of(2026, 2, 28),
             List.of(1904L),
@@ -371,8 +369,6 @@ class ExemptionRepositoryTest {
             "00077881",
             "00055667",
             "00055667",
-            java.sql.Date.valueOf("2026-01-01"),
-            java.sql.Date.valueOf("2026-01-31"),
             java.sql.Date.valueOf("2026-02-01"),
             java.sql.Date.valueOf("2026-02-28"),
             1904L,
@@ -385,7 +381,7 @@ class ExemptionRepositoryTest {
 
     repository.search(
         new ExemptionSearchCriteria(
-            null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
+            null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
 
     assertThat(repository.whereSql())
         .doesNotContain("EEA_REGION.ORG_UNIT_NO")
@@ -400,7 +396,7 @@ class ExemptionRepositoryTest {
 
     repository.search(
         new ExemptionSearchCriteria(
-            null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
+            null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
 
     assertThat(repository.whereSql()).doesNotContain("EXPORT_PACKAGE EP");
     assertThat(repository.pageSelectSql()).doesNotContain("EXPORT_PACKAGE");
@@ -418,8 +414,6 @@ class ExemptionRepositoryTest {
             null,
             null,
             "00012345",
-            null,
-            null,
             null,
             null,
             null,
@@ -486,8 +480,6 @@ class ExemptionRepositoryTest {
             null,
             null,
             null,
-            null,
-            null,
             List.of(),
             false,
             false,
@@ -525,8 +517,6 @@ class ExemptionRepositoryTest {
             null,
             null,
             "00001074",
-            null,
-            null,
             null,
             null,
             null,
@@ -671,8 +661,6 @@ class ExemptionRepositoryTest {
             null,
             null,
             null,
-            null,
-            null,
             List.of(),
             false,
             false,
@@ -692,8 +680,6 @@ class ExemptionRepositoryTest {
     TestExemptionRepository repository = new TestExemptionRepository();
     ExemptionSearchCriteria criteria =
         new ExemptionSearchCriteria(
-            null,
-            null,
             null,
             null,
             null,
@@ -728,7 +714,7 @@ class ExemptionRepositoryTest {
 
     repository.count(
         new ExemptionSearchCriteria(
-            null, null, "EX-1", null, null, null, null, null, null, null, null, List.of(), 0, 10));
+            null, null, "EX-1", null, null, null, null, null, null, List.of(), 0, 10));
 
     assertThat(repository.whereSql())
         .contains("EE.EXEMPTION_NUMBER")
@@ -751,8 +737,6 @@ class ExemptionRepositoryTest {
     repository.count(
         new ExemptionSearchCriteria(
             "900123",
-            null,
-            null,
             null,
             null,
             null,
@@ -789,7 +773,7 @@ class ExemptionRepositoryTest {
     Page<ExemptionSearchResultDto> results =
         repository.search(
             new ExemptionSearchCriteria(
-                null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
+                null, null, null, null, null, null, null, null, null, List.of(), 0, 10));
 
     assertThat(results.getContent())
         .extracting(ExemptionSearchResultDto::exemptionNumber)
@@ -809,7 +793,7 @@ class ExemptionRepositoryTest {
     Page<ExemptionSearchResultDto> results =
         repository.search(
             new ExemptionSearchCriteria(
-                null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 200));
+                null, null, null, null, null, null, null, null, null, List.of(), 0, 200));
 
     assertThat(results.getNumberOfElements()).isEqualTo(200);
     assertThat(repository.countCalls()).isEqualTo(1);
@@ -1033,8 +1017,6 @@ class ExemptionRepositoryTest {
         null,
         null,
         null,
-        null,
-        null,
         List.of(),
         false,
         false,
@@ -1080,8 +1062,6 @@ class ExemptionRepositoryTest {
         exemptionType,
         null,
         "00001074",
-        null,
-        null,
         null,
         null,
         null,

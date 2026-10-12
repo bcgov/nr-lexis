@@ -7,7 +7,6 @@ import ProvincialApplicationCreatePage from '@/pages/ProvincialApplicationCreate
 import ProvincialExemptionCreatePage from '@/pages/ProvincialExemptionCreate'
 import ProvincialOfferCreatePage from '@/pages/ProvincialOfferCreate'
 import {
-  fetchProvincialExemptionCreatePreview,
   submitProvincialApplicationCreate,
   submitProvincialExemptionCreate,
   submitProvincialOfferCreate,
@@ -29,7 +28,6 @@ import {
   fetchOfferPackageVolume,
   validateOfferApplication,
 } from '@/service/provincial-offer-create-service'
-import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 import { useAuth } from '@/context/auth/useAuth'
 import { createTestAuthContext } from '@/test-utils/auth'
 
@@ -39,7 +37,6 @@ vi.mock('@/service/search-options-service', () => ({
 }))
 
 vi.mock('@/service/create-submit-service', () => ({
-  fetchProvincialExemptionCreatePreview: vi.fn(),
   submitProvincialApplicationCreate: vi.fn(),
   submitProvincialExemptionCreate: vi.fn(),
   submitProvincialOfferCreate: vi.fn(),
@@ -52,7 +49,6 @@ vi.mock('@/service/application-client-lookup-service', () => ({
 vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationEndUsesForSpeciesRegion: vi.fn(),
   fetchApplicationRemainingSpecies: vi.fn(),
-  fetchApplicationSummarySnapshot: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-offer-create-service', () => ({
@@ -62,10 +58,6 @@ vi.mock('@/service/provincial-offer-create-service', () => ({
   fetchOfferPackageList: vi.fn(),
   fetchOfferPackageVolume: vi.fn(),
   validateOfferApplication: vi.fn(),
-}))
-
-vi.mock('@/service/provincial-application-search-service', () => ({
-  searchProvincialApplicationNumberOptions: vi.fn(),
 }))
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -114,7 +106,6 @@ Element.prototype.scrollIntoView = vi.fn()
 
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedFetchProvincialExemptionOptions = vi.mocked(fetchProvincialExemptionOptions)
-const mockedFetchProvincialExemptionCreatePreview = vi.mocked(fetchProvincialExemptionCreatePreview)
 const mockedSubmitProvincialApplicationCreate = vi.mocked(submitProvincialApplicationCreate)
 const mockedSubmitProvincialExemptionCreate = vi.mocked(submitProvincialExemptionCreate)
 const mockedSubmitProvincialOfferCreate = vi.mocked(submitProvincialOfferCreate)
@@ -129,9 +120,6 @@ const mockedFetchOfferClientData = vi.mocked(fetchOfferClientData)
 const mockedFetchOfferPackageList = vi.mocked(fetchOfferPackageList)
 const mockedFetchOfferPackageVolume = vi.mocked(fetchOfferPackageVolume)
 const mockedValidateOfferApplication = vi.mocked(validateOfferApplication)
-const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
-  searchProvincialApplicationNumberOptions,
-)
 const mockedUseAuth = vi.mocked(useAuth)
 
 const createCases = [
@@ -230,13 +218,6 @@ describe('create page unsaved changes', () => {
       exemptionStatuses: [{ value: 'NEW', label: 'New' }],
       regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
     })
-    mockedFetchProvincialExemptionCreatePreview.mockResolvedValue({
-      exemptionTypeCode: 'M',
-      exemptionStatusCode: 'NEW',
-      approvedVolume: '10',
-      expiryDate: '',
-      applicationNumbers: [],
-    })
     mockedFetchApplicationClientLocations.mockResolvedValue([])
     mockedFetchApplicationRemainingSpecies.mockResolvedValue([])
     mockedFetchApplicationEndUsesForSpeciesRegion.mockResolvedValue([])
@@ -252,7 +233,6 @@ describe('create page unsaved changes', () => {
     mockedFetchOfferPackageList.mockResolvedValue([])
     mockedFetchOfferPackageVolume.mockResolvedValue('')
     mockedValidateOfferApplication.mockResolvedValue({ isValid: true, errors: [] })
-    mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([])
     mockedSubmitProvincialApplicationCreate.mockResolvedValue({
       success: false,
       message: '',

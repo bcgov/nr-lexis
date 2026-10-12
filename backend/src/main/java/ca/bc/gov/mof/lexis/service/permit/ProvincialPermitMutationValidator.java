@@ -318,12 +318,16 @@ final class ProvincialPermitMutationValidator {
   }
 
   private boolean isInterior(PermitMutationRow permit) {
-    Long orgUnitNo = permit.orgUnitNo();
+    return isInterior(permit.orgUnitNo(), permit.permitNumber());
+  }
+
+  /** Skeena permits are Interior unless they are in MU44. */
+  boolean isInterior(Long orgUnitNo, Long permitNumber) {
     if (INTERIOR_REGIONS.contains(orgUnitNo)) {
       return true;
     }
     return Long.valueOf(RSK_REGION).equals(orgUnitNo)
-        && !repository.isPermitMu44Required(permit.permitNumber());
+        && !repository.isPermitMu44Required(permitNumber);
   }
 
   private void validateCode(

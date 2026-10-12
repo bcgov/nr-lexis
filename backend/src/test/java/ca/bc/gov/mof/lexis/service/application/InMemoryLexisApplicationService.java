@@ -9,7 +9,6 @@ import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationSearchResultDto;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
@@ -272,59 +271,6 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         .findFirst();
   }
 
-  @Override
-  public boolean verifyApplicationClients(List<Long> applicationNumbers) {
-    List<ApplicationRecord> records = resolveRequested(applicationNumbers);
-    if (records.isEmpty()) {
-      return false;
-    }
-
-    String ownerClient = null;
-    String ownerLocation = null;
-    String previousAgent = null;
-
-    for (int i = 0; i < records.size(); i++) {
-      ApplicationRecord record = records.get(i);
-
-      if (ownerClient == null) {
-        ownerClient = record.ownerClientNumber();
-      }
-      if (ownerLocation == null) {
-        ownerLocation = record.ownerClientLocationCode();
-      }
-
-      if (!Objects.equals(ownerClient, record.ownerClientNumber())) {
-        return false;
-      }
-      if (!Objects.equals(ownerLocation, record.ownerClientLocationCode())) {
-        return false;
-      }
-
-      if (previousAgent != null && !Objects.equals(previousAgent, record.agentClientNumber())) {
-        return false;
-      }
-      if (previousAgent == null && i != 0 && record.agentClientLocationCode() != null) {
-        return false;
-      }
-      previousAgent = record.agentClientNumber();
-    }
-
-    return true;
-  }
-
-  @Override
-  public boolean hasValidOffer(List<Long> applicationNumbers) {
-    List<ApplicationRecord> records = resolveRequested(applicationNumbers);
-    for (ApplicationRecord record : records) {
-      for (LexisApplicationDetailDto.LexisOfferDto offer : record.offers()) {
-        if (offer.validOffer() && offer.withdrawalDate() == null) {
-          return true;
-        }
-      }
-    }
-    return false;
-  }
-
   private List<ApplicationRecord> filterApplications(LexisApplicationSearchCriteria criteria) {
     return APPLICATIONS.stream()
         .filter(matchesApplicationNumber(criteria.applicationNumber()))
@@ -343,24 +289,6 @@ public class InMemoryLexisApplicationService implements LexisApplicationService 
         .filter(matchesRegion(criteria.regionNumbers()))
         .sorted(resolveSort(criteria.sortField()))
         .toList();
-  }
-
-  private List<ApplicationRecord> resolveRequested(List<Long> applicationNumbers) {
-    if (applicationNumbers == null || applicationNumbers.isEmpty()) {
-      return List.of();
-    }
-
-    List<ApplicationRecord> records = new ArrayList<>();
-    for (Long applicationNumber : applicationNumbers) {
-      if (applicationNumber == null) {
-        continue;
-      }
-      APPLICATIONS.stream()
-          .filter(app -> app.applicationNumber() == applicationNumber)
-          .findFirst()
-          .ifPresent(records::add);
-    }
-    return records;
   }
 
   private LexisApplicationSearchResultDto toSearchResult(ApplicationRecord record) {

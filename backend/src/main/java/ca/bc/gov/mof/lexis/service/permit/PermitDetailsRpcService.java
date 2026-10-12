@@ -10,16 +10,10 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitGbmsInvoiceHistoryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
@@ -29,9 +23,7 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPersistenceRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
-import java.math.BigDecimal;
 import java.util.List;
 import java.util.Optional;
 import java.util.function.Predicate;
@@ -61,8 +53,6 @@ public interface PermitDetailsRpcService {
 
   PermitScalesForPackageRpcResponseDto getScalesForPackage(String packageNumber);
 
-  PermitDataAfterScaleUpdateRpcResponseDto getPermitDataAfterScaleUpdate(Long permitNumber);
-
   PermitPackageVolumeSumRpcResponseDto getPackageVolumeSum(Long permitNumber, String packageNumber);
 
   PermitPackageInfoRpcResponseDto getPackageInfo(String packageNumber);
@@ -77,8 +67,6 @@ public interface PermitDetailsRpcService {
 
   PermitCountryListRpcResponseDto getCountryList();
 
-  PermitNumberAvailabilityRpcResponseDto checkPermitNumber(Long permitNumber);
-
   PermitApplicationListRpcResponseDto getApplicationList(
       Long permitNumber, Predicate<Long> applicationAccess);
 
@@ -92,25 +80,12 @@ public interface PermitDetailsRpcService {
       String selectedApplicationsCsv,
       Predicate<Long> applicationAccess);
 
-  PermitAvailablePackageListRpcResponseDto getAvailablePackageList(
-      String exemptionNumber,
-      String selectedPackagesCsv,
-      Predicate<Long> applicationAccess);
-
   PermitApprovedExemptionVolumeRpcResponseDto getApprovedExemptionVolume(String exemptionNumber);
 
   PermitExemptionVolumeRemainingRpcResponseDto getExemptionVolumeRemaining(String exemptionNumber);
 
   List<PermitGbmsInvoiceHistoryItemRpcResponseDto> getGbmsInvoiceHistory(
       String receiptNumber, Long permitNumber, boolean readOnlyUser);
-
-  PermitPersistenceRpcResponseDto addInvoice(
-      Long permitNumber,
-      String salesInvoiceNumber,
-      BigDecimal invoiceExportValue,
-      BigDecimal invoiceConversionRate,
-      BigDecimal invoiceFeeInLieu,
-      String userId);
 
   PermitMutationRpcResponseDto createPermitFromExemption(
       String exemptionNumber, String userId);
@@ -165,14 +140,6 @@ public interface PermitDetailsRpcService {
 
   boolean hasFormChanges(PermitMutationRequestDto request);
 
-  PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber);
-
-  PermitInvoiceDetailsRpcResponseDto getInvoiceDetails(Long permitNumber, String salesInvoiceNumber);
-
-  PermitConversionRateRpcResponseDto getConversionRate();
-
-  List<PermitFileTypeRpcResponseDto> getFileTypes();
-
   List<PermitDocumentItemRpcResponseDto> getDocumentDetails(Long permitNumber);
 
   Optional<DocumentStreamer> streamDocument(Long fileId);
@@ -222,7 +189,9 @@ public interface PermitDetailsRpcService {
 
   boolean removeInvoiceDocument(Long documentId);
 
-  record PermitEditContext(boolean overrideEnabled, String overrideFee, String overrideComment) {}
+  /** Interior permits always show a receipt number, which completion requires. */
+  record PermitEditContext(
+      boolean overrideEnabled, String overrideFee, String overrideComment, boolean interior) {}
 
   record PermitMutationClientScope(String ownerClientNumber, String agentClientNumber) {}
 

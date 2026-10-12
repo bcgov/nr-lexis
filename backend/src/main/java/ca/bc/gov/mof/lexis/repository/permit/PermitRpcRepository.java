@@ -6,7 +6,6 @@ import static ca.bc.gov.mof.lexis.util.ValueUtils.firstNonNull;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries;
 import ca.bc.gov.mof.lexis.util.LegacyExcolSort;
-import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -308,7 +307,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   private static final String FIND_PERMIT_DETAIL_BY_ID =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_ID(?,?)";
   private static final String FIND_PERMIT_FEE_OVERRIDE =
-      "SELECT OVERRIDE_FEE, OVERRIDE_COMMENT "
+      "SELECT OVERRIDE_FEE, OVERRIDE_COMMENT, ORG_UNIT_NO "
           + "FROM EXPORT_PERMIT_DETAIL "
           + "WHERE EXPORT_PERMIT_DETAIL_NUMBER = ?";
   private static final String FIND_EXEMPTION_BY_NUMBER =
@@ -424,8 +423,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       )
       ORDER BY SOURCE_ORDER, SOURCE_APPLICATION_NUMBER, EXPORT_ATTACHMENT_ID
       """;
-  private static final String FIND_INVOICE_BY_ID = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICE_BY_ID(?,?,?)";
-  private static final String FIND_INVOICES_BY_PERMIT = LEXIS_GROUP_5_PACKAGE + "FIND_INVOICES_BY_PERMIT(?,?)";
   private static final String INSERT_PERMIT_DETAIL =
       LEXIS_GROUP_9_PACKAGE + "INSERT_PERMIT_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String UPDATE_PERMIT_DETAIL =
@@ -436,8 +433,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_9_PACKAGE + "INSERT_SCALE_DETAIL(?,?,?,?,?,?,?,?,?,?,?,?,?)";
   private static final String DELETE_SCALE_DETAIL =
       LEXIS_GROUP_9_PACKAGE + "DELETE_SCALE_DETAIL(?,?)";
-  private static final String INSERT_SALES_INVOICE =
-      LEXIS_GROUP_9_PACKAGE + "INSERT_SALES_INVOICE(?,?,?,?,?,?,?,?,?,?)";
   private static final String FIND_FILE_ATTACHMENT = LEXIS_GROUP_5_PACKAGE + "FIND_FILE_ATTACHMENT(?,?)";
   private static final String FIND_GBMS_INVOICE_HISTORY =
       LEXIS_GROUP_9_PACKAGE + "FIND_GBMS_INVOICE_HISTORY(?,?,?)";
@@ -464,8 +459,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       LEXIS_CODES_PACKAGE + "FIND_CANDIDATE_EXCOL_VALUES(?,?,?,?,?)";
   private static final String FIND_RATE_BY_EXEMPTION = LEXIS_CODES_PACKAGE + "FIND_RATE_BY_EXEMPTION(?,?)";
   private static final String FIND_LOG_AMV_BY_SCALE = LEXIS_CODES_PACKAGE + "FIND_LOG_AMV(?,?)";
-  private static final String FIND_CONVERSION_FOR_DATE =
-      LEXIS_CODES_PACKAGE + "FIND_CONVERSION_FOR_DATE(?,?,?)";
   private static final String IS_PERMIT_MU44 = LEXIS_GROUP_5_PACKAGE + "IS_PERMIT_MU44(?,?)";
 
   public PermitRpcRepository(@Qualifier("oracleJdbcTemplate") JdbcTemplate jdbcTemplate) {
@@ -1345,20 +1338,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
         .toList();
   }
 
-  public List<AttachmentTypeRow> findAllAttachmentTypes() {
-    return jdbcTemplate.query(
-            LexisCodeQueries.ATTACHMENT_TYPES,
-            (rs, rowNumber) ->
-                new AttachmentTypeRow(
-                    getString(rs, "CODE"),
-                    getString(rs, "DESCRIPTION"),
-                    coalesce(getLong(rs, "GROUP_BY"), 0L),
-                    coalesce(getLong(rs, "ORDER_BY"), 0L)))
-        .stream()
-        .filter(row -> row.code() != null && row.description() != null)
-        .toList();
-  }
-
   public Optional<String> findAttachmentTypeDescription(String attachmentTypeCode) {
     String normalized = trim(attachmentTypeCode);
     if (normalized == null) {
@@ -1374,45 +1353,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return Optional.empty();
     }
     return Optional.ofNullable(descriptions.get(0)).filter(value -> !value.isBlank());
-  }
-
-  public Optional<SalesInvoiceRow> findSalesInvoiceByNumberAndPermit(
-      String salesInvoiceNumber, Long permitNumber) {
-    String normalizedSalesInvoiceNumber = trim(salesInvoiceNumber);
-    if (normalizedSalesInvoiceNumber == null || permitNumber == null || permitNumber < 1) {
-      return Optional.empty();
-    }
-
-    return queryCursorSingleRequired(
-        FIND_INVOICE_BY_ID,
-        cs -> {
-          cs.setString(1, normalizedSalesInvoiceNumber);
-          cs.setString(2, permitNumber.toString());
-        },
-        3,
-        rs ->
-            new SalesInvoiceRow(
-                nonNull(getString(rs, "EXPORT_SALES_INVOICE_NUMBER")),
-                coalesce(getDouble(rs, "EXPORT_VALUE"), 0.0d),
-                coalesce(getDouble(rs, "CURRENCY_CONVERSION_RATE"), 0.0d),
-                coalesce(getDouble(rs, "FEE_IN_LIEU"), 0.0d)));
-  }
-
-  public List<String> findInvoiceNumbersByPermitRequired(Long permitNumber) {
-    if (permitNumber == null || permitNumber < 1) {
-      return List.of();
-    }
-
-    return queryCursorProcedureFailClosed(
-            FIND_INVOICES_BY_PERMIT,
-            cs -> cs.setString(1, permitNumber.toString()),
-            2,
-            rs -> getString(rs, "EXPORT_SALES_INVOICE_NUMBER"))
-        .stream()
-        .filter(value -> value != null && !value.isBlank())
-        .distinct()
-        .sorted()
-        .toList();
   }
 
   public Optional<PermitMutationRow> findPermitMutationByPermitNumber(Long permitNumber) {
@@ -1441,7 +1381,9 @@ public class PermitRpcRepository extends OracleRepositorySupport {
             FIND_PERMIT_FEE_OVERRIDE,
             (rs, rowNumber) ->
                 new PermitFeeOverrideRow(
-                    getDouble(rs, "OVERRIDE_FEE"), getString(rs, "OVERRIDE_COMMENT")),
+                    getDouble(rs, "OVERRIDE_FEE"),
+                    getString(rs, "OVERRIDE_COMMENT"),
+                    getLong(rs, "ORG_UNIT_NO")),
             permitNumber)
         .stream()
         .findFirst();
@@ -1564,56 +1506,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return true;
   }
 
-  public Optional<SalesInvoiceRow> insertSalesInvoice(
-      Long permitNumber,
-      String salesInvoiceNumber,
-      BigDecimal exportValue,
-      BigDecimal currencyConversionRate,
-      BigDecimal feeInLieu,
-      String userId) {
-    String normalizedSalesInvoiceNumber = trim(salesInvoiceNumber);
-    String normalizedUserId = trim(userId);
-    if (permitNumber == null
-        || permitNumber < 1
-        || normalizedSalesInvoiceNumber == null
-        || exportValue == null
-        || currencyConversionRate == null
-        || feeInLieu == null) {
-      return Optional.empty();
-    }
-
-    Timestamp now = new Timestamp(System.currentTimeMillis());
-    return queryCursorSingleRequired(
-        INSERT_SALES_INVOICE,
-        cs -> {
-          cs.setString(1, normalizedSalesInvoiceNumber);
-          cs.setLong(2, permitNumber);
-          cs.setBigDecimal(3, exportValue);
-          cs.setBigDecimal(4, currencyConversionRate);
-          cs.setBigDecimal(5, feeInLieu);
-          cs.setString(6, auditUserOrDefault(normalizedUserId));
-          cs.setTimestamp(7, now);
-          cs.setNull(8, Types.VARCHAR);
-          cs.setNull(9, Types.TIMESTAMP);
-        },
-        10,
-        rs ->
-            new SalesInvoiceRow(
-                nonNull(getString(rs, "EXPORT_SALES_INVOICE_NUMBER")),
-                coalesce(getDouble(rs, "EXPORT_VALUE"), 0.0d),
-                coalesce(getDouble(rs, "CURRENCY_CONVERSION_RATE"), 0.0d),
-                coalesce(getDouble(rs, "FEE_IN_LIEU"), 0.0d)))
-        .filter(
-            row ->
-                java.util.Objects.equals(
-                        trim(row.salesInvoiceNumber()), normalizedSalesInvoiceNumber)
-                    && BigDecimal.valueOf(row.exportValue()).compareTo(exportValue) == 0
-                    && BigDecimal.valueOf(row.currencyConversionRate())
-                            .compareTo(currencyConversionRate)
-                        == 0
-                    && BigDecimal.valueOf(row.feeInLieu()).compareTo(feeInLieu) == 0);
-  }
-
   /** Loads mutable GBMS history without converting an Oracle failure into an empty history. */
   public List<GbmsInvoiceHistoryRow> findGbmsInvoiceHistoryRequired(
       String receiptNumber, Long permitNumber) {
@@ -1676,23 +1568,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
       return List.of();
     }
     return rows.stream().filter(row -> permitNumber.equals(row.permitNumber())).toList();
-  }
-
-  public Optional<Double> findCurrencyConversionRateByDate(LocalDate applicationDate, String countryCode) {
-    LocalDate normalizedDate = applicationDate == null ? LexisBusinessTime.today() : applicationDate;
-    String normalizedCountryCode = trim(countryCode);
-    if (normalizedCountryCode == null) {
-      return Optional.empty();
-    }
-
-    return queryCursorSingleRequired(
-        FIND_CONVERSION_FOR_DATE,
-        cs -> {
-          cs.setString(1, normalizedCountryCode);
-          cs.setDate(2, java.sql.Date.valueOf(normalizedDate));
-        },
-        3,
-        rs -> coalesce(getDouble(rs, "RATE_TO_CANADIAN"), 0.0d));
   }
 
   public boolean deletePermitFile(Long documentId) {
@@ -2344,8 +2219,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   public record CountryCodeRow(String code, String description, long groupBy, long orderBy) {}
 
-  public record AttachmentTypeRow(String code, String description, long groupBy, long orderBy) {}
-
   public record PermitScaleDetailRow(
       String exportScaleDetailId,
       String timberMark,
@@ -2552,13 +2425,7 @@ public class PermitRpcRepository extends OracleRepositorySupport {
   /** Application/status projection from the authoritative exemption application cursor. */
   public record ApplicationStatusRow(Long applicationNumber, String statusCode) {}
 
-  public record SalesInvoiceRow(
-      String salesInvoiceNumber,
-      double exportValue,
-      double currencyConversionRate,
-      double feeInLieu) {}
-
-  public record PermitFeeOverrideRow(Double overrideFee, String overrideComment) {}
+  public record PermitFeeOverrideRow(Double overrideFee, String overrideComment, Long orgUnitNo) {}
 
   public record PermitMutationRow(
       Long permitNumber,

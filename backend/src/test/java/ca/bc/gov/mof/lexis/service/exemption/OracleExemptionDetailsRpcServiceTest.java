@@ -832,7 +832,7 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
-  void getPermitsAndBlanketTotalsShouldKeepAStoredSecondDecimal() {
+  void getPermitsShouldKeepAStoredSecondDecimal() {
     when(repository.findExemptionTypeCodeByExemptionNumber("EX-205")).thenReturn(Optional.of("B"));
     when(repository.findPermitsByExemptionNumber("EX-205"))
         .thenReturn(
@@ -843,30 +843,10 @@ class OracleExemptionDetailsRpcServiceTest {
                 new ExemptionDetailsRpcRepository.PermitSummaryRow(
                     7000124L, 2.0d, 2.0d, "Active", "ACT", LocalDate.of(2026, 3, 10),
                     "00077881", "00055667")));
-    when(repository.findBlanketOicTotals("EX-205"))
-        .thenReturn(new ExemptionDetailsRpcRepository.BlanketOicTotalsRow(2.0d, 0.05d));
 
     assertThat(service.getPermits("EX-205", permit -> true))
         .extracting(ExemptionDetailsRpcService.PermitItem::permitVolume)
         .containsExactly("0.05", "2.0");
-    ExemptionDetailsRpcService.BlanketOicTotalsResponse totals =
-        service.getBlanketOicTotals("EX-205");
-    assertThat(totals.requestedVolume()).isEqualTo("2.0");
-    assertThat(totals.completedVolume()).isEqualTo("0.05");
-  }
-
-  @Test
-  void getBlanketTotalsShouldSumRequestedAndCompletedVolume() {
-    when(repository.findBlanketOicTotals("EX-205"))
-        .thenReturn(new ExemptionDetailsRpcRepository.BlanketOicTotalsRow(55.0d, 20.0d));
-
-    ExemptionDetailsRpcService.BlanketOicTotalsResponse response =
-        service.getBlanketOicTotals("EX-205");
-
-    assertThat(response.requestedVolume()).isEqualTo("55.0");
-    assertThat(response.completedVolume()).isEqualTo("20.0");
-    verify(repository).findBlanketOicTotals("EX-205");
-    verify(repository, never()).findPermitsByExemptionNumber("EX-205");
   }
 
   @Test

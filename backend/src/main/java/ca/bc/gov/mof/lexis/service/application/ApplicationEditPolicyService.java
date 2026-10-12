@@ -130,7 +130,7 @@ public class ApplicationEditPolicyService {
     if (!readOnly
         && !exemptionApprover
         && (applicationApprover || industryUser)
-        && context.interiorMinisterialItemOverrideEligible()) {
+        && context.ministerialItemOverrideEligible()) {
       canEditPackages = true;
       canAddPackages = true;
       canAddScales = true;

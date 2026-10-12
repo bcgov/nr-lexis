@@ -298,9 +298,6 @@ const installPermitParityFixtures = async (
         case '/api/lexis/rpc/exemption-details/applications':
           body = { applications: [], containsUnmanu: false, ownerNumber: '' }
           break
-        case '/api/lexis/rpc/exemption-details/blanket-oic-totals':
-          body = { requestedVolume: '0', completedVolume: '0' }
-          break
         case '/api/lexis/client-search':
           body = [
             { clientNumber: '00067890', companyName: 'Owner Forestry Ltd.', clientAcronym: 'OFL' },

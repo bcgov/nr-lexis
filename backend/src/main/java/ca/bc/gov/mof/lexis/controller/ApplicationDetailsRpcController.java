@@ -94,7 +94,6 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_END_USE_FOR_SPECIES_REGION = "getEndUseForSpeciesRegion";
   private static final String ACTION_GET_REMAINING_SPECIES = "getRemainingSpecies";
   private static final String ACTION_GET_SELECTED_END_USE = "getSelectedEndUse";
-  private static final String ACTION_GET_PACKAGE_SELECTED_END_USE = "getPackageSelectedEndUse";
   private static final String ACTION_GET_SPECIES_FOR_APPLICATION = "getSpeciesForApplication";
   private static final String ACTION_GET_SPECIES_FOR_PACKAGE = "getSpeciesForPackage";
   private static final String ACTION_GET_UNIQUE_SCALES_FOR_APPLICATION = "getUniqueScalesForApplication";
@@ -102,7 +101,6 @@ public class ApplicationDetailsRpcController {
   private static final String ACTION_GET_SCALES_FOR_PACKAGE = "getScalesForPackage";
   private static final String ACTION_GET_SCALE_BY_ID = "getScaleById";
   private static final String ACTION_GET_PACKAGE_DETAILS = "getPackageDetails";
-  private static final String ACTION_IS_PACKAGE_VALID = "isPackageValid";
   private static final String ACTION_ADD_PACKAGE_TO_APPLICATION = "addPackageToApplication";
   private static final String ACTION_UPDATE_PACKAGE = "updatePackage";
   private static final String ACTION_ADD_SCALE_TO_PACKAGE = "addScaleToPackage";
@@ -1108,29 +1106,6 @@ public class ApplicationDetailsRpcController {
     return getSelectedEndUse(applicationNumber);
   }
 
-  @GetMapping("/rpc/application-details/package-selected-end-use")
-  public ResponseEntity<SelectedEndUseResponseDto> getPackageSelectedEndUse(
-      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
-    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Application details RPC service unavailable - returning no content for package selected end use");
-      return ResponseEntity.noContent().build();
-    }
-
-    requirePackageAccess(service, packageNumber, null);
-
-    return service
-        .getPackageSelectedEndUse(packageNumber)
-        .map(value -> ResponseEntity.ok(new SelectedEndUseResponseDto(true, value)))
-        .orElseGet(() -> ResponseEntity.ok(new SelectedEndUseResponseDto(false, null)));
-  }
-
-  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_PACKAGE_SELECTED_END_USE)
-  public ResponseEntity<SelectedEndUseResponseDto> getPackageSelectedEndUseLegacy(
-      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
-    return getPackageSelectedEndUse(packageNumber);
-  }
-
   @GetMapping("/rpc/application-details/species-for-application")
   public ResponseEntity<List<ApplicationSpeciesEndUseResponseDto>> getSpeciesForApplication(
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber) {
@@ -1300,28 +1275,6 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "scaleDetailId", required = false) String scaleDetailId,
       @RequestParam(name = "scaleId", required = false) String scaleId) {
     return getScaleById(scaleDetailId, scaleId);
-  }
-
-  @GetMapping("/rpc/application-details/package-validity")
-  public ResponseEntity<PackageValidityResponseDto> isPackageValid(
-      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
-    ApplicationDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Application details RPC service unavailable - returning no content for package validity");
-      return ResponseEntity.noContent().build();
-    }
-
-    ApplicationDetailsRpcService.PackageValidityItem validity = service.isPackageValid(packageNumber);
-    if (!validity.valid()) {
-      requirePackageAccess(service, packageNumber, null);
-    }
-    return ResponseEntity.ok(toPackageValidityResponse(validity));
-  }
-
-  @PostMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_IS_PACKAGE_VALID)
-  public ResponseEntity<PackageValidityResponseDto> isPackageValidLegacy(
-      @RequestParam(name = "packageNumber", required = false) String packageNumber) {
-    return isPackageValid(packageNumber);
   }
 
   @PostMapping("/rpc/application-details/package")
@@ -2444,11 +2397,6 @@ public class ApplicationDetailsRpcController {
         item.oicIndicator());
   }
 
-  private PackageValidityResponseDto toPackageValidityResponse(
-      ApplicationDetailsRpcService.PackageValidityItem item) {
-    return new PackageValidityResponseDto(item.valid(), item.message());
-  }
-
   private PackagePersistenceResponseDto toPackagePersistenceResponse(
       ApplicationDetailsRpcService.PackagePersistenceResult item) {
     return new PackagePersistenceResponseDto(
@@ -2672,9 +2620,6 @@ public class ApplicationDetailsRpcController {
       String grade,
       String volume,
       String id) {}
-
-  @JsonInclude(JsonInclude.Include.NON_NULL)
-  public record PackageValidityResponseDto(boolean valid, String message) {}
 
   @JsonInclude(JsonInclude.Include.NON_NULL)
   public record PackagePersistenceResponseDto(

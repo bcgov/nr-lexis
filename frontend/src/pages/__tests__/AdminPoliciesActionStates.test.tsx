@@ -1416,7 +1416,7 @@ describe('Admin policy action states', () => {
     },
   )
 
-  it('links application counts to an auto-filtered application search', async () => {
+  it('shows schedule application counts as text', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) =>
@@ -1447,10 +1447,9 @@ describe('Admin policy action states', () => {
 
     renderPage('schedule')
 
-    const applicationLink = await screen.findByRole('link', {
-      name: 'View 2 provincial applications assigned to export schedule 1002',
-    })
-    expect(applicationLink).toHaveAttribute('href', '/provincial/application?exportScheduleId=1002')
+    const scheduleRow = (await screen.findByText('1002')).closest('tr') as HTMLElement
+    expect(within(scheduleRow).getByText('2')).toBeInTheDocument()
+    expect(within(scheduleRow).queryByRole('link')).not.toBeInTheDocument()
   })
 
   it('shows backend schedule guardrail messages without reloading the table', async () => {

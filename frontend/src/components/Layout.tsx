@@ -9,7 +9,6 @@ import {
   Notification,
   Settings,
   Sun,
-  Switcher,
   Tree,
   UserAvatar,
   type CarbonIconType,
@@ -21,7 +20,7 @@ import {
   SideNavMenuItem,
   SkipToContent,
 } from '@carbon/react'
-import { Link, matchPath, useLocation, useNavigate } from 'react-router-dom'
+import { Link, matchPath, useLocation } from 'react-router-dom'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
 import OptimisticConflictModal from '@/components/OptimisticConflictModal'
@@ -332,7 +331,6 @@ const canShowRoleScopedLink = (
 
 function Layout({ children }: LayoutProps) {
   const location = useLocation()
-  const navigate = useNavigate()
   const { capabilities, canPerform, defaultRoute, logout } = useAuth()
   const { theme, toggleTheme } = useTheme()
   const [isProfileOpen, setIsProfileOpen] = useState(false)
@@ -429,11 +427,6 @@ function Layout({ children }: LayoutProps) {
     },
     [focusProfileToggle],
   )
-
-  const handleOrganizationSelection = () => {
-    closeProfile()
-    navigate('/select-organization')
-  }
 
   const toggleNavigation = (): void => {
     setIsProfileOpen(false)
@@ -696,14 +689,6 @@ function Layout({ children }: LayoutProps) {
                   {capabilities.principal ?? 'LEXIS user'}
                   {profileRoleLabel ? ` (${profileRoleLabel})` : ''}
                 </p>
-                {capabilities.orgUnitNo && (
-                  <p className="profile-panel__meta">Organization unit: {capabilities.orgUnitNo}</p>
-                )}
-                {capabilities.forestClientNumber && (
-                  <p className="profile-panel__meta">
-                    Forest client: {capabilities.forestClientNumber}
-                  </p>
-                )}
               </div>
             </div>
             {canUseDefaultRegionPreference(capabilities) && (
@@ -712,17 +697,6 @@ function Layout({ children }: LayoutProps) {
           </div>
 
           <hr className="profile-panel__divider" role="separator" />
-
-          {capabilities.availableForestClientNumbers.length > 1 && (
-            <button
-              className="profile-panel__action"
-              type="button"
-              onClick={handleOrganizationSelection}
-            >
-              <Switcher size={16} />
-              Switch organization
-            </button>
-          )}
 
           <button className="profile-panel__signout" type="button" onClick={handleLogout}>
             <Logout size={16} />

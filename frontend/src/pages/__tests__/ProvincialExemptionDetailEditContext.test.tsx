@@ -19,7 +19,6 @@ import {
   approveExemptions,
   fetchExemptionApplications,
   fetchExemptionApprovalRecipients,
-  fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
   sendExemptionApprovalNotifications,
@@ -53,7 +52,6 @@ vi.mock('@/service/provincial-exemption-detail-service', () => ({
   approveExemptions: vi.fn(),
   fetchExemptionApprovalRecipients: vi.fn(),
   fetchExemptionApplications: vi.fn(),
-  fetchExemptionBlanketOicTotals: vi.fn(),
   fetchExemptionEditContext: vi.fn(),
   fetchExemptionPermits: vi.fn(),
   removeApplicationFromExemption: vi.fn(),
@@ -118,7 +116,9 @@ describe('Provincial exemption edit context', () => {
     vi.clearAllMocks()
     vi.mocked(useAuth).mockReturnValue(
       createTestAuthContext({
-        canPerform: vi.fn((action: string) => action === 'saveExemption'),
+        canPerform: vi.fn(
+          (action: string) => action === 'saveExemption' || action === '/permitDetails',
+        ),
       }),
     )
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue(exemptionDetail)
@@ -141,10 +141,6 @@ describe('Provincial exemption edit context', () => {
       ownerNumber: 'Blanket OIC',
     })
     vi.mocked(fetchExemptionPermits).mockResolvedValue([])
-    vi.mocked(fetchExemptionBlanketOicTotals).mockResolvedValue({
-      requestedVolume: '0.0',
-      completedVolume: '0.0',
-    })
     vi.mocked(addApplicationToExemption).mockResolvedValue({
       success: true,
       message: 'Application linked.',
@@ -1686,6 +1682,78 @@ describe('Provincial exemption edit context', () => {
     expect(unload.defaultPrevented).toBe(true)
   })
 
+  it('hides the Permits tab from roles that cannot open permits', async () => {
+    vi.mocked(useAuth).mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_EXEMPTION_APPROVER'] }),
+        canPerform: vi.fn(
+          (action: string) => action === 'saveExemption' || action === 'approveExemption',
+        ),
+      }),
+    )
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...ministerialExemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
+      exemptionNumber: 'EX-207',
+      exemptionStatusCode: 'ACT',
+      exemptionStatusDescription: 'Active',
+    })
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903'],
+      locked: false,
+      lockMessage: '',
+    })
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/exemption/:exemptionNumber',
+          element: <ProvincialExemptionDetailsPage />,
+        },
+      ],
+      { initialEntries: ['/provincial/exemption/EX-207'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    expect(await screen.findByRole('tab', { name: 'Documents' })).toBeInTheDocument()
+    expect(screen.queryByRole('tab', { name: 'Permits' })).not.toBeInTheDocument()
+  })
+
+  it('hides the Fees tab on a Ministerial exemption without unmanufactured applications', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...ministerialExemptionDetail,
+      exemptionTypeCode: 'M',
+      exemptionTypeDescription: 'Ministerial',
+      exemptionNumber: 'EX-208',
+      exemptionStatusCode: 'ACT',
+      exemptionStatusDescription: 'Active',
+    })
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: true,
+      fixedFeeRate: '25.00',
+      regionNumbers: ['1903'],
+      locked: false,
+      lockMessage: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-208']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByRole('tab', { name: 'Documents' })).toBeInTheDocument()
+    await waitFor(() => expect(vi.mocked(fetchExemptionEditContext)).toHaveBeenCalled())
+    expect(screen.queryByRole('tab', { name: 'Fees' })).not.toBeInTheDocument()
+  })
+
   it('closes approval confirmation when the exemption route changes', async () => {
     vi.mocked(useAuth).mockReturnValue(
       createTestAuthContext({
@@ -2651,6 +2719,19 @@ describe('regional exemption controls', () => {
       }
     },
   )
+
+  it('shows no Region on a Ministerial exemption with linked application regions', async () => {
+    applicationApproverIn(['1903', '1908'])
+    renderLinkedExemption(['1903', '1908'])
+
+    const summaryCard = (
+      await screen.findByRole('heading', { name: 'Exemption details', level: 2 })
+    ).closest('.cds--tile') as HTMLElement
+    await waitFor(() => expect(fetchExemptionEditContext).toHaveBeenCalled())
+    expect(within(summaryCard).getByText('Status')).toBeInTheDocument()
+    expect(within(summaryCard).queryByText('Region')).not.toBeInTheDocument()
+    expect(within(summaryCard).queryByText('Region 1903, Region 1908')).not.toBeInTheDocument()
+  })
 
   it('saves only the stored regions, never the linked application regions', async () => {
     applicationApproverIn(['1903', '1908'])

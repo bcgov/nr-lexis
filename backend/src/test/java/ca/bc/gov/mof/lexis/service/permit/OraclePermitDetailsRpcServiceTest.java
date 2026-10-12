@@ -27,21 +27,14 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitGbmsInvoiceHistoryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRequestDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
@@ -55,7 +48,6 @@ import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationStatusRow;
-import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.AttachmentTypeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.BoicScaleMutationRecord;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
@@ -74,7 +66,6 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitCorePacka
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitCoreScaleRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPolicyContextRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
-import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRecord;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRow;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
@@ -590,15 +581,33 @@ class OraclePermitDetailsRpcServiceTest {
   @Test
   void editContextShouldExposePersistedFeeOverride() {
     when(repository.findPermitFeeOverrideByPermitNumber(7000123L))
-        .thenReturn(Optional.of(new PermitFeeOverrideRow(45.25d, "Reviewed calculation")));
+        .thenReturn(Optional.of(new PermitFeeOverrideRow(45.25d, "Reviewed calculation", 1909L)));
 
     PermitDetailsRpcService.PermitEditContext response = service.getEditContext(7000123L);
 
     assertThat(response.overrideEnabled()).isTrue();
     assertThat(response.overrideFee()).isEqualTo("45.25");
     assertThat(response.overrideComment()).isEqualTo("Reviewed calculation");
+    assertThat(response.interior()).isFalse();
     verify(repository).findPermitFeeOverrideByPermitNumber(7000123L);
     verify(repository, never()).findPermitMutationByPermitNumber(7000123L);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+      "1903, false, true",
+      "1907, false, true",
+      "1908, false, true",
+      "1908, true, false",
+      "1909, false, false",
+      "1910, false, false"
+  })
+  void editContextShouldMarkInteriorPermits(long orgUnitNo, boolean mu44, boolean interior) {
+    when(repository.findPermitFeeOverrideByPermitNumber(7000123L))
+        .thenReturn(Optional.of(new PermitFeeOverrideRow(null, null, orgUnitNo)));
+    lenient().when(repository.isPermitMu44Required(7000123L)).thenReturn(mu44);
+
+    assertThat(service.getEditContext(7000123L).interior()).isEqualTo(interior);
   }
 
   @Test
@@ -950,33 +959,6 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void permitDataAfterScaleUpdateShouldAggregateVolumePiecesFeesAndExemptionVolume() {
-    when(repository.findScaleDetailsByPermitNumber(7000123L))
-        .thenReturn(
-            List.of(
-                scale("101", "TM1", "HEM", "J", 10.25d, 12L, "7000123", "PKG-903"),
-                scale("102", "TM2", "FIR", "K", 5.50d, 8L, "7000123", "PKG-999")));
-    when(repository.findPermitPolicyContextByPermitNumber(7000123L))
-        .thenReturn(
-            Optional.of(
-                new PermitPolicyContextRow(
-                    7000123L, 1835L, LocalDate.of(2026, 1, 15), "EX-700", "US", 0.0d)));
-    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
-    when(repository.findFixedExemptionRate("EX-700")).thenReturn(Optional.of(BigDecimal.valueOf(2.5d)));
-    when(repository.findFeePolicyPercentIncrease(LocalDate.of(2026, 1, 15), 1835L))
-        .thenReturn(BigDecimal.ZERO);
-    when(exemptionService.findByExemptionNumber("EX-700")).thenReturn(Optional.of(exemptionDetail("EX-700", 55.5d)));
-
-    PermitDataAfterScaleUpdateRpcResponseDto response =
-        service.getPermitDataAfterScaleUpdate(7000123L);
-
-    assertThat(response.packageVolume()).isEqualTo("15.75");
-    assertThat(response.pieces()).isEqualTo(20L);
-    assertThat(response.totalFees()).isEqualTo("$39.38");
-    assertThat(response.exemptionVolume()).isEqualTo(55.5d);
-  }
-
-  @Test
   void packageVolumeSumShouldOnlyIncludeSelectedPackageOnPermit() {
     when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(
@@ -1079,15 +1061,6 @@ class OraclePermitDetailsRpcServiceTest {
     PermitHasApplicationsRpcResponseDto response = service.getPermitHasApplications(7000123L);
 
     assertThat(response.hasApplications()).isFalse();
-  }
-
-  @Test
-  void checkPermitNumberShouldReturnAvailableWhenPermitMissing() {
-    when(repository.findPermitPolicyContextByPermitNumber(7000123L)).thenReturn(Optional.empty());
-
-    PermitNumberAvailabilityRpcResponseDto response = service.checkPermitNumber(7000123L);
-
-    assertThat(response.available()).isTrue();
   }
 
   @Test
@@ -1617,114 +1590,6 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void availablePackageListShouldPreserveAndExcludeExactStoredKeys() {
-    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(
-            new PackageCandidateRow(1000456L, "PKG-100"),
-            new PackageCandidateRow(1000456L, "PKG-100  ")));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(List.of(
-            scaleMutation("101", 1000456L, "PKG-100", null),
-            scaleMutation("102", 1000456L, "PKG-100  ", null)));
-
-    assertThat(service.getAvailablePackageList("EX-700", "", ignored -> true).packageList())
-        .containsExactly("PKG-100", "PKG-100  ");
-    assertThat(service.getAvailablePackageList("EX-700", "PKG-100  ", ignored -> true).packageList())
-        .containsExactly("PKG-100");
-    assertThat(service.getAvailablePackageList("EX-700", "PKG-100", ignored -> true).packageList())
-        .containsExactly("PKG-100  ");
-    assertThat(service.getAvailablePackageList("EX-700", "PKG-100,PKG-100  ", ignored -> true).packageList())
-        .isEmpty();
-  }
-
-  @Test
-  void availablePackageListShouldExcludeSelectedAndAssignedPackages() {
-    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(
-            List.of(
-                new PackageCandidateRow(1000456L, "PKG-901"),
-                new PackageCandidateRow(1000456L, "PKG-902"),
-                new PackageCandidateRow(1000457L, "PKG-903")));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(
-                scaleMutation("101", 1000456L, "PKG-901", null),
-                scaleMutation("102", 1000456L, "PKG-902", 7000123L)));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000457L))
-        .thenReturn(List.of(scaleMutation("103", 1000457L, "PKG-903", null)));
-
-    PermitAvailablePackageListRpcResponseDto response =
-        service.getAvailablePackageList("EX-700", "PKG-903", ignored -> true);
-
-    assertThat(response.packageList()).containsExactly("PKG-901");
-    assertThat(response.errorMessage()).isNull();
-    verify(repository, times(1)).findPackagesByExemptionNumberRequired("EX-700");
-    verify(repository, never()).findApplicationNumbersByExemptionNumber("EX-700");
-    verify(repository, never()).findPackagesByApplicationNumber(anyLong());
-  }
-
-  @Test
-  void availablePackageListShouldFilterAndCacheApplicationAccessDecisions() {
-    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(
-            List.of(
-                new PackageCandidateRow(1000456L, "PKG-901"),
-                new PackageCandidateRow(1000456L, "PKG-902"),
-                new PackageCandidateRow(1000457L, "PKG-903")));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(
-                scaleMutation("101", 1000456L, "PKG-901", null),
-                scaleMutation("102", 1000456L, "PKG-902", null)));
-    AtomicInteger decisions = new AtomicInteger();
-
-    PermitAvailablePackageListRpcResponseDto response =
-        service.getAvailablePackageList(
-            "EX-700",
-            "",
-            applicationNumber -> {
-              decisions.incrementAndGet();
-              return applicationNumber == 1000456L;
-            });
-
-    assertThat(response.packageList()).containsExactly("PKG-901", "PKG-902");
-    assertThat(response.errorMessage()).isNull();
-    assertThat(decisions).hasValue(2);
-  }
-
-  @Test
-  void availablePackageListShouldUseGenericEmptyErrorWhenAllRowsAreHidden() {
-    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(
-            List.of(new PackageCandidateRow(1000456L, "PKG-901")));
-
-    PermitAvailablePackageListRpcResponseDto response =
-        service.getAvailablePackageList("EX-700", "", ignored -> false);
-
-    assertThat(response.packageList()).isEmpty();
-    assertThat(response.errorMessage())
-        .isEqualTo("No applications are currently available.");
-  }
-
-  @Test
-  void availablePackageListShouldPropagateApplicationAccessFailure() {
-    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(
-            List.of(new PackageCandidateRow(1000456L, "PKG-901")));
-    IllegalStateException failure = new IllegalStateException("authorization unavailable");
-
-    assertThatThrownBy(
-            () ->
-                service.getAvailablePackageList(
-                    "EX-700",
-                    "",
-                    ignored -> {
-                      throw failure;
-                    }))
-        .isSameAs(failure);
-  }
-
-  @Test
   void availableApplicationListShouldPropagateRequiredPackageLookupFailure() {
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("Oracle packages unavailable");
@@ -1748,18 +1613,6 @@ class OraclePermitDetailsRpcServiceTest {
             () -> service.getAvailableApplicationList("EX-700", "", ignored -> true))
         .isSameAs(failure);
     verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
-  }
-
-  @Test
-  void availablePackageListShouldPreserveLegitimatelyEmptyPackageCursor() {
-    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of());
-
-    PermitAvailablePackageListRpcResponseDto response =
-        service.getAvailablePackageList("EX-700", "", ignored -> true);
-
-    assertThat(response.packageList()).isEmpty();
-    assertThat(response.errorMessage()).isEqualTo("No applications are currently available.");
   }
 
   @Test
@@ -1818,30 +1671,6 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findAllCountryCodesRequired()).thenThrow(failure);
 
     assertThatThrownBy(service::getCountryList).isSameAs(failure);
-  }
-
-  @Test
-  void invoicesForPermitShouldReturnInvoiceList() {
-    when(repository.findInvoiceNumbersByPermitRequired(7000123L))
-        .thenReturn(List.of("INV-100", "INV-101"));
-
-    PermitInvoiceListRpcResponseDto response = service.getInvoicesForPermit(7000123L);
-
-    assertThat(response.invoiceList()).containsExactly("INV-100", "INV-101");
-  }
-
-  @Test
-  void invoiceDetailsShouldReturnComputedCadAmounts() {
-    when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L))
-        .thenReturn(Optional.of(new SalesInvoiceRow("INV-100", 100.0d, 1.25d, 20.0d)));
-
-    PermitInvoiceDetailsRpcResponseDto response =
-        service.getInvoiceDetails(7000123L, "INV-100");
-
-    assertThat(response.invoicefound()).isTrue();
-    assertThat(response.rate()).isEqualTo("1.25");
-    assertThat(response.fee()).isEqualTo("$25.00");
-    assertThat(response.value()).isEqualTo("$125.00");
   }
 
   @Test
@@ -1912,14 +1741,12 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void financialHistoryReadsShouldPropagateOracleFailure() {
+  void gbmsInvoiceHistoryShouldPropagateOracleFailure() {
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("invoice history unavailable");
-    when(repository.findInvoiceNumbersByPermitRequired(7000123L)).thenThrow(failure);
     when(repository.findGbmsInvoiceHistoryForDisplay("RCPT-1", 7000123L, true))
         .thenThrow(failure);
 
-    assertThatThrownBy(() -> service.getInvoicesForPermit(7000123L)).isSameAs(failure);
     assertThatThrownBy(() -> service.getGbmsInvoiceHistory("RCPT-1", 7000123L, true))
         .isSameAs(failure);
   }
@@ -5955,282 +5782,6 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void addInvoiceShouldPersistWhenInputIsValid() {
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
-    when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L)).thenReturn(Optional.empty());
-    when(repository.insertSalesInvoice(
-            7000123L,
-            "INV-100",
-            new BigDecimal("100.00"),
-            new BigDecimal("1.25000"),
-            new BigDecimal("12.00"),
-            "idir\\jsmith"))
-        .thenReturn(Optional.of(new SalesInvoiceRow("INV-100", 100.0d, 1.25d, 12.0d)));
-
-    PermitPersistenceRpcResponseDto response =
-        service.addInvoice(
-            7000123L,
-            "INV-100",
-            new BigDecimal("100.00"),
-            new BigDecimal("1.25"),
-            new BigDecimal("12.00"),
-            "idir\\jsmith");
-
-    assertThat(response.success()).isTrue();
-    assertThat(response.message()).isEqualTo("The sales invoice was saved successfully.");
-    assertThat(response.errors()).isEmpty();
-  }
-
-  @Test
-  void addInvoiceShouldRoundAcceptedValuesBeforePersistenceVerification() {
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
-    when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L))
-        .thenReturn(Optional.empty());
-    when(repository.insertSalesInvoice(
-            7000123L,
-            "INV-100",
-            new BigDecimal("9999999.99"),
-            new BigDecimal("1.00000"),
-            new BigDecimal("12.00"),
-            "idir\\jsmith"))
-        .thenReturn(
-            Optional.of(
-                new SalesInvoiceRow("INV-100", 9_999_999.99d, 1.0d, 12.0d)));
-
-    PermitPersistenceRpcResponseDto response =
-        service.addInvoice(
-            7000123L,
-            "INV-100",
-            new BigDecimal("9999999.994"),
-            new BigDecimal("1.000001"),
-            new BigDecimal("12.001"),
-            "idir\\jsmith");
-
-    assertThat(response.success()).isTrue();
-    assertThat(response.errors()).isEmpty();
-    verify(repository)
-        .insertSalesInvoice(
-            7000123L,
-            "INV-100",
-            new BigDecimal("9999999.99"),
-            new BigDecimal("1.00000"),
-            new BigDecimal("12.00"),
-            "idir\\jsmith");
-  }
-
-  @Test
-  void addInvoiceShouldRollBackWhenInsertReturnsNoRow() {
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
-    when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L))
-        .thenReturn(Optional.empty());
-    when(repository.insertSalesInvoice(
-            7000123L,
-            "INV-100",
-            new BigDecimal("100.00"),
-            new BigDecimal("1.25000"),
-            new BigDecimal("12.00"),
-            "idir\\jsmith"))
-        .thenReturn(Optional.empty());
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    PermitPersistenceRpcResponseDto response =
-        transactionalService(transactionManager)
-            .addInvoice(
-                7000123L,
-                "INV-100",
-                new BigDecimal("100.00"),
-                new BigDecimal("1.25"),
-                new BigDecimal("12.00"),
-                "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors()).containsExactly("Unable to save sales invoice.");
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-  }
-
-  @Test
-  void addInvoiceShouldRollBackWhenInsertReturnsMismatchedInvoice() {
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
-    when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L))
-        .thenReturn(Optional.empty());
-    when(repository.insertSalesInvoice(
-            7000123L,
-            "INV-100",
-            new BigDecimal("100.00"),
-            new BigDecimal("1.25000"),
-            new BigDecimal("12.00"),
-            "idir\\jsmith"))
-        .thenReturn(
-            Optional.of(
-                new SalesInvoiceRow("INV-OTHER", 99.0d, 1.25d, 12.0d)));
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    PermitPersistenceRpcResponseDto response =
-        transactionalService(transactionManager)
-            .addInvoice(
-                7000123L,
-                "INV-100",
-                new BigDecimal("100.00"),
-                new BigDecimal("1.25"),
-                new BigDecimal("12.00"),
-                "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors()).containsExactly("Unable to save sales invoice.");
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-  }
-
-  @Test
-  void addInvoiceShouldReturnValidationErrors() {
-    PermitPersistenceRpcResponseDto response =
-        service.addInvoice(null, "", null, null, null, "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors()).isNotEmpty();
-  }
-
-  @Test
-  void addInvoiceShouldRejectOversizedSalesInvoiceNumberBeforeOracleInsert() {
-    PermitPersistenceRpcResponseDto response =
-        service.addInvoice(
-            7000123L,
-            "INV-123456",
-            new BigDecimal("100.00"),
-            new BigDecimal("1.25"),
-            new BigDecimal("12.00"),
-            "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly("The sales invoice number must be 9 characters or fewer.");
-  }
-
-  @Test
-  void addInvoiceShouldRejectValuesThatCannotFitOracleStorage() {
-    PermitPersistenceRpcResponseDto response =
-        service.addInvoice(
-            7000123L,
-            "ééééééééé",
-            new BigDecimal("10000000"),
-            new BigDecimal("1.000001"),
-            new BigDecimal("12.001"),
-            "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "The sales invoice number must use printable US-ASCII characters.",
-            "The export value must round to 9999999.99 or less.");
-    verifyNoInteractions(repository);
-  }
-
-  @Test
-  void addInvoiceShouldRejectExtremeExponentBeforeOracleInsert() {
-    PermitPersistenceRpcResponseDto response =
-        service.addInvoice(
-            7000123L,
-            "INV-100",
-            new BigDecimal("1E+2147483647"),
-            BigDecimal.ONE,
-            BigDecimal.ONE,
-            "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly("The export value must round to 9999999.99 or less.");
-    verifyNoInteractions(repository);
-  }
-
-  @Test
-  void addInvoiceShouldRejectDuplicateInvoice() {
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
-    when(repository.findSalesInvoiceByNumberAndPermit("INV-100", 7000123L))
-        .thenReturn(Optional.of(new SalesInvoiceRow("INV-100", 100.0d, 1.25d, 12.0d)));
-
-    PermitPersistenceRpcResponseDto response =
-        service.addInvoice(
-            7000123L,
-            "INV-100",
-            new BigDecimal("100.00"),
-            new BigDecimal("1.25"),
-            new BigDecimal("12.00"),
-            "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors()).containsExactly("Sales invoice INV-100 already exists.");
-  }
-
-  @Test
-  void addInvoiceShouldRejectMissingPermitBeforeInvoiceLookup() {
-    when(repository.findPermitMutationByPermitNumber(7000123L)).thenReturn(Optional.empty());
-
-    PermitPersistenceRpcResponseDto response =
-        service.addInvoice(
-            7000123L,
-            "INV-100",
-            new BigDecimal("100.00"),
-            new BigDecimal("1.25"),
-            new BigDecimal("12.00"),
-            "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors()).containsExactly("Permit not found.");
-    verify(repository, never()).findSalesInvoiceByNumberAndPermit(any(), any());
-    verify(repository, never()).insertSalesInvoice(any(), any(), any(), any(), any(), any());
-  }
-
-  @Test
-  void addInvoiceShouldRejectNonActivePermitBeforeInvoiceLookup() {
-    for (String status : List.of("COM", "PPD", "CAN", "EXP")) {
-      when(repository.findPermitMutationByPermitNumber(7000123L))
-          .thenReturn(Optional.of(permitMutationRow(status)));
-
-      PermitPersistenceRpcResponseDto response =
-          service.addInvoice(
-              7000123L,
-              "INV-100",
-              new BigDecimal("100.00"),
-              new BigDecimal("1.25"),
-              new BigDecimal("12.00"),
-              "idir\\jsmith");
-
-      assertThat(response.success()).isFalse();
-      assertThat(response.errors()).containsExactly("Invoices can only be added to active permits.");
-    }
-    verify(repository, never()).findSalesInvoiceByNumberAndPermit(any(), any());
-    verify(repository, never()).insertSalesInvoice(any(), any(), any(), any(), any(), any());
-  }
-
-  @Test
-  void conversionRateShouldReturnSuccessWhenRateExists() {
-    when(repository.findCurrencyConversionRateByDate(LexisBusinessTime.today(), "USD"))
-        .thenReturn(Optional.of(1.333d));
-
-    PermitConversionRateRpcResponseDto response = service.getConversionRate();
-
-    assertThat(response.success()).isTrue();
-    assertThat(response.conversionRate()).isEqualTo("1.33");
-  }
-
-  @Test
-  void conversionRateShouldFailClosedWhenRateIsMissingOrNonPositive() {
-    when(repository.findCurrencyConversionRateByDate(LexisBusinessTime.today(), "USD"))
-        .thenReturn(Optional.of(0.0d));
-
-    PermitConversionRateRpcResponseDto response = service.getConversionRate();
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.conversionRate()).isEmpty();
-  }
-
-  @Test
   void feeCalculationShouldPropagateFeePolicyLookupOutages() {
     when(repository.findPermitPolicyContextByPermitNumber(7000123L))
         .thenReturn(
@@ -6277,21 +5828,6 @@ class OraclePermitDetailsRpcServiceTest {
             () -> service.getTotalFeesForPermit(7000123L, "US", "2026-01-15"))
         .isInstanceOf(DataRetrievalFailureException.class)
         .hasMessageContaining("Average market value was unavailable");
-  }
-
-  @Test
-  void fileTypesShouldReturnSortedFileTypeItems() {
-    when(repository.findAllAttachmentTypes())
-        .thenReturn(
-            List.of(
-                new AttachmentTypeRow("INS", "Application Document", 2L, 1L),
-                new AttachmentTypeRow("INV", "Invoice", 1L, 1L)));
-
-    List<PermitFileTypeRpcResponseDto> response = service.getFileTypes();
-
-    assertThat(response).hasSize(2);
-    assertThat(response.get(0).code()).isEqualTo("INV");
-    assertThat(response.get(1).code()).isEqualTo("INS");
   }
 
   @Test

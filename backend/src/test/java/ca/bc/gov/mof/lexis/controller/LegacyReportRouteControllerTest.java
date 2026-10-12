@@ -227,14 +227,14 @@ class LegacyReportRouteControllerTest {
     when(reportController.tenureReport(any())).thenReturn(streamingResponse(7, 7));
 
     MultiValueMap<String, String> multi = new LinkedMultiValueMap<>();
-    multi.add("actionMapping", "generateFileReport");
+    multi.add("actionMapping", "generatePermitReport");
     multi.add("outputFormat", "CSV");
     multi.add("forestFileId", "A12345");
 
     ResponseEntity<StreamingResponseBody> response =
         controller.legacyReport(
             Map.of(
-                "actionMapping", "generateFileReport",
+                "actionMapping", "generatePermitReport",
                 "outputFormat", "CSV",
                 "forestFileId", "A12345"),
             multi,
@@ -247,7 +247,7 @@ class LegacyReportRouteControllerTest {
 
     LexisReportRequestDto delegated = requestCaptor.getValue();
     assertThat(delegated.format()).isEqualTo("XLS");
-    assertThat(delegated.parameters()).containsEntry("legacyActionMapping", "generateFileReport");
+    assertThat(delegated.parameters()).containsEntry("legacyActionMapping", "generatePermitReport");
     assertThat(delegated.parameters()).containsEntry("forestFileId", "A12345");
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
   }

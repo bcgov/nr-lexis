@@ -1021,39 +1021,17 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('loads an export schedule link and explicitly submits its removal', async () => {
+  it('ignores an export schedule in a saved link', async () => {
     renderPage('/provincial/application?exportScheduleId=1002&region=11')
     await screen.findByText('321')
 
-    expect(screen.getByText('Export schedule filter applied')).toBeInTheDocument()
-    expect(
-      screen.getByText('Showing applications assigned to export schedule 1002.'),
-    ).toBeInTheDocument()
+    expect(screen.queryByText(/export schedule/i)).not.toBeInTheDocument()
     expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
       expect.objectContaining({
-        filters: expect.objectContaining({
-          exportScheduleId: '1002',
-        }),
+        filters: expect.not.objectContaining({ exportScheduleId: expect.anything() }),
       }),
       expect.objectContaining({ knownTotal: expect.any(Number) }),
     )
-
-    mockedSearchProvincialApplications.mockClear()
-    await userEvent.click(screen.getByRole('button', { name: /close notification/i }))
-    expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
-
-    await waitFor(() => {
-      expect(mockedSearchProvincialApplications).toHaveBeenCalledWith(
-        expect.objectContaining({
-          filters: expect.objectContaining({
-            exportScheduleId: '',
-          }),
-        }),
-        expect.objectContaining({ knownTotal: expect.any(Number) }),
-      )
-    })
   })
 
   it('waits for explicit submission while filters are typed', async () => {

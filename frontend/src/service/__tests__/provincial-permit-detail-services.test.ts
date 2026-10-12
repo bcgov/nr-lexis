@@ -18,12 +18,9 @@ import {
 } from '@/service/provincial-permit-detail-tabs-service'
 import {
   addPermitDetail,
-  addPermitInvoice,
   createPermitFromExemption,
   fetchPermitApprovalEmailDefault,
   fetchPermitFeeOverrideContext,
-  fetchPermitInvoiceConversionRate,
-  fetchPermitInvoices,
   releasePermitEditLock,
   sendPermitApprovalEmail,
   sendPermitReviewRequestEmail,
@@ -1059,120 +1056,6 @@ describe('provincial permit detail services', () => {
     ])
   })
 
-  it('loads permit invoice details sequentially after the invoice list', async () => {
-    let resolveFirstInvoice: (value: ReturnType<typeof response>) => void = () => {}
-    getCachedResponseMock
-      .mockResolvedValueOnce(response({ invoiceList: ['INV-1', 'INV-2'] }))
-      .mockReturnValueOnce(
-        new Promise((resolve) => {
-          resolveFirstInvoice = resolve
-        }),
-      )
-      .mockResolvedValueOnce(
-        response({
-          invoicefound: true,
-          rate: '1.25',
-          fee: '12.00',
-          value: '200.00',
-        }),
-      )
-
-    const resultPromise = fetchPermitInvoices('777')
-    await Promise.resolve()
-    await Promise.resolve()
-
-    expect(getCachedResponseMock).toHaveBeenCalledTimes(2)
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      1,
-      '/lexis/rpc/permit-details/invoices-for-permit',
-      { params: { permitNumber: '777' } },
-      { ttlMs: 30_000 },
-    )
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      2,
-      '/lexis/rpc/permit-details/invoice-details',
-      {
-        params: {
-          permitNumber: '777',
-          salesInvoiceNumber: 'INV-1',
-        },
-      },
-      { ttlMs: 30_000 },
-    )
-
-    resolveFirstInvoice(
-      response({
-        invoicefound: true,
-        rate: '1.20',
-        fee: '10.00',
-        value: '100.00',
-      }),
-    )
-    const result = await resultPromise
-
-    expect(getCachedResponseMock).toHaveBeenNthCalledWith(
-      3,
-      '/lexis/rpc/permit-details/invoice-details',
-      {
-        params: {
-          permitNumber: '777',
-          salesInvoiceNumber: 'INV-2',
-        },
-      },
-      { ttlMs: 30_000 },
-    )
-    expect(result.rows).toEqual([
-      expect.objectContaining({
-        invoiceNumber: 'INV-1',
-        exportValueCad: '100.00',
-      }),
-      expect.objectContaining({
-        invoiceNumber: 'INV-2',
-        exportValueCad: '200.00',
-      }),
-    ])
-  })
-
-  it('posts permit invoice values as a legacy form request', async () => {
-    postMock.mockResolvedValue(
-      response({
-        valid: true,
-        message: 'saved',
-        warnings: ['Review invoice value.'],
-      }),
-    )
-
-    const result = await addPermitInvoice({
-      permitNumber: ' 777 ',
-      salesInvoiceNumber: ' INV-3 ',
-      invoiceExportValue: ' 100.00 ',
-      invoiceConversionRate: ' 1.25 ',
-      invoiceFeeInLieu: ' 12.50 ',
-    })
-
-    expect(postMock).toHaveBeenCalledTimes(1)
-    const [path, body, config] = postMock.mock.calls[0]
-    expect(path).toBe('/lexis/rpc/permit-details/add-invoice')
-    expect(body).toBeInstanceOf(URLSearchParams)
-    expect(body.get('permitNumber')).toBe('777')
-    expect(body.get('salesInvoiceNumber')).toBe('INV-3')
-    expect(body.get('invoiceExportValue')).toBe('100.00')
-    expect(body.get('invoiceConversionRate')).toBe('1.25')
-    expect(body.get('invoiceFeeInLieu')).toBe('12.50')
-    expect(config).toEqual({
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-      },
-    })
-    expect(result).toEqual({
-      success: true,
-      message: 'saved',
-      errors: [],
-      warnings: ['Review invoice value.'],
-      source: 'api',
-    })
-  })
-
   it('preserves authoritative permit status and warnings from a permit update', async () => {
     postMock.mockResolvedValue(
       response({
@@ -1364,29 +1247,6 @@ describe('provincial permit detail services', () => {
     })
   })
 
-  it('returns a positive conversion rate only when the backend marks it successful', async () => {
-    getCachedResponseMock.mockResolvedValue(response({ success: true, conversionRate: '1.25' }))
-
-    await expect(fetchPermitInvoiceConversionRate()).resolves.toEqual({
-      conversionRate: '1.25',
-      source: 'api',
-    })
-  })
-
-  it.each([
-    { success: false, conversionRate: '1.25' },
-    { success: true, conversionRate: '' },
-    { success: true, conversionRate: '0' },
-    { success: true, conversionRate: '-1' },
-    { success: true, conversionRate: 'not-a-rate' },
-  ])('rejects an unavailable or invalid invoice conversion response: %o', async (payload) => {
-    getCachedResponseMock.mockResolvedValue(response(payload))
-
-    await expect(fetchPermitInvoiceConversionRate()).rejects.toThrow(
-      'A valid currency conversion rate is required to add an invoice.',
-    )
-  })
-
   it('posts permit email actions with the legacy client copy and approval recipient', async () => {
     postMock.mockResolvedValue(response({ success: true, message: 'sent' }))
 
@@ -1423,6 +1283,7 @@ describe('provincial permit detail services', () => {
         overrideComment: 'Reviewed calculation',
         locked: false,
         lockMessage: '',
+        interior: true,
       }),
     )
 
@@ -1439,6 +1300,7 @@ describe('provincial permit detail services', () => {
       overrideComment: 'Reviewed calculation',
       locked: false,
       lockMessage: '',
+      interior: true,
     })
     expect(registerRecordVersionMock).toHaveBeenCalledWith(
       'permit',

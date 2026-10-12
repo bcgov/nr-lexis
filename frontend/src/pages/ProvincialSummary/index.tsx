@@ -488,17 +488,7 @@ const ProvincialSummaryPage = () => {
                               {row.offerNumber}
                             </Link>
                           </TableCell>
-                          <TableCell>
-                            <Link
-                              className="cds--link"
-                              to={`/provincial/application/${row.application}`}
-                              state={{
-                                returnTo: { label: 'My offers', to: '/provincial/summary' },
-                              }}
-                            >
-                              {row.application}
-                            </Link>
-                          </TableCell>
+                          <TableCell>{displayValue(row.application)}</TableCell>
                           <TableCell>{displayValue(row.packageNumber)}</TableCell>
                           <TableCell>{displayValue(row.listingDate)}</TableCell>
                         </TableRow>
@@ -609,21 +599,7 @@ const ProvincialSummaryPage = () => {
                           <TableCell>
                             <StatusTag status={row.status} />
                           </TableCell>
-                          <TableCell>
-                            {row.exemption ? (
-                              <Link
-                                className="cds--link"
-                                to={`/provincial/exemption/${encodeURIComponent(row.exemption)}`}
-                                state={{
-                                  returnTo: { label: 'My permits', to: '/provincial/summary' },
-                                }}
-                              >
-                                {row.exemption}
-                              </Link>
-                            ) : (
-                              displayValue('')
-                            )}
-                          </TableCell>
+                          <TableCell>{displayValue(row.exemption)}</TableCell>
                           <TableCell>{formatNumber(row.totalPieces)}</TableCell>
                           <TableCell>{displayVolume(row.totalVolume)}</TableCell>
                           <TableCell>{displayValue(row.issueDate)}</TableCell>

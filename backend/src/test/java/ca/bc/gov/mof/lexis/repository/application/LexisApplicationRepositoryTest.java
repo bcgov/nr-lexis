@@ -1049,22 +1049,6 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
-  void validOfferCheckShouldPropagateOracleFailure() {
-    LexisApplicationRepository repository = new OfferReadLexisApplicationRepository(true);
-
-    assertThatThrownBy(() -> repository.hasValidOffer(List.of(900123L)))
-        .isInstanceOf(DataAccessResourceFailureException.class)
-        .hasMessageContaining("purchase offers unavailable");
-  }
-
-  @Test
-  void validOfferCheckShouldPreserveLegitimatelyEmptyOfferCursor() {
-    LexisApplicationRepository repository = new OfferReadLexisApplicationRepository(false);
-
-    assertThat(repository.hasValidOffer(List.of(900123L))).isFalse();
-  }
-
-  @Test
   void searchMappingShouldUseInlineOfferFlagWithoutPerRowProcedureCalls() throws SQLException {
     ResultSet noOffer = applicationSearchResultSet(900101L, 0L);
     ResultSet activeOffer = applicationSearchResultSet(900102L, 1L);
@@ -1515,28 +1499,6 @@ class LexisApplicationRepositoryTest {
       } catch (SQLException ex) {
         throw new AssertionError(ex);
       }
-    }
-  }
-
-  private static final class OfferReadLexisApplicationRepository
-      extends LexisApplicationRepository {
-    private final boolean fail;
-
-    OfferReadLexisApplicationRepository(boolean fail) {
-      super(null);
-      this.fail = fail;
-    }
-
-    @Override
-    protected <T> List<T> queryCursorProcedureFailClosed(
-        String procedureSignature,
-        SqlConsumer<CallableStatement> binder,
-        int cursorOutIndex,
-        SqlRowMapper<T> rowMapper) {
-      if (fail) {
-        throw new DataAccessResourceFailureException("Oracle purchase offers unavailable");
-      }
-      return List.of();
     }
   }
 

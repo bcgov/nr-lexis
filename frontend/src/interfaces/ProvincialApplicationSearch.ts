@@ -10,7 +10,6 @@ export type ProvincialApplicationSearchFilters = {
   receivedToDate: string
   listingFromDate: string
   listingToDate: string
-  exportScheduleId?: string
   applicantClientNumber: string
   ownerClientNumber: string
   agentClientNumber?: string

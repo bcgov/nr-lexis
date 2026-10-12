@@ -176,8 +176,8 @@ class LexisJasperReportParameterProviderTest {
   }
 
   @Test
-  void tenureTypeMarkAndFileReportsShouldApplyASubmittedRegion() {
-    for (String variant : List.of("generateTenureReport", "generateMarkReport", "generateFileReport")) {
+  void tenureTypeAndMarkReportsShouldApplyASubmittedRegion() {
+    for (String variant : List.of("generateTenureReport", "generateMarkReport")) {
       LexisReportRequestDto request =
           new LexisReportRequestDto(
               Map.of("legacyActionMapping", variant, "region", "[1903, 1904]"), "PDF");
@@ -210,27 +210,6 @@ class LexisJasperReportParameterProviderTest {
         .containsEntry("P_TIMBER_MARK_1", "TM-1")
         .containsEntry("P_TIMBER_MARK_2", "TM-2")
         .containsEntry("P_FOREST_FILE_ID", "");
-  }
-
-  @Test
-  void tenureGenerateFileReportShouldOnlyPopulateForestFileId() {
-    LexisReportRequestDto request =
-        new LexisReportRequestDto(
-            Map.of(
-                "legacyActionMapping", "generateFileReport",
-                "fromDate", "2026-01-01",
-                "toDate", "2026-02-01",
-                "forestFileId", "123A0001"),
-            "PDF");
-
-    Map<String, Object> parameters =
-        provider.buildParameters(LexisJasperReportDefinition.TENURE_REPORT, request);
-
-    assertThat(parameters)
-        .containsEntry("P_ORG_UNIT_NUMBER", "-1")
-        .containsEntry("P_TENURE_TYPE_1", "")
-        .containsEntry("P_TIMBER_MARK_1", "")
-        .containsEntry("P_FOREST_FILE_ID", "123A0001");
   }
 
   @Test

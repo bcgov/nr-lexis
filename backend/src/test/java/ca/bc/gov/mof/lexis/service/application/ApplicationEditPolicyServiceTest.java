@@ -146,7 +146,7 @@ class ApplicationEditPolicyServiceTest {
         "LEXIS_APPLICATION_APPROVER",
         "LEXIS_PROVINCIAL_SUBMITTER_00012345"
       })
-  void authorizedRolesCanUseInteriorMinisterialRemainingVolumeItemOverride(String role) {
+  void authorizedRolesCanUseMinisterialRemainingVolumeItemOverride(String role) {
     allowRoles(role);
     context("PMT", TODAY.minusDays(30), true, true, true, true);
 
@@ -161,7 +161,7 @@ class ApplicationEditPolicyServiceTest {
   }
 
   @Test
-  void exemptionApproverCannotUseInteriorMinisterialItemOverride() {
+  void exemptionApproverCannotUseMinisterialItemOverride() {
     allowRoles("LEXIS_APPLICATION_APPROVER", "LEXIS_EXEMPTION_APPROVER");
     context("PMT", TODAY.minusDays(30), true, true, true, true);
 
@@ -240,7 +240,7 @@ class ApplicationEditPolicyServiceTest {
         "LEXIS_APPLICATION_APPROVER",
         "LEXIS_PROVINCIAL_SUBMITTER_00012345"
       })
-  void interiorMinisterialOverrideAllowsUnmanufacturedTimberScaleMutations(String role) {
+  void ministerialOverrideAllowsUnmanufacturedTimberScaleMutations(String role) {
     allowRoles(role);
     context("PMT", TODAY.minusDays(30), true, true, true, true, "T");
 
@@ -456,14 +456,14 @@ class ApplicationEditPolicyServiceTest {
       boolean hasPackageBeforeApproval,
       boolean hasScaleBeforeApproval,
       boolean hasCompletePermit,
-      boolean interiorMinisterialItemOverrideEligible) {
+      boolean ministerialItemOverrideEligible) {
     context(
         status,
         advertisingDate,
         hasPackageBeforeApproval,
         hasScaleBeforeApproval,
         hasCompletePermit,
-        interiorMinisterialItemOverrideEligible,
+        ministerialItemOverrideEligible,
         "H");
   }
 
@@ -473,7 +473,7 @@ class ApplicationEditPolicyServiceTest {
       boolean hasPackageBeforeApproval,
       boolean hasScaleBeforeApproval,
       boolean hasCompletePermit,
-      boolean interiorMinisterialItemOverrideEligible,
+      boolean ministerialItemOverrideEligible,
       String productTypeCode) {
     when(applicationService.getApplicationEditContext(APPLICATION_NUMBER))
         .thenReturn(
@@ -489,6 +489,6 @@ class ApplicationEditPolicyServiceTest {
                     hasScaleBeforeApproval,
                     hasCompletePermit,
                     null,
-                    interiorMinisterialItemOverrideEligible)));
+                    ministerialItemOverrideEligible)));
   }
 }

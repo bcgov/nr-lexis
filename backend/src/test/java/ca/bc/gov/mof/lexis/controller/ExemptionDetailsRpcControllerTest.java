@@ -466,21 +466,6 @@ class ExemptionDetailsRpcControllerTest {
   }
 
   @Test
-  void blanketTotalsShouldReturnPayload() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.getBlanketOicTotals("EX-205"))
-        .thenReturn(new ExemptionDetailsRpcService.BlanketOicTotalsResponse("100.0", "60.0"));
-
-    ResponseEntity<ExemptionDetailsRpcController.BlanketOicTotalsResponseDto> response =
-        controller.getBlanketOicTotals("EX-205");
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().requestedVolume()).isEqualTo("100.0");
-    assertThat(response.getBody().completedVolume()).isEqualTo("60.0");
-  }
-
-  @Test
   void documentDetailsShouldHideApplicationDocumentsWithoutApplicationDetailAuthority() {
     TestingAuthenticationToken authentication =
         new TestingAuthenticationToken("idir\\exemption-approver", "n/a");

@@ -38,7 +38,6 @@ import {
   fetchPermitApprovalEmailDefault,
   fetchPermitFeeOverrideContext,
   fetchPermitDocuments,
-  fetchPermitInvoices,
   openPermitDocument,
   removePermitApplicationDocument,
   removePermitDocument,
@@ -112,7 +111,6 @@ vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
   fetchPermitApprovalEmailDefault: vi.fn(),
   fetchPermitFeeOverrideContext: vi.fn(),
   fetchPermitDocuments: vi.fn(),
-  fetchPermitInvoices: vi.fn(),
   openPermitDocument: vi.fn(),
   releasePermitEditLock: vi.fn(),
   removePermitApplicationDocument: vi.fn(),
@@ -242,7 +240,6 @@ const mockedDeleteBlanketOicScale = vi.mocked(deleteBlanketOicScale)
 const mockedFetchPermitApprovalEmailDefault = vi.mocked(fetchPermitApprovalEmailDefault)
 const mockedFetchPermitFeeOverrideContext = vi.mocked(fetchPermitFeeOverrideContext)
 const mockedFetchPermitDocuments = vi.mocked(fetchPermitDocuments)
-const mockedFetchPermitInvoices = vi.mocked(fetchPermitInvoices)
 const mockedOpenPermitDocument = vi.mocked(openPermitDocument)
 const mockedRemovePermitApplicationDocument = vi.mocked(removePermitApplicationDocument)
 const mockedRemovePermitDocument = vi.mocked(removePermitDocument)
@@ -586,6 +583,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       overrideComment: 'Legacy override',
       locked: false,
       lockMessage: '',
+      interior: true,
     })
     renderPermitDetails()
     await selectPermitDetailTab('Fees')
@@ -778,12 +776,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       overrideComment: '',
       locked: false,
       lockMessage: '',
+      interior: true,
     })
     mockedFetchPermitDocuments.mockResolvedValue({
-      rows: [],
-      source: 'api',
-    })
-    mockedFetchPermitInvoices.mockResolvedValue({
       rows: [],
       source: 'api',
     })
@@ -1031,8 +1026,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
       within(permitSummaryTile as HTMLElement).getByRole('link', { name: 'EX-9' }),
     ).toHaveAttribute('href', '/provincial/exemption/EX-9')
     expect(within(permitSummaryTile as HTMLElement).getByText('Submit date')).toBeInTheDocument()
-    expect(within(permitSummaryTile as HTMLElement).getByText('Received date')).toBeInTheDocument()
-    expect(within(permitSummaryTile as HTMLElement).getAllByText('2026-04-10')).toHaveLength(2)
+    expect(
+      within(permitSummaryTile as HTMLElement).queryByText('Received date'),
+    ).not.toBeInTheDocument()
+    expect(within(permitSummaryTile as HTMLElement).getAllByText('2026-04-10')).toHaveLength(1)
     expect(within(permitSummaryTile as HTMLElement).queryByText('Author')).not.toBeInTheDocument()
     expect(screen.getByText(/Author:/)).toBeInTheDocument()
     expect(screen.getByText(/idir\\permit-author/)).toBeInTheDocument()
@@ -1097,7 +1094,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByRole('cell', { name: '1939.50' })).toBeInTheDocument()
     expect(screen.getAllByRole('cell', { name: '2020-05-06' })).toHaveLength(2)
     expect(screen.getByRole('cell', { name: '2022-02-15' })).toBeInTheDocument()
-    expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
   }, 15000)
 
   it('shows a one-time success on the saved Blanket OIC permit without losing navigation state', async () => {
@@ -1950,8 +1946,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await selectPermitDetailTab('Fees')
 
     expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('2.1')
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$2.08')
-    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$2.08')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$2.08')
   })
 
   it('shows package fee summaries, exemption links, and all fee rows', async () => {
@@ -2001,7 +1996,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       '/provincial/exemption/EX-9',
     )
     expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('5.1')
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$8.12')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$8.12')
     const feeRows = screen.getByRole('region', { name: 'Permit fee rows' })
     expect(within(feeRows).getAllByRole('row')).toHaveLength(4)
     expect(within(feeRows).getAllByRole('cell', { name: 'PKG-A' })).toHaveLength(2)
@@ -2010,8 +2005,37 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByLabelText('Filter fee rows')).not.toBeInTheDocument()
     expect(emptyPackage).toBeVisible()
     expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('5.1')
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$8.12')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$8.12')
   })
+
+  it.each([
+    { receiptNumber: 'R-1', interior: false, shown: true },
+    { receiptNumber: null, interior: true, shown: true },
+    { receiptNumber: null, interior: false, shown: false },
+  ])(
+    'shows Receipt number only with a receipt or on an Interior permit (%o)',
+    async ({ receiptNumber, interior, shown }) => {
+      mockedFetchProvincialPermitDetail.mockResolvedValue({ ...permitDetail, receiptNumber })
+      mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+        overrideEnabled: false,
+        overrideFee: '',
+        overrideComment: '',
+        locked: false,
+        lockMessage: '',
+        interior,
+      })
+      renderPermitDetails()
+
+      await selectPermitDetailTab('Fees')
+      expect(await screen.findByLabelText('Total volume (m³)')).toBeInTheDocument()
+      await waitFor(() => expect(mockedFetchPermitFeeOverrideContext).toHaveBeenCalled())
+      if (shown) {
+        expect(await screen.findByLabelText('Receipt number')).toHaveValue(receiptNumber ?? '—')
+      } else {
+        expect(screen.queryByLabelText('Receipt number')).not.toBeInTheDocument()
+      }
+    },
+  )
 
   it('displays an authoritative masked package subtotal without masking numeric permit fees', async () => {
     mockedFetchProvincialPermitFees.mockResolvedValue({
@@ -2026,7 +2050,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     const summaries = screen.getByRole('region', { name: 'Permit package fee summaries' })
     expect(within(summaries).getByRole('cell', { name: '$' })).toBeVisible()
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$37.50')
   })
 
   it('shows only the selected BOIC package fees without changing authoritative totals', async () => {
@@ -2605,7 +2629,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$37.50')
     expect(screen.queryByLabelText('Filter fee rows')).not.toBeInTheDocument()
     await selectPermitDetailTab('Permit')
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
@@ -2621,7 +2645,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(2)
     expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
     await selectPermitDetailTab('Fees')
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Loading…')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('Loading…')
     expect(screen.queryByRole('row', { name: /TEST-FEE/ })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('region', { name: 'Permit package fee summaries' }),
@@ -2640,8 +2664,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         })),
       }),
     )
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$75.00')
-    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$75.00')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$75.00')
     expect(screen.getByRole('tab', { name: 'Fees' })).toHaveAttribute('aria-selected', 'true')
     expect(within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$75.00')).toBeVisible()
     expect(
@@ -2665,7 +2688,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$37.50')
     await selectPermitDetailTab('Permit')
     await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
     await userEvent.clear(screen.getByLabelText('Submit date'))
@@ -2678,8 +2701,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByLabelText('Submit date')).toHaveValue('2026-04-11')
     await selectPermitDetailTab('Fees')
     expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(1)
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
-    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$37.50')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$37.50')
     expect(within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$37.50')).toBeVisible()
   })
 
@@ -2704,7 +2726,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$37.50')
     await selectPermitDetailTab('Shipping')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
     await userEvent.selectOptions(screen.getByLabelText('Final destination country'), 'CA')
@@ -2714,12 +2736,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByText('Shipping details saved')).toBeInTheDocument()
     expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(2)
     await selectPermitDetailTab('Fees')
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Loading…')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('Loading…')
     expect(screen.queryByRole('row', { name: /TEST-FEE/ })).not.toBeInTheDocument()
     await act(async () => resolveRefreshedFees?.(maskedPermitFees))
 
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$')
-    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$')
     expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('10.0')
     const feeRow = screen.getByRole('row', { name: /TEST-FEE/ })
     expect(within(feeRow).getByText('$')).toBeInTheDocument()
@@ -2735,22 +2756,24 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$37.50')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.click(screen.getByRole('radio', { name: 'Yes' }))
     await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '45.25')
     await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
-    await waitFor(() => expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$'))
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$'),
+      ).toBeInTheDocument(),
+    )
     expect(screen.getByText('Fee override saved')).toBeInTheDocument()
-    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$45.25')
-    expect(within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$')).toBeInTheDocument()
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$45.25')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.click(screen.getByRole('radio', { name: 'No' }))
     await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
-    await waitFor(() => expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$37.50'))
-    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$37.50')
+    await waitFor(() => expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$37.50'))
     expect(
       within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$37.50'),
     ).toBeInTheDocument()
@@ -2778,10 +2801,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await userEvent.type(screen.getByLabelText('Override fee (CAD)'), '45.25')
     await userEvent.click(screen.getByRole('button', { name: /^Save (?:fee override|changes)$/ }))
 
-    await waitFor(() => expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$'))
+    await waitFor(() =>
+      expect(
+        within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$'),
+      ).toBeInTheDocument(),
+    )
     await act(async () => resolveOriginalFees?.(calculatedPermitFees))
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$')
-    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$45.25')
+    const feeRow = screen.getByRole('row', { name: /TEST-FEE/ })
+    expect(within(feeRow).getByText('$')).toBeInTheDocument()
+    expect(within(feeRow).queryByText('$37.50')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$45.25')
     expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(2)
   })
 
@@ -2874,7 +2903,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         await act(async () => resolvePostSaveFees?.(maskedPermitFees))
       }
       expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('20.0')
-      expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$45.25')
+      expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$45.25')
       expect(
         within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('PKG-10'),
       ).toBeInTheDocument()
@@ -2897,13 +2926,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     expect(await screen.findByText('The permit was updated successfully.')).toBeInTheDocument()
     expect(await screen.findByText('Unable to retrieve permit fee details.')).toBeInTheDocument()
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Unavailable')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('Unavailable')
     expect(screen.queryByRole('row', { name: /TEST-FEE/ })).not.toBeInTheDocument()
     await selectPermitDetailTab('Items')
     await selectPermitDetailTab('Fees')
 
-    await waitFor(() => expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('$'))
-    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('$45.25')
+    await waitFor(() => expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$45.25'))
+    expect(within(screen.getByRole('row', { name: /TEST-FEE/ })).getByText('$')).toBeInTheDocument()
     expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1)
     expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(3)
   })
@@ -2923,7 +2952,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
     expect(mockedFetchProvincialPermitFees).not.toHaveBeenCalled()
     expect(mockedFetchPermitDocuments).not.toHaveBeenCalled()
-    expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
 
     await selectPermitDetailTab('Fees')
     expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(1)
@@ -2933,8 +2961,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       blanketOic: false,
     })
     expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('Loading…')
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Loading…')
-    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('Loading…')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('Loading…')
     await act(async () => {
       resolveFees?.({ fees: [], packageFeeSummaries: [], totalFeeVolume: 0 })
     })
@@ -2957,7 +2984,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedFetchPermitDocuments).toHaveBeenCalledTimes(1)
 
     expect(screen.queryByRole('tab', { name: 'Invoices' })).not.toBeInTheDocument()
-    expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
   })
 
   it('shows the permit detail while core tables continue loading', async () => {
@@ -3029,6 +3055,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         overrideComment: '',
         locked: false,
         lockMessage: '',
+        interior: true,
       })
     })
   })
@@ -3206,8 +3233,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         ).not.toBeInTheDocument()
       } else {
         expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('Unavailable')
-        expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Unavailable')
-        expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('Unavailable')
+        expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('Unavailable')
       }
     },
   )
@@ -4282,7 +4308,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
 
     expect(mockedFetchPermitDocuments).not.toHaveBeenCalled()
-    expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
 
     await selectPermitDetailTab('Documents')
 
@@ -5666,6 +5691,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       overrideComment: '',
       locked: true,
       lockMessage: 'Another user is editing this permit.',
+      interior: true,
     })
     renderPermitDetails()
 
@@ -7290,17 +7316,16 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(submitDate).toBeEnabled()
     for (const label of [
       'Exemption number',
-      'Received date',
       'Current permit volume (m³)',
       'Current permit pieces',
     ]) {
       expect(screen.queryByLabelText(label)).not.toBeInTheDocument()
       expect(screen.getByText(label).tagName).toBe('DT')
     }
+    expect(screen.queryByText('Received date')).not.toBeInTheDocument()
 
     await userEvent.clear(submitDate)
     await userEvent.type(submitDate, '2026-04-09')
-    expect(screen.getByText('Received date').nextElementSibling).toHaveTextContent('2026-04-09')
     await userEvent.click(getActiveSectionSaveButton())
 
     await waitFor(() => {
@@ -8172,6 +8197,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       overrideComment: '',
       locked: true,
       lockMessage: 'Another user is editing this permit.',
+      interior: true,
     })
     renderPermitDetails()
 
@@ -8822,6 +8848,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       overrideComment: 'Legacy override',
       locked: false,
       lockMessage: '',
+      interior: true,
     })
 
     render(
@@ -8868,6 +8895,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       overrideComment: '',
       locked: false,
       lockMessage: '',
+      interior: true,
     })
     renderPermitDetails()
 
@@ -8919,6 +8947,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       overrideComment: 'Legacy override',
       locked: false,
       lockMessage: '',
+      interior: true,
     })
 
     renderPermitDetails()
@@ -8950,6 +8979,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       overrideComment: 'Legacy override',
       locked: false,
       lockMessage: '',
+      interior: true,
     })
 
     renderPermitDetails()
@@ -9012,6 +9042,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       overrideComment: 'Legacy override',
       locked: false,
       lockMessage: '',
+      interior: true,
     })
 
     renderPermitDetails()
@@ -9061,6 +9092,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       overrideComment: 'Legacy override',
       locked: false,
       lockMessage: '',
+      interior: true,
     })
 
     renderPermitDetails()
@@ -9096,6 +9128,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         overrideComment: 'Invoiced calculation',
         locked: false,
         lockMessage: '',
+        interior: true,
       })
 
       renderPermitDetails()
@@ -9790,7 +9823,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
-  it('keeps refreshed permit documents visible when the independent invoice refresh fails', async () => {
+  it('keeps refreshed permit documents visible after a delete', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'ACT',
@@ -9810,7 +9843,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
         source: 'api',
       })
       .mockResolvedValueOnce({ rows: [], source: 'api' })
-    mockedFetchPermitInvoices.mockRejectedValueOnce(new Error('invoice lookup unavailable'))
 
     renderPermitDetails()
     await selectPermitDetailTab('Documents')
@@ -10195,7 +10227,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ).toBeInTheDocument()
     expect(mockedFetchProvincialPermitDetailTabs).not.toHaveBeenCalled()
     expect(mockedFetchPermitDocuments).not.toHaveBeenCalled()
-    expect(mockedFetchPermitInvoices).not.toHaveBeenCalled()
   })
 
   it('keeps permit table tabs available and distinguishes lookup failure from empty data', async () => {
@@ -10228,8 +10259,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await selectPermitDetailTab('Fees')
     expect(screen.getByLabelText('Total volume (m³)')).toHaveValue('Unavailable')
-    expect(screen.getByLabelText('Calculated fee (CAD)')).toHaveValue('Unavailable')
-    expect(screen.getByLabelText('Effective fee (CAD)')).toHaveValue('Unavailable')
+    expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('Unavailable')
     expect(screen.queryByRole('button', { name: 'Edit fee override' })).not.toBeInTheDocument()
   })
 

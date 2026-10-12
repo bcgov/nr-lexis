@@ -157,9 +157,6 @@ const installParityFixtures = async (page: Page) => {
         case '/api/lexis/rpc/exemption-details/applications':
           body = { applications: [], containsUnmanu: false, ownerNumber: '' }
           break
-        case '/api/lexis/rpc/exemption-details/blanket-oic-totals':
-          body = { requestedVolume: '0', completedVolume: '0' }
-          break
         case '/api/lexis/shipping-reference-options':
           body = {
             countries: [{ code: 'US', name: 'United States' }],

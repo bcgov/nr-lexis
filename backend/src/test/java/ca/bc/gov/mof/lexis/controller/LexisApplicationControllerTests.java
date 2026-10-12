@@ -78,21 +78,6 @@ class LexisApplicationControllerTests {
   }
 
   @Test
-  void verifyClientsEndpointReturnsBooleanPayload() throws Exception {
-    mockMvc
-        .perform(
-            get("/api/lexis/applications/search/verify-clients")
-                .param("applications", "1000123,1000456")
-                .with(
-                    jwt("orgUnitNos", java.util.List.of(11L, 12L))
-                        .authorities(
-                            new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-CARIBOO"),
-                            new SimpleGrantedAuthority("LEXIS_READ_ONLY_REGION_REGION-SKEENA"))))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.clientsMatch").value(false));
-  }
-
-  @Test
   void multiClientSubmitterShouldBePromptedToSelectAnActiveOrganization() throws Exception {
     mockMvc
         .perform(

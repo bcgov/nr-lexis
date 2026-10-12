@@ -342,43 +342,6 @@ class OracleLexisApplicationServiceTest {
     verify(repository).findPackageByPackageNumber(" PKG-903 ");
   }
 
-  @Test
-  void verifyClientsShouldPassThroughRepositoryWhenInputIsValid() {
-    when(repository.verifyApplicationClients(List.of(1000456L, 1000999L))).thenReturn(true);
-
-    boolean result =
-        service.verifyApplicationClients(
-            Arrays.asList(1000456L, null, 0L, -1L, 1000999L, 1000456L));
-
-    assertThat(result).isTrue();
-    verify(repository).verifyApplicationClients(List.of(1000456L, 1000999L));
-  }
-
-  @Test
-  void verifyClientsShouldShortCircuitWhenInputIsInvalid() {
-    assertThat(service.verifyApplicationClients(null)).isFalse();
-    assertThat(service.verifyApplicationClients(Arrays.asList(null, 0L, -1L))).isFalse();
-    verifyNoInteractions(repository);
-  }
-
-  @Test
-  void hasValidOfferShouldPassThroughRepositoryWhenInputIsValid() {
-    when(repository.hasValidOffer(List.of(1000456L, 1000999L))).thenReturn(true);
-
-    boolean result =
-        service.hasValidOffer(Arrays.asList(1000456L, null, 0L, -1L, 1000999L, 1000456L));
-
-    assertThat(result).isTrue();
-    verify(repository).hasValidOffer(List.of(1000456L, 1000999L));
-  }
-
-  @Test
-  void hasValidOfferShouldShortCircuitWhenInputIsInvalid() {
-    assertThat(service.hasValidOffer(null)).isFalse();
-    assertThat(service.hasValidOffer(Arrays.asList(null, 0L, -1L))).isFalse();
-    verifyNoInteractions(repository);
-  }
-
   private LexisApplicationSearchResultDto row(long application, LocalDate listingDate) {
     return new LexisApplicationSearchResultDto(
         application,

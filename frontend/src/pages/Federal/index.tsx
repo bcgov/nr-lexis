@@ -22,14 +22,14 @@ import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import SearchableSelect from '../../components/SearchableSelect'
 import StatusTag from '@/components/StatusTag'
-import IsoDatePicker from '../../components/IsoDatePicker'
+import IsoDateRangePicker from '../../components/IsoDateRangePicker'
 import type {
   FederalApplicationSearchFilters,
   FederalApplicationSearchRequest,
   FederalApplicationSearchResponse,
 } from '@/interfaces/FederalApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
-import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateValue } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -68,10 +68,13 @@ import {
 import { fetchFederalApplicationOptions, type SearchOption } from '@/service/search-options-service'
 import { displayTableValue } from '@/utils/text'
 
+// Staff check the day's arrivals with Approved and today's list dates.
+const DEFAULT_APPLICATION_STATUS = 'APP'
+
 const INITIAL_FILTERS: FederalApplicationSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
-  applicationStatus: '',
+  applicationStatus: DEFAULT_APPLICATION_STATUS,
   clientNumber: '',
   receivedFromDate: '',
   receivedToDate: '',
@@ -90,7 +93,7 @@ const RESULT_COLUMNS: {
   { id: 'clientNumber', label: 'Client' },
   { id: 'reason', label: 'Reason' },
   { id: 'receivedDate', label: 'Received date' },
-  { id: 'listingDate', label: 'Listing date' },
+  { id: 'listingDate', label: 'List date' },
 ]
 
 const buildSearchParams = (
@@ -125,7 +128,7 @@ const FederalPage = () => {
   const [loading, setLoading] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
-  const canFilterFederalByClient = canPerform('/createExemption')
+  const canFilterFederalByClient = canPerform('searchClients')
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
@@ -314,11 +317,11 @@ const FederalPage = () => {
   useEffect(() => {
     if (!isLoading && !hasSearchQuery) {
       setFilters((currentFilters) =>
-        currentFilters.applicationStatus === 'APP'
+        currentFilters.applicationStatus === DEFAULT_APPLICATION_STATUS
           ? currentFilters
           : {
               ...currentFilters,
-              applicationStatus: 'APP',
+              applicationStatus: DEFAULT_APPLICATION_STATUS,
             },
       )
     }
@@ -371,7 +374,7 @@ const FederalPage = () => {
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Federal application search"
-          subtitle="Find federal applications and open application details."
+          subtitle="Find federal applications and check their status."
         />
       </Column>
 
@@ -409,47 +412,37 @@ const FederalPage = () => {
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('applicationStatus', value)}
                 />
+                <IsoDateRangePicker
+                  fromId="listingFromDate"
+                  toId="listingToDate"
+                  fromLabel="List date from"
+                  toLabel="List date to"
+                  fromValue={filters.listingFromDate}
+                  toValue={filters.listingToDate}
+                  onChange={([listingFromDate, listingToDate]) =>
+                    setFilters((current) => ({ ...current, listingFromDate, listingToDate }))
+                  }
+                />
+                <IsoDateRangePicker
+                  fromId="receivedFromDate"
+                  toId="receivedToDate"
+                  fromLabel="Received date from"
+                  toLabel="Received date to"
+                  fromValue={filters.receivedFromDate}
+                  toValue={filters.receivedToDate}
+                  onChange={([receivedFromDate, receivedToDate]) =>
+                    setFilters((current) => ({ ...current, receivedFromDate, receivedToDate }))
+                  }
+                />
                 {canFilterFederalByClient && (
                   <ForestClientComboBox
                     id="clientNumber"
-                    labelText="Client number"
+                    labelText="Client"
                     value={filters.clientNumber}
                     resetKey={clientSearchResetKey}
                     onChange={(value) => updateFilter('clientNumber', value)}
                   />
                 )}
-                <IsoDatePicker
-                  id="receivedFromDate"
-                  labelText="Received from date"
-                  value={filters.receivedFromDate}
-                  invalid={!isValidIsoDate(filters.receivedFromDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('receivedFromDate', value)}
-                />
-                <IsoDatePicker
-                  id="receivedToDate"
-                  labelText="Received to date"
-                  value={filters.receivedToDate}
-                  invalid={!isValidIsoDate(filters.receivedToDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('receivedToDate', value)}
-                />
-                <IsoDatePicker
-                  id="listingFromDate"
-                  labelText="Listing from date"
-                  value={filters.listingFromDate}
-                  invalid={!isValidIsoDate(filters.listingFromDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('listingFromDate', value)}
-                />
-                <IsoDatePicker
-                  id="listingToDate"
-                  labelText="Listing to date"
-                  value={filters.listingToDate}
-                  invalid={!isValidIsoDate(filters.listingToDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('listingToDate', value)}
-                />
               </div>
               <div className="legacy-search-actions">
                 <Button

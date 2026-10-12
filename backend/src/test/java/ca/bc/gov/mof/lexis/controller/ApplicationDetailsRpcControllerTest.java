@@ -2270,21 +2270,6 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void getPackageSelectedEndUseLegacyShouldReturnFalseWhenMissing() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.getPackageSelectedEndUse("PKG-903")).thenReturn(Optional.empty());
-
-    ResponseEntity<ApplicationDetailsRpcController.SelectedEndUseResponseDto> response =
-        controller.getPackageSelectedEndUseLegacy("PKG-903");
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().success()).isFalse();
-    assertThat(response.getBody().selectedEndUse()).isNull();
-    verify(service).getPackageSelectedEndUse("PKG-903");
-  }
-
-  @Test
   void getSpeciesForApplicationLegacyShouldReturnApplicationFieldNames() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getSpeciesForApplication(1000456L))
@@ -2510,22 +2495,6 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().success()).isTrue();
     assertThat(response.getBody().id()).isEqualTo("55");
     verify(service).getScaleById("55");
-  }
-
-  @Test
-  void isPackageValidLegacyShouldReturnFalseWithMessageWhenPackageExists() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.isPackageValid("PKG-903"))
-        .thenReturn(new ApplicationDetailsRpcService.PackageValidityItem(false, "Package PKG-903 already exists."));
-
-    ResponseEntity<ApplicationDetailsRpcController.PackageValidityResponseDto> response =
-        controller.isPackageValidLegacy("PKG-903");
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody().valid()).isFalse();
-    assertThat(response.getBody().message()).isEqualTo("Package PKG-903 already exists.");
-    verify(service).isPackageValid("PKG-903");
   }
 
   @Test

@@ -357,26 +357,6 @@ public class OfferDetailsRpcController {
                         null, null, null, null, null, null, null, null, null, null, "true")));
   }
 
-  @GetMapping("/client-locations")
-  public ResponseEntity<List<OfferClientLocationResponseDto>> getClientLocations(
-      @RequestParam(name = "clientNumber", required = false) String clientNumber) {
-    ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
-    if (clientLookupService == null) {
-      LOGGER.warn("Client lookup service unavailable - returning no content for client locations");
-      return ResponseEntity.noContent().build();
-    }
-    requireClientAccess(clientNumber);
-
-    List<OfferClientLocationResponseDto> response =
-        clientLookupService.getClientLocations(clientNumber).stream()
-            .map(
-                location ->
-                    new OfferClientLocationResponseDto(
-                        location.locationName(), location.locationCode(), location.selected()))
-            .toList();
-    return ResponseEntity.ok(response);
-  }
-
   @PostMapping("/offer")
   public ResponseEntity<OfferPersistenceResponseDto> addOffer(
       HttpServletRequest request,
@@ -1029,9 +1009,8 @@ public class OfferDetailsRpcController {
             ? firstPresent(parameters, "exportJurisdictionCode", "jurisdictionCode")
             : current.exportJurisdictionCode(),
         current.manufacturingFacilityInfo(),
-        hasAnyParameter(parameters, "offeringClientNumber", "clientNumber")
-            ? firstPresent(parameters, "offeringClientNumber", "clientNumber")
-            : current.offeringClientNumber(),
+        // An offer's offering client is fixed once it is created.
+        current.offeringClientNumber(),
         hasAnyParameter(parameters, "pickupLocation")
             ? firstPresent(parameters, "pickupLocation")
             : current.pickupLocation(),
@@ -1215,9 +1194,6 @@ public class OfferDetailsRpcController {
       String fax,
       String email,
       String notfound) {}
-
-  public record OfferClientLocationResponseDto(
-      String locationName, String locationCode, boolean selected) {}
 
   public record OfferPersistenceResponseDto(
       boolean success,

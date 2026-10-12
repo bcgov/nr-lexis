@@ -35,7 +35,4 @@ public interface LexisApplicationService {
 
   Optional<LexisPackageLookupDto> findPackageByPackageNumber(String packageNumber);
 
-  boolean verifyApplicationClients(List<Long> applicationNumbers);
-
-  boolean hasValidOffer(List<Long> applicationNumbers);
 }

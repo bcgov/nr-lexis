@@ -1,6 +1,5 @@
 import { RecordFieldCell, RecordFieldGrid, RecordFieldRow } from '@/pages/shared/RecordFieldGrid'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Link } from 'react-router-dom'
 import {
   Button,
   Column,
@@ -207,18 +206,10 @@ const policyMutationErrorMessage = (
   return getResponseStatus(error) ? httpErrorMessage : fallbackMessage
 }
 
-const applicationSearchPathForExportSchedule = (exportScheduleId: string): string => {
-  const searchParams = new URLSearchParams({
-    exportScheduleId,
-  })
-  return `/provincial/application?${searchParams.toString()}`
-}
-
 const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
   const { canPerform } = useAuth()
   const canManageFeePolicy = canPerform('/lexisPolicyAdmin')
   const canManageFilPolicy = canPerform('/lexisFILAdmin')
-  const canSearchApplications = canPerform('/applicationSearch')
   const canAccessArea = area === 'fil' ? canManageFilPolicy : canManageFeePolicy
 
   const [feePolicies, setFeePolicies] = useState<FeePolicyRow[]>([])
@@ -1692,16 +1683,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                             {row.teacMeetingDate}
                           </TableCell>
                           <TableCell>
-                            {canSearchApplications ? (
-                              <Link
-                                to={applicationSearchPathForExportSchedule(row.exportScheduleId)}
-                                aria-label={`View ${row.provincialApplicationCount ?? row.applicationCount} provincial applications assigned to export schedule ${row.exportScheduleId}`}
-                              >
-                                {row.provincialApplicationCount ?? row.applicationCount}
-                              </Link>
-                            ) : (
-                              (row.provincialApplicationCount ?? row.applicationCount)
-                            )}
+                            {row.provincialApplicationCount ?? row.applicationCount}
                           </TableCell>
                           <TableCell>
                             <div className="admin-policy-row-actions">

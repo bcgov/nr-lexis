@@ -4,21 +4,12 @@ import {
   RecordFieldGrid,
   RecordFieldRow,
 } from '@/pages/shared/RecordFieldGrid'
-import {
-  Certificate,
-  Currency,
-  DocumentAttachment,
-  Enterprise,
-  Result,
-  Rule,
-  Save,
-} from '@carbon/icons-react'
+import { Certificate, Currency, DocumentAttachment, Result, Rule, Save } from '@carbon/icons-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useLocation, useNavigate, useSearchParams } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import {
   Button,
   Column,
-  DismissibleTag,
   Grid,
   InlineNotification,
   RadioButton,
@@ -32,7 +23,6 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { AppNotification } from '../../components/AppNotification'
 import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
@@ -52,12 +42,9 @@ import {
   getVisibleFieldError,
   isoDateFieldError,
   maxNumericValueFieldError,
-  normalizeProvincialApplicationNumber,
   positiveNumericFieldError,
-  provincialApplicationNumberFieldError,
   requiredFieldError,
   type FieldErrors,
-  type TouchedFields,
 } from '@/pages/shared/create-form-utils'
 import {
   mapSelectedOptionsById,
@@ -68,32 +55,13 @@ import {
   fetchProvincialExemptionOptions,
   type SearchOption,
 } from '@/service/search-options-service'
-import {
-  fetchProvincialExemptionCreatePreview,
-  submitProvincialExemptionCreate,
-} from '@/service/create-submit-service'
-import {
-  fetchApplicationClientData,
-  fetchApplicationClientLocations,
-  type ApplicationClientData,
-  type ApplicationClientLocation,
-} from '@/service/application-client-lookup-service'
-import {
-  fetchApplicationSummarySnapshot,
-  type ApplicationSummarySnapshot,
-} from '@/service/provincial-application-items-service'
-import {
-  clientDisplayName,
-  clientLocationLabel,
-  isAgentApplicant,
-} from '@/pages/shared/application-form-utils'
+import { submitProvincialExemptionCreate } from '@/service/create-submit-service'
 import { requiredLabel } from '@/utils/required-label'
 import { displayAuditIdentity, displayValue } from '@/utils/text'
 import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
 type ProvincialExemptionCreateForm = {
-  applicationNumber: string
   exemptionNumber: string
   exemptionTypeCode: string
   exemptionStatusCode: string
@@ -108,31 +76,10 @@ type ProvincialExemptionCreateForm = {
 
 type ProvincialExemptionCreateField = keyof ProvincialExemptionCreateForm & string
 
-type ExemptionCreatePrefillState = {
-  selectedApplicationNumbers: string[]
-}
-
-type ExemptionCreateTab = 'owner' | 'summary' | 'applications' | 'documents' | 'permits' | 'fees'
-
-type OwnerContextRequestKey = {
-  applicationNumber: string
-  selectedApplicationNumbers: readonly string[]
-}
-
-type OwnerContext = {
-  requestKey: OwnerContextRequestKey
-  status: 'loading' | 'ready' | 'error'
-  applicationOwnerSnapshot: ApplicationSummarySnapshot | null
-  ownerClientData: ApplicationClientData | null
-  agentClientData: ApplicationClientData | null
-  ownerClientLocations: ApplicationClientLocation[]
-  agentClientLocations: ApplicationClientLocation[]
-  error: string
-}
+type ExemptionCreateTab = 'summary' | 'applications' | 'documents' | 'permits' | 'fees'
 
 const EXEMPTION_CREATE_TABS: readonly ExemptionCreateTab[] = [
   'summary',
-  'owner',
   'applications',
   'documents',
   'permits',
@@ -140,7 +87,6 @@ const EXEMPTION_CREATE_TABS: readonly ExemptionCreateTab[] = [
 ]
 
 const EXEMPTION_CREATE_TAB_LABELS: Record<ExemptionCreateTab, string> = {
-  owner: 'Applicant',
   summary: 'Exemption details',
   applications: 'Applications',
   documents: 'Documents',
@@ -149,7 +95,6 @@ const EXEMPTION_CREATE_TAB_LABELS: Record<ExemptionCreateTab, string> = {
 }
 
 const EXEMPTION_CREATE_TAB_ICONS = {
-  owner: Enterprise,
   summary: Rule,
   applications: Result,
   documents: DocumentAttachment,
@@ -158,7 +103,6 @@ const EXEMPTION_CREATE_TAB_ICONS = {
 }
 
 const INITIAL_FORM: ProvincialExemptionCreateForm = {
-  applicationNumber: '',
   exemptionNumber: '',
   exemptionTypeCode: 'M',
   exemptionStatusCode: 'NEW',
@@ -192,75 +136,6 @@ const feeRateError = (value: string): string | undefined => {
   return undefined
 }
 
-const parseExemptionPrefillState = (rawState: unknown): ExemptionCreatePrefillState | null => {
-  if (!rawState || typeof rawState !== 'object') {
-    return null
-  }
-
-  const state = rawState as Record<string, unknown>
-  const selectedApplicationNumbers = Array.isArray(state.selectedApplicationNumbers)
-    ? state.selectedApplicationNumbers.filter(
-        (value): value is string => typeof value === 'string' && value.trim().length > 0,
-      )
-    : []
-
-  if (selectedApplicationNumbers.length === 0) {
-    return null
-  }
-
-  return { selectedApplicationNumbers }
-}
-
-const parseExemptionPrefillQuery = (query: URLSearchParams): ExemptionCreatePrefillState | null => {
-  const applicationsFromCsv = (query.get('applications') ?? '')
-    .split(',')
-    .map((value) => value.trim())
-    .filter((value) => value.length > 0)
-  const fallbackSingleApplication = (query.get('applicationNumber') ?? '').trim()
-  const selectedApplicationNumbers =
-    applicationsFromCsv.length > 0
-      ? applicationsFromCsv
-      : fallbackSingleApplication
-        ? [fallbackSingleApplication]
-        : []
-
-  if (selectedApplicationNumbers.length === 0) {
-    return null
-  }
-
-  return { selectedApplicationNumbers }
-}
-
-const mergePrefillState = (
-  locationPrefill: ExemptionCreatePrefillState | null,
-  queryPrefill: ExemptionCreatePrefillState | null,
-): ExemptionCreatePrefillState | null => {
-  if (!locationPrefill && !queryPrefill) {
-    return null
-  }
-
-  if (locationPrefill && !queryPrefill) {
-    return locationPrefill
-  }
-
-  if (!locationPrefill && queryPrefill) {
-    return queryPrefill
-  }
-
-  const mergedApplicationNumbers = Array.from(
-    new Set([
-      ...(locationPrefill?.selectedApplicationNumbers ?? []),
-      ...(queryPrefill?.selectedApplicationNumbers ?? []),
-    ]),
-  )
-
-  if (mergedApplicationNumbers.length === 0) {
-    return null
-  }
-
-  return { selectedApplicationNumbers: mergedApplicationNumbers }
-}
-
 type PageStatus = {
   kind: 'success' | 'error'
   title: string
@@ -268,99 +143,13 @@ type PageStatus = {
   placement?: 'inline'
 }
 
-type ExemptionCreateClientSummaryProps = {
-  title: string
-  clientData: ApplicationClientData | null
-}
-
-const ExemptionCreateClientSummary = ({ title, clientData }: ExemptionCreateClientSummaryProps) => {
-  if (!clientData) {
-    return null
-  }
-
-  return (
-    <section className="application-create-client-summary" aria-label={title}>
-      <h3 className="application-client-summary__title">{title}</h3>
-      <RecordFieldGrid>
-        <RecordFieldRow>
-          <RecordField label="Address" value={displayValue(clientData.address)} span="wide" />
-          <RecordField label="City" value={displayValue(clientData.city)} />
-          <RecordField label="Province" value={displayValue(clientData.province)} />
-        </RecordFieldRow>
-        <RecordFieldRow>
-          <RecordField label="Country" value={displayValue(clientData.country)} />
-          <RecordField label="Postal code" value={displayValue(clientData.postalCode)} />
-        </RecordFieldRow>
-        <RecordFieldRow>
-          <RecordField label="Phone number" value={displayValue(clientData.phone)} />
-          <RecordField label="Fax number" value={displayValue(clientData.fax)} />
-          <RecordField label="Email address" value={displayValue(clientData.email)} />
-        </RecordFieldRow>
-      </RecordFieldGrid>
-      {clientData.notfound && (
-        <InlineNotification
-          className="detail-context-notification"
-          kind="warning"
-          title="Client lookup"
-          subtitle={clientData.notfound}
-          lowContrast
-          hideCloseButton
-        />
-      )}
-    </section>
-  )
-}
-
-const settledValue = <T,>(result: PromiseSettledResult<T>, fallback: T): T =>
-  result.status === 'fulfilled' ? result.value : fallback
-
-const applicantTypeDescription = (value: string): string => {
-  switch (value.trim().toUpperCase()) {
-    case 'A':
-      return 'Agent'
-    case 'M':
-      return 'Ministerial'
-    case 'O':
-      return 'Owner'
-    default:
-      return value
-  }
-}
-
 const ProvincialExemptionCreatePage = () => {
   const { capabilities, canPerform } = useAuth()
   const navigate = useNavigate()
-  const location = useLocation()
-  const [searchParams] = useSearchParams()
-  const prefillState = useMemo(
-    () =>
-      mergePrefillState(
-        parseExemptionPrefillState(location.state),
-        parseExemptionPrefillQuery(searchParams),
-      ),
-    [location.state, searchParams],
-  )
-  const initialSelectedApplicationNumbers = useMemo(
-    () =>
-      Array.from(
-        new Set(
-          (prefillState?.selectedApplicationNumbers ?? [])
-            .map(normalizeProvincialApplicationNumber)
-            .filter((value) => value.length > 0),
-        ),
-      ),
-    [prefillState],
-  )
   const [form, setForm] = useState<ProvincialExemptionCreateForm>(INITIAL_FORM)
-  const [selectedApplicationNumbers, setSelectedApplicationNumbers] = useState<string[]>(
-    () => initialSelectedApplicationNumbers,
-  )
   const draftBaselineRef = useRef(form)
-  const selectedApplicationNumbersBaselineRef = useRef(selectedApplicationNumbers)
   const [formEdited, setFormEdited] = useState(false)
   const [createdExemptionNumber, setCreatedExemptionNumber] = useState<string | null>(null)
-  // The applications a created exemption was filled in from, for the record's confirmation.
-  const createdFromApplicationNumbersRef = useRef<string[]>([])
   const [exemptionTypes, setExemptionTypes] = useState<SearchOption[]>([])
   const [exemptionStatuses, setExemptionStatuses] = useState<SearchOption[]>([])
   const [allRegionOptions, setAllRegionOptions] = useState<IdTextOption[]>([])
@@ -373,94 +162,28 @@ const ProvincialExemptionCreatePage = () => {
   const [optionsUnavailable, setOptionsUnavailable] = useState(false)
   const [status, setStatus] = useState<PageStatus | null>(null)
   const [showMissingRequiredOptions, setShowMissingRequiredOptions] = useState(true)
-  const [showPrefillNotice, setShowPrefillNotice] = useState(true)
-  const [showPreviewErrorNotice, setShowPreviewErrorNotice] = useState(true)
   const [isSubmitting, setIsSubmitting] = useState(false)
-  const [previewState, setPreviewState] = useState<'idle' | 'loading' | 'ready' | 'error'>(
-    prefillState ? 'loading' : 'idle',
-  )
-  const [previewError, setPreviewError] = useState<string | null>(null)
-  const [confirmedApplicationNumbers, setConfirmedApplicationNumbers] = useState<string[]>([])
   const [selectedExemptionTab, setSelectedExemptionTab] = useState<ExemptionCreateTab>('summary')
-  const [ownerContext, setOwnerContext] = useState<OwnerContext | null>(null)
-  const [touchedFields, setTouchedFields] = useState<TouchedFields<ProvincialExemptionCreateField>>(
-    {},
-  )
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
   const formRef = useRef<HTMLDivElement>(null)
   const roles = capabilities?.roles ?? []
-  const canUseApplicationPrefill = canPerform('/createExemption')
+  const canCreateExemption = canPerform('/createExemption')
   const canCreateBlanketOic =
     !hasRole(roles, 'EXEMPTION_APPROVER') ||
     hasRole(roles, 'ADMIN') ||
     hasRole(roles, 'APPLICATION_APPROVER') ||
     hasRole(roles, 'READ_ONLY') ||
     hasProvincialSubmitterRole(roles)
-  const hasCurrentPreview =
-    previewState === 'ready' &&
-    confirmedApplicationNumbers.length === selectedApplicationNumbers.length &&
-    confirmedApplicationNumbers.every(
-      (applicationNumber, index) => applicationNumber === selectedApplicationNumbers[index],
-    )
   const normalizedTypeCode = form.exemptionTypeCode.trim().toUpperCase()
   const oicLike = OIC_TYPES.has(normalizedTypeCode)
   const blanketOic = normalizedTypeCode === 'B'
-  // Legacy exemption forms omit client tabs only for OIC and Blanket OIC records.
-  const showClientInfo = !oicLike
-  const ownerContextApplicationNumber =
-    hasCurrentPreview && canUseApplicationPrefill && !oicLike
-      ? (confirmedApplicationNumbers[0] ?? '')
-      : ''
-  const ownerContextRequestKey = useMemo<OwnerContextRequestKey | null>(
-    () =>
-      ownerContextApplicationNumber
-        ? {
-            applicationNumber: ownerContextApplicationNumber,
-            selectedApplicationNumbers,
-          }
-        : null,
-    [ownerContextApplicationNumber, selectedApplicationNumbers],
-  )
-  const ownerContextMatchesRequest =
-    ownerContextRequestKey !== null && ownerContext?.requestKey === ownerContextRequestKey
-  const ownerContextState: 'idle' | 'loading' | 'ready' | 'error' =
-    ownerContextRequestKey === null
-      ? 'idle'
-      : ownerContextMatchesRequest && ownerContext
-        ? ownerContext.status
-        : 'loading'
-  const applicationOwnerSnapshot = ownerContextMatchesRequest
-    ? (ownerContext?.applicationOwnerSnapshot ?? null)
-    : null
-  const ownerClientData = ownerContextMatchesRequest
-    ? (ownerContext?.ownerClientData ?? null)
-    : null
-  const agentClientData = ownerContextMatchesRequest
-    ? (ownerContext?.agentClientData ?? null)
-    : null
-  const ownerClientLocations = ownerContextMatchesRequest
-    ? (ownerContext?.ownerClientLocations ?? [])
-    : []
-  const agentClientLocations = ownerContextMatchesRequest
-    ? (ownerContext?.agentClientLocations ?? [])
-    : []
-  const ownerContextError = ownerContextMatchesRequest ? (ownerContext?.error ?? '') : ''
-  const hasAgentTab =
-    showClientInfo &&
-    applicationOwnerSnapshot !== null &&
-    isAgentApplicant(applicationOwnerSnapshot.applicantTypeCode.trim().toUpperCase())
+  const showApplications = !blanketOic
   const visibleExemptionTabs = useMemo(
     () =>
       EXEMPTION_CREATE_TABS.filter((tab) =>
-        tab === 'owner'
-          ? showClientInfo
-          : tab === 'applications'
-            ? !blanketOic
-            : tab === 'fees'
-              ? oicLike
-              : true,
+        tab === 'applications' ? showApplications : tab === 'fees' ? oicLike : true,
       ),
-    [blanketOic, oicLike, showClientInfo],
+    [oicLike, showApplications],
   )
   const activeExemptionTab = visibleExemptionTabs.includes(selectedExemptionTab)
     ? selectedExemptionTab
@@ -473,12 +196,8 @@ const ProvincialExemptionCreatePage = () => {
     optionsLoaded && !optionsUnavailable && !['M', 'O', 'B'].includes(normalizedTypeCode)
   const availableExemptionTypes = useMemo(
     () =>
-      exemptionTypes.filter(
-        (option) =>
-          option.value.toUpperCase() !== 'B' ||
-          (canCreateBlanketOic && selectedApplicationNumbers.length === 0),
-      ),
-    [canCreateBlanketOic, exemptionTypes, selectedApplicationNumbers.length],
+      exemptionTypes.filter((option) => option.value.toUpperCase() !== 'B' || canCreateBlanketOic),
+    [canCreateBlanketOic, exemptionTypes],
   )
   const selectedRegions = useMemo(
     () => mapSelectedOptionsById(form.regionNumbers, regionOptions, (id) => `Region ${id}`),
@@ -488,12 +207,7 @@ const ProvincialExemptionCreatePage = () => {
     if (createdExemptionNumber) {
       // The detail page shows the saved confirmation once for the record this page created.
       navigate(`/provincial/exemption/${encodeURIComponent(createdExemptionNumber)}`, {
-        state: {
-          exemptionCreationNotice: {
-            exemptionNumber: createdExemptionNumber,
-            applicationNumbers: createdFromApplicationNumbersRef.current,
-          },
-        },
+        state: { exemptionCreationNotice: { exemptionNumber: createdExemptionNumber } },
       })
     }
   }, [createdExemptionNumber, navigate])
@@ -516,205 +230,8 @@ const ProvincialExemptionCreatePage = () => {
     void loadOptions()
   }, [])
 
-  useEffect(() => {
-    let active = true
-    const synchronizePreview = async () => {
-      if (selectedApplicationNumbers.length === 0) {
-        setPreviewState('idle')
-        setPreviewError(null)
-        setConfirmedApplicationNumbers([])
-        return
-      }
-      if (!canUseApplicationPrefill) {
-        setPreviewState('error')
-        setPreviewError(null)
-        setConfirmedApplicationNumbers([])
-        return
-      }
-
-      setPreviewState('loading')
-      setPreviewError(null)
-      setConfirmedApplicationNumbers([])
-      try {
-        const preview = await fetchProvincialExemptionCreatePreview(selectedApplicationNumbers)
-        if (!active) {
-          return
-        }
-        const applyPreview = (
-          current: ProvincialExemptionCreateForm,
-        ): ProvincialExemptionCreateForm => ({
-          ...current,
-          exemptionNumber: '',
-          exemptionTypeCode: preview.exemptionTypeCode,
-          approvalDate:
-            preview.exemptionTypeCode.trim().toUpperCase() === 'M' ? '' : current.approvalDate,
-          exemptionStatusCode: preview.exemptionStatusCode,
-          expiryDate: preview.expiryDate,
-          approvedVolume: preview.approvedVolume,
-          enableRateOverride: false,
-          feeRate: '',
-          regionNumbers: [],
-        })
-        // The preview of the starting applications belongs to the starting draft.
-        if (
-          formValuesEqual(selectedApplicationNumbers, selectedApplicationNumbersBaselineRef.current)
-        ) {
-          draftBaselineRef.current = applyPreview(draftBaselineRef.current)
-        }
-        setForm(applyPreview)
-        setConfirmedApplicationNumbers(preview.applicationNumbers)
-        setPreviewState('ready')
-      } catch (error) {
-        if (!active) {
-          return
-        }
-        setConfirmedApplicationNumbers([])
-        setPreviewState('error')
-        setShowPreviewErrorNotice(true)
-        setPreviewError(
-          error instanceof Error
-            ? error.message
-            : 'LEXIS could not prepare the exemption. Please try again before saving.',
-        )
-      }
-    }
-
-    void synchronizePreview()
-    return () => {
-      active = false
-    }
-  }, [canUseApplicationPrefill, selectedApplicationNumbers])
-
-  useEffect(() => {
-    let active = true
-    if (!ownerContextRequestKey) {
-      return () => {
-        active = false
-      }
-    }
-
-    const requestKey = ownerContextRequestKey
-    const loadOwnerContext = async () => {
-      let snapshot: ApplicationSummarySnapshot | null
-      try {
-        snapshot = await fetchApplicationSummarySnapshot(requestKey.applicationNumber)
-      } catch (error) {
-        if (active) {
-          console.error(error)
-          setOwnerContext({
-            requestKey,
-            status: 'error',
-            applicationOwnerSnapshot: null,
-            ownerClientData: null,
-            agentClientData: null,
-            ownerClientLocations: [],
-            agentClientLocations: [],
-            error: 'Applicant details could not be retrieved from the selected application.',
-          })
-        }
-        return
-      }
-
-      if (!active) {
-        return
-      }
-      if (!snapshot) {
-        setOwnerContext({
-          requestKey,
-          status: 'error',
-          applicationOwnerSnapshot: null,
-          ownerClientData: null,
-          agentClientData: null,
-          ownerClientLocations: [],
-          agentClientLocations: [],
-          error: 'Applicant details could not be retrieved from the selected application.',
-        })
-        return
-      }
-
-      const ownerClientNumber = snapshot.ownerClientNumber.trim()
-      const ownerClientLocationCode = snapshot.ownerClientLocationCode.trim()
-      const agentClientNumber = snapshot.agentClientNumber.trim()
-      const agentClientLocationCode = snapshot.agentClientLocationCode.trim()
-      const hasAgent = isAgentApplicant(snapshot.applicantTypeCode.trim().toUpperCase())
-
-      setOwnerContext({
-        requestKey,
-        status: 'loading',
-        applicationOwnerSnapshot: snapshot,
-        ownerClientData: null,
-        agentClientData: null,
-        ownerClientLocations: [],
-        agentClientLocations: [],
-        error: '',
-      })
-
-      const [ownerDataResult, ownerLocationsResult, agentDataResult, agentLocationsResult] =
-        await Promise.allSettled([
-          ownerClientNumber && ownerClientLocationCode
-            ? fetchApplicationClientData(ownerClientNumber, ownerClientLocationCode, {
-                applicationNumber: requestKey.applicationNumber,
-              })
-            : Promise.resolve(null),
-          ownerClientNumber
-            ? fetchApplicationClientLocations(
-                ownerClientNumber,
-                'owner',
-                requestKey.applicationNumber,
-              )
-            : Promise.resolve([]),
-          hasAgent && agentClientNumber && agentClientLocationCode
-            ? fetchApplicationClientData(agentClientNumber, agentClientLocationCode, {
-                applicationNumber: requestKey.applicationNumber,
-              })
-            : Promise.resolve(null),
-          hasAgent && agentClientNumber
-            ? fetchApplicationClientLocations(
-                agentClientNumber,
-                'agent',
-                requestKey.applicationNumber,
-              )
-            : Promise.resolve([]),
-        ])
-
-      if (!active) {
-        return
-      }
-
-      setOwnerContext({
-        requestKey,
-        status: 'ready',
-        applicationOwnerSnapshot: snapshot,
-        ownerClientData: settledValue(ownerDataResult, null),
-        ownerClientLocations: settledValue(ownerLocationsResult, []),
-        agentClientData: settledValue(agentDataResult, null),
-        agentClientLocations: settledValue(agentLocationsResult, []),
-        error: [ownerDataResult, ownerLocationsResult, agentDataResult, agentLocationsResult].some(
-          (result) => result.status === 'rejected',
-        )
-          ? 'Some client details could not be retrieved. The selected application remains the source of applicant information.'
-          : '',
-      })
-    }
-
-    void loadOwnerContext()
-    return () => {
-      active = false
-    }
-  }, [ownerContextRequestKey])
-
   const fieldErrors = useMemo<FieldErrors<ProvincialExemptionCreateField>>(
     () => ({
-      applicationNumber:
-        firstValidationError(
-          () => provincialApplicationNumberFieldError(form.applicationNumber),
-          () => {
-            const applicationNumber = normalizeProvincialApplicationNumber(form.applicationNumber)
-            return applicationNumber && selectedApplicationNumbers.includes(applicationNumber)
-              ? `Application ${applicationNumber} is already selected.`
-              : null
-          },
-        ) ?? undefined,
       exemptionNumber: oicLike
         ? (firstValidationError(
             () => requiredFieldError(form.exemptionNumber, 'Exemption number'),
@@ -792,15 +309,7 @@ const ProvincialExemptionCreatePage = () => {
               : 'Conditions must contain at most 250 characters.',
         ) ?? undefined,
     }),
-    [
-      availableExemptionTypes,
-      blanketOic,
-      exemptionStatuses,
-      form,
-      oicLike,
-      regionOptions,
-      selectedApplicationNumbers,
-    ],
+    [availableExemptionTypes, blanketOic, exemptionStatuses, form, oicLike, regionOptions],
   )
   const hasValidationError = useMemo(
     () => Object.values(fieldErrors).some((error) => !!error),
@@ -813,10 +322,6 @@ const ProvincialExemptionCreatePage = () => {
   const missingRequiredOptions =
     optionsLoaded && !optionsUnavailable && showMissingRequiredOptions && requiredOptionsUnavailable
 
-  const markFieldTouched = (field: ProvincialExemptionCreateField): void => {
-    setTouchedFields((current) => ({ ...current, [field]: true }))
-  }
-
   const markFormEdited = (): void => {
     if (!formEdited) {
       draftBaselineRef.current = form
@@ -825,7 +330,7 @@ const ProvincialExemptionCreatePage = () => {
   }
 
   const fieldError = (field: ProvincialExemptionCreateField): string | undefined =>
-    getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
+    getVisibleFieldError(field, fieldErrors, {}, showAllValidationErrors)
 
   const onExemptionTypeChange = (value: string): void => {
     if (value === form.exemptionTypeCode) {
@@ -848,7 +353,6 @@ const ProvincialExemptionCreatePage = () => {
             : current.approvedVolume
       return {
         ...current,
-        applicationNumber: typeCode === 'B' ? '' : current.applicationNumber,
         exemptionNumber: OIC_TYPES.has(typeCode) ? current.exemptionNumber : '',
         exemptionTypeCode: value,
         exemptionStatusCode: nextStatus || current.exemptionStatusCode,
@@ -861,37 +365,11 @@ const ProvincialExemptionCreatePage = () => {
     })
   }
 
-  const onAddApplication = (): void => {
-    const applicationNumber = normalizeProvincialApplicationNumber(form.applicationNumber)
-    if (!applicationNumber || fieldErrors.applicationNumber) {
-      markFieldTouched('applicationNumber')
-      return
-    }
-
-    markFormEdited()
-    setSelectedApplicationNumbers((current) => [...current, applicationNumber])
-    setForm((current) => ({ ...current, applicationNumber: '' }))
-    setTouchedFields((current) => ({ ...current, applicationNumber: false }))
-    setShowPrefillNotice(false)
-    setStatus(null)
-  }
-
-  const onRemoveApplication = (applicationNumber: string): void => {
-    markFormEdited()
-    setSelectedApplicationNumbers((current) =>
-      current.filter(
-        (selectedApplicationNumber) => selectedApplicationNumber !== applicationNumber,
-      ),
-    )
-    setShowPrefillNotice(false)
-    setStatus(null)
-  }
-
   const onSave = async (): Promise<boolean> => {
     const saveUnavailableReason =
       !optionsLoaded || optionsUnavailable || requiredOptionsUnavailable
         ? 'Authoritative exemption options must load before this exemption can be saved.'
-        : !canUseApplicationPrefill
+        : !canCreateExemption
           ? 'Authorization to create this exemption is required before it can be saved.'
           : undefined
     if (saveUnavailableReason) {
@@ -899,28 +377,6 @@ const ProvincialExemptionCreatePage = () => {
         kind: 'error',
         title: 'Cannot save yet.',
         message: saveUnavailableReason,
-        placement: 'inline',
-      })
-      return false
-    }
-    if (form.applicationNumber.trim()) {
-      setSelectedExemptionTab('applications')
-      markFieldTouched('applicationNumber')
-      setStatus({
-        kind: 'error',
-        title: 'Application not added',
-        message: 'Add or clear the pending application number before saving.',
-        placement: 'inline',
-      })
-      return false
-    }
-    if (selectedApplicationNumbers.length > 0 && !hasCurrentPreview) {
-      setSelectedExemptionTab('applications')
-      setStatus({
-        kind: 'error',
-        title: 'Exemption preview required',
-        message:
-          previewError ?? 'Wait for LEXIS to validate the selected applications before saving.',
         placement: 'inline',
       })
       return false
@@ -941,19 +397,15 @@ const ProvincialExemptionCreatePage = () => {
     setStatus(null)
     setIsSubmitting(true)
     try {
-      const linkedApplicationNumbers =
-        confirmedApplicationNumbers.length > 0 ? confirmedApplicationNumbers : []
       const result = await submitProvincialExemptionCreate({
         ...form,
-        applicationNumber: linkedApplicationNumbers[0] ?? '',
-        linkedApplicationNumbers,
+        applicationNumber: '',
+        linkedApplicationNumbers: [],
       })
       if (result.success) {
         draftBaselineRef.current = form
-        selectedApplicationNumbersBaselineRef.current = [...selectedApplicationNumbers]
         setFormEdited(false)
         if (result.createdId) {
-          createdFromApplicationNumbersRef.current = linkedApplicationNumbers
           setCreatedExemptionNumber(result.createdId)
           return true
         }
@@ -990,41 +442,12 @@ const ProvincialExemptionCreatePage = () => {
 
   const onDiscardCreateDraft = (): void => {
     setForm(draftBaselineRef.current)
-    setSelectedApplicationNumbers([...selectedApplicationNumbersBaselineRef.current])
     setFormEdited(false)
-    setTouchedFields({})
     setShowAllValidationErrors(false)
     setStatus(null)
   }
 
-  const isCreateDraftDirty =
-    formEdited &&
-    (!formValuesEqual(form, draftBaselineRef.current) ||
-      !formValuesEqual(selectedApplicationNumbers, selectedApplicationNumbersBaselineRef.current))
-
-  const ownerClientNumber = applicationOwnerSnapshot?.ownerClientNumber.trim() ?? ''
-  const ownerClientLocationCode = applicationOwnerSnapshot?.ownerClientLocationCode.trim() ?? ''
-  const ownerClientLocationName = ownerClientLocations.find(
-    (location) => location.locationCode === ownerClientLocationCode,
-  )?.locationName
-  const ownerClientLocationDisplay = clientLocationLabel(
-    ownerClientLocationCode,
-    ownerClientLocationName ?? '',
-    ownerClientData?.locationName ?? '',
-  )
-  const ownerApplicantType = applicationOwnerSnapshot?.applicantTypeCode.trim() ?? ''
-  const ownerContactName = applicationOwnerSnapshot?.ownerContactName.trim() ?? ''
-  const agentClientNumber = applicationOwnerSnapshot?.agentClientNumber.trim() ?? ''
-  const agentClientLocationCode = applicationOwnerSnapshot?.agentClientLocationCode.trim() ?? ''
-  const agentClientLocationName = agentClientLocations.find(
-    (location) => location.locationCode === agentClientLocationCode,
-  )?.locationName
-  const agentClientLocationDisplay = clientLocationLabel(
-    agentClientLocationCode,
-    agentClientLocationName ?? '',
-    agentClientData?.locationName ?? '',
-  )
-  const agentContactName = applicationOwnerSnapshot?.agentContactName.trim() ?? ''
+  const isCreateDraftDirty = formEdited && !formValuesEqual(form, draftBaselineRef.current)
 
   return (
     <Grid fullWidth className="default-grid create-page-grid provincial-exemption-create-page">
@@ -1061,8 +484,12 @@ const ProvincialExemptionCreatePage = () => {
       <Column sm={4} md={8} lg={16}>
         <InlineNotification
           kind="info"
-          title="Documents and permits"
-          subtitle="Documents and Permits can be added after you save the exemption."
+          title={showApplications ? 'Applications, documents and permits' : 'Documents and permits'}
+          subtitle={
+            showApplications
+              ? 'Applications, documents and permits can be added after you save the exemption.'
+              : 'Documents and Permits can be added after you save the exemption.'
+          }
           lowContrast
           hideCloseButton
         />
@@ -1078,30 +505,6 @@ const ProvincialExemptionCreatePage = () => {
             subtitle="No valid exemption type, status, or required region values are configured."
             lowContrast
             onCloseButtonClick={() => setShowMissingRequiredOptions(false)}
-          />
-        </Column>
-      )}
-
-      {!!previewError && showPreviewErrorNotice && (
-        <Column sm={4} md={8} lg={16}>
-          <AppNotification
-            kind="error"
-            title="Selected applications could not be prepared"
-            subtitle={previewError}
-            lowContrast
-            onCloseButtonClick={() => setShowPreviewErrorNotice(false)}
-          />
-        </Column>
-      )}
-
-      {!!prefillState && hasCurrentPreview && showPrefillNotice && (
-        <Column sm={4} md={8} lg={16}>
-          <AppNotification
-            kind="info"
-            title="Prefilled from selected applications"
-            subtitle={`Loaded ${prefillState.selectedApplicationNumbers.length} application(s) into this form.`}
-            lowContrast
-            onCloseButtonClick={() => setShowPrefillNotice(false)}
           />
         </Column>
       )}
@@ -1338,201 +741,16 @@ const ProvincialExemptionCreatePage = () => {
                   </fieldset>
                 </Tile>
               </TabPanel>,
-              showClientInfo && (
-                <TabPanel key="owner" className="application-detail-tab-panel">
-                  <Tile
-                    className="create-form-tile application-detail-section"
-                    role="region"
-                    aria-label="Applicant"
-                  >
-                    <RecordFieldGrid editing>
-                      <RecordFieldRow>
-                        <RecordFieldCell>
-                          <TextInput
-                            id="ownerContactName"
-                            labelText="Contact name"
-                            value={ownerContactName}
-                            readOnly
-                          />
-                        </RecordFieldCell>
-                        <RecordFieldCell>
-                          <TextInput
-                            id="ownerApplicantType"
-                            labelText="Applicant type"
-                            value={
-                              applicationOwnerSnapshot
-                                ? applicantTypeDescription(ownerApplicantType)
-                                : ''
-                            }
-                            readOnly
-                          />
-                        </RecordFieldCell>
-                      </RecordFieldRow>
-                      <RecordFieldRow>
-                        <RecordFieldCell span="wide">
-                          <TextInput
-                            id="ownerClientNumber"
-                            labelText="Client"
-                            value={clientDisplayName(ownerClientData, ownerClientNumber)}
-                            readOnly
-                            helperText={
-                              ownerContextState === 'loading'
-                                ? 'Loading from the selected application…'
-                                : 'Derived from the selected application.'
-                            }
-                          />
-                        </RecordFieldCell>
-                        <RecordFieldCell span="wide">
-                          <TextInput
-                            id="ownerClientLocation"
-                            labelText="Client location"
-                            value={ownerClientLocationDisplay}
-                            readOnly
-                          />
-                        </RecordFieldCell>
-                      </RecordFieldRow>
-                      <RecordFieldRow>
-                        <RecordFieldCell>
-                          <TextInput
-                            id="ownerAgentIndicator"
-                            labelText="I'm an agent"
-                            value={applicationOwnerSnapshot ? (hasAgentTab ? 'Yes' : 'No') : ''}
-                            readOnly
-                          />
-                        </RecordFieldCell>
-                      </RecordFieldRow>
-                    </RecordFieldGrid>
-                    {!applicationOwnerSnapshot && ownerContextState === 'idle' && (
-                      <p className="detail-empty-message">
-                        Applicant details are derived from the first selected application. A
-                        standalone Ministerial exemption has no linked applicant details.
-                      </p>
-                    )}
-                    {ownerContextState === 'loading' && (
-                      <p className="detail-empty-message">Loading applicant details…</p>
-                    )}
-                    {!!ownerContextError && (
-                      <InlineNotification
-                        className="detail-context-notification"
-                        kind="warning"
-                        title="Applicant details unavailable"
-                        subtitle={ownerContextError}
-                        lowContrast
-                        hideCloseButton
-                      />
-                    )}
-                    <ExemptionCreateClientSummary
-                      title="Applicant client details"
-                      clientData={ownerClientData}
-                    />
-                    {hasAgentTab && (
-                      <section className="detail-subsection" aria-label="Agent information">
-                        <h3 className="detail-section-subtitle">Agent information</h3>
-                        <RecordFieldGrid editing>
-                          <RecordFieldRow>
-                            <RecordFieldCell>
-                              <TextInput
-                                id="agentContactName"
-                                labelText="Contact name"
-                                value={agentContactName}
-                                readOnly
-                              />
-                            </RecordFieldCell>
-                            <RecordFieldCell>
-                              <TextInput
-                                id="agentApplicantType"
-                                labelText="Applicant type"
-                                value="Agent"
-                                readOnly
-                              />
-                            </RecordFieldCell>
-                          </RecordFieldRow>
-                          <RecordFieldRow>
-                            <RecordFieldCell span="wide">
-                              <TextInput
-                                id="agentClientNumber"
-                                labelText="Client"
-                                value={clientDisplayName(agentClientData, agentClientNumber)}
-                                readOnly
-                              />
-                            </RecordFieldCell>
-                            <RecordFieldCell span="wide">
-                              <TextInput
-                                id="agentClientLocation"
-                                labelText="Client location"
-                                value={agentClientLocationDisplay}
-                                readOnly
-                              />
-                            </RecordFieldCell>
-                          </RecordFieldRow>
-                        </RecordFieldGrid>
-                        <ExemptionCreateClientSummary
-                          title="Agent client details"
-                          clientData={agentClientData}
-                        />
-                      </section>
-                    )}
-                  </Tile>
-                </TabPanel>
-              ),
-              !blanketOic && (
+              showApplications && (
                 <TabPanel key="applications" className="application-detail-tab-panel">
                   <Tile
                     className="create-form-tile application-detail-section"
                     role="region"
                     aria-label="Applications"
                   >
-                    <div className="exemption-create-application-field">
-                      <RecordFieldGrid editing>
-                        <RecordFieldRow>
-                          <RecordFieldCell>
-                            <ApplicationNumberSelect
-                              id="applicationNumber"
-                              labelText="Application number (optional)"
-                              value={form.applicationNumber}
-                              invalid={!!fieldError('applicationNumber')}
-                              invalidText={fieldError('applicationNumber')}
-                              onChange={(value) => {
-                                markFormEdited()
-                                setForm((current) => ({ ...current, applicationNumber: value }))
-                              }}
-                            />
-                          </RecordFieldCell>
-                          <RecordFieldCell>
-                            <Button
-                              type="button"
-                              kind="tertiary"
-                              size="md"
-                              disabled={!form.applicationNumber.trim()}
-                              onClick={onAddApplication}
-                            >
-                              Add application
-                            </Button>
-                          </RecordFieldCell>
-                        </RecordFieldRow>
-                      </RecordFieldGrid>
-                      {selectedApplicationNumbers.length > 0 && (
-                        <div className="exemption-create-application-selection">
-                          <p>Selected applications</p>
-                          <ul
-                            className="exemption-create-application-list"
-                            aria-label="Selected applications"
-                          >
-                            {selectedApplicationNumbers.map((applicationNumber) => (
-                              <li key={applicationNumber}>
-                                <DismissibleTag
-                                  type="blue"
-                                  text={applicationNumber}
-                                  title={`Remove application ${applicationNumber}`}
-                                  dismissTooltipLabel={`Remove application ${applicationNumber}`}
-                                  onClose={() => onRemoveApplication(applicationNumber)}
-                                />
-                              </li>
-                            ))}
-                          </ul>
-                        </div>
-                      )}
-                    </div>
+                    <p className="detail-empty-message">
+                      Applications can be added after you save the exemption.
+                    </p>
                   </Tile>
                 </TabPanel>
               ),

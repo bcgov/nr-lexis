@@ -29,7 +29,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useParams, useSearchParams } from 'react-router-dom'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
@@ -238,7 +238,6 @@ const requiredExactLengthFieldError = (
 }
 
 const FederalApplicationDetailsPage = () => {
-  const navigate = useNavigate()
   const { capabilities, canPerform, defaultRoute } = useAuth()
   const location = useLocation()
   const { applicationNumber } = useParams()
@@ -313,8 +312,10 @@ const FederalApplicationDetailsPage = () => {
   const isRefreshingDetail = loading && !!currentDetail
 
   const federalApplicationLocked = currentDetail?.locked === true
-  const canViewFederalApplication =
-    canPerform('/federalApplicationDetails') && canPerform('viewFederalApplication')
+  const canViewFederalRemarks =
+    canPerform('/federalApplicationDetails') &&
+    canPerform('viewFederalApplication') &&
+    canPerform('/applicationRemarks')
   // Writes also need the application's region when the user's grant is regional.
   const applicationOrgUnit = currentDetail?.orgUnitNumber ?? null
   const canManageFederalApplication = canPerform('manageFederalApplication', applicationOrgUnit)
@@ -371,7 +372,7 @@ const FederalApplicationDetailsPage = () => {
     'application',
     'items',
     'offers',
-    ...(canViewFederalApplication ? (['remarks'] as const) : []),
+    ...(canViewFederalRemarks ? (['remarks'] as const) : []),
     'documents',
     'shipping',
   ]
@@ -566,7 +567,7 @@ const FederalApplicationDetailsPage = () => {
         }
 
         const loadRemarks = async () => {
-          if (!canViewFederalApplication) {
+          if (!canViewFederalRemarks) {
             if (isLatestRequest()) {
               setRemarkRows([])
               setRemarksErrorMessage('')
@@ -603,7 +604,7 @@ const FederalApplicationDetailsPage = () => {
     }
 
     void load()
-  }, [applicationNumber, beginDetailRequest, canViewFederalApplication])
+  }, [applicationNumber, beginDetailRequest, canViewFederalRemarks])
 
   useEffect(() => {
     return () => {
@@ -641,7 +642,7 @@ const FederalApplicationDetailsPage = () => {
         setPermitForm(refreshed ? permitFormFromDetail(refreshed) : emptyPermitForm())
         setEditingSection((current) => (current === 'permit' ? null : current))
       }
-      if (canViewFederalApplication) {
+      if (canViewFederalRemarks) {
         try {
           setRemarkRows(await fetchFederalApplicationRemarks(applicationNumber))
           setRemarksErrorMessage('')
@@ -652,7 +653,7 @@ const FederalApplicationDetailsPage = () => {
         }
       }
     },
-    [applicationNumber, canManageFederalApplication, canViewFederalApplication],
+    [applicationNumber, canManageFederalApplication, canViewFederalRemarks],
   )
 
   const onSaveStatus = useCallback(async (): Promise<boolean> => {
@@ -1354,7 +1355,7 @@ const FederalApplicationDetailsPage = () => {
                 <Tab>Application</Tab>
                 <Tab>Items</Tab>
                 <Tab>Offers</Tab>
-                {canViewFederalApplication && <Tab>Remarks</Tab>}
+                {canViewFederalRemarks && <Tab>Remarks</Tab>}
                 <Tab>Documents</Tab>
                 <Tab>Shipping details</Tab>
               </TabList>
@@ -1447,12 +1448,6 @@ const FederalApplicationDetailsPage = () => {
                               {
                                 label: 'Contact name',
                                 value: displayValue(detail.agentContactName),
-                              },
-                              {
-                                label: 'Applicant type',
-                                value: displayValue(
-                                  applicantTypeLabel(detail.agentApplicantType ?? 'A'),
-                                ),
                               },
                             ],
                             [
@@ -1802,47 +1797,37 @@ const FederalApplicationDetailsPage = () => {
                             <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
-                                  <TableHeader>Offer number</TableHeader>
                                   <TableHeader>Company</TableHeader>
                                   <TableHeader>Date received</TableHeader>
-                                  <TableHeader>Actions</TableHeader>
                                 </TableRow>
                               </TableHead>
                               <TableBody>
                                 {detail.offers.map((item) => (
                                   <TableRow key={item.offerNumber}>
-                                    <TableCell>{displayValue(item.offerNumber)}</TableCell>
-                                    <TableCell>{displayValue(item.companyName)}</TableCell>
-                                    <TableCell>{displayValue(item.receivedDate)}</TableCell>
                                     <TableCell>
-                                      <Button
-                                        kind="ghost"
-                                        size="md"
-                                        disabled={
-                                          !canPerform('/offersSearch') ||
-                                          !canPerform('/offerDetails')
-                                        }
-                                        onClick={() =>
-                                          navigate(
-                                            withCurrentSearch(
-                                              `/provincial/offers/${encodeURIComponent(item.offerNumber)}`,
-                                            ),
+                                      {canPerform('/offersSearch') &&
+                                      canPerform('/offerDetails') ? (
+                                        <Link
+                                          className="cds--link"
+                                          to={withCurrentSearch(
+                                            `/provincial/offers/${encodeURIComponent(item.offerNumber)}`,
+                                          )}
+                                          state={withDetailReturnTo(
+                                            location.state,
                                             {
-                                              state: withDetailReturnTo(
-                                                location.state,
-                                                {
-                                                  label: 'Federal application detail',
-                                                  to: locationPath(location),
-                                                },
-                                                detailReturnTo,
-                                              ),
+                                              label: 'Federal application detail',
+                                              to: locationPath(location),
                                             },
-                                          )
-                                        }
-                                      >
-                                        Open
-                                      </Button>
+                                            detailReturnTo,
+                                          )}
+                                        >
+                                          {displayValue(item.companyName)}
+                                        </Link>
+                                      ) : (
+                                        displayValue(item.companyName)
+                                      )}
                                     </TableCell>
+                                    <TableCell>{displayValue(item.receivedDate)}</TableCell>
                                   </TableRow>
                                 ))}
                               </TableBody>
@@ -1860,7 +1845,7 @@ const FederalApplicationDetailsPage = () => {
                   </Grid>
                 </TabPanel>
 
-                {canViewFederalApplication && (
+                {canViewFederalRemarks && (
                   <TabPanel className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>

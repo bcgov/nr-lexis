@@ -92,6 +92,7 @@ const defaultCanPerform = (action: string) =>
     '/exemptionDetails',
     '/exemptionSearch',
     '/offersSearch',
+    '/permitDetails',
     '/permitSearch',
     'createOffer',
   ].includes(action)

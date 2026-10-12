@@ -23,8 +23,6 @@ public interface ExemptionDetailsRpcService {
   List<PermitItem> getPermits(
       String exemptionNumber, Predicate<PermitAccessContext> permitAccess);
 
-  BlanketOicTotalsResponse getBlanketOicTotals(String exemptionNumber);
-
   ExemptionEditContext getEditContext(String exemptionNumber);
 
   List<DocumentItem> getDocumentDetails(String exemptionNumber);
@@ -153,8 +151,6 @@ public interface ExemptionDetailsRpcService {
       String ownerClientNumber,
       boolean oicLike,
       Long orgUnitNumber) {}
-
-  record BlanketOicTotalsResponse(String requestedVolume, String completedVolume) {}
 
   record ExemptionEditContext(
       boolean rateOverrideEnabled, Double fixedFeeRate, List<Long> regionNumbers) {}

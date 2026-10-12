@@ -153,8 +153,6 @@ public interface ApplicationDetailsRpcService {
 
   Optional<String> getSelectedEndUse(Long applicationNumber);
 
-  Optional<String> getPackageSelectedEndUse(String packageNumber);
-
   /** Returns the canonical legacy EXCOL species/end-use sort for an application. */
   default String getApplicationSpeciesEndUseSort(Long applicationNumber) {
     return "";
@@ -422,7 +420,7 @@ public interface ApplicationDetailsRpcService {
       boolean hasScaleBeforeApproval,
       boolean hasCompletePermit,
       String oicIndicator,
-      boolean interiorMinisterialItemOverrideEligible) {}
+      boolean ministerialItemOverrideEligible) {}
 
   record CreateApplicationRequest(
       Long federalApplicationNumber,

@@ -646,9 +646,6 @@ const ProvincialOfferDetailsPage = () => {
                       readOnly
                     />
                   </RecordFieldCell>
-                  <RecordFieldCell span="wide">
-                    <TextInput id="offerRegion" labelText="Region" value={form.region} readOnly />
-                  </RecordFieldCell>
                 </RecordFieldRow>
                 <RecordFieldRow>
                   <RecordFieldCell>

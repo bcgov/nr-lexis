@@ -226,15 +226,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   }
 
   @Override
-  public BlanketOicTotalsResponse getBlanketOicTotals(String exemptionNumber) {
-    ExemptionDetailsRpcRepository.BlanketOicTotalsRow totals =
-        repository.findBlanketOicTotals(exemptionNumber);
-    return new BlanketOicTotalsResponse(
-        formatVolume(totals.requestedVolume()),
-        formatVolume(totals.completedVolume()));
-  }
-
-  @Override
   public ExemptionEditContext getEditContext(String exemptionNumber) {
     Optional<ExemptionDetailsRpcRepository.ExemptionRateRecord> rate =
         repository.findExemptionRate(exemptionNumber);

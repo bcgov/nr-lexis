@@ -1747,7 +1747,6 @@ describe('Provincial Exemption Search Actions', () => {
           filters: expect.objectContaining({
             listFromDate: '2026-01-01',
             listToDate: '2026-01-31',
-            approvalFromDate: '',
           }),
         }),
         expect.any(Object),

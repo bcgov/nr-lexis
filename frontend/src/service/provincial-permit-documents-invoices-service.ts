@@ -16,15 +16,6 @@ export type PermitDocumentRow = DocumentRowBase & {
   typeCode: string
 }
 
-export type PermitInvoiceRow = {
-  id: string
-  invoiceNumber: string
-  exportValueCad: string
-  conversionRate: string
-  feeInLieu: string
-  invoiceFound: boolean
-}
-
 type PermitDocumentAndInvoiceSource = 'api'
 
 type PermitDocumentsResult = {
@@ -32,28 +23,10 @@ type PermitDocumentsResult = {
   source: PermitDocumentAndInvoiceSource
 }
 
-type PermitInvoicesResult = {
-  rows: PermitInvoiceRow[]
-  source: PermitDocumentAndInvoiceSource
-}
-
 type OpenPermitDocumentResult = {
   source: 'api'
   blob: Blob
   filename: string
-}
-
-type PermitInvoiceConversionRateResult = {
-  conversionRate: string
-  source: PermitDocumentAndInvoiceSource
-}
-
-type AddPermitInvoiceRequest = {
-  permitNumber: string
-  salesInvoiceNumber: string
-  invoiceExportValue: string
-  invoiceConversionRate: string
-  invoiceFeeInLieu: string
 }
 
 export type PermitDetailMutationRequest = {
@@ -93,9 +66,10 @@ export type PermitFeeOverrideContext = {
   overrideComment: string
   locked: boolean
   lockMessage: string
+  interior: boolean
 }
 
-type AddPermitInvoiceResult = {
+type PermitActionResult = {
   success: boolean
   message: string
   errors: string[]
@@ -103,14 +77,14 @@ type AddPermitInvoiceResult = {
   source: PermitDocumentAndInvoiceSource
 }
 
-export type PermitDetailMutationResult = AddPermitInvoiceResult & {
+export type PermitDetailMutationResult = PermitActionResult & {
   permitStatus?: string
   permitReceiptNo?: string
   permitVolume?: number | null
   permitNumberOfPieces?: number | null
 }
 
-type CreatePermitFromExemptionResult = AddPermitInvoiceResult & {
+type CreatePermitFromExemptionResult = PermitActionResult & {
   permitNumber: string
 }
 
@@ -125,13 +99,6 @@ type RemovePermitDocumentResult = {
   source: PermitDocumentAndInvoiceSource
 }
 
-type PermitInvoiceDetailsPayload = {
-  invoicefound?: boolean
-  rate?: unknown
-  fee?: unknown
-  value?: unknown
-}
-
 const PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS = 30_000
 
 const normalizeDocumentRow = (row: unknown, index: number): PermitDocumentRow => {
@@ -140,40 +107,6 @@ const normalizeDocumentRow = (row: unknown, index: number): PermitDocumentRow =>
     ...normalizeDocumentRowBase(row, index),
     typeCode: asString(source.typeCode || source.attachmentType || source.type_code),
   }
-}
-
-const fetchInvoiceDetails = async (
-  permitNumber: string,
-  invoiceNumber: string,
-): Promise<PermitInvoiceDetailsPayload> => {
-  const response = await apiService.getCachedResponse<PermitInvoiceDetailsPayload>(
-    '/lexis/rpc/permit-details/invoice-details',
-    {
-      params: {
-        permitNumber,
-        salesInvoiceNumber: invoiceNumber,
-      },
-    },
-    { ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS },
-  )
-
-  if (response.status === 204) {
-    return {
-      invoicefound: false,
-      rate: '',
-      fee: '',
-      value: '',
-    }
-  }
-
-  return (
-    response.data ?? {
-      invoicefound: false,
-      rate: '',
-      fee: '',
-      value: '',
-    }
-  )
 }
 
 export const fetchPermitDocuments = async (
@@ -237,76 +170,6 @@ export const openPermitDocument = async (
   }
 }
 
-export const fetchPermitInvoices = async (permitNumber: string): Promise<PermitInvoicesResult> => {
-  const response = await apiService.getCachedResponse<{ invoiceList?: unknown }>(
-    '/lexis/rpc/permit-details/invoices-for-permit',
-    {
-      params: {
-        permitNumber,
-      },
-    },
-    { ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS },
-  )
-
-  if (response.status === 204) {
-    return {
-      rows: [],
-      source: 'api',
-    }
-  }
-
-  const listRaw = Array.isArray(response.data?.invoiceList)
-    ? response.data.invoiceList
-    : parseDocumentArrayPayload(response.data, ['invoiceList'])
-  if (!listRaw) {
-    throw new Error('Unexpected invoice list payload.')
-  }
-
-  const invoiceNumbers = listRaw.map((entry) => asString(entry)).filter((entry) => entry.length > 0)
-
-  const detailsResults: PermitInvoiceDetailsPayload[] = []
-  for (const invoiceNumber of invoiceNumbers) {
-    detailsResults.push(await fetchInvoiceDetails(permitNumber, invoiceNumber))
-  }
-
-  return {
-    rows: detailsResults.map((result, index) => ({
-      id: `${invoiceNumbers[index]}-${index + 1}`,
-      invoiceNumber: invoiceNumbers[index],
-      exportValueCad: asString(result.value),
-      conversionRate: asString(result.rate),
-      feeInLieu: asString(result.fee),
-      invoiceFound: asBoolean(result.invoicefound),
-    })),
-    source: 'api',
-  }
-}
-
-export const fetchPermitInvoiceConversionRate =
-  async (): Promise<PermitInvoiceConversionRateResult> => {
-    const response = await apiService.getCachedResponse<{
-      success?: boolean
-      conversionRate?: unknown
-    }>('/lexis/rpc/permit-details/conversion-rate', undefined, {
-      ttlMs: PERMIT_DOCUMENT_INVOICE_CACHE_TTL_MS,
-    })
-
-    const conversionRate = asString(response.data?.conversionRate).trim()
-    const numericRate = Number(conversionRate)
-    if (
-      !asBoolean(response.data?.success) ||
-      !conversionRate ||
-      !Number.isFinite(numericRate) ||
-      numericRate <= 0
-    ) {
-      throw new Error('A valid currency conversion rate is required to add an invoice.')
-    }
-    return {
-      conversionRate,
-      source: 'api',
-    }
-  }
-
 type FormPostOptions = {
   preserveEmptyKeys?: readonly string[]
 }
@@ -331,25 +194,6 @@ const postFormData = async (
   })
 
   return response.data
-}
-
-const parseAddPermitInvoiceResponse = (
-  payload: unknown,
-  source: PermitDocumentAndInvoiceSource,
-): AddPermitInvoiceResult => {
-  const objectPayload = recordOrEmpty(payload)
-  const success = asBoolean(objectPayload.success ?? objectPayload.valid)
-  const message = asString(objectPayload.message)
-  const errors = asStringArray(objectPayload.errors)
-  const warnings = asStringArray(objectPayload.warnings)
-
-  return {
-    success,
-    message: message || (success ? 'Invoice saved successfully.' : 'Unable to save invoice.'),
-    errors,
-    warnings,
-    source,
-  }
 }
 
 const parsePermitDetailMutationResponse = (
@@ -388,21 +232,6 @@ const parseCreatePermitFromExemptionResponse = (
     source: 'api',
     permitNumber: asString(objectPayload.permitNumber),
   }
-}
-
-export const addPermitInvoice = async (
-  request: AddPermitInvoiceRequest,
-): Promise<AddPermitInvoiceResult> => {
-  const normalizedPayload = {
-    permitNumber: request.permitNumber.trim(),
-    salesInvoiceNumber: request.salesInvoiceNumber.trim(),
-    invoiceExportValue: request.invoiceExportValue.trim(),
-    invoiceConversionRate: request.invoiceConversionRate.trim(),
-    invoiceFeeInLieu: request.invoiceFeeInLieu.trim(),
-  }
-
-  const payload = await postFormData('/lexis/rpc/permit-details/add-invoice', normalizedPayload)
-  return parseAddPermitInvoiceResponse(payload, 'api')
 }
 
 const normalizePermitDetailMutationPayload = (
@@ -467,6 +296,7 @@ export const fetchPermitFeeOverrideContext = async (
     overrideComment: asString(payload.overrideComment),
     locked: asBoolean(payload.locked),
     lockMessage: asString(payload.lockMessage),
+    interior: asBoolean(payload.interior),
   }
 }
 

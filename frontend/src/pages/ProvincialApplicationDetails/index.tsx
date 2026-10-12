@@ -35,7 +35,6 @@ import {
   TableHead,
   TableHeader,
   TableRow,
-  TableSelectRow,
   TextArea,
   TextInput,
   Tile,
@@ -174,7 +173,7 @@ import { ActionResultNotification } from '../../components/ActionResultNotificat
 import { AppNotification } from '../../components/AppNotification'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
-import { displayVolume, formatVolume, formatVolumeInput } from '@/utils/volume'
+import { displayVolume, formatVolumeInput } from '@/utils/volume'
 
 const APPLICATION_WRITE_ACTIONS = [
   'createApplication',
@@ -918,13 +917,10 @@ const ProvincialApplicationDetailsPage = () => {
   const shouldFocusScaleSection =
     requestedApplicationTab === 'items' &&
     (searchParams.get('section') ?? '').trim().toLowerCase() === 'scales'
-  const [focusedPackageNumber, setFocusedPackageNumber] = useState(() =>
+  const [focusedPackageNumber] = useState(() =>
     requestedApplicationTab === 'items' ? requestedPackageNumber : '',
   )
-  const [focusedPackageRequestId, setFocusedPackageRequestId] = useState(() =>
-    requestedApplicationTab === 'items' ? 1 : 0,
-  )
-  const [selectedPackageNumber, setSelectedPackageNumber] = useState('')
+  const [focusedPackageRequestId] = useState(() => (requestedApplicationTab === 'items' ? 1 : 0))
   const [selectedApplicationTab, selectApplicationTab] = useReloadPreservedTab({
     tabs: APPLICATION_DETAIL_TAB_SLOTS,
     defaultTab: 'owner',
@@ -937,14 +933,6 @@ const ProvincialApplicationDetailsPage = () => {
   currentDetailRef.current = detail
   const currentSummaryFormRef = useRef<ApplicationSummaryFormState | null>(null)
   currentSummaryFormRef.current = summaryForm
-  const focusPackageInItems = useCallback(
-    (packageNumber: string) => {
-      selectApplicationTab('items')
-      setFocusedPackageNumber(packageNumber)
-      setFocusedPackageRequestId((current) => current + 1)
-    },
-    [selectApplicationTab],
-  )
 
   useEffect(() => {
     if (!createdApplicationNumber) {
@@ -4789,45 +4777,6 @@ const ProvincialApplicationDetailsPage = () => {
                         )}
                       </Tile>
                     </Column>
-                    {detail.packages.length > 1 && (
-                      <Column sm={4} md={8} lg={16}>
-                        <Tile
-                          id="application-packages"
-                          className="application-detail-section application-detail-packages"
-                        >
-                          <DetailCardTitle icon={Box}>Packages</DetailCardTitle>
-                          <TableFrame ariaLabel="Application packages">
-                            <Table size="md" useZebraStyles>
-                              <TableHead>
-                                <TableRow>
-                                  <TableHeader aria-label="Package selection" />
-                                  <TableHeader>Package number</TableHeader>
-                                  <TableHeader>Volume (m³)</TableHeader>
-                                  <TableHeader>Pieces</TableHeader>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {detail.packages.map((item) => (
-                                  <TableRow key={item.packageNumber}>
-                                    <TableSelectRow
-                                      radio
-                                      id={`application-package-select-${item.packageNumber}`}
-                                      name="application-package-selection"
-                                      ariaLabel={`Select package ${item.packageNumber}`}
-                                      checked={selectedPackageNumber === item.packageNumber}
-                                      onSelect={() => focusPackageInItems(item.packageNumber)}
-                                    />
-                                    <TableCell>{item.packageNumber}</TableCell>
-                                    <TableCell>{formatVolume(item.volume)}</TableCell>
-                                    <TableCell>{item.pieceCount.toLocaleString()}</TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableFrame>
-                        </Tile>
-                      </Column>
-                    )}
                     <Column sm={4} md={8} lg={16}>
                       <ProvincialApplicationItemsPanel
                         key={`${applicationNumber}-${applicationItemsResetKey}`}
@@ -4853,7 +4802,6 @@ const ProvincialApplicationDetailsPage = () => {
                         onDirtyChange={setApplicationItemsDirty}
                         onBusyChange={setApplicationItemsBusy}
                         onEditingChange={setApplicationItemsEditing}
-                        onSelectedPackageChange={setSelectedPackageNumber}
                         focusedPackageNumber={focusedPackageNumber}
                         focusedPackageRequestId={focusedPackageRequestId}
                         focusScalesRequestId={shouldFocusScaleSection ? focusedPackageRequestId : 0}
