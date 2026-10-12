@@ -274,8 +274,7 @@ final class LexisApiAuthorizationRules {
               "/federalApplicationSearch",
               "/api/lexis/federal/applications/search/options",
               "/api/lexis/federal/applications/search",
-              "/api/lexis/federal/applications/search/count",
-              "/api/lexis/federal/applications/search/verify-clients"),
+              "/api/lexis/federal/applications/search/count"),
           action(
               HttpMethod.GET,
               ACTION_FEDERAL_APPLICATION_DETAILS,

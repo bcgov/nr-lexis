@@ -108,11 +108,8 @@ type ProvincialExemptionCreateForm = {
 
 type ProvincialExemptionCreateField = keyof ProvincialExemptionCreateForm & string
 
-type ExemptionApplicationSource = 'federal' | 'provincial'
-
 type ExemptionCreatePrefillState = {
   selectedApplicationNumbers: string[]
-  applicationSource?: ExemptionApplicationSource
 }
 
 type ExemptionCreateTab = 'owner' | 'summary' | 'applications' | 'documents' | 'permits' | 'fees'
@@ -195,20 +192,6 @@ const feeRateError = (value: string): string | undefined => {
   return undefined
 }
 
-const parseApplicationSource = (value: unknown): ExemptionApplicationSource | undefined => {
-  if (typeof value !== 'string') {
-    return undefined
-  }
-  const normalized = value.trim().toLowerCase()
-  if (normalized === 'federal' || normalized === 'f') {
-    return 'federal'
-  }
-  if (normalized === 'provincial' || normalized === 'p') {
-    return 'provincial'
-  }
-  return undefined
-}
-
 const parseExemptionPrefillState = (rawState: unknown): ExemptionCreatePrefillState | null => {
   if (!rawState || typeof rawState !== 'object') {
     return null
@@ -225,10 +208,7 @@ const parseExemptionPrefillState = (rawState: unknown): ExemptionCreatePrefillSt
     return null
   }
 
-  return {
-    selectedApplicationNumbers,
-    applicationSource: parseApplicationSource(state.applicationSource ?? state.source),
-  }
+  return { selectedApplicationNumbers }
 }
 
 const parseExemptionPrefillQuery = (query: URLSearchParams): ExemptionCreatePrefillState | null => {
@@ -248,10 +228,7 @@ const parseExemptionPrefillQuery = (query: URLSearchParams): ExemptionCreatePref
     return null
   }
 
-  return {
-    selectedApplicationNumbers,
-    applicationSource: parseApplicationSource(query.get('source')),
-  }
+  return { selectedApplicationNumbers }
 }
 
 const mergePrefillState = (
@@ -281,10 +258,7 @@ const mergePrefillState = (
     return null
   }
 
-  return {
-    selectedApplicationNumbers: mergedApplicationNumbers,
-    applicationSource: queryPrefill?.applicationSource ?? locationPrefill?.applicationSource,
-  }
+  return { selectedApplicationNumbers: mergedApplicationNumbers }
 }
 
 type PageStatus = {
@@ -415,16 +389,7 @@ const ProvincialExemptionCreatePage = () => {
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
   const formRef = useRef<HTMLDivElement>(null)
   const roles = capabilities?.roles ?? []
-  const isFederalApplicationPrefill = prefillState?.applicationSource === 'federal'
-  const canUseApplicationPrefill =
-    canPerform('/createExemption') &&
-    (!isFederalApplicationPrefill || canPerform('viewFederalApplication'))
-  const pageSubtitle = isFederalApplicationPrefill
-    ? 'Enter exemption details for the selected federal applications.'
-    : 'Enter exemption details and save a new exemption.'
-  const prefillApplicationLabel = isFederalApplicationPrefill
-    ? 'federal application(s)'
-    : 'application(s)'
+  const canUseApplicationPrefill = canPerform('/createExemption')
   const canCreateBlanketOic =
     !hasRole(roles, 'EXEMPTION_APPROVER') ||
     hasRole(roles, 'ADMIN') ||
@@ -1066,7 +1031,7 @@ const ProvincialExemptionCreatePage = () => {
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Create new exemption"
-          subtitle={pageSubtitle}
+          subtitle="Enter exemption details and save a new exemption."
           focusTitle
           actions={
             <>
@@ -1074,9 +1039,7 @@ const ProvincialExemptionCreatePage = () => {
                 type="button"
                 kind="tertiary"
                 size="md"
-                onClick={() =>
-                  navigate(isFederalApplicationPrefill ? '/federal' : '/provincial/exemption')
-                }
+                onClick={() => navigate('/provincial/exemption')}
               >
                 Cancel
               </Button>
@@ -1119,17 +1082,6 @@ const ProvincialExemptionCreatePage = () => {
         </Column>
       )}
 
-      {isFederalApplicationPrefill && !canUseApplicationPrefill && (
-        <Column sm={4} md={8} lg={16}>
-          <AppNotification
-            kind="error"
-            title="Federal application access required"
-            subtitle="Your session cannot create an exemption from the selected federal applications."
-            lowContrast
-          />
-        </Column>
-      )}
-
       {!!previewError && showPreviewErrorNotice && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
@@ -1147,7 +1099,7 @@ const ProvincialExemptionCreatePage = () => {
           <AppNotification
             kind="info"
             title="Prefilled from selected applications"
-            subtitle={`Loaded ${prefillState.selectedApplicationNumbers.length} ${prefillApplicationLabel} into this form.`}
+            subtitle={`Loaded ${prefillState.selectedApplicationNumbers.length} application(s) into this form.`}
             lowContrast
             onCloseButtonClick={() => setShowPrefillNotice(false)}
           />
@@ -1530,74 +1482,57 @@ const ProvincialExemptionCreatePage = () => {
                     role="region"
                     aria-label="Applications"
                   >
-                    {isFederalApplicationPrefill ? (
-                      <RecordFieldGrid>
+                    <div className="exemption-create-application-field">
+                      <RecordFieldGrid editing>
                         <RecordFieldRow>
-                          <RecordFieldCell span="full">
-                            <TextArea
-                              className="selected-application-numbers"
-                              id="selectedApplicationNumbers"
-                              labelText="Selected application numbers"
-                              value={selectedApplicationNumbers.join('\n')}
-                              rows={Math.min(Math.max(selectedApplicationNumbers.length, 2), 6)}
-                              readOnly
+                          <RecordFieldCell>
+                            <ApplicationNumberSelect
+                              id="applicationNumber"
+                              labelText="Application number (optional)"
+                              value={form.applicationNumber}
+                              invalid={!!fieldError('applicationNumber')}
+                              invalidText={fieldError('applicationNumber')}
+                              onChange={(value) => {
+                                markFormEdited()
+                                setForm((current) => ({ ...current, applicationNumber: value }))
+                              }}
                             />
+                          </RecordFieldCell>
+                          <RecordFieldCell>
+                            <Button
+                              type="button"
+                              kind="tertiary"
+                              size="md"
+                              disabled={!form.applicationNumber.trim()}
+                              onClick={onAddApplication}
+                            >
+                              Add application
+                            </Button>
                           </RecordFieldCell>
                         </RecordFieldRow>
                       </RecordFieldGrid>
-                    ) : (
-                      <div className="exemption-create-application-field">
-                        <RecordFieldGrid editing>
-                          <RecordFieldRow>
-                            <RecordFieldCell>
-                              <ApplicationNumberSelect
-                                id="applicationNumber"
-                                labelText="Application number (optional)"
-                                value={form.applicationNumber}
-                                invalid={!!fieldError('applicationNumber')}
-                                invalidText={fieldError('applicationNumber')}
-                                onChange={(value) => {
-                                  markFormEdited()
-                                  setForm((current) => ({ ...current, applicationNumber: value }))
-                                }}
-                              />
-                            </RecordFieldCell>
-                            <RecordFieldCell>
-                              <Button
-                                type="button"
-                                kind="tertiary"
-                                size="md"
-                                disabled={!form.applicationNumber.trim()}
-                                onClick={onAddApplication}
-                              >
-                                Add application
-                              </Button>
-                            </RecordFieldCell>
-                          </RecordFieldRow>
-                        </RecordFieldGrid>
-                        {selectedApplicationNumbers.length > 0 && (
-                          <div className="exemption-create-application-selection">
-                            <p>Selected applications</p>
-                            <ul
-                              className="exemption-create-application-list"
-                              aria-label="Selected applications"
-                            >
-                              {selectedApplicationNumbers.map((applicationNumber) => (
-                                <li key={applicationNumber}>
-                                  <DismissibleTag
-                                    type="blue"
-                                    text={applicationNumber}
-                                    title={`Remove application ${applicationNumber}`}
-                                    dismissTooltipLabel={`Remove application ${applicationNumber}`}
-                                    onClose={() => onRemoveApplication(applicationNumber)}
-                                  />
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        )}
-                      </div>
-                    )}
+                      {selectedApplicationNumbers.length > 0 && (
+                        <div className="exemption-create-application-selection">
+                          <p>Selected applications</p>
+                          <ul
+                            className="exemption-create-application-list"
+                            aria-label="Selected applications"
+                          >
+                            {selectedApplicationNumbers.map((applicationNumber) => (
+                              <li key={applicationNumber}>
+                                <DismissibleTag
+                                  type="blue"
+                                  text={applicationNumber}
+                                  title={`Remove application ${applicationNumber}`}
+                                  dismissTooltipLabel={`Remove application ${applicationNumber}`}
+                                  onClose={() => onRemoveApplication(applicationNumber)}
+                                />
+                              </li>
+                            ))}
+                          </ul>
+                        </div>
+                      )}
+                    </div>
                   </Tile>
                 </TabPanel>
               ),

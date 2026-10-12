@@ -12,16 +12,6 @@ import { searchForestClients } from '@/service/client-search-service'
 import { fetchFederalApplicationOptions } from '@/service/search-options-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
-const mockNavigate = vi.fn()
-
-vi.mock('react-router-dom', async () => {
-  const actual = await vi.importActual('react-router-dom')
-  return {
-    ...(actual as object),
-    useNavigate: () => mockNavigate,
-  }
-})
-
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
 }))
@@ -62,14 +52,8 @@ const defaultRows = [
     status: 'APPROVED',
     clientNumber: '11111111',
     reason: 'Economic',
-    exemptionType: 'Section 1',
-    exemptionNumber: '',
     receivedDate: '2026-01-10',
     listingDate: '2026-01-12',
-    packageNumber: 'PKG-1',
-    eligibleForExemption: true,
-    locked: false,
-    allowCreateExemption: true,
   },
   {
     applicationNumber: '1002',
@@ -77,14 +61,8 @@ const defaultRows = [
     status: 'APPROVED',
     clientNumber: '11111111',
     reason: 'Emergency',
-    exemptionType: 'Section 2',
-    exemptionNumber: 'EX-9',
     receivedDate: '2026-01-11',
     listingDate: '2026-01-13',
-    packageNumber: 'PKG-2',
-    eligibleForExemption: false,
-    locked: false,
-    allowCreateExemption: false,
   },
 ]
 
@@ -110,7 +88,7 @@ describe('Federal Search Actions', () => {
     })
   })
 
-  it('lets federal readers open applications without exemption links or write controls', async () => {
+  it('lets federal readers open applications without write controls', async () => {
     const grantedActions = [
       '/federalApplicationSearch',
       '/federalApplicationDetails',
@@ -128,8 +106,6 @@ describe('Federal Search Actions', () => {
       'href',
       expect.stringContaining('/federal/application/1001'),
     )
-    expect(screen.getByText('EX-9')).toBeInTheDocument()
-    expect(screen.queryByRole('link', { name: 'EX-9' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /create exemption/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
   })
@@ -239,62 +215,6 @@ describe('Federal Search Actions', () => {
     })
   })
 
-  it('only allows eligible federal applications to be selected for exemption creation', async () => {
-    renderPage()
-    await screen.findByText('FED-1001')
-
-    const createButton = screen.getByRole('button', {
-      name: 'Create exemption for selected applications',
-    })
-    expect(createButton).toBeDisabled()
-    expect(createButton.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
-    expect(
-      screen.getByRole('checkbox', { name: 'Select federal application FED-1001' }),
-    ).toBeEnabled()
-    expect(
-      screen.getByRole('checkbox', { name: 'Select federal application FED-1002' }),
-    ).toBeDisabled()
-
-    await userEvent.click(
-      screen.getByRole('checkbox', { name: 'Select federal application FED-1001' }),
-    )
-    expect(
-      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
-    ).toBeEnabled()
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
-    )
-
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/provincial/exemption/create?applications=1001&source=federal',
-      {
-        state: {
-          selectedApplicationNumbers: ['1001'],
-          applicationSource: 'federal',
-        },
-      },
-    )
-  })
-
-  it('explains why an ineligible federal application cannot be selected', async () => {
-    renderPage()
-    await screen.findByText('FED-1001')
-
-    const ineligibleCheckbox = screen.getByRole('checkbox', {
-      name: 'Select federal application FED-1002',
-    })
-    expect(ineligibleCheckbox).toBeDisabled()
-
-    const tooltipTrigger = ineligibleCheckbox.closest('.disabled-button-tooltip') as HTMLElement
-    expect(tooltipTrigger).toBeTruthy()
-
-    await userEvent.hover(tooltipTrigger)
-
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'This application already has an exemption.',
-    )
-  })
-
   it('renders every federal result header as plain text without sort state', async () => {
     renderPage()
     await screen.findByText('FED-1001')
@@ -343,105 +263,23 @@ describe('Federal Search Actions', () => {
     })
   })
 
-  it('select-all includes every eligible row and excludes ineligible rows', async () => {
-    mockedSearchFederalApplications.mockResolvedValue({
-      content: [
-        defaultRows[0],
-        {
-          ...defaultRows[1],
-          exemptionNumber: '',
-          eligibleForExemption: true,
-          allowCreateExemption: true,
-        },
-        {
-          ...defaultRows[1],
-          applicationNumber: '1003',
-          federalApplicationNumber: 'FED-1003',
-          allowCreateExemption: false,
-        },
-      ],
-      page: {
-        number: 0,
-        size: 10,
-        totalElements: 3,
-        totalPages: 1,
-      },
-    })
-
+  it('shows the federal result columns without row selection', async () => {
     renderPage()
     await screen.findByText('FED-1001')
 
-    await userEvent.click(
-      screen.getByRole('checkbox', {
-        name: 'Select all eligible federal applications on this page',
-      }),
-    )
-    expect(
-      screen.getByRole('checkbox', { name: 'Select federal application FED-1001' }),
-    ).toBeChecked()
-    expect(
-      screen.getByRole('checkbox', { name: 'Select federal application FED-1002' }),
-    ).toBeChecked()
-    expect(
-      screen.getByRole('checkbox', { name: 'Select federal application FED-1003' }),
-    ).not.toBeChecked()
-
-    await userEvent.click(
-      screen.getByRole('button', { name: 'Create exemption for selected applications' }),
-    )
-    expect(mockNavigate).toHaveBeenCalledWith(
-      '/provincial/exemption/create?applications=1001%2C1002&source=federal',
-      {
-        state: {
-          selectedApplicationNumbers: ['1001', '1002'],
-          applicationSource: 'federal',
-        },
-      },
-    )
+    expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
+      'Application',
+      'Status',
+      'Client',
+      'Reason',
+      'Received date',
+      'Listing date',
+    ])
+    expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /create exemption/i })).not.toBeInTheDocument()
   })
 
-  it('shows a lock marker instead of a checkbox for an otherwise eligible locked row', async () => {
-    mockedSearchFederalApplications.mockResolvedValue({
-      content: [
-        {
-          ...defaultRows[0],
-          locked: true,
-          allowCreateExemption: false,
-        },
-      ],
-      page: {
-        number: 0,
-        size: 10,
-        totalElements: 1,
-        totalPages: 1,
-      },
-    })
-
-    renderPage()
-    await screen.findByText('FED-1001')
-
-    expect(
-      screen.getByRole('status', { name: 'Federal application FED-1001 is locked' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('checkbox', { name: 'Select federal application FED-1001' }),
-    ).not.toBeInTheDocument()
-    const selectAllCheckbox = screen.getByRole('checkbox', {
-      name: 'Select all eligible federal applications on this page',
-    })
-    expect(selectAllCheckbox).toBeDisabled()
-
-    const tooltipTrigger = selectAllCheckbox.closest('.disabled-button-tooltip') as HTMLElement
-    expect(tooltipTrigger).toBeTruthy()
-
-    await userEvent.hover(tooltipTrigger)
-
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'No eligible federal applications are available on this page.',
-    )
-  })
-
-  it('does not expose federal exemption selection without both required actions', async () => {
+  it('shows the Client number filter only with the create exemption action', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action === 'viewFederalApplication',
@@ -451,35 +289,7 @@ describe('Federal Search Actions', () => {
     renderPage()
     await screen.findByText('FED-1001')
 
-    expect(
-      screen.queryByRole('button', { name: 'Create exemption for selected applications' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('checkbox', { name: /Select federal application/ }),
-    ).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Client number')).not.toBeInTheDocument()
-  })
-
-  it('keeps federal search read-only for an application approver like legacy', async () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        capabilities: createTestCapabilities({
-          roles: ['APPLICATION_APPROVER'],
-          welcomeTarget: 'applicationApprover',
-        }),
-      }),
-    )
-
-    renderPage()
-    await screen.findByText('FED-1001')
-
-    expect(
-      screen.queryByRole('button', { name: 'Create exemption for selected applications' }),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('checkbox', { name: /Select federal application/ }),
-    ).not.toBeInTheDocument()
-    expect(screen.getByRole('combobox', { name: 'Client number' })).toBeInTheDocument()
   })
 
   it('keeps repeated federal numbers linked to their distinct internal applications', async () => {

@@ -246,7 +246,6 @@ const ProvincialPage = () => {
               issuedToDate: '',
               permitStatus: '',
               permitNumber: '',
-              invoiceNumber: '',
               ownerClientNumber: '',
               applicantClientNumber: '',
             },

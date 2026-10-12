@@ -1817,7 +1817,15 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Application')
     expect(await screen.findByText('IDIR\\TESTER')).toBeInTheDocument()
-    expect(screen.getByText('Exemption term (days)')).toBeInTheDocument()
+    expect(screen.getByText('List date')).toBeInTheDocument()
+    for (const label of [
+      'Exemption number',
+      'Exemption type',
+      'Exemption reason',
+      'Exemption term (days)',
+    ]) {
+      expect(screen.queryByText(label)).not.toBeInTheDocument()
+    }
 
     await selectDetailTab('Items')
     expect(screen.getByText('Average log volume (m³)')).toBeInTheDocument()

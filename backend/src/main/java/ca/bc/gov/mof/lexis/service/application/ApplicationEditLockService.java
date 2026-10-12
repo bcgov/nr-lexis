@@ -1,8 +1,6 @@
 package ca.bc.gov.mof.lexis.service.application;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
-import java.util.Collection;
-import java.util.Set;
 import org.springframework.stereotype.Service;
 
 /**
@@ -45,10 +43,6 @@ public class ApplicationEditLockService {
   public ApplicationEditLockDto snapshotExemption(
       String exemptionNumber, String userId, boolean showOwner) {
     return editable(false);
-  }
-
-  public Set<Long> lockedApplicationNumbers(Collection<Long> applicationNumbers) {
-    return Set.of();
   }
 
   public boolean release(Long applicationNumber, String userId) {

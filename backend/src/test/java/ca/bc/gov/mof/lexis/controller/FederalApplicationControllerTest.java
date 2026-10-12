@@ -22,7 +22,6 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
-import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationValidationDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationEditPolicyService;
@@ -45,7 +44,6 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
-import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.AccessDeniedException;
@@ -160,12 +158,8 @@ class FederalApplicationControllerTest {
                     "Approved",
                     "00077881",
                     "Federal request",
-                    "Federal",
-                    "EX-300",
                     LocalDate.of(2026, 2, 20),
-                    LocalDate.of(2026, 2, 26),
-                    true,
-                    false)),
+                    LocalDate.of(2026, 2, 26))),
             1,
             0,
             25);
@@ -174,7 +168,7 @@ class FederalApplicationControllerTest {
     ResponseEntity<FederalApplicationSearchResponseDto> response =
         controller.search(
             null,
-            " FED-1000456 ",
+            " 1000456 ",
             " PKG-901 ",
             " EX-300 ",
             " APR ",
@@ -196,7 +190,7 @@ class FederalApplicationControllerTest {
     verify(service).search(criteriaCaptor.capture());
 
     FederalApplicationSearchCriteria criteria = criteriaCaptor.getValue();
-    assertThat(criteria.federalApplicationNumber()).isEqualTo(" FED-1000456 ");
+    assertThat(criteria.federalApplicationNumber()).isEqualTo(" 1000456 ");
     assertThat(criteria.packageNumber()).isEqualTo(" PKG-901 ");
     assertThat(criteria.exemptionNumber()).isEqualTo(" EX-300 ");
     assertThat(criteria.applicationStatus()).isEqualTo(" APR ");
@@ -205,6 +199,27 @@ class FederalApplicationControllerTest {
     assertThat(criteria.listingFromDate()).isEqualTo(LocalDate.of(2026, 2, 26));
     assertThat(criteria.ownerClientNumber()).isEqualTo(" 00077881 ");
     assertThat(criteria.agentClientNumber()).isEqualTo(" 00055667 ");
+  }
+
+  @Test
+  void searchAndCountShouldIgnoreHyphensInApplicationNumber() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.search(any(FederalApplicationSearchCriteria.class)))
+        .thenReturn(new FederalApplicationSearchResponseDto(List.of(), 0, 0, 25));
+    when(service.count(any(FederalApplicationSearchCriteria.class))).thenReturn(0);
+
+    controller.search(
+        "6574-959", null, null, null, null, null, null, null, null, null, null, 0, 25, null);
+    controller.count("6574-959", null, null, null, null, null, null, null, null, null, null);
+
+    ArgumentCaptor<FederalApplicationSearchCriteria> searchCriteria =
+        ArgumentCaptor.forClass(FederalApplicationSearchCriteria.class);
+    verify(service).search(searchCriteria.capture());
+    assertThat(searchCriteria.getValue().federalApplicationNumber()).isEqualTo("6574959");
+    ArgumentCaptor<FederalApplicationSearchCriteria> countCriteria =
+        ArgumentCaptor.forClass(FederalApplicationSearchCriteria.class);
+    verify(service).count(countCriteria.capture());
+    assertThat(countCriteria.getValue().federalApplicationNumber()).isEqualTo("6574959");
   }
 
   @Test
@@ -649,54 +664,6 @@ class FederalApplicationControllerTest {
 
     verify(service, never()).addRemark(any(), any(), any());
     verify(editLockService, never()).requireEditable(any(), any(), any());
-  }
-
-  @Test
-  void verifyClientsShouldReturnValidationPayload() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.verifyApplicationClients(List.of(1000456L, 1000999L))).thenReturn(true);
-
-    ResponseEntity<FederalApplicationValidationDto> response =
-        controller.verifyClients("1000456,1000999", authentication);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(new FederalApplicationValidationDto(true));
-    verify(provincialAuthorizationService)
-        .requireFederalApplication(authentication, 1000456L);
-    verify(provincialAuthorizationService)
-        .requireFederalApplication(authentication, 1000999L);
-    verify(service).verifyApplicationClients(List.of(1000456L, 1000999L));
-  }
-
-  @Test
-  void verifyClientsShouldPropagateOracleFailureToApiExceptionHandling() {
-    DataAccessResourceFailureException failure =
-        new DataAccessResourceFailureException("federal client lookup unavailable");
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.verifyApplicationClients(List.of(1000456L, 1000999L))).thenThrow(failure);
-
-    assertThatThrownBy(
-            () -> controller.verifyClients("1000456,1000999", authentication))
-        .isSameAs(failure);
-    verify(provincialAuthorizationService)
-        .requireFederalApplication(authentication, 1000456L);
-    verify(provincialAuthorizationService)
-        .requireFederalApplication(authentication, 1000999L);
-  }
-
-  @Test
-  void verifyClientsShouldFailBeforeValidationWhenAnyApplicationIsOutOfScope() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    lenient()
-        .doThrow(new org.springframework.security.access.AccessDeniedException("denied"))
-        .when(provincialAuthorizationService)
-        .requireFederalApplication(authentication, 1000999L);
-
-    assertThatThrownBy(
-            () -> controller.verifyClients("1000456,1000999", authentication))
-        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
-
-    verify(service, never()).verifyApplicationClients(any());
   }
 
   @Test

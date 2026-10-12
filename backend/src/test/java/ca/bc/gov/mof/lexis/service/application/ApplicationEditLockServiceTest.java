@@ -2,7 +2,6 @@ package ca.bc.gov.mof.lexis.service.application;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -30,7 +29,6 @@ class ApplicationEditLockServiceTest {
     assertThat(second.locked()).isFalse();
     assertThat(service.snapshot(SYNTHETIC_APPLICATION_NUMBER, "IDIR\\THIRD", true).locked())
         .isFalse();
-    assertThat(service.lockedApplicationNumbers(List.of(SYNTHETIC_APPLICATION_NUMBER))).isEmpty();
   }
 
   @Test

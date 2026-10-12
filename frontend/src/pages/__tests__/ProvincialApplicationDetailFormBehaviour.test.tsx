@@ -331,6 +331,7 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     const drawer = within(packageDrawer())
     const volume = drawer.getByLabelText('Package volume (m³)')
     await waitFor(() => expect(volume).toBeEnabled())
+    await userEvent.click(volume)
     await userEvent.clear(volume)
     expect(drawer.queryByText('Package volume is required')).not.toBeInTheDocument()
 

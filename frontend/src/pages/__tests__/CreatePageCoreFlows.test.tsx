@@ -1904,7 +1904,7 @@ describe('Create Page Core Flows', () => {
     )
   }, 20_000)
 
-  it('shows only the application fields required by H, S, and T product types', async () => {
+  it('shows the same Scale fields for H, S, and T and marks only the required ones', async () => {
     render(
       <MemoryRouter
         initialEntries={[
@@ -1920,13 +1920,25 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
+    const expectScaleFields = (required: { ageClass: boolean; logDetails: boolean }) => {
+      const ageClass = screen.getByRole('combobox', { name: 'Age class' })
+      const location = screen.getByRole('textbox', { name: 'Location of logs' })
+      const logVolume = screen.getByRole('spinbutton', { name: 'Average log volume (m³)' })
+      expect(ageClass).toHaveValue('Old Growth')
+      expect(location).toHaveValue('Camp 1')
+      expect(logVolume).toHaveValue(1.2)
+      if (required.ageClass) expect(ageClass).toHaveAttribute('aria-required', 'true')
+      else expect(ageClass).not.toHaveAttribute('aria-required')
+      for (const field of [location, logVolume]) {
+        expect(field).toHaveAttribute('aria-required', String(required.logDetails))
+      }
+    }
+
     await selectApplicationCreateTab('Application')
     const productType = await screen.findByRole('combobox', { name: 'Product type' })
     await waitFor(() => expect(productType).toHaveValue('Harvested Timber'))
     await selectApplicationCreateTab('Scale')
-    expect(screen.getByRole('combobox', { name: 'Age class' })).toBeInTheDocument()
-    expect(screen.getByRole('textbox', { name: 'Location of logs' })).toBeInTheDocument()
-    expect(screen.getByRole('spinbutton', { name: 'Average log volume (m³)' })).toBeInTheDocument()
+    await waitFor(() => expectScaleFields({ ageClass: true, logDetails: true }))
 
     await selectApplicationCreateTab('Application')
     await chooseComboBoxOption(
@@ -1934,29 +1946,21 @@ describe('Create Page Core Flows', () => {
       'Standing Timber',
     )
     await selectApplicationCreateTab('Scale')
-    expect(screen.getByRole('combobox', { name: 'Age class' })).toBeInTheDocument()
-    expect(screen.queryByRole('textbox', { name: 'Location of logs' })).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('spinbutton', { name: 'Average log volume (m³)' }),
-    ).not.toBeInTheDocument()
+    expectScaleFields({ ageClass: true, logDetails: false })
 
     await selectApplicationCreateTab('Application')
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Product type' }), 'Timber')
     await selectApplicationCreateTab('Scale')
-    expect(screen.queryByRole('combobox', { name: 'Age class' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('textbox', { name: 'Location of logs' })).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('spinbutton', { name: 'Average log volume (m³)' }),
-    ).not.toBeInTheDocument()
+    expectScaleFields({ ageClass: false, logDetails: false })
   })
 
-  it('does not let hidden H-only values block a standing-timber application', async () => {
+  it('does not apply H-only rules to a standing-timber application', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
 
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=S&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&applicationVolume=125.5&averageLogVolume=-1.23&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=S&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&applicationVolume=125.5&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -1976,11 +1980,38 @@ describe('Create Page Core Flows', () => {
           productTypeCode: 'S',
           ageClass: 'O',
           productLocation: '',
-          averageLogVolume: '-1.23',
+          averageLogVolume: '',
         }),
       )
     })
   })
+
+  it.each(['S', 'T'])(
+    'shows an average log volume over 99.9 as a field error for product type %s',
+    async (productTypeCode) => {
+      render(
+        <MemoryRouter
+          initialEntries={[
+            `/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=${productTypeCode}&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&applicationVolume=125.5&averageLogVolume=150&speciesCodes=HE&endUseCode=SA&comments=Ready`,
+          ]}
+        >
+          <Routes>
+            <Route
+              path="/provincial/application/create"
+              element={<ProvincialApplicationCreatePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Save application' }))
+
+      const logVolume = await screen.findByRole('spinbutton', { name: 'Average log volume (m³)' })
+      await waitFor(() => expect(logVolume).toHaveAttribute('aria-invalid', 'true'))
+      expect(screen.getByText('Average log volume must be 99.9 or less')).toBeInTheDocument()
+      expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+    },
+  )
 
   it('shows provincial application species validation when no species are available', async () => {
     mockedFetchApplicationRemainingSpecies.mockResolvedValue([])
@@ -2821,94 +2852,6 @@ describe('Create Page Core Flows', () => {
       ),
     ).toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
-  })
-
-  it('preserves federal multi-application query prefill in the successful create payload', async () => {
-    mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-FED-777'))
-
-    render(
-      <MemoryRouter
-        initialEntries={['/provincial/exemption/create?applications=301,302&source=federal']}
-      >
-        <Routes>
-          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
-    await selectExemptionCreateTab('Applications')
-    expect(
-      screen.getByText('Enter exemption details for the selected federal applications.'),
-    ).toBeInTheDocument()
-    expect(screen.getByLabelText('Selected application numbers')).toHaveValue('301\n302')
-    expect(screen.queryByLabelText('Application number')).not.toBeInTheDocument()
-
-    await selectExemptionCreateTab('Exemption details')
-    await waitFor(() => expect(screen.getByLabelText('Approval volume (m³)')).toHaveValue('250.5'))
-
-    await chooseExemptionType('Section 1')
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
-    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-02-01')
-    await userEvent.clear(screen.getByLabelText('Expiry date (YYYY-MM-DD)'))
-    await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2026-12-31')
-    await userEvent.clear(screen.getByLabelText('Approval volume (m³)'))
-    await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '500')
-    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
-
-    expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
-      applicationNumber: '301',
-      linkedApplicationNumbers: ['301', '302'],
-      exemptionNumber: '',
-      exemptionTypeCode: 'SECTION_1',
-      exemptionStatusCode: 'NEW',
-      approvalDate: '2026-02-01',
-      expiryDate: '2026-12-31',
-      approvedVolume: '500',
-      enableRateOverride: false,
-      feeRate: '',
-      regionNumbers: [],
-      otherConditions: '',
-    })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-FED-777', {
-      state: {
-        exemptionCreationNotice: {
-          exemptionNumber: 'EX-FED-777',
-          applicationNumbers: ['301', '302'],
-        },
-      },
-    })
-  })
-
-  it('blocks a direct federal prefill when federal application access is absent', async () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        canPerform: (action: string) => action !== 'viewFederalApplication',
-      }),
-    )
-
-    render(
-      <MemoryRouter
-        initialEntries={['/provincial/exemption/create?applications=301&source=federal']}
-      >
-        <Routes>
-          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    expect(
-      await screen.findByText(
-        'Your session cannot create an exemption from the selected federal applications.',
-      ),
-    ).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
-    expect(
-      await screen.findByText(
-        'Authorization to create this exemption is required before it can be saved.',
-      ),
-    ).toBeInTheDocument()
-    expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
   it('dismisses a failed preview notice while keeping the exemption blocked', async () => {
@@ -3755,6 +3698,13 @@ describe('Create Page Core Flows', () => {
         }),
       }),
     )
+    mockedFetchOfferApplicationDetails.mockResolvedValue({
+      success: true,
+      speciesGradeCode: 'H/SA',
+      advertisingDate: '03/01/2026',
+      teacReviewDate: '2026-03-20',
+      region: 'Cariboo Natural Resource Region',
+    })
     mockedSubmitProvincialOfferCreate.mockResolvedValue(successfulCreate('8084'))
 
     render(
@@ -3779,7 +3729,8 @@ describe('Create Page Core Flows', () => {
     const contactName = screen.getByLabelText('Contact name')
     expect(contactName).toHaveValue('')
     expect(screen.queryByDisplayValue('Buyer Contact')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('TEAC review date')).toHaveAttribute('readonly')
+    expect(screen.queryByLabelText('TEAC review date')).not.toBeInTheDocument()
+    expect(screen.queryByDisplayValue('2026-03-20')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Fair market value')).toHaveAttribute('readonly')
     expect(screen.getByLabelText('Valid offer')).toHaveAttribute('readonly')
     expect(screen.getByLabelText('Offer approved')).toHaveAttribute('readonly')
@@ -3794,7 +3745,7 @@ describe('Create Page Core Flows', () => {
           offeringClientNumber: '00077881',
           companyName: 'Authoritative Buyer Ltd.',
           contactName: 'Buyer Contact',
-          teacReviewDate: '',
+          teacReviewDate: '2026-03-20',
           fairOfferIndicator: 'N',
           validOfferIndicator: 'Y',
           approvalIndicator: 'N',

@@ -335,41 +335,6 @@ class FederalApplicationRepositoryTest {
         .hasMessageContaining(failingProcedure);
   }
 
-  @Test
-  void verifyApplicationClientsRequiredShouldReturnTrueForMatchingClients() {
-    FederalApplicationRepository repository =
-        new ClientVerificationFederalApplicationRepository(
-            List.of(Optional.of("00077881"), Optional.of("00077881")), false);
-
-    assertThat(repository.verifyApplicationClientsRequired(List.of(900123L, 900124L))).isTrue();
-  }
-
-  @Test
-  void verifyApplicationClientsRequiredShouldPreserveMismatchAndAbsenceAsFalse() {
-    FederalApplicationRepository mismatchRepository =
-        new ClientVerificationFederalApplicationRepository(
-            List.of(Optional.of("00077881"), Optional.of("00055667")), false);
-    FederalApplicationRepository missingRepository =
-        new ClientVerificationFederalApplicationRepository(
-            List.of(Optional.of("00077881"), Optional.empty()), false);
-
-    assertThat(mismatchRepository.verifyApplicationClientsRequired(List.of(900123L, 900124L)))
-        .isFalse();
-    assertThat(missingRepository.verifyApplicationClientsRequired(List.of(900123L, 900124L)))
-        .isFalse();
-  }
-
-  @Test
-  void verifyApplicationClientsRequiredShouldPropagateOracleFailure() {
-    FederalApplicationRepository repository =
-        new ClientVerificationFederalApplicationRepository(List.of(), true);
-
-    assertThatThrownBy(
-            () -> repository.verifyApplicationClientsRequired(List.of(900123L, 900124L)))
-        .isInstanceOf(DataAccessResourceFailureException.class)
-        .hasMessage("Federal client lookup unavailable");
-  }
-
   private static FederalApplicationSearchCriteria emptyCriteria(int page, int size) {
     return new FederalApplicationSearchCriteria(
         null,
@@ -395,11 +360,7 @@ class FederalApplicationRepositoryTest {
         "Client",
         null,
         null,
-        null,
-        null,
-        null,
-        true,
-        true);
+        null);
   }
 
   private static FederalApplicationDetailDto federalDetail(long applicationNumber) {
@@ -598,33 +559,6 @@ class FederalApplicationRepositoryTest {
       } catch (Exception ex) {
         throw new IllegalStateException(ex);
       }
-    }
-  }
-
-  private static final class ClientVerificationFederalApplicationRepository
-      extends FederalApplicationRepository {
-    private final List<Optional<String>> results;
-    private final boolean fail;
-    private int resultIndex;
-
-    ClientVerificationFederalApplicationRepository(
-        List<Optional<String>> results, boolean fail) {
-      super(null);
-      this.results = results;
-      this.fail = fail;
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    protected <T> Optional<T> queryCursorSingleRequired(
-        String procedureSignature,
-        SqlConsumer<CallableStatement> binder,
-        int cursorOutIndex,
-        SqlRowMapper<T> rowMapper) {
-      if (fail) {
-        throw new DataAccessResourceFailureException("Federal client lookup unavailable");
-      }
-      return (Optional<T>) (Optional<?>) results.get(resultIndex++);
     }
   }
 

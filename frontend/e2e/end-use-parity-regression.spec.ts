@@ -211,7 +211,6 @@ const installEndUseParityFixtures = async (page: Page): Promise<EndUseParityFixt
         body = await delayedEndUseOptions
         break
       case '/api/lexis/rpc/application-details/permits':
-      case '/api/lexis/rpc/application-details/unique-scales':
       case '/api/lexis/rpc/application-details/document-details':
         body = []
         break

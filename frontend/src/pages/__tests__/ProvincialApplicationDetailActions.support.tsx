@@ -1,6 +1,6 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useLocation, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
 import { expect, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
@@ -41,7 +41,6 @@ import {
   fetchApplicationSpecies,
   fetchApplicationSpeciesCodes,
   fetchApplicationSummarySnapshot,
-  fetchApplicationUniqueScales,
   saveApplicationRemark,
   type ApplicationSummarySnapshot,
   updateApplicationSummary,
@@ -99,7 +98,6 @@ vi.mock('@/service/provincial-application-items-service', () => ({
   fetchApplicationSpecies: vi.fn(),
   fetchApplicationSpeciesCodes: vi.fn(),
   fetchApplicationSummarySnapshot: vi.fn(),
-  fetchApplicationUniqueScales: vi.fn(),
   saveApplicationRemark: vi.fn(),
   updateApplicationSummary: vi.fn(),
   updateApplicationPackage: vi.fn(),
@@ -195,7 +193,6 @@ const mockedFetchApplicationScaleDetails = vi.mocked(fetchApplicationScaleDetail
 const mockedFetchApplicationSpecies = vi.mocked(fetchApplicationSpecies)
 const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
 const mockedFetchApplicationSummarySnapshot = vi.mocked(fetchApplicationSummarySnapshot)
-const mockedFetchApplicationUniqueScales = vi.mocked(fetchApplicationUniqueScales)
 const mockedSaveApplicationRemark = vi.mocked(saveApplicationRemark)
 const mockedUpdateApplicationSummary = vi.mocked(updateApplicationSummary)
 const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
@@ -290,11 +287,6 @@ const applicationSummarySnapshot: ApplicationSummarySnapshot = {
   oicIndicator: 'N',
   endUseCode: 'LU',
   speciesCodes: ['FI'],
-}
-
-const LocationProbe = () => {
-  const location = useLocation()
-  return <div data-testid="location">{`${location.pathname}${location.search}`}</div>
 }
 
 const NavigateButton = ({ to }: { to: string }) => {
@@ -605,7 +597,6 @@ export const setupApplicationDetailTests = (): void => {
       cascadeSplitCode: 'S',
     },
   ])
-  mockedFetchApplicationUniqueScales.mockResolvedValue([])
   mockedFetchApplicationSpeciesCodes.mockResolvedValue([
     { code: 'FI', description: 'Douglas-fir' },
     { code: 'CE', description: 'Cedar' },
@@ -677,7 +668,6 @@ export const setupApplicationDetailTests = (): void => {
 }
 
 export {
-  LocationProbe,
   NavigateButton,
   applicationDetail,
   applicationSummarySnapshot,
@@ -701,12 +691,9 @@ export {
   mockedFetchApplicationPackageSpecies,
   mockedFetchApplicationPackageStatusCodes,
   mockedFetchApplicationPermits,
-  mockedFetchApplicationRemainingSpecies,
   mockedFetchApplicationReviewOptions,
-  mockedFetchApplicationScaleDetails,
   mockedFetchApplicationSpecies,
   mockedFetchApplicationSummarySnapshot,
-  mockedFetchApplicationUniqueScales,
   mockedFetchProvincialApplicationDetail,
   mockedFetchProvincialApplicationOptions,
   mockedFetchProvincialExemptionDetail,

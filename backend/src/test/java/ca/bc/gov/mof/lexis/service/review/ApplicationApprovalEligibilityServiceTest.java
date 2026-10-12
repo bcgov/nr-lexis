@@ -20,6 +20,8 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataRetrievalFailureException;
@@ -46,6 +48,49 @@ class ApplicationApprovalEligibilityServiceTest {
 
     assertThat(result.eligible()).isTrue();
     assertThat(result.errors()).isEmpty();
+  }
+
+  @ParameterizedTest
+  @CsvSource({"S,O", "T,"})
+  void shouldAllowStandingAndUnmanufacturedApplicationsWithTheirEnteredScaleDetails(
+      String productTypeCode, String growthTypeCode) {
+    ApplicationUpdateRecord harvested = validApplication(null);
+    stubValidApplication(
+        new ApplicationUpdateRecord(
+            harvested.applicationNumber(),
+            harvested.federalApplicationNumber(),
+            harvested.applicationDate(),
+            harvested.termDays(),
+            harvested.receivedDate(),
+            harvested.applicationVolume(),
+            150.0d,
+            " ",
+            harvested.entryUserId(),
+            harvested.entryTimestamp(),
+            harvested.updateUserId(),
+            harvested.updateTimestamp(),
+            harvested.exportScheduleId(),
+            harvested.agentClientNumber(),
+            harvested.agentClientLocationCode(),
+            harvested.ownerClientNumber(),
+            harvested.ownerClientLocationCode(),
+            harvested.exemptionNumber(),
+            harvested.exemptionReasonCode(),
+            harvested.applicationStatusCode(),
+            harvested.applicantTypeCode(),
+            harvested.orgUnitNumber(),
+            productTypeCode,
+            harvested.jurisdictionCode(),
+            growthTypeCode,
+            harvested.agentContactName(),
+            harvested.ownerContactName(),
+            harvested.oicIndicator()),
+        "PL");
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.eligible()).isTrue();
   }
 
   @Test
@@ -221,20 +266,29 @@ class ApplicationApprovalEligibilityServiceTest {
   }
 
   private void stubValidApplication(String jurisdictionCode) {
+    stubValidApplication(validApplication(null, jurisdictionCode), "SA");
+  }
+
+  private void stubValidApplication(ApplicationUpdateRecord application, String endUseCode) {
     when(applicationRepository.findApplicationUpdateRecord(1000456L))
-        .thenReturn(Optional.of(validApplication(null, jurisdictionCode)));
-    when(applicationRepository.isProductTypeCodeValidRequired("H")).thenReturn(true);
-    when(applicationRepository.isGrowthTypeCodeValidRequired("O")).thenReturn(true);
+        .thenReturn(Optional.of(application));
+    when(applicationRepository.isProductTypeCodeValidRequired(application.productTypeCode()))
+        .thenReturn(true);
+    if (application.growthTypeCode() != null) {
+      when(applicationRepository.isGrowthTypeCodeValidRequired(application.growthTypeCode()))
+          .thenReturn(true);
+    }
     when(applicationRepository.isExemptionReasonCodeValidRequired("S")).thenReturn(true);
     when(applicationRepository.isApplicantTypeCodeValidRequired("O")).thenReturn(true);
-    when(applicationRepository.isJurisdictionCodeValidRequired(jurisdictionCode)).thenReturn(true);
+    when(applicationRepository.isJurisdictionCodeValidRequired(application.jurisdictionCode()))
+        .thenReturn(true);
     when(applicationRepository.isOrgUnitValidRequired(1909L)).thenReturn(true);
     when(clientRepository.findLocationByClientNumberCodeRequired("00011111", "01"))
         .thenReturn(Optional.of(clientLocation()));
     when(applicationRepository.findEndUsesByApplicationNumberRequired(1000456L))
-        .thenReturn(List.of(new EndUseRow("FI", "SA")));
-    when(applicationRepository.findCandidateExcolCodesRequired(1, "FI", "SA", 1909L))
-        .thenReturn(List.of(new ExcolValidationRow("FI/SA")));
+        .thenReturn(List.of(new EndUseRow("FI", endUseCode)));
+    when(applicationRepository.findCandidateExcolCodesRequired(1, "FI", endUseCode, 1909L))
+        .thenReturn(List.of(new ExcolValidationRow("FI/" + endUseCode)));
     when(applicationRepository.findPackageMutationsByApplicationNumber(1000456L))
         .thenReturn(List.of(packageRow(50.0d)));
     when(applicationRepository.findScaleMutationsByApplicationNumber(1000456L))

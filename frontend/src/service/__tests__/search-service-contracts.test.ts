@@ -126,7 +126,6 @@ const permitRequest = {
     issuedToDate: '',
     permitStatus: '',
     permitNumber: '',
-    invoiceNumber: '',
     ownerClientNumber: '',
     applicantClientNumber: '',
   },
@@ -277,65 +276,6 @@ describe('search-service contracts', () => {
     expect(result.content[1]).toEqual(
       expect.objectContaining({
         applicationNumber: '102',
-        locked: true,
-        allowCreateExemption: false,
-      }),
-    )
-  })
-
-  it('fails federal exemption eligibility closed when the backend omits its selectable flag', async () => {
-    getCachedResponseMock.mockResolvedValue({
-      data: {
-        results: [
-          {
-            applicationNumber: 302,
-            federalApplicationNumber: 'FED-302',
-            status: 'Approved',
-            client: '00011122',
-            reason: 'Test reason',
-            exemptionNumber: '',
-            receivedDate: '2026-03-02',
-            listingDate: '2026-03-04',
-          },
-        ],
-        total: 1,
-        page: 0,
-        size: 15,
-      },
-    })
-
-    const result = await searchFederalApplications(federalRequest)
-
-    expect(result.content[0].allowCreateExemption).toBe(false)
-  })
-
-  it('fails federal exemption eligibility closed when the backend omits lock state', async () => {
-    getCachedResponseMock.mockResolvedValue({
-      data: {
-        results: [
-          {
-            applicationNumber: 302,
-            federalApplicationNumber: 'FED-302',
-            status: 'Approved',
-            client: '00011122',
-            reason: 'Test reason',
-            exemptionNumber: '',
-            selectable: true,
-            receivedDate: '2026-03-02',
-            listingDate: '2026-03-04',
-          },
-        ],
-        total: 1,
-        page: 0,
-        size: 15,
-      },
-    })
-
-    const result = await searchFederalApplications(federalRequest)
-
-    expect(result.content[0]).toEqual(
-      expect.objectContaining({
-        eligibleForExemption: true,
         locked: true,
         allowCreateExemption: false,
       }),
@@ -501,10 +441,6 @@ describe('search-service contracts', () => {
             status: 'Open',
             client: '00011122',
             reason: 'Test reason',
-            exemptionType: 'A',
-            exemptionNumber: '',
-            selectable: true,
-            locked: false,
             receivedDate: '2026-03-02',
             listingDate: '2026-03-04',
           },
@@ -526,14 +462,15 @@ describe('search-service contracts', () => {
     expect(params.get('ownerClientNumber')).toBe('00011122')
     expect(params.has('agentClientNumber')).toBe(false)
     expect(params.has('sortField')).toBe(false)
-    expect(result.content[0]).toEqual(
-      expect.objectContaining({
-        federalApplicationNumber: 'FED-301',
-        eligibleForExemption: true,
-        locked: false,
-        allowCreateExemption: true,
-      }),
-    )
+    expect(result.content[0]).toEqual({
+      applicationNumber: '301',
+      federalApplicationNumber: 'FED-301',
+      status: 'Open',
+      clientNumber: '00011122',
+      reason: 'Test reason',
+      receivedDate: '2026-03-02',
+      listingDate: '2026-03-04',
+    })
   })
 
   it.each(['permitStatus', 'permitVolume', 'dateIssued'] as const)(
@@ -588,7 +525,7 @@ describe('search-service contracts', () => {
     )
   })
 
-  it('maps the provincial permit invoice number to search and count requests', async () => {
+  it('maps provincial permit filters to search and count requests without an invoice number', async () => {
     getCachedResponseMock
       .mockResolvedValueOnce({
         data: {
@@ -603,7 +540,7 @@ describe('search-service contracts', () => {
       ...permitRequest,
       filters: {
         ...permitRequest.filters,
-        invoiceNumber: ' SI-99881 ',
+        permitNumber: ' 7001 ',
       },
     }
 
@@ -616,7 +553,9 @@ describe('search-service contracts', () => {
       expect.any(Object),
       { ttlMs: 10_000 },
     )
-    expect(readParams(0).get('invoiceNumber')).toBe('SI-99881')
+    const searchParams = readParams(0)
+    expect(searchParams.get('permitNumber')).toBe('7001')
+    expect(searchParams.has('invoiceNumber')).toBe(false)
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       2,
       '/lexis/permits/search/count',
@@ -624,7 +563,8 @@ describe('search-service contracts', () => {
       { ttlMs: 10_000 },
     )
     const countParams = readParams(1)
-    expect(countParams.get('invoiceNumber')).toBe('SI-99881')
+    expect(countParams.get('permitNumber')).toBe('7001')
+    expect(countParams.has('invoiceNumber')).toBe(false)
     expect(countParams.has('sortField')).toBe(false)
     expect(countParams.has('page')).toBe(false)
     expect(countParams.has('size')).toBe(false)

@@ -41,12 +41,8 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
           EEA.RECEIVED_DATE,
           ES.ADVERTISING_DATE,
           EASC.DESCRIPTION AS STATUS_DESCRIPTION,
-          EERC.DESCRIPTION AS REASON_DESCRIPTION,
-          EE.EXPORT_EXEMPTION_TYPE_CODE,
-          EETC.DESCRIPTION AS TYPE_DESCRIPTION
+          EERC.DESCRIPTION AS REASON_DESCRIPTION
         FROM EXPORT_EXEMPTION_APPLICATION EEA
-        LEFT JOIN EXPORT_EXEMPTION EE
-          ON EE.EXEMPTION_NUMBER = EEA.EXEMPTION_NUMBER
         LEFT JOIN EXPORT_SCHEDULE ES
           ON ES.EXPORT_SCHEDULE_ID = EEA.EXPORT_SCHEDULE_ID
         INNER JOIN EXPORT_APPLICATION_STATUS_CODE EASC
@@ -55,8 +51,6 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
           ON EERC.EXPORT_EXEMPTION_REASON_CODE = EEA.EXPORT_EXEMPTION_REASON_CODE
         INNER JOIN EXPORT_APPLICANT_TYPE_CODE EATC
           ON EATC.EXPORT_APPLICANT_TYPE_CODE = EEA.EXPORT_APPLICANT_TYPE_CODE
-        LEFT JOIN EXPORT_EXEMPTION_TYPE_CODE EETC
-          ON EETC.EXPORT_EXEMPTION_TYPE_CODE = EE.EXPORT_EXEMPTION_TYPE_CODE
       ) v
       """;
   private static final String SEARCH_FEDERAL_APPLICATIONS =
@@ -116,25 +110,17 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
         criteria.page(),
         criteria.size(),
         totalElements,
-        rs -> {
-          String statusCode = getString(rs, "EXPORT_APPLICATION_STATUS_CODE");
-          String exemptionNumber = getString(rs, "EXEMPTION_NUMBER");
-          boolean selectable = "APP".equalsIgnoreCase(statusCode) && exemptionNumber == null;
-
-          return new FederalApplicationSearchResultDto(
-              getLong(rs, "APPLICATION_NUMBER"),
-              firstNonNull(getString(rs, "FED_APPLICATION_NUMBER"), getString(rs, "FEDERAL_APPLICATION_NUMBER")),
-              firstNonNull(getString(rs, "STATUS_DESCRIPTION"), statusCode),
-              getString(rs, "OWNER_CLIENT_NUMBER"),
-              getString(rs, "REASON_DESCRIPTION"),
-              firstNonNull(getString(rs, "TYPE_DESCRIPTION"), getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
-              exemptionNumber,
-              getLocalDate(rs, "RECEIVED_DATE"),
-              getLocalDate(rs, "ADVERTISING_DATE"),
-              selectable,
-              // The service replaces this fail-closed value with current editability state.
-              true);
-        });
+        rs ->
+            new FederalApplicationSearchResultDto(
+                getLong(rs, "APPLICATION_NUMBER"),
+                firstNonNull(getString(rs, "FED_APPLICATION_NUMBER"), getString(rs, "FEDERAL_APPLICATION_NUMBER")),
+                firstNonNull(
+                    getString(rs, "STATUS_DESCRIPTION"),
+                    getString(rs, "EXPORT_APPLICATION_STATUS_CODE")),
+                getString(rs, "OWNER_CLIENT_NUMBER"),
+                getString(rs, "REASON_DESCRIPTION"),
+                getLocalDate(rs, "RECEIVED_DATE"),
+                getLocalDate(rs, "ADVERTISING_DATE")));
   }
 
   public int count(FederalApplicationSearchCriteria criteria) {
@@ -427,42 +413,6 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
               getString(rs, "EXPORT_APPLICATION_STATUS_CODE"),
               getLocalDate(rs, "ADVERTISING_DATE"));
         });
-  }
-
-  public boolean verifyApplicationClientsRequired(List<Long> applicationNumbers) {
-    if (applicationNumbers == null || applicationNumbers.isEmpty()) {
-      return false;
-    }
-
-    String previousClientNumber = null;
-
-    for (Long applicationNumber : applicationNumbers) {
-      if (applicationNumber == null || applicationNumber < 1) {
-        return false;
-      }
-
-      Optional<String> currentClient =
-          queryCursorSingleRequired(
-              FIND_APPLICATION_BY_NUMBER,
-              cs -> cs.setString(1, applicationNumber.toString()),
-              2,
-              rs ->
-                  "F".equalsIgnoreCase(getString(rs, "EXPORT_JURISDICTION_CODE"))
-                      ? getString(rs, "OWNER_CLIENT_NUMBER")
-                      : null);
-
-      if (currentClient.isEmpty() || currentClient.get() == null) {
-        return false;
-      }
-
-      if (previousClientNumber == null) {
-        previousClientNumber = currentClient.get();
-      } else if (!previousClientNumber.equals(currentClient.get())) {
-        return false;
-      }
-    }
-
-    return true;
   }
 
   private Long parsePermitNumber(java.sql.ResultSet rs) {

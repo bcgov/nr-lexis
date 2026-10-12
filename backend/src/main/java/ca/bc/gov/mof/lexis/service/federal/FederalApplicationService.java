@@ -32,8 +32,6 @@ public interface FederalApplicationService {
   Optional<List<FederalApplicationRemarkDto>> findRemarksByApplicationNumber(
       Long applicationNumber);
 
-  boolean verifyApplicationClients(List<Long> applicationNumbers);
-
   FederalMutationResult addPermit(
       Long applicationNumber, FederalPermitMutationRequest request, String userId);
 

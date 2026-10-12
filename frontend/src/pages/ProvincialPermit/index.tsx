@@ -92,7 +92,6 @@ const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
   issuedToDate: '',
   permitStatus: '',
   permitNumber: '',
-  invoiceNumber: '',
   ownerClientNumber: '',
   applicantClientNumber: '',
 }
@@ -133,7 +132,6 @@ const buildSearchParams = (
     ['issuedToDate', filters.issuedToDate],
     ['permitStatus', filters.permitStatus],
     ['permitNumber', filters.permitNumber],
-    ['invoiceNumber', filters.invoiceNumber],
     ['ownerClientNumber', filters.ownerClientNumber],
     ['applicantClientNumber', filters.applicantClientNumber],
     ['sortField', sortField],
@@ -175,7 +173,6 @@ const ProvincialPermitPage = () => {
       issuedToDate: searchParams.get('issuedToDate') ?? '',
       permitStatus: searchParams.get('permitStatus') ?? '',
       permitNumber: searchParams.get('permitNumber') ?? '',
-      invoiceNumber: searchParams.get('invoiceNumber') ?? '',
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
     }
@@ -557,14 +554,6 @@ const ProvincialPermitPage = () => {
                   labelText="Permit number"
                   value={filters.permitNumber}
                   onChange={(event) => updateFilter('permitNumber', event.target.value)}
-                />
-                {/* INTENTIONAL_LEGACY_DIVERGENCE(SEARCH_FILTER_EXPANSION):
-                    Modern permit search makes the hidden legacy invoice-number criterion visible. */}
-                <TextInput
-                  id="invoiceNumber"
-                  labelText="Invoice number"
-                  value={filters.invoiceNumber}
-                  onChange={(event) => updateFilter('invoiceNumber', event.target.value)}
                 />
                 <ForestClientComboBox
                   id="applicantClientNumber"

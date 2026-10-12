@@ -2066,6 +2066,17 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       const exemptionAction = page.getByRole('button', {
         name: 'Create exemption',
       })
+      if (route === '/federal') {
+        await expect(page.getByRole('region', { name: 'Search results table' })).toBeVisible()
+        await expect(exemptionAction).toHaveCount(0)
+        await expect(page.getByRole('checkbox')).toHaveCount(0)
+        expect(
+          await page.evaluate(
+            () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+          ),
+        ).toBe(false)
+        continue
+      }
       if (route === '/provincial/application') {
         const rangeBounds = await page.locator('.search-date-range').evaluate((range) =>
           Array.from(range.querySelectorAll('.cds--date-picker-container')).map((field) => {
@@ -2098,8 +2109,6 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
           '1 application selected',
         )
         await expect(exemptionAction).toBeEnabled()
-      } else {
-        await expect(exemptionAction).toBeDisabled()
       }
       await expect(exemptionAction).toBeVisible()
       expect(

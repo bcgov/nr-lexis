@@ -14,7 +14,6 @@ export type ProvincialPermitSearchFilters = {
   issuedToDate: string
   permitStatus: string
   permitNumber: string
-  invoiceNumber: string
   ownerClientNumber: string
   applicantClientNumber: string
 }

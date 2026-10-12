@@ -2241,6 +2241,42 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
+  it.each(['S', 'T'])(
+    'shows an average log volume over 99.9 as a field error for product type %s',
+    async (productTypeCode) => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        productTypeCode,
+      })
+      mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+        ...applicationSummarySnapshot,
+        productTypeCode,
+      })
+
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/321']}>
+          <Routes>
+            <Route
+              path="/provincial/application/:applicationNumber"
+              element={<ProvincialApplicationDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      const itemDetails = within(await selectApplicationItemDetailsTile())
+      const averageLogVolume = await itemDetails.findByLabelText('Average log volume (m³)')
+      fireEvent.change(averageLogVolume, { target: { value: '150' } })
+      await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+      expect(averageLogVolume).toHaveAttribute('aria-invalid', 'true')
+      expect(
+        itemDetails.getAllByText('Average log volume must be 99.9 or less').length,
+      ).toBeGreaterThan(0)
+      expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+    },
+  )
+
   it('shows Cancel before Save changes in the Application and Scale editors', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -2314,7 +2350,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
   })
 
   it.each(['H', 'T'])(
-    'blocks %s to Standing Timber when packages exist',
+    'saves a change from %s to Standing Timber while packages exist',
     async (productTypeCode) => {
       mockedFetchProvincialApplicationDetail.mockResolvedValue({
         ...applicationDetail,
@@ -2338,23 +2374,18 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
       const application = within(await selectApplicationSummaryTile())
       await chooseComboBoxOption(getSummaryComboBox(application, 'Product type'), 'Standing Timber')
-      const message =
-        'Product type cannot be changed to Standing Timber while packages exist. Remove the packages first.'
-      expect(screen.queryByText(message)).not.toBeInTheDocument()
       await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
 
-      expect(screen.getAllByText(message)).toHaveLength(1)
-      expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
-      expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
-      await userEvent.click(application.getByRole('button', { name: 'Cancel' }))
-      await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
-      expect(screen.queryByText(message)).not.toBeInTheDocument()
+      await waitFor(() =>
+        expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+          expect.objectContaining({ saveSource: 'items', productTypeCode: 'S' }),
+        ),
+      )
     },
   )
 
-  it('keeps application edits open when the backend rejects a product change with persisted scales', async () => {
-    const message =
-      'Product type cannot be changed to Unmanufactured Timber while Summary of scale records exist. Remove the Summary of scale records first.'
+  it('keeps application edits open when the backend rejects a product change', async () => {
+    const message = 'Application product type code does not exist.'
     mockedUpdateApplicationSummary.mockResolvedValue({
       valid: false,
       applicationNumber: '321',
@@ -2531,7 +2562,44 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
-  it('saves Timber-to-Standing-Timber changes on the first action without a package-volume warning', async () => {
+  it('keeps the entered Scale details when the product type changes to Timber', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const application = within(await selectApplicationSummaryTile())
+    await chooseComboBoxOption(getSummaryComboBox(application, 'Product type'), 'Timber')
+    const scaleDetails = within(
+      await application.findByRole('region', { name: 'Scale details for changed product type' }),
+    )
+    expect(scaleDetails.getByLabelText('Location of logs')).toHaveValue('BC')
+    expect(scaleDetails.getByLabelText('Location of logs')).toHaveAttribute(
+      'aria-required',
+      'false',
+    )
+    await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          saveSource: 'items',
+          productTypeCode: 'T',
+          productLocation: 'BC',
+          growthTypeCode: 'O',
+          endUseCode: 'LU',
+        }),
+      ),
+    )
+  })
+
+  it('checks package volumes before saving a Timber-to-Standing-Timber change', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       productTypeCode: 'T',
@@ -2565,6 +2633,15 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'LU - Lumber')
     await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
 
+    expect(
+      await screen.findByText(
+        'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedCheckApplicationVolumeUsage).toHaveBeenCalledWith('321')
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -2575,12 +2652,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         }),
       )
     })
-    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
-    expect(
-      screen.queryByText(
-        'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
-      ),
-    ).not.toBeInTheDocument()
   })
 
   it('saves product type and application detail changes together', async () => {

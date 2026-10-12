@@ -683,14 +683,6 @@ const ProvincialOfferDetailsPage = () => {
                 <RecordFieldRow>
                   <RecordFieldCell>
                     <TextInput
-                      id="offerOfferingClientNumber"
-                      labelText="Offering client number"
-                      value={form.offeringClientNumber}
-                      readOnly
-                    />
-                  </RecordFieldCell>
-                  <RecordFieldCell>
-                    <TextInput
                       id="offerCompanyName"
                       labelText={requiredLabel('Company')}
                       aria-required="true"
@@ -919,14 +911,6 @@ const ProvincialOfferDetailsPage = () => {
                 <RecordFieldRow>
                   <RecordField label="Offer number" value={displayValue(detail.offerNumber)} />
                   <RecordField label="Author" value={displayValue(detail.author)} />
-                  <RecordField
-                    label="Manufacturing facility"
-                    value={displayValue(detail.manufacturingFacilityInfo)}
-                  />
-                  <RecordField
-                    label="Export jurisdiction"
-                    value={displayValue(detail.exportJurisdictionCode)}
-                  />
                 </RecordFieldRow>
               </RecordFieldGrid>
               <div className="legacy-search-actions">
