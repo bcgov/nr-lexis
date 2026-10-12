@@ -890,6 +890,15 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
     margin-inline-start 320ms cubic-bezier(0.4, 0.14, 0.3, 1);
 }
 
+// Below 576px an expanded panel would leave the page less than 320px, so it opens over the page
+// and the page keeps its rail offset.
+@media (max-width: 575px) {
+  .cds--content.app-main {
+    margin-left: var(--csp-side-nav-collapsed-width);
+    margin-inline-start: var(--csp-side-nav-collapsed-width);
+  }
+}
+
 .default-grid {
   box-sizing: border-box;
   width: 100%;

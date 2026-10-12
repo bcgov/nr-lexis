@@ -886,14 +886,23 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await reportsToggle.click()
     await expect(reportsToggle).toHaveAttribute('aria-expanded', 'true')
     await expect(reportsMenu).toBeVisible()
+    for (const groupName of ['Provincial', 'Federal', 'Admin']) {
+      const groupToggle = page.getByRole('button', { name: groupName, exact: true })
+      if ((await groupToggle.getAttribute('aria-expanded')) === 'false') await groupToggle.click()
+      await expect(groupToggle).toHaveAttribute('aria-expanded', 'true')
+    }
+    for (const longLabel of ['Species and Grade Report', 'Non-appraised Sec.3 FIL%']) {
+      await expect(page.getByRole('link', { name: longLabel, exact: true })).toBeVisible()
+    }
+    const groupItemLabels = page.locator(
+      '#side-navigation .cds--side-nav__menu .cds--side-nav__link-text',
+    )
     expect(
-      await reportsMenu
-        .locator('.cds--side-nav__link-text')
-        .evaluateAll((labels) =>
-          labels
-            .filter((label) => label.scrollWidth > label.clientWidth)
-            .map((label) => label.textContent),
-        ),
+      await groupItemLabels.evaluateAll((labels) =>
+        labels
+          .filter((label) => label.scrollWidth > label.clientWidth)
+          .map((label) => label.textContent),
+      ),
     ).toEqual([])
     for (const retiredReport of [
       'Application Report',
@@ -1908,6 +1917,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(sideNav).toBeVisible()
     await expect(sideNav).toHaveCSS('width', '256px')
     await expect(sideNav).not.toHaveAttribute('aria-hidden')
+    await expect(page.locator('main.app-main')).toHaveCSS('margin-left', '48px')
     await expect(provincialApplicationSearchLink).toHaveAttribute('aria-current', 'page')
 
     await page.getByRole('button', { name: 'Close menu' }).click()
