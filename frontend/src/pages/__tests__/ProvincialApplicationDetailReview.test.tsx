@@ -1305,7 +1305,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     ).closest('.cds--tile')
     expect(ownerDetailsTile).toBeTruthy()
     expect(
-      within(ownerDetailsTile as HTMLElement).getByText('owner@example.test'),
+      await within(ownerDetailsTile as HTMLElement).findByText('owner@example.test'),
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Applicant details', level: 3 }),

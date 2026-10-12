@@ -113,4 +113,3 @@ jobs:
           name: release-candidate-${{ github.run_attempt }}
           path: ${{ runner.temp }}/release-candidate.json
           if-no-files-found: error
-          retention-days: 90

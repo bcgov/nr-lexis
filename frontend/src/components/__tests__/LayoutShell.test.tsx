@@ -369,11 +369,11 @@ describe('Layout shell', () => {
     const averageMarketValuesLink = screen.getByRole('link', {
       name: /Average market values/i,
     })
-    const activeLinks = document.querySelectorAll('.csp-side-nav__link.cds--side-nav__link--active')
+    const activeLinks = document.querySelectorAll('#side-navigation [aria-current="page"]')
 
     expect(document.querySelector('.page-header__eyebrow')).not.toBeInTheDocument()
     expect(activeLinks).toHaveLength(1)
-    expect(averageMarketValuesLink).toHaveClass('cds--side-nav__link--active')
+    expect(averageMarketValuesLink).toHaveClass('cds--side-nav__link--current')
     expect(averageMarketValuesLink).toHaveAttribute('aria-current', 'page')
   })
 
@@ -385,7 +385,7 @@ describe('Layout shell', () => {
       name: /Average market values/i,
     })
 
-    expect(averageMarketValuesLink).not.toHaveClass('cds--side-nav__link--active')
+    expect(averageMarketValuesLink).not.toHaveClass('cds--side-nav__link--current')
     expect(averageMarketValuesLink).not.toHaveAttribute('aria-current')
   })
 
@@ -401,11 +401,11 @@ describe('Layout shell', () => {
     const owningLink = screen
       .getAllByRole('link', { name: linkName })
       .find((link) => link.getAttribute('href') === href)
-    const activeLinks = document.querySelectorAll('.cds--side-nav__link--active')
+    const activeLinks = document.querySelectorAll('#side-navigation [aria-current="page"]')
 
     expect(owningLink).toBeDefined()
     expect(activeLinks).toHaveLength(1)
-    expect(owningLink).toHaveClass('cds--side-nav__link--active')
+    expect(owningLink).toHaveClass('cds--side-nav__link--current')
     expect(owningLink).toHaveAttribute('aria-current', 'page')
   })
 
@@ -419,13 +419,13 @@ describe('Layout shell', () => {
       .getAllByRole('link', { name: /^Application search$/i })
       .find((link) => link.getAttribute('href') === '/provincial/application')
     const exactLink = screen.getByRole('link', { name: linkName })
-    const activeLinks = document.querySelectorAll('.cds--side-nav__link--active')
+    const activeLinks = document.querySelectorAll('#side-navigation [aria-current="page"]')
 
     expect(activeLinks).toHaveLength(1)
-    expect(exactLink).toHaveClass('cds--side-nav__link--active')
+    expect(exactLink).toHaveClass('cds--side-nav__link--current')
     expect(exactLink).toHaveAttribute('aria-current', 'page')
     expect(applicationsLink).toBeDefined()
-    expect(applicationsLink).not.toHaveClass('cds--side-nav__link--active')
+    expect(applicationsLink).not.toHaveClass('cds--side-nav__link--current')
   })
 
   it('keeps the section containing the active detail route expanded', () => {
@@ -444,7 +444,7 @@ describe('Layout shell', () => {
   it('does not select a navigation item for an unknown deeper route', () => {
     renderLayout('/provincial/application/321/unknown')
 
-    expect(document.querySelectorAll('.cds--side-nav__link--active')).toHaveLength(0)
+    expect(document.querySelectorAll('#side-navigation [aria-current="page"]')).toHaveLength(0)
   })
 
   it('omits export schedule from the admin side-nav', async () => {
@@ -474,10 +474,10 @@ describe('Layout shell', () => {
     expect(filPolicyLink).toHaveAttribute('href', '/admin/policies/fil')
     expect(averageMarketValuesLink).toHaveAttribute('href', '/admin/rtm/emslogamv/upload')
     expect(screen.queryByRole('link', { name: /^Export Schedule$/i })).not.toBeInTheDocument()
-    expect(document.querySelectorAll('.cds--side-nav__link--active')).toHaveLength(0)
-    expect(feePolicyLink).not.toHaveClass('cds--side-nav__link--active')
-    expect(filPolicyLink).not.toHaveClass('cds--side-nav__link--active')
-    expect(averageMarketValuesLink).not.toHaveClass('cds--side-nav__link--active')
+    expect(document.querySelectorAll('#side-navigation [aria-current="page"]')).toHaveLength(0)
+    expect(feePolicyLink).not.toHaveClass('cds--side-nav__link--current')
+    expect(filPolicyLink).not.toHaveClass('cds--side-nav__link--current')
+    expect(averageMarketValuesLink).not.toHaveClass('cds--side-nav__link--current')
   })
 
   it('ignores stale RTM-only runtime configuration for admin navigation', async () => {
@@ -539,7 +539,7 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /Average Monthly Values/i })).not.toBeInTheDocument()
   })
 
-  it('renders side-nav links with standard icons and collapsed labels', async () => {
+  it('renders icons on top-level items only and Carbon menu items inside groups', async () => {
     renderLayout('/admin/rtm/emslogamv/upload')
 
     const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
@@ -557,13 +557,47 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('link', { name: /Users & Access/i })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Uploads$/i })).not.toBeInTheDocument()
     expect(screen.getByRole('link', { name: /Average market values/i })).toBeVisible()
-    const navLinks = sideNav.querySelectorAll('.csp-side-nav__link')
-    const navIcons = sideNav.querySelectorAll('.csp-side-nav__link .csp-side-nav__icon svg')
-    expect(navIcons).toHaveLength(navLinks.length)
-    expect(screen.getByRole('link', { name: /Average market values/i })).toHaveAttribute(
-      'data-label',
-      'Average market values',
+    const topLevelLinks = sideNav.querySelectorAll('.csp-side-nav__link')
+    const topLevelIcons = sideNav.querySelectorAll('.csp-side-nav__link .csp-side-nav__icon svg')
+    expect(topLevelLinks).toHaveLength(1)
+    expect(topLevelIcons).toHaveLength(1)
+    for (const group of sideNav.querySelectorAll('.csp-side-nav__group')) {
+      expect(group.querySelectorAll('.csp-side-nav__icon svg')).toHaveLength(1)
+      expect(group.closest('li')).toHaveClass('cds--side-nav__item--icon')
+    }
+
+    const groupLinks = sideNav.querySelectorAll('.cds--side-nav__menu a')
+    expect(groupLinks.length).toBeGreaterThan(0)
+    for (const link of groupLinks) {
+      expect(link).toHaveClass('cds--side-nav__link')
+      expect(link.closest('li')).toHaveClass('cds--side-nav__menu-item')
+      expect(link.querySelector('svg')).not.toBeInTheDocument()
+    }
+    expect(screen.getByRole('link', { name: /Average market values/i })).toHaveTextContent(
+      /^Average market values$/,
     )
+  })
+
+  it('places Report an issue under Support, outside the navigation', async () => {
+    renderLayout('/admin/rtm/emslogamv/upload')
+
+    const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
+    const support = screen.getByRole('group', { name: 'Support' })
+    const reportIssue = within(support).getByRole('link', { name: 'Report an issue' })
+
+    expect(reportIssue).toHaveAttribute('href', 'mailto:Heartwood@gov.bc.ca')
+    expect(reportIssue.querySelector('.csp-side-nav__icon svg')).toBeInTheDocument()
+    expect(sideNav).not.toContainElement(reportIssue)
+    expect(document.getElementById('side-navigation')).toContainElement(support)
+    expect(support.querySelector('.csp-side-nav__utility-heading')).toHaveTextContent('Support')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Close menu' }))
+
+    const collapsedReportIssue = within(support).getByRole('link', { name: 'Report an issue' })
+    await userEvent.hover(collapsedReportIssue)
+    const tooltip = await screen.findByRole('tooltip')
+    expect(tooltip).toHaveTextContent('Report an issue')
+    expect(collapsedReportIssue).toHaveAttribute('aria-describedby', tooltip.id)
   })
 
   it('navigates the app name to the resolved default route', async () => {
@@ -938,7 +972,7 @@ describe('Layout shell', () => {
     renderLayout('/admin/rtm/emslogamv')
 
     const shell = document.querySelector('.app-shell')
-    const sideNav = screen.getByRole('navigation', { name: 'Side navigation' })
+    const sideNav = document.getElementById('side-navigation')
     const collapseButton = screen.getByRole('button', { name: 'Close menu' })
 
     expect(shell).not.toHaveClass('is-side-nav-collapsed')

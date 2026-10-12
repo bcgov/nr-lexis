@@ -561,9 +561,9 @@ const expectLoginShell = async (page: Page, source: string): Promise<void> => {
   await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
   await expect(page.getByText(landingSubtitle, { exact: true })).toBeVisible()
   await expect(
-    page.getByText('LEXIS helps you create and manage applications and view offers and permits.'),
+    page.getByText('Manage provincial log applications for exemptions, offers and permits.'),
   ).toBeVisible()
-  await expect(page.getByAltText('Government of British Columbia')).toBeVisible()
+  await expect(page.getByRole('img', { name: 'Government of British Columbia' })).toBeVisible()
   const supportingImage = page.locator('.landing-img')
   await expect(supportingImage).toBeVisible()
   await expect(supportingImage).toHaveAttribute('alt', '')

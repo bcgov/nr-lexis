@@ -30,7 +30,7 @@ function SideNavigationGroup({
 
   return (
     <li
-      className={`cds--side-nav__item csp-side-nav__section${
+      className={`cds--side-nav__item cds--side-nav__item--icon csp-side-nav__section${
         isCurrentGroup ? ' cds--side-nav__item--active' : ''
       }`}
       onKeyDown={(event) => {
