@@ -375,13 +375,12 @@ To release:
 If a Merge run fails, use **Re-run all jobs** to redeploy and retest its images. Partial reruns
 cannot publish a release candidate because TEST may have advanced to another commit.
 
-Release manifests are retained for 90 days. A missing, expired, or mismatched manifest stops the
-release. A rollback uses the same
-manual workflow with a retained, previously tested tag. An older tag deploys its own templates
-through the current workflow, which ignores parameters those templates don't declare; a template
-or required parameter the current workflow no longer supplies stops the release. The release
-summary identifies the TEST run, commit, and deployed image digests. Production releases are
-serialized.
+Release manifests are kept for the repository's artifact retention period. A missing, expired, or
+mismatched manifest stops the release. A rollback uses the same manual workflow with a retained,
+previously tested tag. An older tag deploys its own templates through the current workflow, which
+ignores parameters those templates don't declare; a template or required parameter the current
+workflow no longer supplies stops the release. The release summary identifies the TEST run, commit,
+and deployed image digests. Production releases are serialized.
 
 The GitHub environment variable `LEXIS_EXPIRY_ENABLED` controls only the exemption-expiry job,
 including startup catch-up, and has no effect on pages, roles, APIs, or manual writes. A change

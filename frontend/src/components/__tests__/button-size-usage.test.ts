@@ -8,6 +8,14 @@ const SOURCE_ROOT = join(__dirname, '..', '..')
 // section moves, and remove the entry once it reaches zero.
 const PENDING_NON_MD_BUTTONS: Record<string, number> = {}
 
+// Buttons that stay another size, counted per file. The login page signs in with Carbon's
+// expressive 48px buttons.
+const INTENTIONAL_NON_MD_BUTTONS: Record<string, number> = {
+  'pages/Landing/index.tsx': 2,
+}
+
+const ALLOWED_NON_MD_BUTTONS = { ...PENDING_NON_MD_BUTTONS, ...INTENTIONAL_NON_MD_BUTTONS }
+
 const sourceFiles = (directory: string): string[] =>
   readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
     const path = join(directory, entry.name)
@@ -54,16 +62,16 @@ const nonMdButtonsByFile = (): Record<string, string[]> =>
 
 describe('Button size usage', () => {
   it('sets size="md" on every Button', () => {
-    // Carbon defaults to lg (48px); LEXIS buttons are md (40px) everywhere.
+    // Carbon defaults to lg (48px); LEXIS buttons are md (40px) outside the files listed above.
     const findings = nonMdButtonsByFile()
     const unexpected = Object.entries(findings)
-      .filter(([file]) => !(file in PENDING_NON_MD_BUTTONS))
+      .filter(([file]) => !(file in ALLOWED_NON_MD_BUTTONS))
       .flatMap(([, fileFindings]) => fileFindings)
     expect(unexpected).toEqual([])
   })
 
-  it.each(Object.entries(PENDING_NON_MD_BUTTONS))(
-    'keeps the pending non-md count for %s current',
+  it.each(Object.entries(ALLOWED_NON_MD_BUTTONS))(
+    'keeps the allowed non-md count for %s current',
     (file, count) => {
       expect(nonMdButtonsByFile()[file] ?? []).toHaveLength(count)
     },
