@@ -126,7 +126,8 @@ class FederalReadOnlyAuthorizationIntegrationTest {
       "/api/lexis/rtm/emslogamv", "/api/lexis/admin/notifications", "/api/lexis/notifications",
       "/api/lexis/session/preferences", "/api/lexis/rpc/application-details/application-summary",
       "/api/lexis/rpc/application-details/client-details",
-      "/api/lexis/applicationDetailsRPC?actionMapping=getDocumentDetails&applicationNumber=9001"})
+      "/api/lexis/applicationDetailsRPC?actionMapping=getDocumentDetails&applicationNumber=9001",
+      "/api/lexis/federal/applications/9001/remarks"})
   void shouldDenyOtherBusinessAndLegacyEndpoints(String path) throws Exception {
     mvc.perform(get(URI.create(path)).with(federalReader())).andExpect(status().isForbidden());
   }

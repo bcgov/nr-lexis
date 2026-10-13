@@ -1640,17 +1640,6 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void getPackageSelectedEndUseShouldReturnFirstPackageEndUse() {
-    when(repository.findEndUsesByPackageNumberRequired("PKG-903"))
-        .thenReturn(List.of(new ApplicationDetailsRpcRepository.EndUseRow("FIR", "LUM")));
-
-    Optional<String> response = service.getPackageSelectedEndUse("PKG-903");
-
-    assertThat(response).contains("LUM");
-    verify(repository).findEndUsesByPackageNumberRequired("PKG-903");
-  }
-
-  @Test
   void getSpeciesForApplicationShouldResolveEndUseDescriptions() {
     when(repository.findEndUsesByApplicationNumberRequired(1000456L))
         .thenReturn(
@@ -1754,7 +1743,6 @@ class OracleApplicationDetailsRpcServiceTest {
   @Test
   void getSpeciesEndUseLookupsShouldReturnEmptyForInvalidInputs() {
     assertThat(service.getSelectedEndUse(null)).isEmpty();
-    assertThat(service.getPackageSelectedEndUse(" ")).isEmpty();
     assertThat(service.getSpeciesForApplication(null)).isEmpty();
     assertThat(service.getSpeciesForPackage(" ")).isEmpty();
     assertThat(service.getEndUsesForSpeciesRegion("11", List.of())).isEmpty();
@@ -5851,71 +5839,20 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(context.get().oicIndicator()).isEqualTo("Y");
   }
 
-  @Test
-  void applicationEditContextAllowsInteriorMinisterialItemsWithRemainingVolume() {
-    stubApplicationEditContext("EX-205", 1903L, List.of());
-    when(exemptionService.findByExemptionNumber("EX-205"))
-        .thenReturn(Optional.of(exemption("EX-205", "M", 10.0d)));
-
-    Optional<ApplicationDetailsRpcService.ApplicationEditContext> context =
-        service.getApplicationEditContext(1000456L);
-
-    assertThat(context).isPresent();
-    assertThat(context.get().interiorMinisterialItemOverrideEligible()).isTrue();
-  }
-
-  @Test
-  void applicationEditContextRejectsCoastalMinisterialItemOverride() {
-    stubApplicationEditContext("EX-205", 1909L, List.of());
-    when(exemptionService.findByExemptionNumber("EX-205"))
-        .thenReturn(Optional.of(exemption("EX-205", "M", 10.0d)));
-
-    Optional<ApplicationDetailsRpcService.ApplicationEditContext> context =
-        service.getApplicationEditContext(1000456L);
-
-    assertThat(context).isPresent();
-    assertThat(context.get().interiorMinisterialItemOverrideEligible()).isFalse();
-  }
-
-  @Test
-  void applicationEditContextClassifiesSkeenaFromFirstDecisiveScaleGrade() {
-    when(exemptionService.findByExemptionNumber("EX-205"))
-        .thenReturn(Optional.of(exemption("EX-205", "M", 10.0d)));
+  @ParameterizedTest
+  @ValueSource(longs = {1903L, 1908L, 1909L})
+  void applicationEditContextAllowsMinisterialItemsWithRemainingVolumeInEveryRegion(
+      long orgUnitNumber) {
     stubApplicationEditContext(
-        "EX-205",
-        1908L,
-        List.of(scaleMutationRowWithGrade("S-1", "Z"), scaleMutationRowWithGrade("S-2", "1")));
+        "EX-205", orgUnitNumber, List.of(scaleMutationRowWithGrade("S-1", "A")));
+    when(exemptionService.findByExemptionNumber("EX-205"))
+        .thenReturn(Optional.of(exemption("EX-205", "M", 10.0d)));
 
-    assertThat(
-            service
-                .getApplicationEditContext(1000456L)
-                .orElseThrow()
-                .interiorMinisterialItemOverrideEligible())
-        .isTrue();
+    Optional<ApplicationDetailsRpcService.ApplicationEditContext> context =
+        service.getApplicationEditContext(1000456L);
 
-    when(repository.findScaleMutationsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(
-                scaleMutationRowWithGrade("S-1", "Z"),
-                scaleMutationRowWithGrade("S-2", "A")));
-    assertThat(
-            service
-                .getApplicationEditContext(1000456L)
-                .orElseThrow()
-                .interiorMinisterialItemOverrideEligible())
-        .isFalse();
-
-    when(repository.findScaleMutationsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(
-                scaleMutationRowWithGrade("S-1", "Z"),
-                scaleMutationRowWithGrade("S-2", null)));
-    assertThat(
-            service
-                .getApplicationEditContext(1000456L)
-                .orElseThrow()
-                .interiorMinisterialItemOverrideEligible())
-        .isFalse();
+    assertThat(context).isPresent();
+    assertThat(context.get().ministerialItemOverrideEligible()).isTrue();
   }
 
   @Test
@@ -5923,27 +5860,27 @@ class OracleApplicationDetailsRpcServiceTest {
     stubApplicationEditContext("EX-205", 1903L, List.of());
 
     when(exemptionService.findByExemptionNumber("EX-205")).thenReturn(Optional.empty());
-    assertThat(interiorMinisterialItemOverrideEligible()).isFalse();
+    assertThat(ministerialItemOverrideEligible()).isFalse();
 
     when(exemptionService.findByExemptionNumber("EX-205"))
         .thenReturn(Optional.of(exemption("EX-OTHER", "M", 10.0d)));
-    assertThat(interiorMinisterialItemOverrideEligible()).isFalse();
+    assertThat(ministerialItemOverrideEligible()).isFalse();
 
     when(exemptionService.findByExemptionNumber("EX-205"))
         .thenReturn(Optional.of(exemption("EX-205", "O", 10.0d)));
-    assertThat(interiorMinisterialItemOverrideEligible()).isFalse();
+    assertThat(ministerialItemOverrideEligible()).isFalse();
 
     when(exemptionService.findByExemptionNumber("EX-205"))
         .thenReturn(Optional.of(exemption("EX-205", "M", 0.0d)));
-    assertThat(interiorMinisterialItemOverrideEligible()).isFalse();
+    assertThat(ministerialItemOverrideEligible()).isFalse();
 
     when(exemptionService.findByExemptionNumber("EX-205"))
         .thenReturn(Optional.of(exemption("EX-205", "M", Double.NaN)));
-    assertThat(interiorMinisterialItemOverrideEligible()).isFalse();
+    assertThat(ministerialItemOverrideEligible()).isFalse();
 
     when(exemptionService.findByExemptionNumber("EX-205"))
         .thenReturn(Optional.of(exemption("EX-205", "M", Double.POSITIVE_INFINITY)));
-    assertThat(interiorMinisterialItemOverrideEligible()).isFalse();
+    assertThat(ministerialItemOverrideEligible()).isFalse();
   }
 
   @Test
@@ -6036,11 +5973,11 @@ class OracleApplicationDetailsRpcServiceTest {
         Instant.parse("2026-07-01T19:00:00Z"));
   }
 
-  private boolean interiorMinisterialItemOverrideEligible() {
+  private boolean ministerialItemOverrideEligible() {
     return service
         .getApplicationEditContext(1000456L)
         .orElseThrow()
-        .interiorMinisterialItemOverrideEligible();
+        .ministerialItemOverrideEligible();
   }
 
   private ExemptionDetailDto exemption(

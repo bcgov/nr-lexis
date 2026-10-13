@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.controller;
 import static java.util.concurrent.TimeUnit.MILLISECONDS;
 import static java.util.concurrent.TimeUnit.SECONDS;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -26,23 +27,16 @@ import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitGbmsInvoiceHistoryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRequestDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
@@ -170,7 +164,7 @@ class PermitDetailsRpcControllerTest {
         new TestingAuthenticationToken("idir\\jsmith", "n/a");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getEditContext(7000123L))
-        .thenReturn(new PermitDetailsRpcService.PermitEditContext(true, "12.50", "Reviewed"));
+        .thenReturn(new PermitDetailsRpcService.PermitEditContext(true, "12.50", "Reviewed", true));
     controller.setApplicationEditLockService(editLockService);
     controller.setLexisPrincipalService(principalService);
 
@@ -184,6 +178,7 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getBody().overrideComment()).isEqualTo("Reviewed");
     assertThat(response.getBody().locked()).isFalse();
     assertThat(response.getBody().lockMessage()).isNull();
+    assertThat(response.getBody().interior()).isTrue();
     verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
     verify(service).getEditContext(7000123L);
     verifyNoInteractions(editLockService, principalService);
@@ -444,21 +439,6 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void permitDataAfterScaleUpdateShouldForwardRequestToService() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitDataAfterScaleUpdateRpcResponseDto dto =
-        new PermitDataAfterScaleUpdateRpcResponseDto("12.4", 7L, "$11.11", 80.0d);
-    when(service.getPermitDataAfterScaleUpdate(7000123L)).thenReturn(dto);
-
-    ResponseEntity<PermitDataAfterScaleUpdateRpcResponseDto> response =
-        controller.getPermitDataAfterScaleUpdate(7000123L);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getPermitDataAfterScaleUpdate(7000123L);
-  }
-
-  @Test
   void packageVolumeSumShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitPackageVolumeSumRpcResponseDto dto = new PermitPackageVolumeSumRpcResponseDto("12.4");
@@ -510,21 +490,6 @@ class PermitDetailsRpcControllerTest {
     verify(service, never()).getScalesForPackage("OTHER-PKG");
     verify(service, never()).getPackageInfo("OTHER-PKG");
     verify(service, never()).getPackageDetails("OTHER-PKG");
-  }
-
-  @Test
-  void packageListShouldForwardRequestToService() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitPackageListRpcResponseDto dto =
-        new PermitPackageListRpcResponseDto(List.of("PKG-100", "PKG-101"));
-    when(service.getPackageList(7000123L)).thenReturn(dto);
-
-    ResponseEntity<PermitPackageListRpcResponseDto> response =
-        controller.getPackageList(7000123L);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getPackageList(7000123L);
   }
 
   @Test
@@ -652,20 +617,6 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void checkPermitNumberShouldForwardRequestToService() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitNumberAvailabilityRpcResponseDto dto = new PermitNumberAvailabilityRpcResponseDto(true);
-    when(service.checkPermitNumber(7000123L)).thenReturn(dto);
-
-    ResponseEntity<PermitNumberAvailabilityRpcResponseDto> response =
-        controller.checkPermitNumber(7000123L);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).checkPermitNumber(7000123L);
-  }
-
-  @Test
   void applicationListShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     TestingAuthenticationToken authentication =
@@ -734,24 +685,6 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void availablePackageListShouldForwardRequestToService() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    TestingAuthenticationToken authentication =
-        new TestingAuthenticationToken("idir\\jsmith", "n/a");
-    PermitAvailablePackageListRpcResponseDto dto =
-        new PermitAvailablePackageListRpcResponseDto(List.of("PKG-900"), null);
-    when(service.getAvailablePackageList(eq("EX-700"), eq("PKG-901"), any()))
-        .thenReturn(dto);
-
-    ResponseEntity<PermitAvailablePackageListRpcResponseDto> response =
-        controller.getAvailablePackageList("EX-700", "PKG-901", authentication);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getAvailablePackageList(eq("EX-700"), eq("PKG-901"), any());
-  }
-
-  @Test
   void availableApplicationListShouldPropagateOracleFailure() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     TestingAuthenticationToken authentication =
@@ -766,23 +699,6 @@ class PermitDetailsRpcControllerTest {
                 controller.getAvailableApplicationList(
                     "EX-700", "", authentication))
         .isSameAs(failure);
-  }
-
-  @Test
-  void availablePackageListShouldPreserveLegitimatelyEmptyResponse() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    TestingAuthenticationToken authentication =
-        new TestingAuthenticationToken("idir\\jsmith", "n/a");
-    PermitAvailablePackageListRpcResponseDto dto =
-        new PermitAvailablePackageListRpcResponseDto(
-            List.of(), "No applications are currently available.");
-    when(service.getAvailablePackageList(eq("EX-700"), eq(""), any())).thenReturn(dto);
-
-    ResponseEntity<PermitAvailablePackageListRpcResponseDto> response =
-        controller.getAvailablePackageList("EX-700", "", authentication);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
   }
 
   @Test
@@ -831,36 +747,6 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void invoicesForPermitShouldForwardRequestToService() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitInvoiceListRpcResponseDto dto =
-        new PermitInvoiceListRpcResponseDto(List.of("INV-100", "INV-101"));
-    when(service.getInvoicesForPermit(7000123L)).thenReturn(dto);
-
-    ResponseEntity<PermitInvoiceListRpcResponseDto> response =
-        controller.getInvoicesForPermit(7000123L);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getInvoicesForPermit(7000123L);
-  }
-
-  @Test
-  void invoiceDetailsShouldForwardRequestToService() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitInvoiceDetailsRpcResponseDto dto =
-        new PermitInvoiceDetailsRpcResponseDto(true, "1.25", "$50.00", "$125.00");
-    when(service.getInvoiceDetails(7000123L, "INV-101")).thenReturn(dto);
-
-    ResponseEntity<PermitInvoiceDetailsRpcResponseDto> response =
-        controller.getInvoiceDetails(7000123L, "INV-101");
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getInvoiceDetails(7000123L, "INV-101");
-  }
-
-  @Test
   void gbmsInvoiceHistoryShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     List<PermitGbmsInvoiceHistoryItemRpcResponseDto> dto =
@@ -901,40 +787,7 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
-  void addInvoiceShouldForwardRequestToService() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitPersistenceRpcResponseDto dto =
-        new PermitPersistenceRpcResponseDto(
-            true, "The sales invoice was saved successfully.", List.of(), List.of(), 7000123L);
-    when(service.addInvoice(
-            7000123L,
-            "INV-100",
-            new java.math.BigDecimal("100.00"),
-            new java.math.BigDecimal("1.25"),
-            new java.math.BigDecimal("12.00"),
-            "idir\\jsmith"))
-        .thenReturn(dto);
-
-    TestingAuthenticationToken authentication = authorizedSavePermit();
-
-    ResponseEntity<PermitPersistenceRpcResponseDto> response =
-        controller.addInvoice(
-            7000123L, "INV-100", "100.00", "1.25", "12.00", authentication);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(service)
-        .addInvoice(
-            7000123L,
-            "INV-100",
-            new java.math.BigDecimal("100.00"),
-            new java.math.BigDecimal("1.25"),
-            new java.math.BigDecimal("12.00"),
-            "idir\\jsmith");
-  }
-
-  @Test
-  void permitUpdateShouldSerializeAConcurrentInvoiceMutationForTheSamePermit()
+  void permitUpdateShouldSerializeAConcurrentScaleMutationForTheSamePermit()
       throws Exception {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
@@ -946,8 +799,8 @@ class PermitDetailsRpcControllerTest {
 
     CountDownLatch updateEntered = new CountDownLatch(1);
     CountDownLatch releaseUpdate = new CountDownLatch(1);
-    CountDownLatch invoiceAttempted = new CountDownLatch(1);
-    CountDownLatch invoiceEntered = new CountDownLatch(1);
+    CountDownLatch scaleAttempted = new CountDownLatch(1);
+    CountDownLatch scaleEntered = new CountDownLatch(1);
     PermitMutationRpcResponseDto updateResult =
         new PermitMutationRpcResponseDto(
             true,
@@ -960,9 +813,9 @@ class PermitDetailsRpcControllerTest {
             false,
             false,
             null);
-    PermitPersistenceRpcResponseDto invoiceResult =
+    PermitPersistenceRpcResponseDto scaleResult =
         new PermitPersistenceRpcResponseDto(
-            true, "invoiced", List.of(), List.of(), 7000123L);
+            true, "attached", List.of(), List.of(), 7000123L);
     when(service.updatePermit(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
         .thenAnswer(
             ignored -> {
@@ -972,17 +825,11 @@ class PermitDetailsRpcControllerTest {
               }
               return updateResult;
             });
-    when(service.addInvoice(
-            7000123L,
-            "INV-100",
-            new java.math.BigDecimal("100.00"),
-            new java.math.BigDecimal("1.25"),
-            new java.math.BigDecimal("12.00"),
-            "idir\\jsmith"))
+    when(service.updateScaleAttachment("101", 7000123L, true, "idir\\jsmith"))
         .thenAnswer(
             ignored -> {
-              invoiceEntered.countDown();
-              return invoiceResult;
+              scaleEntered.countDown();
+              return scaleResult;
             });
     TestingAuthenticationToken authentication = authorizedSavePermit();
     ExecutorService executor = Executors.newFixedThreadPool(2);
@@ -992,25 +839,20 @@ class PermitDetailsRpcControllerTest {
           executor.submit(() -> controller.updatePermit(request, authentication));
       assertThat(updateEntered.await(2, SECONDS)).isTrue();
 
-      Future<ResponseEntity<PermitPersistenceRpcResponseDto>> invoice =
+      Future<ResponseEntity<PermitPersistenceRpcResponseDto>> scale =
           executor.submit(
               () -> {
-                invoiceAttempted.countDown();
-                return controller.addInvoice(
-                    7000123L,
-                    "INV-100",
-                    "100.00",
-                    "1.25",
-                    "12.00",
-                    authentication);
+                scaleAttempted.countDown();
+                return controller.updateScaleAttachment(
+                    "101", null, 7000123L, "true", authentication);
               });
-      assertThat(invoiceAttempted.await(2, SECONDS)).isTrue();
-      assertThat(invoiceEntered.await(150, MILLISECONDS)).isFalse();
+      assertThat(scaleAttempted.await(2, SECONDS)).isTrue();
+      assertThat(scaleEntered.await(150, MILLISECONDS)).isFalse();
 
       releaseUpdate.countDown();
       assertThat(update.get(2, SECONDS).getBody()).isEqualTo(updateResult);
-      assertThat(invoice.get(2, SECONDS).getBody()).isEqualTo(invoiceResult);
-      assertThat(invoiceEntered.getCount()).isZero();
+      assertThat(scale.get(2, SECONDS).getBody()).isEqualTo(scaleResult);
+      assertThat(scaleEntered.getCount()).isZero();
     } finally {
       releaseUpdate.countDown();
       executor.shutdownNow();
@@ -1064,13 +906,8 @@ class PermitDetailsRpcControllerTest {
       Future<ResponseEntity<PermitPersistenceRpcResponseDto>> waitingMutation =
           executor.submit(
               () ->
-                  controller.addInvoice(
-                      7000123L,
-                      "INV-100",
-                      "100.00",
-                      "1.25",
-                      "12.00",
-                      authentication));
+                  controller.updateScaleAttachment(
+                      "101", null, 7000123L, "true", authentication));
       assertThat(initialAuthorizationPassed.await(2, SECONDS)).isTrue();
       assertThat(authorizationChecks).hasValue(1);
 
@@ -1079,7 +916,7 @@ class PermitDetailsRpcControllerTest {
       assertThatThrownBy(() -> waitingMutation.get(2, SECONDS))
           .hasCauseInstanceOf(
               org.springframework.security.access.AccessDeniedException.class);
-      verify(service, never()).addInvoice(any(), any(), any(), any(), any(), any());
+      verify(service, never()).updateScaleAttachment(any(), any(), anyBoolean(), any());
     } finally {
       releaseHolder.countDown();
       executor.shutdownNow();
@@ -2732,33 +2569,6 @@ class PermitDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).deleteBlanketOicScale("101", 7000123L, "idir\\jsmith");
-  }
-
-  @Test
-  void conversionRateShouldForwardRequestToService() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitConversionRateRpcResponseDto dto = new PermitConversionRateRpcResponseDto(true, "1.23");
-    when(service.getConversionRate()).thenReturn(dto);
-
-    ResponseEntity<PermitConversionRateRpcResponseDto> response =
-        controller.getConversionRate();
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getConversionRate();
-  }
-
-  @Test
-  void fileTypesShouldForwardRequestToService() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    List<PermitFileTypeRpcResponseDto> dto = List.of(new PermitFileTypeRpcResponseDto("INV", "Invoice"));
-    when(service.getFileTypes()).thenReturn(dto);
-
-    ResponseEntity<List<PermitFileTypeRpcResponseDto>> response = controller.getFileTypes();
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(service).getFileTypes();
   }
 
   @Test

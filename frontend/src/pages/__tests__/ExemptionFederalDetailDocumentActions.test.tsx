@@ -37,7 +37,6 @@ import {
 import {
   addApplicationToExemption,
   fetchExemptionApplications,
-  fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
   removeApplicationFromExemption,
@@ -85,7 +84,6 @@ vi.mock('@/service/provincial-exemption-detail-service', () => ({
   addApplicationToExemption: vi.fn(),
   approveExemptions: vi.fn(),
   fetchExemptionApplications: vi.fn(),
-  fetchExemptionBlanketOicTotals: vi.fn(),
   fetchExemptionEditContext: vi.fn(),
   fetchExemptionPermits: vi.fn(),
   removeApplicationFromExemption: vi.fn(),
@@ -155,7 +153,6 @@ const mockedFetchExemptionDocuments = vi.mocked(fetchExemptionDocuments)
 const mockedOpenExemptionDocument = vi.mocked(openExemptionDocument)
 const mockedRemoveExemptionDocument = vi.mocked(removeExemptionDocument)
 const mockedFetchExemptionApplications = vi.mocked(fetchExemptionApplications)
-const mockedFetchExemptionBlanketOicTotals = vi.mocked(fetchExemptionBlanketOicTotals)
 const mockedFetchExemptionEditContext = vi.mocked(fetchExemptionEditContext)
 const mockedFetchExemptionPermits = vi.mocked(fetchExemptionPermits)
 const mockedUpdateExemption = vi.mocked(updateExemption)
@@ -324,10 +321,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
         canViewPermit: true,
       },
     ])
-    mockedFetchExemptionBlanketOicTotals.mockResolvedValue({
-      requestedVolume: '500.0',
-      completedVolume: '125.5',
-    })
     mockedFetchExemptionEditContext.mockResolvedValue({
       rateOverrideEnabled: false,
       fixedFeeRate: '',
@@ -1182,7 +1175,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(permits.queryByText('Sum of completed permits (m³)')).not.toBeInTheDocument()
     expect(permits.queryByText('Balance remaining (m³)')).not.toBeInTheDocument()
     expect(permits.queryByText('Blanket OIC totals unavailable')).not.toBeInTheDocument()
-    expect(mockedFetchExemptionBlanketOicTotals).not.toHaveBeenCalled()
   })
 
   it('keeps application and fee eligibility unavailable when associated applications fail', async () => {
@@ -1809,11 +1801,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
     expect(within(agentTile as HTMLElement).getByText('Client')).toBeInTheDocument()
     expect(within(agentTile as HTMLElement).queryByText('Company name')).not.toBeInTheDocument()
-    const agentApplicantTypeField = within(agentTile as HTMLElement)
-      .getByText('Applicant type')
-      .closest('.record-field')
-    expect(agentApplicantTypeField).toBeTruthy()
-    expect(within(agentApplicantTypeField as HTMLElement).getByText('Agent')).toBeInTheDocument()
+    expect(within(agentTile as HTMLElement).getByText('Contact name')).toBeInTheDocument()
+    expect(within(agentTile as HTMLElement).queryByText('Applicant type')).not.toBeInTheDocument()
 
     await selectDetailTab('Application')
     expect(await screen.findByText('IDIR\\TESTER')).toBeInTheDocument()
@@ -2752,7 +2741,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
   })
 
-  it('renders structured federal offers and opens the selected offer', async () => {
+  it('lists federal offers by company and opens the offer from the company link', async () => {
     const router = createMemoryRouter(
       [
         {
@@ -2769,19 +2758,49 @@ describe('Exemption and Federal Detail Document Actions', () => {
     render(<RouterProvider router={router} />)
 
     await selectDetailTab('Offers')
+    const offersTable = await screen.findByRole('region', { name: 'Federal application offers' })
     expect(
-      await screen.findByRole('region', { name: 'Federal application offers' }),
-    ).toBeInTheDocument()
-    const offerRow = (await screen.findByText('Federal Buyer')).closest('tr')
+      within(offersTable)
+        .getAllByRole('columnheader')
+        .map((header) => header.textContent),
+    ).toEqual(['Company', 'Date received'])
+    const companyLink = await within(offersTable).findByRole('link', { name: 'Federal Buyer' })
+    expect(companyLink).toHaveAttribute('href', '/provincial/offers/81001')
+    const offerRow = companyLink.closest('tr')
     expect(offerRow).toBeTruthy()
-    expect(within(offerRow as HTMLElement).getByText('81001')).toBeInTheDocument()
     expect(within(offerRow as HTMLElement).getByText('2026-01-13')).toBeInTheDocument()
+    expect(within(offersTable).queryByText('81001')).not.toBeInTheDocument()
+    expect(within(offersTable).queryByRole('button')).not.toBeInTheDocument()
 
-    await userEvent.click(within(offerRow as HTMLElement).getByRole('button', { name: 'Open' }))
+    await userEvent.click(companyLink)
 
     await waitFor(() => {
       expect(router.state.location.pathname).toBe('/provincial/offers/81001')
     })
+    expect(router.state.location.state).toMatchObject({
+      returnTo: { label: 'Federal application detail', to: '/federal/888' },
+    })
+  })
+
+  it('shows the offer company as text when offer permission is unavailable', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action !== '/offerDetails',
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/federal/888']}>
+        <Routes>
+          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Offers')
+    const offersTable = await screen.findByRole('region', { name: 'Federal application offers' })
+    expect(await within(offersTable).findByText('Federal Buyer')).toBeInTheDocument()
+    expect(within(offersTable).queryByRole('link')).not.toBeInTheDocument()
   })
 
   it('does not present federal document or remark lookup failures as empty collections', async () => {
@@ -2952,7 +2971,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
       createTestAuthContext({
         capabilities: createTestCapabilities({ roles: ['LEXIS_READ_ONLY'] }),
         canPerform: (action: string) =>
-          action === '/federalApplicationDetails' || action === 'viewFederalApplication',
+          action === '/federalApplicationDetails' ||
+          action === 'viewFederalApplication' ||
+          action === '/applicationRemarks',
       }),
     )
 
@@ -3365,8 +3386,13 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
       await selectDetailTab('Application')
       expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
-      await selectDetailTab('Remarks')
-      expect(screen.queryByLabelText('New remark')).not.toBeInTheDocument()
+      if (role === 'LEXIS_FEDERAL_READ_ONLY') {
+        expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
+        expect(mockedFetchFederalApplicationRemarks).not.toHaveBeenCalled()
+      } else {
+        await selectDetailTab('Remarks')
+        expect(screen.queryByLabelText('New remark')).not.toBeInTheDocument()
+      }
       await selectDetailTab('Shipping details')
       expect(
         screen.queryByRole('button', { name: 'Edit shipping details' }),

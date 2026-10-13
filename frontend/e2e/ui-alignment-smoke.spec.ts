@@ -1175,11 +1175,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBe(true)
     await expect(addApplicationAction).toHaveCSS('background-color', 'rgb(0, 115, 230)')
 
-    const infoNotification = page.locator('.cds--inline-notification--info')
-    await expect(infoNotification).toContainText('Export schedule filter applied')
-    await expect(infoNotification).toHaveCSS('background-color', 'rgb(194, 224, 255)')
-    await expect(infoNotification).toHaveCSS('border-left-width', '4px')
-    await expect(infoNotification).toHaveCSS('border-left-color', 'rgb(0, 92, 184)')
+    await expect(page.getByText('Export schedule filter applied')).toHaveCount(0)
 
     const iconTooltipPopovers = page.locator('.cds--icon-tooltip > .cds--popover')
     expect(await iconTooltipPopovers.count()).toBeGreaterThan(0)

@@ -56,7 +56,6 @@ const DEFAULT_APPLICATION_SEARCH_FILTERS: ProvincialApplicationSearchFilters = {
   receivedToDate: '',
   listingFromDate: '',
   listingToDate: '',
-  exportScheduleId: '',
   applicantClientNumber: '',
   ownerClientNumber: '',
 }
@@ -76,7 +75,6 @@ const buildBackendParams = (request: ProvincialApplicationSearchRequest): URLSea
       ['receivedToDate', filters.receivedToDate],
       ['listingFromDate', filters.listingFromDate],
       ['listingToDate', filters.listingToDate],
-      ['exportScheduleId', filters.exportScheduleId ?? ''],
       ['agentClientNumber', filters.applicantClientNumber],
       ['ownerClientNumber', filters.ownerClientNumber],
       // Keep the historical agentClientNumber API parameter's Applicant semantics.

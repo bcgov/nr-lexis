@@ -88,10 +88,10 @@ class ExemptionControllerTest {
     when(service.search(any(ExemptionSearchCriteria.class)))
         .thenReturn(new ExemptionSearchResponseDto(List.of(), 0, 0, 25));
 
-    controller.search(null, null, null, null, null, null, null, null, null,
+    controller.search(null, null, null, null, null, null, null,
         null, null, null, null, null, null, List.of(), null, 0, 25, null,
         authentication, "00012345");
-    controller.count(null, null, null, null, null, null, null, null, null,
+    controller.count(null, null, null, null, null, null, null,
         null, null, null, null, null, null, List.of(), authentication, "00012345");
 
     ArgumentCaptor<ExemptionSearchCriteria> searchCaptor = ArgumentCaptor.forClass(ExemptionSearchCriteria.class);
@@ -182,8 +182,6 @@ class ExemptionControllerTest {
             null,
             null,
             null,
-            null,
-            null,
             List.<Long>of(),
             null,
             0,
@@ -231,8 +229,6 @@ class ExemptionControllerTest {
             null,
             "APR",
             null,
-            "03/01/2026",
-            "03/31/2026",
             "2026-02-01",
             null,
             "2026-02-28",
@@ -257,7 +253,6 @@ class ExemptionControllerTest {
     assertThat(criteria.exemptionNumber()).isEqualTo("EX-205");
     assertThat(criteria.exemptionType()).isEqualTo("FEE");
     assertThat(criteria.exemptionStatus()).isEqualTo("APR");
-    assertThat(criteria.approvalFromDate()).isEqualTo(LocalDate.of(2026, 3, 1));
     assertThat(criteria.listingFromDate()).isEqualTo(LocalDate.of(2026, 2, 1));
     assertThat(criteria.listingToDate()).isEqualTo(LocalDate.of(2026, 2, 28));
     assertThat(criteria.regionNumbers()).containsExactly(12L);
@@ -281,8 +276,6 @@ class ExemptionControllerTest {
         null,
         null,
         exemptionType,
-        null,
-        null,
         null,
         null,
         null,
@@ -323,8 +316,6 @@ class ExemptionControllerTest {
         null,
         null,
         null,
-        null,
-        null,
         "00099999",
         "00088888",
         List.of(),
@@ -354,8 +345,6 @@ class ExemptionControllerTest {
         null,
         exemptionType,
         exemptionTypeCode,
-        null,
-        null,
         null,
         null,
         null,
@@ -405,8 +394,6 @@ class ExemptionControllerTest {
         null,
         null,
         null,
-        null,
-        null,
         List.of(76L),
         authentication, null);
 
@@ -428,8 +415,6 @@ class ExemptionControllerTest {
         .thenReturn(new ExemptionSearchResponseDto(List.of(), 0, 0, 25));
 
     controller.search(
-        null,
-        null,
         null,
         null,
         null,
@@ -600,8 +585,6 @@ class ExemptionControllerTest {
 
   private ResponseEntity<ExemptionSearchResponseDto> searchDefault() {
     return controller.search(
-        null,
-        null,
         null,
         null,
         null,

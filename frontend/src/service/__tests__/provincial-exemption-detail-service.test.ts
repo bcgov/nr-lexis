@@ -4,7 +4,6 @@ import {
   approveExemptions,
   fetchExemptionApplications,
   fetchExemptionApprovalRecipients,
-  fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionRegionContext,
   fetchExemptionPermits,
@@ -214,20 +213,6 @@ describe('provincial exemption detail service', () => {
     await expect(fetchExemptionPermits('EX-777')).resolves.toMatchObject([
       { permitIssueDate: expected },
     ])
-  })
-
-  it('parses Blanket OIC permit volume totals', async () => {
-    getMock.mockResolvedValue({
-      data: { requestedVolume: '500.0', completedVolume: 125.5 },
-    })
-
-    await expect(fetchExemptionBlanketOicTotals(' BOIC-205 ')).resolves.toEqual({
-      requestedVolume: '500.0',
-      completedVolume: '125.5',
-    })
-    expect(getMock).toHaveBeenCalledWith('/lexis/rpc/exemption-details/blanket-oic-totals', {
-      params: { exemptionNumber: 'BOIC-205' },
-    })
   })
 
   it('parses associated applications and trims the exemption key', async () => {

@@ -13,23 +13,16 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitGbmsInvoiceHistoryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRequestDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
@@ -51,7 +44,6 @@ import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import jakarta.servlet.http.HttpServletRequest;
-import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -288,7 +280,8 @@ public class PermitDetailsRpcController {
             context.overrideFee(),
             context.overrideComment(),
             false,
-            null));
+            null,
+            context.interior()));
   }
 
   @GetMapping("/scale-fees-for-package")
@@ -334,19 +327,6 @@ public class PermitDetailsRpcController {
     return ResponseEntity.ok(service.getScalesForPackage(packageNumber));
   }
 
-  @GetMapping("/permit-data-after-scale-update")
-  public ResponseEntity<PermitDataAfterScaleUpdateRpcResponseDto> getPermitDataAfterScaleUpdate(
-      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
-    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Permit RPC service unavailable - returning no content for permit data after scale update");
-      return ResponseEntity.noContent().build();
-    }
-    requirePermitAccess(permitNumber);
-
-    return ResponseEntity.ok(service.getPermitDataAfterScaleUpdate(permitNumber));
-  }
-
   @GetMapping("/package-volume-sum")
   public ResponseEntity<PermitPackageVolumeSumRpcResponseDto> getPackageVolumeSum(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,
@@ -359,19 +339,6 @@ public class PermitDetailsRpcController {
     requirePackageAccess(service, packageNumber, permitNumber);
 
     return ResponseEntity.ok(service.getPackageVolumeSum(permitNumber, packageNumber));
-  }
-
-  @GetMapping("/package-list")
-  public ResponseEntity<PermitPackageListRpcResponseDto> getPackageList(
-      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
-    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Permit RPC service unavailable - returning no content for package list");
-      return ResponseEntity.noContent().build();
-    }
-    requirePermitAccess(permitNumber);
-
-    return ResponseEntity.ok(service.getPackageList(permitNumber));
   }
 
   @GetMapping("/oic-package-list")
@@ -455,18 +422,6 @@ public class PermitDetailsRpcController {
     return ResponseEntity.ok(service.getCountryList());
   }
 
-  @GetMapping("/check-permit-number")
-  public ResponseEntity<PermitNumberAvailabilityRpcResponseDto> checkPermitNumber(
-      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
-    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Permit RPC service unavailable - returning no content for check permit number");
-      return ResponseEntity.noContent().build();
-    }
-
-    return ResponseEntity.ok(service.checkPermitNumber(permitNumber));
-  }
-
   @GetMapping("/application-list")
   public ResponseEntity<PermitApplicationListRpcResponseDto> getApplicationList(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,
@@ -499,25 +454,6 @@ public class PermitDetailsRpcController {
         service.getAvailableApplicationList(
             exemptionNumber,
             selectedApplications,
-            applicationAccessPredicate(authentication)));
-  }
-
-  @GetMapping("/available-package-list")
-  public ResponseEntity<PermitAvailablePackageListRpcResponseDto> getAvailablePackageList(
-      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
-      @RequestParam(name = "selectedPackages", required = false) String selectedPackages,
-      Authentication authentication) {
-    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Permit RPC service unavailable - returning no content for available package list");
-      return ResponseEntity.noContent().build();
-    }
-
-    requireExemptionAccess(exemptionNumber, authentication);
-    return ResponseEntity.ok(
-        service.getAvailablePackageList(
-            exemptionNumber,
-            selectedPackages,
             applicationAccessPredicate(authentication)));
   }
 
@@ -1200,40 +1136,6 @@ public class PermitDetailsRpcController {
         });
   }
 
-  @PostMapping("/add-invoice")
-  public ResponseEntity<PermitPersistenceRpcResponseDto> addInvoice(
-      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
-      @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber,
-      @RequestParam(name = "invoiceExportValue", required = false) String invoiceExportValue,
-      @RequestParam(name = "invoiceConversionRate", required = false) String invoiceConversionRate,
-      @RequestParam(name = "invoiceFeeInLieu", required = false) String invoiceFeeInLieu,
-      Authentication authentication) {
-    if (!canSavePermit(authentication)) {
-      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-    }
-
-    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Permit RPC service unavailable - returning no content for add invoice");
-      return ResponseEntity.noContent().build();
-    }
-    requirePermitAccess(permitNumber, authentication);
-    return permitOperationMutex.execute(
-        permitNumber,
-        () -> {
-          requirePermitAccess(permitNumber, authentication);
-          requirePermitEditable(permitNumber, authentication);
-          return ResponseEntity.ok(
-              service.addInvoice(
-                  permitNumber,
-                  salesInvoiceNumber,
-                  parsePositiveDecimal(invoiceExportValue),
-                  parsePositiveDecimal(invoiceConversionRate),
-                  parsePositiveDecimal(invoiceFeeInLieu),
-                  userId(authentication)));
-        });
-  }
-
   @GetMapping("/check-form-changes")
   public ResponseEntity<CheckFormChangesResponseDto> checkFormChanges(HttpServletRequest request) {
     PermitDetailsRpcService service = serviceProvider.getIfAvailable();
@@ -1277,55 +1179,6 @@ public class PermitDetailsRpcController {
   ResponseEntity<ReleaseLockResponseDto> releaseLock(HttpServletRequest request) {
     return releaseLock(
         null, request, SecurityContextHolder.getContext().getAuthentication());
-  }
-
-  @GetMapping("/invoices-for-permit")
-  public ResponseEntity<PermitInvoiceListRpcResponseDto> getInvoicesForPermit(
-      @RequestParam(name = "permitNumber", required = false) Long permitNumber) {
-    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Permit RPC service unavailable - returning no content for invoices for permit");
-      return ResponseEntity.noContent().build();
-    }
-
-    requirePermitAccess(permitNumber);
-    return ResponseEntity.ok(service.getInvoicesForPermit(permitNumber));
-  }
-
-  @GetMapping("/invoice-details")
-  public ResponseEntity<PermitInvoiceDetailsRpcResponseDto> getInvoiceDetails(
-      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
-      @RequestParam(name = "salesInvoiceNumber", required = false) String salesInvoiceNumber) {
-    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Permit RPC service unavailable - returning no content for invoice details");
-      return ResponseEntity.noContent().build();
-    }
-
-    requirePermitAccess(permitNumber);
-    return ResponseEntity.ok(service.getInvoiceDetails(permitNumber, salesInvoiceNumber));
-  }
-
-  @GetMapping("/conversion-rate")
-  public ResponseEntity<PermitConversionRateRpcResponseDto> getConversionRate() {
-    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Permit RPC service unavailable - returning no content for conversion rate");
-      return ResponseEntity.noContent().build();
-    }
-
-    return ResponseEntity.ok(service.getConversionRate());
-  }
-
-  @GetMapping("/file-types")
-  public ResponseEntity<List<PermitFileTypeRpcResponseDto>> getFileTypes() {
-    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Permit RPC service unavailable - returning no content for file types");
-      return ResponseEntity.noContent().build();
-    }
-
-    return ResponseEntity.ok(service.getFileTypes());
   }
 
   @GetMapping("/document-details")
@@ -2006,18 +1859,6 @@ public class PermitDetailsRpcController {
     return authentication == null ? null : authentication.getName();
   }
 
-  private BigDecimal parsePositiveDecimal(String rawValue) {
-    if (rawValue == null || rawValue.isBlank()) {
-      return null;
-    }
-    try {
-      BigDecimal parsed = new BigDecimal(rawValue.trim());
-      return parsed.compareTo(BigDecimal.ZERO) > 0 ? parsed : null;
-    } catch (NumberFormatException ex) {
-      return null;
-    }
-  }
-
   public record CheckFormChangesResponseDto(boolean permitChanged) {}
 
   public record PermitEditContextResponseDto(
@@ -2025,7 +1866,8 @@ public class PermitDetailsRpcController {
       String overrideFee,
       String overrideComment,
       boolean locked,
-      String lockMessage) {}
+      String lockMessage,
+      boolean interior) {}
 
   public record ReleaseLockResponseDto(String release) {}
 

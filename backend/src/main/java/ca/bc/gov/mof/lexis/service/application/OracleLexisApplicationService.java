@@ -119,24 +119,6 @@ public class OracleLexisApplicationService implements LexisApplicationService {
     return repository.findPackageByPackageNumber(persistedPackageNumber);
   }
 
-  @Override
-  public boolean verifyApplicationClients(List<Long> applicationNumbers) {
-    List<Long> normalized = positiveDistinctLongs(applicationNumbers);
-    if (normalized.isEmpty()) {
-      return false;
-    }
-    return repository.verifyApplicationClients(normalized);
-  }
-
-  @Override
-  public boolean hasValidOffer(List<Long> applicationNumbers) {
-    List<Long> normalized = positiveDistinctLongs(applicationNumbers);
-    if (normalized.isEmpty()) {
-      return false;
-    }
-    return repository.hasValidOffer(normalized);
-  }
-
   private LexisApplicationSearchCriteria normalizeCriteria(LexisApplicationSearchCriteria input) {
     if (input == null) {
       return new LexisApplicationSearchCriteria(

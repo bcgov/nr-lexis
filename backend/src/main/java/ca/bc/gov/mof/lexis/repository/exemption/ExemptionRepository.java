@@ -612,8 +612,6 @@ public class ExemptionRepository extends OracleRepositorySupport {
           applicantClientNumber);
     }
 
-    where.addDateGte("EE.APPROVAL_DATE", criteria.approvalFromDate());
-    where.addDateLte("EE.APPROVAL_DATE", criteria.approvalToDate());
     where.addDateGte("ES.ADVERTISING_DATE", criteria.listingFromDate());
     where.addDateLte("ES.ADVERTISING_DATE", criteria.listingToDate());
     // INTENTIONAL_LEGACY_DIVERGENCE(HISTORICAL_ORG_UNIT_SEARCH_VISIBILITY):
@@ -713,8 +711,6 @@ public class ExemptionRepository extends OracleRepositorySupport {
         && trim(criteria.exemptionType()) == null
         && trim(criteria.exemptionStatus()) == null
         && trim(criteria.ownerClientNumber()) == null
-        && criteria.approvalFromDate() == null
-        && criteria.approvalToDate() == null
         && criteria.listingFromDate() == null
         && criteria.listingToDate() == null
         && (criteria.regionNumbers() == null || criteria.regionNumbers().isEmpty());

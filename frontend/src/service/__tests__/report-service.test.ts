@@ -325,7 +325,7 @@ describe('report-service', () => {
     })
     await runReport({
       reportId: 'tenureReport',
-      actionMapping: 'generateFileReport',
+      actionMapping: 'generateMarkReport',
       values: {
         forestFileId: ' ff-d ',
       },
@@ -351,7 +351,7 @@ describe('report-service', () => {
     expect(postMock.mock.calls[2][1]).toEqual(
       expect.objectContaining({
         parameters: {
-          legacyActionMapping: 'generateFileReport',
+          legacyActionMapping: 'generateMarkReport',
           forestFileId: 'FF-D',
         },
       }),
@@ -383,12 +383,7 @@ describe('report-service', () => {
     })
   })
 
-  it.each([
-    'generatePermitReport',
-    'generateTenureReport',
-    'generateMarkReport',
-    'generateFileReport',
-  ])(
+  it.each(['generatePermitReport', 'generateTenureReport', 'generateMarkReport'])(
     'always sends the %s tenure variant under default deployed configuration',
     async (actionMapping) => {
       postMock.mockResolvedValue({

@@ -141,25 +141,25 @@ describe('Federal Search Actions', () => {
 
   it('clears an unselected client search term with Clear all', async () => {
     mockedUseAuth.mockReturnValue(
-      createTestAuthContext({ canPerform: (action: string) => action === '/createExemption' }),
+      createTestAuthContext({ canPerform: (action: string) => action === 'searchClients' }),
     )
 
     renderPage('/federal')
 
-    const clientInput = await screen.findByRole('combobox', { name: 'Client number' })
+    const clientInput = await screen.findByRole('combobox', { name: 'Client' })
     await userEvent.type(clientInput, 'Pine')
     expect(clientInput).toHaveValue('Pine')
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     await waitFor(() => {
-      expect(screen.getByRole('combobox', { name: 'Client number' })).toHaveValue('')
+      expect(screen.getByRole('combobox', { name: 'Client' })).toHaveValue('')
     })
   })
 
   it('uses a selected canonical client number for the federal search', async () => {
     mockedUseAuth.mockReturnValue(
-      createTestAuthContext({ canPerform: (action: string) => action === '/createExemption' }),
+      createTestAuthContext({ canPerform: (action: string) => action === 'searchClients' }),
     )
     mockedSearchForestClients.mockResolvedValue([
       {
@@ -171,7 +171,7 @@ describe('Federal Search Actions', () => {
 
     renderPage('/federal')
 
-    const clientInput = await screen.findByRole('combobox', { name: 'Client number' })
+    const clientInput = await screen.findByRole('combobox', { name: 'Client' })
     await userEvent.type(clientInput, 'Pine')
     const option = await screen.findByRole('option', {
       name: 'Pine Forestry (PF) · 00012345',
@@ -213,6 +213,15 @@ describe('Federal Search Actions', () => {
         expect.any(Object),
       )
     })
+
+    await userEvent.click(screen.getByRole('combobox', { name: 'Application status' }))
+    await userEvent.click(await screen.findByRole('option', { name: 'New' }))
+    expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveValue('New')
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+    await waitFor(() => {
+      expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveValue('Approved')
+    })
   })
 
   it('renders every federal result header as plain text without sort state', async () => {
@@ -225,7 +234,7 @@ describe('Federal Search Actions', () => {
       'Client',
       'Reason',
       'Received date',
-      'Listing date',
+      'List date',
     ]) {
       expect(screen.queryByRole('button', { name: header })).not.toBeInTheDocument()
     }
@@ -273,13 +282,13 @@ describe('Federal Search Actions', () => {
       'Client',
       'Reason',
       'Received date',
-      'Listing date',
+      'List date',
     ])
     expect(screen.queryByRole('checkbox')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /create exemption/i })).not.toBeInTheDocument()
   })
 
-  it('shows the Client number filter only with the create exemption action', async () => {
+  it('shows the Client filter only with client search access', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action === 'viewFederalApplication',
@@ -289,7 +298,33 @@ describe('Federal Search Actions', () => {
     renderPage()
     await screen.findByText('FED-1001')
 
-    expect(screen.queryByLabelText('Client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Client')).not.toBeInTheDocument()
+  })
+
+  it('orders the filters as List date, Received date, then Client', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'searchClients' }),
+    )
+    renderPage('/federal')
+
+    expect(
+      await screen.findByText('Find federal applications and check their status.'),
+    ).toBeInTheDocument()
+    const labels = [
+      'Application number',
+      'Package number',
+      'Application status',
+      'List date from',
+      'List date to',
+      'Received date from',
+      'Received date to',
+      'Client',
+    ].map((label) => screen.getAllByLabelText(label)[0])
+    labels.slice(1).forEach((field, index) => {
+      expect(
+        labels[index].compareDocumentPosition(field) & Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy()
+    })
   })
 
   it('keeps repeated federal numbers linked to their distinct internal applications', async () => {
@@ -323,7 +358,7 @@ describe('Federal Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Received from date'), '2026-13-99')
+    await userEvent.type(screen.getByLabelText('Received date from'), '2026-13-99')
 
     await waitFor(() => {
       expect(searchButton).toBeDisabled()
@@ -334,11 +369,11 @@ describe('Federal Search Actions', () => {
     renderPage()
     await screen.findByText('FED-1001')
 
-    expect(screen.getByLabelText('Received from date')).toBeInTheDocument()
-    expect(screen.getByLabelText('Received to date')).toBeInTheDocument()
-    expect(screen.getByLabelText('Listing from date')).toBeInTheDocument()
-    expect(screen.getByLabelText('Listing to date')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Received from date (YYYY-MM-DD)')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Received date from')).toBeInTheDocument()
+    expect(screen.getByLabelText('Received date to')).toBeInTheDocument()
+    expect(screen.getByLabelText('List date from')).toBeInTheDocument()
+    expect(screen.getByLabelText('List date to')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Received date from (YYYY-MM-DD)')).not.toBeInTheDocument()
   })
 
   it('keeps federal rows and pagination available when the exact count fails', async () => {

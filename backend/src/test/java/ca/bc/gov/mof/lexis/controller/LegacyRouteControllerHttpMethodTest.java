@@ -131,7 +131,7 @@ class LegacyRouteControllerHttpMethodTest {
   void readActionMappingsShouldRemainAvailableOverGet() throws Exception {
     when(applicationReviewController.searchOptions())
         .thenReturn(ResponseEntity.noContent().build());
-    when(offerDetailsRpcController.getClientLocations("00000001"))
+    when(offerDetailsRpcController.getClientData("00000001", null))
         .thenReturn(ResponseEntity.noContent().build());
     when(permitDetailsRpcController.getCountryList())
         .thenReturn(ResponseEntity.noContent().build());
@@ -148,7 +148,7 @@ class LegacyRouteControllerHttpMethodTest {
     mockMvc
         .perform(
             get("/api/lexis/offerDetailsRPC.do")
-                .param("actionMapping", "getClientLocations")
+                .param("actionMapping", "getClientData")
                 .param("clientNumber", "00000001"))
         .andExpect(status().isNoContent());
     mockMvc
@@ -168,7 +168,7 @@ class LegacyRouteControllerHttpMethodTest {
         .andExpect(status().isNoContent());
 
     verify(applicationReviewController).searchOptions();
-    verify(offerDetailsRpcController).getClientLocations("00000001");
+    verify(offerDetailsRpcController).getClientData("00000001", null);
     verify(permitDetailsRpcController).getCountryList();
     verify(adminController).feePolicyRpcForm(anyMap());
     verify(adminController).filPolicyRpcForm(anyMap());

@@ -483,82 +483,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
                 getString(rs, "EXPORT_GROWTH_TYPE_CODE")));
   }
 
-  public boolean verifyApplicationClients(List<Long> applicationNumbers) {
-    if (applicationNumbers == null || applicationNumbers.isEmpty()) {
-      return false;
-    }
-
-    String previousOwnerClient = null;
-    String previousOwnerLocation = null;
-    String previousAgentClient = null;
-
-    for (int i = 0; i < applicationNumbers.size(); i++) {
-      Long applicationNumber = applicationNumbers.get(i);
-      if (applicationNumber == null || applicationNumber < 1) {
-        return false;
-      }
-
-      Optional<ApplicationSnapshot> current = loadSnapshot(applicationNumber);
-      if (current.isEmpty()) {
-        return false;
-      }
-
-      ApplicationSnapshot app = current.get();
-      if (previousOwnerClient == null) {
-        previousOwnerClient = app.ownerClientNumber();
-      }
-      if (previousOwnerLocation == null) {
-        previousOwnerLocation = app.ownerClientLocationCode();
-      }
-
-      if (!equalsNullable(previousOwnerClient, app.ownerClientNumber())) {
-        return false;
-      }
-      if (!equalsNullable(previousOwnerLocation, app.ownerClientLocationCode())) {
-        return false;
-      }
-
-      if (previousAgentClient != null && !equalsNullable(previousAgentClient, app.agentClientNumber())) {
-        return false;
-      }
-      if (previousAgentClient == null && i != 0 && app.agentClientLocationCode() != null) {
-        return false;
-      }
-      previousAgentClient = app.agentClientNumber();
-    }
-
-    return true;
-  }
-
-  public boolean hasValidOffer(List<Long> applicationNumbers) {
-    if (applicationNumbers == null || applicationNumbers.isEmpty()) {
-      return false;
-    }
-
-    for (Long applicationNumber : applicationNumbers) {
-      if (applicationNumber == null || applicationNumber < 1) {
-        continue;
-      }
-      List<LexisApplicationDetailDto.LexisOfferDto> offers =
-          loadOffersByApplicationFailClosed(applicationNumber);
-      for (LexisApplicationDetailDto.LexisOfferDto offer : offers) {
-        if (offer.validOffer() && offer.withdrawalDate() == null) {
-          return true;
-        }
-      }
-    }
-
-    return false;
-  }
-
-  private Optional<ApplicationSnapshot> loadSnapshot(Long applicationNumber) {
-    return queryCursorSingle(
-        FIND_APPLICATION_BY_NUMBER,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        this::mapSnapshot);
-  }
-
   private LexisApplicationSearchResultDto toSearchResult(ResultSet rs, LocalDate today) {
     Long applicationNumber = getLong(rs, "APPLICATION_NUMBER");
     String statusCode = getString(rs, "EXPORT_APPLICATION_STATUS_CODE");
@@ -873,10 +797,6 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
       return numeric.toString();
     }
     return getString(rs, "EXPORT_PURCHASE_OFFER_NUMBER");
-  }
-
-  private boolean equalsNullable(String left, String right) {
-    return left == null ? right == null : left.equals(right);
   }
 
   private record ApplicationSnapshot(

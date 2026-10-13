@@ -76,7 +76,6 @@ public class ExemptionDetailsRpcController {
 
   private static final String ACTION_GET_APPLICATIONS = "getApplications";
   private static final String ACTION_GET_PERMITS = "getPermits";
-  private static final String ACTION_GET_BLANKET_OIC_TOTALS = "getBlanketOICTotals";
   private static final String ACTION_GET_DOCUMENT_DETAILS = "getDocumentDetails";
   private static final String ACTION_GET_DOCUMENT = "getDocument";
   private static final String ACTION_REMOVE_DOCUMENT = "removeDocument";
@@ -261,29 +260,6 @@ public class ExemptionDetailsRpcController {
       @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber,
       Authentication authentication) {
     return getPermits(exemptionNumber, authentication);
-  }
-
-  @GetMapping("/rpc/exemption-details/blanket-oic-totals")
-  public ResponseEntity<BlanketOicTotalsResponseDto> getBlanketOicTotals(
-      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber) {
-    ExemptionDetailsRpcService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn(
-          "Exemption details RPC service unavailable - returning no content for get blanket OIC totals");
-      return ResponseEntity.noContent().build();
-    }
-    requireExemptionAccess(exemptionNumber);
-
-    ExemptionDetailsRpcService.BlanketOicTotalsResponse payload =
-        service.getBlanketOicTotals(exemptionNumber);
-    return ResponseEntity.ok(
-        new BlanketOicTotalsResponseDto(payload.requestedVolume(), payload.completedVolume()));
-  }
-
-  @PostMapping(value = "/exemptionDetailsRPC", params = "actionMapping=" + ACTION_GET_BLANKET_OIC_TOTALS)
-  public ResponseEntity<BlanketOicTotalsResponseDto> getBlanketOicTotalsLegacy(
-      @RequestParam(name = "exemptionNumber", required = false) String exemptionNumber) {
-    return getBlanketOicTotals(exemptionNumber);
   }
 
   @GetMapping("/rpc/exemption-details/region-context")
@@ -1711,8 +1687,6 @@ public class ExemptionDetailsRpcController {
       String permitStatus,
       String permitIssueDate,
       boolean canViewPermit) {}
-
-  public record BlanketOicTotalsResponseDto(String requestedVolume, String completedVolume) {}
 
   /**
    * regionNumbers are the exemption's stored OIC regions; accessRegionNumbers add its linked

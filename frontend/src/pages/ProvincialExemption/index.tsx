@@ -167,8 +167,6 @@ const INITIAL_FILTERS: ProvincialExemptionSearchFilters = {
   packageNumber: '',
   exemptionNumber: '',
   region: [],
-  approvalFromDate: '',
-  approvalToDate: '',
   listFromDate: '',
   listToDate: '',
   exemptionTypeCode: '',
@@ -312,8 +310,6 @@ const ProvincialExemptionPage = () => {
       exemptionNumber: searchParams.get('exemptionNumber') ?? '',
       region: parseCsvParam(searchParams.get('region')),
       // Figma has no approval-date criteria, so an old link can't apply a hidden one.
-      approvalFromDate: '',
-      approvalToDate: '',
       listFromDate: searchParams.get('listFromDate') ?? '',
       listToDate: searchParams.get('listToDate') ?? '',
       exemptionTypeCode: exemptionTypeLocked ? 'M' : (searchParams.get('exemptionTypeCode') ?? ''),

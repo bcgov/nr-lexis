@@ -244,7 +244,6 @@ type ProvincialApplicationItemsPanelProps = {
   onDirtyChange?: (dirty: boolean) => void
   onBusyChange?: (busy: boolean) => void
   onEditingChange?: (editing: boolean) => void
-  onSelectedPackageChange?: (packageNumber: string) => void
   focusedPackageNumber?: string
   focusedPackageRequestId?: number
   focusScalesRequestId?: number
@@ -470,7 +469,6 @@ function ProvincialApplicationItemsPanel({
   onDirtyChange,
   onBusyChange,
   onEditingChange,
-  onSelectedPackageChange,
   focusedPackageNumber,
   focusedPackageRequestId,
   focusScalesRequestId,
@@ -891,10 +889,6 @@ function ProvincialApplicationItemsPanel({
   useEffect(() => {
     dispatchPackageSelection({ type: 'sync', packageNumbers: packageNumbersFromDetail })
   }, [packageNumbersFromDetail])
-
-  useEffect(() => {
-    onSelectedPackageChange?.(selectedPackageNumber)
-  }, [onSelectedPackageChange, selectedPackageNumber])
 
   useEffect(() => {
     const focusRequestKey = `${focusedPackageRequestId ?? 0}:${focusedPackageNumber ?? ''}`

@@ -42,22 +42,6 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_EXEMPTION(?,?)";
   private static final String FIND_PERMITS_BY_EXEMPTION =
       LEXIS_GROUP_5_PACKAGE + "FIND_PERMIT_DET_BY_EXMP(?,?)";
-  private static final String FIND_BLANKET_OIC_TOTALS =
-      """
-      SELECT
-        NVL(SUM(PERMIT_VOLUME), 0) AS REQUESTED_VOLUME,
-        NVL(
-          SUM(
-            CASE
-              WHEN EXPORT_PERMIT_STATUS_CODE = 'COM' THEN PERMIT_VOLUME
-              ELSE 0
-            END
-          ),
-          0
-        ) AS COMPLETED_VOLUME
-      FROM EXPORT_PERMIT_DETAIL
-      WHERE EXEMPTION_NUMBER = ?
-      """;
   // The deployed FIND_PERMIT_DET_BY_EXMP cursor has no ORG_UNIT_NO, so regions are read directly
   // for the same permits.
   private static final String FIND_PERMIT_REGIONS_BY_EXEMPTION =
@@ -196,24 +180,6 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
             },
         normalized);
     return regions;
-  }
-
-  public BlanketOicTotalsRow findBlanketOicTotals(String exemptionNumber) {
-    String normalized = trim(exemptionNumber);
-    if (normalized == null) {
-      return new BlanketOicTotalsRow(0.0d, 0.0d);
-    }
-    return jdbcTemplate
-        .query(
-            FIND_BLANKET_OIC_TOTALS,
-            (rs, rowNumber) ->
-                new BlanketOicTotalsRow(
-                    coalesce(getDouble(rs, "REQUESTED_VOLUME"), 0.0d),
-                    coalesce(getDouble(rs, "COMPLETED_VOLUME"), 0.0d)),
-            normalized)
-        .stream()
-        .findFirst()
-        .orElse(new BlanketOicTotalsRow(0.0d, 0.0d));
   }
 
   public Optional<String> findExemptionTypeCodeByExemptionNumber(String exemptionNumber) {
@@ -862,8 +828,6 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       LocalDate issueDate,
       String clientNumber,
       String agentNumber) {}
-
-  public record BlanketOicTotalsRow(double requestedVolume, double completedVolume) {}
 
   public record ApplicationPermitRow(Long permitNumber, String exemptionNumber) {}
 

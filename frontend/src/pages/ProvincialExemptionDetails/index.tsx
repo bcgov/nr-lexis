@@ -1255,17 +1255,14 @@ const ProvincialExemptionDetailsPage = () => {
       }
     : undefined
   const feeManagementAvailable =
-    currentTypeCode === 'B' ||
-    currentTypeCode === 'O' ||
-    containsUnmanu === true ||
-    editContext.rateOverrideEnabled
+    currentTypeCode === 'B' || currentTypeCode === 'O' || containsUnmanu === true
   const showFees = feeManagementAvailable || Boolean(applicationsErrorMessage)
   const exemptionDetailTabs: ExemptionDetailTabKey[] = [
     ...(showOwner || showAgent ? (['owner'] as const) : []),
     'summary',
     ...(showApplications ? (['applications'] as const) : []),
     'documents',
-    'permits',
+    ...(canPerform('/permitDetails') ? (['permits'] as const) : []),
     ...(showFees ? (['fees'] as const) : []),
   ]
   const activeExemptionTab = exemptionDetailTabs.includes(selectedExemptionTab)
@@ -1284,7 +1281,8 @@ const ProvincialExemptionDetailsPage = () => {
       mapSelectedOptionsById(editForm?.regionNumbers ?? [], regionOptions, (id) => `Region ${id}`),
     [editForm?.regionNumbers, regionOptions],
   )
-  const exemptionRegionNames = exemptionOrgUnits
+  // Only Blanket OIC exemptions have a Region field.
+  const exemptionRegionNames = (currentDetail?.blanketOic ? editContext.regionNumbers : [])
     .map(
       (regionNumber) =>
         allRegionOptions.find((region) => region.id === regionNumber)?.text ??

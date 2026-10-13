@@ -228,7 +228,7 @@ describe('Provincial Summary', () => {
     expect(mockedFetchSummaryFees).toHaveBeenLastCalledWith(0, 10, 'permitNumber ASC')
   })
 
-  it('keeps offers placed on another client application accessible without linking that application', async () => {
+  it('shows application and exemption numbers in offer and permit tables as plain text', async () => {
     mockedFetchSummaryOffersPlaced.mockResolvedValue({
       results: [
         {
@@ -254,10 +254,12 @@ describe('Provincial Summary', () => {
     )
 
     const myOffersTable = screen.getByRole('region', { name: 'My offers table' })
-    expect(within(myOffersTable).getByRole('link', { name: '12345' })).toHaveAttribute(
-      'href',
-      '/provincial/application/12345',
-    )
+    expect(within(myOffersTable).getByRole('cell', { name: '12345' })).toBeVisible()
+    expect(within(myOffersTable).queryByRole('link', { name: '12345' })).not.toBeInTheDocument()
+
+    const myPermitsTable = screen.getByRole('region', { name: 'My permits table' })
+    expect(within(myPermitsTable).getByRole('cell', { name: 'EX-205' })).toBeVisible()
+    expect(within(myPermitsTable).queryByRole('link', { name: 'EX-205' })).not.toBeInTheDocument()
   })
 
   it('pages one summary section independently', async () => {

@@ -69,7 +69,6 @@ import TableFrame from '@/components/TableFrame'
 import { useDiscardPrompt } from '@/components/DiscardChangesModal'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
-import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import RecordDocumentsSection, {
   DOCUMENT_DELETED_RESULT,
   documentsSavedResult,
@@ -153,7 +152,6 @@ import {
   fetchPermitFeeOverrideContext,
   fetchPermitApprovalEmailDefault,
   fetchPermitDocuments,
-  fetchPermitInvoices,
   openPermitDocument,
   releasePermitEditLock,
   removePermitApplicationDocument,
@@ -167,7 +165,6 @@ import {
   type PermitDetailMutationRequest,
   type PermitDetailMutationResult,
   type PermitFeeOverrideContext,
-  type PermitInvoiceRow,
 } from '@/service/provincial-permit-documents-invoices-service'
 import {
   EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS,
@@ -339,12 +336,10 @@ const PERMIT_DETAIL_TABS = [
   { id: 'documents', label: 'Documents', icon: DocumentAttachment },
   { id: 'fees', label: 'Fees', icon: Currency },
   { id: 'gbms', label: 'GBMS', icon: undefined },
-  // Not shown in navigation; see permitDetailTabs.
-  { id: 'invoices', label: 'Invoices', icon: undefined },
 ] as const
 
 type PermitDetailTabId = (typeof PERMIT_DETAIL_TABS)[number]['id']
-type DeferredPermitTabId = Extract<PermitDetailTabId, 'fees' | 'documents' | 'invoices'>
+type DeferredPermitTabId = Extract<PermitDetailTabId, 'fees' | 'documents'>
 const PERMIT_DETAIL_TAB_IDS: readonly PermitDetailTabId[] = PERMIT_DETAIL_TABS.map(({ id }) => id)
 
 // One section edits at a time. A new Ministerial permit opens with its permit, applicant and
@@ -385,7 +380,6 @@ const ContiguousTabPanels = ({
 const EMPTY_DEFERRED_PERMIT_TAB_STATE: Record<DeferredPermitTabId, boolean> = {
   fees: false,
   documents: false,
-  invoices: false,
 }
 
 const EMPTY_BLANKET_OIC_SCALE_FORM: BlanketOicScaleForm = {
@@ -1072,7 +1066,6 @@ const ProvincialPermitDetailsPage = () => {
   const [clientDataErrorMessage, setClientDataErrorMessage] = useState('')
   const [clientDataRequested, setClientDataRequested] = useState(false)
   const [documentRows, setDocumentRows] = useState<PermitDocumentRow[]>([])
-  const [invoiceRows, setInvoiceRows] = useState<PermitInvoiceRow[]>([])
   const [permitForm, setPermitForm] = useState<PermitDetailForm | null>(null)
   const [feeOverrideContext, setFeeOverrideContext] = useState<PermitFeeOverrideContext | null>(
     null,
@@ -1093,7 +1086,6 @@ const ProvincialPermitDetailsPage = () => {
   const isEditingShipping = permitEditSection === 'shipping' || permitEditSection === 'newPermit'
   const isEditingFeeOverride = permitEditSection === 'feeOverride'
   const [isEditingPermitDocuments, setIsEditingPermitDocuments] = useState(false)
-  const [isEditingInvoiceDocuments, setIsEditingInvoiceDocuments] = useState(false)
   const [isSavingPermit, setIsSavingPermit] = useState(false)
   const [isSavingShipping, setIsSavingShipping] = useState(false)
   const [isSavingFeeOverride, setIsSavingFeeOverride] = useState(false)
@@ -1109,7 +1101,6 @@ const ProvincialPermitDetailsPage = () => {
   const [gbmsErrorMessage, setGbmsErrorMessage] = useState('')
   const [permitFeesErrorMessage, setPermitFeesErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
-  const [invoicesErrorMessage, setInvoicesErrorMessage] = useState('')
   const [deferredPermitTabLoaded, setDeferredPermitTabLoaded] = useState(
     EMPTY_DEFERRED_PERMIT_TAB_STATE,
   )
@@ -1195,10 +1186,7 @@ const ProvincialPermitDetailsPage = () => {
     useState('')
   const [permitDocumentUploadDirty, setPermitDocumentUploadDirty] = useState(false)
   const [permitDocumentUploadBusy, setPermitDocumentUploadBusy] = useState(false)
-  const [invoiceDocumentUploadDirty, setInvoiceDocumentUploadDirty] = useState(false)
-  const [invoiceDocumentUploadBusy, setInvoiceDocumentUploadBusy] = useState(false)
   const [permitDocumentUploadResetKey, setPermitDocumentUploadResetKey] = useState(0)
-  const [invoiceDocumentUploadResetKey, setInvoiceDocumentUploadResetKey] = useState(0)
   const [showPermitValidationErrors, setShowPermitValidationErrors] = useState(false)
   const [shippingReferences, setShippingReferences] = useState<ShippingReferenceOptions | null>(
     null,
@@ -1228,7 +1216,6 @@ const ProvincialPermitDetailsPage = () => {
   const beginDocumentRefreshRequest = useLatestRequestGuard()
   const beginPermitFeesRequest = useLatestRequestGuard()
   const beginPermitDocumentsRequest = useLatestRequestGuard()
-  const beginPermitInvoicesRequest = useLatestRequestGuard()
   const beginPermitGbmsRequest = useLatestRequestGuard()
   const beginPermitMutationRequest = useLatestRequestGuard()
   const beginBoicPackageEditRequest = useLatestRequestGuard()
@@ -1252,7 +1239,6 @@ const ProvincialPermitDetailsPage = () => {
   const resetPermitRouteDrafts = useCallback(() => {
     beginPermitFeesRequest()
     beginPermitDocumentsRequest()
-    beginPermitInvoicesRequest()
     beginPermitGbmsRequest()
     deferredPermitTabLoadsRef.current.clear()
     loadedDeferredPermitTabsRef.current.clear()
@@ -1292,14 +1278,9 @@ const ProvincialPermitDetailsPage = () => {
     setFeeOverrideFieldErrors({})
     setPermitDocumentUploadDirty(false)
     setPermitDocumentUploadBusy(false)
-    setInvoiceDocumentUploadDirty(false)
-    setInvoiceDocumentUploadBusy(false)
     setPermitDocumentUploadResetKey((current) => current + 1)
-    setInvoiceDocumentUploadResetKey((current) => current + 1)
     setIsEditingPermitDocuments(false)
-    setIsEditingInvoiceDocuments(false)
     setDocumentRows([])
-    setInvoiceRows([])
     setClientDataRequested(false)
     setClientDataErrorMessage('')
     ownerClientLookupRequestRef.current += 1
@@ -1330,7 +1311,6 @@ const ProvincialPermitDetailsPage = () => {
     beginPermitDocumentsRequest,
     beginPermitFeesRequest,
     beginPermitGbmsRequest,
-    beginPermitInvoicesRequest,
   ])
 
   const loadPermitGbmsEvents = useCallback(
@@ -1462,9 +1442,7 @@ const ProvincialPermitDetailsPage = () => {
         setTabsData(null)
         setPermitTablesErrorMessage('')
         setDocumentRows([])
-        setInvoiceRows([])
         setDocumentsErrorMessage('')
-        setInvoicesErrorMessage('')
         setLoading(false)
         return
       }
@@ -1476,7 +1454,6 @@ const ProvincialPermitDetailsPage = () => {
       setIsPermitTablesLoading(false)
       setPermitExemptionContextReady(false)
       setDocumentsErrorMessage('')
-      setInvoicesErrorMessage('')
       setTabsData(null)
       setFeeOverrideContext(null)
       setFeeOverrideForm(null)
@@ -1506,7 +1483,6 @@ const ProvincialPermitDetailsPage = () => {
           setTabsData(null)
           setPermitTablesErrorMessage('')
           setDocumentRows([])
-          setInvoiceRows([])
           return
         }
 
@@ -1611,9 +1587,7 @@ const ProvincialPermitDetailsPage = () => {
           setTabsData(null)
           setPermitTablesErrorMessage('')
           setDocumentRows([])
-          setInvoiceRows([])
           setDocumentsErrorMessage('')
-          setInvoicesErrorMessage('')
         }
       } finally {
         if (isLatestRequest()) {
@@ -1640,10 +1614,8 @@ const ProvincialPermitDetailsPage = () => {
     blanketOicPermit && detail?.oicApplicationNumber != null
   const usesReviewedPermitFlow = blanketOicPermit || ministerialPermit
   const hasGbmsHistory = (tabsData?.gbmsEvents.length ?? 0) > 0 || Boolean(gbmsErrorMessage)
-  // Legacy retains the invoice upload workflow but hides Invoices from permit navigation.
   const permitDetailTabs = PERMIT_DETAIL_TABS.filter(
     ({ id }) =>
-      id !== 'invoices' &&
       (id !== 'agent' || (hasPermitAgent && !usesReviewedPermitFlow)) &&
       (id !== 'gbms' || hasGbmsHistory),
   ).map((tab) => ({
@@ -1736,11 +1708,7 @@ const ProvincialPermitDetailsPage = () => {
       }
 
       const isLatestRequest =
-        tab === 'fees'
-          ? beginPermitFeesRequest()
-          : tab === 'documents'
-            ? beginPermitDocumentsRequest()
-            : beginPermitInvoicesRequest()
+        tab === 'fees' ? beginPermitFeesRequest() : beginPermitDocumentsRequest()
       deferredPermitTabLoadsRef.current.add(tab)
       setDeferredPermitTabLoading((current) => ({ ...current, [tab]: true }))
 
@@ -1755,16 +1723,11 @@ const ProvincialPermitDetailsPage = () => {
           if (!isLatestRequest()) return
           setTabsData((current) => (current ? { ...current, ...feesResult } : current))
           setPermitFeesErrorMessage('')
-        } else if (tab === 'documents') {
+        } else {
           const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
           if (!isLatestRequest()) return
           setDocumentRows(documentsResult.rows)
           setDocumentsErrorMessage('')
-        } else {
-          const invoicesResult = await fetchPermitInvoices(resolvedPermitNumber)
-          if (!isLatestRequest()) return
-          setInvoiceRows(invoicesResult.rows)
-          setInvoicesErrorMessage('')
         }
 
         loadedDeferredPermitTabsRef.current.add(tab)
@@ -1775,16 +1738,8 @@ const ProvincialPermitDetailsPage = () => {
         if (tab === 'fees') {
           setPermitFeesErrorMessage('Unable to retrieve permit fee details.')
         } else {
-          if (tab === 'documents') {
-            setDocumentRows([])
-          } else {
-            setInvoiceRows([])
-          }
-          if (tab === 'documents') {
-            setDocumentsErrorMessage('Unable to retrieve permit documents.')
-          } else {
-            setInvoicesErrorMessage('Unable to retrieve permit invoice details.')
-          }
+          setDocumentRows([])
+          setDocumentsErrorMessage('Unable to retrieve permit documents.')
         }
       } finally {
         if (isLatestRequest()) {
@@ -1796,7 +1751,6 @@ const ProvincialPermitDetailsPage = () => {
     [
       beginPermitDocumentsRequest,
       beginPermitFeesRequest,
-      beginPermitInvoicesRequest,
       detail?.blanketOic,
       detail?.permitNumber,
       permitNumber,
@@ -1822,11 +1776,7 @@ const ProvincialPermitDetailsPage = () => {
   }, [activePermitTabId, loadDeferredPermitTab])
 
   useEffect(() => {
-    if (
-      activePermitTabId === 'fees' ||
-      activePermitTabId === 'documents' ||
-      activePermitTabId === 'invoices'
-    ) {
+    if (activePermitTabId === 'fees' || activePermitTabId === 'documents') {
       void loadDeferredPermitTab(activePermitTabId)
     }
   }, [activePermitTabId, loadDeferredPermitTab])
@@ -2125,12 +2075,6 @@ const ProvincialPermitDetailsPage = () => {
     canPerform('/filePermitUpload', permitOrgUnit) &&
     editContextLoaded &&
     !permitEditLocked
-  const canUploadInvoiceDocuments =
-    permitExemptionContextReady &&
-    canPerform('/fileInvoiceUpload', permitOrgUnit) &&
-    editContextLoaded &&
-    !permitEditLocked &&
-    permitStatusCode === 'ACT'
   const canMutatePermit =
     permitExemptionContextReady &&
     canPerform('savePermit', permitOrgUnit) &&
@@ -2204,7 +2148,6 @@ const ProvincialPermitDetailsPage = () => {
     hasDocumentActorRole &&
     (adminUser || !readOnlyUser) &&
     permitStatusCode === 'ACT'
-  const canEditInvoiceDocuments = canUploadInvoiceDocuments
   const scaleAttachmentLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
   const feeOverrideLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
   const canOpenPermitReport = canPerform('/permitReport') && permitStatusCode === 'COM'
@@ -2311,16 +2254,12 @@ const ProvincialPermitDetailsPage = () => {
     canEditBlanketOicScaleRows &&
     !formValuesEqual(resolvedBlanketOicScaleForm, resolvedBlanketOicScaleBaselineForm)
   const permitPanelsDirty =
-    blanketOicPackageDirty ||
-    blanketOicScaleDirty ||
-    permitDocumentUploadDirty ||
-    invoiceDocumentUploadDirty
+    blanketOicPackageDirty || blanketOicScaleDirty || permitDocumentUploadDirty
   const permitPanelOpen =
     isCreatingBoicPackage ||
     editingBoicPackageNumber !== null ||
     isAddingBoicScale ||
-    isEditingPermitDocuments ||
-    isEditingInvoiceDocuments
+    isEditingPermitDocuments
   const isPermitDirty =
     ministerialScaleSelectionDirty ||
     permitDetailDirty ||
@@ -2340,8 +2279,7 @@ const ProvincialPermitDetailsPage = () => {
     isSavingPermitApplication ||
     isRemovingPermitApplication !== null ||
     isRemovingDocumentId !== null ||
-    permitDocumentUploadBusy ||
-    invoiceDocumentUploadBusy
+    permitDocumentUploadBusy
   const blanketOicPackageEditorOpen = isCreatingBoicPackage || editingBoicPackageNumber !== null
   const blanketOicPackageActionsDisabled =
     isSavingBoicScale ||
@@ -3110,12 +3048,8 @@ const ProvincialPermitDetailsPage = () => {
     setBoicScaleFieldErrors({})
     setPermitDocumentUploadDirty(false)
     setPermitDocumentUploadBusy(false)
-    setInvoiceDocumentUploadDirty(false)
-    setInvoiceDocumentUploadBusy(false)
     setPermitDocumentUploadResetKey((current) => current + 1)
-    setInvoiceDocumentUploadResetKey((current) => current + 1)
     setIsEditingPermitDocuments(false)
-    setIsEditingInvoiceDocuments(false)
     setActionResult(withoutActionError)
   }, [boicScaleBaselineForm, detail, feeOverrideContext, resetBlanketOicPackageForm])
 
@@ -3151,7 +3085,7 @@ const ProvincialPermitDetailsPage = () => {
     if (tabId === 'owner' || tabId === 'agent') {
       setClientDataRequested(true)
     }
-    if (tabId === 'fees' || tabId === 'documents' || tabId === 'invoices') {
+    if (tabId === 'fees' || tabId === 'documents') {
       void loadDeferredPermitTab(tabId)
     }
   }
@@ -3751,6 +3685,7 @@ const ProvincialPermitDetailsPage = () => {
         overrideComment: feeOverrideForm.overrideEnabled ? normalizedComment : '',
         locked: false,
         lockMessage: '',
+        interior: feeOverrideContext?.interior === true,
       }
       setFeeOverrideContext(savedContext)
       setFeeOverrideForm(savedContext)
@@ -4473,38 +4408,23 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     const isCurrentDocumentsRequest = beginPermitDocumentsRequest()
-    const isCurrentInvoicesRequest = beginPermitInvoicesRequest()
     deferredPermitTabLoadsRef.current.delete('documents')
-    deferredPermitTabLoadsRef.current.delete('invoices')
-    setDeferredPermitTabLoading((current) => ({
-      ...current,
-      documents: false,
-      invoices: false,
-    }))
-    const [documentsResult, invoicesResult] = await Promise.allSettled([
-      fetchPermitDocuments(resolvedPermitNumber),
-      fetchPermitInvoices(resolvedPermitNumber),
-    ])
-    if (documentsResult.status === 'fulfilled' && isCurrentDocumentsRequest()) {
-      setDocumentRows(documentsResult.value.rows)
-      loadedDeferredPermitTabsRef.current.add('documents')
-      setDeferredPermitTabLoaded((current) => ({ ...current, documents: true }))
-      setDocumentsErrorMessage('')
-    } else if (documentsResult.status === 'rejected' && isCurrentDocumentsRequest()) {
-      setDocumentsErrorMessage('Unable to retrieve permit documents.')
+    setDeferredPermitTabLoading((current) => ({ ...current, documents: false }))
+    try {
+      const documentsResult = await fetchPermitDocuments(resolvedPermitNumber)
+      if (isCurrentDocumentsRequest()) {
+        setDocumentRows(documentsResult.rows)
+        loadedDeferredPermitTabsRef.current.add('documents')
+        setDeferredPermitTabLoaded((current) => ({ ...current, documents: true }))
+        setDocumentsErrorMessage('')
+      }
+    } catch (error) {
+      if (isCurrentDocumentsRequest()) {
+        setDocumentsErrorMessage('Unable to retrieve permit documents.')
+        throw error
+      }
     }
-    if (invoicesResult.status === 'fulfilled' && isCurrentInvoicesRequest()) {
-      setInvoiceRows(invoicesResult.value.rows)
-      loadedDeferredPermitTabsRef.current.add('invoices')
-      setDeferredPermitTabLoaded((current) => ({ ...current, invoices: true }))
-      setInvoicesErrorMessage('')
-    } else if (invoicesResult.status === 'rejected' && isCurrentInvoicesRequest()) {
-      setInvoicesErrorMessage('Unable to retrieve permit invoice details.')
-    }
-    if (documentsResult.status === 'rejected' && isCurrentDocumentsRequest()) {
-      throw documentsResult.reason
-    }
-  }, [beginPermitDocumentsRequest, beginPermitInvoicesRequest, detail?.permitNumber, permitNumber])
+  }, [beginPermitDocumentsRequest, detail?.permitNumber, permitNumber])
 
   const onCancelPermitDocumentEditing = useCallback(() => {
     setPermitDocumentUploadDirty(false)
@@ -4512,14 +4432,6 @@ const ProvincialPermitDetailsPage = () => {
     setPermitDocumentUploadResetKey((current) => current + 1)
     setActionResult(withoutActionError)
     setIsEditingPermitDocuments(false)
-  }, [])
-
-  const onCancelInvoiceDocumentEditing = useCallback(() => {
-    setInvoiceDocumentUploadDirty(false)
-    setInvoiceDocumentUploadBusy(false)
-    setInvoiceDocumentUploadResetKey((current) => current + 1)
-    setActionResult(withoutActionError)
-    setIsEditingInvoiceDocuments(false)
   }, [])
 
   const fetchPermitDocument = useCallback(
@@ -5466,12 +5378,6 @@ const ProvincialPermitDetailsPage = () => {
               )
             }
           />
-          <RecordField
-            label="Received date"
-            value={
-              isEditingPermit && permitForm ? permitForm.permitRequestDate : detail.applicationDate
-            }
-          />
         </RecordFieldRow>
       </RecordFieldGrid>
     )
@@ -5796,6 +5702,21 @@ const ProvincialPermitDetailsPage = () => {
   const renderPermitFeeSummary = () => {
     if (!detail) return null
     const showReviewedPermitFeeSummary = usesReviewedPermitFlow && !isEditingPermit
+    const totalVolumeValue = feeSummaryStatus ?? (formatVolume(totalFeeVolume) || 'Unavailable')
+    // An override replaces the calculated fee.
+    const totalFeesValue =
+      feeSummaryStatus ??
+      (!feeOverrideContext
+        ? editContextLoadFailed
+          ? 'Unavailable'
+          : 'Loading…'
+        : feeOverrideContext.overrideEnabled
+          ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
+          : permitFeesMasked
+            ? '$'
+            : `$${formatAmount(calculatedPermitFee)}`)
+    const showReceiptNumber =
+      !!detail.receiptNumber?.trim() || feeOverrideContext?.interior === true
     return (
       <fieldset ref={permitEditSections.sectionRef('permit')} className="legacy-form-fieldset">
         <legend className={showReviewedPermitFeeSummary ? 'cds--visually-hidden' : undefined}>
@@ -5806,23 +5727,8 @@ const ProvincialPermitDetailsPage = () => {
           <RecordFieldGrid>
             <RecordFieldRow>
               {[
-                [
-                  'Total volume (m³)',
-                  feeSummaryStatus ?? (formatVolume(totalFeeVolume) || 'Unavailable'),
-                ],
-                [
-                  'Total fees (CAD)',
-                  feeSummaryStatus ??
-                    (!feeOverrideContext
-                      ? editContextLoadFailed
-                        ? 'Unavailable'
-                        : 'Loading…'
-                      : feeOverrideContext.overrideEnabled
-                        ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
-                        : permitFeesMasked
-                          ? '$'
-                          : `$${formatAmount(calculatedPermitFee)}`),
-                ],
+                ['Total volume (m³)', totalVolumeValue],
+                ['Total fees (CAD)', totalFeesValue],
               ].map(([label, value]) => (
                 <RecordField key={label} label={label} value={value} />
               ))}
@@ -5831,54 +5737,38 @@ const ProvincialPermitDetailsPage = () => {
         ) : (
           <RecordFieldGrid>
             <RecordFieldRow>
-              <RecordFieldCell>
-                {isEditingPermit && permitForm ? (
-                  renderPermitTextInput(
-                    'permitReceiptNo',
-                    'Receipt number',
-                    invoiceMaterialLocked && !canEnterPaymentReceipt,
-                    50,
-                  )
-                ) : (
-                  <TextInput
-                    id="permitFeeReceiptNumber"
-                    labelText="Receipt number"
-                    value={displayValueText(detail.receiptNumber)}
-                    disabled
-                  />
-                )}
-              </RecordFieldCell>
+              {showReceiptNumber && (
+                <RecordFieldCell>
+                  {isEditingPermit && permitForm ? (
+                    renderPermitTextInput(
+                      'permitReceiptNo',
+                      'Receipt number',
+                      invoiceMaterialLocked && !canEnterPaymentReceipt,
+                      50,
+                    )
+                  ) : (
+                    <TextInput
+                      id="permitFeeReceiptNumber"
+                      labelText="Receipt number"
+                      value={displayValueText(detail.receiptNumber)}
+                      disabled
+                    />
+                  )}
+                </RecordFieldCell>
+              )}
               <RecordFieldCell>
                 <TextInput
                   id="permitFeeTotalVolume"
                   labelText="Total volume (m³)"
-                  value={feeSummaryStatus ?? (formatVolume(totalFeeVolume) || 'Unavailable')}
+                  value={totalVolumeValue}
                   disabled
                 />
               </RecordFieldCell>
               <RecordFieldCell>
                 <TextInput
-                  id="permitCalculatedFee"
-                  labelText="Calculated fee (CAD)"
-                  value={
-                    feeSummaryStatus ??
-                    (permitFeesMasked ? '$' : `$${formatAmount(calculatedPermitFee)}`)
-                  }
-                  disabled
-                />
-              </RecordFieldCell>
-              <RecordFieldCell>
-                <TextInput
-                  id="permitEffectiveFee"
-                  labelText="Effective fee (CAD)"
-                  value={
-                    feeSummaryStatus ??
-                    (feeOverrideContext?.overrideEnabled
-                      ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
-                      : permitFeesMasked
-                        ? '$'
-                        : `$${formatAmount(calculatedPermitFee)}`)
-                  }
+                  id="permitTotalFees"
+                  labelText="Total fees (CAD)"
+                  value={totalFeesValue}
                   disabled
                 />
               </RecordFieldCell>
@@ -7771,102 +7661,6 @@ const ProvincialPermitDetailsPage = () => {
                         onDeleteStart={clearActionNotifications}
                         onDelete={onRemoveDocument}
                       />
-                    </Column>
-                  </Grid>
-                </TabPanel>
-                <TabPanel key="invoices" className="application-detail-tab-panel">
-                  <Grid fullWidth className="application-detail-tab-grid">
-                    <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <div className="detail-section-card__header">
-                          <DetailCardTitle>Invoices</DetailCardTitle>
-                          {canEditInvoiceDocuments &&
-                            (isEditingInvoiceDocuments ? (
-                              <Button
-                                kind="tertiary"
-                                size="md"
-                                disabled={invoiceDocumentUploadBusy}
-                                onClick={onCancelInvoiceDocumentEditing}
-                              >
-                                Cancel
-                              </Button>
-                            ) : (
-                              <Button
-                                kind="tertiary"
-                                size="md"
-                                renderIcon={Edit}
-                                onClick={() => setIsEditingInvoiceDocuments(true)}
-                              >
-                                Edit invoice documents
-                              </Button>
-                            ))}
-                        </div>
-                        {isEditingInvoiceDocuments && canUploadInvoiceDocuments && (
-                          <DetailDocumentUploadPanel
-                            key={`invoice-document-upload-${permitNumber}-${invoiceDocumentUploadResetKey}`}
-                            workflowType="invoice"
-                            targetNumber={String(detail.permitNumber ?? permitNumber ?? '')}
-                            inputId="permitInvoiceUpload"
-                            disabled={!detail.permitNumber}
-                            onDirtyChange={setInvoiceDocumentUploadDirty}
-                            onBusyChange={setInvoiceDocumentUploadBusy}
-                            onUploadComplete={refreshPermitDocuments}
-                            onUploadSuccess={(message) =>
-                              setActionResult({
-                                kind: 'success',
-                                title: 'Invoice uploaded',
-                                message,
-                              })
-                            }
-                          />
-                        )}
-                        {deferredPermitTabLoading.invoices ? (
-                          <InlineLoading description="Loading permit invoices…" />
-                        ) : invoicesErrorMessage ? (
-                          <EmptyState
-                            title="Invoices unavailable"
-                            description={invoicesErrorMessage}
-                            headingLevel={3}
-                            role="alert"
-                          />
-                        ) : invoiceRows.length > 0 ? (
-                          <TableFrame ariaLabel="Permit invoice rows">
-                            <Table size="md" useZebraStyles>
-                              <TableHead>
-                                <TableRow>
-                                  <TableHeader>Invoice number</TableHeader>
-                                  <TableHeader>Export value (CAD)</TableHeader>
-                                  <TableHeader>Conversion rate</TableHeader>
-                                  <TableHeader>Fee in lieu</TableHeader>
-                                  <TableHeader>Status</TableHeader>
-                                </TableRow>
-                              </TableHead>
-                              <TableBody>
-                                {invoiceRows.map((row) => (
-                                  <TableRow key={row.id}>
-                                    <TableCell>{displayTableValue(row.invoiceNumber)}</TableCell>
-                                    <TableCell>{displayTableValue(row.exportValueCad)}</TableCell>
-                                    <TableCell>{displayTableValue(row.conversionRate)}</TableCell>
-                                    <TableCell>{displayTableValue(row.feeInLieu)}</TableCell>
-                                    <TableCell>
-                                      <StatusTag
-                                        status={row.invoiceFound ? 'Found' : 'Missing'}
-                                        variant={row.invoiceFound ? 'positive' : 'negative'}
-                                      />
-                                    </TableCell>
-                                  </TableRow>
-                                ))}
-                              </TableBody>
-                            </Table>
-                          </TableFrame>
-                        ) : (
-                          <EmptyState
-                            title="No invoices available"
-                            description="No invoices are available for this permit."
-                            headingLevel={3}
-                          />
-                        )}
-                      </Tile>
                     </Column>
                   </Grid>
                 </TabPanel>

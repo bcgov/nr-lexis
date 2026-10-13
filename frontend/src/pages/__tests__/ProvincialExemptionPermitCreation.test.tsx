@@ -15,7 +15,6 @@ import {
 } from '@/service/application-client-lookup-service'
 import {
   fetchExemptionApplications,
-  fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
   updateExemption,
@@ -66,7 +65,6 @@ vi.mock('@/service/provincial-exemption-detail-service', () => ({
   addApplicationToExemption: vi.fn(),
   approveExemptions: vi.fn(),
   fetchExemptionApplications: vi.fn(),
-  fetchExemptionBlanketOicTotals: vi.fn(),
   fetchExemptionEditContext: vi.fn(),
   fetchExemptionPermits: vi.fn(),
   removeApplicationFromExemption: vi.fn(),
@@ -181,7 +179,9 @@ const mockRole = (roles: string[], allowedActions = ['createPermit']) => {
   vi.mocked(useAuth).mockReturnValue(
     createTestAuthContext({
       capabilities: createTestCapabilities({ roles }),
-      canPerform: vi.fn((action: string) => allowedActions.includes(action)),
+      canPerform: vi.fn(
+        (action: string) => action === '/permitDetails' || allowedActions.includes(action),
+      ),
     }),
   )
 }
@@ -194,8 +194,9 @@ const mockCaribooApprover = () => {
       capabilities: createTestCapabilities({ roles: ['LEXIS_APPLICATION_APPROVER'] }),
       canPerform: vi.fn(
         (action: string, ...recordOrgUnits: [recordOrgUnits?: RecordOrgUnits]) =>
-          action === 'createPermit' &&
-          (recordOrgUnits.length === 0 || withinRegions(cariboo, recordOrgUnits[0])),
+          action === '/permitDetails' ||
+          (action === 'createPermit' &&
+            (recordOrgUnits.length === 0 || withinRegions(cariboo, recordOrgUnits[0]))),
       ),
     }),
   )
@@ -338,10 +339,6 @@ describe('permit creation from an exemption', () => {
       ownerNumber: '00012345',
     })
     vi.mocked(fetchExemptionPermits).mockResolvedValue([])
-    vi.mocked(fetchExemptionBlanketOicTotals).mockResolvedValue({
-      requestedVolume: '0',
-      completedVolume: '0',
-    })
     vi.mocked(fetchExemptionEditContext).mockResolvedValue({
       rateOverrideEnabled: false,
       fixedFeeRate: '',

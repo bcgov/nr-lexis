@@ -6,7 +6,6 @@ import {
   Column,
   DismissibleTag,
   Grid,
-  InlineNotification,
   Pagination,
   Table,
   TableBody,
@@ -119,7 +118,6 @@ const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
   receivedToDate: '',
   listingFromDate: '',
   listingToDate: '',
-  exportScheduleId: '',
   applicantClientNumber: '',
   ownerClientNumber: '',
   agentClientNumber: '',
@@ -181,7 +179,6 @@ const buildSearchParams = (
     ['region', filters.region],
     ['listingFromDate', filters.listingFromDate],
     ['listingToDate', filters.listingToDate],
-    ['exportScheduleId', filters.exportScheduleId ?? ''],
     ['applicantClientNumber', filters.applicantClientNumber],
     ['ownerClientNumber', filters.ownerClientNumber],
     ['agentClientNumber', filters.agentClientNumber ?? ''],
@@ -247,7 +244,6 @@ const ProvincialApplicationPage = () => {
       receivedToDate: '',
       listingFromDate: searchParams.get('listingFromDate') ?? '',
       listingToDate: searchParams.get('listingToDate') ?? '',
-      exportScheduleId: searchParams.get('exportScheduleId') ?? '',
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
       agentClientNumber: searchParams.get('agentClientNumber') ?? '',
@@ -729,15 +725,6 @@ const ProvincialApplicationPage = () => {
                 onSearch()
               }}
             >
-              {filters.exportScheduleId && (
-                <InlineNotification
-                  kind="info"
-                  lowContrast
-                  title="Export schedule filter applied"
-                  subtitle={`Showing applications assigned to export schedule ${filters.exportScheduleId}.`}
-                  onCloseButtonClick={() => updateFilter('exportScheduleId', '')}
-                />
-              )}
               <div className="legacy-search-grid provincial-application-search-grid">
                 <TextInput
                   id="applicationNumber"

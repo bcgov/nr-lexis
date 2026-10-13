@@ -10,7 +10,6 @@ import { fetchProvincialExemptionOptions } from '@/service/search-options-servic
 import {
   addApplicationToExemption,
   fetchExemptionApplications,
-  fetchExemptionBlanketOicTotals,
   fetchExemptionEditContext,
   fetchExemptionPermits,
   updateExemption,
@@ -40,7 +39,6 @@ vi.mock('@/service/provincial-exemption-detail-service', () => ({
   addApplicationToExemption: vi.fn(),
   approveExemptions: vi.fn(),
   fetchExemptionApplications: vi.fn(),
-  fetchExemptionBlanketOicTotals: vi.fn(),
   fetchExemptionEditContext: vi.fn(),
   fetchExemptionPermits: vi.fn(),
   removeApplicationFromExemption: vi.fn(),
@@ -139,10 +137,6 @@ describe('Provincial exemption detail form behaviour', () => {
       ownerNumber: 'Blanket OIC',
     })
     vi.mocked(fetchExemptionPermits).mockResolvedValue([])
-    vi.mocked(fetchExemptionBlanketOicTotals).mockResolvedValue({
-      requestedVolume: '0.0',
-      completedVolume: '0.0',
-    })
     vi.mocked(fetchExemptionEditContext).mockResolvedValue({
       rateOverrideEnabled: false,
       fixedFeeRate: '',

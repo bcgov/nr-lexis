@@ -66,10 +66,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
   private static final Set<String> MUTATION_LOCKED_EXPORT_PERMIT_STATUSES =
       Set.of("COM", "PPD", "EXP", "CAN");
-  private static final Set<Long> COASTAL_ORG_UNITS =
-      Set.of(1832L, 1909L, 1910L, 15L, 23L, 27L, 43L, 48L, 1619L);
-  private static final Set<Long> SKEENA_ORG_UNITS =
-      Set.of(1621L, 24L, 40L, 1908L, 28L, 1823L, 1824L, 32L, 16L, 20L, 36L);
   private static final String PACKAGE_EXISTS_MESSAGE_TEMPLATE = "Package %s already exists.";
   private static final String PACKAGE_PERMITTED_SCALE_MESSAGE =
       "Package changes are not allowed after a scale has been permitted.";
@@ -587,15 +583,15 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             hasScaleBeforeApproval,
             hasCompletePermit,
             trimToNull(application.oicIndicator()),
-            isInteriorMinisterialItemOverrideEligible(application, scales)));
+            isMinisterialItemOverrideEligible(application)));
   }
 
-  private boolean isInteriorMinisterialItemOverrideEligible(
-      ApplicationDetailsRpcRepository.ApplicationEditContextRow application,
-      List<ApplicationDetailsRpcRepository.ScaleMutationRow> scales) {
+  // Legacy meant to exclude Coast and Skeena coastal-grade applications, but that check never
+  // matched, so every region qualifies.
+  private boolean isMinisterialItemOverrideEligible(
+      ApplicationDetailsRpcRepository.ApplicationEditContextRow application) {
     String exemptionNumber = trimToNull(application.exemptionNumber());
-    Long orgUnitNumber = application.orgUnitNumber();
-    if (exemptionNumber == null || orgUnitNumber == null) {
+    if (exemptionNumber == null) {
       return false;
     }
 
@@ -607,34 +603,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             exemption ->
                 Double.isFinite(exemption.remainingVolume())
                     && exemption.remainingVolume() > 0.0d)
-        .filter(exemption -> isInteriorAdministration(orgUnitNumber, scales))
         .isPresent();
-  }
-
-  private boolean isInteriorAdministration(
-      Long orgUnitNumber, List<ApplicationDetailsRpcRepository.ScaleMutationRow> scales) {
-    if (COASTAL_ORG_UNITS.contains(orgUnitNumber)) {
-      return false;
-    }
-    if (!SKEENA_ORG_UNITS.contains(orgUnitNumber)) {
-      return true;
-    }
-    if (scales == null) {
-      return false;
-    }
-    for (ApplicationDetailsRpcRepository.ScaleMutationRow scale : scales) {
-      String grade = scale == null ? null : normalizeCode(scale.gradeCode());
-      if (grade == null) {
-        continue;
-      }
-      if (grade.chars().anyMatch(value -> value >= 'A' && value <= 'Y')) {
-        return false;
-      }
-      if (grade.chars().anyMatch(Character::isDigit)) {
-        return true;
-      }
-    }
-    return false;
   }
 
   @Override
@@ -817,19 +786,6 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return Optional.empty();
     }
     return repository.findEndUsesByApplicationNumberRequired(applicationNumber).stream()
-        .map(ApplicationDetailsRpcRepository.EndUseRow::endUseCode)
-        .map(TextUtils::trimToNull)
-        .filter(value -> value != null)
-        .findFirst();
-  }
-
-  @Override
-  public Optional<String> getPackageSelectedEndUse(String packageNumber) {
-    String persistedPackageNumber = preservePackageNumber(packageNumber);
-    if (persistedPackageNumber == null) {
-      return Optional.empty();
-    }
-    return repository.findEndUsesByPackageNumberRequired(persistedPackageNumber).stream()
         .map(ApplicationDetailsRpcRepository.EndUseRow::endUseCode)
         .map(TextUtils::trimToNull)
         .filter(value -> value != null)

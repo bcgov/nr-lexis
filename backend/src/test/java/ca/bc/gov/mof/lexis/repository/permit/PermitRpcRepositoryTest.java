@@ -648,32 +648,6 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
-  void invoiceNumbersShouldPreserveLegitimateEmptyResult() throws Exception {
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_INVOICES_BY_PERMIT(?,?) }", 2);
-    when(resultSet.next()).thenReturn(false);
-    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
-
-    assertThat(repository.findInvoiceNumbersByPermitRequired(7000123L)).isEmpty();
-    verify(callableStatement).setString(1, "7000123");
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
-  }
-
-  @Test
-  void invoiceNumbersShouldPropagateOracleFailure() {
-    DataAccessResourceFailureException failure =
-        new DataAccessResourceFailureException("invoice lookup unavailable");
-    when(
-            jdbcTemplate.execute(
-                eq("{ call LEXIS_GROUP_5.FIND_INVOICES_BY_PERMIT(?,?) }"),
-                any(CallableStatementCallback.class)))
-        .thenThrow(failure);
-    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
-
-    assertThatThrownBy(() -> repository.findInvoiceNumbersByPermitRequired(7000123L))
-        .isSameAs(failure);
-  }
-
-  @Test
   void contextualEndUseReadsShouldPropagateOracleFailure() {
     when(jdbcTemplate.execute(any(String.class), any(CallableStatementCallback.class)))
         .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
@@ -1297,48 +1271,16 @@ class PermitRpcRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void attachmentTypesShouldKeepHistoricalRowsAndMapOptionalOrderMetadata() throws Exception {
-    when(resultSet.getString("CODE")).thenReturn(" INV ", " ", "OTH", "TXT");
-    when(resultSet.getString("DESCRIPTION"))
-        .thenReturn(" Invoice ", "Blank code", null, "Plain text");
-    when(resultSet.wasNull()).thenReturn(true);
-    when(jdbcTemplate.query(eq(LexisCodeQueries.ATTACHMENT_TYPES), any(RowMapper.class)))
-        .thenAnswer(invocation -> {
-          RowMapper<PermitRpcRepository.AttachmentTypeRow> mapper = invocation.getArgument(1);
-          return List.of(
-              mapper.mapRow(resultSet, 0), mapper.mapRow(resultSet, 1),
-              mapper.mapRow(resultSet, 2), mapper.mapRow(resultSet, 3));
-        });
-    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
-
-    assertThat(repository.findAllAttachmentTypes())
-        .extracting("code", "description", "groupBy", "orderBy")
-        .containsExactly(tuple("INV", "Invoice", 0L, 0L), tuple("TXT", "Plain text", 0L, 0L));
-    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class));
-    assertThat(sql.getValue())
-        .contains("FROM THE.EXPORT_ATTACHMENT_TYPE_CODE C", "NULL AS ORDER_BY", "NULL AS GROUP_BY")
-        .doesNotContain("WHERE", "SYSDATE", "ORDER BY");
-    verify(jdbcTemplate, never()).execute(anyString(), any(CallableStatementCallback.class));
-  }
-
-  @Test
-  @SuppressWarnings("unchecked")
-  void attachmentTypeQueriesShouldKeepEmptyResultsAndPropagateFailures() {
+  void attachmentTypeDescriptionShouldKeepEmptyResultAndPropagateFailure() {
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("Oracle unavailable");
-    when(jdbcTemplate.query(eq(LexisCodeQueries.ATTACHMENT_TYPES), any(RowMapper.class)))
-        .thenReturn(List.of())
-        .thenThrow(failure);
     when(jdbcTemplate.query(
             eq(LexisCodeQueries.ATTACHMENT_TYPE_BY_CODE), any(RowMapper.class), eq("INV")))
         .thenReturn(List.of())
         .thenThrow(failure);
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
 
-    assertThat(repository.findAllAttachmentTypes()).isEmpty();
     assertThat(repository.findAttachmentTypeDescription("INV")).isEmpty();
-    assertThatThrownBy(repository::findAllAttachmentTypes).isSameAs(failure);
     assertThatThrownBy(() -> repository.findAttachmentTypeDescription("INV")).isSameAs(failure);
   }
 

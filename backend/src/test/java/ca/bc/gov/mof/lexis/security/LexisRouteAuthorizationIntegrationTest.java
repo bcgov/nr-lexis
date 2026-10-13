@@ -313,7 +313,7 @@ class LexisRouteAuthorizationIntegrationTest {
                 HttpMethod.GET,
                 "/api/lexis/federal/applications/9001/remarks",
                 null,
-                "/federalApplicationDetails"),
+                "/applicationRemarks"),
             expected(
                 HttpMethod.POST,
                 "/api/lexis/federal/applications/9001/remarks",
@@ -445,16 +445,6 @@ class LexisRouteAuthorizationIntegrationTest {
                 HttpMethod.POST,
                 "/api/lexis/permitDetailsRPC.do",
                 "updateShipping",
-                "savePermit"),
-            expected(
-                HttpMethod.GET,
-                "/api/lexis/rpc/permit-details/check-permit-number",
-                null,
-                "savePermit"),
-            expected(
-                HttpMethod.POST,
-                "/api/lexis/permitDetailsRPC.do",
-                "checkPermitNumber",
                 "savePermit"),
             expected(
                 HttpMethod.POST,
@@ -975,7 +965,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void legacyOfferDetailsRpcShouldAllowClientLookupAction() throws Exception {
     mockMvc.perform(
             post("/api/lexis/offerDetailsRPC")
-                .param("actionMapping", "getClientLocations")
+                .param("actionMapping", "getClientData")
                 .param("clientNumber", "77881")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER"))))
         .andExpect(status().isNoContent());
@@ -1532,7 +1522,7 @@ class LexisRouteAuthorizationIntegrationTest {
   void legacyPermitDetailsRpcShouldAllowReadOnlyRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/permitDetailsRPC")
-                .param("actionMapping", "getPackageList")
+                .param("actionMapping", "getOICPackageList")
                 .param("permitNumber", "7000123")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isNoContent());
@@ -1555,42 +1545,6 @@ class LexisRouteAuthorizationIntegrationTest {
                 .param("permitNumber", "7000123")
                 .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
         .andExpect(status().isForbidden());
-  }
-
-  @Test
-  void permitNumberProbesShouldRequireSavePermitAuthority() throws Exception {
-    SimpleGrantedAuthority readOnly = new SimpleGrantedAuthority("LEXIS_READ_ONLY");
-    SimpleGrantedAuthority applicationApprover =
-        new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER");
-
-    mockMvc
-        .perform(
-            get("/api/lexis/rpc/permit-details/check-permit-number")
-                .param("permitNumber", "7000123")
-                .with(jwt().authorities(readOnly)))
-        .andExpect(status().isForbidden());
-    mockMvc
-        .perform(
-            get("/api/lexis/rpc/permit-details/check-permit-number")
-                .param("permitNumber", "7000123")
-                .with(jwt().authorities(applicationApprover)))
-        .andExpect(status().isNoContent())
-        .andExpect(handler().handlerType(PermitDetailsRpcController.class))
-        .andExpect(handler().methodName("checkPermitNumber"));
-    mockMvc
-        .perform(
-            post("/api/lexis/permitDetailsRPC.do")
-                .param("actionMapping", "checkPermitNumber")
-                .param("permitNumber", "7000123")
-                .with(jwt().authorities(readOnly)))
-        .andExpect(status().isForbidden());
-    mockMvc
-        .perform(
-            post("/api/lexis/permitDetailsRPC.do")
-                .param("actionMapping", "checkPermitNumber")
-                .param("permitNumber", "7000123")
-                .with(jwt().authorities(applicationApprover)))
-        .andExpect(status().isNoContent());
   }
 
   @Test

@@ -138,42 +138,6 @@ class ExemptionDetailsRpcRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void blanketOicTotalsShouldMatchLegacyBySummingPermitVolume() throws SQLException {
-    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    ResultSet resultSet = mock(ResultSet.class);
-    when(resultSet.getDouble("REQUESTED_VOLUME")).thenReturn(1250.5d);
-    when(resultSet.getDouble("COMPLETED_VOLUME")).thenReturn(800.25d);
-    when(resultSet.wasNull()).thenReturn(false);
-    when(
-            jdbcTemplate.query(
-                any(String.class),
-                any(RowMapper.class),
-                eq("BO-001")))
-        .thenAnswer(
-            invocation ->
-                List.of(
-                    ((RowMapper<ExemptionDetailsRpcRepository.BlanketOicTotalsRow>)
-                            invocation.getArgument(1))
-                        .mapRow(resultSet, 0)));
-    ExemptionDetailsRpcRepository repository =
-        new ExemptionDetailsRpcRepository(jdbcTemplate);
-
-    ExemptionDetailsRpcRepository.BlanketOicTotalsRow totals =
-        repository.findBlanketOicTotals(" BO-001 ");
-
-    assertThat(totals.requestedVolume()).isEqualTo(1250.5d);
-    assertThat(totals.completedVolume()).isEqualTo(800.25d);
-    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
-    verify(jdbcTemplate)
-        .query(sql.capture(), any(RowMapper.class), eq("BO-001"));
-    assertThat(sql.getValue())
-        .contains("SUM(PERMIT_VOLUME)")
-        .contains("EXPORT_PERMIT_STATUS_CODE = 'COM'")
-        .contains("WHERE EXEMPTION_NUMBER = ?");
-  }
-
-  @Test
-  @SuppressWarnings("unchecked")
   void documentContextShouldLoadAllLinkedDocumentsInOneDirectQuery() throws SQLException {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     ResultSet resultSet = mock(ResultSet.class);

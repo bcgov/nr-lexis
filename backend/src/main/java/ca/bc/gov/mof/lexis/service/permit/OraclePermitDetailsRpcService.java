@@ -1,12 +1,6 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import static ca.bc.gov.mof.lexis.util.DateUtils.parseIsoOrLegacyDate;
-import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.INVOICE_NUMBER_MAX_LENGTH;
-import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceAmount;
-import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceConversionRate;
-import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.isValidInvoiceNumber;
-import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.roundInvoiceAmountForStorage;
-import static ca.bc.gov.mof.lexis.util.InvoiceStorageConstraints.roundInvoiceConversionRateForStorage;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.controlSafe;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.fingerprint;
@@ -24,23 +18,16 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApplicationListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitApprovedExemptionVolumeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailableApplicationListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAvailablePackageListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitConversionRateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCorePackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCoreTabsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDataAfterScaleUpdateRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitDocumentItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitExemptionVolumeRemainingRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitFileTypeRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitGbmsInvoiceHistoryItemRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitHasApplicationsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceDetailsRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitInvoiceListRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRequestDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitMutationRpcResponseDto;
-import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitNumberAvailabilityRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageDetailsRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageInfoRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitPackageListRpcResponseDto;
@@ -54,7 +41,6 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitScalesForPackageRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitSummaryRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
-import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.AttachmentTypeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.GbmsInvoiceHistoryRow;
@@ -76,7 +62,6 @@ import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitPackageAp
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitScaleDetailRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PackageCandidateRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
-import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.SalesInvoiceRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRecord;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ScaleMutationRow;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
@@ -431,9 +416,10 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                           .setScale(2, RoundingMode.HALF_UP)
                           .toPlainString()
                       : "",
-                  nonNull(permit.overrideComment()));
+                  nonNull(permit.overrideComment()),
+                  permitMutationValidator.isInterior(permit.orgUnitNo(), permitNumber));
             })
-        .orElseGet(() -> new PermitEditContext(false, "", ""));
+        .orElseGet(() -> new PermitEditContext(false, "", "", false));
   }
 
   @Override
@@ -689,32 +675,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
-  public PermitDataAfterScaleUpdateRpcResponseDto getPermitDataAfterScaleUpdate(Long permitNumber) {
-    if (permitNumber == null || permitNumber < 1) {
-      return new PermitDataAfterScaleUpdateRpcResponseDto("0.0", 0L, "$0.00", 0.0d);
-    }
-
-    String permitNumberString = permitNumber.toString();
-    FeeCalculationContext feeContext = buildFeeContext(permitNumber, null, null);
-    List<PermitScaleDetailRow> permitScales =
-        repository.findScaleDetailsByPermitNumber(permitNumber).stream()
-            .filter(scale -> permitNumberString.equals(trimToNull(scale.exportPermitDetailNumber())))
-            .toList();
-
-    double totalVolume = permitScales.stream().mapToDouble(PermitScaleDetailRow::speciesGradeVolume).sum();
-    long totalPieces = permitScales.stream().mapToLong(PermitScaleDetailRow::piecesCount).sum();
-    BigDecimal totalFees = sumFees(permitScales, feeContext);
-    double exemptionVolume =
-        exemptionService
-            .findByExemptionNumber(feeContext.exemptionNumber())
-            .map(exemption -> exemption.remainingVolume())
-            .orElse(0.0d);
-
-    return new PermitDataAfterScaleUpdateRpcResponseDto(
-        formatVolume(totalVolume), totalPieces, formatCurrency(totalFees), exemptionVolume);
-  }
-
-  @Override
   public PermitPackageVolumeSumRpcResponseDto getPackageVolumeSum(Long permitNumber, String packageNumber) {
     String persistedPackageNumber = preservePackageNumber(packageNumber);
     if (permitNumber == null || permitNumber < 1 || persistedPackageNumber == null) {
@@ -803,15 +763,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .map(row -> new PermitCountryItemRpcResponseDto(nonNull(row.description()), nonNull(row.code())))
             .toList();
     return new PermitCountryListRpcResponseDto(countries);
-  }
-
-  @Override
-  public PermitNumberAvailabilityRpcResponseDto checkPermitNumber(Long permitNumber) {
-    if (permitNumber == null || permitNumber < 1) {
-      return new PermitNumberAvailabilityRpcResponseDto(true);
-    }
-    return new PermitNumberAvailabilityRpcResponseDto(
-        repository.findPermitPolicyContextByPermitNumber(permitNumber).isEmpty());
   }
 
   @Override
@@ -1185,40 +1136,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return null;
     }
     return unassignedScales.stream().mapToDouble(ScaleMutationRow::speciesGradeVolume).sum();
-  }
-
-  @Override
-  public PermitAvailablePackageListRpcResponseDto getAvailablePackageList(
-      String exemptionNumber,
-      String selectedPackagesCsv,
-      Predicate<Long> applicationAccess) {
-    String normalizedExemptionNumber = trimToNull(exemptionNumber);
-    if (normalizedExemptionNumber == null) {
-      return new PermitAvailablePackageListRpcResponseDto(
-          List.of(), "No applications are currently available.");
-    }
-
-    Set<String> selectedPackages =
-        selectedPackagesCsv == null
-            ? Set.of()
-            : selectedPackagesCsv.lines()
-                .flatMap(line -> java.util.Arrays.stream(line.split(",")))
-                .filter(packageNumber -> !packageNumber.isBlank())
-                .collect(java.util.stream.Collectors.toSet());
-    List<String> distinctPackages =
-        findUnassignedScalesByApplication(normalizedExemptionNumber, applicationAccess).values()
-            .stream()
-            .flatMap(List::stream)
-            .map(ScaleMutationRow::packageNumber)
-            .map(this::preservePackageNumber)
-            .filter(java.util.Objects::nonNull)
-            .filter(packageNumber -> !selectedPackages.contains(packageNumber))
-            .distinct()
-            .sorted()
-            .toList();
-    return new PermitAvailablePackageListRpcResponseDto(
-        distinctPackages,
-        distinctPackages.isEmpty() ? "No applications are currently available." : null);
   }
 
   private boolean canAccessApplication(
@@ -3092,162 +3009,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   @Override
-  @Transactional
-  public PermitPersistenceRpcResponseDto addInvoice(
-      Long permitNumber,
-      String salesInvoiceNumber,
-      BigDecimal invoiceExportValue,
-      BigDecimal invoiceConversionRate,
-      BigDecimal invoiceFeeInLieu,
-      String userId) {
-    List<String> errors = new ArrayList<>();
-    String normalizedSalesInvoiceNumber = trimToNull(salesInvoiceNumber);
-
-    if (permitNumber == null || permitNumber < 1) {
-      errors.add("A valid permit number is required.");
-    }
-    if (normalizedSalesInvoiceNumber == null) {
-      errors.add("A valid sales invoice number is required.");
-    } else if (normalizedSalesInvoiceNumber.length() > INVOICE_NUMBER_MAX_LENGTH) {
-      errors.add(
-          "The sales invoice number must be "
-              + INVOICE_NUMBER_MAX_LENGTH
-              + " characters or fewer.");
-    } else if (!isValidInvoiceNumber(normalizedSalesInvoiceNumber)) {
-      errors.add("The sales invoice number must use printable US-ASCII characters.");
-    }
-    if (invoiceExportValue == null || invoiceExportValue.compareTo(BigDecimal.ZERO) <= 0) {
-      errors.add("A valid export value is required.");
-    } else if (!isValidInvoiceAmount(invoiceExportValue)) {
-      errors.add("The export value must round to 9999999.99 or less.");
-    }
-    if (invoiceConversionRate == null || invoiceConversionRate.compareTo(BigDecimal.ZERO) <= 0) {
-      errors.add("A valid currency conversion rate is required.");
-    } else if (!isValidInvoiceConversionRate(invoiceConversionRate)) {
-      errors.add("The currency conversion rate must round to 9.99999 or less.");
-    }
-    if (invoiceFeeInLieu == null || invoiceFeeInLieu.compareTo(BigDecimal.ZERO) <= 0) {
-      errors.add("A valid fee in lieu is required.");
-    } else if (!isValidInvoiceAmount(invoiceFeeInLieu)) {
-      errors.add("The fee in lieu must round to 9999999.99 or less.");
-    }
-    if (!errors.isEmpty()) {
-      return new PermitPersistenceRpcResponseDto(
-          false, "", errors, List.of(), permitNumber);
-    }
-
-    BigDecimal storedInvoiceExportValue = roundInvoiceAmountForStorage(invoiceExportValue);
-    BigDecimal storedInvoiceConversionRate =
-        roundInvoiceConversionRateForStorage(invoiceConversionRate);
-    BigDecimal storedInvoiceFeeInLieu = roundInvoiceAmountForStorage(invoiceFeeInLieu);
-
-    Optional<PermitMutationRow> permit = repository.findPermitMutationByPermitNumber(permitNumber);
-    if (permit.isEmpty()) {
-      return failurePersistenceResponse(List.of("Permit not found."), permitNumber);
-    }
-    if (!EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(
-        trimToNull(permit.get().permitStatusCode()))) {
-      return failurePersistenceResponse(
-          List.of("Invoices can only be added to active permits."), permitNumber);
-    }
-
-    if (repository.findSalesInvoiceByNumberAndPermit(normalizedSalesInvoiceNumber, permitNumber).isPresent()) {
-      return new PermitPersistenceRpcResponseDto(
-          false,
-          "",
-          List.of("Sales invoice " + normalizedSalesInvoiceNumber + " already exists."),
-          List.of(),
-          permitNumber);
-    }
-
-    Optional<SalesInvoiceRow> inserted =
-        repository.insertSalesInvoice(
-            permitNumber,
-            normalizedSalesInvoiceNumber,
-            storedInvoiceExportValue,
-            storedInvoiceConversionRate,
-            storedInvoiceFeeInLieu,
-            trimToNull(userId));
-    if (inserted
-        .filter(
-            row ->
-                matchesInsertedSalesInvoice(
-                    row,
-                    normalizedSalesInvoiceNumber,
-                    storedInvoiceExportValue,
-                    storedInvoiceConversionRate,
-                    storedInvoiceFeeInLieu))
-        .isEmpty()) {
-      markRollbackOnly();
-      return new PermitPersistenceRpcResponseDto(
-          false,
-          "",
-          List.of("Unable to save sales invoice."),
-          List.of(),
-          permitNumber);
-    }
-
-    return new PermitPersistenceRpcResponseDto(
-        true,
-        "The sales invoice was saved successfully.",
-        List.of(),
-        List.of(),
-        permitNumber);
-  }
-
-  @Override
-  public PermitInvoiceListRpcResponseDto getInvoicesForPermit(Long permitNumber) {
-    return new PermitInvoiceListRpcResponseDto(
-        repository.findInvoiceNumbersByPermitRequired(permitNumber));
-  }
-
-  @Override
-  public PermitInvoiceDetailsRpcResponseDto getInvoiceDetails(
-      Long permitNumber, String salesInvoiceNumber) {
-    Optional<SalesInvoiceRow> invoice =
-        repository.findSalesInvoiceByNumberAndPermit(salesInvoiceNumber, permitNumber);
-    if (invoice.isEmpty()) {
-      return new PermitInvoiceDetailsRpcResponseDto(false, "", "", "");
-    }
-
-    SalesInvoiceRow row = invoice.get();
-    BigDecimal rateToCad = BigDecimal.valueOf(row.currencyConversionRate());
-    BigDecimal feeCad = rateToCad.multiply(BigDecimal.valueOf(row.feeInLieu()));
-    BigDecimal valueCad = rateToCad.multiply(BigDecimal.valueOf(row.exportValue()));
-
-    return new PermitInvoiceDetailsRpcResponseDto(
-        true,
-        formatDecimal(rateToCad, 2),
-        formatCurrency(feeCad),
-        formatCurrency(valueCad));
-  }
-
-  @Override
-  public PermitConversionRateRpcResponseDto getConversionRate() {
-    Optional<Double> conversionRate =
-        repository.findCurrencyConversionRateByDate(LexisBusinessTime.today(), "USD");
-    if (conversionRate.isEmpty()
-        || !Double.isFinite(conversionRate.get())
-        || conversionRate.get() <= 0.0d) {
-      return new PermitConversionRateRpcResponseDto(false, "");
-    }
-
-    return new PermitConversionRateRpcResponseDto(
-        true, formatDecimal(BigDecimal.valueOf(conversionRate.get()), 2));
-  }
-
-  @Override
-  public List<PermitFileTypeRpcResponseDto> getFileTypes() {
-    return repository.findAllAttachmentTypes().stream()
-        .sorted(
-            Comparator.comparingLong((AttachmentTypeRow row) -> sortGroup(row.groupBy()))
-                .thenComparingLong(AttachmentTypeRow::orderBy)
-                .thenComparing(row -> nonNull(trimToNull(row.code()))))
-        .map(row -> new PermitFileTypeRpcResponseDto(nonNull(row.code()), nonNull(row.description())))
-        .toList();
-  }
-
-  @Override
   public List<PermitDocumentItemRpcResponseDto> getDocumentDetails(Long permitNumber) {
     if (permitNumber == null || permitNumber < 1) {
       return List.of();
@@ -5091,20 +4852,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         && sameNumber(row.speciesGradeVolume(), expected.speciesGradeVolume());
   }
 
-  private boolean matchesInsertedSalesInvoice(
-      SalesInvoiceRow row,
-      String expectedInvoiceNumber,
-      BigDecimal expectedExportValue,
-      BigDecimal expectedConversionRate,
-      BigDecimal expectedFeeInLieu) {
-    return row != null
-        && java.util.Objects.equals(
-            trimToNull(row.salesInvoiceNumber()), trimToNull(expectedInvoiceNumber))
-        && sameDecimal(row.exportValue(), expectedExportValue)
-        && sameDecimal(row.currencyConversionRate(), expectedConversionRate)
-        && sameDecimal(row.feeInLieu(), expectedFeeInLieu);
-  }
-
   private boolean sameText(String actual, String expected) {
     return java.util.Objects.equals(trimToNull(actual), trimToNull(expected));
   }
@@ -5114,10 +4861,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return actual == null && expected == null;
     }
     return BigDecimal.valueOf(actual).compareTo(BigDecimal.valueOf(expected)) == 0;
-  }
-
-  private boolean sameDecimal(double actual, BigDecimal expected) {
-    return expected != null && BigDecimal.valueOf(actual).compareTo(expected) == 0;
   }
 
   private void markRollbackOnly() {

@@ -316,22 +316,6 @@ class OfferDetailsRpcControllerTest {
   }
 
   @Test
-  void clientLocationsShouldReturnLocationRows() {
-    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
-    when(clientLookupService.getClientLocations("77881"))
-        .thenReturn(List.of(new ClientLookupService.ClientLocation("00 - Main", "00", true)));
-
-    ResponseEntity<List<OfferDetailsRpcController.OfferClientLocationResponseDto>> response =
-        controller.getClientLocations("77881");
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isNotNull();
-    assertThat(response.getBody()).hasSize(1);
-    assertThat(response.getBody().get(0).locationCode()).isEqualTo("00");
-    assertThat(response.getBody().get(0).selected()).isTrue();
-  }
-
-  @Test
   void addOfferLegacyShouldMapAliasesAndReturnPersistencePayload() {
     when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
     when(authentication.getName()).thenReturn("idir\\jsmith");
@@ -801,6 +785,7 @@ class OfferDetailsRpcControllerTest {
     params.add("approvalIndicator", "Y");
     params.add("offerRemark", "Approver-only change");
     params.add("pickupLocation", "Port Moody");
+    params.add("offeringClientNumber", "99999999");
 
     ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
         controller.updateOfferLegacy(params, authentication);
@@ -818,6 +803,8 @@ class OfferDetailsRpcControllerTest {
     assertThat(request.validOfferIndicator()).isEqualTo("N");
     assertThat(request.approvalIndicator()).isEqualTo("Y");
     assertThat(request.offerRemark()).isEqualTo("Approver-only change");
+    assertThat(request.offeringClientNumber())
+        .isEqualTo(offerDetailForRestrictedUpdate().offeringClientNumber());
   }
 
   @Test

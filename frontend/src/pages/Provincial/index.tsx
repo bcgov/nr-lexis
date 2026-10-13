@@ -203,8 +203,6 @@ const ProvincialPage = () => {
               packageNumber: '',
               exemptionNumber: '',
               region: [],
-              approvalFromDate: '',
-              approvalToDate: '',
               listFromDate: '',
               listToDate: '',
               exemptionTypeCode: '',

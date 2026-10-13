@@ -46,7 +46,7 @@ class ExemptionOracleServiceTest {
     when(repository.search(any(ExemptionSearchCriteria.class))).thenReturn(page(List.of(), 0));
     ExemptionSearchCriteria criteria = new ExemptionSearchCriteria(
         null, null, null, null, null, null, null,
-        null, null, null, null, List.of(), false, false, false,
+        null, null, List.of(), false, false, false,
         null, 0, 25, null, " 00012345 ");
 
     service.search(criteria);
@@ -71,8 +71,6 @@ class ExemptionOracleServiceTest {
         new ExemptionSearchCriteria(
             null,
             packageNumber,
-            null,
-            null,
             null,
             null,
             null,
@@ -116,7 +114,7 @@ class ExemptionOracleServiceTest {
   void searchShouldReturnRepositoryPage() {
     ExemptionSearchCriteria criteria =
         new ExemptionSearchCriteria(
-            null, null, null, null, null, null, null, null, null, null, null, List.of(11L), 1, 2);
+            null, null, null, null, null, null, null, null, null, List.of(11L), 1, 2);
 
     List<ExemptionSearchResultDto> rows =
         List.of(
@@ -260,7 +258,7 @@ class ExemptionOracleServiceTest {
   void searchShouldQueryRepositoryWhenRegionNotSelected() {
     ExemptionSearchCriteria criteria =
         new ExemptionSearchCriteria(
-            null, null, null, null, null, null, null, null, null, null, null, List.of(), 0, 25);
+            null, null, null, null, null, null, null, null, null, List.of(), 0, 25);
     when(repository.search(any(ExemptionSearchCriteria.class)))
         .thenReturn(page(List.of(row("EX-001", LocalDate.of(2026, 1, 1))), 1));
 
@@ -276,8 +274,6 @@ class ExemptionOracleServiceTest {
   void searchShouldPreserveBlanketOicExclusionDuringNormalization() {
     ExemptionSearchCriteria criteria =
         new ExemptionSearchCriteria(
-            null,
-            null,
             null,
             null,
             null,
@@ -316,8 +312,6 @@ class ExemptionOracleServiceTest {
             null,
             null,
             null,
-            null,
-            null,
             List.of(12L),
             0,
             25);
@@ -346,8 +340,6 @@ class ExemptionOracleServiceTest {
             null,
             null,
             " 00055667 ",
-            null,
-            null,
             null,
             null,
             null,
@@ -383,8 +375,6 @@ class ExemptionOracleServiceTest {
             null,
             null,
             "00077881",
-            null,
-            null,
             null,
             null,
             List.of(12L),

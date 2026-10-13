@@ -170,9 +170,6 @@ public class LexisJasperReportParameterProvider {
     if ("generatemarkreport".equals(legacyActionMapping)) {
       return tenureMarkAnalysisReport(parameters);
     }
-    if ("generatefilereport".equals(legacyActionMapping)) {
-      return tenureFileAnalysisReport(parameters);
-    }
     return tenurePermitAnalysisReport(parameters);
   }
 
@@ -266,34 +263,6 @@ public class LexisJasperReportParameterProvider {
     return reportParameters;
   }
 
-  private Map<String, Object> tenureFileAnalysisReport(Map<String, String> parameters) {
-    Map<String, Object> reportParameters = new HashMap<>();
-
-    reportParameters.put("P_ORG_UNIT_NUMBER", regionsOrAll(parameters));
-    reportParameters.put("P_EXEMPTION_REASON", "");
-    reportParameters.put("P_EXEMPTION_TYPE", "");
-    reportParameters.put("P_EXEMPTION_NUMBER", "");
-    reportParameters.put("P_CLIENT_NUMBER", "");
-    reportParameters.put("P_CLIENT_TYPE", "");
-    reportParameters.put("P_FROM_DATE", first(parameters, "fromDate"));
-    reportParameters.put("P_TO_DATE", first(parameters, "toDate"));
-    reportParameters.put("P_TENURE_TYPE_1", "");
-    reportParameters.put("P_TENURE_TYPE_2", "");
-    reportParameters.put("P_TENURE_TYPE_3", "");
-    reportParameters.put("P_TENURE_TYPE_4", "");
-    reportParameters.put("P_TENURE_TYPE_5", "");
-    reportParameters.put("P_TENURE_TYPE_6", "");
-    reportParameters.put("P_TIMBER_MARK_1", "");
-    reportParameters.put("P_TIMBER_MARK_2", "");
-    reportParameters.put("P_TIMBER_MARK_3", "");
-    reportParameters.put("P_TIMBER_MARK_4", "");
-    reportParameters.put("P_TIMBER_MARK_5", "");
-    reportParameters.put("P_TIMBER_MARK_6", "");
-    reportParameters.put("P_FOREST_FILE_ID", first(parameters, "forestFileId"));
-
-    return reportParameters;
-  }
-
   private String normalizeLegacyAction(String actionMapping) {
     if (actionMapping == null) {
       return null;
@@ -318,9 +287,8 @@ public class LexisJasperReportParameterProvider {
   }
 
   /**
-   * Legacy ran the tenure type, timber mark and file analyses for every region ("-1"). A
-   * submitted region still applies, since regional users are only authorized for the regions
-   * they name.
+   * Legacy ran the tenure type and timber mark analyses for every region ("-1"). A submitted
+   * region still applies, since regional users are only authorized for the regions they name.
    */
   private String regionsOrAll(Map<String, String> parameters) {
     String regions = csvValue(parameters, "region");
