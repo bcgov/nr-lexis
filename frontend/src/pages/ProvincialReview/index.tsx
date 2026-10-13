@@ -43,7 +43,11 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
-import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
+import {
+  hasInvalidIsoDateRange,
+  isValidIsoDate,
+  isoDateRangeEndError,
+} from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -122,6 +126,13 @@ type ApplicationApprovalResult = {
   message: string
 }
 
+const RECEIVED_FROM_DATE_LABEL = 'Received from date'
+const LISTING_FROM_DATE_LABEL = 'Listing from date'
+
+const hasInvalidSearchDates = (filters: ApplicationReviewSearchFilters): boolean =>
+  hasInvalidIsoDateRange(filters.receivedFromDate, filters.receivedToDate) ||
+  hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate)
+
 const INITIAL_FILTERS: ApplicationReviewSearchFilters = {
   applicationNumber: '',
   productTypeCode: '',
@@ -132,8 +143,8 @@ const INITIAL_FILTERS: ApplicationReviewSearchFilters = {
   listingToDate: '',
 }
 
-// INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_REVIEW_PAGE_SIZE): only IDIR Application Review
-// defaults to 100 rows; ordinary searches retain the legacy default of 10.
+// INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_REVIEW_PAGE_SIZE): Application Review retains
+// its additional 150-row option alongside the shared 100-row search default.
 const APPLICATION_REVIEW_DEFAULT_PAGE_SIZE = 100
 const APPLICATION_REVIEW_PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 150, 200] as const
 
@@ -339,6 +350,8 @@ const ProvincialReviewPage = () => {
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
   const hasSearchQuery = searchParams.toString().length > 0
+  // A saved link with invalid dates doesn't run its search, so it has no results to show.
+  const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setReviewActionResults([])
@@ -377,19 +390,17 @@ const ProvincialReviewPage = () => {
   )
   const rejectStatusSupportsEmail = EMAIL_STATUS_CODES.has(normalizeReviewStatus(rejectStatusCode))
 
-  const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(
-      filters.receivedFromDate,
-      filters.receivedToDate,
-      filters.listingFromDate,
-      filters.listingToDate,
-    )
-  }, [
+  const receivedToDateError = isoDateRangeEndError(
     filters.receivedFromDate,
     filters.receivedToDate,
+    RECEIVED_FROM_DATE_LABEL,
+  )
+  const listingToDateError = isoDateRangeEndError(
     filters.listingFromDate,
     filters.listingToDate,
-  ])
+    LISTING_FROM_DATE_LABEL,
+  )
+  const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const selectableRows = useMemo(() => {
     if (!canApproveApplications) {
@@ -451,14 +462,7 @@ const ProvincialReviewPage = () => {
         }
       }
 
-      if (
-        hasInvalidIsoDateValue(
-          request.filters.receivedFromDate,
-          request.filters.receivedToDate,
-          request.filters.listingFromDate,
-          request.filters.listingToDate,
-        )
-      ) {
+      if (hasInvalidSearchDates(request.filters)) {
         setLoading(false)
         return
       }
@@ -1101,7 +1105,7 @@ const ProvincialReviewPage = () => {
               />
               <IsoDatePicker
                 id="receivedFromDate"
-                labelText="Received from date"
+                labelText={RECEIVED_FROM_DATE_LABEL}
                 value={filters.receivedFromDate}
                 invalid={!isValidIsoDate(filters.receivedFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -1111,13 +1115,13 @@ const ProvincialReviewPage = () => {
                 id="receivedToDate"
                 labelText="Received to date"
                 value={filters.receivedToDate}
-                invalid={!isValidIsoDate(filters.receivedToDate)}
-                invalidText="Date must be YYYY-MM-DD"
+                invalid={Boolean(receivedToDateError)}
+                invalidText={receivedToDateError}
                 onChange={(value) => updateFilter('receivedToDate', value)}
               />
               <IsoDatePicker
                 id="listingFromDate"
-                labelText="Listing from date"
+                labelText={LISTING_FROM_DATE_LABEL}
                 value={filters.listingFromDate}
                 invalid={!isValidIsoDate(filters.listingFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -1127,8 +1131,8 @@ const ProvincialReviewPage = () => {
                 id="listingToDate"
                 labelText="Listing to date"
                 value={filters.listingToDate}
-                invalid={!isValidIsoDate(filters.listingToDate)}
-                invalidText="Date must be YYYY-MM-DD"
+                invalid={Boolean(listingToDateError)}
+                invalidText={listingToDateError}
                 onChange={(value) => updateFilter('listingToDate', value)}
               />
             </div>
@@ -1311,14 +1315,15 @@ const ProvincialReviewPage = () => {
         sm={4}
         md={8}
         lg={16}
-        hidden={!hasSearchQuery}
-        style={{ display: hasSearchQuery ? undefined : 'none' }}
+        hidden={!showResults}
+        style={{ display: showResults ? undefined : 'none' }}
       >
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Review queue"
         >
           <SearchResultsTableFrame
+            resultName="application"
             loading={loading}
             loadingDescription="Loading review queue…"
             columnCount={RESULT_COLUMNS.length + 2}
@@ -1336,6 +1341,7 @@ const ProvincialReviewPage = () => {
                     results.page.totalElements,
                     totalStatus,
                     results.page.number * results.page.size + results.content.length,
+                    'application',
                   )
             }
             actions={
@@ -1542,8 +1548,8 @@ const ProvincialReviewPage = () => {
               </Table>
             ) : !loading ? (
               <EmptyState
-                title="No review records found"
-                description="No review records found for the selected criteria."
+                title="No results found"
+                description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (

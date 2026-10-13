@@ -254,7 +254,7 @@ describe('Provincial Permit Search Actions', () => {
       resolveCount(125)
     })
 
-    expect(await screen.findByText('125 results found')).toBeInTheDocument()
+    expect(await screen.findByText('125 permits found')).toBeInTheDocument()
     expect(screen.getByText('7001')).toBeInTheDocument()
   })
 
@@ -427,7 +427,7 @@ describe('Provincial Permit Search Actions', () => {
     })
 
     expect(await screen.findByText('7001')).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'No permits found' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No results found' })).not.toBeInTheDocument()
   })
 
   it('reuses the first search total when pagination changes page', async () => {
@@ -626,6 +626,45 @@ describe('Provincial Permit Search Actions', () => {
       await screen.findByRole('heading', { name: 'Permit search unavailable' }),
     ).toBeInTheDocument()
     expect(screen.getByText('Unable to retrieve permit search results.')).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'No permits found' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No results found' })).not.toBeInTheDocument()
+  })
+  it.each([['Issued from date', 'Issued to date']])(
+    'blocks a reversed %s range until To is corrected',
+    async (fromLabel, toLabel) => {
+      renderPage()
+      await waitFor(() => expect(mockedSearchProvincialPermits).toHaveBeenCalled())
+      const search = screen.getByRole('button', { name: 'Search' })
+      await waitFor(() => expect(search).toBeEnabled())
+      const callsBeforeEdit = mockedSearchProvincialPermits.mock.calls.length
+      const from = screen.getByLabelText(fromLabel)
+      const to = screen.getByLabelText(toLabel)
+      fireEvent.change(from, { target: { value: '2026-10-12' } })
+      fireEvent.change(to, { target: { value: '2026-10-01' } })
+      expect(from).toHaveValue('2026-10-12')
+      expect(to).toHaveValue('2026-10-01')
+      expect(to).toHaveAttribute('aria-invalid', 'true')
+      expect(screen.getByText(`Must be on or after ${fromLabel}`)).toBeVisible()
+      expect(search).toBeDisabled()
+      fireEvent.submit(to.closest('form') as HTMLFormElement)
+      expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(callsBeforeEdit)
+
+      fireEvent.change(to, { target: { value: '2026-10-12' } })
+      await waitFor(() => expect(search).toBeEnabled())
+      expect(to).not.toHaveAttribute('aria-invalid', 'true')
+      await userEvent.click(search)
+      await waitFor(() =>
+        expect(mockedSearchProvincialPermits.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
+      )
+    },
+  )
+
+  it('does not request a reversed date range restored from a saved link', async () => {
+    renderPage('/provincial/permit?issuedFromDate=2026-10-12&issuedToDate=2026-10-01')
+    await waitFor(() =>
+      expect(screen.getByLabelText('Issued to date')).toHaveAttribute('aria-invalid', 'true'),
+    )
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
+    expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
+    expect(screen.queryByRole('region', { name: 'Search results' })).not.toBeInTheDocument()
   })
 })

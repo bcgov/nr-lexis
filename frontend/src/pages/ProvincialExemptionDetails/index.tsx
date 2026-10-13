@@ -2902,10 +2902,11 @@ const ProvincialExemptionDetailsPage = () => {
                                 label="Approved volume (m³)"
                                 value={formatExemptionVolume(detail.approvedVolume)}
                               />
-                              {/* INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_PERMIT_TOTALS): Every permit's volume contributes to the balance, including pending permits. */}
+                              {/* INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_PERMIT_TOTALS):
+                                  Completed volume is separate from the reserved-volume balance. */}
                               <RecordField
-                                label="Scale volume assigned to permits (m³)"
-                                value={formatExemptionVolume(detail.usedVolume)}
+                                label="Sum of completed permits (m³)"
+                                value={formatExemptionVolume(detail.completedPermitVolume)}
                               />
                               <RecordField
                                 label="Balance remaining (m³)"

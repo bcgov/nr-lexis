@@ -1,5 +1,6 @@
 import { DataTableSkeleton, InlineLoading, TableToolbar, TableToolbarContent } from '@carbon/react'
 import type { ReactNode } from 'react'
+import { formatSearchResultCount } from '@/pages/shared/deferred-search-total'
 import TableFrame from './TableFrame'
 
 type SearchResultsTableFrameProps = {
@@ -8,13 +9,9 @@ type SearchResultsTableFrameProps = {
   loadingDescription: string
   totalItems?: number
   totalItemsLabel?: ReactNode
+  resultName?: string
   actions?: ReactNode
   columnCount?: number
-}
-
-const formatSearchResultCount = (totalItems: number): string => {
-  const formattedTotal = new Intl.NumberFormat('en-CA').format(totalItems)
-  return `${formattedTotal} ${totalItems === 1 ? 'result' : 'results'} found`
 }
 
 function SearchResultsTableFrame({
@@ -23,6 +20,7 @@ function SearchResultsTableFrame({
   loadingDescription,
   totalItems,
   totalItemsLabel,
+  resultName = 'result',
   actions,
   columnCount = 6,
 }: SearchResultsTableFrameProps) {
@@ -42,7 +40,7 @@ function SearchResultsTableFrame({
               {/* Stays mounted so the new count is announced after each search. */}
               <div className="legacy-search-result-count" aria-live="polite" aria-atomic="true">
                 {!loading && totalItems !== undefined
-                  ? (totalItemsLabel ?? formatSearchResultCount(totalItems))
+                  ? (totalItemsLabel ?? formatSearchResultCount(totalItems, resultName))
                   : null}
               </div>
               {actions ? (

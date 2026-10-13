@@ -159,6 +159,15 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => expect(mockedFetchApplicationDocuments).toHaveBeenCalledWith('321'))
   })
 
+  it('identifies one package by its card title without a redundant selector', async () => {
+    renderApplicationItems()
+    await selectApplicationDetailTab('Scale')
+
+    expect(await screen.findByRole('heading', { name: 'Package PKG-1' })).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Selected package' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add scale' })).toBeInTheDocument()
+  })
+
   it('opens a scale deep link on the Items tab and selects its package for an owner application', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValue({
       ...applicationSummarySnapshot,
@@ -721,6 +730,33 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(drawer).toBeInTheDocument()
     expect(within(drawer).getByLabelText('Comments')).toHaveAttribute('maxlength', '180')
     expect(within(drawer).getByRole('button', { name: 'Save package' })).toBeInTheDocument()
+  })
+
+  it('moves focus to the new package card after creating the first package', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [],
+    })
+    mockedAddApplicationPackage.mockImplementationOnce(async () => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        packages: [{ packageNumber: 'PKG-NEW', volume: 25, pieceCount: 0 }],
+      })
+      return { valid: true, packageNumber: 'PKG-NEW', errors: [], warnings: [] }
+    })
+    renderApplicationItems()
+
+    const drawer = await openCreatePackageControls()
+    fillNewPackage(drawer, 'PKG-NEW')
+    const save = drawer.getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await userEvent.click(save)
+
+    const packageCard = (await screen.findByRole('heading', { name: 'Package PKG-NEW' })).closest(
+      'section',
+    )
+    await waitFor(() => expect(packageCard).toHaveFocus())
+    expect(screen.queryByRole('combobox', { name: 'Selected package' })).not.toBeInTheDocument()
   })
 
   it('keeps an unsaved package draft until discard is confirmed', async () => {

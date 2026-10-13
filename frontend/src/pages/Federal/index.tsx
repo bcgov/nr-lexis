@@ -29,7 +29,7 @@ import type {
   FederalApplicationSearchResponse,
 } from '@/interfaces/FederalApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
-import { hasInvalidIsoDateValue } from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateRange } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -70,6 +70,10 @@ import { displayTableValue } from '@/utils/text'
 
 // Staff check the day's arrivals with Approved and today's list dates.
 const DEFAULT_APPLICATION_STATUS = 'APP'
+
+const hasInvalidSearchDates = (filters: FederalApplicationSearchFilters): boolean =>
+  hasInvalidIsoDateRange(filters.receivedFromDate, filters.receivedToDate) ||
+  hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate)
 
 const INITIAL_FILTERS: FederalApplicationSearchFilters = {
   applicationNumber: '',
@@ -162,6 +166,8 @@ const FederalPage = () => {
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
   const hasSearchQuery = searchParams.toString().length > 0
+  // A saved link with invalid dates doesn't run its search, so it has no results to show.
+  const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
   const updateFilter = useCallback(
     (key: keyof FederalApplicationSearchFilters, value: string) => {
       setFilters((currentFilters) => ({ ...currentFilters, [key]: value }))
@@ -169,19 +175,7 @@ const FederalPage = () => {
     [setFilters],
   )
 
-  const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(
-      filters.receivedFromDate,
-      filters.receivedToDate,
-      filters.listingFromDate,
-      filters.listingToDate,
-    )
-  }, [
-    filters.receivedFromDate,
-    filters.receivedToDate,
-    filters.listingFromDate,
-    filters.listingToDate,
-  ])
+  const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
@@ -223,14 +217,7 @@ const FederalPage = () => {
         }
       }
 
-      if (
-        hasInvalidIsoDateValue(
-          request.filters.receivedFromDate,
-          request.filters.receivedToDate,
-          request.filters.listingFromDate,
-          request.filters.listingToDate,
-        )
-      ) {
+      if (hasInvalidSearchDates(request.filters)) {
         setLoading(false)
         return
       }
@@ -465,14 +452,15 @@ const FederalPage = () => {
         sm={4}
         md={8}
         lg={16}
-        hidden={!hasSearchQuery}
-        style={{ display: hasSearchQuery ? undefined : 'none' }}
+        hidden={!showResults}
+        style={{ display: showResults ? undefined : 'none' }}
       >
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"
         >
           <SearchResultsTableFrame
+            resultName="application"
             loading={loading}
             loadingDescription="Loading federal application search results…"
             columnCount={RESULT_COLUMNS.length}
@@ -485,6 +473,7 @@ const FederalPage = () => {
               results.page.totalElements,
               totalStatus,
               results.page.number * results.page.size + results.content.length,
+              'application',
             )}
           >
             {errorMessage ? (
@@ -536,8 +525,8 @@ const FederalPage = () => {
               </Table>
             ) : !loading ? (
               <EmptyState
-                title="No federal applications found"
-                description="No federal applications found for the selected criteria."
+                title="No results found"
+                description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (

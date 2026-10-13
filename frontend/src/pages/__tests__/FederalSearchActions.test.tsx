@@ -401,7 +401,7 @@ describe('Federal Search Actions', () => {
 
     expect(await screen.findByText('FED-8100')).toBeInTheDocument()
     expect(
-      await screen.findByText('At least 10 results found — exact count unavailable'),
+      await screen.findByText('At least 10 applications found — exact count unavailable'),
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'Federal application search unavailable' }),
@@ -426,8 +426,45 @@ describe('Federal Search Actions', () => {
     expect(
       screen.getByText('Unable to retrieve federal application search results.'),
     ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('heading', { name: 'No federal applications found' }),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No results found' })).not.toBeInTheDocument()
+  })
+  it.each([
+    ['List date from', 'List date to'],
+    ['Received date from', 'Received date to'],
+  ])('blocks a reversed %s range until To is corrected', async (fromLabel, toLabel) => {
+    renderPage()
+    await waitFor(() => expect(mockedSearchFederalApplications).toHaveBeenCalled())
+    const search = screen.getByRole('button', { name: 'Search' })
+    await waitFor(() => expect(search).toBeEnabled())
+    const callsBeforeEdit = mockedSearchFederalApplications.mock.calls.length
+    const from = screen.getByLabelText(fromLabel)
+    const to = screen.getByLabelText(toLabel)
+    fireEvent.change(from, { target: { value: '2026-10-12' } })
+    fireEvent.change(to, { target: { value: '2026-10-01' } })
+    expect(from).toHaveValue('2026-10-12')
+    expect(to).toHaveValue('2026-10-01')
+    expect(to).toHaveAttribute('aria-invalid', 'true')
+    expect(screen.getByText(`Must be on or after ${fromLabel}`)).toBeVisible()
+    expect(search).toBeDisabled()
+    fireEvent.submit(to.closest('form') as HTMLFormElement)
+    expect(mockedSearchFederalApplications).toHaveBeenCalledTimes(callsBeforeEdit)
+
+    fireEvent.change(to, { target: { value: '2026-10-12' } })
+    await waitFor(() => expect(search).toBeEnabled())
+    expect(to).not.toHaveAttribute('aria-invalid', 'true')
+    await userEvent.click(search)
+    await waitFor(() =>
+      expect(mockedSearchFederalApplications.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
+    )
+  })
+
+  it('does not request a reversed date range restored from a saved link', async () => {
+    renderPage('/federal?listingFromDate=2026-10-12&listingToDate=2026-10-01')
+    await waitFor(() =>
+      expect(screen.getByLabelText('List date to')).toHaveAttribute('aria-invalid', 'true'),
+    )
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
+    expect(mockedSearchFederalApplications).not.toHaveBeenCalled()
+    expect(screen.queryByRole('region', { name: 'Search results' })).not.toBeInTheDocument()
   })
 })

@@ -196,6 +196,7 @@ class ExemptionOracleServiceTest {
             95.0,
             12.0,
             83.0,
+            7.5,
             "Pending final confirmation",
             false,
             List.of("9020934"),
@@ -216,6 +217,7 @@ class ExemptionOracleServiceTest {
         .extracting(ExemptionDetailDto::exemptionTypeDescription)
         .isEqualTo("Ministerial");
     assertThat(result).get().extracting(ExemptionDetailDto::author).isEqualTo("IDIR\\EDITOR");
+    assertThat(result).get().extracting(ExemptionDetailDto::completedPermitVolume).isEqualTo(7.5d);
     verify(repository).loadExemptionTypeOptions();
   }
 

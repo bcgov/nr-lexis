@@ -68,6 +68,11 @@ const withTotal = <TResponse extends PagedSearchResponse>(
   }
 }
 
+export const formatSearchResultCount = (totalItems: number, resultName = 'result'): string => {
+  const formattedTotal = new Intl.NumberFormat('en-CA').format(totalItems)
+  return `${formattedTotal} ${resultName}${totalItems === 1 ? '' : 's'} found`
+}
+
 const optimisticTotalFor = (request: SearchPageRequest): number =>
   Math.max((request.page + 1) * request.pageSize + 1, request.pageSize + 1)
 
@@ -75,6 +80,7 @@ export const formatDeferredSearchTotalLabel = (
   totalElements: number,
   status: DeferredSearchTotalStatus,
   knownMinimum = totalElements,
+  resultName = 'result',
 ): ReactNode | undefined => {
   if (status === 'exact') {
     return undefined
@@ -90,8 +96,7 @@ export const formatDeferredSearchTotalLabel = (
       createElement(SkeletonText, { width: '160px' }),
     )
   }
-  const formattedTotal = new Intl.NumberFormat('en-CA').format(knownMinimum)
-  return `At least ${formattedTotal} ${knownMinimum === 1 ? 'result' : 'results'} found — exact count unavailable`
+  return `At least ${formatSearchResultCount(knownMinimum, resultName)} — exact count unavailable`
 }
 
 const inferExactTotalFromShortPage = <TResponse extends PagedSearchResponse>(

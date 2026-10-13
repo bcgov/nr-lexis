@@ -893,6 +893,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
                           approvedVolume,
                           calculateUsedVolume(approvedVolume, remainingVolume),
                           remainingVolume,
+                          coalesce(getDouble(rs, "COMPLETED_PERMIT_VOLUME"), 0.0d),
                           getString(rs, "OTHER_CONDITIONS"),
                           "B".equalsIgnoreCase(getString(rs, "EXPORT_EXEMPTION_TYPE_CODE")),
                           List.of(),

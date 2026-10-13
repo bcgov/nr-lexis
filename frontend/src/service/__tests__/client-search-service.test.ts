@@ -13,15 +13,20 @@ describe('client-search-service', () => {
     expect(getCachedData).not.toHaveBeenCalled()
   })
   it('uses the authorized endpoint with the counterparty and disables cached suggestions', async () => {
+    const controller = new AbortController()
     getCachedData.mockResolvedValue([
       { clientNumber: '00012345', companyName: ' Sample ', clientAcronym: ' SFC ' },
     ])
-    expect(await searchForestClients(' Sam ', ' 00011111 ')).toEqual([
+    expect(await searchForestClients(' Sam ', ' 00011111 ', controller.signal)).toEqual([
       { clientNumber: '00012345', companyName: 'Sample', clientAcronym: 'SFC' },
     ])
     expect(getCachedData).toHaveBeenCalledWith(
       '/lexis/client-search',
-      { params: { q: 'Sam', counterpartyClientNumber: '00011111' } },
+      {
+        params: { q: 'Sam', counterpartyClientNumber: '00011111' },
+        signal: controller.signal,
+        timeout: 15_000,
+      },
       { ttlMs: 0 },
     )
   })

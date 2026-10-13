@@ -41,7 +41,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
-import { hasInvalidIsoDateValue } from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateRange } from '@/pages/shared/create-form-utils'
 import { batchSelectionTranslator } from '@/pages/shared/batch-selection'
 import {
   buildPageDataCacheKey,
@@ -79,6 +79,7 @@ import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPrefe
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   formatDeferredSearchTotalLabel,
+  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchNextSearchPage,
   type DeferredSearchTotalStatus,
@@ -105,6 +106,9 @@ type ExemptionStatus = {
   kind: 'error'
   message: string
 }
+
+const hasInvalidSearchDates = (filters: ProvincialApplicationSearchFilters): boolean =>
+  hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate)
 
 const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
   applicationNumber: '',
@@ -276,6 +280,8 @@ const ProvincialApplicationPage = () => {
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
   const hasSearchQuery = searchParams.toString().length > 0
+  // A saved link with invalid dates doesn't run its search, so it has no results to show.
+  const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setExemptionStatus(null)
@@ -309,9 +315,7 @@ const ProvincialApplicationPage = () => {
       preferenceLoading ||
       (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
-  const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(filters.listingFromDate, filters.listingToDate)
-  }, [filters.listingFromDate, filters.listingToDate])
+  const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
@@ -356,7 +360,7 @@ const ProvincialApplicationPage = () => {
         }
       }
 
-      if (hasInvalidIsoDateValue(request.filters.listingFromDate, request.filters.listingToDate)) {
+      if (hasInvalidSearchDates(request.filters)) {
         setLoading(false)
         return
       }
@@ -862,14 +866,15 @@ const ProvincialApplicationPage = () => {
         sm={4}
         md={8}
         lg={16}
-        hidden={!hasSearchQuery}
-        style={{ display: hasSearchQuery ? undefined : 'none' }}
+        hidden={!showResults}
+        style={{ display: showResults ? undefined : 'none' }}
       >
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"
         >
           <SearchResultsTableFrame
+            resultName="application"
             loading={loading}
             loadingDescription="Loading application search results…"
             columnCount={visibleResultColumns.length + (canCreateExemption ? 1 : 0)}
@@ -882,6 +887,7 @@ const ProvincialApplicationPage = () => {
               results.page.totalElements,
               totalStatus,
               results.page.number * results.page.size + results.content.length,
+              'application',
             )}
             actions={
               canCreateExemption && selectedRowsCount > 0 ? (
@@ -1033,8 +1039,8 @@ const ProvincialApplicationPage = () => {
               </Table>
             ) : !loading ? (
               <EmptyState
-                title="No applications found"
-                description="No applications found for the selected criteria."
+                title="No results found"
+                description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
@@ -1044,8 +1050,8 @@ const ProvincialApplicationPage = () => {
                     results.page.totalElements,
                     totalStatus,
                     results.page.number * results.page.size + results.content.length,
-                  ) ??
-                    `${results.page.totalElements.toLocaleString('en-CA')} ${results.page.totalElements === 1 ? 'result' : 'results'} found`}
+                    'application',
+                  ) ?? formatSearchResultCount(results.page.totalElements, 'application')}
                 </div>
                 <Pagination
                   page={results.page.number + 1}

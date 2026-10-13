@@ -4,6 +4,22 @@ import { formatDeferredSearchTotalLabel } from '@/pages/shared/deferred-search-t
 import SearchResultsTableFrame from '../SearchResultsTableFrame'
 
 describe('SearchResultsTableFrame', () => {
+  it.each([
+    [1, '1 application found'],
+    [7, '7 applications found'],
+  ])('names the searched object for an exact count of %s', (totalItems, expected) => {
+    render(
+      <SearchResultsTableFrame
+        loading={false}
+        loadingDescription="Loading applications…"
+        totalItems={totalItems}
+        resultName="application"
+      >
+        <table />
+      </SearchResultsTableFrame>,
+    )
+    expect(screen.getByText(expected)).toBeVisible()
+  })
   it('replaces stale rows with a labelled table skeleton while loading', () => {
     const { container } = render(
       <SearchResultsTableFrame loading loadingDescription="Loading search results…">

@@ -47,6 +47,7 @@ public class ClientLookupRepository extends OracleRepositorySupport {
   private static final int MINIMUM_CLIENT_SEARCH_LENGTH = 3;
   private static final int MAXIMUM_CLIENT_SEARCH_LENGTH = 60;
   private static final int CLIENT_NUMBER_LENGTH = 8;
+  private static final int CLIENT_SEARCH_TIMEOUT_SECONDS = 10;
   private static final Pattern NUMERIC_SEARCH_TERM = Pattern.compile("[0-9]+");
   // MATCH_RANK keeps exact acronym matches ahead of name-prefix matches within the row limit.
   private static final String FIND_CLIENT_SUGGESTIONS =
@@ -99,18 +100,22 @@ public class ClientLookupRepository extends OracleRepositorySupport {
           ))
         )
         AND (? IS NULL OR FC.CLIENT_NUMBER = ?)
-        AND (
-          ? = 0
-          OR EXISTS (
-            SELECT 1
-            FROM THE.EXPORT_EXEMPTION_APPLICATION EEA
-            WHERE EEA.EXPORT_JURISDICTION_CODE = 'F'
-              AND (
-                EEA.OWNER_CLIENT_NUMBER = FC.CLIENT_NUMBER
-                OR EEA.AGENT_CLIENT_NUMBER = FC.CLIENT_NUMBER
-              )
-          )
+      """;
+  // Form the federal client set independently instead of probing owner OR agent per client.
+  private static final String FEDERAL_CLIENT_SCOPE =
+      """
+        AND FC.CLIENT_NUMBER IN (
+          SELECT EEA.OWNER_CLIENT_NUMBER
+          FROM THE.EXPORT_EXEMPTION_APPLICATION EEA
+          WHERE EEA.EXPORT_JURISDICTION_CODE = 'F'
+          UNION ALL
+          SELECT EEA.AGENT_CLIENT_NUMBER
+          FROM THE.EXPORT_EXEMPTION_APPLICATION EEA
+          WHERE EEA.EXPORT_JURISDICTION_CODE = 'F'
         )
+      """;
+  private static final String CLIENT_SUGGESTIONS_ORDER_AND_LIMIT =
+      """
         ORDER BY MATCH_RANK, UPPER(FC.CLIENT_NAME), FC.CLIENT_NUMBER
       )
       WHERE ROWNUM <= 15
@@ -231,8 +236,11 @@ public class ClientLookupRepository extends OracleRepositorySupport {
     boolean numericSearchTerm = NUMERIC_SEARCH_TERM.matcher(normalizedSearchTerm).matches();
     String escapedSearchTerm = escapeLike(normalizedSearchTerm);
     return jdbcTemplate.query(
-        FIND_CLIENT_SUGGESTIONS,
+        FIND_CLIENT_SUGGESTIONS
+            + (federalOnly ? FEDERAL_CLIENT_SCOPE : "")
+            + CLIENT_SUGGESTIONS_ORDER_AND_LIMIT,
         ps -> {
+          ps.setQueryTimeout(CLIENT_SEARCH_TIMEOUT_SECONDS);
           int parameterIndex = 1;
           ps.setInt(parameterIndex++, numericSearchTerm ? 1 : 0);
           ps.setString(parameterIndex++, escapedSearchTerm);
@@ -244,8 +252,7 @@ public class ClientLookupRepository extends OracleRepositorySupport {
           ps.setString(parameterIndex++, escapedSearchTerm);
           ps.setString(parameterIndex++, escapedSearchTerm);
           ps.setString(parameterIndex++, normalizedAllowedClientNumber);
-          ps.setString(parameterIndex++, normalizedAllowedClientNumber);
-          ps.setInt(parameterIndex, federalOnly ? 1 : 0);
+          ps.setString(parameterIndex, normalizedAllowedClientNumber);
         },
         (rs, rowNumber) ->
             new ClientSuggestionRow(

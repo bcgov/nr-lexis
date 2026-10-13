@@ -32,7 +32,11 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
-import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
+import {
+  hasInvalidIsoDateRange,
+  isValidIsoDate,
+  isoDateRangeEndError,
+} from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -85,6 +89,10 @@ import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { displayTableValue } from '@/utils/text'
 
+const hasInvalidSearchDates = (filters: ProvincialOfferSearchFilters): boolean =>
+  hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate) ||
+  hasInvalidIsoDateRange(filters.withdrawalFromDate, filters.withdrawalToDate)
+
 const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
@@ -97,6 +105,8 @@ const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
 }
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialOfferSearchResponse>()
+const LISTING_FROM_DATE_LABEL = 'Listing from date'
+const WITHDRAWN_FROM_DATE_LABEL = 'Withdrawn from date'
 
 const SORT_COLUMNS: {
   id: ProvincialOfferSearchSortField
@@ -203,6 +213,8 @@ const ProvincialOffersPage = () => {
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
   const hasSearchQuery = searchParams.toString().length > 0
+  // A saved link with invalid dates doesn't run its search, so it has no results to show.
+  const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
   const updateFilter = useCallback(
     <K extends keyof ProvincialOfferSearchFilters>(
       key: K,
@@ -231,19 +243,17 @@ const ProvincialOffersPage = () => {
       preferenceLoading ||
       (!offerOptionsUnavailable && defaultZoneRegionIds.length > 0))
 
-  const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(
-      filters.listingFromDate,
-      filters.listingToDate,
-      filters.withdrawalFromDate,
-      filters.withdrawalToDate,
-    )
-  }, [
+  const listingToDateError = isoDateRangeEndError(
     filters.listingFromDate,
     filters.listingToDate,
+    LISTING_FROM_DATE_LABEL,
+  )
+  const withdrawalToDateError = isoDateRangeEndError(
     filters.withdrawalFromDate,
     filters.withdrawalToDate,
-  ])
+    WITHDRAWN_FROM_DATE_LABEL,
+  )
+  const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
@@ -285,14 +295,7 @@ const ProvincialOffersPage = () => {
         }
       }
 
-      if (
-        hasInvalidIsoDateValue(
-          request.filters.listingFromDate,
-          request.filters.listingToDate,
-          request.filters.withdrawalFromDate,
-          request.filters.withdrawalToDate,
-        )
-      ) {
+      if (hasInvalidSearchDates(request.filters)) {
         setLoading(false)
         return
       }
@@ -581,7 +584,7 @@ const ProvincialOffersPage = () => {
                 />
                 <IsoDatePicker
                   id="listingFromDate"
-                  labelText="Listing from date"
+                  labelText={LISTING_FROM_DATE_LABEL}
                   value={filters.listingFromDate}
                   invalid={!isValidIsoDate(filters.listingFromDate)}
                   invalidText="Date must be YYYY-MM-DD"
@@ -591,13 +594,13 @@ const ProvincialOffersPage = () => {
                   id="listingToDate"
                   labelText="Listing to date"
                   value={filters.listingToDate}
-                  invalid={!isValidIsoDate(filters.listingToDate)}
-                  invalidText="Date must be YYYY-MM-DD"
+                  invalid={Boolean(listingToDateError)}
+                  invalidText={listingToDateError}
                   onChange={(value) => updateFilter('listingToDate', value)}
                 />
                 <IsoDatePicker
                   id="withdrawalFromDate"
-                  labelText="Withdrawn from date"
+                  labelText={WITHDRAWN_FROM_DATE_LABEL}
                   value={filters.withdrawalFromDate}
                   invalid={!isValidIsoDate(filters.withdrawalFromDate)}
                   invalidText="Date must be YYYY-MM-DD"
@@ -607,8 +610,8 @@ const ProvincialOffersPage = () => {
                   id="withdrawalToDate"
                   labelText="Withdrawn to date"
                   value={filters.withdrawalToDate}
-                  invalid={!isValidIsoDate(filters.withdrawalToDate)}
-                  invalidText="Date must be YYYY-MM-DD"
+                  invalid={Boolean(withdrawalToDateError)}
+                  invalidText={withdrawalToDateError}
                   onChange={(value) => updateFilter('withdrawalToDate', value)}
                 />
               </div>
@@ -633,14 +636,15 @@ const ProvincialOffersPage = () => {
         sm={4}
         md={8}
         lg={16}
-        hidden={!hasSearchQuery}
-        style={{ display: hasSearchQuery ? undefined : 'none' }}
+        hidden={!showResults}
+        style={{ display: showResults ? undefined : 'none' }}
       >
         <section
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"
         >
           <SearchResultsTableFrame
+            resultName="offer"
             loading={loading}
             loadingDescription="Loading offer search results…"
             columnCount={SORT_COLUMNS.length}
@@ -653,6 +657,7 @@ const ProvincialOffersPage = () => {
               results.page.totalElements,
               totalStatus,
               results.page.number * results.page.size + results.content.length,
+              'offer',
             )}
             actions={
               canCreateOffer ? (
@@ -725,8 +730,8 @@ const ProvincialOffersPage = () => {
               </Table>
             ) : !loading ? (
               <EmptyState
-                title="No offers found"
-                description="No offers found for the selected criteria."
+                title="No results found"
+                description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
