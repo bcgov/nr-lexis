@@ -27,6 +27,7 @@ import DetailSidePanel from '@/components/DetailSidePanel'
 import { useDiscardPrompt } from '@/components/DiscardChangesModal'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
+import IneligibleRowCheckbox from '@/components/IneligibleRowCheckbox'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
 import SearchSubmitButton from '@/components/SearchSubmitButton'
@@ -35,7 +36,7 @@ import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
 import StatusTag from '@/components/StatusTag'
 import UnsavedChangesGuard from '@/components/UnsavedChangesGuard'
-import IsoDatePicker from '../../components/IsoDatePicker'
+import IsoDateRangePicker from '../../components/IsoDateRangePicker'
 import type {
   ApplicationReviewSearchFilters,
   ApplicationReviewSearchRequest,
@@ -45,11 +46,7 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
-import {
-  hasInvalidIsoDateRange,
-  isValidIsoDate,
-  isoDateRangeEndError,
-} from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateRange } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -64,6 +61,7 @@ import {
 } from '@/pages/shared/search-total-cache'
 import {
   DEFAULT_SEARCH_PAGE,
+  SEARCH_PAGE_SIZE_OPTIONS,
   appendSearchParamsToPath,
   createEmptyPagedSearchResponse,
   createSearchParams,
@@ -85,6 +83,7 @@ import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { isAgentApplicant } from '@/pages/shared/application-form-utils'
 import {
   formatDeferredSearchTotalLabel,
+  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchNextSearchPage,
   type DeferredSearchTotalStatus,
@@ -128,9 +127,6 @@ type ApplicationApprovalResult = {
   message: string
 }
 
-const RECEIVED_FROM_DATE_LABEL = 'Received from date'
-const LISTING_FROM_DATE_LABEL = 'Listing from date'
-
 const hasInvalidSearchDates = (filters: ApplicationReviewSearchFilters): boolean =>
   hasInvalidIsoDateRange(filters.receivedFromDate, filters.receivedToDate) ||
   hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate)
@@ -145,10 +141,9 @@ const INITIAL_FILTERS: ApplicationReviewSearchFilters = {
   listingToDate: '',
 }
 
-// INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_REVIEW_PAGE_SIZE): Application Review retains
-// its additional 150-row option alongside the shared 100-row search default.
+// INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_REVIEW_PAGE_SIZE): the review queue opens with more
+// rows than other searches, using the same page-size options.
 const APPLICATION_REVIEW_DEFAULT_PAGE_SIZE = 100
-const APPLICATION_REVIEW_PAGE_SIZE_OPTIONS = [10, 25, 50, 100, 150, 200] as const
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ApplicationReviewSearchResponse>(
   APPLICATION_REVIEW_DEFAULT_PAGE_SIZE,
@@ -163,7 +158,7 @@ const RESULT_COLUMNS: {
   { id: 'status', label: 'Status' },
   { id: 'volume', label: 'Application volume (m³)' },
   { id: 'speciesEndUse', label: 'Species end use sort' },
-  { id: 'listingDate', label: 'Listing date', sortField: 'listingDate' },
+  { id: 'listingDate', label: 'List date', sortField: 'listingDate' },
   { id: 'region', label: 'Region', sortField: 'regionCode' },
 ]
 
@@ -340,7 +335,7 @@ const ProvincialReviewPage = () => {
       pageSize: parsePageSizeParam(
         searchParams.get('pageSize'),
         APPLICATION_REVIEW_DEFAULT_PAGE_SIZE,
-        APPLICATION_REVIEW_PAGE_SIZE_OPTIONS,
+        SEARCH_PAGE_SIZE_OPTIONS,
       ),
     }
   }, [searchParams])
@@ -392,16 +387,6 @@ const ProvincialReviewPage = () => {
   )
   const rejectStatusSupportsEmail = EMAIL_STATUS_CODES.has(normalizeReviewStatus(rejectStatusCode))
 
-  const receivedToDateError = isoDateRangeEndError(
-    filters.receivedFromDate,
-    filters.receivedToDate,
-    RECEIVED_FROM_DATE_LABEL,
-  )
-  const listingToDateError = isoDateRangeEndError(
-    filters.listingFromDate,
-    filters.listingToDate,
-    LISTING_FROM_DATE_LABEL,
-  )
   const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const selectableRows = useMemo(() => {
@@ -524,7 +509,7 @@ const ProvincialReviewPage = () => {
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setErrorMessage('Unable to retrieve application review search results.')
+          setErrorMessage('Unable to retrieve application review search results. Try again.')
           commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
@@ -1097,7 +1082,7 @@ const ProvincialReviewPage = () => {
                 id="productTypeCode"
                 labelText="Product type"
                 value={filters.productTypeCode}
-                placeholder="All product types"
+                placeholder="All"
                 options={productTypeOptions}
                 disabled={optionsLoading || optionsUnavailable}
                 onChange={(value) => updateFilter('productTypeCode', value)}
@@ -1106,7 +1091,7 @@ const ProvincialReviewPage = () => {
                 id="region"
                 titleText="Region"
                 items={regionOptions}
-                placeholder="Select region(s)"
+                placeholder="All"
                 selectedItems={selectedRegions}
                 disabled={optionsLoading || optionsUnavailable}
                 onChange={(nextSelected) => {
@@ -1116,37 +1101,29 @@ const ProvincialReviewPage = () => {
                   )
                 }}
               />
-              <IsoDatePicker
-                id="receivedFromDate"
-                labelText={RECEIVED_FROM_DATE_LABEL}
-                value={filters.receivedFromDate}
-                invalid={!isValidIsoDate(filters.receivedFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('receivedFromDate', value)}
+              <IsoDateRangePicker
+                fromId="receivedFromDate"
+                toId="receivedToDate"
+                fromLabel="Received date from"
+                toLabel="Received date to"
+                fromValue={filters.receivedFromDate}
+                toValue={filters.receivedToDate}
+                onChange={([receivedFromDate, receivedToDate]) => {
+                  clearSelection()
+                  setFilters((current) => ({ ...current, receivedFromDate, receivedToDate }))
+                }}
               />
-              <IsoDatePicker
-                id="receivedToDate"
-                labelText="Received to date"
-                value={filters.receivedToDate}
-                invalid={Boolean(receivedToDateError)}
-                invalidText={receivedToDateError}
-                onChange={(value) => updateFilter('receivedToDate', value)}
-              />
-              <IsoDatePicker
-                id="listingFromDate"
-                labelText={LISTING_FROM_DATE_LABEL}
-                value={filters.listingFromDate}
-                invalid={!isValidIsoDate(filters.listingFromDate)}
-                invalidText="Date must be YYYY-MM-DD"
-                onChange={(value) => updateFilter('listingFromDate', value)}
-              />
-              <IsoDatePicker
-                id="listingToDate"
-                labelText="Listing to date"
-                value={filters.listingToDate}
-                invalid={Boolean(listingToDateError)}
-                invalidText={listingToDateError}
-                onChange={(value) => updateFilter('listingToDate', value)}
+              <IsoDateRangePicker
+                fromId="listingFromDate"
+                toId="listingToDate"
+                fromLabel="List date from"
+                toLabel="List date to"
+                fromValue={filters.listingFromDate}
+                toValue={filters.listingToDate}
+                onChange={([listingFromDate, listingToDate]) => {
+                  clearSelection()
+                  setFilters((current) => ({ ...current, listingFromDate, listingToDate }))
+                }}
               />
             </div>
             <div className="legacy-search-actions" role="group" aria-label="Review search actions">
@@ -1345,7 +1322,7 @@ const ProvincialReviewPage = () => {
           <SearchResultsTableFrame
             resultName="application"
             loading={loading}
-            loadingDescription="Loading review queue…"
+            loadingDescription="Searching"
             columnCount={RESULT_COLUMNS.length + 2}
             totalItems={
               errorMessage
@@ -1426,7 +1403,7 @@ const ProvincialReviewPage = () => {
                         <Checkbox
                           id="selectAllCurrentPageRows"
                           hideLabel
-                          labelText="Select all rows on this page"
+                          labelText="Select all eligible rows on this page"
                           checked={allSelectableRowsAreSelected}
                           disabled={selectableRows.length === 0 || !canApproveApplications}
                           onChange={(_, payload) =>
@@ -1459,25 +1436,23 @@ const ProvincialReviewPage = () => {
                   {results.content.map((row) => (
                     <TableRow key={row.applicationNumber}>
                       <TableCell>
-                        <DisabledButtonTooltip
-                          disabled={
-                            !canApproveApplications || !isReviewableSourceStatus(row.status)
-                          }
-                          description={disabledReviewSelectionDescription(canApproveApplications)}
-                        >
+                        {canApproveApplications && isReviewableSourceStatus(row.status) ? (
                           <Checkbox
                             id={`selectRow-${row.applicationNumber}`}
                             hideLabel
-                            labelText={`Select ${row.applicationNumber}`}
+                            labelText={`Select application ${row.applicationNumber}`}
                             checked={Boolean(selectedRowsById[row.applicationNumber])}
-                            disabled={
-                              !canApproveApplications || !isReviewableSourceStatus(row.status)
-                            }
                             onChange={(_, payload) =>
                               toggleRowSelection(row.applicationNumber, Boolean(payload.checked))
                             }
                           />
-                        </DisabledButtonTooltip>
+                        ) : (
+                          <IneligibleRowCheckbox
+                            id={`selectRow-${row.applicationNumber}`}
+                            labelText={`Select application ${row.applicationNumber}`}
+                            reason={disabledReviewSelectionDescription(canApproveApplications)}
+                          />
+                        )}
                       </TableCell>
                       <TableCell>
                         {canOpenApplicationDetails ? (
@@ -1573,20 +1548,36 @@ const ProvincialReviewPage = () => {
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
-              <Pagination
-                page={results.page.number + 1}
-                pageSize={results.page.size}
-                pageSizes={[...APPLICATION_REVIEW_PAGE_SIZE_OPTIONS]}
-                totalItems={results.page.totalElements}
-                pagesUnknown={totalStatus !== 'exact'}
-                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
-                onChange={({ page, pageSize: nextPageSize }) => {
-                  clearSelection()
-                  setSearchParams(
-                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
-                  )
-                }}
-              />
+              <>
+                <div className="legacy-search-result-count legacy-search-result-count--footer">
+                  {formatDeferredSearchTotalLabel(
+                    results.page.totalElements,
+                    totalStatus,
+                    results.page.number * results.page.size + results.content.length,
+                    'application',
+                  ) ?? formatSearchResultCount(results.page.totalElements, 'application')}
+                </div>
+                <Pagination
+                  page={results.page.number + 1}
+                  pageSize={results.page.size}
+                  pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                  totalItems={results.page.totalElements}
+                  pagesUnknown={totalStatus !== 'exact'}
+                  isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
+                  onChange={({ page, pageSize: nextPageSize }) => {
+                    clearSelection()
+                    setSearchParams(
+                      buildSearchParams(
+                        appliedFilters,
+                        sortField,
+                        sortDirection,
+                        page,
+                        nextPageSize,
+                      ),
+                    )
+                  }}
+                />
+              </>
             )}
           </SearchResultsTableFrame>
         </section>

@@ -174,11 +174,12 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('shows application result list dates in ISO format', async () => {
+  it('shows application result list dates in words', async () => {
     renderPage()
     const application = await screen.findByText('321')
     const row = within(application.closest('tr') as HTMLElement)
-    expect(row.getByRole('cell', { name: '2026-01-10' })).toBeVisible()
+    expect(row.getByRole('cell', { name: 'Jan 10, 2026' })).toBeVisible()
+    expect(row.queryByRole('cell', { name: '2026-01-10' })).not.toBeInTheDocument()
   })
 
   it('submits and restores None as literal NULL', async () => {
@@ -188,7 +189,7 @@ describe('Provincial Application Search Actions', () => {
 
     const exemptionType = screen.getByRole('combobox', { name: 'Exemption type' })
     expect(exemptionType).toHaveValue('')
-    expect(exemptionType).toHaveAttribute('placeholder', 'All types')
+    expect(exemptionType).toHaveAttribute('placeholder', 'All')
     await userEvent.click(exemptionType)
     await userEvent.click(screen.getByRole('option', { name: 'None' }))
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
@@ -211,7 +212,7 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('None')
   })
 
-  it('clears a restored None filter to All types and submits an unfiltered search', async () => {
+  it('clears a restored None filter to All and submits an unfiltered search', async () => {
     const storageKey = 'lexis.search-state.v1.provincial-applications'
     // A complete saved query makes Search refresh results instead of normalizing the URL.
     sessionStorage.setItem(
@@ -235,7 +236,7 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('')
     expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveAttribute(
       'placeholder',
-      'All types',
+      'All',
     )
     expect(new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').has('exemptionType')).toBe(
       false,
@@ -295,7 +296,7 @@ describe('Provincial Application Search Actions', () => {
           (header.querySelector('.cds--table-header-label') ?? header).textContent?.trim(),
         ),
     ).toEqual([
-      'Select all rows on this page',
+      'Select all eligible rows on this page',
       'Application',
       'Status',
       'Owner client number',
@@ -319,24 +320,36 @@ describe('Provincial Application Search Actions', () => {
       }),
     ).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select application 321' })).toBeEnabled()
-    expect(
-      screen.queryByRole('checkbox', { name: 'Select application 654' }),
-    ).not.toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: 'Select application 321' })).not.toHaveAttribute(
+      'aria-disabled',
+    )
+    const ineligibleCheckbox = screen.getByRole('checkbox', { name: 'Select application 654' })
+    expect(ineligibleCheckbox).toHaveAttribute('aria-disabled', 'true')
+    expect(ineligibleCheckbox).toHaveAccessibleDescription(
+      expect.stringContaining('This application already has an exemption.'),
+    )
     expect(
       screen.queryByRole('link', { name: 'Upload Application Submission' }),
     ).not.toBeInTheDocument()
-    const addApplicationAction = screen.getByRole('link', { name: 'Add application' })
-    expect(addApplicationAction).toHaveAttribute('href', '/provincial/application/create')
-    expect(addApplicationAction).toHaveClass('cds--btn--primary')
-    expect(addApplicationAction.closest('.lexis-page-header__actions')).not.toBeNull()
+    const createApplicationAction = screen.getByRole('link', { name: 'Create application' })
+    expect(createApplicationAction).toHaveAttribute('href', '/provincial/application/create')
+    expect(createApplicationAction).toHaveClass('cds--btn--tertiary')
+    expect(createApplicationAction.closest('.lexis-page-header__actions')).not.toBeNull()
 
     expect(
       screen.getAllByText('This application already has an exemption.').length,
     ).toBeGreaterThan(0)
 
+    // jsdom flips a cancelled checkbox click instead of restoring it, so assert the
+    // cancelled click and the unchanged selection rather than the DOM checked state.
+    expect(fireEvent.click(ineligibleCheckbox)).toBe(false)
+    expect(screen.queryByText('1 application selected')).not.toBeInTheDocument()
+
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
     expect(screen.getByText('1 application selected')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Create exemption' })).toBeEnabled()
+    expect(fireEvent.click(ineligibleCheckbox)).toBe(false)
+    expect(screen.getByText('1 application selected')).toBeInTheDocument()
 
     mockedFetchExemptionCreatePreview.mockResolvedValueOnce(exemptionPreview(['321']))
     mockedSubmitExemptionCreate.mockResolvedValueOnce({
@@ -473,12 +486,18 @@ describe('Provincial Application Search Actions', () => {
     renderPage()
     await screen.findByText(rowState.applicationNumber)
 
-    expect(
-      screen.queryByRole('checkbox', {
-        name: `Select application ${rowState.applicationNumber}`,
-      }),
-    ).not.toBeInTheDocument()
+    const checkbox = screen.getByRole('checkbox', {
+      name: `Select application ${rowState.applicationNumber}`,
+    })
+    expect(checkbox).toHaveAttribute('aria-disabled', 'true')
+    expect(checkbox).toHaveAccessibleDescription(expect.stringContaining(rowState.expected))
     expect(screen.getAllByText(rowState.expected).length).toBeGreaterThan(0)
+    expect(checkbox).not.toBeChecked()
+    // jsdom flips a cancelled checkbox click instead of restoring it, so assert the
+    // cancelled click and the unchanged selection rather than the DOM checked state.
+    expect(fireEvent.click(checkbox)).toBe(false)
+    expect(screen.queryByText('1 application selected')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create exemption' })).not.toBeInTheDocument()
   })
 
   it('paints application rows before the exact result count is available', async () => {
@@ -509,7 +528,7 @@ describe('Provincial Application Search Actions', () => {
     expect(await screen.findByText('8000')).toBeInTheDocument()
     expect(screen.getAllByRole('status', { name: 'Counting search results' })).toHaveLength(2)
     expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
-    expect(screen.queryByText('Loading application search results…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Searching')).not.toBeInTheDocument()
 
     await act(async () => {
       resolveCount(125)
@@ -634,7 +653,7 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('654')
 
     const selectAllCheckbox = screen.getByRole('checkbox', {
-      name: 'Select all rows on this page',
+      name: 'Select all eligible rows on this page',
     })
     expect(selectAllCheckbox).toBeDisabled()
 
@@ -740,7 +759,7 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.queryByLabelText('Agent client')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create exemption' })).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
+      screen.queryByRole('checkbox', { name: 'Select all eligible rows on this page' }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('checkbox', { name: 'Select application 321' }),
@@ -816,9 +835,10 @@ describe('Provincial Application Search Actions', () => {
     const link = await screen.findByRole('link', { name: '321' })
     const row = within(link.closest('tr')!)
     expect(screen.getByRole('heading', { name: 'Application search' })).toBeVisible()
+    expect(screen.getByText('Find applications and check their status')).toBeVisible()
     expect(row.getByText('New')).toBeVisible()
     expect(row.getByText('100.0')).toBeVisible()
-    expect(row.getByText('2026-01-10')).toBeVisible()
+    expect(row.getByText('Jan 10, 2026')).toBeVisible()
     expect(screen.getByText('Application volume (m³)')).toBeVisible()
     expect(screen.getAllByText('2 applications found')).toHaveLength(2)
   })
@@ -917,7 +937,9 @@ describe('Provincial Application Search Actions', () => {
     renderPage()
     await screen.findByText('321')
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Create exemption' }))
 
     await waitFor(() => {
@@ -976,9 +998,9 @@ describe('Provincial Application Search Actions', () => {
       await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
     ).toBeVisible()
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
-    const addApplicationAction = screen.getByRole('link', { name: 'Add application' })
-    expect(addApplicationAction).toHaveAttribute('href', '/provincial/application/create')
-    expect(addApplicationAction.closest('.lexis-page-header__actions')).not.toBeNull()
+    const createApplicationAction = screen.getByRole('link', { name: 'Create application' })
+    expect(createApplicationAction).toHaveAttribute('href', '/provincial/application/create')
+    expect(createApplicationAction.closest('.lexis-page-header__actions')).not.toBeNull()
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()
@@ -1190,7 +1212,9 @@ describe('Provincial Application Search Actions', () => {
     expect(
       await screen.findByRole('heading', { name: 'Application search unavailable' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Unable to retrieve application search results.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Unable to retrieve application search results. Try again.'),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'No results found' })).not.toBeInTheDocument()
   })
   it.each([['List date from', 'List date to']])(

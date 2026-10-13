@@ -22,7 +22,7 @@ import {
 describe('search-query-utils', () => {
   it('defines shared search pagination defaults', () => {
     expect(DEFAULT_SEARCH_PAGE).toBe(1)
-    expect(DEFAULT_SEARCH_PAGE_SIZE).toBe(100)
+    expect(DEFAULT_SEARCH_PAGE_SIZE).toBe(10)
     expect(SEARCH_PAGE_SIZE_OPTIONS).toEqual([10, 25, 50, 100, 200])
   })
 
@@ -31,7 +31,7 @@ describe('search-query-utils', () => {
       content: [],
       page: {
         number: 0,
-        size: 100,
+        size: 10,
         totalElements: 0,
         totalPages: 1,
       },
@@ -75,7 +75,7 @@ describe('search-query-utils', () => {
     expect(parsePageSizeParam('25', DEFAULT_SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE_OPTIONS)).toBe(25)
     expect(parsePageSizeParam('100', DEFAULT_SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE_OPTIONS)).toBe(100)
     expect(parsePageSizeParam('10', DEFAULT_SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE_OPTIONS)).toBe(10)
-    expect(parsePageSizeParam('0', DEFAULT_SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE_OPTIONS)).toBe(100)
+    expect(parsePageSizeParam('0', DEFAULT_SEARCH_PAGE_SIZE, SEARCH_PAGE_SIZE_OPTIONS)).toBe(10)
   })
 
   it('parses constrained enum and sort direction values', () => {

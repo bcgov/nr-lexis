@@ -32,11 +32,7 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
-import {
-  hasInvalidIsoDateRange,
-  isValidIsoDate,
-  isoDateRangeEndError,
-} from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateRange } from '@/pages/shared/create-form-utils'
 import {
   DEFAULT_SEARCH_PAGE,
   DEFAULT_SEARCH_PAGE_SIZE,
@@ -67,13 +63,14 @@ import {
   setCachedSearchTotal,
   type SearchTotalCache,
 } from '@/pages/shared/search-total-cache'
-import IsoDatePicker from '../../components/IsoDatePicker'
+import IsoDateRangePicker from '../../components/IsoDateRangePicker'
 import { useSearchFilterDraft } from '@/pages/shared/useSearchFilterDraft'
 import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParams'
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   formatDeferredSearchTotalLabel,
+  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchNextSearchPage,
   type DeferredSearchTotalStatus,
@@ -104,7 +101,6 @@ const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
 }
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialPermitSearchResponse>()
-const ISSUED_FROM_DATE_LABEL = 'Issued from date'
 
 const SORT_COLUMNS: {
   id: ProvincialPermitSearchSortField
@@ -242,11 +238,6 @@ const ProvincialPermitPage = () => {
       preferenceLoading ||
       (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
-  const issuedToDateError = isoDateRangeEndError(
-    filters.issuedFromDate,
-    filters.issuedToDate,
-    ISSUED_FROM_DATE_LABEL,
-  )
   const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const beginSearchRequest = useLatestRequestGuard()
@@ -348,7 +339,7 @@ const ProvincialPermitPage = () => {
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setErrorMessage('Unable to retrieve permit search results.')
+          setErrorMessage('Unable to retrieve permit search results. Try again.')
           commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
@@ -527,7 +518,7 @@ const ProvincialPermitPage = () => {
                   id="region"
                   titleText="Region"
                   items={regionOptions}
-                  placeholder="Select region(s)"
+                  placeholder="All"
                   selectedItems={selectedRegions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(nextSelected) => {
@@ -537,27 +528,22 @@ const ProvincialPermitPage = () => {
                     )
                   }}
                 />
-                <IsoDatePicker
-                  id="issuedFromDate"
-                  labelText={ISSUED_FROM_DATE_LABEL}
-                  value={filters.issuedFromDate}
-                  invalid={!isValidIsoDate(filters.issuedFromDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('issuedFromDate', value)}
-                />
-                <IsoDatePicker
-                  id="issuedToDate"
-                  labelText="Issued to date"
-                  value={filters.issuedToDate}
-                  invalid={Boolean(issuedToDateError)}
-                  invalidText={issuedToDateError}
-                  onChange={(value) => updateFilter('issuedToDate', value)}
+                <IsoDateRangePicker
+                  fromId="issuedFromDate"
+                  toId="issuedToDate"
+                  fromLabel="Issued date from"
+                  toLabel="Issued date to"
+                  fromValue={filters.issuedFromDate}
+                  toValue={filters.issuedToDate}
+                  onChange={([issuedFromDate, issuedToDate]) =>
+                    setFilters((current) => ({ ...current, issuedFromDate, issuedToDate }))
+                  }
                 />
                 <SearchableSelect
                   id="permitStatus"
                   labelText="Permit status"
                   value={filters.permitStatus}
-                  placeholder="All statuses"
+                  placeholder="All"
                   options={permitStatusOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('permitStatus', value)}
@@ -614,7 +600,7 @@ const ProvincialPermitPage = () => {
           <SearchResultsTableFrame
             resultName="permit"
             loading={loading}
-            loadingDescription="Loading permit search results…"
+            loadingDescription="Searching"
             columnCount={SORT_COLUMNS.length}
             totalItems={
               errorMessage || (loading && results.content.length === 0)
@@ -691,19 +677,35 @@ const ProvincialPermitPage = () => {
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
-              <Pagination
-                page={results.page.number + 1}
-                pageSize={results.page.size}
-                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-                totalItems={results.page.totalElements}
-                pagesUnknown={totalStatus !== 'exact'}
-                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
-                onChange={({ page, pageSize: nextPageSize }) => {
-                  setSearchParams(
-                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
-                  )
-                }}
-              />
+              <>
+                <div className="legacy-search-result-count legacy-search-result-count--footer">
+                  {formatDeferredSearchTotalLabel(
+                    results.page.totalElements,
+                    totalStatus,
+                    results.page.number * results.page.size + results.content.length,
+                    'permit',
+                  ) ?? formatSearchResultCount(results.page.totalElements, 'permit')}
+                </div>
+                <Pagination
+                  page={results.page.number + 1}
+                  pageSize={results.page.size}
+                  pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                  totalItems={results.page.totalElements}
+                  pagesUnknown={totalStatus !== 'exact'}
+                  isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
+                  onChange={({ page, pageSize: nextPageSize }) => {
+                    setSearchParams(
+                      buildSearchParams(
+                        appliedFilters,
+                        sortField,
+                        sortDirection,
+                        page,
+                        nextPageSize,
+                      ),
+                    )
+                  }}
+                />
+              </>
             )}
           </SearchResultsTableFrame>
         </section>

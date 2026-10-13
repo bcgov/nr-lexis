@@ -705,7 +705,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBeLessThan(1)
     expect(sectionToggleLayout.chevronLeft).toBeGreaterThan(sectionToggleLayout.titleRight)
     await expect(page.locator('.lexis-page-header__subtitle')).toContainText(
-      'Find provincial applications',
+      'Find applications and check their status',
     )
     const initialShellLayout = await page.evaluate(() => {
       const sideNav = document.querySelector('.csp-side-nav')
@@ -1166,14 +1166,15 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(clearButton).toHaveCSS('border-color', 'rgb(0, 92, 184)')
     await expect(clearButton).toHaveCSS('color', 'rgb(0, 92, 184)')
 
-    const addApplicationAction = page.getByRole('link', { name: 'Add application' })
-    await expect(addApplicationAction).toHaveClass(/cds--btn--primary/)
+    const createApplicationAction = page.getByRole('link', { name: 'Create application' })
+    await expect(createApplicationAction).toHaveClass(/cds--btn--tertiary/)
     expect(
-      await addApplicationAction.evaluate((action) =>
+      await createApplicationAction.evaluate((action) =>
         Boolean(action.closest('.lexis-page-header__actions')),
       ),
     ).toBe(true)
-    await expect(addApplicationAction).toHaveCSS('background-color', 'rgb(0, 115, 230)')
+    await expect(createApplicationAction).toHaveCSS('border-color', 'rgb(0, 92, 184)')
+    await expect(createApplicationAction).toHaveCSS('color', 'rgb(0, 92, 184)')
 
     await expect(page.getByText('Export schedule filter applied')).toHaveCount(0)
 
@@ -1339,17 +1340,21 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await to.press('Tab')
     await expect(search).toBeEnabled()
     await search.click()
-    await expect(page.getByText('1 application found', { exact: true })).toBeVisible()
-    expect(searchRequests[0].searchParams.get('size')).toBe('100')
+    const oneResultCounts = page.getByText('1 application found', { exact: true })
+    await expect(oneResultCounts).toHaveCount(2)
+    await expect(oneResultCounts.first()).toBeVisible()
+    expect(searchRequests[0].searchParams.get('size')).toBe('10')
     expect(searchRequests[0].searchParams.get('listingFromDate')).toBe('2026-10-12')
     expect(searchRequests[0].searchParams.get('listingToDate')).toBe('2026-10-12')
     const pageSize = page.getByRole('combobox', { name: 'Items per page:' })
-    await expect(pageSize).toHaveValue('100')
+    await expect(pageSize).toHaveValue('10')
     await expect(pageSize.locator('option[value="100"]')).toHaveCount(1)
 
     await page.getByRole('textbox', { name: 'Application number', exact: true }).fill('9999999999')
     await search.click()
-    await expect(page.getByText('0 applications found', { exact: true })).toBeVisible()
+    const noResultCounts = page.getByText('0 applications found', { exact: true })
+    await expect(noResultCounts).toHaveCount(2)
+    await expect(noResultCounts.first()).toBeVisible()
     await expect(page.getByRole('heading', { name: 'No results found', exact: true })).toBeVisible()
     await expect(
       page.getByText(
@@ -1683,9 +1688,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
     await expect(eligibleApplication).toBeVisible()
     await expect(eligibleApplication).toBeEnabled()
-    await expect(
-      page.getByRole('checkbox', { name: 'Select application 281002', exact: true }),
-    ).toHaveCount(0)
+    const ineligibleApplication = page.getByRole('checkbox', {
+      name: 'Select application 281002',
+      exact: true,
+    })
+    await expect(ineligibleApplication).toHaveAttribute('aria-disabled', 'true')
+    await expect(ineligibleApplication).not.toBeChecked()
     const eligibleApplicationLabel = page.locator('label[for="selectRow-281001"]')
     await expect(eligibleApplicationLabel).toBeVisible()
     await eligibleApplicationLabel.click()
@@ -1693,6 +1701,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const batchActions = page.locator('.cds--batch-actions--active')
     await expect(batchActions).toContainText('1 application selected')
     await expect(createExemptionAction).toBeEnabled()
+    await page.locator('label[for="selectRow-281002"]').click()
+    await expect(ineligibleApplication).not.toBeChecked()
+    await expect(batchActions).toContainText('1 application selected')
     await batchActions.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(eligibleApplication).not.toBeChecked()
     await expect(createExemptionAction).toHaveCount(0)
@@ -1765,10 +1776,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await rows.nth(0).hover()
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
 
-    const addApplicationAction = page.getByRole('link', { name: 'Add application' })
+    const createApplicationAction = page.getByRole('link', { name: 'Create application' })
     await page.getByRole('switch', { name: 'Dark theme' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
-    await expect(addApplicationAction).toHaveCSS('color', 'rgb(255, 255, 255)')
+    await expect(createApplicationAction).toHaveCSS('color', 'rgb(255, 255, 255)')
     const clearAllButton = page.getByRole('button', { name: 'Clear all', exact: true })
     await expect(clearAllButton).toHaveCSS('color', 'rgb(255, 255, 255)')
     await clearAllButton.hover()
@@ -2194,7 +2205,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         await expect(eligibleApplication).toBeEnabled()
         await expect(
           page.getByRole('checkbox', { name: 'Select application 281002', exact: true }),
-        ).toHaveCount(0)
+        ).toHaveAttribute('aria-disabled', 'true')
         const eligibleApplicationLabel = page.locator('label[for="selectRow-281001"]')
         await expect(eligibleApplicationLabel).toBeVisible()
         await eligibleApplicationLabel.click()
@@ -2585,9 +2596,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       ready: page.getByRole('heading', { level: 1, name: 'Create new offer', exact: true }),
     })
 
-    await expect(
-      page.getByRole('heading', { level: 1, name: 'Create new offer' }),
-    ).toBeVisible()
+    await expect(page.getByRole('heading', { level: 1, name: 'Create new offer' })).toBeVisible()
     const formCard = page.locator('.provincial-offer-create.create-form-tile')
     const sections = formCard.locator('.create-form-section')
     await expect(formCard).toBeVisible()

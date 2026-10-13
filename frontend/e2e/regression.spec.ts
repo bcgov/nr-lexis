@@ -666,12 +666,12 @@ const adminNavigationSections: Array<{
     section: 'Provincial',
     links: [
       'Application review',
-      'Create/Edit Application',
+      'Create application',
       'Upload',
       'Application search',
-      'Create/Edit Exemption',
+      'Create exemption',
       'Exemption search',
-      'Create/Edit Offer',
+      'Create offer',
       'Offer search',
       'Permit search',
     ],
@@ -2319,7 +2319,9 @@ test.describe('TEST IDIR admin regression', () => {
     })
     await expect(approveSelectedButton).toBeVisible()
     await expect(approveSelectedButton).toBeDisabled()
-    await expect(page.getByRole('checkbox', { name: 'Select all rows on this page' })).toBeVisible()
+    await expect(
+      page.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    ).toBeVisible()
 
     await expect(page.getByRole('button', { name: /reject selected/i })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /update selected/i })).toHaveCount(0)

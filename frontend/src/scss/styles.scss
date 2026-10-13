@@ -1898,12 +1898,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   grid-column: 1 / span 2;
 }
 
-:is(
-    .provincial-application-search-grid,
-    .provincial-exemption-search-grid,
-    .federal-application-search-grid
-  )
-  > .search-date-range {
+.legacy-search-grid > .search-date-range {
   grid-column: span 2;
 
   .cds--date-picker {
@@ -2207,6 +2202,18 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .disabled-button-tooltip > .cds--checkbox-wrapper {
   pointer-events: none;
+}
+
+.ineligible-row-checkbox {
+  display: inline-flex;
+}
+
+.ineligible-row-checkbox .cds--checkbox-label {
+  cursor: not-allowed;
+}
+
+.ineligible-row-checkbox .cds--checkbox-label::before {
+  border-color: var(--cds-icon-disabled);
 }
 
 // Search result tables scroll beneath the fixed application navigation. Lift
@@ -5993,22 +6000,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   .provincial-application-search-grid > .forest-client-combobox,
   .provincial-application-search-grid > .forest-client-combobox:has(#ownerClientNumber),
   .federal-application-search-grid > .forest-client-combobox,
-  :is(
-      .provincial-application-search-grid,
-      .provincial-exemption-search-grid,
-      .federal-application-search-grid
-    )
-    > .search-date-range {
+  .legacy-search-grid > .search-date-range {
     grid-column: auto;
   }
 
-  :is(
-      .provincial-application-search-grid,
-      .provincial-exemption-search-grid,
-      .federal-application-search-grid
-    )
-    > .search-date-range
-    .cds--date-picker {
+  .legacy-search-grid > .search-date-range .cds--date-picker {
     grid-template-columns: 1fr;
   }
 

@@ -19,7 +19,7 @@ import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
-import IsoDatePicker from '../../components/IsoDatePicker'
+import IsoDateRangePicker from '../../components/IsoDateRangePicker'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PageHeader from '@/components/PageHeader'
 import SearchSubmitButton from '@/components/SearchSubmitButton'
@@ -32,11 +32,7 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
-import {
-  hasInvalidIsoDateRange,
-  isValidIsoDate,
-  isoDateRangeEndError,
-} from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateRange } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -73,6 +69,7 @@ import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPrefe
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   formatDeferredSearchTotalLabel,
+  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchAdjacentSearchPages,
   type DeferredSearchTotalStatus,
@@ -105,8 +102,6 @@ const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
 }
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialOfferSearchResponse>()
-const LISTING_FROM_DATE_LABEL = 'Listing from date'
-const WITHDRAWN_FROM_DATE_LABEL = 'Withdrawn from date'
 
 const SORT_COLUMNS: {
   id: ProvincialOfferSearchSortField
@@ -115,7 +110,7 @@ const SORT_COLUMNS: {
   { id: 'offerNumber', label: 'Offer' },
   { id: 'applicationNumber', label: 'Application' },
   { id: 'packageNumber', label: 'Package' },
-  { id: 'listingDate', label: 'Listing date' },
+  { id: 'listingDate', label: 'List date' },
   { id: 'region', label: 'Region' },
   { id: 'offerWithdrawalDate', label: 'Offer withdrawn date' },
 ]
@@ -243,16 +238,6 @@ const ProvincialOffersPage = () => {
       preferenceLoading ||
       (!offerOptionsUnavailable && defaultZoneRegionIds.length > 0))
 
-  const listingToDateError = isoDateRangeEndError(
-    filters.listingFromDate,
-    filters.listingToDate,
-    LISTING_FROM_DATE_LABEL,
-  )
-  const withdrawalToDateError = isoDateRangeEndError(
-    filters.withdrawalFromDate,
-    filters.withdrawalToDate,
-    WITHDRAWN_FROM_DATE_LABEL,
-  )
   const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const beginSearchRequest = useLatestRequestGuard()
@@ -355,7 +340,7 @@ const ProvincialOffersPage = () => {
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setErrorMessage('Unable to retrieve offer search results.')
+          setErrorMessage('Unable to retrieve offer search results. Try again.')
           commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
@@ -531,6 +516,20 @@ const ProvincialOffersPage = () => {
         <PageHeader
           title="Offer search"
           subtitle="Find provincial purchase offers and open offer details."
+          actions={
+            canCreateOffer ? (
+              <Button
+                as={Link}
+                to="/provincial/offers/create"
+                kind="tertiary"
+                size="md"
+                renderIcon={Add}
+              >
+                Create offer
+              </Button>
+            ) : undefined
+          }
+          actionsLabel="Offer actions"
         />
       </Column>
 
@@ -572,7 +571,7 @@ const ProvincialOffersPage = () => {
                   id="region"
                   titleText="Region"
                   items={regionOptions}
-                  placeholder="Select region(s)"
+                  placeholder="All"
                   selectedItems={selectedRegions}
                   disabled={!isOptionsLoaded || offerOptionsUnavailable}
                   onChange={(nextSelected) => {
@@ -582,37 +581,27 @@ const ProvincialOffersPage = () => {
                     )
                   }}
                 />
-                <IsoDatePicker
-                  id="listingFromDate"
-                  labelText={LISTING_FROM_DATE_LABEL}
-                  value={filters.listingFromDate}
-                  invalid={!isValidIsoDate(filters.listingFromDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('listingFromDate', value)}
+                <IsoDateRangePicker
+                  fromId="listingFromDate"
+                  toId="listingToDate"
+                  fromLabel="List date from"
+                  toLabel="List date to"
+                  fromValue={filters.listingFromDate}
+                  toValue={filters.listingToDate}
+                  onChange={([listingFromDate, listingToDate]) =>
+                    setFilters((current) => ({ ...current, listingFromDate, listingToDate }))
+                  }
                 />
-                <IsoDatePicker
-                  id="listingToDate"
-                  labelText="Listing to date"
-                  value={filters.listingToDate}
-                  invalid={Boolean(listingToDateError)}
-                  invalidText={listingToDateError}
-                  onChange={(value) => updateFilter('listingToDate', value)}
-                />
-                <IsoDatePicker
-                  id="withdrawalFromDate"
-                  labelText={WITHDRAWN_FROM_DATE_LABEL}
-                  value={filters.withdrawalFromDate}
-                  invalid={!isValidIsoDate(filters.withdrawalFromDate)}
-                  invalidText="Date must be YYYY-MM-DD"
-                  onChange={(value) => updateFilter('withdrawalFromDate', value)}
-                />
-                <IsoDatePicker
-                  id="withdrawalToDate"
-                  labelText="Withdrawn to date"
-                  value={filters.withdrawalToDate}
-                  invalid={Boolean(withdrawalToDateError)}
-                  invalidText={withdrawalToDateError}
-                  onChange={(value) => updateFilter('withdrawalToDate', value)}
+                <IsoDateRangePicker
+                  fromId="withdrawalFromDate"
+                  toId="withdrawalToDate"
+                  fromLabel="Offer withdrawn date from"
+                  toLabel="Offer withdrawn date to"
+                  fromValue={filters.withdrawalFromDate}
+                  toValue={filters.withdrawalToDate}
+                  onChange={([withdrawalFromDate, withdrawalToDate]) =>
+                    setFilters((current) => ({ ...current, withdrawalFromDate, withdrawalToDate }))
+                  }
                 />
               </div>
               <div className="legacy-search-actions">
@@ -646,7 +635,7 @@ const ProvincialOffersPage = () => {
           <SearchResultsTableFrame
             resultName="offer"
             loading={loading}
-            loadingDescription="Loading offer search results…"
+            loadingDescription="Searching"
             columnCount={SORT_COLUMNS.length}
             totalItems={
               errorMessage || (loading && results.content.length === 0)
@@ -659,19 +648,6 @@ const ProvincialOffersPage = () => {
               results.page.number * results.page.size + results.content.length,
               'offer',
             )}
-            actions={
-              canCreateOffer ? (
-                <Button
-                  as={Link}
-                  to="/provincial/offers/create"
-                  kind="primary"
-                  size="md"
-                  renderIcon={Add}
-                >
-                  Add offer
-                </Button>
-              ) : undefined
-            }
           >
             {errorMessage ? (
               <EmptyState
@@ -735,19 +711,35 @@ const ProvincialOffersPage = () => {
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
-              <Pagination
-                page={results.page.number + 1}
-                pageSize={results.page.size}
-                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-                totalItems={results.page.totalElements}
-                pagesUnknown={totalStatus !== 'exact'}
-                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
-                onChange={({ page, pageSize: nextPageSize }) => {
-                  setSearchParams(
-                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
-                  )
-                }}
-              />
+              <>
+                <div className="legacy-search-result-count legacy-search-result-count--footer">
+                  {formatDeferredSearchTotalLabel(
+                    results.page.totalElements,
+                    totalStatus,
+                    results.page.number * results.page.size + results.content.length,
+                    'offer',
+                  ) ?? formatSearchResultCount(results.page.totalElements, 'offer')}
+                </div>
+                <Pagination
+                  page={results.page.number + 1}
+                  pageSize={results.page.size}
+                  pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                  totalItems={results.page.totalElements}
+                  pagesUnknown={totalStatus !== 'exact'}
+                  isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
+                  onChange={({ page, pageSize: nextPageSize }) => {
+                    setSearchParams(
+                      buildSearchParams(
+                        appliedFilters,
+                        sortField,
+                        sortDirection,
+                        page,
+                        nextPageSize,
+                      ),
+                    )
+                  }}
+                />
+              </>
             )}
           </SearchResultsTableFrame>
         </section>

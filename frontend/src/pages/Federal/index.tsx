@@ -57,6 +57,7 @@ import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParam
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   formatDeferredSearchTotalLabel,
+  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchAdjacentSearchPages,
   type DeferredSearchTotalStatus,
@@ -277,7 +278,7 @@ const FederalPage = () => {
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setErrorMessage('Unable to retrieve federal application search results.')
+          setErrorMessage('Unable to retrieve federal application search results. Try again.')
           commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
@@ -361,7 +362,7 @@ const FederalPage = () => {
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Federal application search"
-          subtitle="Find federal applications and check their status."
+          subtitle="Find federal applications and check their status"
         />
       </Column>
 
@@ -394,7 +395,7 @@ const FederalPage = () => {
                   id="applicationStatus"
                   labelText="Application status"
                   value={filters.applicationStatus}
-                  placeholder="All statuses"
+                  placeholder="All"
                   options={applicationStatusOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('applicationStatus', value)}
@@ -462,7 +463,7 @@ const FederalPage = () => {
           <SearchResultsTableFrame
             resultName="application"
             loading={loading}
-            loadingDescription="Loading federal application search results…"
+            loadingDescription="Searching"
             columnCount={RESULT_COLUMNS.length}
             totalItems={
               errorMessage || (loading && results.content.length === 0)
@@ -530,17 +531,27 @@ const FederalPage = () => {
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
-              <Pagination
-                page={results.page.number + 1}
-                pageSize={results.page.size}
-                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-                totalItems={results.page.totalElements}
-                pagesUnknown={totalStatus !== 'exact'}
-                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
-                onChange={({ page, pageSize: nextPageSize }) => {
-                  setSearchParams(buildSearchParams(appliedFilters, page, nextPageSize))
-                }}
-              />
+              <>
+                <div className="legacy-search-result-count legacy-search-result-count--footer">
+                  {formatDeferredSearchTotalLabel(
+                    results.page.totalElements,
+                    totalStatus,
+                    results.page.number * results.page.size + results.content.length,
+                    'application',
+                  ) ?? formatSearchResultCount(results.page.totalElements, 'application')}
+                </div>
+                <Pagination
+                  page={results.page.number + 1}
+                  pageSize={results.page.size}
+                  pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                  totalItems={results.page.totalElements}
+                  pagesUnknown={totalStatus !== 'exact'}
+                  isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
+                  onChange={({ page, pageSize: nextPageSize }) => {
+                    setSearchParams(buildSearchParams(appliedFilters, page, nextPageSize))
+                  }}
+                />
+              </>
             )}
           </SearchResultsTableFrame>
         </section>

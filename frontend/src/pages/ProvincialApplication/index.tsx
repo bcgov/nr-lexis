@@ -24,6 +24,7 @@ import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
+import IneligibleRowCheckbox from '@/components/IneligibleRowCheckbox'
 import PageHeader from '@/components/PageHeader'
 import SearchSubmitButton from '@/components/SearchSubmitButton'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
@@ -419,7 +420,7 @@ const ProvincialApplicationPage = () => {
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setErrorMessage('Unable to retrieve application search results.')
+          setErrorMessage('Unable to retrieve application search results. Try again.')
           commitResults(EMPTY_RESULTS, 'exact')
         }
       } finally {
@@ -699,17 +700,17 @@ const ProvincialApplicationPage = () => {
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Application search"
-          subtitle="Find provincial applications and manage eligible application workflows."
+          subtitle="Find applications and check their status"
           actions={
             canCreateApplication ? (
               <Button
                 as={Link}
                 to="/provincial/application/create"
-                kind="primary"
+                kind="tertiary"
                 size="md"
                 renderIcon={Add}
               >
-                Add application
+                Create application
               </Button>
             ) : undefined
           }
@@ -752,7 +753,7 @@ const ProvincialApplicationPage = () => {
                   id="region"
                   titleText="Region"
                   items={regionOptions}
-                  placeholder="Select region(s)"
+                  placeholder="All"
                   selectedItems={selectedRegions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(nextSelected) => {
@@ -778,7 +779,7 @@ const ProvincialApplicationPage = () => {
                   id="exemptionType"
                   labelText="Exemption type"
                   value={filters.exemptionType}
-                  placeholder="All types"
+                  placeholder="All"
                   options={exemptionTypeOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('exemptionType', value)}
@@ -787,7 +788,7 @@ const ProvincialApplicationPage = () => {
                   id="applicationStatus"
                   labelText="Application status"
                   value={filters.applicationStatus}
-                  placeholder="All statuses"
+                  placeholder="All"
                   options={applicationStatusOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('applicationStatus', value)}
@@ -815,7 +816,7 @@ const ProvincialApplicationPage = () => {
                     id="productTypeCode"
                     labelText="Product type"
                     value={filters.productTypeCode}
-                    placeholder="All product types"
+                    placeholder="All"
                     options={productTypeOptions}
                     disabled={optionsLoading || optionsUnavailable}
                     onChange={(value) => updateFilter('productTypeCode', value)}
@@ -876,7 +877,7 @@ const ProvincialApplicationPage = () => {
           <SearchResultsTableFrame
             resultName="application"
             loading={loading}
-            loadingDescription="Loading application search results…"
+            loadingDescription="Searching"
             columnCount={visibleResultColumns.length + (canCreateExemption ? 1 : 0)}
             totalItems={
               errorMessage || (loading && results.content.length === 0)
@@ -927,7 +928,7 @@ const ProvincialApplicationPage = () => {
                           <Checkbox
                             id="selectAllCurrentPageRows"
                             hideLabel
-                            labelText="Select all rows on this page"
+                            labelText="Select all eligible rows on this page"
                             checked={allSelectableRowsAreSelected}
                             disabled={selectableRows.length === 0}
                             onChange={(_, payload) =>
@@ -961,27 +962,23 @@ const ProvincialApplicationPage = () => {
                     <TableRow key={row.applicationNumber}>
                       {canCreateExemption && (
                         <TableCell>
-                          <DisabledButtonTooltip
-                            disabled={!row.allowCreateExemption}
-                            description={disabledExemptionSelectionDescription(row)}
-                          >
-                            {row.allowCreateExemption ? (
-                              <Checkbox
-                                id={`selectRow-${row.applicationNumber}`}
-                                hideLabel
-                                labelText={`Select application ${row.applicationNumber}`}
-                                checked={Boolean(selectedRowsById[row.applicationNumber])}
-                                disabled={!row.allowCreateExemption}
-                                onChange={(_, payload) =>
-                                  toggleRowSelection(row, Boolean(payload.checked))
-                                }
-                              />
-                            ) : (
-                              <span className="sr-only">
-                                {disabledExemptionSelectionDescription(row)}
-                              </span>
-                            )}
-                          </DisabledButtonTooltip>
+                          {row.allowCreateExemption ? (
+                            <Checkbox
+                              id={`selectRow-${row.applicationNumber}`}
+                              hideLabel
+                              labelText={`Select application ${row.applicationNumber}`}
+                              checked={Boolean(selectedRowsById[row.applicationNumber])}
+                              onChange={(_, payload) =>
+                                toggleRowSelection(row, Boolean(payload.checked))
+                              }
+                            />
+                          ) : (
+                            <IneligibleRowCheckbox
+                              id={`selectRow-${row.applicationNumber}`}
+                              labelText={`Select application ${row.applicationNumber}`}
+                              reason={disabledExemptionSelectionDescription(row)}
+                            />
+                          )}
                         </TableCell>
                       )}
                       <TableCell>
