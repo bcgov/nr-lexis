@@ -1352,7 +1352,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(pageSize).toHaveValue('10')
     await expect(pageSize.locator('option[value="100"]')).toHaveCount(1)
 
-    await page.getByRole('textbox', { name: 'Application number', exact: true }).fill('9999999999')
+    // A date calendar left open can take focus back as it closes, so close it before typing.
+    await page.getByRole('heading', { name: 'Federal application search', exact: true }).click()
+    const applicationNumber = page.getByRole('textbox', { name: 'Application number', exact: true })
+    await applicationNumber.fill('9999999999')
+    await expect(applicationNumber).toHaveValue('9999999999')
+    await expect(to).toHaveValue('2026-10-12')
     await search.click()
     const noResultCounts = page.getByText('0 applications found', { exact: true })
     await expect(noResultCounts).toHaveCount(2)
