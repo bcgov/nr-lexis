@@ -5,7 +5,8 @@ public final class ExemptionDetailQueries {
 
   // Aggregate assigned scales before joining descriptive application/region rows. The legacy
   // detail procedure sums after those joins, multiplying consumption for multi-region exemptions.
-  // Completed permit volume is a separate display total; available balance retains assigned scales.
+  // Cancelled permits retain historical scale links, but no longer reserve exemption volume.
+  // Completed permit volume is a separate display total; available balance retains pending scales.
   // INTENTIONAL_LEGACY_DIVERGENCE(CANONICAL_EXEMPTION_DETAILS): use the same latest-application
   // ordering as search for client/date context, while volumes and regions retain every application.
   public static final String BY_NUMBER =
@@ -38,6 +39,12 @@ public final class ExemptionDetailQueries {
         INNER JOIN THE.EXPORT_SCALE_DETAIL ESD
           ON ESD.PACKAGE_NUMBER = EP.PACKAGE_NUMBER
         WHERE ESD.EXPORT_PERMIT_DETAIL_NUMBER IS NOT NULL
+          AND NOT EXISTS (
+            SELECT 1
+            FROM THE.EXPORT_PERMIT_DETAIL CANCELLED_PERMIT
+            WHERE CANCELLED_PERMIT.EXPORT_PERMIT_DETAIL_NUMBER = ESD.EXPORT_PERMIT_DETAIL_NUMBER
+              AND CANCELLED_PERMIT.EXPORT_PERMIT_STATUS_CODE = 'CAN'
+          )
       ), COMPLETED_PERMIT_VOLUME AS (
         SELECT COALESCE(SUM(EPD.PERMIT_VOLUME), 0) AS COMPLETED_PERMIT_VOLUME
         FROM TARGET_EXEMPTION EE
