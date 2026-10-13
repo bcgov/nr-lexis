@@ -1352,17 +1352,30 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     PermitMutationRow permit = inserted.get();
     // Intentional legacy divergence: MINISTERIAL_PERMIT_EMPTY_CREATION.
     if (!EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemption.exemptionTypeCode())) {
+      List<ScaleMutationRow> unassignedScales =
+          findUnassignedScalesByApplication(normalizedExemptionNumber, ignored -> true).values()
+              .stream()
+              .flatMap(List::stream)
+              .toList();
+      BigDecimal addedVolume =
+          unassignedScales.stream()
+              .map(OraclePermitDetailsRpcService::scaleVolume)
+              .reduce(BigDecimal.ZERO, BigDecimal::add);
+      Optional<String> balanceError =
+          balanceRemainingForAddedScales(permit)
+              .flatMap(remaining -> addedScalesBalanceError(remaining, addedVolume));
+      if (balanceError.isPresent()) {
+        markRollbackOnly();
+        return failureMutationResponse(List.of(balanceError.get()), null);
+      }
       int attachedScaleCount = 0;
-      for (List<ScaleMutationRow> unassignedScales :
-          findUnassignedScalesByApplication(normalizedExemptionNumber, ignored -> true).values()) {
-        for (ScaleMutationRow scale : unassignedScales) {
-          if (!updateScalePermitAssignment(scale, permit.permitNumber(), normalizedUserId)) {
-            markRollbackOnly();
-            return failureMutationResponse(
-                List.of("Unable to attach exemption scales to the new permit."), permit.permitNumber());
-          }
-          attachedScaleCount++;
+      for (ScaleMutationRow scale : unassignedScales) {
+        if (!updateScalePermitAssignment(scale, permit.permitNumber(), normalizedUserId)) {
+          markRollbackOnly();
+          return failureMutationResponse(
+              List.of("Unable to attach exemption scales to the new permit."), permit.permitNumber());
         }
+        attachedScaleCount++;
       }
       if (attachedScaleCount > 0 && !updatePermitTotals(permit.permitNumber(), normalizedUserId)) {
         markRollbackOnly();
@@ -2373,6 +2386,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     Map<Long, String> includedApplicationStatuses = new LinkedHashMap<>();
     Set<Long> removedApplicationNumbers = new LinkedHashSet<>();
     Set<PackageCandidateRow> eligiblePackages = null;
+    Optional<BigDecimal> balanceRemaining =
+        included.isEmpty() ? Optional.empty() : balanceRemainingForAddedScales(permit.get());
+    BigDecimal addedVolume = BigDecimal.ZERO;
     for (boolean attach : List.of(false, true)) {
       for (String scaleId : attach ? included : excluded) {
         Optional<ScaleMutationRow> existing = repository.findScaleMutationById(scaleId);
@@ -2431,6 +2447,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                 permitNumber);
           }
           includedApplicationStatuses.put(applicationNumber, attachSourceStatus);
+          if (currentPermitNumber == null) {
+            addedVolume = addedVolume.add(scaleVolume(scale));
+          }
           targetPermitNumber = permitNumber;
         } else {
           if (currentPermitNumber == null || !permitNumber.equals(currentPermitNumber)) {
@@ -2438,6 +2457,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                 List.of("Scale detail is not assigned to this permit."), permitNumber);
           }
           removedApplicationNumbers.add(applicationNumber);
+          addedVolume = addedVolume.subtract(scaleVolume(scale));
           targetPermitNumber = null;
         }
 
@@ -2445,6 +2465,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           return failurePersistenceResponse(List.of("Unable to update scale detail."), permitNumber);
         }
       }
+    }
+
+    BigDecimal netAddedVolume = addedVolume;
+    Optional<String> balanceError =
+        balanceRemaining.flatMap(remaining -> addedScalesBalanceError(remaining, netAddedVolume));
+    if (balanceError.isPresent()) {
+      return failurePersistenceResponse(List.of(balanceError.get()), permitNumber);
     }
 
     // Reconcile each application once against the final selection. A replacement row keeps
@@ -2538,6 +2565,17 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       }
       attachmentPlans.add(
           new ApplicationScaleAttachmentPlan(applicationNumber, sourceStatus, unassignedScales));
+    }
+    BigDecimal addedVolume =
+        attachmentPlans.stream()
+            .flatMap(plan -> plan.unassignedScales().stream())
+            .map(OraclePermitDetailsRpcService::scaleVolume)
+            .reduce(BigDecimal.ZERO, BigDecimal::add);
+    Optional<String> balanceError =
+        balanceRemainingForAddedScales(permit)
+            .flatMap(remaining -> addedScalesBalanceError(remaining, addedVolume));
+    if (balanceError.isPresent()) {
+      return failurePersistenceResponse(List.of(balanceError.get()), permitNumber);
     }
 
     int attachedScaleCount = 0;
@@ -2885,6 +2923,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     } else if (ScaleDomainValidator.exceedsVolume(
         permitScales, normalizedVolume, current.oicRequestVolume())) {
       errors.add("The total scale volume exceeds the permit request volume.");
+    }
+    if (normalizedVolume != null) {
+      balanceRemainingForAddedScales(current)
+          .flatMap(
+              remaining ->
+                  addedScalesBalanceError(remaining, BigDecimal.valueOf(normalizedVolume)))
+          .ifPresent(errors::add);
     }
     if (!errors.isEmpty()) {
       return failurePersistenceResponse(errors, permitNumber);
@@ -5053,6 +5098,38 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   private LocalDate parseDate(String value) {
     return parseIsoOrLegacyDate(value);
+  }
+
+  /**
+   * The exemption balance that scales added to this permit draw on. A cancelled permit reserves
+   * nothing, so it has none.
+   */
+  private Optional<BigDecimal> balanceRemainingForAddedScales(PermitMutationRow permit) {
+    String exemptionNumber = trimToNull(permit.exemptionNumber());
+    if (exemptionNumber == null
+        || EXPORT_PERMIT_STATUS_CANCELLED.equalsIgnoreCase(permit.permitStatusCode())) {
+      return Optional.empty();
+    }
+    return exemptionService
+        .findByExemptionNumber(exemptionNumber)
+        .map(exemption -> BigDecimal.valueOf(exemption.remainingVolume()));
+  }
+
+  private Optional<String> addedScalesBalanceError(
+      BigDecimal balanceRemaining, BigDecimal addedVolume) {
+    if (addedVolume.signum() <= 0 || addedVolume.compareTo(balanceRemaining) <= 0) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        "The added scales total "
+            + formatVolume(addedVolume)
+            + " m³, but the exemption has "
+            + formatVolume(balanceRemaining.max(BigDecimal.ZERO))
+            + " m³ remaining.");
+  }
+
+  private static BigDecimal scaleVolume(ScaleMutationRow scale) {
+    return BigDecimal.valueOf(firstNonNull(scale.speciesGradeVolume(), 0.0d));
   }
 
   private String formatVolume(double value) {

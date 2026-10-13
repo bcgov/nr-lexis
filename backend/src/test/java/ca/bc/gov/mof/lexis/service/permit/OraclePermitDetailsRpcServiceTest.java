@@ -4101,6 +4101,109 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updateScaleSelectionShouldRollBackScalesBeyondTheExemptionBalance() {
+    stubScaleSelection();
+    stubExemptionBalanceRemaining("EX-700", 1.5d);
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
+
+    PermitPersistenceRpcResponseDto result =
+        transactionalService(transactionManager)
+            .updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors())
+        .containsExactly(
+            "The added scales total 2.0 m³, but the exemption has 1.5 m³ remaining.");
+    assertThat(transactionManager.commits).isZero();
+    assertThat(transactionManager.rollbacks).isEqualTo(1);
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void addApplicationsToPermitShouldRejectScalesBeyondTheExemptionBalance() {
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleMutation("101", 1000456L, null, entryTimestamp)));
+    when(repository.findApplicationStatusCodeByNumber(1000456L))
+        .thenReturn(Optional.of("EXE"));
+    stubExemptionBalanceRemaining("EX-700", 30.0d);
+
+    PermitPersistenceRpcResponseDto response =
+        service.addApplicationsToPermit(7000123L, "1000456", "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "The added scales total 34.5 m³, but the exemption has 30.0 m³ remaining.");
+    verify(repository, never()).updateScaleDetail(any(), any());
+  }
+
+  @Test
+  void createPermitFromExemptionShouldRejectOrderInCouncilScalesBeyondTheExemptionBalance() {
+    stubValidOrderInCouncilPermitCreationContext();
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation ->
+                Optional.of(
+                    withPermitNumber(invocation.getArgument(0), 7000123L)));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleMutation("101", 1000456L, "PKG-903", null, entryTimestamp)));
+    stubExemptionBalanceRemaining("EX-700", 30.0d);
+
+    PermitMutationRpcResponseDto response =
+        service.createPermitFromExemption("EX-700", "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "The added scales total 34.5 m³, but the exemption has 30.0 m³ remaining.");
+    verify(repository, never()).updateScaleDetail(any(), any());
+  }
+
+  @Test
+  void addBlanketOicScaleShouldRejectAScaleBeyondTheExemptionBalance() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of("PKG-903  "));
+    when(repository.isValidBoicTimberMarkRequired("TM3", "EX-700")).thenReturn(true);
+    when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
+    when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903  ")).thenReturn(List.of());
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903  "))
+        .thenReturn(
+            Optional.of(
+                new PackageDetailsRow(
+                    "PKG-903  ", 100.0d, 10.0d, 20.0d, "ACT", null, "N", "S")));
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(
+                withRemainingVolume(
+                    exemptionDetailWithClients("EX-700", "B", "00077881", "00077880"), 10.0d)));
+
+    PermitPersistenceRpcResponseDto response =
+        service.addBlanketOicScale(
+            7000123L, "PKG-903  ", "TM3", "12.5", 7L, "HE", "A", "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "The added scales total 12.5 m³, but the exemption has 10.0 m³ remaining.");
+    verify(repository, never()).insertBoicScaleDetail(any());
+  }
+
+  @Test
   void updatePermitShouldRejectInvoiceNotationChangesWhilePermitRemainsInvoiced() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("PPD")));
@@ -8981,6 +9084,39 @@ class OraclePermitDetailsRpcServiceTest {
         oicRequestPieces,
         oicRequestVolume,
         orgUnitNumber);
+  }
+
+  private void stubExemptionBalanceRemaining(String exemptionNumber, double remainingVolume) {
+    ExemptionDetailDto stubbed =
+        exemptionService
+            .findByExemptionNumber(exemptionNumber)
+            .orElseGet(
+                () -> exemptionDetailWithClients(exemptionNumber, "M", "00077881", "00077880"));
+    when(exemptionService.findByExemptionNumber(exemptionNumber))
+        .thenReturn(Optional.of(withRemainingVolume(stubbed, remainingVolume)));
+  }
+
+  private ExemptionDetailDto withRemainingVolume(ExemptionDetailDto detail, double remainingVolume) {
+    return new ExemptionDetailDto(
+        detail.exemptionNumber(),
+        detail.exemptionTypeCode(),
+        detail.exemptionTypeDescription(),
+        detail.exemptionStatusCode(),
+        detail.exemptionStatusDescription(),
+        detail.ownerClientNumber(),
+        detail.agentClientNumber(),
+        detail.applicationNumber(),
+        detail.applicationStatus(),
+        detail.approvalDate(),
+        detail.expiryDate(),
+        detail.approvedVolume(),
+        detail.approvedVolume() - remainingVolume,
+        remainingVolume,
+        detail.otherConditions(),
+        detail.blanketOic(),
+        detail.permitNumbers(),
+        detail.remarks(),
+        detail.author());
   }
 
   private void stubTargetMinisterialExemption(String exemptionNumber) {
