@@ -200,7 +200,20 @@ public class LexisReportController {
   @PostMapping({"/tenureReport", "/tenure-report"})
   public ResponseEntity<StreamingResponseBody> tenureReport(
       @RequestBody(required = false) LexisReportRequestDto request) {
-    return executeReport("tenureReport", "tenure report", request);
+    return executeReport(
+        "tenureReport",
+        "tenure report",
+        request,
+        null,
+        normalizedRequest -> {
+          // INTENTIONAL_LEGACY_DIVERGENCE(TENURE_FILE_REPORT_RETIREMENT)
+          String variant = normalizedRequest.parameters().get("legacyActionMapping");
+          if (variant != null && "generateFileReport".equalsIgnoreCase(variant.trim())) {
+            throw new LexisReportValidationException(
+                "The forest file tenure analysis report is not available.");
+          }
+          return normalizedRequest;
+        });
   }
 
   private ResponseEntity<StreamingResponseBody> executeReport(

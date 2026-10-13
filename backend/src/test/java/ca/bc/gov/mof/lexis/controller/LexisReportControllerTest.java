@@ -453,6 +453,23 @@ class LexisReportControllerTest {
   }
 
   @Test
+  void tenureReportShouldRejectTheForestFileVariantBeforeCallingService() {
+    LexisReportController controller =
+        new LexisReportController(
+            reportServiceProvider, provincialAuthorizationService, principalService);
+
+    assertThatThrownBy(
+            () ->
+                controller.tenureReport(
+                    new LexisReportRequestDto(
+                        Map.of("legacyActionMapping", " generatefilereport ", "forestFileId", "A1"),
+                        "PDF")))
+        .isInstanceOf(LexisReportValidationException.class)
+        .hasMessage("The forest file tenure analysis report is not available.");
+    verifyNoInteractions(reportServiceProvider, reportService);
+  }
+
+  @Test
   void nullRequestShouldDefaultToPdfAndEmptyParameters() {
     when(reportServiceProvider.getIfAvailable()).thenReturn(reportService);
     LexisReportController controller =
