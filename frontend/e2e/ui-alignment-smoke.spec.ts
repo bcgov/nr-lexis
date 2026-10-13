@@ -1706,6 +1706,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     // The ineligible row is aria-disabled, so Playwright would wait for it to become enabled.
     await page.locator('label[for="selectRow-281002"]').click({ force: true })
     await expect(ineligibleApplication).not.toBeChecked()
+    await ineligibleApplication.focus()
+    await page.keyboard.press('Space')
+    await expect(ineligibleApplication).not.toBeChecked()
     await expect(batchActions).toContainText('1 application selected')
     await batchActions.getByRole('button', { name: 'Cancel', exact: true }).click()
     await expect(eligibleApplication).not.toBeChecked()

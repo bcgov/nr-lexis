@@ -9036,6 +9036,33 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(within(permitFeesTile).queryByText('Receipt number')).not.toBeInTheDocument()
   })
 
+  it.each([
+    { permitStatusCode: 'COM', permitStatusDescription: 'Completed' },
+    { permitStatusCode: 'PPD', permitStatusDescription: 'Payment pending' },
+  ])('keeps a stored receipt number read-only without Edit receipt number (%o)', async (status) => {
+    configureMinisterialActivePermit({ ...status, receiptNumber: 'R-77' })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [{ ...editableBlanketOicPackage, packageNumber: 'MIN-1' }],
+    })
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: false,
+      overrideFee: '',
+      overrideComment: '',
+      locked: false,
+      lockMessage: '',
+      interior: false,
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    const permitFeesTile = (await screen.findByRole('heading', { name: 'Permit fees' })).closest(
+      '.cds--tile',
+    ) as HTMLElement
+    expect(await within(permitFeesTile).findByText('R-77')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Edit receipt number' })).not.toBeInTheDocument()
+  })
+
   it('shows fee override fields only when Yes is selected', async () => {
     configureActivePermit()
 

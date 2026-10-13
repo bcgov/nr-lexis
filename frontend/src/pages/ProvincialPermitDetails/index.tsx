@@ -2186,7 +2186,8 @@ const ProvincialPermitDetailsPage = () => {
     canReviewPermits &&
     !feeOverrideLockedStatuses.has(permitStatusCode ?? '')
   const showReceiptNumber = !!detail?.receiptNumber?.trim() || feeOverrideContext?.interior === true
-  const canEditReceiptNumber = canSavePermit && showReceiptNumber
+  const receiptNumberLocked = invoiceMaterialLocked && !canEnterPaymentReceipt
+  const canEditReceiptNumber = canSavePermit && showReceiptNumber && !receiptNumberLocked
   const permitBaselineForm = useMemo(
     () => (detail ? buildPermitDetailForm(detail) : null),
     [detail],
@@ -5782,7 +5783,7 @@ const ProvincialPermitDetailsPage = () => {
                     renderPermitTextInput(
                       'permitReceiptNo',
                       'Receipt number',
-                      invoiceMaterialLocked && !canEnterPaymentReceipt,
+                      receiptNumberLocked,
                       50,
                     )
                   ) : (
