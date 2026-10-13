@@ -2,8 +2,8 @@ import { useCallback, useRef, useState, type ReactNode } from 'react'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import { focusedElement } from '@/utils/focus'
 
-export const DISCARD_CHANGES_TITLE = 'Discard changes?'
-export const DISCARD_CHANGES_DESCRIPTION = 'Your changes will be lost.'
+const DISCARD_CHANGES_TITLE = 'Discard changes?'
+const DISCARD_CHANGES_DESCRIPTION = 'Your changes will be lost.'
 
 export type DiscardChangesCopy = {
   title?: string
