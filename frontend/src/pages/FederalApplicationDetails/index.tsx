@@ -87,7 +87,7 @@ import {
   fetchApplicationPackageScales,
   type ApplicationPackageScaleRow,
 } from '@/service/provincial-application-items-service'
-import { formatBusinessDateTime, formatBusinessIsoDate } from '@/utils/date'
+import { formatBusinessDateTimeLabel, formatBusinessIsoDate } from '@/utils/date'
 import { fieldErrorText } from '@/utils/field-error'
 import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
 import { displayAuditIdentity, displayTableValue } from '@/utils/text'
@@ -1956,7 +1956,7 @@ const FederalApplicationDetailsPage = () => {
                                 <Table size="md" useZebraStyles>
                                   <TableHead>
                                     <TableRow>
-                                      <TableHeader>Date</TableHeader>
+                                      <TableHeader>Date and time</TableHeader>
                                       <TableHeader>User</TableHeader>
                                       <TableHeader>Remark</TableHeader>
                                       {canMutateFederalApplication && (
@@ -1967,7 +1967,9 @@ const FederalApplicationDetailsPage = () => {
                                   <TableBody>
                                     {remarkRows.map((item) => (
                                       <TableRow key={item.remarkId}>
-                                        <TableCell>{formatBusinessDateTime(item.date)}</TableCell>
+                                        <TableCell>
+                                          {formatBusinessDateTimeLabel(item.date)}
+                                        </TableCell>
                                         <TableCell>{displayValue(item.user)}</TableCell>
                                         <TableCell>{item.remark}</TableCell>
                                         {canMutateFederalApplication && (

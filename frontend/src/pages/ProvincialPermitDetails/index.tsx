@@ -2185,6 +2185,8 @@ const ProvincialPermitDetailsPage = () => {
     canSavePermit &&
     canReviewPermits &&
     !feeOverrideLockedStatuses.has(permitStatusCode ?? '')
+  const showReceiptNumber = !!detail?.receiptNumber?.trim() || feeOverrideContext?.interior === true
+  const canEditReceiptNumber = canSavePermit && showReceiptNumber
   const permitBaselineForm = useMemo(
     () => (detail ? buildPermitDetailForm(detail) : null),
     [detail],
@@ -4690,6 +4692,24 @@ const ProvincialPermitDetailsPage = () => {
     />
   )
 
+  const renderPermitDateInput = (
+    field: PermitDetailFormField,
+    labelText: string,
+    isDisabled: boolean,
+    required = false,
+  ) => (
+    <IsoDatePicker
+      id={`permit-${field}`}
+      labelText={requiredLabel(labelText, required)}
+      required={required}
+      value={permitForm?.[field] ?? ''}
+      invalid={!!permitFieldError(field)}
+      invalidText={permitFieldError(field)}
+      disabled={isDisabled}
+      onChange={(value) => setPermitFormField(field, value)}
+    />
+  )
+
   const renderPermitClientEditor = (kind: PermitClientKind, isDisabled: boolean) => {
     const isOwner = kind === 'owner'
     const { clientNumber: clientNumberField, location: locationField } = permitClientFields(kind)
@@ -5203,11 +5223,10 @@ const ProvincialPermitDetailsPage = () => {
               label="Submit date"
               value={detail.applicationDate}
               edit={() =>
-                renderPermitTextInput(
+                renderPermitDateInput(
                   'permitSubmitDate',
                   'Submit date',
                   !canCorrectPermitSubmitDate,
-                  undefined,
                   requiresCompletionSubmitDate && canCorrectPermitSubmitDate,
                 )
               }
@@ -5216,11 +5235,10 @@ const ProvincialPermitDetailsPage = () => {
               label="Issued date"
               value={detail.issueDate}
               edit={() =>
-                renderPermitTextInput(
+                renderPermitDateInput(
                   'permitIssueDate',
                   'Issued date',
                   !canReviewPermits || invoiceMaterialLocked,
-                  undefined,
                   requiresPermitCompletionDates && canReviewPermits && !invoiceMaterialLocked,
                 )
               }
@@ -5229,11 +5247,10 @@ const ProvincialPermitDetailsPage = () => {
               label="Expiry date"
               value={detail.expiryDate}
               edit={() =>
-                renderPermitTextInput(
+                renderPermitDateInput(
                   'permitExpiryDate',
                   'Expiry date',
                   !canReviewPermits,
-                  undefined,
                   requiresPermitCompletionDates && canReviewPermits,
                 )
               }
@@ -5365,11 +5382,10 @@ const ProvincialPermitDetailsPage = () => {
             label="Submit date"
             value={detail.applicationDate}
             edit={() =>
-              renderPermitTextInput(
+              renderPermitDateInput(
                 'permitSubmitDate',
                 'Submit date',
                 !canCorrectPermitSubmitDate,
-                undefined,
                 requiresCompletionSubmitDate && canCorrectPermitSubmitDate,
               )
             }
@@ -5378,11 +5394,10 @@ const ProvincialPermitDetailsPage = () => {
             label="Issued date"
             value={detail.issueDate}
             edit={() =>
-              renderPermitTextInput(
+              renderPermitDateInput(
                 'permitIssueDate',
                 'Issued date',
                 !canReviewPermits || invoiceMaterialLocked,
-                undefined,
                 requiresPermitCompletionDates && canReviewPermits && !invoiceMaterialLocked,
               )
             }
@@ -5391,11 +5406,10 @@ const ProvincialPermitDetailsPage = () => {
             label="Expiry date"
             value={detail.expiryDate}
             edit={() =>
-              renderPermitTextInput(
+              renderPermitDateInput(
                 'permitExpiryDate',
                 'Expiry date',
                 !canReviewPermits,
-                undefined,
                 requiresPermitCompletionDates && canReviewPermits,
               )
             }
@@ -5737,8 +5751,6 @@ const ProvincialPermitDetailsPage = () => {
           : permitFeesMasked
             ? '$'
             : `$${formatAmount(calculatedPermitFee)}`)
-    const showReceiptNumber =
-      !!detail.receiptNumber?.trim() || feeOverrideContext?.interior === true
     return (
       <fieldset ref={permitEditSections.sectionRef('permit')} className="legacy-form-fieldset">
         <legend className={showReviewedPermitFeeSummary ? 'cds--visually-hidden' : undefined}>
@@ -5748,6 +5760,11 @@ const ProvincialPermitDetailsPage = () => {
         {showReviewedPermitFeeSummary ? (
           <RecordFieldGrid>
             <RecordFieldRow>
+              <RecordField
+                label="Receipt number"
+                value={detail.receiptNumber}
+                hidden={!showReceiptNumber}
+              />
               {[
                 ['Total volume (m³)', totalVolumeValue],
                 ['Total fees (CAD)', totalFeesValue],
@@ -5837,7 +5854,7 @@ const ProvincialPermitDetailsPage = () => {
                     ref={permitEditSections.editButtonRef('permit')}
                     onClick={startPermitEdit}
                   >
-                    {usesReviewedPermitFlow ? 'Edit fee details' : 'Edit permit'}
+                    Edit permit
                   </Button>
                 )}
               </div>
@@ -7534,37 +7551,44 @@ const ProvincialPermitDetailsPage = () => {
                           <Tile>
                             <div className="detail-section-card__header">
                               <DetailCardTitle icon={Currency}>Permit fees</DetailCardTitle>
-                              {canEditFeeOverride && !isEditingFeeOverride && (
-                                <Button
-                                  kind="tertiary"
-                                  size="md"
-                                  renderIcon={Edit}
-                                  ref={permitEditSections.editButtonRef('feeOverride')}
-                                  onClick={startFeeOverrideEdit}
-                                >
-                                  Edit fee override
-                                </Button>
-                              )}
+                              {!isEditingPermit &&
+                                !isEditingFeeOverride &&
+                                (canEditReceiptNumber || canEditFeeOverride) && (
+                                  <div className="permit-fee-card__actions">
+                                    {/* Best-case assumption until the design places it: receipt
+                                        editing (legacy Fee Receipt Number) sits on the Permit fees
+                                        card, where the field shows. */}
+                                    {canEditReceiptNumber && (
+                                      <Button
+                                        kind="tertiary"
+                                        size="md"
+                                        renderIcon={Edit}
+                                        ref={permitEditSections.editButtonRef('permit')}
+                                        onClick={startPermitEdit}
+                                      >
+                                        Edit receipt number
+                                      </Button>
+                                    )}
+                                    {canEditFeeOverride && (
+                                      <Button
+                                        kind="tertiary"
+                                        size="md"
+                                        renderIcon={Edit}
+                                        ref={permitEditSections.editButtonRef('feeOverride')}
+                                        onClick={startFeeOverrideEdit}
+                                      >
+                                        Edit fee override
+                                      </Button>
+                                    )}
+                                  </div>
+                                )}
                             </div>
                             {renderPermitFeeSummary()}
                           </Tile>
                         </Column>
                         <Column sm={4} md={8} lg={16}>
                           <Tile>
-                            <div className="detail-section-card__header">
-                              <DetailCardTitle icon={Currency}>Package fees</DetailCardTitle>
-                              {canSavePermit && !isEditingPermit && (
-                                <Button
-                                  kind="tertiary"
-                                  size="md"
-                                  renderIcon={Edit}
-                                  ref={permitEditSections.editButtonRef('permit')}
-                                  onClick={startPermitEdit}
-                                >
-                                  Edit fee details
-                                </Button>
-                              )}
-                            </div>
+                            <DetailCardTitle icon={Currency}>Package fees</DetailCardTitle>
                             {renderPackageFees()}
                           </Tile>
                         </Column>

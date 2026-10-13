@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
 import {
-  formatBusinessDateTime,
   formatBusinessDateTimeLabel,
   formatBusinessIsoDate,
   formatIsoDateLabel,
@@ -22,17 +21,6 @@ describe('date utilities', () => {
     expect(formatIsoDateLabel('2026-09-17')).toBe('Sep 17, 2026')
     expect(formatIsoDateLabel(null)).toBe('')
     expect(formatIsoDateLabel('not-a-date')).toBe('not-a-date')
-  })
-
-  it('formats timestamps in the Vancouver business time zone', () => {
-    expect(formatBusinessDateTime('2026-07-18T04:37:21Z')).toBe('2026-07-17 21:37:21')
-    expect(formatBusinessDateTime('2026-01-01T07:30:05Z')).toBe('2025-12-31 23:30:05')
-  })
-
-  it('preserves invalid timestamp text and returns blank for absent values', () => {
-    expect(formatBusinessDateTime('not-a-date')).toBe('not-a-date')
-    expect(formatBusinessDateTime('')).toBe('')
-    expect(formatBusinessDateTime(null)).toBe('')
   })
 
   it('shows signed-off table labels with B.C. dates and 12-hour times', () => {

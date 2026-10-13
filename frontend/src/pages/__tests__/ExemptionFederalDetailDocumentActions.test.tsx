@@ -2913,7 +2913,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Remarks')
     expect(await screen.findByText('Review note')).toBeInTheDocument()
     expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()
-    expect(screen.getByText('2026-07-17 21:37:21')).toBeInTheDocument()
+    expect(screen.getByText('Jul 17, 2026 · 09:37:21 PM')).toBeInTheDocument()
 
     await enterFederalRemarkEditMode()
     const newRemarkInput = screen.getByLabelText('New remark')
