@@ -2183,11 +2183,11 @@ function ProvincialApplicationItemsPanel({
         <ConfirmationModal
           open
           danger
-          title="Delete package"
+          title="Are you sure you want to delete this package?"
           description={
             <>
-              Permanently delete package <strong>{packagePendingDeletion}</strong> from application{' '}
-              {applicationNumber}? This cannot be undone.
+              <strong>Package {formatPackageNumberLabel(packagePendingDeletion)}</strong> will be
+              deleted. This action cannot be undone.
             </>
           }
           confirmLabel="Delete"
@@ -2201,12 +2201,18 @@ function ProvincialApplicationItemsPanel({
         <ConfirmationModal
           open
           danger
-          title="Delete scale"
+          title="Are you sure you want to delete this scale?"
           description={
             <>
-              Permanently delete scale <strong>{scalePendingDeletion.id}</strong> (
-              {scalePendingDeletion.timberMark}) from package {selectedPackageNumber}? This cannot
-              be undone.
+              <strong>
+                {[
+                  `Timber mark ${scalePendingDeletion.timberMark}`,
+                  scalePendingDeletion.species,
+                  `Grade ${scalePendingDeletion.grade.replace(/^Grade\s+/i, '')}`,
+                  `${formatVolume(scalePendingDeletion.volume)} m³`,
+                ].join(' · ')}
+              </strong>{' '}
+              will be deleted. This action cannot be undone.
             </>
           }
           confirmLabel="Delete"

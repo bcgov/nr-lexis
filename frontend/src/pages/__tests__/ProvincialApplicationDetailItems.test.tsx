@@ -906,7 +906,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     }
     expect(comments).toHaveValue('Keep this draft')
     expect(screen.getByRole('heading', { name: 'Edit package' })).toBeInTheDocument()
-    expect(screen.queryByRole('dialog', { name: 'Delete scale' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('dialog', { name: 'Are you sure you want to delete this scale?' }),
+    ).not.toBeInTheDocument()
   })
 
   it('submits a new package only once while its save is pending', async () => {
@@ -2332,9 +2334,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         name: 'Delete package',
       }),
     )
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete package' })
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this package?',
+    })
     expect(confirmation).toHaveTextContent(
-      'Permanently delete package PKG-1 from application 321? This cannot be undone.',
+      'Package PKG-1 will be deleted. This action cannot be undone.',
     )
     expect(mockedDeleteApplicationPackage).not.toHaveBeenCalled()
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
@@ -2373,14 +2377,18 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await selectApplicationDetailTab('Scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Delete package' }))
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete package' })
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this package?',
+    })
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
 
     expect(await screen.findByText('Failed to delete package')).toBeInTheDocument()
     expect(screen.getByText('Package delete failed. Refresh and try again.')).toBeInTheDocument()
-    expect(screen.getByRole('dialog', { name: 'Delete package' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('dialog', { name: 'Are you sure you want to delete this package?' }),
+    ).toBeInTheDocument()
     expect(within(confirmation).getByRole('button', { name: 'Cancel' })).toBeEnabled()
-    expect(screen.getAllByText('PKG-1').length).toBeGreaterThan(0)
+    expect(confirmation).toHaveTextContent('Package PKG-1 will be deleted.')
   })
 
   it('prevents package save and delete when package scales are permitted', async () => {
@@ -2652,9 +2660,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(scaleRow).toBeTruthy()
     expect(within(scaleRow as HTMLElement).getByText('-')).toBeInTheDocument()
     fireEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete scale' })
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this scale?',
+    })
     expect(confirmation).toHaveTextContent(
-      'Permanently delete scale 55 (TM001) from package PKG-1? This cannot be undone.',
+      'Timber mark TM001 · Douglas-fir · Grade Sawlog · 20.0 m³ will be deleted. This action cannot be undone.',
     )
     expect(mockedDeleteApplicationScale).not.toHaveBeenCalled()
     await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
@@ -2891,7 +2901,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     const scaleRow = screen.getByText('TM001').closest('tr')
     expect(scaleRow).toBeTruthy()
     await userEvent.click(within(scaleRow as HTMLElement).getByRole('button', { name: 'Delete' }))
-    const confirmation = await screen.findByRole('dialog', { name: 'Delete scale' })
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this scale?',
+    })
     expect(
       screen.queryByText('Scale 56 added. Reload before adding another scale row.'),
     ).not.toBeInTheDocument()
