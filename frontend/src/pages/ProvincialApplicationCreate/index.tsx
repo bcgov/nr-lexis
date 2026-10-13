@@ -31,6 +31,7 @@ import {
   DataDefinition,
   DocumentAttachment,
   Enterprise,
+  Save,
   Stamp,
   Task,
 } from '@carbon/icons-react'
@@ -95,7 +96,8 @@ import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import IsoDatePicker from '../../components/IsoDatePicker'
-import { formatBusinessIsoDate } from '@/utils/date'
+import PendingIcon from '../../components/PendingIcon'
+import { formatBusinessIsoDate, formatIsoDateLabel } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
 import { displayValue } from '@/utils/text'
 import './ApplicationCreate.scss'
@@ -162,6 +164,13 @@ const APPLICATION_CREATE_TAB_LABELS: Record<ApplicationCreateTab, string> = {
   review: 'Review',
 }
 
+// The tabs whose fields are required before the first save, in tab order.
+const APPLICATION_CREATE_REQUIRED_FIELD_TABS: ApplicationCreateTab[] = [
+  'owner',
+  'application',
+  'items',
+]
+
 const APPLICATION_CREATE_TAB_ICONS = {
   owner: Enterprise,
   application: Task,
@@ -177,11 +186,23 @@ const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 const APPLICATION_CONTACT_NAME_MAX_LENGTH = 120
 const APPLICATION_PRODUCT_LOCATION_MAX_LENGTH = 250
 
+const CLIENT_SEARCH_HELPER = 'Enter name, acronym, or client number (min. 3 characters).'
+const CLIENT_LOCATION_HELPER = 'Available once a client is selected.'
+
 const clientNumberFieldError = (value: string, label: string): string | undefined =>
   firstValidationError(
-    () => requiredFieldError(value, label),
+    () => (value.trim() ? null : `${label} is required. ${CLIENT_SEARCH_HELPER}`),
     () => (CLIENT_NUMBER_PATTERN.test(value.trim()) ? null : `${label} must be 1 to 8 digits.`),
   )
+
+const clientLocationFieldError = (
+  value: string,
+  clientNumber: string,
+  label: string,
+): string | undefined =>
+  value.trim()
+    ? (maxLengthFieldError(value, 2, label) ?? undefined)
+    : `${label} is required.${clientNumber.trim() ? '' : ` ${CLIENT_LOCATION_HELPER}`}`
 
 const applicationTextStorageFieldError = (
   value: string,
@@ -1148,34 +1169,33 @@ const ProvincialApplicationCreatePage = () => {
 
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
-      ownerClientNumber: clientNumberFieldError(form.ownerClientNumber, 'Applicant client number'),
-      ownerClientLocationCode:
-        requiredMaxLengthFieldError(
-          form.ownerClientLocationCode,
-          2,
-          'Applicant client location code',
-        ) ?? undefined,
+      ownerClientNumber: clientNumberFieldError(form.ownerClientNumber, 'Client'),
+      ownerClientLocationCode: clientLocationFieldError(
+        form.ownerClientLocationCode,
+        form.ownerClientNumber,
+        'Client location',
+      ),
       ownerContactName: applicationTextStorageFieldError(
         form.ownerContactName,
         APPLICATION_CONTACT_NAME_MAX_LENGTH,
-        'Applicant contact name',
+        'Contact name',
         true,
       ),
       agentClientNumber: isAgentApplicant(form.applicantTypeCode)
-        ? clientNumberFieldError(form.agentClientNumber, 'Agent client number')
+        ? clientNumberFieldError(form.agentClientNumber, 'Agent client')
         : undefined,
       agentClientLocationCode: isAgentApplicant(form.applicantTypeCode)
-        ? (requiredMaxLengthFieldError(
+        ? clientLocationFieldError(
             form.agentClientLocationCode,
-            2,
-            'Agent client location code',
-          ) ?? undefined)
+            form.agentClientNumber,
+            'Agent location',
+          )
         : undefined,
       agentContactName: isAgentApplicant(form.applicantTypeCode)
         ? applicationTextStorageFieldError(
             form.agentContactName,
             APPLICATION_CONTACT_NAME_MAX_LENGTH,
-            'Agent contact name',
+            'Contact name',
             true,
           )
         : undefined,
@@ -1326,24 +1346,20 @@ const ProvincialApplicationCreatePage = () => {
     !form.productTypeCode.trim() ||
     isLoadingApplicationSpeciesScope ||
     applicationSpeciesSelectOptions.length === 0
-  const ownerClientLocationPlaceholder = !form.ownerClientNumber.trim()
-    ? 'Enter applicant client number first'
-    : !hasValidOwnerClientNumber
-      ? 'Enter a valid applicant client number'
-      : isLoadingOwnerClientLocations
-        ? 'Loading locations'
-        : hasSelectableOwnerClientLocations
-          ? 'Select location'
-          : 'No locations on file'
-  const agentClientLocationPlaceholder = !form.agentClientNumber.trim()
-    ? 'Enter agent client number first'
-    : !hasValidAgentClientNumber
-      ? 'Enter a valid agent client number'
-      : isLoadingAgentClientLocations
-        ? 'Loading locations'
-        : hasSelectableAgentClientLocations
-          ? 'Select location'
-          : 'No locations on file'
+  const ownerClientLocationPlaceholder = !hasValidOwnerClientNumber
+    ? 'Select location'
+    : isLoadingOwnerClientLocations
+      ? 'Loading locations'
+      : hasSelectableOwnerClientLocations
+        ? 'Select location'
+        : 'No locations on file'
+  const agentClientLocationPlaceholder = !hasValidAgentClientNumber
+    ? 'Select location'
+    : isLoadingAgentClientLocations
+      ? 'Loading locations'
+      : hasSelectableAgentClientLocations
+        ? 'Select location'
+        : 'No locations on file'
   const speciesPlaceholder = !form.region.trim()
     ? 'Select region first'
     : !form.productTypeCode.trim()
@@ -1355,7 +1371,7 @@ const ProvincialApplicationCreatePage = () => {
           : 'No remaining species'
   const endUsePlaceholder =
     form.speciesCodes.length === 0
-      ? 'Add species first'
+      ? 'Select end use'
       : isLoadingApplicationEndUses
         ? 'Loading end uses'
         : applicationEndUseSelectOptions.length > 0
@@ -1379,6 +1395,17 @@ const ProvincialApplicationCreatePage = () => {
   const firstInvalidField = (Object.keys(fieldErrors) as ProvincialApplicationCreateField[]).find(
     (field) => !!fieldErrors[field],
   )
+  const invalidTabLabels = APPLICATION_CREATE_REQUIRED_FIELD_TABS.filter((tab) =>
+    (Object.keys(fieldErrors) as ProvincialApplicationCreateField[]).some(
+      (field) =>
+        !!fieldErrors[field] && (APPLICATION_CREATE_FIELD_TAB[field] ?? 'application') === tab,
+    ),
+  ).map((tab) => APPLICATION_CREATE_TAB_LABELS[tab])
+  const invalidTabsText =
+    invalidTabLabels.length > 1
+      ? `${invalidTabLabels.slice(0, -1).join(', ')} and ${invalidTabLabels.at(-1)}`
+      : invalidTabLabels[0]
+  const requiredTabsMessage = `Complete the required fields in ${invalidTabsText} ${invalidTabLabels.length === 1 ? 'tab' : 'tabs'}.`
 
   const saveUnavailableReason =
     !optionsLoaded || optionsUnavailable || requiredApplicationOptionsMissing
@@ -1449,7 +1476,7 @@ const ProvincialApplicationCreatePage = () => {
         setStatus({
           kind: 'error',
           title: 'Cannot save yet.',
-          message: 'Complete the required fields in the Applicant, Application and Scale tabs.',
+          message: requiredTabsMessage,
           placement: 'inline',
         })
         return false
@@ -1566,6 +1593,7 @@ const ProvincialApplicationCreatePage = () => {
                 type="button"
                 kind="primary"
                 size="md"
+                renderIcon={isSubmitting ? PendingIcon : Save}
                 onClick={onRequestSave}
                 disabled={isSubmitting}
               >
@@ -1581,7 +1609,7 @@ const ProvincialApplicationCreatePage = () => {
           <InlineNotification
             kind="info"
             title="The application number is assigned when you save."
-            subtitle="Documents, Remarks, Offers and Review are available after that, according to your access."
+            subtitle="Documents, Remarks, Offers and Review can be added after that."
             lowContrast
             hideCloseButton
           />
@@ -1646,9 +1674,8 @@ const ProvincialApplicationCreatePage = () => {
             revealKey={currentStatus}
             focusOnReveal
             title={currentStatus.title}
-            subtitle={currentStatus.message}
+            subtitle={requiredTabsMessage}
             lowContrast
-            onCloseButtonClick={() => setStatus(null)}
           />
         )}
         <Tabs
@@ -1676,7 +1703,7 @@ const ProvincialApplicationCreatePage = () => {
                   key={tab}
                   aria-label={
                     errorCount
-                      ? `${APPLICATION_CREATE_TAB_LABELS[tab]}, ${errorCount} ${errorCount === 1 ? 'field needs' : 'fields need'} attention`
+                      ? `${APPLICATION_CREATE_TAB_LABELS[tab]}, ${errorCount} required ${errorCount === 1 ? 'field' : 'fields'} outstanding`
                       : APPLICATION_CREATE_TAB_LABELS[tab]
                   }
                   renderIcon={errorCount > 0 ? undefined : APPLICATION_CREATE_TAB_ICONS[tab]}
@@ -1713,7 +1740,6 @@ const ProvincialApplicationCreatePage = () => {
                         labelText={requiredLabel('Contact name')}
                         aria-required="true"
                         value={form.ownerContactName}
-                        placeholder="Enter applicant contact name"
                         invalid={!!fieldError('ownerContactName')}
                         invalidText={fieldError('ownerContactName')}
                         onBlur={() => markFieldTouched('ownerContactName')}
@@ -1786,6 +1812,7 @@ const ProvincialApplicationCreatePage = () => {
                         invalid={!!fieldError('ownerClientLocationCode')}
                         invalidText={fieldError('ownerClientLocationCode')}
                         placeholder={ownerClientLocationPlaceholder}
+                        helperText={hasValidOwnerClientNumber ? undefined : CLIENT_LOCATION_HELPER}
                         options={ownerClientLocations
                           .filter(isSelectableClientLocation)
                           .map((location) => ({
@@ -1840,6 +1867,8 @@ const ProvincialApplicationCreatePage = () => {
                   </div>
                 )}
 
+                {/* Best-case assumption until the design shows saved agent details: agent fields
+                    keep the Agent prefix (Agent client, Agent location) in create, view and edit. */}
                 {hasAgentDetails && (
                   <section
                     className="application-create-agent-details"
@@ -1855,7 +1884,6 @@ const ProvincialApplicationCreatePage = () => {
                             labelText={requiredLabel('Contact name')}
                             aria-required="true"
                             value={form.agentContactName}
-                            placeholder="Enter agent contact name"
                             invalid={!!fieldError('agentContactName')}
                             invalidText={fieldError('agentContactName')}
                             onBlur={() => markFieldTouched('agentContactName')}
@@ -1904,6 +1932,9 @@ const ProvincialApplicationCreatePage = () => {
                             invalid={!!fieldError('agentClientLocationCode')}
                             invalidText={fieldError('agentClientLocationCode')}
                             placeholder={agentClientLocationPlaceholder}
+                            helperText={
+                              hasValidAgentClientNumber ? undefined : CLIENT_LOCATION_HELPER
+                            }
                             options={agentClientLocations
                               .filter(isSelectableClientLocation)
                               .map((location) => ({
@@ -2024,7 +2055,7 @@ const ProvincialApplicationCreatePage = () => {
                     <RecordFieldCell>
                       <IsoDatePicker
                         id="applicationDate"
-                        labelText={requiredLabel('Application date (YYYY-MM-DD)')}
+                        labelText={requiredLabel('Application date')}
                         required
                         value={form.applicationDate}
                         invalid={!!fieldError('applicationDate')}
@@ -2046,7 +2077,7 @@ const ProvincialApplicationCreatePage = () => {
                             (canReviewApplications ? NO_LIST_DATE_VALUE : '')
                           }
                           required
-                          orientation="horizontal"
+                          orientation="vertical"
                           disabled={!optionsLoaded || optionsUnavailable}
                           onChange={(value) => {
                             markFormEdited()
@@ -2068,7 +2099,7 @@ const ProvincialApplicationCreatePage = () => {
                               key={option.value}
                               id={`exportScheduleId-${option.value}`}
                               value={option.value}
-                              labelText={option.label}
+                              labelText={formatIsoDateLabel(option.label)}
                             />
                           ))}
                         </RadioButtonGroup>
@@ -2118,7 +2149,7 @@ const ProvincialApplicationCreatePage = () => {
                   <RequiredFieldsLegend className="application-create-required" />
                   <RecordFieldGrid editing>
                     <RecordFieldRow>
-                      <RecordFieldCell>
+                      <RecordFieldCell span="full">
                         <TextArea
                           id="productLocation"
                           labelText={requiredLabel('Location of logs', logDetailsRequired)}
@@ -2188,6 +2219,7 @@ const ProvincialApplicationCreatePage = () => {
                           id="applicationVolume"
                           labelText={requiredLabel('Application volume (m³)')}
                           aria-required="true"
+                          helperText="Must be greater than 0"
                           value={form.applicationVolume}
                           invalid={!!fieldError('applicationVolume')}
                           invalidText={fieldError('applicationVolume')}
@@ -2241,6 +2273,11 @@ const ProvincialApplicationCreatePage = () => {
                             applicationEndUseSelectOptions.length === 0
                           }
                           placeholder={endUsePlaceholder}
+                          helperText={
+                            form.speciesCodes.length === 0
+                              ? 'Available once species are selected'
+                              : undefined
+                          }
                           options={applicationEndUseSelectOptions}
                           onChange={(value) => {
                             markFormEdited()

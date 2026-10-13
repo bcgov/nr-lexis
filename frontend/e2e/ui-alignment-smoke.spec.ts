@@ -2654,7 +2654,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(
       page.getByRole('group', { name: 'Exemption type' }).getByRole('radio').first(),
     ).toBeEnabled()
-    const expiry = page.getByRole('textbox', { name: 'Expiry date (YYYY-MM-DD)', exact: true })
+    const expiry = page.getByRole('textbox', { name: 'Expiry date', exact: true })
     await expiry.fill('2026-10-01')
     await expiry.press('Escape')
     await expect(expiry).toHaveValue('2026-10-01')

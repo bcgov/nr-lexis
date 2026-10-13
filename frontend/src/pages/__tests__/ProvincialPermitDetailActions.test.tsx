@@ -1029,7 +1029,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(permitSummaryTile as HTMLElement).queryByText('Received date'),
     ).not.toBeInTheDocument()
-    expect(within(permitSummaryTile as HTMLElement).getAllByText('2026-04-10')).toHaveLength(1)
+    expect(within(permitSummaryTile as HTMLElement).getAllByText('Apr 10, 2026')).toHaveLength(1)
     expect(within(permitSummaryTile as HTMLElement).queryByText('Author')).not.toBeInTheDocument()
     expect(screen.getByText(/Author:/)).toBeInTheDocument()
     expect(screen.getByText(/idir\\permit-author/)).toBeInTheDocument()
@@ -7782,9 +7782,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ['Status', 'Active'],
       ['Exemption type', 'Blanket OIC'],
       ['Region', permitDetail.region ?? ''],
-      ['Submit date', '2026-04-10'],
-      ['Issued date', '2026-05-01'],
-      ['Expiry date', '2026-06-01'],
+      ['Submit date', 'Apr 10, 2026'],
+      ['Issued date', 'May 1, 2026'],
+      ['Expiry date', 'Jun 1, 2026'],
     ]
     for (const [label, value] of savedSummaryFields) {
       const field = within(permitTile as HTMLElement)
@@ -8865,7 +8865,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.queryByRole('dialog', { name: /Email permit .* approval/ })).toBeNull()
       expect(screen.getByText('Permit review request email sent.')).toBeInTheDocument()
     })
-    expect(screen.getAllByText('2026-07-10')).toHaveLength(1)
+    expect(screen.getAllByText('Jul 10, 2026')).toHaveLength(1)
   })
 
   it('saves a permit fee override without changing unrelated permit fields', async () => {

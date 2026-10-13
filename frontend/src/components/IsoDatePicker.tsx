@@ -87,6 +87,7 @@ export default function IsoDatePicker({
         id={id}
         labelText={labelText}
         placeholder="YYYY-MM-DD"
+        helperText="year-month-day"
         pattern={ISO_DATE_INPUT_PATTERN}
         data-1p-ignore="true"
         data-lpignore="true"

@@ -633,14 +633,14 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByRole('button', { name: 'Edit package' })).toBeInTheDocument()
     expect(screen.queryByRole('heading', { level: 2, name: 'Packages' })).not.toBeInTheDocument()
     expect(screen.getByRole('heading', { level: 3, name: /^Package PKG-/ })).toBeInTheDocument()
-    expect(screen.getByRole('heading', { level: 3, name: 'Summary of scale' })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { level: 4, name: 'Summary of scale' })).toBeInTheDocument()
     const summaryOfScale = document.getElementById('application-items-scales')
     expect(summaryOfScale).toBeInTheDocument()
     expect(
       within(summaryOfScale as HTMLElement)
         .getAllByRole('columnheader')
         .map((header) => header.textContent),
-    ).toEqual(['Timber mark', 'Scale type', 'Pieces', 'Species', 'Grade', 'Volume (m³)', 'Delete'])
+    ).toEqual(['Timber mark', 'Scale type', 'Pieces', 'Species', 'Grade', 'Volume (m³)', 'Actions'])
     expect(screen.queryByLabelText('Package comments')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save package' })).not.toBeInTheDocument()
 
@@ -651,7 +651,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       within(summaryOfScale as HTMLElement)
         .getAllByRole('columnheader')
         .map((header) => header.textContent),
-    ).toEqual(['Timber mark', 'Scale type', 'Pieces', 'Species', 'Grade', 'Volume (m³)', 'Delete'])
+    ).toEqual(['Timber mark', 'Scale type', 'Pieces', 'Species', 'Grade', 'Volume (m³)', 'Actions'])
 
     await userEvent.click(
       within(document.querySelector('.application-items-drawer') as HTMLElement).getByRole(
@@ -1266,13 +1266,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
           (field) => field.textContent,
         ),
       ).toEqual([
-        'Package number',
-        'Package volume (m³)',
-        'Total scale volume (m³)',
-        'Total pieces',
+        'Volume (m³)',
         'Average length (m)',
         'Average top diameter (rads)',
-        'Comments',
+        'Total pieces',
+        'Total scale volume (m³)',
       ])
       expect(screen.getByRole('heading', { name: 'Summary of scale' })).toBeVisible()
       expect(screen.queryByRole('heading', { name: 'Timber marks' })).not.toBeInTheDocument()
@@ -1409,7 +1407,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         }),
       )
     })
-    expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
+    expect(
+      (await screen.findByText('Package saved.')).closest('#application-items-package'),
+    ).not.toBeNull()
   })
 
   it.each([
@@ -1481,7 +1481,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
           }),
         ),
       )
-      expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
+      expect(await screen.findByText('Package saved.')).toBeInTheDocument()
     },
   )
 
@@ -1812,9 +1812,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(screen.getByText('Package species could not be loaded.')).toBeInTheDocument()
     expect(
       within(packageDetailsSection as HTMLElement)
-        .getByText('Comments')
+        .getByText('Average length (m)')
         .parentElement?.querySelector('dd'),
-    ).toHaveTextContent('Ready')
+    ).toHaveTextContent('12.0')
     expect(within(scalesSection as HTMLElement).getByText('TM001')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Edit package' })).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Delete package' })).not.toBeInTheDocument()
@@ -1889,9 +1889,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(await screen.findByText('Selected package data unavailable')).toBeInTheDocument()
     expect(
       within(packageDetailsSection as HTMLElement)
-        .getByText('Comments')
+        .getByText('Average length (m)')
         .parentElement?.querySelector('dd'),
-    ).toHaveTextContent('Ready')
+    ).toHaveTextContent('12.0')
     expect(
       within(scalesSection as HTMLElement).getByText('Package scales could not be loaded.'),
     ).toBeInTheDocument()
@@ -2277,7 +2277,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       target: { value: 'Updated comments' },
     })
     await userEvent.click(screen.getByRole('button', { name: 'Save package' }))
-    expect(await screen.findByText('Package PKG-1 saved.')).toBeInTheDocument()
+    expect(await screen.findByText('Package saved.')).toBeInTheDocument()
 
     await selectApplicationDetailTab('Documents')
     const documentRow = (await screen.findByText('app-doc.pdf')).closest('tr')
@@ -2286,7 +2286,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await selectApplicationDetailTab('Scale')
     expect(await screen.findByRole('heading', { name: 'Package PKG-1' })).toBeInTheDocument()
-    expect(screen.queryByText('Package PKG-1 saved.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Package saved.')).not.toBeInTheDocument()
     expect(screen.getByText('Unable to open the selected document.')).toBeInTheDocument()
   })
 
@@ -2320,10 +2320,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       await screen.findByRole('heading', { name: /^Package PKG-/ })
     ).closest('section')
     expect(packageDetailsSection).toBeTruthy()
-    expect(
-      within(packageDetailsSection as HTMLElement).getAllByText('Package number').length,
-    ).toBeGreaterThan(0)
-    expect(within(packageDetailsSection as HTMLElement).getByText('PKG-1')).toBeInTheDocument()
+    expect(packageDetailsSection).toHaveTextContent('Package PKG-1')
     expect(
       within(packageDetailsSection as HTMLElement)
         .getByText('Total pieces')
@@ -2496,13 +2493,13 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
     await waitFor(() => {
       expect(mockedFetchApplicationPackageDetails).toHaveBeenCalledWith('PKG-2')
-      expect(screen.getByText('Comments').parentElement?.querySelector('dd')).toHaveTextContent(
-        'Second package',
-      )
+      expect(
+        screen.getByText('Average length (m)').parentElement?.querySelector('dd'),
+      ).toHaveTextContent('14.0')
     })
     expect(packageSelector).toHaveValue('PKG-2')
     expect(
-      screen.getByText('Package volume (m³)').parentElement?.querySelector('dd'),
+      screen.getByText('Volume (m³)', { selector: 'dt' }).parentElement?.querySelector('dd'),
     ).toHaveTextContent('200.0')
 
     await act(async () => {
@@ -2525,9 +2522,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     })
 
     expect(screen.getByRole('combobox', { name: 'Selected package' })).toHaveValue('PKG-2')
-    expect(screen.getByText('Comments').parentElement?.querySelector('dd')).toHaveTextContent(
-      'Second package',
-    )
+    expect(
+      screen.getByText('Average length (m)').parentElement?.querySelector('dd'),
+    ).toHaveTextContent('14.0')
     expect(screen.queryByText('First package stale')).not.toBeInTheDocument()
     expect(screen.getByText('TM002')).toBeInTheDocument()
     expect(screen.queryByText('TM001')).not.toBeInTheDocument()
@@ -2648,9 +2645,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       )
     })
     expect(await screen.findByText('Scale saved.')).toBeInTheDocument()
-    expect(
-      screen.getByText('Scale saved.').closest('.application-items-section--scales'),
-    ).not.toBeNull()
+    expect(screen.getByText('Scale saved.').closest('#application-items-scales')).not.toBeNull()
     expect(screen.queryByText('Timber mark is required')).not.toBeInTheDocument()
 
     const scaleRow = screen.getByText('TM001').closest('tr')
@@ -2671,6 +2666,9 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
         detailFetchCountAfterInitialLoad + 2,
       )
     })
+    expect(
+      (await screen.findByText('Scale deleted.')).closest('#application-items-scales'),
+    ).not.toBeNull()
   })
 
   it.each([
@@ -2802,9 +2800,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       ).toHaveClass('cds--inline-notification--warning')
       expect(screen.queryByText('Unable to save package details.')).not.toBeInTheDocument()
       expect(screen.queryByText('Unable to create package.')).not.toBeInTheDocument()
-      expect(
-        screen.queryByText(operation === 'save' ? 'Package PKG-1 saved.' : 'Package saved.'),
-      ).not.toBeInTheDocument()
+      expect(screen.queryByText('Package saved.')).not.toBeInTheDocument()
       expect(
         operation === 'save' ? mockedUpdateApplicationPackage : mockedAddApplicationPackage,
       ).toHaveBeenCalledTimes(1)

@@ -22,7 +22,12 @@ import {
 import { E2E_BASE_URL } from './utils'
 import { gotoWithRecovery } from './utils/navigation'
 import { regressionSubmissionFile, resolveRegressionSubmission } from './utils/regression-fixtures'
-import { businessDateParts, formatBusinessIsoDate, formatIsoDateParts } from '../src/utils/date'
+import {
+  businessDateParts,
+  formatBusinessIsoDate,
+  formatIsoDateLabel,
+  formatIsoDateParts,
+} from '../src/utils/date'
 
 const sideNavSection = (name: string) =>
   `.csp-side-nav__section:has(.cds--side-nav__submenu .cds--side-nav__submenu-title:text-is("${name}"))`
@@ -2633,12 +2638,12 @@ test.describe('TEST IDIR admin regression', () => {
     const region = page.getByRole('combobox', { name: 'Region' })
     await expect(region).toHaveValue('')
     await expect(region).toBeEnabled()
-    await expect(page.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
-      today,
-    )
+    await expect(page.getByRole('textbox', { name: 'Application date' })).toHaveValue(today)
     await expect(page.getByRole('textbox', { name: /Date received/i })).toHaveCount(0)
     const listDate = page.getByRole('group', { name: 'List date' })
-    await expect(listDate.getByRole('radio', { name: nextListDate })).toBeChecked()
+    await expect(
+      listDate.getByRole('radio', { name: formatIsoDateLabel(nextListDate) }),
+    ).toBeChecked()
     await expect(listDate.getByRole('radio', { name: 'No list date' })).not.toBeChecked()
     await expect(page.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue('180')
 

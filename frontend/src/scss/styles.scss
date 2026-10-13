@@ -5837,16 +5837,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   justify-content: flex-start;
 }
 
-.application-items-summary {
-  background-color: transparent;
-  border: 0;
-  display: grid;
-  gap: 1rem 1.5rem;
-  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-  margin: 0 0 1.5rem;
-  padding: 0;
-}
-
 .application-items-section h3 {
   margin: 0;
   @include carbon-type.type-style('heading-compact-02');

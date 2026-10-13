@@ -639,7 +639,7 @@ const ProvincialExemptionCreatePage = () => {
                         <RecordFieldCell>
                           <IsoDatePicker
                             id="approvalDate"
-                            labelText={requiredLabel('Approval date (YYYY-MM-DD)', oicLike)}
+                            labelText={requiredLabel('Approval date', oicLike)}
                             required={oicLike}
                             value={form.approvalDate}
                             disabled={normalizedTypeCode === 'M'}
@@ -654,10 +654,7 @@ const ProvincialExemptionCreatePage = () => {
                         <RecordFieldCell>
                           <IsoDatePicker
                             id="expiryDate"
-                            labelText={requiredLabel(
-                              'Expiry date (YYYY-MM-DD)',
-                              oicLike || !!form.approvalDate,
-                            )}
+                            labelText={requiredLabel('Expiry date', oicLike || !!form.approvalDate)}
                             required={oicLike || !!form.approvalDate}
                             value={form.expiryDate}
                             invalid={!!fieldError('expiryDate')}

@@ -2768,7 +2768,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(companyLink).toHaveAttribute('href', '/provincial/offers/81001')
     const offerRow = companyLink.closest('tr')
     expect(offerRow).toBeTruthy()
-    expect(within(offerRow as HTMLElement).getByText('2026-01-13')).toBeInTheDocument()
+    expect(within(offerRow as HTMLElement).getByText('Jan 13, 2026')).toBeInTheDocument()
     expect(within(offersTable).queryByText('81001')).not.toBeInTheDocument()
     expect(within(offersTable).queryByRole('button')).not.toBeInTheDocument()
 

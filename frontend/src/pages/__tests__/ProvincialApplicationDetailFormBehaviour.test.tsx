@@ -171,14 +171,14 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
 
     await userEvent.click(save)
 
-    expect(await tile.findByText('Applicant contact name is required')).toBeInTheDocument()
+    expect(await tile.findByText('Contact name is required')).toBeInTheDocument()
     expect(contactName).toHaveAttribute('aria-invalid', 'true')
     await waitFor(() => expect(contactName).toHaveFocus())
     expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     await userEvent.type(contactName, 'N')
-    expect(tile.queryByText('Applicant contact name is required')).not.toBeInTheDocument()
+    expect(tile.queryByText('Contact name is required')).not.toBeInTheDocument()
   })
 
   it('returns focus to Edit after a successful save', async () => {

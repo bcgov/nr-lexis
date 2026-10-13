@@ -1026,7 +1026,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(await screen.findByRole('region', { name: 'Application offers' })).toBeInTheDocument()
     expect(await screen.findByText('Example Lumber')).toBeInTheDocument()
-    expect(screen.getByText('2026-04-05')).toBeInTheDocument()
+    expect(screen.getByText('Apr 5, 2026')).toBeInTheDocument()
     expect(screen.queryByText('OFF-77')).not.toBeInTheDocument()
 
     expect(screen.queryByLabelText('Filter offers')).not.toBeInTheDocument()
@@ -1110,8 +1110,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByText('EX-555')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Permits' })).not.toBeInTheDocument()
     expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
-    expect(within(summaryTile).getByText('2026-01-01')).toBeInTheDocument()
-    expect(within(summaryTile).getByText('2026-01-03')).toBeInTheDocument()
+    expect(within(summaryTile).getByText('Jan 1, 2026')).toBeInTheDocument()
+    expect(within(summaryTile).getByText('Jan 3, 2026')).toBeInTheDocument()
 
     await selectApplicationDetailTab('Scale')
     const scaleTile = screen.getByRole('heading', { name: 'Scale details' }).closest('.cds--tile')
@@ -1862,8 +1862,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue(
         'Historic Natural Resource Region',
       )
-      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
+      expect(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' })).toBeChecked()
     })
+    expect(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' })).toHaveAttribute(
+      'value',
+      '31885',
+    )
 
     fireEvent.change(termDaysInput, {
       target: { value: '31' },
@@ -1917,12 +1921,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryControls = within(await selectApplicationSummaryTile())
     await waitFor(() => {
-      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
+      expect(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' })).toBeChecked()
     })
 
     await userEvent.click(summaryControls.getByRole('radio', { name: 'Jan 25, 2026' }))
     expect(summaryControls.getByRole('radio', { name: 'Jan 25, 2026' })).toBeChecked()
-    await userEvent.click(summaryControls.getByRole('radio', { name: '2011-11-25' }))
+    await userEvent.click(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' }))
     await userEvent.click(summaryControls.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>

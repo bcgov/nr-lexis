@@ -74,7 +74,11 @@ import {
   applicationListDateOptions,
   NO_LIST_DATE_VALUE,
 } from '@/pages/shared/application-list-date-options'
-import { formatBusinessDateTimeLabel, formatBusinessIsoDate } from '@/utils/date'
+import {
+  formatBusinessDateTimeLabel,
+  formatBusinessIsoDate,
+  formatIsoDateLabel,
+} from '@/utils/date'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import { displayValue } from '@/pages/shared/detail-page-utils'
@@ -1518,37 +1522,28 @@ const ProvincialApplicationDetailsPage = () => {
     }
 
     return {
-      ownerClientNumber: applicationClientNumberFieldError(
-        summaryForm.ownerClientNumber,
-        'Applicant client number',
-      ),
+      ownerClientNumber: applicationClientNumberFieldError(summaryForm.ownerClientNumber, 'Client'),
       ownerClientLocationCode:
-        requiredMaxLengthFieldError(
-          summaryForm.ownerClientLocationCode,
-          2,
-          'Applicant client location code',
-        ) ?? undefined,
+        requiredMaxLengthFieldError(summaryForm.ownerClientLocationCode, 2, 'Client location') ??
+        undefined,
       ownerContactName: applicationTextStorageFieldError(
         summaryForm.ownerContactName,
         APPLICATION_CONTACT_NAME_MAX_LENGTH,
-        'Applicant contact name',
+        'Contact name',
         true,
       ),
       agentClientNumber: isAgentApplicant(summaryForm.applicantTypeCode)
-        ? applicationClientNumberFieldError(summaryForm.agentClientNumber, 'Agent client number')
+        ? applicationClientNumberFieldError(summaryForm.agentClientNumber, 'Agent client')
         : undefined,
       agentClientLocationCode: isAgentApplicant(summaryForm.applicantTypeCode)
-        ? (requiredMaxLengthFieldError(
-            summaryForm.agentClientLocationCode,
-            2,
-            'Agent client location code',
-          ) ?? undefined)
+        ? (requiredMaxLengthFieldError(summaryForm.agentClientLocationCode, 2, 'Agent location') ??
+          undefined)
         : undefined,
       agentContactName: isAgentApplicant(summaryForm.applicantTypeCode)
         ? applicationTextStorageFieldError(
             summaryForm.agentContactName,
             APPLICATION_CONTACT_NAME_MAX_LENGTH,
-            'Agent contact name',
+            'Contact name',
             true,
           )
         : undefined,
@@ -4594,7 +4589,7 @@ const ProvincialApplicationDetailsPage = () => {
                                         (canReviewApplication ? NO_LIST_DATE_VALUE : '')
                                       }
                                       required
-                                      orientation="horizontal"
+                                      orientation="vertical"
                                       disabled={
                                         summaryOptionsAvailability !== 'available' ||
                                         summaryScheduleOptions.length === 0
@@ -4617,7 +4612,7 @@ const ProvincialApplicationDetailsPage = () => {
                                           key={option.value}
                                           id={`applicationSummarySchedule-${option.value}`}
                                           value={option.value}
-                                          labelText={option.label}
+                                          labelText={formatIsoDateLabel(option.label)}
                                         />
                                       ))}
                                     </RadioButtonGroup>
