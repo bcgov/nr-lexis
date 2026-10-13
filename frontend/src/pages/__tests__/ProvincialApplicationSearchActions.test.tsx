@@ -1232,5 +1232,6 @@ describe('Provincial Application Search Actions', () => {
     )
     expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
+    expect(screen.queryByRole('region', { name: 'Search results' })).not.toBeInTheDocument()
   })
 })

@@ -88,6 +88,9 @@ import { formatPermitNumber } from '@/utils/permit'
 import { displayTableValue } from '@/utils/text'
 import { displayVolume } from '@/utils/volume'
 
+const hasInvalidSearchDates = (filters: ProvincialPermitSearchFilters): boolean =>
+  hasInvalidIsoDateRange(filters.issuedFromDate, filters.issuedToDate)
+
 const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
@@ -209,6 +212,8 @@ const ProvincialPermitPage = () => {
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
   const hasSearchQuery = searchParams.toString().length > 0
+  // A saved link with invalid dates doesn't run its search, so it has no results to show.
+  const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
   const updateFilter = useCallback(
     <K extends keyof ProvincialPermitSearchFilters>(
       key: K,
@@ -242,9 +247,7 @@ const ProvincialPermitPage = () => {
     filters.issuedToDate,
     ISSUED_FROM_DATE_LABEL,
   )
-  const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateRange(filters.issuedFromDate, filters.issuedToDate)
-  }, [filters.issuedFromDate, filters.issuedToDate])
+  const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
@@ -286,7 +289,7 @@ const ProvincialPermitPage = () => {
         }
       }
 
-      if (hasInvalidIsoDateRange(request.filters.issuedFromDate, request.filters.issuedToDate)) {
+      if (hasInvalidSearchDates(request.filters)) {
         setLoading(false)
         return
       }
@@ -601,8 +604,8 @@ const ProvincialPermitPage = () => {
         sm={4}
         md={8}
         lg={16}
-        hidden={!hasSearchQuery}
-        style={{ display: hasSearchQuery ? undefined : 'none' }}
+        hidden={!showResults}
+        style={{ display: showResults ? undefined : 'none' }}
       >
         <section
           className="legacy-search-section legacy-search-section--results"

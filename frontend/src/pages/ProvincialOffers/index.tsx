@@ -89,6 +89,10 @@ import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { displayTableValue } from '@/utils/text'
 
+const hasInvalidSearchDates = (filters: ProvincialOfferSearchFilters): boolean =>
+  hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate) ||
+  hasInvalidIsoDateRange(filters.withdrawalFromDate, filters.withdrawalToDate)
+
 const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
@@ -209,6 +213,8 @@ const ProvincialOffersPage = () => {
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
   const hasSearchQuery = searchParams.toString().length > 0
+  // A saved link with invalid dates doesn't run its search, so it has no results to show.
+  const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
   const updateFilter = useCallback(
     <K extends keyof ProvincialOfferSearchFilters>(
       key: K,
@@ -247,17 +253,7 @@ const ProvincialOffersPage = () => {
     filters.withdrawalToDate,
     WITHDRAWN_FROM_DATE_LABEL,
   )
-  const hasDateValidationError = useMemo(() => {
-    return (
-      hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate) ||
-      hasInvalidIsoDateRange(filters.withdrawalFromDate, filters.withdrawalToDate)
-    )
-  }, [
-    filters.listingFromDate,
-    filters.listingToDate,
-    filters.withdrawalFromDate,
-    filters.withdrawalToDate,
-  ])
+  const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
@@ -299,10 +295,7 @@ const ProvincialOffersPage = () => {
         }
       }
 
-      if (
-        hasInvalidIsoDateRange(request.filters.listingFromDate, request.filters.listingToDate) ||
-        hasInvalidIsoDateRange(request.filters.withdrawalFromDate, request.filters.withdrawalToDate)
-      ) {
+      if (hasInvalidSearchDates(request.filters)) {
         setLoading(false)
         return
       }
@@ -643,8 +636,8 @@ const ProvincialOffersPage = () => {
         sm={4}
         md={8}
         lg={16}
-        hidden={!hasSearchQuery}
-        style={{ display: hasSearchQuery ? undefined : 'none' }}
+        hidden={!showResults}
+        style={{ display: showResults ? undefined : 'none' }}
       >
         <section
           className="legacy-search-section legacy-search-section--results"

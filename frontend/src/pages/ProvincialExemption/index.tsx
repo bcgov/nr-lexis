@@ -163,6 +163,9 @@ const approvalRequestFailureMessage = (error: unknown): string => {
 const approvedExemptionMessage = (count: number): string =>
   `Approved ${count} ${count === 1 ? 'exemption' : 'exemptions'}.`
 
+const hasInvalidSearchDates = (filters: ProvincialExemptionSearchFilters): boolean =>
+  hasInvalidIsoDateRange(filters.listFromDate, filters.listToDate)
+
 const INITIAL_FILTERS: ProvincialExemptionSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
@@ -347,6 +350,8 @@ const ProvincialExemptionPage = () => {
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
   const hasSearchQuery = searchParams.toString().length > 0
+  // A saved link with invalid dates doesn't run its search, so it has no results to show.
+  const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
   }, [])
@@ -379,9 +384,7 @@ const ProvincialExemptionPage = () => {
       preferenceLoading ||
       (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
-  const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateRange(filters.listFromDate, filters.listToDate)
-  }, [filters.listFromDate, filters.listToDate])
+  const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
@@ -429,7 +432,7 @@ const ProvincialExemptionPage = () => {
         }
       }
 
-      if (hasInvalidIsoDateRange(request.filters.listFromDate, request.filters.listToDate)) {
+      if (hasInvalidSearchDates(request.filters)) {
         setLoading(false)
         return false
       }
@@ -1027,8 +1030,8 @@ const ProvincialExemptionPage = () => {
         sm={4}
         md={8}
         lg={16}
-        hidden={!hasSearchQuery}
-        style={{ display: hasSearchQuery ? undefined : 'none' }}
+        hidden={!showResults}
+        style={{ display: showResults ? undefined : 'none' }}
       >
         <section
           className="legacy-search-section legacy-search-section--results"

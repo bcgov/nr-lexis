@@ -1879,5 +1879,6 @@ describe('Provincial Exemption Search Actions', () => {
     )
     expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
     expect(mockedSearchProvincialExemptions).not.toHaveBeenCalled()
+    expect(screen.queryByRole('region', { name: 'Search results' })).not.toBeInTheDocument()
   })
 })

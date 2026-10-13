@@ -107,6 +107,9 @@ type ExemptionStatus = {
   message: string
 }
 
+const hasInvalidSearchDates = (filters: ProvincialApplicationSearchFilters): boolean =>
+  hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate)
+
 const INITIAL_FILTERS: ProvincialApplicationSearchFilters = {
   applicationNumber: '',
   packageNumber: '',
@@ -277,6 +280,8 @@ const ProvincialApplicationPage = () => {
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
   const hasSearchQuery = searchParams.toString().length > 0
+  // A saved link with invalid dates doesn't run its search, so it has no results to show.
+  const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setExemptionStatus(null)
@@ -310,9 +315,7 @@ const ProvincialApplicationPage = () => {
       preferenceLoading ||
       (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
-  const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate)
-  }, [filters.listingFromDate, filters.listingToDate])
+  const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
@@ -357,7 +360,7 @@ const ProvincialApplicationPage = () => {
         }
       }
 
-      if (hasInvalidIsoDateRange(request.filters.listingFromDate, request.filters.listingToDate)) {
+      if (hasInvalidSearchDates(request.filters)) {
         setLoading(false)
         return
       }
@@ -863,8 +866,8 @@ const ProvincialApplicationPage = () => {
         sm={4}
         md={8}
         lg={16}
-        hidden={!hasSearchQuery}
-        style={{ display: hasSearchQuery ? undefined : 'none' }}
+        hidden={!showResults}
+        style={{ display: showResults ? undefined : 'none' }}
       >
         <section
           className="legacy-search-section legacy-search-section--results"

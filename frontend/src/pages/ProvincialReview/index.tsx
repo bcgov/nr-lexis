@@ -129,6 +129,10 @@ type ApplicationApprovalResult = {
 const RECEIVED_FROM_DATE_LABEL = 'Received from date'
 const LISTING_FROM_DATE_LABEL = 'Listing from date'
 
+const hasInvalidSearchDates = (filters: ApplicationReviewSearchFilters): boolean =>
+  hasInvalidIsoDateRange(filters.receivedFromDate, filters.receivedToDate) ||
+  hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate)
+
 const INITIAL_FILTERS: ApplicationReviewSearchFilters = {
   applicationNumber: '',
   productTypeCode: '',
@@ -346,6 +350,8 @@ const ProvincialReviewPage = () => {
   const pageSize = urlState.pageSize
   const requestFilters = appliedFilters
   const hasSearchQuery = searchParams.toString().length > 0
+  // A saved link with invalid dates doesn't run its search, so it has no results to show.
+  const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setReviewActionResults([])
@@ -394,17 +400,7 @@ const ProvincialReviewPage = () => {
     filters.listingToDate,
     LISTING_FROM_DATE_LABEL,
   )
-  const hasDateValidationError = useMemo(() => {
-    return (
-      hasInvalidIsoDateRange(filters.receivedFromDate, filters.receivedToDate) ||
-      hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate)
-    )
-  }, [
-    filters.receivedFromDate,
-    filters.receivedToDate,
-    filters.listingFromDate,
-    filters.listingToDate,
-  ])
+  const hasDateValidationError = hasInvalidSearchDates(filters)
 
   const selectableRows = useMemo(() => {
     if (!canApproveApplications) {
@@ -466,10 +462,7 @@ const ProvincialReviewPage = () => {
         }
       }
 
-      if (
-        hasInvalidIsoDateRange(request.filters.receivedFromDate, request.filters.receivedToDate) ||
-        hasInvalidIsoDateRange(request.filters.listingFromDate, request.filters.listingToDate)
-      ) {
+      if (hasInvalidSearchDates(request.filters)) {
         setLoading(false)
         return
       }
@@ -1322,8 +1315,8 @@ const ProvincialReviewPage = () => {
         sm={4}
         md={8}
         lg={16}
-        hidden={!hasSearchQuery}
-        style={{ display: hasSearchQuery ? undefined : 'none' }}
+        hidden={!showResults}
+        style={{ display: showResults ? undefined : 'none' }}
       >
         <section
           className="legacy-search-section legacy-search-section--results"

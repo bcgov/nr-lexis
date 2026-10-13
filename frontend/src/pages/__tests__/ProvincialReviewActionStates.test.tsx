@@ -1539,5 +1539,6 @@ describe('Provincial Review Action State Smoke', () => {
     )
     expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
     expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
+    expect(screen.queryByRole('region', { name: 'Review queue' })).not.toBeInTheDocument()
   })
 })
