@@ -126,6 +126,9 @@ type ApplicationApprovalResult = {
   message: string
 }
 
+const RECEIVED_FROM_DATE_LABEL = 'Received from date'
+const LISTING_FROM_DATE_LABEL = 'Listing from date'
+
 const INITIAL_FILTERS: ApplicationReviewSearchFilters = {
   applicationNumber: '',
   productTypeCode: '',
@@ -384,12 +387,12 @@ const ProvincialReviewPage = () => {
   const receivedToDateError = isoDateRangeEndError(
     filters.receivedFromDate,
     filters.receivedToDate,
-    'Received from date',
+    RECEIVED_FROM_DATE_LABEL,
   )
   const listingToDateError = isoDateRangeEndError(
     filters.listingFromDate,
     filters.listingToDate,
-    'Listing from date',
+    LISTING_FROM_DATE_LABEL,
   )
   const hasDateValidationError = useMemo(() => {
     return (
@@ -1109,7 +1112,7 @@ const ProvincialReviewPage = () => {
               />
               <IsoDatePicker
                 id="receivedFromDate"
-                labelText="Received from date"
+                labelText={RECEIVED_FROM_DATE_LABEL}
                 value={filters.receivedFromDate}
                 invalid={!isValidIsoDate(filters.receivedFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -1120,12 +1123,12 @@ const ProvincialReviewPage = () => {
                 labelText="Received to date"
                 value={filters.receivedToDate}
                 invalid={Boolean(receivedToDateError)}
-                invalidText={<span>{receivedToDateError}</span>}
+                invalidText={receivedToDateError}
                 onChange={(value) => updateFilter('receivedToDate', value)}
               />
               <IsoDatePicker
                 id="listingFromDate"
-                labelText="Listing from date"
+                labelText={LISTING_FROM_DATE_LABEL}
                 value={filters.listingFromDate}
                 invalid={!isValidIsoDate(filters.listingFromDate)}
                 invalidText="Date must be YYYY-MM-DD"
@@ -1136,7 +1139,7 @@ const ProvincialReviewPage = () => {
                 labelText="Listing to date"
                 value={filters.listingToDate}
                 invalid={Boolean(listingToDateError)}
-                invalidText={<span>{listingToDateError}</span>}
+                invalidText={listingToDateError}
                 onChange={(value) => updateFilter('listingToDate', value)}
               />
             </div>

@@ -732,6 +732,33 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(within(drawer).getByRole('button', { name: 'Save package' })).toBeInTheDocument()
   })
 
+  it('moves focus to the new package card after creating the first package', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [],
+    })
+    mockedAddApplicationPackage.mockImplementationOnce(async () => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        packages: [{ packageNumber: 'PKG-NEW', volume: 25, pieceCount: 0 }],
+      })
+      return { valid: true, packageNumber: 'PKG-NEW', errors: [], warnings: [] }
+    })
+    renderApplicationItems()
+
+    const drawer = await openCreatePackageControls()
+    fillNewPackage(drawer, 'PKG-NEW')
+    const save = drawer.getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await userEvent.click(save)
+
+    const packageCard = (await screen.findByRole('heading', { name: 'Package PKG-NEW' })).closest(
+      'section',
+    )
+    await waitFor(() => expect(packageCard).toHaveFocus())
+    expect(screen.queryByRole('combobox', { name: 'Selected package' })).not.toBeInTheDocument()
+  })
+
   it('keeps an unsaved package draft until discard is confirmed', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321?tab=items']}>

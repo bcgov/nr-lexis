@@ -1,5 +1,6 @@
 import { DataTableSkeleton, InlineLoading, TableToolbar, TableToolbarContent } from '@carbon/react'
 import type { ReactNode } from 'react'
+import { formatSearchResultCount } from '@/pages/shared/deferred-search-total'
 import TableFrame from './TableFrame'
 
 type SearchResultsTableFrameProps = {
@@ -11,11 +12,6 @@ type SearchResultsTableFrameProps = {
   resultName?: string
   actions?: ReactNode
   columnCount?: number
-}
-
-const formatSearchResultCount = (totalItems: number, resultName: string): string => {
-  const formattedTotal = new Intl.NumberFormat('en-CA').format(totalItems)
-  return `${formattedTotal} ${resultName}${totalItems === 1 ? '' : 's'} found`
 }
 
 function SearchResultsTableFrame({

@@ -101,6 +101,8 @@ const INITIAL_FILTERS: ProvincialOfferSearchFilters = {
 }
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialOfferSearchResponse>()
+const LISTING_FROM_DATE_LABEL = 'Listing from date'
+const WITHDRAWN_FROM_DATE_LABEL = 'Withdrawn from date'
 
 const SORT_COLUMNS: {
   id: ProvincialOfferSearchSortField
@@ -238,12 +240,12 @@ const ProvincialOffersPage = () => {
   const listingToDateError = isoDateRangeEndError(
     filters.listingFromDate,
     filters.listingToDate,
-    'Listing from date',
+    LISTING_FROM_DATE_LABEL,
   )
   const withdrawalToDateError = isoDateRangeEndError(
     filters.withdrawalFromDate,
     filters.withdrawalToDate,
-    'Withdrawn from date',
+    WITHDRAWN_FROM_DATE_LABEL,
   )
   const hasDateValidationError = useMemo(() => {
     return (
@@ -589,7 +591,7 @@ const ProvincialOffersPage = () => {
                 />
                 <IsoDatePicker
                   id="listingFromDate"
-                  labelText="Listing from date"
+                  labelText={LISTING_FROM_DATE_LABEL}
                   value={filters.listingFromDate}
                   invalid={!isValidIsoDate(filters.listingFromDate)}
                   invalidText="Date must be YYYY-MM-DD"
@@ -600,12 +602,12 @@ const ProvincialOffersPage = () => {
                   labelText="Listing to date"
                   value={filters.listingToDate}
                   invalid={Boolean(listingToDateError)}
-                  invalidText={<span>{listingToDateError}</span>}
+                  invalidText={listingToDateError}
                   onChange={(value) => updateFilter('listingToDate', value)}
                 />
                 <IsoDatePicker
                   id="withdrawalFromDate"
-                  labelText="Withdrawn from date"
+                  labelText={WITHDRAWN_FROM_DATE_LABEL}
                   value={filters.withdrawalFromDate}
                   invalid={!isValidIsoDate(filters.withdrawalFromDate)}
                   invalidText="Date must be YYYY-MM-DD"
@@ -616,7 +618,7 @@ const ProvincialOffersPage = () => {
                   labelText="Withdrawn to date"
                   value={filters.withdrawalToDate}
                   invalid={Boolean(withdrawalToDateError)}
-                  invalidText={<span>{withdrawalToDateError}</span>}
+                  invalidText={withdrawalToDateError}
                   onChange={(value) => updateFilter('withdrawalToDate', value)}
                 />
               </div>

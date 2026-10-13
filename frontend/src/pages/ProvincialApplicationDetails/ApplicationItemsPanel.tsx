@@ -1180,6 +1180,9 @@ function ProvincialApplicationItemsPanel({
     baseReferenceOptionsAvailable && !createEndUseOptionsLoading && !createEndUseOptionsUnavailable
   const canManageItems = !hideMutationActions && (canEditPackages || canAddPackages || canAddScales)
   const packageFirstEmptyState = packageNumbers.length === 0
+  // A single package has no selector, so focus returns to its card.
+  const packageFocusFallbackSelector =
+    packageNumbers.length > 1 ? '#applicationItemsPackageSelect' : '#application-items-package'
   const canOpenItemsEditor =
     !editingBlocked &&
     (packageFirstEmptyState ? !hideMutationActions && canAddPackages : canManageItems)
@@ -1650,6 +1653,8 @@ function ProvincialApplicationItemsPanel({
 
       <div className="application-items-grid">
         <section
+          id="application-items-package"
+          tabIndex={-1}
           className="application-items-card application-items-section application-items-section--package-details"
           hidden={packageFirstEmptyState}
           style={packageFirstEmptyState ? { display: 'none' } : undefined}
@@ -1748,7 +1753,7 @@ function ProvincialApplicationItemsPanel({
             contentSelector=".provincial-application-detail"
             initialFocusSelector="#applicationItemsPackageNumber"
             launcherRef={packageLauncherRef}
-            fallbackFocusSelector="#applicationItemsPackageSelect"
+            fallbackFocusSelector={packageFocusFallbackSelector}
             busy={isSavingPackage}
             onClose={requestDrawerClose}
             actions={[
@@ -1850,7 +1855,7 @@ function ProvincialApplicationItemsPanel({
           contentSelector=".provincial-application-detail"
           initialFocusSelector="#applicationItemsCreatePackageNumber"
           launcherRef={packageLauncherRef}
-          fallbackFocusSelector="#applicationItemsPackageSelect"
+          fallbackFocusSelector={packageFocusFallbackSelector}
           busy={isSavingPackage}
           onClose={requestDrawerClose}
           actions={[

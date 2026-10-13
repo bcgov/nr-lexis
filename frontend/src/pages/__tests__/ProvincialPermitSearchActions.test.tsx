@@ -643,7 +643,7 @@ describe('Provincial Permit Search Actions', () => {
       expect(from).toHaveValue('2026-10-12')
       expect(to).toHaveValue('2026-10-01')
       expect(to).toHaveAttribute('aria-invalid', 'true')
-      expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
+      expect(screen.getByText(`Must be on or after ${fromLabel}`)).toBeVisible()
       expect(search).toBeDisabled()
       fireEvent.submit(to.closest('form') as HTMLFormElement)
       expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(callsBeforeEdit)

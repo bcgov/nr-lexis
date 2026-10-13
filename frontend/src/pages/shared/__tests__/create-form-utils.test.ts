@@ -48,7 +48,7 @@ describe('create-form-utils', () => {
     }
     expect(hasInvalidIsoDateRange('2026-10-12', '2026-10-01')).toBe(true)
     expect(isoDateRangeEndError('2026-10-12', '2026-10-01', 'List date from')).toBe(
-      'Must be on or after List date from.',
+      'Must be on or after List date from',
     )
     expect(hasInvalidIsoDateRange('invalid', '2026-10-01')).toBe(true)
     expect(isoDateRangeEndError('invalid', '2026-10-01', 'List date from')).toBeUndefined()

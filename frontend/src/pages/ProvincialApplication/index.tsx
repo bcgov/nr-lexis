@@ -79,6 +79,7 @@ import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPrefe
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   formatDeferredSearchTotalLabel,
+  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchNextSearchPage,
   type DeferredSearchTotalStatus,
@@ -1047,8 +1048,7 @@ const ProvincialApplicationPage = () => {
                     totalStatus,
                     results.page.number * results.page.size + results.content.length,
                     'application',
-                  ) ??
-                    `${results.page.totalElements.toLocaleString('en-CA')} ${results.page.totalElements === 1 ? 'application' : 'applications'} found`}
+                  ) ?? formatSearchResultCount(results.page.totalElements, 'application')}
                 </div>
                 <Pagination
                   page={results.page.number + 1}

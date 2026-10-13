@@ -101,6 +101,7 @@ const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
 }
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialPermitSearchResponse>()
+const ISSUED_FROM_DATE_LABEL = 'Issued from date'
 
 const SORT_COLUMNS: {
   id: ProvincialPermitSearchSortField
@@ -239,7 +240,7 @@ const ProvincialPermitPage = () => {
   const issuedToDateError = isoDateRangeEndError(
     filters.issuedFromDate,
     filters.issuedToDate,
-    'Issued from date',
+    ISSUED_FROM_DATE_LABEL,
   )
   const hasDateValidationError = useMemo(() => {
     return hasInvalidIsoDateRange(filters.issuedFromDate, filters.issuedToDate)
@@ -535,7 +536,7 @@ const ProvincialPermitPage = () => {
                 />
                 <IsoDatePicker
                   id="issuedFromDate"
-                  labelText="Issued from date"
+                  labelText={ISSUED_FROM_DATE_LABEL}
                   value={filters.issuedFromDate}
                   invalid={!isValidIsoDate(filters.issuedFromDate)}
                   invalidText="Date must be YYYY-MM-DD"
@@ -546,7 +547,7 @@ const ProvincialPermitPage = () => {
                   labelText="Issued to date"
                   value={filters.issuedToDate}
                   invalid={Boolean(issuedToDateError)}
-                  invalidText={<span>{issuedToDateError}</span>}
+                  invalidText={issuedToDateError}
                   onChange={(value) => updateFilter('issuedToDate', value)}
                 />
                 <SearchableSelect

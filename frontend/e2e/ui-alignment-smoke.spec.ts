@@ -1322,7 +1322,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await to.press('Tab')
     await expect(to).toHaveAttribute('aria-invalid', 'true')
     await expect(
-      page.getByText('Must be on or after List date from.', { exact: true }),
+      page.getByText('Must be on or after List date from', { exact: true }),
     ).toBeVisible()
     await expect(search).toBeDisabled()
     await to.press('Enter')

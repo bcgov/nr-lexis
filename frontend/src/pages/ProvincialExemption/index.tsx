@@ -89,6 +89,7 @@ import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPrefe
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   formatDeferredSearchTotalLabel,
+  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchNextSearchPage,
   type DeferredSearchTotalStatus,
@@ -1212,8 +1213,7 @@ const ProvincialExemptionPage = () => {
                     totalStatus,
                     results.page.number * results.page.size + results.content.length,
                     'exemption',
-                  ) ??
-                    `${results.page.totalElements.toLocaleString('en-CA')} ${results.page.totalElements === 1 ? 'exemption' : 'exemptions'} found`}
+                  ) ?? formatSearchResultCount(results.page.totalElements, 'exemption')}
                 </div>
                 <Pagination
                   page={results.page.number + 1}
