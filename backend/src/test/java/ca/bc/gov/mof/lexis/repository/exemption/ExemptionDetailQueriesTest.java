@@ -83,7 +83,7 @@ class ExemptionDetailQueriesTest {
         INSERT INTO THE.EXPORT_PERMIT_DETAIL VALUES
           (101, 'EX-205', 30, 'COM'), (102, 'EX-205', 15, 'COM'),
           (103, 'EX-205', 20, 'ACT'), (104, 'EX-205', 5, 'PPD'),
-          (105, 'EX-205', 7, 'CAN'), (106, 'EX-205', 8, 'NEW'),
+          (105, 'EX-205', 7, 'CAN'), (106, 'EX-205', 8, 'EXP'),
           (999, 'OTHER', 900, 'COM')
         """);
     jdbc.execute("""
@@ -160,7 +160,7 @@ class ExemptionDetailQueriesTest {
   void searchAndSummaryPathsShouldExcludeCancelledPermitVolumes(
       String sortField, boolean clientScoped) {
     // Number sorting exercises page-first SQL; balance sorting exercises aggregate-first SQL.
-    // Search retains its stored-permit measure, including the unscaled NEW permit's 8 m3.
+    // Search retains its stored-permit measure, including the expired permit's unscaled 8 m3.
     ExemptionSearchCriteria criteria = new ExemptionSearchCriteria(
         null, null, null, null, null, clientScoped ? "OWNER" : null,
         null, null, null, List.of(), true, false, clientScoped, sortField, 0, 10);
