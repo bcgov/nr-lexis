@@ -4039,6 +4039,67 @@ class OraclePermitDetailsRpcServiceTest {
     verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"ACT", "COM"})
+  void updatePermitShouldRejectReactivationBeyondTheExemptionBalance(String targetStatus) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("CAN")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(
+                scale("101", "TM1", "FI", "D", 60.0d, 4L, "7000123", "PKG-1"),
+                scale("102", "TM1", "FI", "D", 40.5d, 3L, "7000123", "PKG-1")));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            formCheckRequest(targetStatus, "42", "Legacy notes"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "This permit can't be reactivated. Its scales total 100.5 m³, but the exemption has 100.0 m³ remaining.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updatePermitShouldAllowReactivationThatUsesTheWholeExemptionBalance() {
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("CAN")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("101", "TM1", "FI", "D", 100.0d, 4L, "7000123", "PKG-1")));
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class),
+            eq("idir\\jsmith"),
+            eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of(1000456L));
+    when(repository.findApplicationStatusCodeByNumber(1000456L))
+        .thenReturn(Optional.of("EXE"));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(
+            List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)));
+    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE")))
+        .thenReturn(
+            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
+                true, true, true, "EXE", null));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            formCheckRequest("ACT", "42", "Legacy notes"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    verify(repository)
+        .updatePermitDetail(
+            any(PermitMutationRow.class),
+            eq("idir\\jsmith"),
+            eq(FEE_MASK_EFFECTIVE_DATE));
+  }
+
   @Test
   void updatePermitShouldRejectInvoiceNotationChangesWhilePermitRemainsInvoiced() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
