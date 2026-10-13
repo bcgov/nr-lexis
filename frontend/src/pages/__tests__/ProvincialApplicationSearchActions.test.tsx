@@ -743,7 +743,7 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('hides staff client filters and exemption actions for an industry session', async () => {
+  it('hides staff client filters and exemption actions but shows the agent for an industry session', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: () => false,
@@ -765,8 +765,10 @@ describe('Provincial Application Search Actions', () => {
       screen.queryByRole('checkbox', { name: 'Select application 321' }),
     ).not.toBeInTheDocument()
     expect(screen.queryByText('Applicant client number')).not.toBeInTheDocument()
-    expect(screen.queryByText('11111111')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Owner client number' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Agent client number' })).toBeInTheDocument()
+    const row = screen.getByText('321').closest('tr') as HTMLElement
+    expect(within(row).getByText('11111111')).toBeInTheDocument()
   })
 
   it('uses independent canonical owner and agent client selections in the search request', async () => {

@@ -226,9 +226,6 @@ const ProvincialApplicationPage = () => {
   const canCreateExemption = canPerform('/createExemption')
   const canCreateApplication = canPerform('createApplication')
   const canFilterByClient = hasProvincialStaffRole(capabilities.roles)
-  const visibleResultColumns = canCreateExemption
-    ? RESULT_COLUMNS
-    : RESULT_COLUMNS.filter((column) => column.id !== 'agentClientNumber')
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
@@ -878,7 +875,7 @@ const ProvincialApplicationPage = () => {
             resultName="application"
             loading={loading}
             loadingDescription="Searching"
-            columnCount={visibleResultColumns.length + (canCreateExemption ? 1 : 0)}
+            columnCount={RESULT_COLUMNS.length + (canCreateExemption ? 1 : 0)}
             totalItems={
               errorMessage || (loading && results.content.length === 0)
                 ? undefined
@@ -938,7 +935,7 @@ const ProvincialApplicationPage = () => {
                         </DisabledButtonTooltip>
                       </TableHeader>
                     )}
-                    {visibleResultColumns.map((column) => (
+                    {RESULT_COLUMNS.map((column) => (
                       <TableHeader
                         key={column.id}
                         isSortable={Boolean(column.sortField)}
@@ -1004,9 +1001,7 @@ const ProvincialApplicationPage = () => {
                         />
                       </TableCell>
                       <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
-                      {canCreateExemption && (
-                        <TableCell>{displayTableValue(row.agentClientNumber)}</TableCell>
-                      )}
+                      <TableCell>{displayTableValue(row.agentClientNumber)}</TableCell>
                       <TableCell>{formatVolume(row.applicationVolume)}</TableCell>
                       <TableCell>
                         {row.exemptionNumber ? (
