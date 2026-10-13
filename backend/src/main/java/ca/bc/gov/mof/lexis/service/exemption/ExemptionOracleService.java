@@ -135,7 +135,6 @@ public class ExemptionOracleService implements ExemptionService {
         detail.approvedVolume(),
         detail.usedVolume(),
         detail.remainingVolume(),
-        detail.completedPermitVolume(),
         detail.otherConditions(),
         detail.blanketOic(),
         detail.permitNumbers(),

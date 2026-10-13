@@ -512,7 +512,7 @@ describe('permit creation from an exemption', () => {
     expect(within(page).getByLabelText('Expiry date')).toHaveValue('')
   })
 
-  it('shows the exemption completed total independently of visible permits and reserved balance', async () => {
+  it('shows the requested, approved, scale and balance totals for the exemption', async () => {
     vi.mocked(fetchExemptionApplications).mockResolvedValue({
       applications: [
         {
@@ -556,20 +556,21 @@ describe('permit creation from an exemption', () => {
       approvedVolume: 100,
       usedVolume: 50,
       remainingVolume: 50,
-      completedPermitVolume: 30,
     })
 
     await openPermitsTab()
 
     const totals = screen.getByLabelText('Exemption permit volume totals')
-    expect(within(totals).queryByText('Requested volume (m³)')).not.toBeInTheDocument()
-    expect(within(totals).getByText('Approved volume (m³)')).toBeInTheDocument()
-    expect(within(totals).getByText('Sum of completed permits (m³)')).toBeInTheDocument()
-    expect(within(totals).getByText('Balance remaining (m³)')).toBeInTheDocument()
-    expect(within(totals).getByText('100.0')).toBeInTheDocument()
-    expect(within(totals).getByText('30.0')).toBeInTheDocument()
-    expect(within(totals).getByText('50.0')).toBeInTheDocument()
-    expect(within(totals).queryByText('70.0')).not.toBeInTheDocument()
+    for (const [label, value] of [
+      ['Requested volume (m³)', '307.2'],
+      ['Approved volume (m³)', '100.0'],
+      ['Sum of application scales (m³)', '50.0'],
+      ['Balance remaining (m³)', '50.0'],
+    ]) {
+      const field = within(totals).getByText(label).closest('.record-field')
+      expect(field).toBeTruthy()
+      expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
+    }
     expect(within(totals).queryByText('10.0')).not.toBeInTheDocument()
     expect(screen.getByText('9020934 (Pending)')).toBeInTheDocument()
     expect(screen.getByText('9020933')).toBeInTheDocument()

@@ -66,7 +66,6 @@ export type ProvincialExemptionDetail = {
   expiryDate: string | null
   approvedVolume: number | null
   usedVolume: number | null
-  completedPermitVolume?: number | null
   remainingVolume: number | null
   otherConditions: string | null
   blanketOic: boolean

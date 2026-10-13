@@ -2899,14 +2899,20 @@ const ProvincialExemptionDetailsPage = () => {
                           <RecordFieldGrid aria-label="Exemption permit volume totals">
                             <RecordFieldRow>
                               <RecordField
+                                label="Requested volume (m³)"
+                                value={formatExemptionVolume(
+                                  applicationsErrorMessage ? null : requestedApplicationVolume,
+                                )}
+                              />
+                              <RecordField
                                 label="Approved volume (m³)"
                                 value={formatExemptionVolume(detail.approvedVolume)}
                               />
                               {/* INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_PERMIT_TOTALS):
-                                  Completed volume is separate from the reserved-volume balance. */}
+                                  Scales on cancelled permits no longer count. */}
                               <RecordField
-                                label="Sum of completed permits (m³)"
-                                value={formatExemptionVolume(detail.completedPermitVolume)}
+                                label="Sum of application scales (m³)"
+                                value={formatExemptionVolume(detail.usedVolume)}
                               />
                               <RecordField
                                 label="Balance remaining (m³)"
