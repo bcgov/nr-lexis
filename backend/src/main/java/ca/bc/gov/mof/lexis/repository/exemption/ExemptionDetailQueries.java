@@ -5,6 +5,7 @@ public final class ExemptionDetailQueries {
 
   // Aggregate assigned scales before joining descriptive application/region rows. The legacy
   // detail procedure sums after those joins, multiplying consumption for multi-region exemptions.
+  // Completed permit volume is a separate display total; available balance retains assigned scales.
   // INTENTIONAL_LEGACY_DIVERGENCE(CANONICAL_EXEMPTION_DETAILS): use the same latest-application
   // ordering as search for client/date context, while volumes and regions retain every application.
   public static final String BY_NUMBER =
@@ -37,6 +38,12 @@ public final class ExemptionDetailQueries {
         INNER JOIN THE.EXPORT_SCALE_DETAIL ESD
           ON ESD.PACKAGE_NUMBER = EP.PACKAGE_NUMBER
         WHERE ESD.EXPORT_PERMIT_DETAIL_NUMBER IS NOT NULL
+      ), COMPLETED_PERMIT_VOLUME AS (
+        SELECT COALESCE(SUM(EPD.PERMIT_VOLUME), 0) AS COMPLETED_PERMIT_VOLUME
+        FROM TARGET_EXEMPTION EE
+        INNER JOIN THE.EXPORT_PERMIT_DETAIL EPD
+          ON EPD.EXEMPTION_NUMBER = EE.EXEMPTION_NUMBER
+        WHERE EPD.EXPORT_PERMIT_STATUS_CODE = 'COM'
       ), EXEMPTION_REGIONS AS (
         SELECT EXEMPTION_NUMBER,
                LISTAGG(ORG_UNIT_NAME, ',') WITHIN GROUP (ORDER BY ORG_UNIT_NO) AS ORG_UNIT_NAME
@@ -68,6 +75,7 @@ public final class ExemptionDetailQueries {
              EE.EXPORT_EXEMPTION_STATUS_CODE,
              EESC.DESCRIPTION AS STATUS_DESCRIPTION,
              EE.APPROVED_VOLUME - SV.USED_VOLUME AS VOLUME_REMAINING,
+             CPV.COMPLETED_PERMIT_VOLUME,
              EEA.ADVERTISING_DATE,
              EO.ORG_UNIT_NAME,
              CASE WHEN EE.EXPORT_EXEMPTION_TYPE_CODE = 'M'
@@ -76,6 +84,7 @@ public final class ExemptionDetailQueries {
                THEN EEA.OWNER_CLIENT_NUMBER ELSE '' END AS OWNER_CLIENT_NUMBER
       FROM TARGET_EXEMPTION EE
       CROSS JOIN ASSIGNED_SCALE_VOLUME SV
+      CROSS JOIN COMPLETED_PERMIT_VOLUME CPV
       INNER JOIN THE.EXPORT_EXEMPTION_STATUS_CODE EESC
         ON EESC.EXPORT_EXEMPTION_STATUS_CODE = EE.EXPORT_EXEMPTION_STATUS_CODE
       LEFT JOIN CANONICAL_EXEMPTION_APPLICATION EEA

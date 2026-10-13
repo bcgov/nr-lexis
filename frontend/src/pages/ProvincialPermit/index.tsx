@@ -32,7 +32,11 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
-import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
+import {
+  hasInvalidIsoDateRange,
+  isValidIsoDate,
+  isoDateRangeEndError,
+} from '@/pages/shared/create-form-utils'
 import {
   DEFAULT_SEARCH_PAGE,
   DEFAULT_SEARCH_PAGE_SIZE,
@@ -232,8 +236,13 @@ const ProvincialPermitPage = () => {
       preferenceLoading ||
       (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
+  const issuedToDateError = isoDateRangeEndError(
+    filters.issuedFromDate,
+    filters.issuedToDate,
+    'Issued from date',
+  )
   const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(filters.issuedFromDate, filters.issuedToDate)
+    return hasInvalidIsoDateRange(filters.issuedFromDate, filters.issuedToDate)
   }, [filters.issuedFromDate, filters.issuedToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
@@ -276,7 +285,7 @@ const ProvincialPermitPage = () => {
         }
       }
 
-      if (hasInvalidIsoDateValue(request.filters.issuedFromDate, request.filters.issuedToDate)) {
+      if (hasInvalidIsoDateRange(request.filters.issuedFromDate, request.filters.issuedToDate)) {
         setLoading(false)
         return
       }
@@ -536,8 +545,8 @@ const ProvincialPermitPage = () => {
                   id="issuedToDate"
                   labelText="Issued to date"
                   value={filters.issuedToDate}
-                  invalid={!isValidIsoDate(filters.issuedToDate)}
-                  invalidText="Date must be YYYY-MM-DD"
+                  invalid={Boolean(issuedToDateError)}
+                  invalidText={<span>{issuedToDateError}</span>}
                   onChange={(value) => updateFilter('issuedToDate', value)}
                 />
                 <SearchableSelect
@@ -599,6 +608,7 @@ const ProvincialPermitPage = () => {
           aria-label="Search results"
         >
           <SearchResultsTableFrame
+            resultName="permit"
             loading={loading}
             loadingDescription="Loading permit search results…"
             columnCount={SORT_COLUMNS.length}
@@ -611,6 +621,7 @@ const ProvincialPermitPage = () => {
               results.page.totalElements,
               totalStatus,
               results.page.number * results.page.size + results.content.length,
+              'permit',
             )}
           >
             {errorMessage ? (
@@ -671,8 +682,8 @@ const ProvincialPermitPage = () => {
               </Table>
             ) : !loading ? (
               <EmptyState
-                title="No permits found"
-                description="No permits found for the selected criteria."
+                title="No results found"
+                description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (

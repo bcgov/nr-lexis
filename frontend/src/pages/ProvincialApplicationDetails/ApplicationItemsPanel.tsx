@@ -1702,18 +1702,22 @@ function ProvincialApplicationItemsPanel({
                 </Button>
               )}
             </div>
-            <SearchableSelect
-              id="applicationItemsPackageSelect"
-              labelText="Selected package"
-              value={selectedPackageNumber}
-              placeholder="Select package"
-              disabled={itemsBusy}
-              options={packageNumbers.map((packageNumber) => ({
-                value: packageNumber,
-                label: formatPackageNumberLabel(packageNumber),
-              }))}
-              onChange={requestPackageSelection}
-            />
+            {/* INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_PACKAGE_SELECTION): A single
+                package is identified by its card title, as in the application design. */}
+            {packageNumbers.length > 1 && (
+              <SearchableSelect
+                id="applicationItemsPackageSelect"
+                labelText="Selected package"
+                value={selectedPackageNumber}
+                placeholder="Select package"
+                disabled={itemsBusy}
+                options={packageNumbers.map((packageNumber) => ({
+                  value: packageNumber,
+                  label: formatPackageNumberLabel(packageNumber),
+                }))}
+                onChange={requestPackageSelection}
+              />
+            )}
           </div>
           {actionResultNotification('package')}
           <dl className="detail-field-grid application-items-summary">

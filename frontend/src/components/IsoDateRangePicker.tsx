@@ -1,6 +1,10 @@
 import { DatePicker, DatePickerInput } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import { isValidIsoDate } from '@/pages/shared/create-form-utils'
+import {
+  hasInvalidIsoDateRange,
+  isValidIsoDate,
+  isoDateRangeEndError,
+} from '@/pages/shared/create-form-utils'
 import { parseIsoDate } from './IsoDatePicker'
 
 type IsoDateRangePickerProps = {
@@ -31,6 +35,7 @@ export default function IsoDateRangePicker({
   const keyboardFocusRef = useRef(false)
   const calendarSelectionRef = useRef(false)
   const removeCalendarListenersRef = useRef<(() => void) | null>(null)
+  const toError = isoDateRangeEndError(fromValue, toValue, fromLabel)
   const calendarValues = useMemo(
     // Local Date objects avoid a UTC day shift in Carbon's range-input formatting.
     () => [parseIsoDate(fromValue) || '', parseIsoDate(toValue) || ''],
@@ -64,10 +69,7 @@ export default function IsoDateRangePicker({
       const input = event.target
       if (!(input instanceof HTMLInputElement)) return
       event.stopPropagation()
-      if (
-        event.type === 'keydown' &&
-        latestValuesRef.current.some((value) => !isValidIsoDate(value))
-      ) {
+      if (event.type === 'keydown' && hasInvalidIsoDateRange(...latestValuesRef.current)) {
         event.preventDefault()
       }
     }
@@ -187,8 +189,8 @@ export default function IsoDateRangePicker({
             pattern={String.raw`\d{4}-\d{2}-\d{2}`}
             data-1p-ignore="true"
             data-lpignore="true"
-            invalid={!isValidIsoDate(value)}
-            invalidText="Date must be YYYY-MM-DD"
+            invalid={index === 1 ? Boolean(toError) : !isValidIsoDate(value)}
+            invalidText={index === 1 ? toError : 'Date must be YYYY-MM-DD'}
             onChange={(event) => {
               const values: [string, string] = [...latestValuesRef.current]
               values[index] = event.target.value

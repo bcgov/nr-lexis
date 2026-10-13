@@ -515,7 +515,7 @@ describe('Provincial Application Search Actions', () => {
       resolveCount(125)
     })
 
-    expect(await screen.findAllByText('125 results found')).toHaveLength(2)
+    expect(await screen.findAllByText('125 applications found')).toHaveLength(2)
     expect(screen.getByText('8000')).toBeInTheDocument()
   })
 
@@ -535,7 +535,7 @@ describe('Provincial Application Search Actions', () => {
 
     expect(await screen.findByText('8100')).toBeInTheDocument()
     expect(
-      await screen.findAllByText('At least 10 results found — exact count unavailable'),
+      await screen.findAllByText('At least 10 applications found — exact count unavailable'),
     ).toHaveLength(2)
     expect(screen.getByText('8100')).toBeInTheDocument()
   })
@@ -820,7 +820,7 @@ describe('Provincial Application Search Actions', () => {
     expect(row.getByText('100.0')).toBeVisible()
     expect(row.getByText('2026-01-10')).toBeVisible()
     expect(screen.getByText('Application volume (m³)')).toBeVisible()
-    expect(screen.getAllByText('2 results found')).toHaveLength(2)
+    expect(screen.getAllByText('2 applications found')).toHaveLength(2)
   })
 
   it('restores and submits independently optional list-date bounds from a range control', async () => {
@@ -1191,6 +1191,46 @@ describe('Provincial Application Search Actions', () => {
       await screen.findByRole('heading', { name: 'Application search unavailable' }),
     ).toBeInTheDocument()
     expect(screen.getByText('Unable to retrieve application search results.')).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'No applications found' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'No results found' })).not.toBeInTheDocument()
+  })
+  it.each([['List date from', 'List date to']])(
+    'blocks a reversed %s range until To is corrected',
+    async (fromLabel, toLabel) => {
+      renderPage()
+      await waitFor(() => expect(mockedSearchProvincialApplications).toHaveBeenCalled())
+      const search = screen.getByRole('button', { name: 'Search' })
+      await waitFor(() => expect(search).toBeEnabled())
+      const callsBeforeEdit = mockedSearchProvincialApplications.mock.calls.length
+      const from = screen.getByLabelText(fromLabel)
+      const to = screen.getByLabelText(toLabel)
+      fireEvent.change(from, { target: { value: '2026-10-12' } })
+      fireEvent.change(to, { target: { value: '2026-10-01' } })
+      expect(from).toHaveValue('2026-10-12')
+      expect(to).toHaveValue('2026-10-01')
+      expect(to).toHaveAttribute('aria-invalid', 'true')
+      expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
+      expect(search).toBeDisabled()
+      fireEvent.submit(to.closest('form') as HTMLFormElement)
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(callsBeforeEdit)
+
+      fireEvent.change(to, { target: { value: '2026-10-12' } })
+      await waitFor(() => expect(search).toBeEnabled())
+      expect(to).not.toHaveAttribute('aria-invalid', 'true')
+      await userEvent.click(search)
+      await waitFor(() =>
+        expect(mockedSearchProvincialApplications.mock.calls.length).toBeGreaterThan(
+          callsBeforeEdit,
+        ),
+      )
+    },
+  )
+
+  it('does not request a reversed date range restored from a saved link', async () => {
+    renderPage('/provincial/application?listingFromDate=2026-10-12&listingToDate=2026-10-01')
+    await waitFor(() =>
+      expect(screen.getByLabelText('List date to')).toHaveAttribute('aria-invalid', 'true'),
+    )
+    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
+    expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
   })
 })

@@ -512,7 +512,7 @@ describe('permit creation from an exemption', () => {
     expect(within(page).getByLabelText('Expiry date')).toHaveValue('')
   })
 
-  it('matches legacy permit totals and marks active permits as pending', async () => {
+  it('shows the exemption completed total independently of visible permits and reserved balance', async () => {
     vi.mocked(fetchExemptionApplications).mockResolvedValue({
       applications: [
         {
@@ -545,7 +545,7 @@ describe('permit creation from an exemption', () => {
       },
       {
         permitNumber: '9020933',
-        permitVolume: '307.2',
+        permitVolume: '10.0',
         permitStatus: 'Complete',
         permitIssueDate: '2026-03-19',
         canViewPermit: true,
@@ -553,9 +553,10 @@ describe('permit creation from an exemption', () => {
     ])
     renderPage({
       ...activeMinisterialExemption,
-      approvedVolume: 307.2,
-      usedVolume: 307.2,
-      remainingVolume: 0,
+      approvedVolume: 100,
+      usedVolume: 50,
+      remainingVolume: 50,
+      completedPermitVolume: 30,
     })
 
     await openPermitsTab()
@@ -563,10 +564,13 @@ describe('permit creation from an exemption', () => {
     const totals = screen.getByLabelText('Exemption permit volume totals')
     expect(within(totals).queryByText('Requested volume (m³)')).not.toBeInTheDocument()
     expect(within(totals).getByText('Approved volume (m³)')).toBeInTheDocument()
-    expect(within(totals).getByText('Scale volume assigned to permits (m³)')).toBeInTheDocument()
+    expect(within(totals).getByText('Sum of completed permits (m³)')).toBeInTheDocument()
     expect(within(totals).getByText('Balance remaining (m³)')).toBeInTheDocument()
-    expect(within(totals).getAllByText('307.2')).toHaveLength(2)
-    expect(within(totals).getByText('0.0')).toBeInTheDocument()
+    expect(within(totals).getByText('100.0')).toBeInTheDocument()
+    expect(within(totals).getByText('30.0')).toBeInTheDocument()
+    expect(within(totals).getByText('50.0')).toBeInTheDocument()
+    expect(within(totals).queryByText('70.0')).not.toBeInTheDocument()
+    expect(within(totals).queryByText('10.0')).not.toBeInTheDocument()
     expect(screen.getByText('9020934 (Pending)')).toBeInTheDocument()
     expect(screen.getByText('9020933')).toBeInTheDocument()
   })

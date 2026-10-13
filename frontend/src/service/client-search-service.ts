@@ -10,13 +10,18 @@ export type ForestClientSuggestion = {
 export const searchForestClients = async (
   query: string,
   counterpartyClientNumber?: string,
+  signal?: AbortSignal,
 ): Promise<ForestClientSuggestion[]> => {
   const q = query.trim()
   if (q.length < 3 || (/^\d+$/.test(q) && q.length > 8)) return []
   const counterparty = counterpartyClientNumber?.trim() ?? ''
   const data = await apiService.getCachedData<unknown>(
     '/lexis/client-search',
-    { params: { q, ...(counterparty ? { counterpartyClientNumber: counterparty } : {}) } },
+    {
+      params: { q, ...(counterparty ? { counterpartyClientNumber: counterparty } : {}) },
+      signal,
+      timeout: 15_000,
+    },
     // Reauthorize every lookup, including after roles change within the same session.
     { ttlMs: 0 },
   )

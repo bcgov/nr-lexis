@@ -151,6 +151,7 @@ const exemptionDetail: ProvincialExemptionDetail = {
   expiryDate: '2026-12-31',
   approvedVolume: 99,
   usedVolume: 5,
+  completedPermitVolume: 3,
   remainingVolume: 94,
   otherConditions: 'none',
   blanketOic: false,
@@ -325,7 +326,7 @@ describe('Detail Quick Action Smoke', () => {
     const permitTotals = screen.getByRole('tabpanel', { name: 'Permits' })
     for (const [label, value] of [
       ['Approved volume (m³)', '99.0'],
-      ['Scale volume assigned to permits (m³)', '5.0'],
+      ['Sum of completed permits (m³)', '3.0'],
       ['Balance remaining (m³)', '94.0'],
     ]) {
       const field = within(permitTotals).getByText(label).closest('.record-field')

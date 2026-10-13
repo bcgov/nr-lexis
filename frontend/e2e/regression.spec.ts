@@ -1701,7 +1701,7 @@ test.describe('TEST IDIR admin regression', () => {
       `/provincial/application?applicationNumber=${missingApplicationNumber}`,
       /provincial application search/i,
     )
-    await expect(page.getByText('No applications found', { exact: true })).toBeVisible()
+    await expect(page.getByText('No results found', { exact: true })).toBeVisible()
 
     await expectAccessiblePage(
       page,
@@ -1714,7 +1714,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect
       .poll(() => new URL(page.url()).searchParams.get('applicationNumber'))
       .toBe(missingApplicationNumber)
-    await expect(page.getByText('No applications found', { exact: true })).toBeVisible()
+    await expect(page.getByText('No results found', { exact: true })).toBeVisible()
   })
 
   test('supports collapsible sidebar groups and collapsed group-rail navigation', async () => {

@@ -358,7 +358,7 @@ const submitApplicationSearch = async (page: Page) => {
   const searchButton = page.getByRole('button', { name: 'Search', exact: true })
   await expect(searchButton).toBeVisible()
   await searchButton.click()
-  const counts = page.getByText('2 results found', { exact: true })
+  const counts = page.getByText('2 applications found', { exact: true })
   await expect(counts).toHaveCount(2)
   await expect(counts.nth(0)).toBeVisible()
   await expect(counts.nth(1)).toBeVisible()
@@ -1266,6 +1266,104 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
   })
 
+  test('validates Federal date order and uses the shared Figma search defaults and copy', async ({
+    page,
+  }, testInfo) => {
+    await page.setViewportSize({ width: 1440, height: 1000 })
+    const searchRequests: URL[] = []
+    await page.route(/\/api\/lexis\/federal\/applications\/search(?:\/|\?|$)/, async (route) => {
+      const url = new URL(route.request().url())
+      const results =
+        url.searchParams.get('applicationNumber') === '9999999999'
+          ? []
+          : [
+              {
+                applicationNumber: 888,
+                federalApplicationNumber: 'FED-888',
+                status: 'APP',
+                client: '00021234',
+                reason: 'Surplus',
+                receivedDate: '2026-10-12',
+                listingDate: '2026-10-12',
+              },
+            ]
+      if (url.pathname.endsWith('/options')) {
+        await route.fulfill({ json: { applicationStatuses: [{ code: 'APP', name: 'Approved' }] } })
+      } else if (url.pathname.endsWith('/count')) {
+        await route.fulfill({ json: { total: results.length } })
+      } else {
+        searchRequests.push(url)
+        await route.fulfill({
+          json: {
+            results,
+            total: results.length,
+            page: 0,
+            size: Number(url.searchParams.get('size')),
+          },
+        })
+      }
+    })
+    await gotoSyntheticRoute(page, '/federal', {
+      waitUntil: 'domcontentloaded',
+      ready: page.getByRole('heading', {
+        level: 1,
+        name: 'Federal application search',
+        exact: true,
+      }),
+    })
+    await expect(
+      page.getByRole('combobox', { name: 'Application status', exact: true }),
+    ).toBeEnabled()
+    const from = page.getByRole('textbox', { name: 'List date from', exact: true })
+    const to = page.getByRole('textbox', { name: 'List date to', exact: true })
+    const search = page.getByRole('button', { name: 'Search', exact: true })
+    await from.fill('2026-10-12')
+    await to.fill('2026-10-01')
+    await to.press('Tab')
+    await expect(to).toHaveAttribute('aria-invalid', 'true')
+    await expect(
+      page.getByText('Must be on or after List date from.', { exact: true }),
+    ).toBeVisible()
+    await expect(search).toBeDisabled()
+    await to.press('Enter')
+    expect(searchRequests).toHaveLength(0)
+    await page.getByRole('heading', { name: 'Federal application search', exact: true }).click()
+    await expect(from).toHaveValue('2026-10-12')
+    await expect(to).toHaveValue('2026-10-01')
+    await testInfo.attach('reversed-date-range', {
+      body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+      contentType: 'image/png',
+    })
+
+    await to.fill('2026-10-12')
+    await to.press('Tab')
+    await expect(search).toBeEnabled()
+    await search.click()
+    await expect(page.getByText('1 application found', { exact: true })).toBeVisible()
+    expect(searchRequests[0].searchParams.get('size')).toBe('100')
+    expect(searchRequests[0].searchParams.get('listingFromDate')).toBe('2026-10-12')
+    expect(searchRequests[0].searchParams.get('listingToDate')).toBe('2026-10-12')
+    const pageSize = page.getByRole('combobox', { name: 'Items per page:' })
+    await expect(pageSize).toHaveValue('100')
+    await expect(pageSize.locator('option[value="100"]')).toHaveCount(1)
+
+    await page.getByRole('textbox', { name: 'Application number', exact: true }).fill('9999999999')
+    await search.click()
+    await expect(page.getByText('0 applications found', { exact: true })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'No results found', exact: true })).toBeVisible()
+    await expect(
+      page.getByText(
+        'No records match your search criteria. Try adjusting your filters and searching again.',
+        { exact: true },
+      ),
+    ).toBeVisible()
+    await page.getByRole('heading', { name: 'Federal application search', exact: true }).click()
+    await testInfo.attach('corrected-search-empty-state', {
+      body: await page.screenshot({ fullPage: true, animations: 'disabled' }),
+      contentType: 'image/png',
+    })
+  })
+
   test('uses the same FSPTS list-page foundation on every primary search route', async ({
     page,
   }) => {
@@ -1404,7 +1502,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(new URL((await withoutApplicant).url()).searchParams.get('ownerClientNumber')).toBe(
       '00020001',
     )
-    await expect(page.getByText('0 results found', { exact: true })).toHaveCount(2)
+    await expect(page.getByText('0 applications found', { exact: true })).toHaveCount(2)
   })
 
   test('keeps application ranges and client groups aligned without changing offer layout', async ({
@@ -1640,7 +1738,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(rowDividerStyles[0]?.borderBlockEndColor).toBe(rowDividerStyles[0]?.backgroundColor)
     expect(rowDividerStyles[1]?.borderBlockStartColor).toBe(rowDividerStyles[1]?.backgroundColor)
     expect(rowDividerStyles[1]?.borderBlockEndColor).toBe(rowDividerStyles[1]?.backgroundColor)
-    const resultCounts = page.getByText('2 results found', { exact: true })
+    const resultCounts = page.getByText('2 applications found', { exact: true })
     await expect(resultCounts).toHaveCount(2)
     for (const count of await resultCounts.all()) {
       await expect(count).toHaveCSS('font-weight', '400')

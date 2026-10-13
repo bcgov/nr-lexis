@@ -13,6 +13,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository.ClientLocationRow;
+import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository.ClientSuggestionRow;
 import java.sql.CallableStatement;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
@@ -261,6 +262,10 @@ class ClientLookupRepositoryTest {
         .contains("COALESCE(")
         .contains("AND (? IS NULL OR FC.CLIENT_NUMBER = ?)")
         .contains("EEA.EXPORT_JURISDICTION_CODE = 'F'")
+        .contains("AND FC.CLIENT_NUMBER IN (")
+        .contains("UNION")
+        .doesNotContain("EEA.OWNER_CLIENT_NUMBER = FC.CLIENT_NUMBER")
+        .doesNotContain("EEA.AGENT_CLIENT_NUMBER = FC.CLIENT_NUMBER")
         .contains("UPPER(CA.CLIENT_ACRONYM) = UPPER(?)")
         .contains("ORDER BY MATCH_RANK, UPPER(FC.CLIENT_NAME), FC.CLIENT_NUMBER")
         .endsWith("WHERE ROWNUM <= 15\n");
@@ -275,7 +280,7 @@ class ClientLookupRepositoryTest {
     verify(statement).setString(9, "Acme\\%\\_\\\\");
     verify(statement).setString(10, "00077881");
     verify(statement).setString(11, "00077881");
-    verify(statement).setInt(12, 1);
+    verify(statement).setQueryTimeout(10);
   }
 
   @Test
@@ -297,7 +302,9 @@ class ClientLookupRepositoryTest {
     ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
     verify(jdbcTemplate)
         .query(sql.capture(), any(PreparedStatementSetter.class), any(RowMapper.class));
-    assertThat(sql.getValue()).contains("FC.CLIENT_NUMBER = LPAD(?, 8, '0')");
+    assertThat(sql.getValue())
+        .contains("FC.CLIENT_NUMBER = LPAD(?, 8, '0')")
+        .doesNotContain("THE.EXPORT_EXEMPTION_APPLICATION");
     verify(statement).setInt(1, 1);
     verify(statement).setInt(3, 1);
     verify(statement).setString(4, "77881");
@@ -305,8 +312,8 @@ class ClientLookupRepositoryTest {
     verify(statement).setString(6, "77881");
     verify(statement).setInt(7, 1);
     verify(statement).setString(10, null);
+    verify(statement).setQueryTimeout(10);
     verify(statement).setString(11, null);
-    verify(statement).setInt(12, 0);
   }
 
   @Test
@@ -380,6 +387,147 @@ class ClientLookupRepositoryTest {
 
     assertThatThrownBy(() -> repository.findClientSuggestions("Acme", true, "00077881"))
         .isInstanceOf(DataAccessResourceFailureException.class);
+  }
+
+  @Test
+  void clientSuggestionsShouldApplyFederalMembershipWithoutDuplicatingClients() {
+    EmbeddedDatabase database = clientSearchDatabase();
+    try {
+      JdbcTemplate jdbcTemplate = new JdbcTemplate(database);
+      jdbcTemplate.execute(
+          """
+          INSERT INTO THE.V_CLIENT_PUBLIC VALUES
+          ('00000001', 'Forest Provincial', NULL, NULL),
+          ('00000002', 'Zulu Federal', NULL, NULL),
+          ('00000003', 'Forest Owner', NULL, NULL),
+          ('00000004', 'Forest Agent', NULL, NULL),
+          ('00000005', 'Forest Both', NULL, NULL),
+          ('00000006', 'Forest Unused', NULL, NULL),
+          ('00000007', 'Forest Person', ' Alex ', ' Q ')
+          """);
+      jdbcTemplate.execute(
+          """
+          INSERT INTO THE.CLIENT_ACRONYM VALUES
+          ('00000002', 'FOR'), ('00000003', 'FOREST'), ('00000003', 'AAA')
+          """);
+      jdbcTemplate.execute(
+          """
+          INSERT INTO THE.EXPORT_EXEMPTION_APPLICATION VALUES
+          ('P', '00000001', '00000006'),
+          ('F', '00000002', NULL), ('F', '00000003', '00000004'),
+          ('F', '00000005', '00000005'), ('F', '00000003', '00000005'),
+          ('F', '00000007', NULL), ('F', NULL, NULL)
+          """);
+      ClientLookupRepository repository = new ClientLookupRepository(jdbcTemplate);
+
+      assertThat(repository.findClientSuggestions("for", true, null))
+          .containsExactly(
+              new ClientSuggestionRow("00000002", "Zulu Federal", "FOR"),
+              new ClientSuggestionRow("00000004", "Forest Agent", null),
+              new ClientSuggestionRow("00000005", "Forest Both", null),
+              new ClientSuggestionRow("00000003", "Forest Owner", "FOREST"),
+              new ClientSuggestionRow("00000007", "Forest Person, Alex Q", null));
+      assertThat(repository.findClientSuggestions("003", true, null))
+          .containsExactly(new ClientSuggestionRow("00000003", "Forest Owner", "AAA"));
+      assertThat(repository.findClientSuggestions("00000004", true, null))
+          .containsExactly(new ClientSuggestionRow("00000004", "Forest Agent", null));
+      assertThat(repository.findClientSuggestions("00000001", true, null)).isEmpty();
+      assertThat(repository.findClientSuggestions("00000006", true, null)).isEmpty();
+      assertThat(repository.findClientSuggestions("for", true, "00000004"))
+          .containsExactly(new ClientSuggestionRow("00000004", "Forest Agent", null));
+      assertThat(repository.findClientSuggestions("for", true, "00000001")).isEmpty();
+      assertThat(repository.findClientSuggestions("00000001", false, null))
+          .containsExactly(new ClientSuggestionRow("00000001", "Forest Provincial", null));
+    } finally {
+      database.shutdown();
+    }
+  }
+
+  @Test
+  void clientSuggestionsShouldFilterAndRankBeforeApplyingLimit() {
+    EmbeddedDatabase database = clientSearchDatabase();
+    try {
+      JdbcTemplate jdbcTemplate = new JdbcTemplate(database);
+      for (int index = 1; index <= 20; index++) {
+        String clientNumber = "%08d".formatted(index);
+        jdbcTemplate.update(
+            "INSERT INTO THE.V_CLIENT_PUBLIC VALUES (?, ?, NULL, NULL)",
+            clientNumber, "Alpha %02d".formatted(index));
+        jdbcTemplate.update(
+            "INSERT INTO THE.EXPORT_EXEMPTION_APPLICATION VALUES (?, ?, NULL)",
+            index <= 5 ? "P" : "F", clientNumber);
+      }
+      jdbcTemplate.execute(
+          "INSERT INTO THE.V_CLIENT_PUBLIC VALUES ('00000099', 'Zulu Federal', NULL, NULL)");
+      jdbcTemplate.execute("INSERT INTO THE.CLIENT_ACRONYM VALUES ('00000099', 'ALPHA')");
+      jdbcTemplate.execute(
+          "INSERT INTO THE.EXPORT_EXEMPTION_APPLICATION VALUES ('F', NULL, '00000099')");
+      ClientLookupRepository repository = new ClientLookupRepository(jdbcTemplate);
+
+      List<ClientSuggestionRow> suggestions = repository.findClientSuggestions("alpha", true, null);
+
+      assertThat(suggestions).hasSize(15);
+      assertThat(suggestions.getFirst())
+          .isEqualTo(new ClientSuggestionRow("00000099", "Zulu Federal", "ALPHA"));
+      assertThat(suggestions.subList(1, 15))
+          .extracting(ClientSuggestionRow::clientNumber)
+          .containsExactly(
+              "00000006", "00000007", "00000008", "00000009", "00000010", "00000011",
+              "00000012", "00000013", "00000014", "00000015", "00000016", "00000017",
+              "00000018", "00000019");
+    } finally {
+      database.shutdown();
+    }
+  }
+
+  @Test
+  void clientSuggestionsShouldTreatWildcardCharactersAsLiteralInput() {
+    EmbeddedDatabase database = clientSearchDatabase();
+    try {
+      JdbcTemplate jdbcTemplate = new JdbcTemplate(database);
+      jdbcTemplate.update(
+          "INSERT INTO THE.V_CLIENT_PUBLIC VALUES (?, ?, NULL, NULL)",
+          "00000001", "Literal%_\\ Timber");
+      jdbcTemplate.update(
+          "INSERT INTO THE.V_CLIENT_PUBLIC VALUES (?, ?, NULL, NULL)",
+          "00000002", "LiteralXYZ Timber");
+      jdbcTemplate.execute(
+          "INSERT INTO THE.EXPORT_EXEMPTION_APPLICATION VALUES ('F', '00000001', '00000002')");
+      ClientLookupRepository repository = new ClientLookupRepository(jdbcTemplate);
+
+      assertThat(repository.findClientSuggestions("Literal%_\\", true, null))
+          .containsExactly(new ClientSuggestionRow("00000001", "Literal%_\\ Timber", null));
+    } finally {
+      database.shutdown();
+    }
+  }
+
+  private static EmbeddedDatabase clientSearchDatabase() {
+    EmbeddedDatabase database =
+        new EmbeddedDatabaseBuilder()
+            .generateUniqueName(true)
+            .setType(EmbeddedDatabaseType.H2)
+            .build();
+    JdbcTemplate jdbcTemplate = new JdbcTemplate(database);
+    jdbcTemplate.execute("SET MODE Oracle");
+    jdbcTemplate.execute("CREATE SCHEMA THE");
+    jdbcTemplate.execute(
+        """
+        CREATE TABLE THE.V_CLIENT_PUBLIC (
+          CLIENT_NUMBER VARCHAR(8) PRIMARY KEY, CLIENT_NAME VARCHAR(100),
+          LEGAL_FIRST_NAME VARCHAR(60), LEGAL_MIDDLE_NAME VARCHAR(60)
+        )
+        """);
+    jdbcTemplate.execute(
+        "CREATE TABLE THE.CLIENT_ACRONYM (CLIENT_NUMBER VARCHAR(8), CLIENT_ACRONYM VARCHAR(20))");
+    jdbcTemplate.execute(
+        """
+        CREATE TABLE THE.EXPORT_EXEMPTION_APPLICATION (
+          EXPORT_JURISDICTION_CODE VARCHAR(1), OWNER_CLIENT_NUMBER VARCHAR(8),
+          AGENT_CLIENT_NUMBER VARCHAR(8)
+        )
+        """);
+    return database;
   }
 
   private static final class FailingClientLookupRepository extends ClientLookupRepository {

@@ -4,8 +4,10 @@ import {
   greaterThanFieldError,
   greaterThanOrEqualFieldError,
   hasInvalidIsoDateValue,
+  hasInvalidIsoDateRange,
   integerFieldError,
   isValidIsoDate,
+  isoDateRangeEndError,
   joinCreateSubmitMessages,
   lessThanOrEqualFieldError,
   normalizeProvincialApplicationNumber,
@@ -31,6 +33,28 @@ describe('create-form-utils', () => {
     expect(hasInvalidIsoDateValue('', '2026-06-23')).toBe(false)
     expect(hasInvalidIsoDateValue('2026-06-23', '2026-13-23')).toBe(true)
     expect(hasInvalidIsoDateValue('not-a-date')).toBe(true)
+  })
+
+  it('accepts optional bounds and same-day ranges but rejects reversed dates', () => {
+    for (const [from, to] of [
+      ['', ''],
+      ['', '2026-10-12'],
+      ['2026-10-12', ' '],
+      ['2026-10-12', '2026-10-12'],
+      ['2026-10-01', '2026-10-12'],
+    ]) {
+      expect(hasInvalidIsoDateRange(from, to)).toBe(false)
+      expect(isoDateRangeEndError(from, to, 'List date from')).toBeUndefined()
+    }
+    expect(hasInvalidIsoDateRange('2026-10-12', '2026-10-01')).toBe(true)
+    expect(isoDateRangeEndError('2026-10-12', '2026-10-01', 'List date from')).toBe(
+      'Must be on or after List date from.',
+    )
+    expect(hasInvalidIsoDateRange('invalid', '2026-10-01')).toBe(true)
+    expect(isoDateRangeEndError('invalid', '2026-10-01', 'List date from')).toBeUndefined()
+    expect(isoDateRangeEndError('2026-10-12', '2026-02-30', 'List date from')).toBe(
+      'Date must be YYYY-MM-DD',
+    )
   })
 
   it('rejects impossible calendar dates while accepting leap days', () => {

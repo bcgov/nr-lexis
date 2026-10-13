@@ -20,6 +20,26 @@ export const isValidIsoDate = (value: string): boolean => {
 export const hasInvalidIsoDateValue = (...values: string[]): boolean =>
   values.some((value) => !isValidIsoDate(value))
 
+const isReversedIsoDateRange = (fromValue: string, toValue: string): boolean =>
+  Boolean(fromValue.trim() && toValue.trim()) &&
+  isValidIsoDate(fromValue) &&
+  isValidIsoDate(toValue) &&
+  fromValue > toValue
+
+export const hasInvalidIsoDateRange = (fromValue: string, toValue: string): boolean =>
+  hasInvalidIsoDateValue(fromValue, toValue) || isReversedIsoDateRange(fromValue, toValue)
+
+export const isoDateRangeEndError = (
+  fromValue: string,
+  toValue: string,
+  fromLabel: string,
+): string | undefined => {
+  if (!isValidIsoDate(toValue)) return 'Date must be YYYY-MM-DD'
+  return isReversedIsoDateRange(fromValue, toValue)
+    ? `Must be on or after ${fromLabel}.`
+    : undefined
+}
+
 const isPositiveNumeric = (value: string): boolean => {
   if (!value.trim()) return true
   const parsed = Number(value)

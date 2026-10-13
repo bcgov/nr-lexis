@@ -159,6 +159,15 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => expect(mockedFetchApplicationDocuments).toHaveBeenCalledWith('321'))
   })
 
+  it('identifies one package by its card title without a redundant selector', async () => {
+    renderApplicationItems()
+    await selectApplicationDetailTab('Scale')
+
+    expect(await screen.findByRole('heading', { name: 'Package PKG-1' })).toBeInTheDocument()
+    expect(screen.queryByRole('combobox', { name: 'Selected package' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add scale' })).toBeInTheDocument()
+  })
+
   it('opens a scale deep link on the Items tab and selects its package for an owner application', async () => {
     mockedFetchApplicationSummarySnapshot.mockResolvedValue({
       ...applicationSummarySnapshot,

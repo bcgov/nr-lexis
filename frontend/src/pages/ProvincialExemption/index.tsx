@@ -51,7 +51,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole, isPureExemptionApprover } from '@/context/auth/role-utils'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
-import { hasInvalidIsoDateValue } from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateRange } from '@/pages/shared/create-form-utils'
 import { batchSelectionTranslator } from '@/pages/shared/batch-selection'
 import {
   buildPageDataCacheKey,
@@ -379,7 +379,7 @@ const ProvincialExemptionPage = () => {
       (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
   const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(filters.listFromDate, filters.listToDate)
+    return hasInvalidIsoDateRange(filters.listFromDate, filters.listToDate)
   }, [filters.listFromDate, filters.listToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
@@ -428,7 +428,7 @@ const ProvincialExemptionPage = () => {
         }
       }
 
-      if (hasInvalidIsoDateValue(request.filters.listFromDate, request.filters.listToDate)) {
+      if (hasInvalidIsoDateRange(request.filters.listFromDate, request.filters.listToDate)) {
         setLoading(false)
         return false
       }
@@ -1034,6 +1034,7 @@ const ProvincialExemptionPage = () => {
           aria-label="Search results"
         >
           <SearchResultsTableFrame
+            resultName="exemption"
             loading={loading}
             loadingDescription="Loading exemption search results…"
             columnCount={SORT_COLUMNS.length + (canApproveExemption ? 1 : 0)}
@@ -1046,6 +1047,7 @@ const ProvincialExemptionPage = () => {
               results.page.totalElements,
               totalStatus,
               results.page.number * results.page.size + results.content.length,
+              'exemption',
             )}
             actions={
               canApproveExemption && selectedRowsCount > 0 ? (
@@ -1198,8 +1200,8 @@ const ProvincialExemptionPage = () => {
               </Table>
             ) : !loading ? (
               <EmptyState
-                title="No exemptions found"
-                description="No exemptions found for the selected criteria."
+                title="No results found"
+                description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
@@ -1209,8 +1211,9 @@ const ProvincialExemptionPage = () => {
                     results.page.totalElements,
                     totalStatus,
                     results.page.number * results.page.size + results.content.length,
+                    'exemption',
                   ) ??
-                    `${results.page.totalElements.toLocaleString('en-CA')} ${results.page.totalElements === 1 ? 'result' : 'results'} found`}
+                    `${results.page.totalElements.toLocaleString('en-CA')} ${results.page.totalElements === 1 ? 'exemption' : 'exemptions'} found`}
                 </div>
                 <Pagination
                   page={results.page.number + 1}

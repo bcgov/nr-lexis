@@ -32,7 +32,11 @@ import type {
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
-import { hasInvalidIsoDateValue, isValidIsoDate } from '@/pages/shared/create-form-utils'
+import {
+  hasInvalidIsoDateRange,
+  isValidIsoDate,
+  isoDateRangeEndError,
+} from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -231,12 +235,20 @@ const ProvincialOffersPage = () => {
       preferenceLoading ||
       (!offerOptionsUnavailable && defaultZoneRegionIds.length > 0))
 
+  const listingToDateError = isoDateRangeEndError(
+    filters.listingFromDate,
+    filters.listingToDate,
+    'Listing from date',
+  )
+  const withdrawalToDateError = isoDateRangeEndError(
+    filters.withdrawalFromDate,
+    filters.withdrawalToDate,
+    'Withdrawn from date',
+  )
   const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(
-      filters.listingFromDate,
-      filters.listingToDate,
-      filters.withdrawalFromDate,
-      filters.withdrawalToDate,
+    return (
+      hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate) ||
+      hasInvalidIsoDateRange(filters.withdrawalFromDate, filters.withdrawalToDate)
     )
   }, [
     filters.listingFromDate,
@@ -286,12 +298,8 @@ const ProvincialOffersPage = () => {
       }
 
       if (
-        hasInvalidIsoDateValue(
-          request.filters.listingFromDate,
-          request.filters.listingToDate,
-          request.filters.withdrawalFromDate,
-          request.filters.withdrawalToDate,
-        )
+        hasInvalidIsoDateRange(request.filters.listingFromDate, request.filters.listingToDate) ||
+        hasInvalidIsoDateRange(request.filters.withdrawalFromDate, request.filters.withdrawalToDate)
       ) {
         setLoading(false)
         return
@@ -591,8 +599,8 @@ const ProvincialOffersPage = () => {
                   id="listingToDate"
                   labelText="Listing to date"
                   value={filters.listingToDate}
-                  invalid={!isValidIsoDate(filters.listingToDate)}
-                  invalidText="Date must be YYYY-MM-DD"
+                  invalid={Boolean(listingToDateError)}
+                  invalidText={<span>{listingToDateError}</span>}
                   onChange={(value) => updateFilter('listingToDate', value)}
                 />
                 <IsoDatePicker
@@ -607,8 +615,8 @@ const ProvincialOffersPage = () => {
                   id="withdrawalToDate"
                   labelText="Withdrawn to date"
                   value={filters.withdrawalToDate}
-                  invalid={!isValidIsoDate(filters.withdrawalToDate)}
-                  invalidText="Date must be YYYY-MM-DD"
+                  invalid={Boolean(withdrawalToDateError)}
+                  invalidText={<span>{withdrawalToDateError}</span>}
                   onChange={(value) => updateFilter('withdrawalToDate', value)}
                 />
               </div>
@@ -641,6 +649,7 @@ const ProvincialOffersPage = () => {
           aria-label="Search results"
         >
           <SearchResultsTableFrame
+            resultName="offer"
             loading={loading}
             loadingDescription="Loading offer search results…"
             columnCount={SORT_COLUMNS.length}
@@ -653,6 +662,7 @@ const ProvincialOffersPage = () => {
               results.page.totalElements,
               totalStatus,
               results.page.number * results.page.size + results.content.length,
+              'offer',
             )}
             actions={
               canCreateOffer ? (
@@ -725,8 +735,8 @@ const ProvincialOffersPage = () => {
               </Table>
             ) : !loading ? (
               <EmptyState
-                title="No offers found"
-                description="No offers found for the selected criteria."
+                title="No results found"
+                description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (

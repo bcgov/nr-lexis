@@ -41,7 +41,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
-import { hasInvalidIsoDateValue } from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateRange } from '@/pages/shared/create-form-utils'
 import { batchSelectionTranslator } from '@/pages/shared/batch-selection'
 import {
   buildPageDataCacheKey,
@@ -310,7 +310,7 @@ const ProvincialApplicationPage = () => {
       (!optionsUnavailable && defaultZoneRegionIds.length > 0))
 
   const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(filters.listingFromDate, filters.listingToDate)
+    return hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate)
   }, [filters.listingFromDate, filters.listingToDate])
 
   const beginSearchRequest = useLatestRequestGuard()
@@ -356,7 +356,7 @@ const ProvincialApplicationPage = () => {
         }
       }
 
-      if (hasInvalidIsoDateValue(request.filters.listingFromDate, request.filters.listingToDate)) {
+      if (hasInvalidIsoDateRange(request.filters.listingFromDate, request.filters.listingToDate)) {
         setLoading(false)
         return
       }
@@ -870,6 +870,7 @@ const ProvincialApplicationPage = () => {
           aria-label="Search results"
         >
           <SearchResultsTableFrame
+            resultName="application"
             loading={loading}
             loadingDescription="Loading application search results…"
             columnCount={visibleResultColumns.length + (canCreateExemption ? 1 : 0)}
@@ -882,6 +883,7 @@ const ProvincialApplicationPage = () => {
               results.page.totalElements,
               totalStatus,
               results.page.number * results.page.size + results.content.length,
+              'application',
             )}
             actions={
               canCreateExemption && selectedRowsCount > 0 ? (
@@ -1033,8 +1035,8 @@ const ProvincialApplicationPage = () => {
               </Table>
             ) : !loading ? (
               <EmptyState
-                title="No applications found"
-                description="No applications found for the selected criteria."
+                title="No results found"
+                description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (
@@ -1044,8 +1046,9 @@ const ProvincialApplicationPage = () => {
                     results.page.totalElements,
                     totalStatus,
                     results.page.number * results.page.size + results.content.length,
+                    'application',
                   ) ??
-                    `${results.page.totalElements.toLocaleString('en-CA')} ${results.page.totalElements === 1 ? 'result' : 'results'} found`}
+                    `${results.page.totalElements.toLocaleString('en-CA')} ${results.page.totalElements === 1 ? 'application' : 'applications'} found`}
                 </div>
                 <Pagination
                   page={results.page.number + 1}

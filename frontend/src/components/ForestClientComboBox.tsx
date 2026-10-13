@@ -87,9 +87,10 @@ function ClientInput({
     let active = true
     const term = query.trim()
     if (disabled || value || term.length < 3) return
+    const controller = new AbortController()
     const timer = setTimeout(() => {
       setResult({ key: requestKey, items: [], status: 'loading' })
-      void searchForestClients(term, counterpartyClientNumber)
+      void searchForestClients(term, counterpartyClientNumber, controller.signal)
         .then((results) => {
           if (!active) return
           setResult({ key: requestKey, items: results, status: 'ready' })
@@ -101,6 +102,7 @@ function ClientInput({
     return () => {
       active = false
       clearTimeout(timer)
+      controller.abort()
     }
   }, [query, value, disabled, counterpartyClientNumber, retry, requestKey])
 
@@ -166,7 +168,7 @@ function ClientInput({
         aria-live="polite"
       >
         {status === 'loading' && 'Searching clients…'}
-        {status === 'ready' && items.length === 0 && 'No matching clients.'}
+        {status === 'ready' && items.length === 0 && 'No clients found'}
         {status === 'error' && (
           <>
             Unable to search clients.{' '}

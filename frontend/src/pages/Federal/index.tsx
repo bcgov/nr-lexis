@@ -29,7 +29,7 @@ import type {
   FederalApplicationSearchResponse,
 } from '@/interfaces/FederalApplicationSearch'
 import { useAuth } from '@/context/auth/useAuth'
-import { hasInvalidIsoDateValue } from '@/pages/shared/create-form-utils'
+import { hasInvalidIsoDateRange } from '@/pages/shared/create-form-utils'
 import {
   buildPageDataCacheKey,
   getPageDataCache,
@@ -170,11 +170,9 @@ const FederalPage = () => {
   )
 
   const hasDateValidationError = useMemo(() => {
-    return hasInvalidIsoDateValue(
-      filters.receivedFromDate,
-      filters.receivedToDate,
-      filters.listingFromDate,
-      filters.listingToDate,
+    return (
+      hasInvalidIsoDateRange(filters.receivedFromDate, filters.receivedToDate) ||
+      hasInvalidIsoDateRange(filters.listingFromDate, filters.listingToDate)
     )
   }, [
     filters.receivedFromDate,
@@ -224,12 +222,8 @@ const FederalPage = () => {
       }
 
       if (
-        hasInvalidIsoDateValue(
-          request.filters.receivedFromDate,
-          request.filters.receivedToDate,
-          request.filters.listingFromDate,
-          request.filters.listingToDate,
-        )
+        hasInvalidIsoDateRange(request.filters.receivedFromDate, request.filters.receivedToDate) ||
+        hasInvalidIsoDateRange(request.filters.listingFromDate, request.filters.listingToDate)
       ) {
         setLoading(false)
         return
@@ -473,6 +467,7 @@ const FederalPage = () => {
           aria-label="Search results"
         >
           <SearchResultsTableFrame
+            resultName="application"
             loading={loading}
             loadingDescription="Loading federal application search results…"
             columnCount={RESULT_COLUMNS.length}
@@ -485,6 +480,7 @@ const FederalPage = () => {
               results.page.totalElements,
               totalStatus,
               results.page.number * results.page.size + results.content.length,
+              'application',
             )}
           >
             {errorMessage ? (
@@ -536,8 +532,8 @@ const FederalPage = () => {
               </Table>
             ) : !loading ? (
               <EmptyState
-                title="No federal applications found"
-                description="No federal applications found for the selected criteria."
+                title="No results found"
+                description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
             {!errorMessage && (!loading || results.content.length > 0) && (

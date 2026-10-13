@@ -63,7 +63,7 @@ describe('ForestClientComboBox', () => {
     await tick(299)
     expect(search).not.toHaveBeenCalled()
     await tick(1)
-    expect(search).toHaveBeenCalledExactlyOnceWith('Samp', '')
+    expect(search).toHaveBeenCalledExactlyOnceWith('Samp', '', expect.any(AbortSignal))
     expect(screen.getByRole('option', { name: 'Sample Forest (SFC) · 00012345' })).toBeVisible()
   })
 
@@ -78,7 +78,7 @@ describe('ForestClientComboBox', () => {
     expect(screen.getByTestId('value')).toBeEmptyDOMElement()
     expect(input()).toHaveValue('Other')
     await tick()
-    expect(search).toHaveBeenLastCalledWith('Other', '')
+    expect(search).toHaveBeenLastCalledWith('Other', '', expect.any(AbortSignal))
   })
 
   it('selects a suggestion by keyboard', async () => {
@@ -177,12 +177,28 @@ describe('ForestClientComboBox', () => {
     render(<Harness />)
     type('Sam')
     await tick()
+    const pendingSignal = search.mock.calls[0]?.[2]
+    expect(pendingSignal?.aborted).toBe(false)
     type('Nope')
+    expect(pendingSignal?.aborted).toBe(true)
     await act(async () => resolve([sample]))
     expect(screen.queryByRole('option', { name: /Sample Forest/ })).not.toBeInTheDocument()
     search.mockResolvedValueOnce([])
     await tick()
-    expect(screen.getByRole('status')).toHaveTextContent('No matching clients.')
+    expect(screen.getByRole('status')).toHaveTextContent('No clients found')
+  })
+
+  it('aborts a pending lookup when the field unmounts', async () => {
+    search.mockReturnValueOnce(new Promise(() => {}))
+    const { unmount } = render(<Harness />)
+    type('Sam')
+    await tick()
+    const pendingSignal = search.mock.calls[0]?.[2]
+    expect(pendingSignal?.aborted).toBe(false)
+
+    unmount()
+
+    expect(pendingSignal?.aborted).toBe(true)
   })
 
   it('clears old results and ignores pending responses after the counterparty changes', async () => {
@@ -199,7 +215,7 @@ describe('ForestClientComboBox', () => {
     await act(async () => resolve([sample]))
     expect(screen.queryByRole('option', { name: /Sample Forest/ })).not.toBeInTheDocument()
     await tick()
-    expect(search).toHaveBeenLastCalledWith('Sam', '00022222')
+    expect(search).toHaveBeenLastCalledWith('Sam', '00022222', expect.any(AbortSignal))
   })
 
   it('distinguishes failure from no matches and retries the same query', async () => {
