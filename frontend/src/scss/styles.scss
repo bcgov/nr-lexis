@@ -359,6 +359,7 @@ body {
 .csp-side-nav__link:focus-visible,
 .csp-side-nav__group:focus-visible,
 .profile-panel__close:focus-visible,
+.profile-panel__action:focus-visible,
 .profile-panel__signout:focus-visible {
   outline: 2px solid var(--csp-text-inverse);
   outline-offset: -2px;
@@ -367,6 +368,7 @@ body {
 .csp-side-nav__link:focus-visible,
 .csp-side-nav__group:focus-visible,
 .profile-panel__close:focus-visible,
+.profile-panel__action:focus-visible,
 .profile-panel__signout:focus-visible {
   outline-color: var(--csp-focus);
 }
@@ -785,6 +787,14 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   overflow-wrap: anywhere;
 }
 
+.profile-panel__meta {
+  margin: 0 0 2px;
+  color: var(--csp-text-primary);
+  font-size: 0.85rem;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
 .profile-panel__preferences {
   // Keep explanatory copy within the standard 24rem drawer, including its 1px border.
   inline-size: calc(var(--csp-profile-panel-width) - 2rem - 1px);
@@ -834,6 +844,7 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   opacity: 0.6;
 }
 
+.profile-panel__action,
 .profile-panel__signout {
   align-items: center;
   display: flex;
@@ -851,11 +862,14 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   text-align: left;
 }
 
+.profile-panel__action:hover,
+.profile-panel__action:focus-visible,
 .profile-panel__signout:hover,
 .profile-panel__signout:focus-visible {
   background-color: var(--csp-layer-hover);
 }
 
+.profile-panel__action svg,
 .profile-panel__signout svg {
   color: var(--csp-interactive);
   fill: currentColor;

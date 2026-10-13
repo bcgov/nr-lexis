@@ -1024,7 +1024,7 @@ describe('Layout shell', () => {
     expect(screen.queryByRole('dialog', { name: 'My profile' })).not.toBeInTheDocument()
   })
 
-  it('shows the user and role in the profile panel without organization details', async () => {
+  it('shows the user role and available organization context in the profile panel', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -1042,12 +1042,13 @@ describe('Layout shell', () => {
 
     const profilePanel = screen.getByRole('dialog', { name: 'My profile' })
     expect(within(profilePanel).getByText('idir\\analyst (Read Only)')).toBeVisible()
-    expect(within(profilePanel).queryByText(/Organization unit/)).not.toBeInTheDocument()
-    expect(within(profilePanel).queryByText(/Forest client/)).not.toBeInTheDocument()
-    expect(
-      within(profilePanel).queryByRole('button', { name: 'Switch organization' }),
-    ).not.toBeInTheDocument()
-    expect(within(profilePanel).getByRole('button', { name: 'Log out' })).toBeVisible()
+    expect(within(profilePanel).getByText('Organization unit: 1903')).toBeVisible()
+    expect(within(profilePanel).getByText('Forest client: 00012345')).toBeVisible()
+
+    await userEvent.click(within(profilePanel).getByRole('button', { name: 'Switch organization' }))
+
+    expect(screen.getByTestId('current-path')).toHaveTextContent('/select-organization')
+    expect(document.getElementById('profile-panel')).toHaveAttribute('aria-hidden', 'true')
   })
 
   it('loads and saves the default region from the profile panel', async () => {
