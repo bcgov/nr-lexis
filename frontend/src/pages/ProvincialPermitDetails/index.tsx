@@ -1042,7 +1042,7 @@ const ProvincialPermitDetailsPage = () => {
   const navigate = useNavigate()
   const { permitNumber } = useParams()
   const detailReturnTo = readDetailReturnTo(location.state) ?? {
-    label: canPerform('/permitSearch') ? 'Provincial permit search' : 'Your landing page',
+    label: canPerform('/permitSearch') ? 'Permit search' : 'Your landing page',
     to: canPerform('/permitSearch') ? '/provincial/permit' : defaultRoute,
   }
   const [selectedPermitTabId, selectPermitTab] = useReloadPreservedTab({
@@ -3102,16 +3102,20 @@ const ProvincialPermitDetailsPage = () => {
     openPermitTab(tabId)
   }
 
-  // Field errors show on their fields. An error on a field the open tab doesn't show stays in the
-  // page notification.
-  const showPermitFieldErrors = useCallback((message: string): void => {
-    setShowPermitValidationErrors(true)
-    requestAnimationFrame(() => {
-      if (!focusFirstInvalidField(document.getElementById('permit-detail-content'))) {
-        setActionResult({ kind: 'error', message })
-      }
-    })
-  }, [])
+  // Field errors show on their fields. A tab passed here opens first, so its field can take focus.
+  // An error on a field the open tab doesn't show stays in the page notification.
+  const showPermitFieldErrors = useCallback(
+    (message: string, tabId?: PermitDetailTabId): void => {
+      setShowPermitValidationErrors(true)
+      if (tabId) selectPermitTab(tabId)
+      requestAnimationFrame(() => {
+        if (!focusFirstInvalidField(document.getElementById('permit-detail-content'))) {
+          setActionResult({ kind: 'error', message })
+        }
+      })
+    },
+    [selectPermitTab],
+  )
 
   const savePermitMutation = useCallback(
     async (includeShipping = false, deferStatusTransition = false): Promise<boolean> => {
@@ -3600,6 +3604,19 @@ const ProvincialPermitDetailsPage = () => {
       })
       return false
     }
+    // A new permit's first save also checks Shipping fields nobody has touched yet, and opens the
+    // first tab with an error.
+    if (
+      permitEditSection === 'newPermit' &&
+      (hasPermitValidationError || hasShippingValidationError)
+    ) {
+      showPermitFieldErrors(
+        Object.values(permitFieldErrors).find((error): error is string => !!error) ??
+          'Please fix validation errors before saving the permit.',
+        hasPermitValidationError ? 'permit' : 'shipping',
+      )
+      return false
+    }
     if (ministerialScaleSelectionDirty && !(await onSaveScaleSelection())) return false
     const shippingSaved = permitShippingDirty ? await onSaveShipping() : true
     if (!shippingSaved) return false
@@ -3619,6 +3636,11 @@ const ProvincialPermitDetailsPage = () => {
     permitOptionsUnavailable,
     paymentPendingReceiptRequiresCompletion,
     requiredPermitOptionsMissing,
+    permitEditSection,
+    hasPermitValidationError,
+    hasShippingValidationError,
+    permitFieldErrors,
+    showPermitFieldErrors,
     permitInvoicePolicyDirty,
     permitShippingDirty,
     permitStatusTransitionDraft,
@@ -6370,11 +6392,7 @@ const ProvincialPermitDetailsPage = () => {
         loadingDescription="Refreshing provincial permit detail…"
       />
       <Column sm={4} md={8} lg={16}>
-        <DetailBreadcrumb
-          label="Provincial permit search"
-          to="/provincial/permit"
-          returnTo={detailReturnTo}
-        />
+        <DetailBreadcrumb label="Permit search" to="/provincial/permit" returnTo={detailReturnTo} />
       </Column>
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader

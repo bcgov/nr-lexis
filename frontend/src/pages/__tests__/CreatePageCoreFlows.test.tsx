@@ -341,7 +341,7 @@ describe('Create Page Core Flows', () => {
     )
 
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Create provincial application' }),
+      screen.getByRole('heading', { level: 1, name: 'Create new application' }),
     ).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(screen.getByRole('region', { name: 'Applicant' })).toBeInTheDocument()
@@ -2753,7 +2753,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(screen.getByText('Enter offer details and save a new offer.')).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     const offerFormActions = screen.getByRole('group', { name: 'Offer form actions' })
@@ -2763,7 +2763,7 @@ describe('Create Page Core Flows', () => {
         .map((button) => button.textContent),
     ).toEqual(['Cancel', 'Save new offer'])
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Create provincial offer' }).closest('header'),
+      screen.getByRole('heading', { level: 1, name: 'Create new offer' }).closest('header'),
     ).toContainElement(offerFormActions)
     expect(within(offerFormActions).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
       'type',
@@ -3195,7 +3195,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     const applicationNumberInput = screen.getByLabelText('Application number')
     mockedValidateOfferApplication.mockClear()
     mockedFetchOfferApplicationDetails.mockClear()
@@ -3229,7 +3229,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     mockedValidateOfferApplication.mockClear()
     fireEvent.change(screen.getByLabelText('Application number'), {
       target: { value: '1e3' },
@@ -3339,7 +3339,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(await screen.findByDisplayValue('Authoritative Buyer Ltd.')).toHaveAttribute('readonly')
     expect(mockedFetchOfferClientData).toHaveBeenCalledWith('77881')
     expect(screen.queryByLabelText('Offering client number')).not.toBeInTheDocument()
@@ -3398,7 +3398,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(await screen.findByDisplayValue('Authoritative Buyer Ltd.')).toHaveAttribute('readonly')
     expect(screen.queryByLabelText('Offering client number')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('00099999')).not.toBeInTheDocument()
@@ -3463,7 +3463,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Bell Pole Company')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Dave Kohlen')).toBeInTheDocument()
@@ -3490,7 +3490,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
@@ -3523,7 +3523,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(await screen.findByDisplayValue('No Packages')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'See scale detail' })).toBeDisabled()
     expect(screen.getByDisplayValue('100.0')).toBeInTheDocument()

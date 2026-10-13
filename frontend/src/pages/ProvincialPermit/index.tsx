@@ -493,7 +493,7 @@ const ProvincialPermitPage = () => {
     <Grid fullWidth className="default-grid fullbleed-table-page provincial-permit-search-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
-          title="Provincial permit search"
+          title="Permit search"
           subtitle="Find provincial export permits and open permit details."
         />
       </Column>
@@ -662,7 +662,7 @@ const ProvincialPermitPage = () => {
                           to={withCurrentSearch(`/provincial/permit/${row.permitNumber}`)}
                           state={{
                             returnTo: {
-                              label: 'Provincial permit search',
+                              label: 'Permit search',
                               to: withCurrentSearch('/provincial/permit'),
                             },
                           }}

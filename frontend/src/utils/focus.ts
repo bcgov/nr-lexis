@@ -10,6 +10,12 @@ const FOCUSABLE_CONTROL_SELECTOR =
 
 const INVALID_FIELD_SELECTOR = '[aria-invalid="true"], [data-invalid="true"]'
 
+/** The element that has focus, or null when nothing on the page does. */
+export const focusedElement = (): HTMLElement | null =>
+  document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+    ? document.activeElement
+    : null
+
 const isHidden = (element: HTMLElement): boolean =>
   Boolean(element.closest('[hidden], [inert], [aria-hidden="true"]'))
 

@@ -771,6 +771,9 @@ describe('permit creation from an exemption', () => {
     expect(within(dialog).getByText(/created when you save it/)).toBeInTheDocument()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Apply for new permit' })).toHaveFocus(),
+    )
     expect(addPermitDetail).not.toHaveBeenCalled()
     expect(createPermitFromExemption).not.toHaveBeenCalled()
   })

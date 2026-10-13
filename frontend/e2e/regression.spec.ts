@@ -701,7 +701,7 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/admin/policies/fee', /multiplication factor/i],
   ['/admin/policies/fil', /non-appraised sec\.3 fil%/i],
   ['/provincial/review', /provincial application review/i],
-  ['/provincial/application/create', /create provincial application/i],
+  ['/provincial/application/create', /create new application/i],
   ['/provincial/application/upload', /upload application submission/i],
   ['/provincial/application', /provincial application search/i],
   ['/federal', /federal application search/i],
@@ -727,9 +727,9 @@ const retiredReportPages: Array<[path: string, heading: RegExp]> = [
 ]
 
 const createWorkflowPages: Array<[path: string, heading: RegExp]> = [
-  ['/provincial/application/create', /create provincial application/i],
+  ['/provincial/application/create', /create new application/i],
   ['/provincial/exemption/create', /create new exemption/i],
-  ['/provincial/offers/create', /create provincial offer/i],
+  ['/provincial/offers/create', /create new offer/i],
 ]
 
 const regionFilterPages: Array<[path: string, heading: RegExp]> = [
@@ -737,7 +737,7 @@ const regionFilterPages: Array<[path: string, heading: RegExp]> = [
   ['/provincial/application?region=1903,1908', /provincial application search/i],
   ['/provincial/exemption?region=1903,1908', /provincial exemption search/i],
   ['/provincial/offers?region=1903,1908', /provincial offers search/i],
-  ['/provincial/permit?region=1903,1908', /provincial permit search/i],
+  ['/provincial/permit?region=1903,1908', /permit search/i],
 ]
 
 const searchPageSizeContracts: Array<{
@@ -816,7 +816,7 @@ const searchDefaultPageSizePages: Array<{
   {
     source: 'permit search',
     pagePath: '/provincial/permit?permitNumber=LEXIS-E2E-MISSING',
-    heading: /provincial permit search/i,
+    heading: /permit search/i,
     searchPath: '/api/lexis/permits/search',
   },
 ]
@@ -860,7 +860,7 @@ const deferredSearchCountPages: Array<{
   {
     source: 'permit search',
     pagePath: '/provincial/permit?page=1&pageSize=10',
-    heading: /provincial permit search/i,
+    heading: /permit search/i,
     countPath: '/api/lexis/permits/search/count',
   },
 ]
@@ -2620,11 +2620,7 @@ test.describe('TEST IDIR admin regression', () => {
       isoDatePattern,
     )
 
-    await expectAccessiblePage(
-      page,
-      '/provincial/application/create',
-      /create provincial application/i,
-    )
+    await expectAccessiblePage(page, '/provincial/application/create', /create new application/i)
     const today = formatBusinessIsoDate()
 
     await page.getByRole('tab', { name: 'Application' }).click()
@@ -2670,11 +2666,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('shows create application tabs and guards record-dependent actions', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(
-      page,
-      '/provincial/application/create',
-      /create provincial application/i,
-    )
+    await expectAccessiblePage(page, '/provincial/application/create', /create new application/i)
 
     for (const tabName of ['Applicant', 'Application', 'Scale', 'Documents', 'Remarks', 'Offers']) {
       await expect(page.getByRole('tab', { name: tabName })).toBeVisible()
@@ -4240,7 +4232,7 @@ test.describe('TEST IDIR admin regression', () => {
       await test.step('find the linked permit by uppercase and lowercase package number', () =>
         expectLowercasePackageSearch(page, packageNumber, {
           pagePath: '/provincial/permit',
-          heading: /provincial permit search/i,
+          heading: /permit search/i,
           searchPath: '/api/lexis/permits/search',
           numberField: 'permitNumber',
           recordNumber: String(permitNumber),

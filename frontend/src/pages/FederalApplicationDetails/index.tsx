@@ -1251,6 +1251,27 @@ const FederalApplicationDetailsPage = () => {
     )
   }
 
+  const addFederalRemarkButton =
+    canMutateFederalApplication && !isEditingFederalRemarks ? (
+      <Button
+        ref={sections.editButtonRef('new-remark')}
+        kind="tertiary"
+        size="md"
+        onClick={() =>
+          sections.startEditing('new-remark', () => {
+            setRemarkDraft('')
+            setEditingRemarkId(null)
+            setRemarkValidationMessage('')
+          })
+        }
+      >
+        Add remark
+      </Button>
+    ) : undefined
+  // A tab with nothing in it shows its empty state on the tab background, without a card.
+  const federalRemarksEmpty =
+    !remarksErrorMessage && remarkRows.length === 0 && !isEditingFederalRemarks
+
   return (
     <Grid fullWidth className="default-grid detail-page-grid">
       <Column sm={4} md={8} lg={16}>
@@ -1787,12 +1808,16 @@ const FederalApplicationDetailsPage = () => {
                   </Grid>
                 </TabPanel>
 
-                <TabPanel className="application-detail-tab-panel">
+                <TabPanel
+                  className={`application-detail-tab-panel${
+                    detail.offers.length === 0 ? ' application-detail-tab-panel--empty' : ''
+                  }`}
+                >
                   <Grid fullWidth className="application-detail-tab-grid">
                     <Column sm={4} md={8} lg={16}>
-                      <Tile>
-                        <h2 className="detail-tile-title">Offers</h2>
-                        {detail.offers.length > 0 ? (
+                      {detail.offers.length > 0 ? (
+                        <Tile>
+                          <h2 className="detail-tile-title">Offers</h2>
                           <TableFrame ariaLabel="Federal application offers">
                             <Table size="md" useZebraStyles>
                               <TableHead>
@@ -1833,151 +1858,155 @@ const FederalApplicationDetailsPage = () => {
                               </TableBody>
                             </Table>
                           </TableFrame>
-                        ) : (
-                          <EmptyState
-                            title="No offers found"
-                            description="No purchase offers are linked to this federal application."
-                            headingLevel={3}
-                          />
-                        )}
-                      </Tile>
+                        </Tile>
+                      ) : (
+                        <EmptyState
+                          title="No offers found"
+                          description="No purchase offers are linked to this federal application."
+                          headingLevel={2}
+                          variant="tab"
+                        />
+                      )}
                     </Column>
                   </Grid>
                 </TabPanel>
 
                 {canViewFederalRemarks && (
-                  <TabPanel className="application-detail-tab-panel">
+                  <TabPanel
+                    className={`application-detail-tab-panel${
+                      federalRemarksEmpty ? ' application-detail-tab-panel--empty' : ''
+                    }`}
+                  >
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
-                        <Tile
-                          ref={
-                            editingRemarkSection
-                              ? sections.sectionRef(editingRemarkSection)
-                              : undefined
-                          }
-                          className="application-detail-section application-detail-remarks"
-                        >
-                          <div className="detail-section-card__header">
-                            <h2 className="detail-tile-title">Remarks</h2>
-                            {canMutateFederalApplication && !isEditingFederalRemarks && (
-                              <Button
-                                ref={sections.editButtonRef('new-remark')}
-                                kind="tertiary"
-                                size="md"
-                                onClick={() =>
-                                  sections.startEditing('new-remark', () => {
-                                    setRemarkDraft('')
-                                    setEditingRemarkId(null)
-                                    setRemarkValidationMessage('')
-                                  })
-                                }
-                              >
-                                Add remark
-                              </Button>
-                            )}
-                          </div>
-                          {canMutateFederalApplication && isEditingFederalRemarks && (
-                            <div ref={remarkFormRef} className="legacy-search-actions">
-                              <TextArea
-                                id="federalApplicationRemark"
-                                labelText={requiredLabel(
-                                  editingRemarkId ? `Edit remark ${editingRemarkId}` : 'New remark',
-                                )}
-                                aria-required="true"
-                                maxCount={250}
-                                value={remarkDraft}
-                                invalid={!!remarkValidationMessage}
-                                invalidText={fieldErrorText(remarkValidationMessage)}
-                                onChange={(event) => {
-                                  setRemarkDraft(event.target.value)
-                                  if (remarkValidationMessage) {
-                                    setRemarkValidationMessage('')
-                                  }
-                                }}
-                              />
-                              <Button
-                                kind="ghost"
-                                size="md"
-                                disabled={isSavingRemark}
-                                onClick={sections.cancelEditing}
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                kind="primary"
-                                size="md"
-                                disabled={isSavingRemark}
-                                renderIcon={isSavingRemark ? PendingIcon : undefined}
-                                onClick={() => void onSaveRemark()}
-                              >
-                                {isSavingRemark
-                                  ? 'Saving…'
-                                  : editingRemarkId
-                                    ? 'Update remark'
-                                    : 'Save remark'}
-                              </Button>
+                        {federalRemarksEmpty ? (
+                          <EmptyState
+                            title="No remarks found"
+                            description="No remarks have been added to this federal application."
+                            action={addFederalRemarkButton}
+                            headingLevel={2}
+                            variant="tab"
+                          />
+                        ) : (
+                          <Tile
+                            ref={
+                              editingRemarkSection
+                                ? sections.sectionRef(editingRemarkSection)
+                                : undefined
+                            }
+                            className="application-detail-section application-detail-remarks"
+                          >
+                            <div className="detail-section-card__header">
+                              <h2 className="detail-tile-title">Remarks</h2>
+                              {addFederalRemarkButton}
                             </div>
-                          )}
-                          {remarksErrorMessage ? (
-                            <EmptyState
-                              title="Remarks unavailable"
-                              description={remarksErrorMessage}
-                              headingLevel={3}
-                              role="alert"
-                            />
-                          ) : remarkRows.length > 0 ? (
-                            <TableFrame ariaLabel="Federal application remarks">
-                              <Table size="md" useZebraStyles>
-                                <TableHead>
-                                  <TableRow>
-                                    <TableHeader>Date</TableHeader>
-                                    <TableHeader>User</TableHeader>
-                                    <TableHeader>Remark</TableHeader>
-                                    {canMutateFederalApplication && (
-                                      <TableHeader>Actions</TableHeader>
-                                    )}
-                                  </TableRow>
-                                </TableHead>
-                                <TableBody>
-                                  {remarkRows.map((item) => (
-                                    <TableRow key={item.remarkId}>
-                                      <TableCell>{formatBusinessDateTime(item.date)}</TableCell>
-                                      <TableCell>{displayValue(item.user)}</TableCell>
-                                      <TableCell>{item.remark}</TableCell>
+                            {canMutateFederalApplication && isEditingFederalRemarks && (
+                              <div ref={remarkFormRef} className="legacy-search-actions">
+                                <TextArea
+                                  id="federalApplicationRemark"
+                                  labelText={requiredLabel(
+                                    editingRemarkId
+                                      ? `Edit remark ${editingRemarkId}`
+                                      : 'New remark',
+                                  )}
+                                  aria-required="true"
+                                  maxCount={250}
+                                  value={remarkDraft}
+                                  invalid={!!remarkValidationMessage}
+                                  invalidText={fieldErrorText(remarkValidationMessage)}
+                                  onChange={(event) => {
+                                    setRemarkDraft(event.target.value)
+                                    if (remarkValidationMessage) {
+                                      setRemarkValidationMessage('')
+                                    }
+                                  }}
+                                />
+                                <Button
+                                  kind="ghost"
+                                  size="md"
+                                  disabled={isSavingRemark}
+                                  onClick={sections.cancelEditing}
+                                >
+                                  Cancel
+                                </Button>
+                                <Button
+                                  kind="primary"
+                                  size="md"
+                                  disabled={isSavingRemark}
+                                  renderIcon={isSavingRemark ? PendingIcon : undefined}
+                                  onClick={() => void onSaveRemark()}
+                                >
+                                  {isSavingRemark
+                                    ? 'Saving…'
+                                    : editingRemarkId
+                                      ? 'Update remark'
+                                      : 'Save remark'}
+                                </Button>
+                              </div>
+                            )}
+                            {remarksErrorMessage ? (
+                              <EmptyState
+                                title="Remarks unavailable"
+                                description={remarksErrorMessage}
+                                headingLevel={3}
+                                role="alert"
+                              />
+                            ) : remarkRows.length > 0 ? (
+                              <TableFrame ariaLabel="Federal application remarks">
+                                <Table size="md" useZebraStyles>
+                                  <TableHead>
+                                    <TableRow>
+                                      <TableHeader>Date</TableHeader>
+                                      <TableHeader>User</TableHeader>
+                                      <TableHeader>Remark</TableHeader>
                                       {canMutateFederalApplication && (
-                                        <TableCell>
-                                          <Button
-                                            ref={sections.editButtonRef(`remark-${item.remarkId}`)}
-                                            kind="ghost"
-                                            size="md"
-                                            onClick={() =>
-                                              sections.startEditing(
-                                                `remark-${item.remarkId}`,
-                                                () => {
-                                                  setEditingRemarkId(item.remarkId)
-                                                  setRemarkDraft(item.remark)
-                                                  setRemarkValidationMessage('')
-                                                },
-                                              )
-                                            }
-                                          >
-                                            Edit
-                                          </Button>
-                                        </TableCell>
+                                        <TableHeader>Actions</TableHeader>
                                       )}
                                     </TableRow>
-                                  ))}
-                                </TableBody>
-                              </Table>
-                            </TableFrame>
-                          ) : (
-                            <EmptyState
-                              title="No remarks found"
-                              description="No remarks have been added to this federal application."
-                              headingLevel={3}
-                            />
-                          )}
-                        </Tile>
+                                  </TableHead>
+                                  <TableBody>
+                                    {remarkRows.map((item) => (
+                                      <TableRow key={item.remarkId}>
+                                        <TableCell>{formatBusinessDateTime(item.date)}</TableCell>
+                                        <TableCell>{displayValue(item.user)}</TableCell>
+                                        <TableCell>{item.remark}</TableCell>
+                                        {canMutateFederalApplication && (
+                                          <TableCell>
+                                            <Button
+                                              ref={sections.editButtonRef(
+                                                `remark-${item.remarkId}`,
+                                              )}
+                                              kind="ghost"
+                                              size="md"
+                                              onClick={() =>
+                                                sections.startEditing(
+                                                  `remark-${item.remarkId}`,
+                                                  () => {
+                                                    setEditingRemarkId(item.remarkId)
+                                                    setRemarkDraft(item.remark)
+                                                    setRemarkValidationMessage('')
+                                                  },
+                                                )
+                                              }
+                                            >
+                                              Edit
+                                            </Button>
+                                          </TableCell>
+                                        )}
+                                      </TableRow>
+                                    ))}
+                                  </TableBody>
+                                </Table>
+                              </TableFrame>
+                            ) : (
+                              <EmptyState
+                                title="No remarks found"
+                                description="No remarks have been added to this federal application."
+                                headingLevel={3}
+                              />
+                            )}
+                          </Tile>
+                        )}
                       </Column>
                     </Grid>
                   </TabPanel>

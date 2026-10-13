@@ -352,4 +352,34 @@ describe('Federal application detail form behaviour', () => {
     expect(await screen.findByText('Federal application remark saved.')).toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add remark' })).toHaveFocus())
   })
+
+  it('shows empty Offers and Remarks tabs without a card and keeps Add remark in reach', async () => {
+    mockedFetchFederalApplicationRemarks.mockResolvedValue([])
+    renderPage()
+
+    await selectTab('Offers')
+    const offersEmpty = (
+      await screen.findByRole('heading', { name: 'No offers found', level: 2 })
+    ).closest('.lexis-empty-state')
+    expect(offersEmpty).toHaveClass('lexis-empty-state--tab')
+    expect(offersEmpty?.closest('.cds--tile')).toBeNull()
+    expect(offersEmpty?.closest('.cds--tab-content')).toHaveClass(
+      'application-detail-tab-panel--empty',
+    )
+
+    await selectTab('Remarks')
+    const remarksEmpty = (
+      await screen.findByRole('heading', { name: 'No remarks found', level: 2 })
+    ).closest('.lexis-empty-state') as HTMLElement
+    expect(remarksEmpty).toHaveClass('lexis-empty-state--tab')
+    expect(remarksEmpty.closest('.cds--tile')).toBeNull()
+    expect(remarksEmpty.closest('.cds--tab-content')).toHaveClass(
+      'application-detail-tab-panel--empty',
+    )
+
+    await userEvent.click(within(remarksEmpty).getByRole('button', { name: 'Add remark' }))
+    expect(await screen.findByLabelText('New remark')).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add remark' })).toHaveFocus())
+  })
 })

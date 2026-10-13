@@ -763,7 +763,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
   })
 
-  it('edits agent details using the legacy editable fields', async () => {
+  it('keeps the saved agent client and edits its location and contact', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -795,7 +795,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     agentControls = within(getAgentDetailsTile())
 
-    expect(agentControls.getByLabelText('Agent client')).toHaveValue('00033344')
+    expect(agentControls.queryByLabelText('Agent client')).not.toBeInTheDocument()
+    const savedAgentClient = agentControls.getByText('Agent client').closest('.detail-field-item')
+    expect(within(savedAgentClient as HTMLElement).getByText(/00033344$/)).toBeInTheDocument()
     expect(within(getOwnerClientDetailsTile()).getByLabelText("I'm an agent")).toBeChecked()
 
     await chooseComboBoxOption(
@@ -836,6 +838,32 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.getByText('The application was saved.')).toBeInTheDocument()
   })
 
+  it("keeps the saved agent client when I'm an agent is cleared and checked again", async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await selectApplicationDetailTab('Applicant')
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    const agentChoice = ownerControls.getByLabelText("I'm an agent")
+    await userEvent.click(agentChoice)
+    await userEvent.click(agentChoice)
+
+    const agentControls = within(getAgentDetailsTile())
+    expect(agentControls.queryByLabelText('Agent client')).not.toBeInTheDocument()
+    const savedAgentClient = agentControls.getByText('Agent client').closest('.detail-field-item')
+    expect(within(savedAgentClient as HTMLElement).getByText(/00033344$/)).toBeInTheDocument()
+  })
+
   it('cancels agent edits without changing the persisted summary', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -857,8 +885,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       }),
     )
     agentControls = within(getAgentDetailsTile())
-    fireEvent.change(agentControls.getByLabelText('Agent client'), {
-      target: { value: '00099988' },
+    await waitFor(() =>
+      expect(agentControls.getByRole('textbox', { name: 'Contact name' })).toBeEnabled(),
+    )
+    fireEvent.change(agentControls.getByRole('textbox', { name: 'Contact name' }), {
+      target: { value: 'Discarded Agent Contact' },
     })
     await userEvent.click(
       within(getOwnerClientDetailsTile()).getByRole('button', { name: 'Cancel' }),
@@ -867,6 +898,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     agentControls = within(getAgentDetailsTile())
+    expect(agentControls.queryByText('Discarded Agent Contact')).not.toBeInTheDocument()
     expect(agentControls.queryByLabelText('Agent client')).not.toBeInTheDocument()
     const agentClientField = agentControls
       .getByText('Agent client')

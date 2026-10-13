@@ -1,5 +1,5 @@
 import { DatePicker, DatePickerInput } from '@carbon/react'
-import { type ReactNode, useEffect, useRef } from 'react'
+import { type ComponentProps, type ReactNode, useEffect, useRef } from 'react'
 import { isValidIsoDate } from '@/pages/shared/create-form-utils'
 import { fieldErrorText } from '@/utils/field-error'
 
@@ -12,6 +12,26 @@ export const parseIsoDate = (value: string): Date | false => {
   const parsedDate = new Date(year, month - 1, day)
   if (year < 100) parsedDate.setFullYear(year)
   return parsedDate
+}
+
+type CalendarOpenHook = NonNullable<ComponentProps<typeof DatePicker>['onOpen']>
+
+/**
+ * The calendar is placed under its field when it opens. A field that is still moving then, such
+ * as one in a side panel that is sliding in, would leave the calendar behind, so the calendar is
+ * placed again once that motion ends.
+ */
+const placeCalendarAfterMotion: CalendarOpenHook = (_dates, _value, calendar) => {
+  const field = calendar._positionElement
+  const motion =
+    document.getAnimations?.().filter((animation) => {
+      const target = animation.effect instanceof KeyframeEffect ? animation.effect.target : null
+      return target?.contains(field)
+    }) ?? []
+  if (motion.length === 0) return
+  void Promise.allSettled(motion.map((animation) => animation.finished)).then(() => {
+    if (calendar.isOpen) calendar._positionCalendar()
+  })
 }
 
 type IsoDatePickerProps = {
@@ -51,6 +71,7 @@ export default function IsoDatePicker({
       allowInput
       parseDate={parseIsoDate}
       value={flatpickrValue}
+      onOpen={placeCalendarAfterMotion}
       onChange={(_selectedDates, dateString) => {
         const latestInputValue = latestInputValueRef.current
         if (!dateString && latestInputValue.trim() && !isValidIsoDate(latestInputValue)) {

@@ -997,7 +997,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       within(pageHeader as HTMLElement).queryByText('Check and manage this provincial permit'),
     ).not.toBeInTheDocument()
     expect(within(pageHeader as HTMLElement).getByText(/^Author: /)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to Provincial permit search' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Back to Permit search' })).toHaveAttribute(
       'href',
       '/provincial/permit',
     )
@@ -7446,6 +7446,38 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitShipping.mock.invocationCallOrder[0]).toBeLessThan(
       mockedUpdatePermitDetail.mock.invocationCallOrder[0],
     )
+  })
+
+  it("checks a new Ministerial permit's untouched Shipping fields before saving", async () => {
+    configureMinisterialActivePermit({
+      destinationCompanyName: '',
+      destinationCountryCode: '',
+      transportTypeCode: '',
+      transportName: '',
+      estimatedShippingDate: '',
+      portOfExportCode: '',
+    })
+    render(
+      <MemoryRouter
+        initialEntries={[{ pathname: '/provincial/permit/777', state: { permitCreated: true } }]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.type(await screen.findByLabelText('Remarks'), ' updated')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await waitFor(() => expect(screen.getByLabelText('Purchaser')).toHaveFocus())
+    expect(screen.getByRole('tab', { name: 'Shipping' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Purchaser')).toHaveAttribute('aria-invalid', 'true')
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
   })
 
   it('asks before leaving a tab with unsaved changes and edits one section at a time', async () => {

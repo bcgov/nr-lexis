@@ -1543,7 +1543,7 @@ const ProvincialApplicationCreatePage = () => {
     <Grid fullWidth className="default-grid create-page-grid provincial-application-create-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
-          title="Create provincial application"
+          title="Create new application"
           focusTitle
           actions={
             <div

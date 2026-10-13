@@ -593,10 +593,39 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.type(remarks, 'Unsaved reason')
     fireEvent.keyDown(remarks, { key: 'Escape', code: 'Escape', keyCode: 27, which: 27 })
 
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Keep editing',
+      }),
+    )
+    await waitFor(() => expect(remarks).toHaveFocus())
+    expect(remarks).toHaveValue('Unsaved reason')
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Close' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    )
+
     await waitFor(() => expect(launcher).toHaveFocus())
     expect(
       screen.queryByRole('complementary', { name: 'Update application 1000123' }),
     ).not.toBeInTheDocument()
+    await userEvent.click(launcher)
+    expect(
+      within(
+        screen.getByRole('complementary', { name: 'Update application 1000123' }),
+      ).getByLabelText('Remarks'),
+    ).toHaveValue('')
+    await userEvent.click(
+      within(screen.getByRole('complementary', { name: 'Update application 1000123' })).getByRole(
+        'button',
+        { name: 'Cancel' },
+      ),
+    )
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    await waitFor(() => expect(launcher).toHaveFocus())
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeEnabled()
@@ -642,6 +671,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(remarks).toHaveValue('Draft reason')
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
     await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     await waitFor(() => expect(launcher).toHaveFocus())
   })
 
@@ -754,6 +784,7 @@ describe('Provincial Review Action State Smoke', () => {
         { name: 'Cancel' },
       ),
     )
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[1])
 
     expect(

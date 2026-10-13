@@ -817,6 +817,7 @@ describe('Admin upload workflow smoke', () => {
     expect(emptyReviewButton).toBeEnabled()
     await userEvent.click(emptyReviewButton)
     expect(screen.getByText('Please upload a file before continuing')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Choose files for Submission file' })).toHaveFocus()
     expect(mockedValidateApplicationSubmissionUpload).not.toHaveBeenCalled()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
     expect(screen.queryByRole('heading', { name: 'Submission summary' })).not.toBeInTheDocument()

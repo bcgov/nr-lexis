@@ -2,6 +2,7 @@ import { Button, FeatureFlags, Loading } from '@carbon/react'
 import { useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { AppNotification } from '@/components/AppNotification'
 import Modal from '@/components/Modal'
+import { focusedElement } from '@/utils/focus'
 import { genericActionFailureMessage } from '@/utils/notification-messages'
 
 import './ConfirmationModal.css'
@@ -62,6 +63,12 @@ const ConfirmationModal = ({
   const generatedId = useId().replaceAll(':', '')
   const cancelButtonId = `lexis-confirmation-cancel-${generatedId}`
   const descriptionId = `lexis-confirmation-description-${generatedId}`
+  // The control that had focus as the dialog opened, before the dialog moves focus inside.
+  const openerRef = useRef<HTMLElement | null>(null)
+
+  useLayoutEffect(() => {
+    if (open) openerRef.current = focusedElement()
+  }, [open])
 
   useLayoutEffect(() => {
     if (!open || !description) return
@@ -73,8 +80,13 @@ const ConfirmationModal = ({
     return () => dialog?.removeAttribute('aria-describedby')
   }, [description, descriptionId, open])
 
-  const closeAndRestoreFocus = () => {
-    const launcherButton = launcherButtonRef?.current
+  // Without a launcherButtonRef, dismissing the dialog returns focus to the control that opened it.
+  const closeAndRestoreFocus = (dismissed: boolean) => {
+    const launcherButton = launcherButtonRef
+      ? launcherButtonRef.current
+      : dismissed
+        ? openerRef.current
+        : null
     onClose()
     if (launcherButton) {
       window.setTimeout(() => launcherButton.focus())
@@ -84,14 +96,14 @@ const ConfirmationModal = ({
   const requestClose = () => {
     if (pending) return
     setFailureMessage('')
-    closeAndRestoreFocus()
+    closeAndRestoreFocus(true)
   }
 
   const requestCancel = () => {
     if (pending) return
     setFailureMessage('')
     onCancel?.()
-    closeAndRestoreFocus()
+    closeAndRestoreFocus(true)
   }
 
   const confirm = async () => {
@@ -101,7 +113,7 @@ const ConfirmationModal = ({
     setPending(true)
     try {
       await onConfirm()
-      closeAndRestoreFocus()
+      closeAndRestoreFocus(false)
     } catch (error) {
       if (onError) {
         onError(error)

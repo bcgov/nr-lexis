@@ -1,5 +1,6 @@
 import { useCallback, useRef, useState, type ReactNode } from 'react'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import { focusedElement } from '@/utils/focus'
 
 export const DISCARD_CHANGES_TITLE = 'Discard changes?'
 export const DISCARD_CHANGES_DESCRIPTION = 'Your changes will be lost.'
@@ -66,11 +67,6 @@ const DiscardChangesModal = ({
 
 export default DiscardChangesModal
 
-const activeElement = (): HTMLElement | null =>
-  document.activeElement instanceof HTMLElement && document.activeElement !== document.body
-    ? document.activeElement
-    : null
-
 /**
  * Runs an action straight away when nothing has changed, and asks "Discard changes?" first when
  * something has. Render `discardModal` once on the page.
@@ -92,7 +88,7 @@ export const useDiscardPrompt = (
         action()
         return
       }
-      returnFocusRef.current = getReturnFocus?.() ?? activeElement()
+      returnFocusRef.current = getReturnFocus?.() ?? focusedElement()
       setPendingAction({ run: action })
     },
     [getReturnFocus, isDirty],

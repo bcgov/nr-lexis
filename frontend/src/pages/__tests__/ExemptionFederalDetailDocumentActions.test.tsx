@@ -2727,12 +2727,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Offers')
     expect(
-      await screen.findByRole('heading', { name: 'No offers found', level: 3 }),
+      await screen.findByRole('heading', { name: 'No offers found', level: 2 }),
     ).toBeInTheDocument()
 
     await selectDetailTab('Remarks')
     expect(
-      await screen.findByRole('heading', { name: 'No remarks found', level: 3 }),
+      await screen.findByRole('heading', { name: 'No remarks found', level: 2 }),
     ).toBeInTheDocument()
 
     await selectDetailTab('Documents')

@@ -27,6 +27,7 @@ import {
 } from '@/service/provincial-exemption-detail-service'
 import { formatBusinessIsoDate, formatIsoDateLabel } from '@/utils/date'
 import { fieldErrorText } from '@/utils/field-error'
+import { focusedElement } from '@/utils/focus'
 import { isValidEmail } from '@/utils/text'
 import { isClientErrorResponse } from '@/utils/http-error'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
@@ -111,6 +112,8 @@ const ExemptionApprovalModal = ({
   onBusyChange,
 }: Props) => {
   const modalRef = useRef<HTMLDivElement>(null)
+  // The control that opened the dialog, captured before the dialog moves focus inside.
+  const [opener] = useState(focusedElement)
   const [touchedEmails, setTouchedEmails] = useState<Record<string, boolean>>({})
   const [numbers] = useState(exemptionNumbers)
   const [approvalDate] = useState(formatBusinessIsoDate)
@@ -205,8 +208,12 @@ const ExemptionApprovalModal = ({
   }
   const close = () => {
     if (pendingRef.current) return
-    if (approved) finish(approved)
-    else onClose()
+    if (approved) {
+      finish(approved)
+      return
+    }
+    onClose()
+    if (opener) window.setTimeout(() => opener.focus())
   }
   const focusFirstError = () => {
     const row = rowsNeedingInput[0]

@@ -1852,7 +1852,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       waitUntil: 'domcontentloaded',
       ready: page.getByRole('heading', {
         level: 1,
-        name: 'Create provincial application',
+        name: 'Create new application',
         exact: true,
       }),
     })
@@ -1884,7 +1884,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       }),
     )
     await gotoSyntheticRoute(page, '/provincial/application/create', {
-      ready: page.getByRole('heading', { name: 'Create provincial application', exact: true }),
+      ready: page.getByRole('heading', { name: 'Create new application', exact: true }),
     })
     await expect(page.getByRole('button', { name: 'Save application', exact: true })).toBeVisible()
     await expect(page.getByRole('combobox', { name: 'Client', exact: true })).toBeVisible()
@@ -2483,7 +2483,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('keeps record summaries and footer actions within the form', async ({ page }, testInfo) => {
     const routes = [
-      ['/provincial/offers/create', 'Create provincial offer'],
+      ['/provincial/offers/create', 'Create new offer'],
       ['/provincial/exemption/create', 'Create new exemption'],
       ['/provincial/offers/81001', 'Offer 81001'],
     ]
@@ -2582,11 +2582,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/provincial/offers/create', {
       waitUntil: 'domcontentloaded',
-      ready: page.getByRole('heading', { level: 1, name: 'Create provincial offer', exact: true }),
+      ready: page.getByRole('heading', { level: 1, name: 'Create new offer', exact: true }),
     })
 
     await expect(
-      page.getByRole('heading', { level: 1, name: 'Create provincial offer' }),
+      page.getByRole('heading', { level: 1, name: 'Create new offer' }),
     ).toBeVisible()
     const formCard = page.locator('.provincial-offer-create.create-form-tile')
     const sections = formCard.locator('.create-form-section')
@@ -2675,7 +2675,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
   }) => {
     await page.setViewportSize({ width: 780, height: 999 })
     await gotoSyntheticRoute(page, '/provincial/offers/create', {
-      ready: page.getByRole('heading', { level: 1, name: 'Create provincial offer', exact: true }),
+      ready: page.getByRole('heading', { level: 1, name: 'Create new offer', exact: true }),
     })
     const applicationNumber = page.getByLabel('Application number', { exact: true })
     for (let attempt = 0; attempt < 2; attempt += 1) {
@@ -2695,7 +2695,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
   test('keeps an impossible typed date visible for correction after blur', async ({ page }) => {
     await gotoSyntheticRoute(page, '/provincial/offers/create', {
       waitUntil: 'domcontentloaded',
-      ready: page.getByRole('heading', { level: 1, name: 'Create provincial offer', exact: true }),
+      ready: page.getByRole('heading', { level: 1, name: 'Create new offer', exact: true }),
     })
 
     const dateInput = page.getByLabel('TEAC review date')

@@ -24,6 +24,7 @@ import { ActionResultNotifications } from '@/components/ActionResultNotification
 import { actionResultText, type ActionResult } from '@/utils/action-result'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import DetailSidePanel from '@/components/DetailSidePanel'
+import { useDiscardPrompt } from '@/components/DiscardChangesModal'
 import EmptyState from '@/components/EmptyState'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import PageHeader from '@/components/PageHeader'
@@ -33,6 +34,7 @@ import AuthoritativeOptionsUnavailableNotification from '@/components/Authoritat
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
 import StatusTag from '@/components/StatusTag'
+import UnsavedChangesGuard from '@/components/UnsavedChangesGuard'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import type {
   ApplicationReviewSearchFilters,
@@ -710,6 +712,17 @@ const ProvincialReviewPage = () => {
     setLoadingRejectEmail(false)
   }, [])
 
+  // The panel opens with Rejected selected, no remark and no status email.
+  const rejectDraftDirty =
+    Boolean(rejectApplicationNumber) &&
+    (rejectStatusCode !== REJECT_STATUS_CODE || rejectRemark !== '' || sendRejectEmail)
+  const { confirmDiscard: confirmRejectDiscard, discardModal: rejectDiscardModal } =
+    useDiscardPrompt(rejectDraftDirty)
+  const requestCloseRejectPanel = () => {
+    if (submittingReject) return
+    confirmRejectDiscard(closeRejectPanel)
+  }
+
   const loadRejectEmail = useCallback(async (applicationNumber: string) => {
     const requestId = ++rejectEmailRequestRef.current
     setReviewActionResults([])
@@ -1195,13 +1208,13 @@ const ProvincialReviewPage = () => {
         fallbackFocusSelector=".provincial-review-search-page button:not(:disabled)"
         initialFocusSelector="#reviewRejectStatus"
         busy={submittingReject}
-        onClose={closeRejectPanel}
+        onClose={requestCloseRejectPanel}
         actions={[
           {
             label: 'Cancel',
             kind: 'tertiary',
             disabled: submittingReject,
-            onClick: closeRejectPanel,
+            onClick: requestCloseRejectPanel,
           },
           {
             label: submittingReject ? 'Saving…' : 'Save',
@@ -1310,6 +1323,13 @@ const ProvincialReviewPage = () => {
           />
         )}
       </DetailSidePanel>
+      {rejectDiscardModal}
+      <UnsavedChangesGuard
+        isDirty={rejectDraftDirty}
+        isBusy={submittingReject}
+        onDiscard={closeRejectPanel}
+        subject="this application"
+      />
 
       <Column
         sm={4}

@@ -284,6 +284,35 @@ const applicantTypeLabel = (value: string | null | undefined): string => {
   }
 }
 
+type ReadOnlyClientFieldProps = {
+  label: string
+  value: string
+  error?: string
+  errorId: string
+}
+
+/** A saved client identity in the edit form: it shows the client, and any error on it. */
+function ReadOnlyClientField({ label, value, error, errorId }: ReadOnlyClientFieldProps) {
+  return (
+    <dl className="detail-field-item">
+      <dt className="detail-field-label">{label}</dt>
+      <dd
+        className="detail-field-value"
+        tabIndex={error ? -1 : undefined}
+        aria-invalid={!!error || undefined}
+        aria-describedby={error ? errorId : undefined}
+      >
+        {displayValue(value)}
+      </dd>
+      {error && (
+        <dd id={errorId} className="legacy-search-error" role="alert">
+          {error}
+        </dd>
+      )}
+    </dl>
+  )
+}
+
 type ClientDataSummaryProps = {
   title: string
   showTitle?: boolean
@@ -1255,6 +1284,11 @@ const ProvincialApplicationDetailsPage = () => {
   const hasSummaryForm = summaryForm !== null
   const summaryOwnerClientNumber = summaryForm?.ownerClientNumber.trim() ?? ''
   const isSummaryAgentApplicant = isAgentApplicant(summaryForm?.applicantTypeCode ?? '')
+  // A saved agent keeps its client; only its location and contact name can change.
+  const savedAgentClientNumber =
+    summaryBaselineForm && isAgentApplicant(summaryBaselineForm.applicantTypeCode)
+      ? summaryBaselineForm.agentClientNumber.trim()
+      : ''
   const applicationDetailTabs: ApplicationDetailTabKey[] = [
     'owner',
     'application',
@@ -2603,25 +2637,28 @@ const ProvincialApplicationDetailsPage = () => {
     [],
   )
 
-  const onOwnerApplicantTypeChange = useCallback((applicantTypeCode: string) => {
-    setSummaryForm((current) => {
-      if (!current) {
-        return current
-      }
+  const onOwnerApplicantTypeChange = useCallback(
+    (applicantTypeCode: string) => {
+      setSummaryForm((current) => {
+        if (!current) {
+          return current
+        }
 
-      const next = {
-        ...current,
-        applicantTypeCode,
-        agentClientNumber:
-          applicantTypeCode === 'A'
-            ? current.agentClientNumber || current.ownerClientNumber
-            : current.agentClientNumber,
-      }
-      return normalizeSummaryAgentFields(next)
-    })
-    setSummaryVolumeWarningAccepted(false)
-    setActionResult(withoutVolumeWarning)
-  }, [])
+        const next = {
+          ...current,
+          applicantTypeCode,
+          agentClientNumber:
+            applicantTypeCode === 'A'
+              ? current.agentClientNumber || savedAgentClientNumber || current.ownerClientNumber
+              : current.agentClientNumber,
+        }
+        return normalizeSummaryAgentFields(next)
+      })
+      setSummaryVolumeWarningAccepted(false)
+      setActionResult(withoutVolumeWarning)
+    },
+    [savedAgentClientNumber],
+  )
 
   const discardOwnerDetailsDraft = useCallback(() => {
     setSummaryForm((current) => {
@@ -4204,41 +4241,15 @@ const ProvincialApplicationDetailsPage = () => {
                               </RecordFieldRow>
                               <RecordFieldRow>
                                 <RecordFieldCell span="wide">
-                                  <dl className="detail-field-item">
-                                    <dt className="detail-field-label">Client</dt>
-                                    <dd
-                                      className="detail-field-value"
-                                      tabIndex={
-                                        visibleSummaryFieldError('ownerClientNumber')
-                                          ? -1
-                                          : undefined
-                                      }
-                                      aria-invalid={
-                                        !!visibleSummaryFieldError('ownerClientNumber') || undefined
-                                      }
-                                      aria-describedby={
-                                        visibleSummaryFieldError('ownerClientNumber')
-                                          ? 'applicationOwnerClientError'
-                                          : undefined
-                                      }
-                                    >
-                                      {displayValue(
-                                        clientDisplayName(
-                                          ownerClientData,
-                                          summaryForm.ownerClientNumber,
-                                        ),
-                                      )}
-                                    </dd>
-                                    {visibleSummaryFieldError('ownerClientNumber') && (
-                                      <dd
-                                        id="applicationOwnerClientError"
-                                        className="legacy-search-error"
-                                        role="alert"
-                                      >
-                                        {visibleSummaryFieldError('ownerClientNumber')}
-                                      </dd>
+                                  <ReadOnlyClientField
+                                    label="Client"
+                                    value={clientDisplayName(
+                                      ownerClientData,
+                                      summaryForm.ownerClientNumber,
                                     )}
-                                  </dl>
+                                    error={visibleSummaryFieldError('ownerClientNumber')}
+                                    errorId="applicationOwnerClientError"
+                                  />
                                 </RecordFieldCell>
                                 <RecordFieldCell span="wide">
                                   <SearchableSelect
@@ -4322,25 +4333,42 @@ const ProvincialApplicationDetailsPage = () => {
                                   </RecordFieldRow>
                                   <RecordFieldRow>
                                     <RecordFieldCell span="wide">
-                                      <ForestClientComboBox
-                                        id="applicationAgentClientNumberEdit"
-                                        labelText={requiredLabel('Agent client')}
-                                        value={summaryForm.agentClientNumber}
-                                        selectedClientName={clientDisplayName(agentClientData, '')}
-                                        counterpartyClientNumber={summaryForm.ownerClientNumber}
-                                        required
-                                        invalid={Boolean(
-                                          visibleSummaryFieldError('agentClientNumber'),
-                                        )}
-                                        invalidText={visibleSummaryFieldError('agentClientNumber')}
-                                        disabled={isSavingSummary}
-                                        onChange={(agentClientNumber) =>
-                                          onSummaryFormChange(
+                                      {savedAgentClientNumber ? (
+                                        <ReadOnlyClientField
+                                          label="Agent client"
+                                          value={clientDisplayName(
+                                            agentClientData,
+                                            summaryForm.agentClientNumber,
+                                          )}
+                                          error={visibleSummaryFieldError('agentClientNumber')}
+                                          errorId="applicationAgentClientError"
+                                        />
+                                      ) : (
+                                        <ForestClientComboBox
+                                          id="applicationAgentClientNumberEdit"
+                                          labelText={requiredLabel('Agent client')}
+                                          value={summaryForm.agentClientNumber}
+                                          selectedClientName={clientDisplayName(
+                                            agentClientData,
+                                            '',
+                                          )}
+                                          counterpartyClientNumber={summaryForm.ownerClientNumber}
+                                          required
+                                          invalid={Boolean(
+                                            visibleSummaryFieldError('agentClientNumber'),
+                                          )}
+                                          invalidText={visibleSummaryFieldError(
                                             'agentClientNumber',
-                                            agentClientNumber,
-                                          )
-                                        }
-                                      />
+                                          )}
+                                          disabled={isSavingSummary}
+                                          onChange={(agentClientNumber) =>
+                                            onSummaryFormChange(
+                                              'agentClientNumber',
+                                              agentClientNumber,
+                                            )
+                                          }
+                                        />
+                                      )}
                                     </RecordFieldCell>
                                     <RecordFieldCell span="wide">
                                       <SearchableSelect
