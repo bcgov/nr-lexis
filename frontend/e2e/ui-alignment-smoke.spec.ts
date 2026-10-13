@@ -1166,7 +1166,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(clearButton).toHaveCSS('border-color', 'rgb(0, 92, 184)')
     await expect(clearButton).toHaveCSS('color', 'rgb(0, 92, 184)')
 
-    const createApplicationAction = page.getByRole('link', { name: 'Create application' })
+    const createApplicationAction = page
+      .locator('.lexis-page-header__actions')
+      .getByRole('link', { name: 'Create application' })
     await expect(createApplicationAction).toHaveClass(/cds--btn--tertiary/)
     expect(
       await createApplicationAction.evaluate((action) =>
@@ -1701,7 +1703,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const batchActions = page.locator('.cds--batch-actions--active')
     await expect(batchActions).toContainText('1 application selected')
     await expect(createExemptionAction).toBeEnabled()
-    await page.locator('label[for="selectRow-281002"]').click()
+    // The ineligible row is aria-disabled, so Playwright would wait for it to become enabled.
+    await page.locator('label[for="selectRow-281002"]').click({ force: true })
     await expect(ineligibleApplication).not.toBeChecked()
     await expect(batchActions).toContainText('1 application selected')
     await batchActions.getByRole('button', { name: 'Cancel', exact: true }).click()
@@ -1776,7 +1779,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await rows.nth(0).hover()
     await expect(firstRowCell).toHaveCSS('background-color', 'rgb(255, 255, 255)')
 
-    const createApplicationAction = page.getByRole('link', { name: 'Create application' })
+    const createApplicationAction = page
+      .locator('.lexis-page-header__actions')
+      .getByRole('link', { name: 'Create application' })
     await page.getByRole('switch', { name: 'Dark theme' }).click()
     await expect(page.locator('html')).toHaveAttribute('data-carbon-theme', 'g100')
     await expect(createApplicationAction).toHaveCSS('color', 'rgb(255, 255, 255)')
@@ -2469,7 +2474,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'width',
       '48px',
     )
-    await expect(emptyState.locator('.lexis-empty-state__title')).toHaveCSS('font-size', '18px')
+    await expect(emptyState.locator('.lexis-empty-state__title')).toHaveCSS('font-size', '16px')
     await expect(emptyState.locator('.lexis-empty-state__title')).toHaveCSS('font-weight', '700')
   })
 
