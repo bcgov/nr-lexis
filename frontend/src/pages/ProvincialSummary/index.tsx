@@ -4,7 +4,6 @@ import {
   Column,
   Grid,
   InlineLoading,
-  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -15,6 +14,7 @@ import {
 } from '@carbon/react'
 import { Link } from 'react-router-dom'
 import EmptyState from '@/components/EmptyState'
+import Pagination from '@/components/Pagination'
 import PageHeader from '@/components/PageHeader'
 import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'

@@ -4,7 +4,6 @@ import {
   Button,
   Column,
   Grid,
-  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -17,6 +16,7 @@ import {
 import { Add } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
+import Pagination from '@/components/Pagination'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import AuthoritativeOptionsUnavailableNotification from '@/components/AuthoritativeOptionsUnavailableNotification'
 import IsoDateRangePicker from '../../components/IsoDateRangePicker'
@@ -154,9 +154,12 @@ const ProvincialOffersPage = () => {
   const [searchResult, setSearchResult] = useState<{
     results: ProvincialOfferSearchResponse
     totalStatus: DeferredSearchTotalStatus
-  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
-  const { results, totalStatus } = searchResult
+    searched: boolean
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact', searched: false })
+  const { results, totalStatus, searched } = searchResult
   const [loading, setLoading] = useState(false)
+  // Results show as loading, not as zero results, until the first search returns.
+  const resultsLoading = loading || !searched
   const [errorMessage, setErrorMessage] = useState('')
   const [defaultListingToDate, setDefaultListingToDate] = useState('')
   const [isOptionsLoaded, setIsOptionsLoaded] = useState(false)
@@ -243,7 +246,7 @@ const ProvincialOffersPage = () => {
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
     (nextResults: ProvincialOfferSearchResponse, nextTotalStatus: DeferredSearchTotalStatus) => {
-      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus, searched: true })
     },
     [],
   )
@@ -634,11 +637,11 @@ const ProvincialOffersPage = () => {
         >
           <SearchResultsTableFrame
             resultName="offer"
-            loading={loading}
+            loading={resultsLoading}
             loadingDescription="Searching"
             columnCount={SORT_COLUMNS.length}
             totalItems={
-              errorMessage || (loading && results.content.length === 0)
+              errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
                 : results.page.totalElements
             }
@@ -704,13 +707,13 @@ const ProvincialOffersPage = () => {
                   ))}
                 </TableBody>
               </Table>
-            ) : !loading ? (
+            ) : !resultsLoading ? (
               <EmptyState
                 title="No results found"
                 description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
-            {!errorMessage && (!loading || results.content.length > 0) && (
+            {!errorMessage && (!resultsLoading || results.content.length > 0) && (
               <>
                 <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(

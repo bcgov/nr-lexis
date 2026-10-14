@@ -369,6 +369,34 @@ class OracleLexisSummaryServiceTest {
   }
 
   @Test
+  void feesShouldLeaveAPermitFeeWithoutAnAmountEmpty() {
+    when(permitService.search(any(PermitSearchCriteria.class)))
+        .thenReturn(
+            new PermitSearchResponseDto(
+                List.of(
+                    new PermitSearchResultDto(
+                        7000123L,
+                        "Issued",
+                        "00077881",
+                        "00055667",
+                        95.0,
+                        LocalDate.of(2026, 3, 15),
+                        "R2")),
+                1,
+                0,
+                10));
+    when(permitService.findSummaryEnrichmentByPermitNumbers(List.of(7000123L)))
+        .thenReturn(Map.of());
+    when(permitDetailsRpcService.getTotalFeesForPermit(7000123L, null, null))
+        .thenReturn(new PermitTotalFeesRpcResponseDto(null));
+
+    SummaryFeesResponseDto response = service.fees("00077881", 0, 10, null);
+
+    assertThat(response.results()).hasSize(1);
+    assertThat(response.results().get(0).fees()).isNull();
+  }
+
+  @Test
   void offersPlacedShouldUseOfferingClientScopeAndExcludeWithdrawn() {
     when(offerService.search(any(PurchaseOfferSearchCriteria.class)))
         .thenReturn(

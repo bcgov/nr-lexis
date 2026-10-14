@@ -171,6 +171,9 @@ const APPLICATION_CREATE_REQUIRED_FIELD_TABS: ApplicationCreateTab[] = [
   'items',
 ]
 
+const joinTabLabels = (labels: string[]): string | undefined =>
+  labels.length > 1 ? `${labels.slice(0, -1).join(', ')} and ${labels.at(-1)}` : labels[0]
+
 const APPLICATION_CREATE_TAB_ICONS = {
   owner: Enterprise,
   application: Task,
@@ -195,14 +198,17 @@ const clientNumberFieldError = (value: string, label: string): string | undefine
     () => (CLIENT_NUMBER_PATTERN.test(value.trim()) ? null : `${label} must be 1 to 8 digits.`),
   )
 
+// The location waits on a valid client, which shows its own error until then.
 const clientLocationFieldError = (
   value: string,
   clientNumber: string,
   label: string,
 ): string | undefined =>
-  value.trim()
-    ? (maxLengthFieldError(value, 2, label) ?? undefined)
-    : `${label} is required.${clientNumber.trim() ? '' : ` ${CLIENT_LOCATION_HELPER}`}`
+  !CLIENT_NUMBER_PATTERN.test(clientNumber.trim())
+    ? undefined
+    : value.trim()
+      ? (maxLengthFieldError(value, 2, label) ?? undefined)
+      : `${label} is required.`
 
 const applicationTextStorageFieldError = (
   value: string,
@@ -511,6 +517,9 @@ const ProvincialApplicationCreatePage = () => {
       ),
     [canReviewApplications, canViewRemarks],
   )
+  const tabsAddedAfterSave = visibleApplicationTabs
+    .filter((tab) => !APPLICATION_CREATE_REQUIRED_FIELD_TABS.includes(tab))
+    .map((tab) => APPLICATION_CREATE_TAB_LABELS[tab])
   const selectedApplicationTabIndex = Math.max(
     0,
     visibleApplicationTabs.indexOf(selectedApplicationTab),
@@ -1167,6 +1176,11 @@ const ProvincialApplicationCreatePage = () => {
     }
   }, [applyLoadedFormValues, form.region, form.speciesCodes])
 
+  const speciesPrerequisiteText = !form.region.trim()
+    ? 'Select a region before adding species.'
+    : !form.productTypeCode.trim()
+      ? 'Select a product type before adding species.'
+      : undefined
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
       ownerClientNumber: clientNumberFieldError(form.ownerClientNumber, 'Client'),
@@ -1224,15 +1238,12 @@ const ProvincialApplicationCreatePage = () => {
                 : 'Select a valid age class.',
           )
         : undefined,
+      // Species wait on a region and product type, which show their own errors until chosen.
       speciesCodes:
-        form.speciesCodes.length === 0
-          ? !form.region.trim()
-            ? 'Select a region before adding species.'
-            : !form.productTypeCode.trim()
-              ? 'Select a product type before adding species.'
-              : !isLoadingApplicationSpecies && applicationSpeciesOptions.length === 0
-                ? 'At least one species is required, but no species are available for the selected region and product type.'
-                : 'At least one species is required.'
+        form.speciesCodes.length === 0 && !speciesPrerequisiteText
+          ? !isLoadingApplicationSpecies && applicationSpeciesOptions.length === 0
+            ? 'At least one species is required, but no species are available for the selected region and product type.'
+            : 'At least one species is required.'
           : undefined,
       exemptionType: firstValidationError(
         () =>
@@ -1295,6 +1306,7 @@ const ProvincialApplicationCreatePage = () => {
       isLoadingApplicationSpecies,
       productTypes,
       regions,
+      speciesPrerequisiteText,
     ],
   )
   const hasValidationError = useMemo(
@@ -1392,6 +1404,15 @@ const ProvincialApplicationCreatePage = () => {
   const fieldError = (field: ProvincialApplicationCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
   const speciesCodesError = fieldError('speciesCodes')
+  const speciesHelperText = isApplicationSpeciesSelectDisabled
+    ? (speciesCodesError ??
+      getVisibleFieldError(
+        'speciesCodes',
+        { speciesCodes: speciesPrerequisiteText },
+        touchedFields,
+        showAllValidationErrors,
+      ))
+    : undefined
   const firstInvalidField = (Object.keys(fieldErrors) as ProvincialApplicationCreateField[]).find(
     (field) => !!fieldErrors[field],
   )
@@ -1401,10 +1422,7 @@ const ProvincialApplicationCreatePage = () => {
         !!fieldErrors[field] && (APPLICATION_CREATE_FIELD_TAB[field] ?? 'application') === tab,
     ),
   ).map((tab) => APPLICATION_CREATE_TAB_LABELS[tab])
-  const invalidTabsText =
-    invalidTabLabels.length > 1
-      ? `${invalidTabLabels.slice(0, -1).join(', ')} and ${invalidTabLabels.at(-1)}`
-      : invalidTabLabels[0]
+  const invalidTabsText = joinTabLabels(invalidTabLabels)
   const requiredTabsMessage = `Complete the required fields in ${invalidTabsText} ${invalidTabLabels.length === 1 ? 'tab' : 'tabs'}.`
 
   const saveUnavailableReason =
@@ -1422,6 +1440,21 @@ const ProvincialApplicationCreatePage = () => {
   const showSaveUnavailable = (): boolean => {
     if (!saveUnavailableReason) return false
     setStatus({ kind: 'error', title: 'Cannot save yet.', message: saveUnavailableReason })
+    return true
+  }
+
+  const showValidationErrors = (): boolean => {
+    if (!hasValidationError) return false
+    if (firstInvalidField) {
+      setSelectedApplicationTab(APPLICATION_CREATE_FIELD_TAB[firstInvalidField] ?? 'application')
+    }
+    setShowAllValidationErrors(true)
+    setStatus({
+      kind: 'error',
+      title: 'Cannot save yet.',
+      message: requiredTabsMessage,
+      placement: 'inline',
+    })
     return true
   }
 
@@ -1466,19 +1499,7 @@ const ProvincialApplicationCreatePage = () => {
           : current,
       )
 
-      if (hasValidationError) {
-        if (firstInvalidField) {
-          setSelectedApplicationTab(
-            APPLICATION_CREATE_FIELD_TAB[firstInvalidField] ?? 'application',
-          )
-        }
-        setShowAllValidationErrors(true)
-        setStatus({
-          kind: 'error',
-          title: 'Cannot save yet.',
-          message: requiredTabsMessage,
-          placement: 'inline',
-        })
+      if (showValidationErrors()) {
         return false
       }
 
@@ -1539,6 +1560,10 @@ const ProvincialApplicationCreatePage = () => {
     }
     if (!provincialSubmitterIdentityLocked) {
       void onSave()
+      return
+    }
+    // The accuracy agreement opens only for an application that is ready to save.
+    if (showValidationErrors()) {
       return
     }
     setStatus(null)
@@ -1609,7 +1634,7 @@ const ProvincialApplicationCreatePage = () => {
           <InlineNotification
             kind="info"
             title="The application number is assigned when you save."
-            subtitle="Documents, Remarks, Offers and Review can be added after that."
+            subtitle={`${joinTabLabels(tabsAddedAfterSave)} can be added after that.`}
             lowContrast
             hideCloseButton
           />
@@ -2247,9 +2272,7 @@ const ProvincialApplicationCreatePage = () => {
                           placeholder={speciesPlaceholder}
                           invalid={!!speciesCodesError}
                           invalidText={speciesCodesError}
-                          helperText={
-                            isApplicationSpeciesSelectDisabled ? speciesCodesError : undefined
-                          }
+                          helperText={speciesHelperText}
                           onChange={({ selectedItems }) => {
                             markFormEdited()
                             setForm((current) => ({

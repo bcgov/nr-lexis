@@ -6,7 +6,6 @@ import {
   Column,
   DismissibleTag,
   Grid,
-  Pagination,
   Table,
   TableBody,
   TableBatchActions,
@@ -22,6 +21,7 @@ import { Add } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
+import Pagination from '@/components/Pagination'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import IneligibleRowCheckbox from '@/components/IneligibleRowCheckbox'
@@ -210,9 +210,12 @@ const ProvincialApplicationPage = () => {
   const [searchResult, setSearchResult] = useState<{
     results: ProvincialApplicationSearchResponse
     totalStatus: DeferredSearchTotalStatus
-  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
-  const { results, totalStatus } = searchResult
+    searched: boolean
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact', searched: false })
+  const { results, totalStatus, searched } = searchResult
   const [loading, setLoading] = useState(false)
+  // Results show as loading, not as zero results, until the first search returns.
+  const resultsLoading = loading || !searched
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRowsById, setSelectedRowsById] = useState<
     Record<string, ProvincialApplicationSearchItem>
@@ -321,7 +324,7 @@ const ProvincialApplicationPage = () => {
       nextResults: ProvincialApplicationSearchResponse,
       nextTotalStatus: DeferredSearchTotalStatus,
     ) => {
-      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus, searched: true })
     },
     [],
   )
@@ -873,11 +876,11 @@ const ProvincialApplicationPage = () => {
         >
           <SearchResultsTableFrame
             resultName="application"
-            loading={loading}
+            loading={resultsLoading}
             loadingDescription="Searching"
             columnCount={RESULT_COLUMNS.length + (canCreateExemption ? 1 : 0)}
             totalItems={
-              errorMessage || (loading && results.content.length === 0)
+              errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
                 : results.page.totalElements
             }
@@ -1029,13 +1032,13 @@ const ProvincialApplicationPage = () => {
                   ))}
                 </TableBody>
               </Table>
-            ) : !loading ? (
+            ) : !resultsLoading ? (
               <EmptyState
                 title="No results found"
                 description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
-            {!errorMessage && (!loading || results.content.length > 0) && (
+            {!errorMessage && (!resultsLoading || results.content.length > 0) && (
               <>
                 <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(

@@ -771,6 +771,47 @@ describe('Provincial Application Search Actions', () => {
     expect(within(row).getByText('11111111')).toBeInTheDocument()
   })
 
+  it('shows a restored submitter search as loading, not as zero results, until it runs', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: () => false,
+        capabilities: createTestCapabilities({ roles: ['PROVINCIAL_SUBMITTER_00012345'] }),
+      }),
+    )
+    let resolveOptions: (
+      options: Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>,
+    ) => void = () => undefined
+    mockedFetchProvincialApplicationOptions.mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveOptions = resolve
+      }),
+    )
+    sessionStorage.setItem(
+      'lexis.search-state.v1.provincial-applications',
+      'page=1&pageSize=10&sortField=applicationNumber&sortDirection=desc',
+    )
+
+    renderPage('/provincial/application')
+
+    expect(await screen.findByText('Searching')).toBeInTheDocument()
+    expect(screen.queryByText('0 applications found')).not.toBeInTheDocument()
+    expect(screen.queryByText('No results found')).not.toBeInTheDocument()
+    expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
+
+    await act(async () => {
+      resolveOptions({
+        exemptionTypes: [],
+        exemptionReasons: [],
+        applicationStatuses: [],
+        productTypes: [],
+        growthTypes: [],
+        regions: [{ value: '11', label: 'Cariboo' }],
+        currentSchedules: [],
+      })
+    })
+    expect(await screen.findByText('321')).toBeInTheDocument()
+  })
+
   it('uses independent canonical owner and agent client selections in the search request', async () => {
     renderPage('/provincial/application')
 

@@ -1304,7 +1304,7 @@ describe('permit creation from an exemption', () => {
     expect(within(page).getAllByText('Permit request pieces is required')).not.toHaveLength(0)
     expect(within(page).getAllByText('Permit request volume is required')).not.toHaveLength(0)
     await userEvent.click(
-      within(page).getByRole('tab', { name: /^Applicant, \d+ required fields outstanding$/ }),
+      within(page).getByRole('tab', { name: 'Applicant, 1 required field outstanding' }),
     )
 
     expect(await within(page).findAllByText('Client is required')).not.toHaveLength(0)

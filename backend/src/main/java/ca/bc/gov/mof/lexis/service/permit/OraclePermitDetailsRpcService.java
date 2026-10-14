@@ -467,9 +467,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     return new PermitSummaryRpcResponseDto(
         formatVolume(totalVolume),
         totalPieces,
-        maskFees ? "$" : formatCurrency(totalFees),
+        maskFees ? null : formatCurrency(totalFees),
         scaleList,
-        maskFees ? "$" : formatCurrency(totalFeeForPackage),
+        maskFees ? null : formatCurrency(totalFeeForPackage),
         resolveGrowthType(packageNumber));
   }
 
@@ -487,7 +487,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (shouldMaskFees(
         firstNonNull(countryCode, feeContext.exportCountryCode()),
         firstNonNull(parseDate(applicationDate), feeContext.permitApplicationDate()))) {
-      return new PermitTotalFeesRpcResponseDto("$");
+      return new PermitTotalFeesRpcResponseDto(null);
     }
     return new PermitTotalFeesRpcResponseDto(formatCurrency(totalFees));
   }
@@ -540,14 +540,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
               scale.piecesCount(),
               fil,
               mf,
-              maskScaleFees ? "$" : formatCurrency(fee),
+              maskScaleFees ? null : formatCurrency(fee),
               "",
               nonNull(scale.exportScaleDetailId()),
               nonNull(scale.exportPermitDetailNumber())));
     }
 
     return new PermitScaleFeesRpcResponseDto(
-        maskTotalFeeForPackage ? "$" : formatCurrency(totalFeeForPackage),
+        maskTotalFeeForPackage ? null : formatCurrency(totalFeeForPackage),
         scaleList,
         resolveGrowthType(packageNumber));
   }
@@ -633,7 +633,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                   scale.piecesCount(),
                   fil,
                   mf,
-                  maskScaleFees ? "$" : formatCurrency(fee),
+                  maskScaleFees ? null : formatCurrency(fee),
                   "",
                   nonNull(scale.exportScaleDetailId()),
                   nonNull(scale.exportPermitDetailNumber())));
@@ -652,7 +652,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           new PermitPackageScaleFeesRpcResponseDto(
               packageNumber,
               maskPackageTotals
-                  ? "$"
+                  ? null
                   : formatCurrency(totalsByPackage.getOrDefault(packageNumber, BigDecimal.ZERO)),
               List.copyOf(entry.getValue()),
               nonNull(growthTypeByPackage.get(packageNumber))));
@@ -3696,6 +3696,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     return amv.multiply(volume);
   }
 
+  // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_FEE_NO_AMOUNT): a masked fee has no amount, so responses
+  // leave it null instead of a bare "$".
   private boolean shouldMaskFees(String countryCode, LocalDate applicationDate) {
     String normalizedCountryCode = trimToNull(countryCode);
     return "CA".equalsIgnoreCase(normalizedCountryCode)

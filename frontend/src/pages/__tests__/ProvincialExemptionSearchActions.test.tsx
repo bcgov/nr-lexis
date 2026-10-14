@@ -1420,6 +1420,24 @@ describe('Provincial Exemption Search Actions', () => {
     expect(screen.getByRole('link', { name: 'EX-2002' })).toBeInTheDocument()
   })
 
+  it('groups approval and balance volumes the same way', async () => {
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([
+        {
+          ...selectableExemption('EX-3003'),
+          approvedVolume: 9999999.9,
+          balanceRemaining: 1234567.5,
+        },
+      ]),
+    )
+
+    renderPage()
+    const row = (await screen.findByText('EX-3003')).closest('tr') as HTMLElement
+
+    expect(within(row).getByText('9,999,999.9')).toBeInTheDocument()
+    expect(within(row).getByText('1,234,567.5')).toBeInTheDocument()
+  })
+
   it('hides client-number filters for client-scoped provincial submitters', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -1578,6 +1596,75 @@ describe('Provincial Exemption Search Actions', () => {
       expect(resultsTable).not.toBeVisible()
     })
     expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(searchCallsBeforeClear)
+  })
+
+  const mockExemptionApprover = () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['EXEMPTION_APPROVER'], orgUnitNo: '11' }),
+        canPerform: () => true,
+      }),
+    )
+    mockedFetchProvincialExemptionOptions.mockResolvedValue({
+      exemptionTypes: [{ value: 'M', label: 'Ministerial' }],
+      exemptionStatuses: [
+        { value: 'NEW', label: 'New' },
+        { value: 'ACT', label: 'Active' },
+      ],
+      regions: [{ value: '11', label: 'Cariboo' }],
+    })
+  }
+
+  it('runs a saved exemption approver search on New exemptions when it has no status', async () => {
+    mockExemptionApprover()
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ exemptionTypeCode: 'M', exemptionStatusCode: 'NEW' }),
+        }),
+        expect.any(Object),
+      )
+    })
+    const status = screen.getByRole('combobox', { name: 'Exemption status' })
+    await waitFor(() => expect(status).toHaveValue('New'))
+    expect(status).not.toHaveAttribute('readonly')
+  })
+
+  it('keeps an exemption approver search of every status and clears back to Ministerial New', async () => {
+    mockExemptionApprover()
+
+    renderPage(
+      '/provincial/exemption?region=11&exemptionStatusCode=&page=1&pageSize=10&sortField=exemptionNumber&sortDirection=desc',
+    )
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ exemptionTypeCode: 'M', exemptionStatusCode: '' }),
+        }),
+        expect.any(Object),
+      )
+    })
+    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('New'),
+    )
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('Ministerial')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ exemptionTypeCode: 'M', exemptionStatusCode: 'NEW' }),
+        }),
+        expect.any(Object),
+      )
+    })
   })
 
   it('renders a full result page before count and then prefetches the next page', async () => {

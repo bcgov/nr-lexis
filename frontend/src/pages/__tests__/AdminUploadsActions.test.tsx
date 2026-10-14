@@ -8,9 +8,16 @@ import {
   submitAdminUpload,
   validateApplicationSubmissionUpload,
 } from '@/service/admin-upload-service'
+import type * as ApplicationItemsServiceModule from '@/service/provincial-application-items-service'
+import { fetchApplicationEndUsesForSpeciesRegion } from '@/service/provincial-application-items-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialApplicationNumberOptions } from '@/service/provincial-application-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
+import type * as SearchOptionsServiceModule from '@/service/search-options-service'
+import {
+  fetchProvincialApplicationOptions,
+  fetchReportOptions,
+} from '@/service/search-options-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -34,6 +41,17 @@ vi.mock('@/service/provincial-permit-search-service', () => ({
   searchProvincialPermitNumberOptions: vi.fn(),
 }))
 
+vi.mock('@/service/provincial-application-items-service', async (importOriginal) => ({
+  ...(await importOriginal<typeof ApplicationItemsServiceModule>()),
+  fetchApplicationEndUsesForSpeciesRegion: vi.fn(),
+}))
+
+vi.mock('@/service/search-options-service', async (importOriginal) => ({
+  ...(await importOriginal<typeof SearchOptionsServiceModule>()),
+  fetchProvincialApplicationOptions: vi.fn(),
+  fetchReportOptions: vi.fn(),
+}))
+
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedValidateApplicationSubmissionUpload = vi.mocked(validateApplicationSubmissionUpload)
@@ -44,13 +62,18 @@ const mockedSearchProvincialExemptionNumberOptions = vi.mocked(
   searchProvincialExemptionNumberOptions,
 )
 const mockedSearchProvincialPermitNumberOptions = vi.mocked(searchProvincialPermitNumberOptions)
+const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
+const mockedFetchReportOptions = vi.mocked(fetchReportOptions)
+const mockedFetchApplicationEndUsesForSpeciesRegion = vi.mocked(
+  fetchApplicationEndUsesForSpeciesRegion,
+)
 
 const pendingValidation = (): Promise<never> => new Promise(() => {})
 
-const mockUploadAccess = (allowedAction: string | null): void => {
+const mockUploadAccess = (...allowedActions: string[]): void => {
   mockedUseAuth.mockReturnValue(
     createTestAuthContext({
-      canPerform: (action: string) => action === allowedAction,
+      canPerform: (action: string) => allowedActions.includes(action),
     }),
   )
 }
@@ -816,7 +839,7 @@ describe('Admin upload workflow smoke', () => {
     const emptyReviewButton = screen.getByRole('button', { name: 'Review' })
     expect(emptyReviewButton).toBeEnabled()
     await userEvent.click(emptyReviewButton)
-    expect(screen.getByText('Please upload a file before continuing')).toBeInTheDocument()
+    expect(screen.getByText('Submission file is required')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Choose files for Submission file' })).toHaveFocus()
     expect(mockedValidateApplicationSubmissionUpload).not.toHaveBeenCalled()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
@@ -895,10 +918,12 @@ describe('Admin upload workflow smoke', () => {
       within(productDetailsTable).getByRole('columnheader', { name: 'Species' }),
     ).toBeInTheDocument()
     expect(within(productDetailsTable).getByText('HE, FI')).toBeInTheDocument()
+    // Without reference data access, coded values are shown as submitted.
     expect(within(productDetailsTable).getByText('PL')).toBeInTheDocument()
     expect(screen.getByText('U')).toBeInTheDocument()
-    expect(screen.getByText('Applicant type')).toBeInTheDocument()
-    expect(screen.getByText('O')).toBeInTheDocument()
+    expect(
+      within(applicationDetailsTable).getByRole('row', { name: 'Applicant type Owner' }),
+    ).toBeInTheDocument()
     expect(screen.getByText('Age class')).toBeInTheDocument()
     expect(screen.getByText('M')).toBeInTheDocument()
     expect(screen.getAllByText('525.0').length).toBeGreaterThan(0)
@@ -919,13 +944,132 @@ describe('Admin upload workflow smoke', () => {
     })
 
     expect(screen.getByText('Application submission complete')).toBeInTheDocument()
-    expect(screen.getAllByText(/Application 9001/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/Package TEST23-652-7D-2/).length).toBeGreaterThan(0)
-    expect(screen.getAllByText(/3 scale rows/).length).toBeGreaterThan(0)
+    expect(
+      screen.getByText('Application 9001 created with package TEST23-652-7D-2 and 3 scale rows.'),
+    ).toBeInTheDocument()
+    // Without application details access the created application number is plain text.
+    expect(screen.queryByRole('link', { name: 'Application 9001' })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(document.activeElement).toContainElement(
+        screen.getByText('Application submission complete'),
+      ),
+    )
     expect(screen.queryByText('No application submissions selected')).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Review' })).toBeEnabled()
     expect(screen.queryByRole('button', { name: 'Remove submission.xml' })).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'Open Application 9001' })).not.toBeInTheDocument()
+  })
+
+  it('reviews submission codes with their reference descriptions', async () => {
+    mockUploadAccess(
+      'uploadApplicationSubmission',
+      '/applicationSearch',
+      '/applicationDetails',
+      '/applicationReport',
+    )
+    mockedFetchProvincialApplicationOptions.mockResolvedValue({
+      exemptionTypes: [],
+      exemptionReasons: [{ value: 'S', label: 'Surplus to domestic needs' }],
+      applicationStatuses: [],
+      productTypes: [{ value: 'H', label: 'Harvested' }],
+      growthTypes: [{ value: 'S', label: 'Second growth' }],
+      regions: [{ value: '1909', label: 'South Coast Natural Resource Region' }],
+      currentSchedules: [],
+    })
+    mockedFetchReportOptions.mockResolvedValue({
+      currentSchedules: [],
+      defaultRegion: '',
+      regions: [],
+      reportJurisdictions: [
+        { value: '', label: 'All' },
+        { value: 'P', label: 'Provincial' },
+      ],
+      biweeklyJurisdictions: [],
+      teacJurisdictions: [],
+      exemptionTypes: [],
+      tenureExemptionTypes: [],
+      exemptionReasons: [],
+      exemptionStatuses: [],
+      growthTypes: [],
+      permitStatuses: [],
+      destinationCountries: [],
+      allDestinationCountries: [],
+      portsOfExport: [],
+    })
+    mockedFetchApplicationEndUsesForSpeciesRegion.mockResolvedValue([
+      { code: 'PL', description: 'Peeler logs' },
+    ])
+    mockedValidateApplicationSubmissionUpload.mockResolvedValue({
+      packageNumber: 'TEST-2026-10-14',
+      scaleRows: 3,
+      submissionSummary: {
+        ownerClientNumber: '00001074',
+        ownerClientLocationCode: '03',
+        jurisdictionCode: 'P',
+        orgUnitNumber: 1909,
+        sourceApplicationStatusCode: 'A',
+        exemptionReasonCode: 'S',
+        applicantTypeCode: 'O',
+        productTypeCode: 'H',
+        ageClass: 'S',
+        speciesCodes: ['HE'],
+        endUseCode: 'PL',
+      },
+    })
+    mockedSubmitAdminUpload.mockResolvedValue({
+      applicationNumber: 9001,
+      packageNumber: 'TEST-2026-10-14',
+      scaleRows: 3,
+    })
+
+    renderPage('/provincial/application/upload')
+
+    const file = new File(['<xml />'], 'test-2026-10-14.xml', { type: 'application/xml' })
+    await userEvent.upload(screen.getByLabelText('Application submission file'), file)
+    const reviewButton = screen.getByRole('button', { name: 'Review' })
+    await waitFor(() => expect(reviewButton).toBeEnabled())
+    await userEvent.click(reviewButton)
+
+    const applicationDetailsTable = screen.getByRole('table', {
+      name: 'Application details review',
+    })
+    await waitFor(() =>
+      expect(
+        within(applicationDetailsTable).getByRole('row', {
+          name: 'Region South Coast Natural Resource Region',
+        }),
+      ).toBeInTheDocument(),
+    )
+    for (const rowName of [
+      'Owner client 00001074-03',
+      'Jurisdiction Provincial',
+      'Source status A',
+      'Exemption reason Surplus to domestic needs',
+      'Applicant type Owner',
+    ]) {
+      expect(within(applicationDetailsTable).getByRole('row', { name: rowName })).toBeVisible()
+    }
+    const productDetailsTable = screen.getByRole('table', { name: 'Product details review' })
+    await waitFor(() =>
+      expect(within(productDetailsTable).getByText('Peeler logs')).toBeInTheDocument(),
+    )
+    expect(within(productDetailsTable).getByText('Harvested')).toBeInTheDocument()
+    expect(within(productDetailsTable).getByText('Second growth')).toBeInTheDocument()
+    expect(within(productDetailsTable).getByText('HE')).toBeInTheDocument()
+    expect(mockedFetchApplicationEndUsesForSpeciesRegion).toHaveBeenCalledWith('1909', ['HE'])
+
+    await userEvent.click(screen.getByRole('button', { name: 'Submit submission' }))
+
+    const createdApplication = await screen.findByRole('link', { name: 'Application 9001' })
+    expect(createdApplication).toHaveAttribute('href', '/provincial/application/9001')
+    expect(createdApplication.closest('li')).toHaveTextContent(
+      'Application 9001 created with package TEST-2026-10-14 and 3 scale rows.',
+    )
+    await waitFor(() =>
+      expect(document.activeElement).toContainElement(
+        screen.getByText('Application submission complete'),
+      ),
+    )
   })
 
   it('replaces application submissions with the same file name while validation is pending', async () => {
@@ -1193,7 +1337,7 @@ describe('Admin upload workflow smoke', () => {
   })
 
   it('submits queued XML files one at a time', async () => {
-    mockUploadAccess('uploadApplicationSubmission')
+    mockUploadAccess('uploadApplicationSubmission', '/applicationDetails')
     mockedValidateApplicationSubmissionUpload
       .mockResolvedValueOnce({
         message: 'First XML validated.',
@@ -1208,9 +1352,16 @@ describe('Admin upload workflow smoke', () => {
     mockedSubmitAdminUpload
       .mockResolvedValueOnce({
         message: 'First XML application submission created application 9001.',
+        applicationNumber: 9001,
+        packageNumber: 'FIRST-PKG',
+        scaleRows: 1,
       })
       .mockResolvedValueOnce({
         message: 'Second XML application submission created application 9002.',
+        applicationNumber: 9002,
+        packageNumber: 'SECOND-PKG',
+        scaleRows: 1,
+        warnings: ['Source application status A was ignored.'],
       })
 
     renderPage('/provincial/application/upload')
@@ -1251,12 +1402,24 @@ describe('Admin upload workflow smoke', () => {
       'applicationSubmission',
       expect.objectContaining({ file: secondFile }),
     )
-    expect(
-      screen.getByText(
-        '2 application submissions created. Verify the created application and package details.',
+    expect(screen.getByText('Application submissions complete')).toBeInTheDocument()
+    const firstCreated = screen.getByRole('link', { name: 'Application 9001' })
+    expect(firstCreated).toHaveAttribute('href', '/provincial/application/9001')
+    expect(firstCreated.closest('li')).toHaveTextContent(
+      'Application 9001 created with package FIRST-PKG and 1 scale row.',
+    )
+    const secondCreated = screen.getByRole('link', { name: 'Application 9002' })
+    expect(secondCreated).toHaveAttribute('href', '/provincial/application/9002')
+    expect(secondCreated.closest('li')).toHaveTextContent(
+      'Application 9002 created with package SECOND-PKG and 1 scale row.',
+    )
+    expect(screen.getByText('Warning: Source application status A was ignored.')).toBeVisible()
+    await waitFor(() =>
+      expect(document.activeElement).toContainElement(
+        screen.getByText('Application submissions complete'),
       ),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('Please upload a file before continuing')).not.toBeInTheDocument()
+    )
+    expect(screen.queryByText('Submission file is required')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Application submission file')).not.toHaveAttribute(
       'aria-invalid',
       'true',
@@ -1330,7 +1493,7 @@ describe('Admin upload workflow smoke', () => {
     // The validated and failed submissions each get one notification.
     expect(screen.getByText('Upload error')).toBeInTheDocument()
     expect(
-      document.querySelectorAll('.admin-upload-workflow > .app-notification-container'),
+      document.querySelectorAll('.admin-upload-workflow .app-notification-container'),
     ).toHaveLength(2)
     expect(screen.getAllByText('first.xml').length).toBeGreaterThan(0)
     expect(screen.getAllByText('second.xml').length).toBeGreaterThan(0)

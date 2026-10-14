@@ -246,12 +246,14 @@ describe('BlanketOicPermitCreateForm', () => {
         .getByRole('tab', { name: 'Permit, 2 required fields outstanding' })
         .querySelector('svg'),
     ).toBeNull()
+    // Client location waits on a client, so only the client is counted.
     expect(
-      screen.getByRole('tab', { name: 'Applicant, 2 required fields outstanding' }),
+      screen.getByRole('tab', { name: 'Applicant, 1 required field outstanding' }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('tab', { name: 'Shipping, 3 required fields outstanding' }),
     ).toBeInTheDocument()
+    expect(screen.queryByText('Client location is required')).not.toBeInTheDocument()
     expect(addPermitDetail).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: 'Save permit' }))

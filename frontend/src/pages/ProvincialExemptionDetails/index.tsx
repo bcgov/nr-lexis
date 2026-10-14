@@ -644,6 +644,8 @@ const ProvincialExemptionDetailsPage = () => {
   const createdExemptionNumber = navigationState?.exemptionCreationNotice?.exemptionNumber ?? ''
   // Read by the first load, which otherwise clears page results before showing the record.
   const createdExemptionNumberRef = useRef(createdExemptionNumber)
+  // The Create exemption button is on the page left behind, so focus starts at the new title.
+  const [focusCreatedExemptionTitle] = useState(() => !!createdExemptionNumber)
   const createdFromApplicationNumbersRef = useRef<string[]>(
     (() => {
       const numbers = navigationState?.exemptionCreationNotice?.applicationNumbers
@@ -2126,6 +2128,7 @@ const ProvincialExemptionDetailsPage = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={exemptionPageTitle}
+          focusTitle={focusCreatedExemptionTitle && !!currentDetail}
           subtitle={`Author: ${displayValueText(currentDetail?.author)}`}
           status={
             currentDetail ? (

@@ -105,6 +105,7 @@ function SubmissionReview({
         const applicationNumber = details?.applicationNumber ?? item.resultApplicationNumber
         const target = item.targetSummary ?? targetSummary
         const submissionSummary = details?.submissionSummary
+        const summaryLabels = details?.submissionSummaryLabels
         const packageRows: ReviewTableRow[] = [
           ...(applicationNumber
             ? [{ label: 'Application', value: `Application ${applicationNumber}` }]
@@ -192,10 +193,17 @@ function SubmissionReview({
                       label: 'Owner contact',
                       value: submissionValue(submissionSummary.ownerContactName),
                     },
-                    { label: 'Region', value: submissionValue(submissionSummary.orgUnitNumber) },
+                    {
+                      label: 'Region',
+                      value: submissionValue(
+                        summaryLabels?.orgUnitNumber ?? submissionSummary.orgUnitNumber,
+                      ),
+                    },
                     {
                       label: 'Jurisdiction',
-                      value: submissionValue(submissionSummary.jurisdictionCode),
+                      value: submissionValue(
+                        summaryLabels?.jurisdictionCode ?? submissionSummary.jurisdictionCode,
+                      ),
                     },
                     {
                       label: 'Federal application',
@@ -207,11 +215,15 @@ function SubmissionReview({
                     },
                     {
                       label: 'Exemption reason',
-                      value: submissionValue(submissionSummary.exemptionReasonCode),
+                      value: submissionValue(
+                        summaryLabels?.exemptionReasonCode ?? submissionSummary.exemptionReasonCode,
+                      ),
                     },
                     {
                       label: 'Applicant type',
-                      value: submissionValue(submissionSummary.applicantTypeCode),
+                      value: submissionValue(
+                        summaryLabels?.applicantTypeCode ?? submissionSummary.applicantTypeCode,
+                      ),
                     },
                   ]}
                 />
@@ -252,8 +264,14 @@ function SubmissionReview({
                     </thead>
                     <tbody>
                       <tr>
-                        <td>{submissionValue(submissionSummary.productTypeCode)}</td>
-                        <td>{submissionValue(submissionSummary.ageClass)}</td>
+                        <td>
+                          {submissionValue(
+                            summaryLabels?.productTypeCode ?? submissionSummary.productTypeCode,
+                          )}
+                        </td>
+                        <td>
+                          {submissionValue(summaryLabels?.ageClass ?? submissionSummary.ageClass)}
+                        </td>
                         <td>{submissionValue(submissionSummary.productLocation)}</td>
                         <td>{formatSubmissionDecimal(submissionSummary.applicationVolume)}</td>
                         <td>{formatSubmissionDecimal(submissionSummary.averageLogVolume)}</td>
@@ -264,7 +282,11 @@ function SubmissionReview({
                             ? submissionSummary.speciesCodes.join(', ')
                             : displayValue('')}
                         </td>
-                        <td>{submissionValue(submissionSummary.endUseCode)}</td>
+                        <td>
+                          {submissionValue(
+                            summaryLabels?.endUseCode ?? submissionSummary.endUseCode,
+                          )}
+                        </td>
                       </tr>
                     </tbody>
                   </table>

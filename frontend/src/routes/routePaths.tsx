@@ -108,30 +108,29 @@ const canAccessRoleScope = (
   return hasProvincialRole
 }
 
-function RouteActionGuard({
-  children,
-  requiredActions,
-  requiredActionsMatch = 'any',
-  roleScope,
-}: RouteGuardProps) {
+const canAccessRoute = (
+  { requiredActions, requiredActionsMatch = 'any', roleScope }: Omit<RouteGuardProps, 'children'>,
+  roles: string[],
+  canPerform: (action: string) => boolean,
+): boolean => {
+  if (!requiredActions || requiredActions.length === 0) {
+    return true
+  }
+  if (!canAccessRoleScope(roles, roleScope)) {
+    return false
+  }
+  return requiredActionsMatch === 'all'
+    ? requiredActions.every((action) => canPerform(action))
+    : requiredActions.some((action) => canPerform(action))
+}
+
+function RouteActionGuard({ children, ...route }: RouteGuardProps) {
   const { capabilities, canPerform } = useAuth()
   // AppRoutes mounts protected routes only after authentication and organization selection.
   // Consume pending login navigation even when the target is denied by the checks below.
   useEffect(clearLoginDestination, [])
 
-  if (!requiredActions || requiredActions.length === 0) {
-    return <>{children}</>
-  }
-
-  if (!canAccessRoleScope(capabilities.roles, roleScope)) {
-    return <Navigate to="/unauthorized" replace />
-  }
-
-  const canAccessRoute =
-    requiredActionsMatch === 'all'
-      ? requiredActions.every((action) => canPerform(action))
-      : requiredActions.some((action) => canPerform(action))
-  if (!canAccessRoute) {
+  if (!canAccessRoute(route, capabilities.roles, canPerform)) {
     return <Navigate to="/unauthorized" replace />
   }
 
@@ -584,11 +583,17 @@ const isLoginDestinationRoute = (route: { path?: string }): boolean =>
   !['/', '/dashboard', '/unauthorized', '/logout', '/select-organization', '*'].includes(route.path)
 
 function ProtectedRootRedirect() {
-  const { defaultRoute } = useAuth()
+  const { capabilities, canPerform, defaultRoute } = useAuth()
   const [destination] = useState(() => {
     const pendingDestination = getLoginDestination()
     const match = pendingDestination && matchRoutes(PROTECTED_ROUTES, pendingDestination)?.[0]
-    return match && isLoginDestinationRoute(match.route) ? pendingDestination : defaultRoute
+    // A saved page this user can't open, such as one from an earlier sign-in, gives way to
+    // their landing page.
+    return match &&
+      isLoginDestinationRoute(match.route) &&
+      canAccessRoute(match.route, capabilities.roles, canPerform)
+      ? pendingDestination
+      : defaultRoute
   })
   return <Navigate to={destination ?? defaultRoute} replace />
 }

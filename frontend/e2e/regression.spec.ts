@@ -1784,7 +1784,7 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(clearAll).toHaveCSS('color', 'rgb(255, 255, 255)')
 
       const approveSelected = page.getByRole('button', {
-        name: 'Approve Selected Applications',
+        name: 'Approve selected applications',
       })
       await expect(approveSelected).toBeDisabled()
       const beforeHover = await approveSelected.evaluate((element) => {
@@ -2320,7 +2320,7 @@ test.describe('TEST IDIR admin regression', () => {
     )
 
     const approveSelectedButton = page.getByRole('button', {
-      name: 'Approve Selected Applications',
+      name: 'Approve selected applications',
     })
     await expect(approveSelectedButton).toBeVisible()
     await expect(approveSelectedButton).toBeDisabled()

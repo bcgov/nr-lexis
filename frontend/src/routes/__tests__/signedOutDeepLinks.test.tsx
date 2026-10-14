@@ -115,14 +115,53 @@ describe('Signed-out deep links', () => {
     expect(window.sessionStorage.getItem(destinationKey)).toBeNull()
   })
 
-  it('still denies the resumed route when its actions are not granted', async () => {
+  it('opens the landing page instead of a resumed route whose actions are not granted', async () => {
     window.sessionStorage.setItem(destinationKey, offerLink)
     window.history.replaceState({}, '', '/')
-    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action) => action === '/applicationsReview' }),
+    )
     render(app())
 
-    expect(await screen.findByRole('heading', { name: 'Access denied' })).toBeVisible()
+    expect(await screen.findByRole('heading', { name: 'Application review' })).toBeVisible()
+    expect(window.location.pathname).toBe('/provincial/review')
     expect(screen.queryByRole('heading', { name: 'Offer details' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Access denied' })).not.toBeInTheDocument()
+    expect(window.sessionStorage.getItem(destinationKey)).toBeNull()
+  })
+
+  it('opens a submitter landing page after organization selection when the saved page is staff-only', async () => {
+    window.sessionStorage.setItem(destinationKey, '/federal')
+    window.history.replaceState({}, '', '/')
+    const capabilities = createTestCapabilities({
+      roles: ['PROVINCIAL_SUBMITTER'],
+      availableForestClientNumbers: ['11111111', '22222222'],
+      forestClientSelectionRequired: true,
+    })
+    const canPerform = (action: string) => action === '/offersSearch' || action === '/offerDetails'
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ capabilities, canPerform, defaultRoute: offerLink }),
+    )
+    const view = render(app())
+
+    expect(await screen.findByRole('heading', { name: 'Select organization' })).toBeVisible()
+
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: {
+          ...capabilities,
+          forestClientNumber: '22222222',
+          forestClientSelectionRequired: false,
+        },
+        canPerform,
+        defaultRoute: offerLink,
+      }),
+    )
+    view.rerender(app())
+
+    expect(await screen.findByRole('heading', { name: 'Offer details' })).toBeVisible()
+    expect(screen.queryByRole('heading', { name: 'Federal search' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Access denied' })).not.toBeInTheDocument()
     expect(window.sessionStorage.getItem(destinationKey)).toBeNull()
   })
 

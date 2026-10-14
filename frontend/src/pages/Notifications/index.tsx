@@ -781,7 +781,8 @@ export default function NotificationsPage() {
                       />
                       <span className="notifications-page__notification-window">
                         <Time size={14} aria-hidden="true" />
-                        Shows until {formatDate(notification.displayEndDate)}
+                        {status === 'Past' ? 'Ended' : 'Shows until'}{' '}
+                        {formatDate(notification.displayEndDate)}
                       </span>
                     </div>
                   </div>

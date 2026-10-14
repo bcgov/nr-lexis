@@ -651,6 +651,9 @@ describe('Provincial exemption edit context', () => {
     expect(
       screen.getByText('Details were filled in from applications 108597 and 108594.'),
     ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Exemption BOIC-205' })).toHaveFocus(),
+    )
   })
 
   it('renames an ordinary OIC and refreshes the saved number while retaining the return context', async () => {
