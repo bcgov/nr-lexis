@@ -146,6 +146,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
     expect(screen.queryByText('Action complete')).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: 'Application 321' })).toHaveFocus(),
+    )
   })
 
   it('shows each summary field once while editing and restores display values on cancel', async () => {
@@ -438,6 +441,43 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
     expect(agentSection.previousElementSibling).toHaveClass('application-applicant-divider')
     expect(within(agentSection).getByText('01 - Export office')).toBeInTheDocument()
+  })
+
+  it('does not warn that client details are unavailable before their lookup settles', async () => {
+    mockedFetchApplicationClientData.mockReturnValue(new Promise(() => undefined))
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [],
+      remarks: [],
+      offers: [],
+    })
+
+    let warningShown = false
+    const observer = new MutationObserver((records) => {
+      warningShown ||= records.some((record) =>
+        [...record.addedNodes].some((node) =>
+          node.textContent?.includes('Client details unavailable'),
+        ),
+      )
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await waitFor(() => expect(mockedFetchApplicationClientData).toHaveBeenCalled())
+    observer.disconnect()
+    expect(warningShown).toBe(false)
+    expect(screen.queryByText('Client details unavailable')).not.toBeInTheDocument()
   })
 
   it('keeps saved client values visible when enrichment fails', async () => {
