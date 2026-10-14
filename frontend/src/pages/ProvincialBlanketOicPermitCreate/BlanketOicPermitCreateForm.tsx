@@ -59,7 +59,6 @@ import {
 } from '@/service/shipping-reference-service'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { fieldErrorText } from '@/utils/field-error'
-import { focusFirstInvalidField } from '@/utils/focus'
 import { requiredLabel } from '@/utils/required-label'
 import { resolveBlanketOicRegionContext } from './region-context'
 
@@ -431,11 +430,11 @@ const BlanketOicPermitCreateForm = ({
   )
   const isDraftDirty = formEdited && !formValuesEqual({ form, agentUsed }, draftBaselineRef.current)
 
-  // A failed save shows the first tab with an error and focuses its first invalid field. Errors
-  // that belong to no field, such as options still loading, leave focus on the summary.
+  // A failed save shows the first tab with an error and moves focus to the error summary, so
+  // keyboard and screen reader users hear why Save did nothing.
   useEffect(() => {
     if (failedSubmitCount === 0) return
-    if (!focusFirstInvalidField(formSectionRef.current)) errorSummaryRef.current?.focus()
+    errorSummaryRef.current?.focus()
   }, [failedSubmitCount])
 
   useEffect(() => {
@@ -946,7 +945,8 @@ const BlanketOicPermitCreateForm = ({
                 <legend className="cds--visually-hidden">Permit details</legend>
                 <RecordFieldGrid editing>
                   <RecordFieldRow>
-                    <RecordField label={requiredLabel('Status')} value="Active" />
+                    {/* New permits are always created Active, so Status is a fixed value. */}
+                    <RecordField label="Status" value="Active" />
                   </RecordFieldRow>
                   <RecordFieldRow>
                     <RecordField
