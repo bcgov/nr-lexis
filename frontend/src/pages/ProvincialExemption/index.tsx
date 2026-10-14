@@ -872,11 +872,11 @@ const ProvincialExemptionPage = () => {
               <Button
                 as={Link}
                 to="/provincial/exemption/create"
-                kind="primary"
+                kind="tertiary"
                 size="md"
                 renderIcon={Add}
               >
-                Add exemption
+                Create exemption
               </Button>
             ) : undefined
           }

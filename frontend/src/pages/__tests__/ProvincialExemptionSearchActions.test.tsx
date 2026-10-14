@@ -546,10 +546,10 @@ describe('Provincial Exemption Search Actions', () => {
     ).not.toBeChecked()
     await userEvent.click(within(postApprovalDialog).getByRole('button', { name: 'Cancel' }))
 
-    const addExemptionAction = screen.getByRole('link', { name: 'Add exemption' })
-    expect(addExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
-    expect(addExemptionAction).toHaveClass('cds--btn--primary')
-    expect(addExemptionAction.closest('.lexis-page-header__actions')).not.toBeNull()
+    const createExemptionAction = screen.getByRole('link', { name: 'Create exemption' })
+    expect(createExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
+    expect(createExemptionAction).toHaveClass('cds--btn--tertiary')
+    expect(createExemptionAction.closest('.lexis-page-header__actions')).not.toBeNull()
   }, 20_000)
 
   it('preserves selected exemptions while paging through approval results', async () => {
@@ -1393,7 +1393,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
 
-    expect(screen.queryByRole('link', { name: 'Add exemption' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Create exemption' })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('checkbox', { name: 'Select exemption EX-1001' }),
     ).not.toBeInTheDocument()
@@ -1548,9 +1548,9 @@ describe('Provincial Exemption Search Actions', () => {
     })
 
     expect(mockedSearchProvincialExemptions).not.toHaveBeenCalled()
-    const addExemptionAction = screen.getByRole('link', { name: 'Add exemption' })
-    expect(addExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
-    expect(addExemptionAction.closest('.lexis-page-header__actions')).not.toBeNull()
+    const createExemptionAction = screen.getByRole('link', { name: 'Create exemption' })
+    expect(createExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
+    expect(createExemptionAction.closest('.lexis-page-header__actions')).not.toBeNull()
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()
