@@ -253,7 +253,7 @@ const ProvincialExemptionCreatePage = () => {
             : 'Select a valid exemption type.',
       ),
       exemptionStatusCode: firstValidationError(
-        () => requiredFieldError(form.exemptionStatusCode, 'Exemption status'),
+        () => requiredFieldError(form.exemptionStatusCode, 'Status'),
         () =>
           exemptionStatuses.some((option) => option.value === form.exemptionStatusCode)
             ? null
@@ -570,28 +570,6 @@ const ProvincialExemptionCreatePage = () => {
                     <RecordFieldGrid editing>
                       <RecordFieldRow>
                         <RecordFieldCell>
-                          <SearchableSelect
-                            id="exemptionStatusCode"
-                            labelText={requiredLabel(
-                              'Exemption status',
-                              canEditInitialExemptionStatus,
-                            )}
-                            required={canEditInitialExemptionStatus}
-                            value={form.exemptionStatusCode}
-                            invalid={!!fieldError('exemptionStatusCode')}
-                            invalidText={fieldError('exemptionStatusCode')}
-                            placeholder="Select status"
-                            options={exemptionStatuses}
-                            disabled={!canEditInitialExemptionStatus}
-                            onChange={(value) => {
-                              markFormEdited()
-                              setForm((current) => ({ ...current, exemptionStatusCode: value }))
-                            }}
-                          />
-                        </RecordFieldCell>
-                      </RecordFieldRow>
-                      <RecordFieldRow>
-                        <RecordFieldCell>
                           <RadioButtonGroup
                             className="provincial-exemption-type-group"
                             legendText={requiredLabel('Exemption type')}
@@ -614,6 +592,8 @@ const ProvincialExemptionCreatePage = () => {
                             ))}
                           </RadioButtonGroup>
                         </RecordFieldCell>
+                      </RecordFieldRow>
+                      <RecordFieldRow>
                         {oicLike && (
                           <RecordFieldCell>
                             <TextInput
@@ -634,7 +614,33 @@ const ProvincialExemptionCreatePage = () => {
                             />
                           </RecordFieldCell>
                         )}
+                        <RecordFieldCell>
+                          <SearchableSelect
+                            id="exemptionStatusCode"
+                            labelText={requiredLabel('Status', canEditInitialExemptionStatus)}
+                            required={canEditInitialExemptionStatus}
+                            value={form.exemptionStatusCode}
+                            invalid={!!fieldError('exemptionStatusCode')}
+                            invalidText={fieldError('exemptionStatusCode')}
+                            placeholder="Select status"
+                            options={exemptionStatuses}
+                            disabled={!canEditInitialExemptionStatus}
+                            onChange={(value) => {
+                              markFormEdited()
+                              setForm((current) => ({ ...current, exemptionStatusCode: value }))
+                            }}
+                          />
+                        </RecordFieldCell>
                       </RecordFieldRow>
+                      {oicLike && (
+                        <RecordFieldRow>
+                          <RecordField
+                            label="Exemption holder"
+                            value="No applications associated with this exemption"
+                            span="wide"
+                          />
+                        </RecordFieldRow>
+                      )}
                       <RecordFieldRow>
                         <RecordFieldCell>
                           <IsoDatePicker

@@ -122,6 +122,20 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
   })
 
   it('shows a green creation confirmation after redirecting from application creation', async () => {
+    // Browsers ignore focus inside an inert region, so the title must be focused after loading.
+    const focusedWhileInert: boolean[] = []
+    const recordTitleFocus = (event: FocusEvent) => {
+      const target = event.target as HTMLElement
+      if (target.tagName === 'H1') focusedWhileInert.push(!!target.closest('[inert]'))
+    }
+    document.addEventListener('focusin', recordTitleFocus)
+    let resolveSnapshot: (snapshot: typeof applicationSummarySnapshot) => void = () => undefined
+    mockedFetchApplicationSummarySnapshot.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSnapshot = resolve
+        }),
+    )
     render(
       <MemoryRouter
         initialEntries={[
@@ -146,9 +160,15 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
     expect(screen.queryByText('Action complete')).not.toBeInTheDocument()
+    await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalled())
+    await act(async () => {
+      resolveSnapshot(applicationSummarySnapshot)
+    })
     await waitFor(() =>
       expect(screen.getByRole('heading', { level: 1, name: 'Application 321' })).toHaveFocus(),
     )
+    document.removeEventListener('focusin', recordTitleFocus)
+    expect(focusedWhileInert).toEqual([false])
   })
 
   it('shows each summary field once while editing and restores display values on cancel', async () => {
@@ -478,6 +498,62 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     observer.disconnect()
     expect(warningShown).toBe(false)
     expect(screen.queryByText('Client details unavailable')).not.toBeInTheDocument()
+  })
+
+  it('waits for client locations before warning about a client without a location', async () => {
+    let resolveLocations: (
+      locations: { locationCode: string; locationName: string; selected: boolean }[],
+    ) => void = () => undefined
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicantTypeCode: 'O',
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      ownerClientLocationCode: '',
+    })
+    mockedFetchApplicationClientLocations.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLocations = resolve
+        }),
+    )
+    mockedFetchApplicationClientData.mockReturnValue(new Promise(() => undefined))
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [],
+      remarks: [],
+      offers: [],
+    })
+
+    let warningShown = false
+    const observer = new MutationObserver((records) => {
+      warningShown ||= records.some((record) =>
+        [...record.addedNodes].some((node) =>
+          node.textContent?.includes('Client details unavailable'),
+        ),
+      )
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await waitFor(() => expect(mockedFetchApplicationClientLocations).toHaveBeenCalled())
+    await act(async () => {
+      resolveLocations([{ locationCode: '00', locationName: 'Main', selected: true }])
+    })
+    await waitFor(() => expect(mockedFetchApplicationClientData).toHaveBeenCalled())
+    observer.disconnect()
+    expect(warningShown).toBe(false)
   })
 
   it('keeps saved client values visible when enrichment fails', async () => {

@@ -893,6 +893,8 @@ const ProvincialApplicationDetailsPage = () => {
   const [isLoadingAgentClientData, setIsLoadingAgentClientData] = useState(false)
   const [settledOwnerClientLookupKey, setSettledOwnerClientLookupKey] = useState('')
   const [settledAgentClientLookupKey, setSettledAgentClientLookupKey] = useState('')
+  const [settledOwnerLocationsNumber, setSettledOwnerLocationsNumber] = useState('')
+  const [settledAgentLocationsNumber, setSettledAgentLocationsNumber] = useState('')
   const [
     dismissedDocumentUploadUnavailableMessageKey,
     setDismissedDocumentUploadUnavailableMessageKey,
@@ -1341,7 +1343,8 @@ const ProvincialApplicationDetailsPage = () => {
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const isOwnerClientLookupPending = isLoadingOwnerClientLocations || isLoadingOwnerClientData
   // A client lookup counts as loading until it settles for the current client, so a details
-  // card does not show its unavailable warning before the first request starts.
+  // card does not show its unavailable warning before the first request starts. A client with
+  // no location yet waits for its locations, which can supply the default location.
   const ownerClientLookupKey = hasSummaryForm
     ? clientLookupKey(summaryOwnerClientNumberForLookup, summaryOwnerClientLocationCode)
     : ''
@@ -1350,10 +1353,18 @@ const ProvincialApplicationDetailsPage = () => {
     : ''
   const isOwnerClientDataPending =
     isLoadingOwnerClientData ||
-    (!!ownerClientLookupKey && settledOwnerClientLookupKey !== ownerClientLookupKey)
+    (!!ownerClientLookupKey && settledOwnerClientLookupKey !== ownerClientLookupKey) ||
+    (hasSummaryForm &&
+      !!summaryOwnerClientNumberForLookup &&
+      !summaryOwnerClientLocationCode &&
+      settledOwnerLocationsNumber !== summaryOwnerClientNumberForLookup)
   const isAgentClientDataPending =
     isLoadingAgentClientData ||
-    (!!agentClientLookupKey && settledAgentClientLookupKey !== agentClientLookupKey)
+    (!!agentClientLookupKey && settledAgentClientLookupKey !== agentClientLookupKey) ||
+    (hasSummaryForm &&
+      !!summaryAgentClientNumberForLookup &&
+      !summaryAgentClientLocationCode &&
+      settledAgentLocationsNumber !== summaryAgentClientNumberForLookup)
   const isAgentClientLookupPending = isLoadingAgentClientLocations || isLoadingAgentClientData
   const isSummaryClientLookupPendingForSource = useCallback(
     (source: SummarySaveSource): boolean => {
@@ -2058,6 +2069,7 @@ const ProvincialApplicationDetailsPage = () => {
           return
         }
 
+        setSettledOwnerLocationsNumber(summaryOwnerClientNumberForLookup)
         setOwnerClientLocations(locations)
         updateClientLookupFailure('owner-locations', false)
         if (!canEditSummary) {
@@ -2088,6 +2100,7 @@ const ProvincialApplicationDetailsPage = () => {
             summaryOwnerClientNumberForLookup,
           )
         ) {
+          setSettledOwnerLocationsNumber(summaryOwnerClientNumberForLookup)
           setOwnerClientLocations([])
           updateClientLookupFailure('owner-locations', true)
         }
@@ -2166,6 +2179,7 @@ const ProvincialApplicationDetailsPage = () => {
           return
         }
 
+        setSettledAgentLocationsNumber(summaryAgentClientNumberForLookup)
         setAgentClientLocations(locations)
         updateClientLookupFailure('agent-locations', false)
         if (!canEditSummary) {
@@ -2196,6 +2210,7 @@ const ProvincialApplicationDetailsPage = () => {
             summaryAgentClientNumberForLookup,
           )
         ) {
+          setSettledAgentLocationsNumber(summaryAgentClientNumberForLookup)
           setAgentClientLocations([])
           updateClientLookupFailure('agent-locations', true)
         }
@@ -4077,7 +4092,7 @@ const ProvincialApplicationDetailsPage = () => {
           title={`Application ${
             detailMatchesRoute ? (detail?.applicationNumber ?? '') : (applicationNumber ?? '')
           }`.trim()}
-          focusTitle={focusCreatedApplicationTitle && !!detail && detailMatchesRoute}
+          focusTitle={focusCreatedApplicationTitle && detailMatchesRoute && !isRefreshingDetail}
           subtitle={
             detail && detailMatchesRoute
               ? `Author: ${displayValueText(detail.author)}`
