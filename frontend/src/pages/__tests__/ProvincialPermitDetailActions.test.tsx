@@ -1128,6 +1128,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     // The design shows the confirmation as the title alone.
     expect(screen.getAllByText('The permit was saved.')).toHaveLength(1)
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveFocus())
     expect(screen.getByRole('heading', { name: 'Permit 777 (Pending)' })).toBeInTheDocument()
     expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('button', { name: 'Edit permit details' })).toBeInTheDocument()

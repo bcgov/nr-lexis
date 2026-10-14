@@ -15,7 +15,6 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { AddDocument, Cardboard, Invoice } from '@carbon/pictograms-react'
 import {
   Box,
   Certificate,
@@ -27,7 +26,6 @@ import {
 } from '@carbon/icons-react'
 import { Link, useLocation } from 'react-router-dom'
 import DetailCardTitle from '@/components/DetailCardTitle'
-import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PendingIcon from '@/components/PendingIcon'
@@ -227,8 +225,11 @@ const requiredTextError = (value: string, label: string, maxLength: number): str
     : `${label} must be ${maxLength} characters or fewer.`
 }
 
-const clientNumberError = (value: string, label: string): string | undefined =>
-  /^\d{8}$/.test(value.trim()) ? undefined : `${label} must be exactly 8 digits.`
+const clientNumberError = (value: string, fieldLabel: string): string | undefined => {
+  const normalized = value.trim()
+  if (!normalized) return `${fieldLabel} is required.`
+  return /^\d{8}$/.test(normalized) ? undefined : `${fieldLabel} number must be exactly 8 digits.`
+}
 
 const isPopulatedIsoDate = (value: string): boolean => !!value.trim() && isValidIsoDate(value)
 
@@ -266,7 +267,7 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
     permitIssueDate: optionalDateError(form.permitIssueDate, 'Issued date'),
     permitExpiryDate: optionalDateError(form.permitExpiryDate, 'Expiry date'),
     orgUnitNumber: form.orgUnitNumber.trim() ? undefined : 'Region is required.',
-    ownerClientNumber: clientNumberError(form.ownerClientNumber, 'Client number'),
+    ownerClientNumber: clientNumberError(form.ownerClientNumber, 'Client'),
     ownerClientLocation: form.ownerClientLocation.trim()
       ? undefined
       : 'Client location is required.',
@@ -334,7 +335,7 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
   }
 
   if (agentUsed) {
-    errors.agentClientNumber = clientNumberError(form.agentClientNumber, 'Agent client number')
+    errors.agentClientNumber = clientNumberError(form.agentClientNumber, 'Agent client')
     errors.agentClientLocation = form.agentClientLocation.trim()
       ? undefined
       : 'Agent client location is required.'
@@ -1453,31 +1454,13 @@ const BlanketOicPermitCreateForm = ({
             </Tile>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
-            <EmptyState
-              variant="tab"
-              icon={<Cardboard width={48} height={48} />}
-              title="Save the permit first"
-              description="Available after the permit is saved."
-              headingLevel={2}
-            />
+            <p className="boic-permit-unsaved-tab-note">Available after the permit is saved.</p>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
-            <EmptyState
-              variant="tab"
-              icon={<AddDocument width={48} height={48} />}
-              title="Save the permit first"
-              description="Available after the permit is saved."
-              headingLevel={2}
-            />
+            <p className="boic-permit-unsaved-tab-note">Available after the permit is saved.</p>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
-            <EmptyState
-              variant="tab"
-              icon={<Invoice width={48} height={48} />}
-              title="Save the permit first"
-              description="Available after the permit is saved."
-              headingLevel={2}
-            />
+            <p className="boic-permit-unsaved-tab-note">Available after the permit is saved.</p>
           </TabPanel>
         </TabPanels>
       </Tabs>

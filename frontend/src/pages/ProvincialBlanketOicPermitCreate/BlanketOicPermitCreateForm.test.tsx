@@ -204,7 +204,7 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(screen.queryByRole('group', { name: 'Permit needs attention' })).not.toBeInTheDocument()
   })
 
-  it('leads each card title with its tab icon and shows the later tabs without a card', async () => {
+  it('leads each card title with its tab icon and notes the later tabs without a card', async () => {
     const user = userEvent.setup()
     renderForm()
 
@@ -214,10 +214,9 @@ describe('BlanketOicPermitCreateForm', () => {
     ).toHaveAttribute('aria-hidden', 'true')
     for (const tab of ['Scale', 'Documents', 'Fees']) {
       await user.click(screen.getByRole('tab', { name: tab }))
-      const emptyState = screen.getByRole('region', { name: 'Save the permit first' })
-      expect(emptyState).toHaveClass('lexis-empty-state--tab')
-      expect(emptyState).toHaveTextContent('Available after the permit is saved.')
-      expect(emptyState.closest('.cds--tile')).toBeNull()
+      const panel = screen.getByRole('tabpanel', { name: tab })
+      expect(panel).toHaveTextContent(/^Available after the permit is saved\.$/)
+      expect(panel.querySelector('.cds--tile, h2, svg')).toBeNull()
     }
   })
 

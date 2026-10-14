@@ -6,7 +6,7 @@ import PermitCountrySelect from '..'
 const countryOptions = [
   { value: 'CO', label: 'Colombia (CO)' },
   { value: 'CA', label: 'Canada (CA)' },
-  { value: 'US', label: 'United States (US)' },
+  { value: 'US', label: 'United States of America (US)' },
   { value: 'TW', label: 'Taiwan (TW)' },
   { value: 'JP', label: 'Japan (JP)' },
   { value: 'CN', label: 'China (CN)' },
@@ -44,7 +44,7 @@ describe('PermitCountrySelect', () => {
     await user.click(countryInput)
 
     expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual([
-      'United States (US)',
+      'United States of America (US)',
       'Japan (JP)',
       'China (CN)',
       'Korea (KR)',
@@ -74,7 +74,7 @@ describe('PermitCountrySelect', () => {
     expect(screen.getByLabelText('Selected country')).toHaveTextContent('AD')
   })
 
-  it('shows flat search matches with preferred countries first and supports keyboard selection', async () => {
+  it('matches the start of country names with preferred countries first and supports keyboard selection', async () => {
     const user = userEvent.setup()
     const { container } = render(<CountrySelectHarness />)
     const countryInput = screen.getByRole('combobox', { name: 'Final destination country' })
