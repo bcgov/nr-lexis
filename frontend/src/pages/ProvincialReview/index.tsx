@@ -1580,6 +1580,7 @@ const ProvincialReviewPage = () => {
                   pageSize={results.page.size}
                   pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
                   totalItems={results.page.totalElements}
+                  totalPending={totalStatus === 'pending'}
                   pagesUnknown={totalStatus !== 'exact'}
                   isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
                   onChange={({ page, pageSize: nextPageSize }) => {

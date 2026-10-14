@@ -17,4 +17,20 @@ describe('Pagination', () => {
 
     expect(screen.getByText('1,001–1,010 items')).toBeInTheDocument()
   })
+
+  it('holds the pager place with a skeleton while the total is being counted', () => {
+    const { container } = render(
+      <Pagination
+        page={2}
+        pageSize={10}
+        pageSizes={[10, 25]}
+        totalItems={20}
+        pagesUnknown
+        totalPending
+      />,
+    )
+
+    expect(container.querySelector('.cds--pagination.cds--skeleton')).toBeInTheDocument()
+    expect(screen.queryByText(/items/)).not.toBeInTheDocument()
+  })
 })

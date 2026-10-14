@@ -189,6 +189,9 @@ const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
 // Figma confirms every Applicant, Application and Scale save, including the first, with this title.
 const APPLICATION_SAVED_TITLE = 'The application was saved.'
 
+const clientLookupKey = (clientNumber: string, locationCode: string): string =>
+  clientNumber && locationCode ? `${clientNumber}|${locationCode}` : ''
+
 const REVIEW_STATUS_SUCCESS_TITLES: Record<string, string> = {
   REJ: 'Application rejected.',
   WDN: 'Application withdrawn.',
@@ -778,6 +781,8 @@ const ProvincialApplicationDetailsPage = () => {
   const detailReturnTo = readDetailReturnTo(navigationState) ?? fallbackReturnTo
   const createdApplicationNumber =
     navigationState?.applicationCreationNotice?.applicationNumber.trim()
+  // The create page's Save button is gone, so focus starts at the new application's title.
+  const [focusCreatedApplicationTitle] = useState(() => !!createdApplicationNumber)
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
   const [documentRows, setDocumentRows] = useState<ProvincialApplicationDocumentRow[]>([])
   const [permitRows, setPermitRows] = useState<ApplicationPermitRow[]>([])
@@ -886,6 +891,8 @@ const ProvincialApplicationDetailsPage = () => {
   const [isLoadingAgentClientLocations, setIsLoadingAgentClientLocations] = useState(false)
   const [isLoadingOwnerClientData, setIsLoadingOwnerClientData] = useState(false)
   const [isLoadingAgentClientData, setIsLoadingAgentClientData] = useState(false)
+  const [settledOwnerClientLookupKey, setSettledOwnerClientLookupKey] = useState('')
+  const [settledAgentClientLookupKey, setSettledAgentClientLookupKey] = useState('')
   const [
     dismissedDocumentUploadUnavailableMessageKey,
     setDismissedDocumentUploadUnavailableMessageKey,
@@ -1333,6 +1340,20 @@ const ProvincialApplicationDetailsPage = () => {
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
   const isOwnerClientLookupPending = isLoadingOwnerClientLocations || isLoadingOwnerClientData
+  // A client lookup counts as loading until it settles for the current client, so a details
+  // card does not show its unavailable warning before the first request starts.
+  const ownerClientLookupKey = hasSummaryForm
+    ? clientLookupKey(summaryOwnerClientNumberForLookup, summaryOwnerClientLocationCode)
+    : ''
+  const agentClientLookupKey = hasSummaryForm
+    ? clientLookupKey(summaryAgentClientNumberForLookup, summaryAgentClientLocationCode)
+    : ''
+  const isOwnerClientDataPending =
+    isLoadingOwnerClientData ||
+    (!!ownerClientLookupKey && settledOwnerClientLookupKey !== ownerClientLookupKey)
+  const isAgentClientDataPending =
+    isLoadingAgentClientData ||
+    (!!agentClientLookupKey && settledAgentClientLookupKey !== agentClientLookupKey)
   const isAgentClientLookupPending = isLoadingAgentClientLocations || isLoadingAgentClientData
   const isSummaryClientLookupPendingForSource = useCallback(
     (source: SummarySaveSource): boolean => {
@@ -1811,6 +1832,9 @@ const ProvincialApplicationDetailsPage = () => {
           return
         }
 
+        setSettledOwnerClientLookupKey(
+          clientLookupKey(summaryOwnerClientNumberForLookup, summaryOwnerClientLocationCode),
+        )
         setOwnerClientData(clientData)
         updateClientLookupFailure('owner-data', false)
         if (!clientData || (!isEditingOwnerDetails && !isEditingSummary)) {
@@ -1846,6 +1870,9 @@ const ProvincialApplicationDetailsPage = () => {
           ) &&
           (currentForm?.ownerClientLocationCode ?? '').trim() === summaryOwnerClientLocationCode
         ) {
+          setSettledOwnerClientLookupKey(
+            clientLookupKey(summaryOwnerClientNumberForLookup, summaryOwnerClientLocationCode),
+          )
           setOwnerClientData(null)
           updateClientLookupFailure('owner-data', true)
         }
@@ -1910,6 +1937,9 @@ const ProvincialApplicationDetailsPage = () => {
           return
         }
 
+        setSettledAgentClientLookupKey(
+          clientLookupKey(summaryAgentClientNumberForLookup, summaryAgentClientLocationCode),
+        )
         setAgentClientData(clientData)
         updateClientLookupFailure('agent-data', false)
         if (!clientData || (!isEditingOwnerDetails && !isEditingSummary)) {
@@ -1945,6 +1975,9 @@ const ProvincialApplicationDetailsPage = () => {
           ) &&
           (currentForm?.agentClientLocationCode ?? '').trim() === summaryAgentClientLocationCode
         ) {
+          setSettledAgentClientLookupKey(
+            clientLookupKey(summaryAgentClientNumberForLookup, summaryAgentClientLocationCode),
+          )
           setAgentClientData(null)
           updateClientLookupFailure('agent-data', true)
         }
@@ -3510,7 +3543,7 @@ const ProvincialApplicationDetailsPage = () => {
       title="Applicant client details"
       showTitle={false}
       clientData={ownerClientData}
-      isLoading={isLoadingOwnerClientData}
+      isLoading={isOwnerClientDataPending}
       detailFields={ownerClientDetailFields}
     />
   )
@@ -3532,7 +3565,7 @@ const ProvincialApplicationDetailsPage = () => {
       title="Agent details"
       showTitle={false}
       clientData={agentClientData}
-      isLoading={isLoadingAgentClientData}
+      isLoading={isAgentClientDataPending}
       detailFields={agentClientDetailFields}
     />
   ) : (
@@ -4044,6 +4077,7 @@ const ProvincialApplicationDetailsPage = () => {
           title={`Application ${
             detailMatchesRoute ? (detail?.applicationNumber ?? '') : (applicationNumber ?? '')
           }`.trim()}
+          focusTitle={focusCreatedApplicationTitle && !!detail && detailMatchesRoute}
           subtitle={
             detail && detailMatchesRoute
               ? `Author: ${displayValueText(detail.author)}`
@@ -4284,7 +4318,7 @@ const ProvincialApplicationDetailsPage = () => {
                               title="Applicant client details"
                               showTitle={false}
                               clientData={ownerClientData}
-                              isLoading={isLoadingOwnerClientData}
+                              isLoading={isOwnerClientDataPending}
                             />
                             <hr className="application-applicant-divider" />
                             <Checkbox
@@ -4403,7 +4437,7 @@ const ProvincialApplicationDetailsPage = () => {
                                   title="Agent information"
                                   showTitle={false}
                                   clientData={agentClientData}
-                                  isLoading={isLoadingAgentClientData}
+                                  isLoading={isAgentClientDataPending}
                                 />
                               </section>
                             )}
