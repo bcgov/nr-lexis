@@ -2583,9 +2583,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
   })
 
   test('keeps record summaries and footer actions within the form', async ({ page }, testInfo) => {
+    // Create new exemption shows its status in the form, with no record summary footer.
+    await gotoSyntheticRoute(page, '/provincial/exemption/create', {
+      ready: page.getByRole('heading', { level: 1, name: 'Create new exemption', exact: true }),
+    })
+    await expect(page.locator('.legacy-form-footer')).toHaveCount(0)
+
     const routes = [
       ['/provincial/offers/create', 'Create new offer'],
-      ['/provincial/exemption/create', 'Create new exemption'],
       ['/provincial/offers/81001', 'Offer 81001'],
     ]
     const bounds: unknown[] = []

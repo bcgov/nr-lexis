@@ -37,9 +37,9 @@ const tableRowBackgrounds = (row: Locator): Promise<string[]> =>
     Array.from(element.querySelectorAll('td'), (cell) => getComputedStyle(cell).backgroundColor),
   )
 
-const exactSearchResultCountLabel = (total: number): string => {
+const exactSearchResultCountLabel = (total: number, resultName: string): string => {
   const formattedTotal = new Intl.NumberFormat('en-CA').format(total)
-  return `${formattedTotal} ${total === 1 ? 'result' : 'results'} found`
+  return `${formattedTotal} ${resultName}${total === 1 ? '' : 's'} found`
 }
 
 const expectFsptsUploadLayout = async (page: Page): Promise<void> => {
@@ -705,10 +705,10 @@ const adminNavigationSections: Array<{
 const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/admin/policies/fee', /multiplication factor/i],
   ['/admin/policies/fil', /non-appraised sec\.3 fil%/i],
-  ['/provincial/review', /provincial application review/i],
+  ['/provincial/review', /^Application review$/],
   ['/provincial/application/create', /create new application/i],
   ['/provincial/application/upload', /upload application submission/i],
-  ['/provincial/application', /provincial application search/i],
+  ['/provincial/application', /^Application search$/],
   ['/federal', /federal application search/i],
   ['/reports', /offers report/i],
   ['/admin/rtm/emslogamv/upload', /average market values/i],
@@ -731,18 +731,18 @@ const retiredReportPages: Array<[path: string, heading: RegExp]> = [
   ['/reports/feeReport', /fee report/i],
 ]
 
-const createWorkflowPages: Array<[path: string, heading: RegExp]> = [
-  ['/provincial/application/create', /create new application/i],
-  ['/provincial/exemption/create', /create new exemption/i],
-  ['/provincial/offers/create', /create new offer/i],
+const createWorkflowPages: Array<[path: string, heading: RegExp, saveLabel: string]> = [
+  ['/provincial/application/create', /create new application/i, 'Save application'],
+  ['/provincial/exemption/create', /create new exemption/i, 'Save exemption'],
+  ['/provincial/offers/create', /create new offer/i, 'Save new offer'],
 ]
 
 const regionFilterPages: Array<[path: string, heading: RegExp]> = [
-  ['/provincial/review?region=1903,1908', /provincial application review/i],
-  ['/provincial/application?region=1903,1908', /provincial application search/i],
-  ['/provincial/exemption?region=1903,1908', /provincial exemption search/i],
-  ['/provincial/offers?region=1903,1908', /provincial offers search/i],
-  ['/provincial/permit?region=1903,1908', /permit search/i],
+  ['/provincial/review?region=1903,1908', /^Application review$/],
+  ['/provincial/application?region=1903,1908', /^Application search$/],
+  ['/provincial/exemption?region=1903,1908', /^Exemption search$/],
+  ['/provincial/offers?region=1903,1908', /^Offer search$/],
+  ['/provincial/permit?region=1903,1908', /^Permit search$/],
 ]
 
 const searchPageSizeContracts: Array<{
@@ -791,13 +791,13 @@ const searchDefaultPageSizePages: Array<{
   {
     source: 'application review search',
     pagePath: `/provincial/review?applicationNumber=${missingApplicationNumber}`,
-    heading: /provincial application review/i,
+    heading: /^Application review$/,
     searchPath: '/api/lexis/application-reviews/search',
   },
   {
     source: 'provincial application search',
     pagePath: `/provincial/application?applicationNumber=${missingApplicationNumber}`,
-    heading: /provincial application search/i,
+    heading: /^Application search$/,
     searchPath: '/api/lexis/applications/search',
   },
   {
@@ -809,19 +809,19 @@ const searchDefaultPageSizePages: Array<{
   {
     source: 'exemption search',
     pagePath: '/provincial/exemption?exemptionNumber=LEXIS-E2E-MISSING',
-    heading: /provincial exemption search/i,
+    heading: /^Exemption search$/,
     searchPath: '/api/lexis/exemptions/search',
   },
   {
     source: 'purchase offer search',
     pagePath: '/provincial/offers?packageNumber=LEXIS-E2E-MISSING',
-    heading: /provincial offers search/i,
+    heading: /^Offer search$/,
     searchPath: '/api/lexis/purchase-offers/search',
   },
   {
     source: 'permit search',
     pagePath: '/provincial/permit?permitNumber=LEXIS-E2E-MISSING',
-    heading: /permit search/i,
+    heading: /^Permit search$/,
     searchPath: '/api/lexis/permits/search',
   },
 ]
@@ -831,42 +831,49 @@ const deferredSearchCountPages: Array<{
   pagePath: string
   heading: RegExp
   countPath: string
+  resultName: string
 }> = [
   {
     source: 'application review search',
     pagePath: '/provincial/review?page=1&pageSize=10',
-    heading: /provincial application review/i,
+    heading: /^Application review$/,
     countPath: '/api/lexis/application-reviews/search/count',
+    resultName: 'application',
   },
   {
     source: 'provincial application search',
     pagePath: '/provincial/application?page=1&pageSize=10',
-    heading: /provincial application search/i,
+    heading: /^Application search$/,
     countPath: '/api/lexis/applications/search/count',
+    resultName: 'application',
   },
   {
     source: 'federal application search',
     pagePath: '/federal?page=1&pageSize=10',
     heading: /federal application search/i,
     countPath: '/api/lexis/federal/applications/search/count',
+    resultName: 'application',
   },
   {
     source: 'exemption search',
     pagePath: '/provincial/exemption?page=1&pageSize=10',
-    heading: /provincial exemption search/i,
+    heading: /^Exemption search$/,
     countPath: '/api/lexis/exemptions/search/count',
+    resultName: 'exemption',
   },
   {
     source: 'purchase offer search',
     pagePath: '/provincial/offers?page=1&pageSize=10',
-    heading: /provincial offers search/i,
+    heading: /^Offer search$/,
     countPath: '/api/lexis/purchase-offers/search/count',
+    resultName: 'offer',
   },
   {
     source: 'permit search',
     pagePath: '/provincial/permit?page=1&pageSize=10',
-    heading: /permit search/i,
+    heading: /^Permit search$/,
     countPath: '/api/lexis/permits/search/count',
+    resultName: 'permit',
   },
 ]
 
@@ -1636,7 +1643,7 @@ test.describe('TEST IDIR admin regression', () => {
     const page = await authenticatedIdirPage()
     const apiServerErrors = collectApiServerErrors(page)
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+    await expectAccessiblePage(page, '/provincial/review', /^Application review$/)
 
     await expect(page.getByRole('button', { name: 'Provincial', exact: true })).toHaveAttribute(
       'aria-expanded',
@@ -1688,13 +1695,11 @@ test.describe('TEST IDIR admin regression', () => {
   test('lands authenticated IDIR admins on provincial application review from the app root', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/', /provincial application review/i)
+    await expectAccessiblePage(page, '/', /^Application review$/)
 
-    await expect(page.getByRole('heading', { name: /provincial application review/i })).toBeVisible(
-      {
-        timeout: 30_000,
-      },
-    )
+    await expect(page.getByRole('heading', { name: /^Application review$/ })).toBeVisible({
+      timeout: 30_000,
+    })
     await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/review')
   })
 
@@ -1704,7 +1709,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expectAccessiblePage(
       page,
       `/provincial/application?applicationNumber=${missingApplicationNumber}`,
-      /provincial application search/i,
+      /^Application search$/,
     )
     await expect(page.getByText('No results found', { exact: true })).toBeVisible()
 
@@ -1713,7 +1718,7 @@ test.describe('TEST IDIR admin regression', () => {
       `/federal?applicationNumber=${missingApplicationNumber}`,
       /federal application search/i,
     )
-    await expectAccessiblePage(page, '/provincial/application', /provincial application search/i)
+    await expectAccessiblePage(page, '/provincial/application', /^Application search$/)
 
     await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/application')
     await expect
@@ -1725,7 +1730,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('supports collapsible sidebar groups and collapsed group-rail navigation', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+    await expectAccessiblePage(page, '/provincial/review', /^Application review$/)
 
     const reportsSection = page.locator(sideNavSection('Reports'))
     await expandSideNavSection(page, 'Reports')
@@ -1762,7 +1767,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expectAccessiblePage(
       page,
       `/provincial/review?applicationNumber=${missingApplicationNumber}`,
-      /provincial application review/i,
+      /^Application review$/,
     )
     const themeSwitch = page.getByRole('switch', { name: 'Dark theme' })
     const initiallyDark = (await themeSwitch.getAttribute('aria-checked')) === 'true'
@@ -1807,7 +1812,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('keeps upload navigation scoped to provincial application submissions', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+    await expectAccessiblePage(page, '/provincial/review', /^Application review$/)
 
     const provincialSection = page.locator(sideNavSection('Provincial'))
     const federalSection = page.locator(sideNavSection('Federal'))
@@ -1837,7 +1842,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('heading', { name: 'Submission summary' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Review' })).toBeEnabled()
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+    await expectAccessiblePage(page, '/provincial/review', /^Application review$/)
     await expect(federalSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
     await expect(adminSection.getByRole('link', { name: /upload/i })).toHaveCount(0)
 
@@ -1885,7 +1890,7 @@ test.describe('TEST IDIR admin regression', () => {
   test('opens reports from direct sidebar report links', async () => {
     const page = await authenticatedIdirPage()
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+    await expectAccessiblePage(page, '/provincial/review', /^Application review$/)
     await expandSideNavSection(page, 'Reports')
 
     for (const [linkName, path, heading] of [
@@ -2316,7 +2321,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expectAccessiblePage(
       page,
       '/provincial/review?page=1&pageSize=25',
-      /provincial application review/i,
+      /^Application review$/,
     )
 
     const approveSelectedButton = page.getByRole('button', {
@@ -2739,14 +2744,9 @@ test.describe('TEST IDIR admin regression', () => {
   test('uses save and cancel workflow on provincial create/edit pages', async () => {
     const page = await authenticatedIdirPage()
 
-    for (const [path, heading] of createWorkflowPages) {
+    for (const [path, heading, saveLabel] of createWorkflowPages) {
       await expectAccessiblePage(page, path, heading)
-      await expect(
-        page.getByRole('button', {
-          name: path === '/provincial/application/create' ? 'Save application' : 'Save',
-          exact: true,
-        }),
-      ).toBeVisible()
+      await expect(page.getByRole('button', { name: saveLabel, exact: true })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Cancel' })).toBeVisible()
       await expect(page.getByRole('button', { name: 'Save Draft' })).toHaveCount(0)
       await expect(page.getByRole('button', { name: 'Submit' })).toHaveCount(0)
@@ -3068,7 +3068,9 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(
         resultCount,
         `${contract.source} should replace its count skeleton with the exact number`,
-      ).toHaveText(exactSearchResultCountLabel(count.total as number), { timeout: 30_000 })
+      ).toHaveText(exactSearchResultCountLabel(count.total as number, contract.resultName), {
+        timeout: 30_000,
+      })
       await expect(resultCount.locator('.legacy-search-result-count-skeleton')).toHaveCount(0)
     }
   })
@@ -3714,7 +3716,7 @@ test.describe('TEST IDIR admin regression', () => {
       await test.step('find the imported application by uppercase and lowercase package number', () =>
         expectLowercasePackageSearch(page, packageNumber, {
           pagePath: '/provincial/application',
-          heading: /provincial application search/i,
+          heading: /^Application search$/,
           searchPath: '/api/lexis/applications/search',
           numberField: 'application',
           recordNumber: String(lifecycleApplicationNumber),
@@ -4006,13 +4008,17 @@ test.describe('TEST IDIR admin regression', () => {
         )
         await page.getByRole('tab', { name: 'Exemption details', exact: true }).click()
         await page.getByRole('button', { name: 'Edit exemption details', exact: true }).click()
-        for (const label of [
-          'Approval date',
-          'Expiry date',
-          'Approved volume (m³)',
-          'Conditions',
-        ]) {
-          await expect(page.getByLabel(label, { exact: true })).toBeDisabled()
+        const summaryPanel = page.getByRole('tabpanel', { name: 'Exemption details' })
+        // A cancelled Ministerial exemption shows its missing approval date as read-only text.
+        await expect(summaryPanel.getByLabel('Approval date', { exact: true })).toHaveCount(0)
+        await expect(
+          summaryPanel
+            .locator('dl.record-field')
+            .filter({ has: page.locator('dt', { hasText: /^Approval date$/ }) })
+            .locator('dd'),
+        ).toHaveText('Not approved')
+        for (const label of ['Expiry date', 'Approval volume (m³)', 'Conditions']) {
+          await expect(summaryPanel.getByLabel(label, { exact: true })).toBeDisabled()
         }
         await expect(page.getByLabel('Expiry date', { exact: true })).toHaveValue('')
         const status = page.getByRole('combobox', { name: 'Status', exact: true })
@@ -4056,7 +4062,7 @@ test.describe('TEST IDIR admin regression', () => {
       await test.step('find the linked exemption by uppercase and lowercase package number', () =>
         expectLowercasePackageSearch(page, packageNumber, {
           pagePath: '/provincial/exemption',
-          heading: /provincial exemption search/i,
+          heading: /^Exemption search$/,
           searchPath: '/api/lexis/exemptions/search',
           numberField: 'exemptionNumber',
           recordNumber: exemptionNumber,
@@ -4239,7 +4245,7 @@ test.describe('TEST IDIR admin regression', () => {
       await test.step('find the linked permit by uppercase and lowercase package number', () =>
         expectLowercasePackageSearch(page, packageNumber, {
           pagePath: '/provincial/permit',
-          heading: /permit search/i,
+          heading: /^Permit search$/,
           searchPath: '/api/lexis/permits/search',
           numberField: 'permitNumber',
           recordNumber: String(permitNumber),
@@ -4345,7 +4351,7 @@ test.describe('TEST IDIR admin regression', () => {
     await redirectExternalLogoutToLoginShell(page)
     await loginWithIdir(page)
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+    await expectAccessiblePage(page, '/provincial/review', /^Application review$/)
     await expectLogoutRoundTrip(page, 'Expired IDIR admin session', () =>
       page.evaluate((eventName) => {
         window.dispatchEvent(
@@ -4362,7 +4368,7 @@ test.describe('TEST IDIR admin regression', () => {
     await redirectExternalLogoutToLoginShell(page)
     await loginWithIdir(page)
 
-    await expectAccessiblePage(page, '/provincial/review', /provincial application review/i)
+    await expectAccessiblePage(page, '/provincial/review', /^Application review$/)
     const profileButton = page.locator('button[aria-controls="profile-panel"]')
     if ((await profileButton.getAttribute('aria-expanded')) !== 'true') {
       await profileButton.click()
