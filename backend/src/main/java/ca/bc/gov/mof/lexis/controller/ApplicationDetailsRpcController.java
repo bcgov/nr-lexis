@@ -805,6 +805,9 @@ public class ApplicationDetailsRpcController {
           if (changesAgentFromListDate(service, request, authentication)) {
             return agentListDateLocked(request.applicationNumber());
           }
+          if (removesSavedSubmitterAgent(service, request, authentication)) {
+            return savedSubmitterAgentLocked(request.applicationNumber());
+          }
           ApplicationDetailsRpcService.CreateApplicationResult result =
               service.updateApplicationSummary(request, userId);
           return ResponseEntity.ok(
@@ -1667,6 +1670,60 @@ public class ApplicationDetailsRpcController {
             .orElse(false);
     return requestsAgent != savedAgent
         && applicationEditPolicyService.listDateReached(service, request.applicationNumber());
+  }
+
+  /**
+   * A Provincial Submitter who is the saved agent can't remove or replace that agent, since doing so
+   * would end their own access. Staff keep their applicant type rules.
+   */
+  private boolean removesSavedSubmitterAgent(
+      ApplicationDetailsRpcService service,
+      ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request,
+      Authentication authentication) {
+    if (canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)) {
+      return false;
+    }
+    String scopedClientNumber =
+        normalizeClientNumber(
+            provincialAuthorizationService.scopedForestClientNumber(authentication));
+    if (scopedClientNumber == null) {
+      return false;
+    }
+    boolean savedAsAgent =
+        service
+            .getApplicationSummarySnapshot(request.applicationNumber())
+            .map(
+                snapshot ->
+                    APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(
+                            trimToNull(snapshot.applicantTypeCode()))
+                        && scopedClientNumber.equals(
+                            normalizeClientNumber(snapshot.agentClientNumber())))
+            .orElse(false);
+    if (!savedAsAgent) {
+      return false;
+    }
+    String requestedApplicantType = trimToNull(request.applicantTypeCode());
+    boolean removesAgent =
+        request.saveSource().updatesApplicantType()
+            && requestedApplicantType != null
+            && !APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(requestedApplicantType);
+    String requestedAgentClientNumber = normalizeClientNumber(request.agentClientNumber());
+    boolean replacesAgent =
+        request.saveSource().updatesAgentFields()
+            && requestedAgentClientNumber != null
+            && !scopedClientNumber.equals(requestedAgentClientNumber);
+    return removesAgent || replacesAgent;
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> savedSubmitterAgentLocked(
+      Long applicationNumber) {
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            false,
+            null,
+            applicationNumber,
+            List.of("You're the agent on this application, so the agent can't be removed or changed."),
+            List.of()));
   }
 
   private ResponseEntity<ApplicationPersistenceResponseDto> agentListDateLocked(

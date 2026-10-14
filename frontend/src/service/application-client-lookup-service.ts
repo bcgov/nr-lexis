@@ -114,11 +114,14 @@ export const fetchApplicationClientData = async (
       ? { counterpartyClientNumber: normalizedCounterpartyClientNumber }
       : {}),
   }
-  const contextCacheKey = normalizedApplicationNumber
-    ? `:application:${normalizedApplicationNumber}`
-    : normalizedPermitNumber
-      ? `:permit:${normalizedPermitNumber}`
-      : ''
+  // The counterparty is part of the access check, so each pairing is cached on its own.
+  const contextCacheKey = `${
+    normalizedApplicationNumber
+      ? `:application:${normalizedApplicationNumber}`
+      : normalizedPermitNumber
+        ? `:permit:${normalizedPermitNumber}`
+        : ''
+  }${normalizedCounterpartyClientNumber ? `:counterparty:${normalizedCounterpartyClientNumber}` : ''}`
 
   const data = await apiService.getCachedData<unknown>(
     '/lexis/rpc/application-details/client-data',
@@ -194,6 +197,7 @@ export const fetchApplicationClientLocations = async (
         applicantType,
         normalizedClientNumber,
         normalizedApplicationNumber,
+        normalizedCounterpartyClientNumber && `counterparty-${normalizedCounterpartyClientNumber}`,
       ]
         .filter(Boolean)
         .join(':'),

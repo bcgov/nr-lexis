@@ -1863,6 +1863,50 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @ParameterizedTest
+  @CsvSource({"owner, O, 00022222", "owner-agent, A, 00033333"})
+  void updateApplicationSummaryShouldRefuseASavedSubmitterAgentLeavingTheApplication(
+      String saveSource, String requestedApplicantType, String requestedAgentClientNumber) {
+    TestingAuthenticationToken authentication = scopedSubmitter("00022222");
+    matchScopedClient(authentication, "00022222");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithApplicantType("A")));
+    MultiValueMap<String, String> params =
+        ownerAgentSaveParams("00011111", requestedApplicantType, requestedAgentClientNumber);
+    params.set("saveSource", saveSource);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"owner, O, 00022222", "owner-agent, O, 00022222", "owner-agent, A, 00033333"})
+  void updateApplicationSummaryShouldKeepTheAgentWhenASavedSubmitterAgentNamesThemselvesOwner(
+      String saveSource, String requestedApplicantType, String requestedAgentClientNumber) {
+    TestingAuthenticationToken authentication = scopedSubmitter("00022222");
+    matchScopedClient(authentication, "00022222");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithApplicantType("A")));
+    MultiValueMap<String, String> params =
+        ownerAgentSaveParams("00022222", requestedApplicantType, requestedAgentClientNumber);
+    params.set("saveSource", saveSource);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly(
+            "You're the agent on this application, so the agent can't be removed or changed.");
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @ParameterizedTest
   @CsvSource({"O, owner-agent, A", "A, owner, O"})
   void updateApplicationSummaryShouldRejectScopedSubmitterAgentChangeFromTheListDate(
       String savedApplicantType, String saveSource, String requestedApplicantType) {

@@ -93,7 +93,10 @@ describe('application-client-lookup-service', () => {
           counterpartyClientNumber: '00077881',
         },
       },
-      expect.anything(),
+      {
+        cacheKey: 'application-client-locations:owner:00099999:counterparty-00077881',
+        ttlMs: 300000,
+      },
     )
     expect(getCachedDataMock).toHaveBeenNthCalledWith(
       2,
@@ -105,7 +108,10 @@ describe('application-client-lookup-service', () => {
           clientNumber: '00099999',
         },
       },
-      expect.anything(),
+      {
+        cacheKey: 'application-client-data:00099999:01:counterparty:00077881',
+        ttlMs: 300000,
+      },
     )
   })
 
