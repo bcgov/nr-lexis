@@ -228,6 +228,7 @@ type PermitActionResultSource =
   | 'scale-summary'
   | 'permit'
   | 'applicant'
+  | 'agent'
   | 'shipping'
   | 'fees'
   | 'email'
@@ -1060,9 +1061,9 @@ const withPermitMutationResult = (
 
 /** The tab a section's save reports in: the one it was saved from. */
 const permitSaveResultSource = (tab: PermitDetailTabId): PermitActionResultSource =>
-  tab === 'owner' || tab === 'agent'
+  tab === 'owner'
     ? 'applicant'
-    : tab === 'shipping' || tab === 'fees'
+    : tab === 'agent' || tab === 'shipping' || tab === 'fees'
       ? tab
       : 'permit'
 
@@ -3344,6 +3345,7 @@ const ProvincialPermitDetailsPage = () => {
 
         let persistedDetail: ProvincialPermitDetail | null = null
         let exemptionTotals: PermitExemptionTotals | null = null
+        let exemptionTotalsRefreshFailed = false
         if (resolvedPermitNumber) {
           const savedExemptionNumber = confirmedRequest.exemptionNumber.trim()
           const [persistedResult, exemptionResult] = await Promise.allSettled([
@@ -3361,12 +3363,14 @@ const ProvincialPermitDetailsPage = () => {
             exemptionTotals = exemptionResult.value
           } else {
             console.warn('Unable to refresh exemption totals.', exemptionResult.reason)
+            exemptionTotalsRefreshFailed = true
           }
           if (!isLatestRequest()) {
             return false
           }
         }
-        const permitDetailRefreshFailed = persistedDetail == null
+        // Stale exemption totals need the same reload as stale permit details.
+        const permitDetailRefreshFailed = persistedDetail == null || exemptionTotalsRefreshFailed
 
         const detailWithPermitChanges = withUpdatedPermitDetail(
           detail,
@@ -7152,7 +7156,7 @@ const ProvincialPermitDetailsPage = () => {
                     >
                       {ownerEditMode && permitForm ? (
                         <Column sm={4} md={8} lg={16}>
-                          {renderSectionSaveResult('applicant')}
+                          {renderSectionSaveResult('agent')}
                           <Tile>
                             <DetailCardTitle>Edit agent</DetailCardTitle>
                             <RequiredFieldsLegend />
@@ -7162,7 +7166,7 @@ const ProvincialPermitDetailsPage = () => {
                         </Column>
                       ) : (
                         <Column sm={4} md={8} lg={16}>
-                          {renderSectionSaveResult('applicant')}
+                          {renderSectionSaveResult('agent')}
                           <PermitClientTile
                             title="Agent"
                             kind="agent"

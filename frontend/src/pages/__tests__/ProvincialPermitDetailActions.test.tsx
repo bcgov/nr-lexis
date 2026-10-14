@@ -7431,6 +7431,36 @@ describe('Provincial Permit Detail Action Smoke', () => {
     consoleWarn.mockRestore()
   })
 
+  it('requires a reload after a permit save cannot refresh its exemption totals', async () => {
+    const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
+    configureActivePermit()
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    mockedFetchProvincialPermitExemptionContext.mockRejectedValueOnce(
+      new Error('exemption totals unavailable'),
+    )
+    await userEvent.clear(screen.getByLabelText('Remarks'))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'save without refreshed totals')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await waitFor(() => expect(mockedUpdatePermitDetail).toHaveBeenCalledOnce())
+    expect(
+      await screen.findByText(
+        'Current permit details could not be refreshed; reload before making another change.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).not.toBeInTheDocument()
+    consoleWarn.mockRestore()
+  })
+
   it('does not continue a deferred status transition after a saved normal permit cannot refresh', async () => {
     const consoleWarn = vi.spyOn(console, 'warn').mockImplementation(() => undefined)
     configureActivePermit()
