@@ -4,8 +4,12 @@ import {
   type BrowserContext,
   type Locator,
   type Page,
+  type Route,
   test,
 } from '@playwright/test'
+import { Result, type CarbonIconType } from '@carbon/icons-react'
+import { createElement } from 'react'
+import { renderToStaticMarkup } from 'react-dom/server'
 import {
   collectApiServerErrors,
   deleteWithCsrf,
@@ -40,6 +44,49 @@ const tableRowBackgrounds = (row: Locator): Promise<string[]> =>
 const exactSearchResultCountLabel = (total: number, resultName: string): string => {
   const formattedTotal = new Intl.NumberFormat('en-CA').format(total)
   return `${formattedTotal} ${resultName}${total === 1 ? '' : 's'} found`
+}
+
+const exactTextPattern = (text: string): RegExp =>
+  new RegExp(`^${text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`)
+
+// The value of a read-only record field: <dl><dt>label</dt><dd>value</dd></dl>.
+const recordFieldValue = (scope: Locator, label: string): Locator =>
+  scope
+    .locator('dl.record-field')
+    .filter({ has: scope.page().locator('dt', { hasText: exactTextPattern(label) }) })
+    .locator('dd')
+
+const carbonIconPathData = (icon: CarbonIconType): string[] =>
+  Array.from(
+    renderToStaticMarkup(createElement(icon)).matchAll(/\sd="([^"]+)"/g),
+    (match) => match[1],
+  )
+
+const svgPathData = (svg: Locator): Promise<string[]> =>
+  svg.evaluate((element) =>
+    Array.from(element.querySelectorAll('path'), (path) => path.getAttribute('d') ?? ''),
+  )
+
+// A search with no results shows only its empty state. The count stays in a visually hidden
+// toolbar for screen readers, and there is no footer count or pagination.
+const expectOnlyEmptySearchState = async (page: Page, resultName: string): Promise<void> => {
+  const results = page.getByRole('region', { name: 'Search results', exact: true })
+  await expect(results.getByRole('heading', { name: 'No results found', exact: true })).toBeVisible(
+    { timeout: 30_000 },
+  )
+  await expect(results.getByRole('table')).toHaveCount(0)
+  const toolbar = results.locator('.legacy-search-table-toolbar')
+  await expect(toolbar).toHaveClass(/(^|\s)cds--visually-hidden(\s|$)/)
+  await expect(toolbar.locator('.legacy-search-result-count')).toHaveText(`0 ${resultName}s found`)
+  expect(
+    await toolbar.evaluate((element) => {
+      const bounds = element.getBoundingClientRect()
+      return bounds.width <= 1 && bounds.height <= 1
+    }),
+    `the ${resultName} count toolbar should not take visible space`,
+  ).toBe(true)
+  await expect(results.locator('.legacy-search-result-count--footer')).toHaveCount(0)
+  await expect(results.locator('.cds--pagination, .cds--pagination-skeleton')).toHaveCount(0)
 }
 
 const expectFsptsUploadLayout = async (page: Page): Promise<void> => {
@@ -2313,6 +2360,14 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(deniedHeading).toBeVisible()
     await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /log in with idir/i })).toHaveCount(0)
+
+    // Logging out here would end the shared session, so the button is only checked.
+    const forbiddenPage = page.getByTestId('forbidden-page')
+    await expect(
+      forbiddenPage.getByRole('button', { name: 'Go to my landing page', exact: true }),
+    ).toBeVisible()
+    await expect(forbiddenPage.getByRole('button', { name: 'Log out', exact: true })).toBeVisible()
+    await expect(forbiddenPage.getByRole('button', { name: 'Sign out' })).toHaveCount(0)
   })
 
   test('keeps review queue bulk actions limited to approve', async () => {
@@ -2754,6 +2809,157 @@ test.describe('TEST IDIR admin regression', () => {
     }
   })
 
+  test('lists incomplete create application tabs without saving', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/provincial/application/create', /create new application/i)
+
+    const saveNotice = page
+      .locator('.cds--inline-notification')
+      .filter({ hasText: 'The application number is assigned when you save.' })
+    await expect(saveNotice.locator('.cds--inline-notification__title')).toHaveText(
+      'The application number is assigned when you save.',
+    )
+    await expect(saveNotice.locator('.cds--inline-notification__subtitle')).toHaveText(
+      'Documents, Remarks, Offers and Review can be added after that.',
+    )
+
+    // The Application tab and its card title use the Carbon Result icon.
+    const resultIconPathData = carbonIconPathData(Result)
+    const applicationTab = page.getByRole('tab', { name: 'Application', exact: true })
+    await applicationTab.click()
+    expect(await svgPathData(applicationTab.locator('.cds--tabs__nav-item--icon svg'))).toEqual(
+      resultIconPathData,
+    )
+    const applicationCardTitle = page
+      .getByRole('region', { name: 'Application', exact: true })
+      .getByRole('heading', { name: 'Application details', exact: true })
+    expect(await svgPathData(applicationCardTitle.locator('svg'))).toEqual(resultIconPathData)
+    await expect(page.getByRole('combobox', { name: 'Region' })).toBeEnabled({ timeout: 30_000 })
+
+    // Save on an empty form only validates. Any write that slips through is aborted and fails.
+    const attemptedWrites: string[] = []
+    const blockWrites = async (route: Route): Promise<void> => {
+      const request = route.request()
+      if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) {
+        await route.fallback()
+        return
+      }
+      attemptedWrites.push(`${request.method()} ${new URL(request.url()).pathname}`)
+      await route.abort()
+    }
+    await page.route('**/api/lexis/**', blockWrites)
+    try {
+      await page.getByRole('button', { name: 'Save application', exact: true }).click()
+
+      const validation = page.locator('.create-form-validation-notification')
+      await expect(validation.locator('.cds--inline-notification__title')).toHaveText(
+        'Cannot save yet.',
+      )
+      await expect(validation.locator('.cds--inline-notification__subtitle')).toHaveText(
+        'Complete the required fields in Applicant, Application and Scale tabs.',
+      )
+      for (const tabName of ['Applicant', 'Application', 'Scale']) {
+        await expect(
+          page.getByRole('tab', {
+            name: new RegExp(`^${tabName}, \\d+ required fields? outstanding$`),
+          }),
+        ).toBeVisible()
+      }
+      await expect(page).toHaveURL(/\/provincial\/application\/create(?:\?|$)/)
+      expect(attemptedWrites).toEqual([])
+    } finally {
+      await page.unroute('**/api/lexis/**', blockWrites)
+    }
+  })
+
+  test('shows the Blanket OIC create exemption layout without saving', async () => {
+    const page = await authenticatedIdirPage()
+    const apiServerErrors = collectApiServerErrors(page)
+
+    const exemptionOptions = await readJsonResponse<GenericOptionsResponse>(
+      await getWithAuth(page, '/api/lexis/exemptions/search/options'),
+    )
+    const blanketOicLabel = requiredString(
+      optionName(
+        asRecordArray(exemptionOptions.exemptionTypes).find(
+          (option) => optionCode(option) === 'B',
+        ) ?? {},
+      ),
+      'Blanket OIC exemption type label',
+    )
+
+    await expectAccessiblePage(page, '/provincial/exemption/create', /^Create new exemption$/)
+    const saveNotice = page
+      .locator('.cds--inline-notification')
+      .filter({ hasText: 'can be added after you save the exemption.' })
+    await expect(saveNotice.locator('.cds--inline-notification__subtitle')).toHaveText(
+      'Applications, documents and permits can be added after you save the exemption.',
+    )
+    await expect(saveNotice.locator('.cds--inline-notification__title')).toHaveCount(0)
+    await expect(page.locator('.legacy-form-footer')).toHaveCount(0)
+    await expect(page.getByText('Author', { exact: true })).toHaveCount(0)
+
+    for (const tabName of ['Applications', 'Documents', 'Permits']) {
+      await page.getByRole('tab', { name: tabName, exact: true }).click()
+      const panel = page.getByRole('tabpanel', { name: tabName, exact: true })
+      await expect(panel).toHaveText('Available after the exemption is saved.')
+      await expect(panel.locator('input, textarea, button')).toHaveCount(0)
+    }
+    await expect(page.getByRole('tab', { name: 'Fees', exact: true })).toHaveCount(0)
+
+    await page.getByRole('tab', { name: 'Exemption details', exact: true }).click()
+    const detailsPanel = page.getByRole('tabpanel', { name: 'Exemption details', exact: true })
+    const exemptionType = detailsPanel.getByRole('group', { name: 'Exemption type' })
+    const blanketOic = exemptionType.getByRole('radio', { name: blanketOicLabel, exact: true })
+    await expect(blanketOic).toBeEnabled({ timeout: 30_000 })
+    await detailsPanel.locator('label[for="exemptionTypeCode-B"]').click()
+    await expect(blanketOic).toBeChecked()
+
+    await expect(saveNotice.locator('.cds--inline-notification__subtitle')).toHaveText(
+      'Documents and Permits can be added after you save the exemption.',
+    )
+    await expect(saveNotice.locator('.cds--inline-notification__title')).toHaveCount(0)
+    await expect(page.getByRole('tab', { name: 'Applications', exact: true })).toHaveCount(0)
+    for (const tabName of ['Documents', 'Permits', 'Fees']) {
+      await expect(page.getByRole('tab', { name: tabName, exact: true })).toBeVisible()
+    }
+
+    // Rows: the type, then exemption number and status, then the exemption holder.
+    const fieldRows = detailsPanel.locator('.record-field-grid__row')
+    await expect(fieldRows.nth(0).getByRole('group', { name: 'Exemption type' })).toBeVisible()
+    const exemptionNumber = fieldRows
+      .nth(1)
+      .getByRole('textbox', { name: 'Exemption number', exact: true })
+    const status = fieldRows.nth(1).getByRole('combobox', { name: 'Status', exact: true })
+    await expect(exemptionNumber).toBeEditable()
+    await expect(status).toBeDisabled()
+    await expect(status).toHaveValue('Active')
+    const statusField = detailsPanel.locator('.cds--list-box__wrapper').filter({ has: status })
+    await expect(statusField.locator('.required-label__marker')).toHaveCount(0)
+    await expect(statusField.getByRole('button', { name: 'Clear selected item' })).toHaveCount(0)
+    await expect(statusField.locator('.cds--list-box__selection')).toBeHidden()
+    await expect(recordFieldValue(fieldRows.nth(2), 'Exemption holder')).toHaveText(
+      'No applications associated with this exemption',
+    )
+
+    await page.getByRole('tab', { name: 'Fees', exact: true }).click()
+    const feeOverride = page
+      .getByRole('tabpanel', { name: 'Fees', exact: true })
+      .getByRole('group', { name: 'Override fee rate?' })
+    await expect(feeOverride).toBeVisible()
+    const feeOverrideMarker = feeOverride.locator('legend .required-label__marker')
+    await expect(feeOverrideMarker).toHaveCount(1)
+    expect(
+      await feeOverrideMarker.evaluate((element) => getComputedStyle(element, '::before').content),
+    ).toContain('*')
+    await expect(feeOverride.getByRole('radio', { name: 'No', exact: true })).toBeChecked()
+
+    await expect(page.getByRole('button', { name: 'Save exemption', exact: true })).toBeEnabled()
+    await expect(page).toHaveURL(/\/provincial\/exemption\/create(?:\?|$)/)
+    expect(apiServerErrors).toEqual([])
+  })
+
   test('can query application review search contracts', async () => {
     const page = await authenticatedIdirPage()
 
@@ -3073,6 +3279,167 @@ test.describe('TEST IDIR admin regression', () => {
       })
       await expect(resultCount.locator('.legacy-search-result-count-skeleton')).toHaveCount(0)
     }
+  })
+
+  test('shows only the empty state when a search has no results', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const [path, heading, resultName] of [
+      [
+        `/provincial/application?applicationNumber=${missingApplicationNumber}`,
+        /^Application search$/,
+        'application',
+      ],
+      [
+        '/provincial/exemption?exemptionNumber=LEXIS-E2E-MISSING',
+        /^Exemption search$/,
+        'exemption',
+      ],
+      ['/provincial/offers?packageNumber=LEXIS-E2E-MISSING', /^Offer search$/, 'offer'],
+      ['/provincial/permit?permitNumber=LEXIS-E2E-MISSING', /^Permit search$/, 'permit'],
+    ] as const) {
+      await expectAccessiblePage(page, path, heading)
+      await expectOnlyEmptySearchState(page, resultName)
+    }
+  })
+
+  test('shows search subtitles and the exemption search client columns', async () => {
+    const page = await authenticatedIdirPage()
+
+    for (const [path, heading, subtitle] of [
+      [
+        '/provincial/application',
+        /^Application search$/,
+        'Find applications and check their status',
+      ],
+      ['/provincial/exemption', /^Exemption search$/, 'Find exemptions and check their status'],
+      ['/provincial/offers', /^Offer search$/, 'Find offers and check their status'],
+      ['/provincial/permit', /^Permit search$/, 'Find permits and check their status'],
+    ] as const) {
+      await expectAccessiblePage(page, path, heading)
+      await expect(page.locator('.lexis-page-header__subtitle')).toHaveText(subtitle)
+    }
+
+    await expectAccessiblePage(
+      page,
+      '/provincial/exemption?page=1&pageSize=10',
+      /^Exemption search$/,
+    )
+    const resultsTable = page.getByRole('region', { name: 'Search results table', exact: true })
+    await expect(resultsTable).toHaveAttribute('aria-busy', 'false', { timeout: 30_000 })
+    const table = resultsTable.getByRole('table')
+    await expect(table.locator('thead th[aria-sort] .cds--table-header-label')).toHaveText([
+      'Exemption',
+      'Type',
+      'Status',
+      'Owner client number',
+      'Agent client number',
+      'Approval volume (m³)',
+      'Balance remaining (m³)',
+      'List date',
+      'Expiry date',
+      'Region',
+    ])
+    for (const name of ['Owner client number', 'Agent client number']) {
+      await expect(table.getByRole('columnheader', { name, exact: true })).toBeVisible()
+    }
+  })
+
+  test('explains a reversed search date range', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(page, '/provincial/application', /^Application search$/)
+    const listDateFrom = page.getByLabel('List date from', { exact: true })
+    const listDateTo = page.getByLabel('List date to', { exact: true })
+    await listDateFrom.fill('2030-02-01')
+    await listDateTo.fill('2030-01-01')
+    await listDateTo.press('Escape')
+
+    const rangeError = page.getByText('Must be on or after List date from.', { exact: true })
+    await expect(rangeError).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeDisabled()
+
+    await page.getByRole('button', { name: 'Clear all', exact: true }).click()
+    await expect(rangeError).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeEnabled()
+  })
+
+  test('keeps the Search button named and focused while a search runs', async () => {
+    const page = await authenticatedIdirPage()
+
+    await expectAccessiblePage(
+      page,
+      `/provincial/application?applicationNumber=${missingApplicationNumber}`,
+      /^Application search$/,
+    )
+    await expectOnlyEmptySearchState(page, 'application')
+
+    // Hold the next search response so the in-progress state can be checked.
+    let releaseSearch = (): void => undefined
+    const searchHeld = new Promise<void>((resolve) => {
+      releaseSearch = resolve
+    })
+    let heldSearches = 0
+    const isApplicationSearch = (url: URL): boolean =>
+      url.pathname === '/api/lexis/applications/search'
+    const holdSearch = async (route: Route): Promise<void> => {
+      heldSearches += 1
+      await searchHeld
+      await route.fallback()
+    }
+    await page.route(isApplicationSearch, holdSearch)
+    const searchButton = page.getByRole('button', { name: 'Search', exact: true })
+    try {
+      // A number not searched yet in this page load, so the search goes to the server.
+      await page
+        .getByRole('textbox', { name: 'Application number', exact: true })
+        .fill(String(Number(missingApplicationNumber) - 1))
+      await searchButton.click()
+      await expect.poll(() => heldSearches).toBeGreaterThan(0)
+      await expect(searchButton).toHaveAttribute('aria-disabled', 'true')
+      await expect(searchButton).toBeFocused()
+      await expect(searchButton).toHaveText('Search')
+      await expect(page.getByRole('button', { name: /^Searching/ })).toHaveCount(0)
+    } finally {
+      releaseSearch()
+      await page.unroute(isApplicationSearch, holdSearch)
+    }
+
+    await expect(searchButton).not.toHaveAttribute('aria-disabled', 'true', { timeout: 30_000 })
+    await expectOnlyEmptySearchState(page, 'application')
+  })
+
+  test('shows permit status as text inside the Permit tab', async () => {
+    const page = await authenticatedIdirPage()
+    const apiServerErrors = collectApiServerErrors(page)
+
+    const permitSearch = await readJsonResponse<GenericSearchResponse>(
+      await getWithAuth(page, '/api/lexis/permits/search', {
+        params: { page: '0', size: '1' },
+      }),
+    )
+    const permitNumber = requiredString(
+      asRecordArray(permitSearch.results)[0]?.permitNumber,
+      'Permit number',
+    )
+
+    await expectAccessiblePage(
+      page,
+      `/provincial/permit/${encodeURIComponent(permitNumber)}`,
+      new RegExp(`^Permit ${permitNumber}\\b`),
+    )
+    // The status tag stays beside the title.
+    const headerStatus = page.locator('.lexis-page-header__status .lexis-status-tag')
+    await expect(headerStatus).toBeVisible({ timeout: 30_000 })
+    const statusLabel = (await headerStatus.innerText()).trim()
+
+    await page.getByRole('tab', { name: 'Permit', exact: true }).click()
+    const permitPanel = page.getByRole('tabpanel', { name: 'Permit', exact: true })
+    const statusValue = recordFieldValue(permitPanel, 'Status')
+    await expect(statusValue).toHaveCount(1)
+    await expect(statusValue).toHaveText(statusLabel)
+    await expect(statusValue.locator('.lexis-status-tag')).toHaveCount(0)
+    expect(apiServerErrors).toEqual([])
   })
 
   test('can query application maintenance reference data contracts', async () => {
@@ -4011,12 +4378,7 @@ test.describe('TEST IDIR admin regression', () => {
         const summaryPanel = page.getByRole('tabpanel', { name: 'Exemption details' })
         // A cancelled Ministerial exemption shows its missing approval date as read-only text.
         await expect(summaryPanel.getByLabel('Approval date', { exact: true })).toHaveCount(0)
-        await expect(
-          summaryPanel
-            .locator('dl.record-field')
-            .filter({ has: page.locator('dt', { hasText: /^Approval date$/ }) })
-            .locator('dd'),
-        ).toHaveText('Not approved')
+        await expect(recordFieldValue(summaryPanel, 'Approval date')).toHaveText('Not approved')
         for (const label of ['Expiry date', 'Approval volume (m³)', 'Conditions']) {
           await expect(summaryPanel.getByLabel(label, { exact: true })).toBeDisabled()
         }
@@ -4073,6 +4435,28 @@ test.describe('TEST IDIR admin regression', () => {
         `/provincial/exemption/${encodeURIComponent(exemptionNumber)}`,
         new RegExp(`exemption ${exemptionNumber}`, 'i'),
       )
+      await test.step('show the remove application confirmation, then cancel it', async () => {
+        await page.getByRole('tab', { name: 'Applications', exact: true }).click()
+        const applicationRow = page
+          .getByRole('region', { name: 'Associated exemption applications' })
+          .getByRole('row')
+          .filter({
+            has: page.getByRole('link', { name: String(lifecycleApplicationNumber), exact: true }),
+          })
+        await applicationRow.getByRole('button', { name: 'Remove', exact: true }).click()
+        const removeDialog = page.getByRole('dialog', {
+          name: 'Are you sure you want to remove this application?',
+        })
+        await expect(removeDialog).toBeVisible()
+        await expect(removeDialog.locator('.lexis-confirmation-modal__description')).toHaveText(
+          `Application ${lifecycleApplicationNumber} will be removed from this exemption.`,
+        )
+        await removeDialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+        await expect(removeDialog).toHaveCount(0)
+        expect(
+          await exemptionContainsApplication(page, exemptionNumber, lifecycleApplicationNumber),
+        ).toBe(true)
+      })
       const currentExemption = await readVersionedJson<Record<string, unknown>>(
         page,
         `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
