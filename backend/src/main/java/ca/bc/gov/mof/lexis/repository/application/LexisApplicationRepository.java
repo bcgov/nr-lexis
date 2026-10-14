@@ -362,7 +362,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
             app.ownerClientNumber(),
             app.agentClientNumber(),
             app.orgUnitNumber(),
-            firstNonNull(app.regionCode(), app.regionName()),
+            firstNonNull(app.regionName(), app.regionCode()),
             app.productTypeCode(),
             app.exemptionReasonCode(),
             app.applicationDate(),

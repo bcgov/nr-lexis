@@ -61,6 +61,7 @@ import {
 } from '@/service/shipping-reference-service'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { fieldErrorText } from '@/utils/field-error'
+import { focusFirstInvalidField } from '@/utils/focus'
 import { requiredLabel } from '@/utils/required-label'
 import { resolveBlanketOicRegionContext } from './region-context'
 
@@ -385,6 +386,7 @@ const BlanketOicPermitCreateForm = ({
   const [actionError, setActionError] = useState('')
   const [failedSubmitCount, setFailedSubmitCount] = useState(0)
   const errorSummaryRef = useRef<HTMLDivElement>(null)
+  const formSectionRef = useRef<HTMLElement>(null)
   const [clientLookupFailures, setClientLookupFailures] = useState<ReadonlySet<ClientKind>>(
     () => new Set(),
   )
@@ -428,8 +430,11 @@ const BlanketOicPermitCreateForm = ({
   )
   const isDraftDirty = formEdited && !formValuesEqual({ form, agentUsed }, draftBaselineRef.current)
 
+  // A failed save shows the first tab with an error and focuses its first invalid field. Errors
+  // that belong to no field, such as options still loading, leave focus on the summary.
   useEffect(() => {
-    if (failedSubmitCount > 0) errorSummaryRef.current?.focus()
+    if (failedSubmitCount === 0) return
+    if (!focusFirstInvalidField(formSectionRef.current)) errorSummaryRef.current?.focus()
   }, [failedSubmitCount])
 
   useEffect(() => {
@@ -860,7 +865,7 @@ const BlanketOicPermitCreateForm = ({
   )
 
   const content = (
-    <section aria-label="Blanket OIC permit details">
+    <section ref={formSectionRef} aria-label="Blanket OIC permit details">
       {invalidTabLabels.length > 0 || errorMessages.length > 0 ? (
         <div ref={errorSummaryRef} tabIndex={-1} role="group" aria-label="Permit needs attention">
           <InlineNotification

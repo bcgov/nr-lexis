@@ -229,8 +229,8 @@ describe('Provincial exemption edit context', () => {
     expect(within(summaryCard as HTMLElement).getByText('Blanket OIC')).toBeInTheDocument()
 
     for (const [label, value] of [
-      ['Approval date', '2026-02-01'],
-      ['Expiry date', '2026-12-31'],
+      ['Approval date', 'Feb 1, 2026'],
+      ['Expiry date', 'Dec 31, 2026'],
     ]) {
       const field = within(summaryCard as HTMLElement)
         .getByText(label)
@@ -1610,7 +1610,7 @@ describe('Provincial exemption edit context', () => {
       screen.getByText(label, { selector: 'dt' }).nextElementSibling?.textContent
     const editButton = await screen.findByRole('button', { name: 'Edit exemption details' })
     const viewValues = lockedFields.map(fieldValue)
-    expect(viewValues).toEqual(['Blanket Order in Council', 'Blanket OIC', '2026-02-01'])
+    expect(viewValues).toEqual(['Blanket Order in Council', 'Blanket OIC', 'Feb 1, 2026'])
 
     await userEvent.click(editButton)
 
@@ -2544,7 +2544,7 @@ describe('Provincial exemption edit context', () => {
       expect(screen.queryByLabelText('Approval date')).not.toBeInTheDocument()
       expect(
         screen.getByText('Approval date', { selector: 'dt' }).nextElementSibling,
-      ).toHaveTextContent(cancelledDetail.approvalDate ?? 'Not approved')
+      ).toHaveTextContent(missingDates ? 'Not approved' : 'Feb 1, 2026')
       expect(screen.getByLabelText('Expiry date')).toBeDisabled()
       expect(screen.getByLabelText('Expiry date')).not.toHaveAttribute('aria-invalid', 'true')
       expect(screen.getByLabelText('Conditions')).toBeDisabled()

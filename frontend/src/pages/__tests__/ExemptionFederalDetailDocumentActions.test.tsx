@@ -2727,12 +2727,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Offers')
     expect(
-      await screen.findByRole('heading', { name: 'No offers found', level: 3 }),
+      await screen.findByRole('heading', { name: 'No offers found', level: 2 }),
     ).toBeInTheDocument()
 
     await selectDetailTab('Remarks')
     expect(
-      await screen.findByRole('heading', { name: 'No remarks found', level: 3 }),
+      await screen.findByRole('heading', { name: 'No remarks found', level: 2 }),
     ).toBeInTheDocument()
 
     await selectDetailTab('Documents')
@@ -2768,7 +2768,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(companyLink).toHaveAttribute('href', '/provincial/offers/81001')
     const offerRow = companyLink.closest('tr')
     expect(offerRow).toBeTruthy()
-    expect(within(offerRow as HTMLElement).getByText('2026-01-13')).toBeInTheDocument()
+    expect(within(offerRow as HTMLElement).getByText('Jan 13, 2026')).toBeInTheDocument()
     expect(within(offersTable).queryByText('81001')).not.toBeInTheDocument()
     expect(within(offersTable).queryByRole('button')).not.toBeInTheDocument()
 
@@ -2913,7 +2913,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Remarks')
     expect(await screen.findByText('Review note')).toBeInTheDocument()
     expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()
-    expect(screen.getByText('2026-07-17 21:37:21')).toBeInTheDocument()
+    expect(screen.getByText('Jul 17, 2026 · 09:37:21 PM')).toBeInTheDocument()
 
     await enterFederalRemarkEditMode()
     const newRemarkInput = screen.getByLabelText('New remark')

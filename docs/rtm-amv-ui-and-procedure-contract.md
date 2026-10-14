@@ -130,7 +130,8 @@ keyboard-focusable but are announced as unavailable until a value changes or a r
 workbook has been accepted; the helper text is linked through `aria-describedby`. Editing a value
 clears the saved confirmation. Cancel then offers to save the changes or return the table to the
 last saved values; Discard changes uses the danger-tertiary style. Restoring the saved values shows
-a dismissible confirmation that also clears on the next edit.
+a dismissible confirmation that also clears on the next edit. Leaving the page or closing the tab
+with edited values, or with an accepted workbook that is not saved, asks "Discard changes?" first.
 Confirmation dialogs return focus to the action that opened them. The page header does not show
 save time or user until the upcoming month has saved rows and complete audit metadata. After an
 accepted save, and again on navigation or refresh, the page queries the immediately upcoming

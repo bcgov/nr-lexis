@@ -43,29 +43,6 @@ export const formatIsoDateLabel = (value: string | null | undefined): string => 
   }).format(date)
 }
 
-export const formatBusinessDateTime = (value: string | null | undefined): string => {
-  const text = value?.trim() ?? ''
-  if (!text) return ''
-
-  const date = new Date(text)
-  if (Number.isNaN(date.getTime())) return text
-
-  const parts = new Intl.DateTimeFormat('en-CA', {
-    timeZone: LEXIS_BUSINESS_TIME_ZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-    hourCycle: 'h23',
-  }).formatToParts(date)
-  const part = (type: Intl.DateTimeFormatPartTypes): string =>
-    parts.find((item) => item.type === type)?.value ?? ''
-
-  return `${part('year')}-${part('month')}-${part('day')} ${part('hour')}:${part('minute')}:${part('second')}`
-}
-
 /** Signed-off application tables show a month name and a 12-hour time in B.C. */
 export const formatBusinessDateTimeLabel = (value: string | null | undefined): string => {
   const text = value?.trim() ?? ''

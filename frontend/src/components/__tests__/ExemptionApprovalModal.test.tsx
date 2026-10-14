@@ -1,5 +1,6 @@
 import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { beforeEach, vi } from 'vitest'
 import ExemptionApprovalModal from '@/components/ExemptionApprovalModal'
 import type {
@@ -792,5 +793,35 @@ describe('ExemptionApprovalModal', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
     expect(onApprove).not.toHaveBeenCalled()
     expect(sendExemptionApprovalNotifications).not.toHaveBeenCalled()
+  })
+
+  it('returns focus to the control that opened it when cancelled', async () => {
+    const user = userEvent.setup()
+    const ApproveExemption = () => {
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <button type="button" onClick={() => setOpen(true)}>
+            Approve exemption
+          </button>
+          {open && (
+            <ExemptionApprovalModal
+              exemptionNumbers={['EX-205']}
+              onApprove={vi.fn()}
+              onComplete={vi.fn()}
+              onClose={() => setOpen(false)}
+            />
+          )}
+        </>
+      )
+    }
+
+    render(<ApproveExemption />)
+    await user.click(screen.getByRole('button', { name: 'Approve exemption' }))
+    await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Approve exemption' })).toHaveFocus(),
+    )
   })
 })

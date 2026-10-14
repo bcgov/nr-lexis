@@ -133,6 +133,8 @@ describe('DetailDocumentUploadPanel', () => {
     expect(within(panel).queryByRole('button', { name: 'Review upload' })).not.toBeInTheDocument()
     await userEvent.click(within(panel).getByRole('button', { name: 'Save documents' }))
     expect(screen.getByRole('alert')).toHaveTextContent('Choose at least one file to upload')
+    expect(within(panel).getAllByText(/Choose at least one file to upload/)).toHaveLength(1)
+    expect(within(panel).getByRole('button', { name: 'Choose files for Files' })).toHaveFocus()
     await userEvent.upload(screen.getByLabelText('Document File'), file)
     expect(within(panel).getByText('Required fields')).toBeVisible()
     expect(within(panel).getByText('Files')).toBeVisible()
@@ -664,7 +666,8 @@ describe('DetailDocumentUploadPanel', () => {
 
     await userEvent.click(reviewButton)
 
-    expect(screen.getAllByText('Choose at least one file to upload.').length).toBeGreaterThan(0)
+    expect(screen.getAllByText(/Choose at least one file to upload/)).toHaveLength(1)
+    expect(screen.getByRole('button', { name: 'Choose files for File' })).toHaveFocus()
     expect(screen.getByRole('dialog', { name: 'Add document' })).toBeInTheDocument()
     expect(mockedValidateAdminUpload).not.toHaveBeenCalled()
     expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()

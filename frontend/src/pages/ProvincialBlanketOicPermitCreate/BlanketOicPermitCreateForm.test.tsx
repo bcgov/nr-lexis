@@ -44,7 +44,10 @@ const shippingReferences = {
     { code: 'AD', name: 'Andorra' },
   ],
   transportTypes: [{ code: 'B', name: 'Barge' }],
-  ports: [{ code: 'CB', name: 'Cowichan Bay' }],
+  ports: [
+    { code: 'CB', name: 'Cowichan Bay' },
+    { code: 'OT', name: 'Other' },
+  ],
 }
 
 const clientDetails = (clientNumber: string, locationCode: string) => ({
@@ -235,7 +238,7 @@ describe('BlanketOicPermitCreateForm', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('Permit request pieces is required')).toBeInTheDocument()
     expect(screen.getByText('Permit request volume is required')).toBeInTheDocument()
-    expect(summary).toHaveFocus()
+    expect(screen.getByLabelText('Permit request pieces')).toHaveFocus()
     expect(
       screen.queryByText(/The permit number is assigned when you save/),
     ).not.toBeInTheDocument()
@@ -253,7 +256,7 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(addPermitDetail).not.toHaveBeenCalled()
 
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
-    expect(summary).toHaveFocus()
+    expect(screen.getByLabelText('Permit request pieces')).toHaveFocus()
 
     await user.type(screen.getByLabelText('Permit request pieces'), '0')
     expect(
@@ -282,7 +285,26 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(
       within(summary).getByText('Issued date must be after or equal to submit date.'),
     ).toBeInTheDocument()
-    expect(summary).toHaveFocus()
+    expect(screen.getByLabelText('Issued date')).toHaveFocus()
+    expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('opens Shipping and focuses Other port of export when it is the only missing field', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await fillRequiredPermitAndShippingFields(user)
+    await user.selectOptions(screen.getByLabelText('Customs port of export'), 'OT')
+    await user.click(screen.getByRole('tab', { name: 'Applicant' }))
+    await selectForestClient(user, 'owner', '12345678')
+    await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('00'))
+    await user.click(screen.getByRole('tab', { name: 'Permit' }))
+    await user.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    const summary = await screen.findByRole('group', { name: 'Permit needs attention' })
+    expect(within(summary).getByText(/Complete the required fields in Shipping tab/)).toBeVisible()
+    expect(screen.getByRole('tab', { name: /^Shipping,/ })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Other port of export')).toHaveFocus()
     expect(addPermitDetail).not.toHaveBeenCalled()
   })
 
@@ -349,7 +371,7 @@ describe('BlanketOicPermitCreateForm', () => {
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
     const summary = screen.getByRole('group', { name: 'Permit needs attention' })
-    expect(summary).toHaveFocus()
+    expect(screen.getByLabelText('Permit request pieces')).toHaveFocus()
     expect(
       within(summary).getByText(/Shipping reference options are still loading/),
     ).toBeInTheDocument()

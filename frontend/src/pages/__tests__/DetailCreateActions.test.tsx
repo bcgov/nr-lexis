@@ -204,7 +204,7 @@ describe('Detail Quick Action Smoke', () => {
       'Date and time received',
     ])
     expect(offers.getByText('Example Lumber')).toBeInTheDocument()
-    expect(offers.getByText('2026-01-04')).toBeInTheDocument()
+    expect(offers.getByText('Jan 4, 2026')).toBeInTheDocument()
     expect(offers.queryByRole('button')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Create offer' })).not.toBeInTheDocument()
   })

@@ -308,7 +308,7 @@ describe('Federal Search Actions', () => {
     renderPage('/federal')
 
     expect(
-      await screen.findByText('Find federal applications and check their status.'),
+      await screen.findByText('Find federal applications and check their status'),
     ).toBeInTheDocument()
     const labels = [
       'Application number',
@@ -401,8 +401,8 @@ describe('Federal Search Actions', () => {
 
     expect(await screen.findByText('FED-8100')).toBeInTheDocument()
     expect(
-      await screen.findByText('At least 10 applications found — exact count unavailable'),
-    ).toBeInTheDocument()
+      await screen.findAllByText('At least 10 applications found — exact count unavailable'),
+    ).toHaveLength(2)
     expect(
       screen.queryByRole('heading', { name: 'Federal application search unavailable' }),
     ).not.toBeInTheDocument()
@@ -424,7 +424,7 @@ describe('Federal Search Actions', () => {
       await screen.findByRole('heading', { name: 'Federal application search unavailable' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Unable to retrieve federal application search results.'),
+      screen.getByText('Unable to retrieve federal application search results. Try again.'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'No results found' })).not.toBeInTheDocument()
   })

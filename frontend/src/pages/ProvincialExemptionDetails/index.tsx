@@ -620,6 +620,7 @@ const ProvincialExemptionDetailsPage = () => {
   const [addApplicationError, setAddApplicationError] = useState('')
   const [isAddingApplication, setIsAddingApplication] = useState(false)
   const addApplicationButtonRef = useRef<HTMLButtonElement>(null)
+  const applyForPermitButtonRef = useRef<HTMLButtonElement>(null)
   const addApplicationInputRef = useRef<HTMLInputElement>(null)
   const tabsColumnRef = useRef<HTMLDivElement>(null)
   const [applicationMutationNumber, setApplicationMutationNumber] = useState<string | null>(null)
@@ -1721,6 +1722,7 @@ const ProvincialExemptionDetailsPage = () => {
   const closePermitCreationConfirmation = useCallback(() => {
     if (creatingPermit) return
     setPermitCreationConfirmationOpen(false)
+    window.setTimeout(() => applyForPermitButtonRef.current?.focus())
   }, [creatingPermit])
 
   const continuePermitCreation = useCallback(
@@ -2093,6 +2095,7 @@ const ProvincialExemptionDetailsPage = () => {
   const applyForPermitButton =
     canStartApplicationBackedPermitCreation || canStartBlanketOicPermitCreation ? (
       <Button
+        ref={applyForPermitButtonRef}
         kind="tertiary"
         size="md"
         renderIcon={Add}

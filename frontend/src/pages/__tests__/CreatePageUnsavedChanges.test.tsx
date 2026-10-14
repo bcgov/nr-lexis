@@ -127,7 +127,7 @@ const createCases = [
     name: 'application',
     createPath: '/provincial/application/create',
     targetPath: '/provincial/application',
-    heading: 'Create provincial application',
+    heading: 'Create new application',
     fieldLabel: 'Location of logs',
     saveButtonName: 'Save application',
     discardTitle: 'Discard this application?',
@@ -151,7 +151,7 @@ const createCases = [
     name: 'purchase offer',
     createPath: '/provincial/offers/create',
     targetPath: '/provincial/offers',
-    heading: 'Create provincial offer',
+    heading: 'Create new offer',
     fieldLabel: 'Offer conditions / remarks',
     saveButtonName: 'Save new offer',
     discardTitle: 'Discard this offer?',
@@ -439,7 +439,7 @@ describe('create page unsaved changes', () => {
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
-    await userEvent.click(screen.getByLabelText('Expiry date (YYYY-MM-DD)'))
+    await userEvent.click(screen.getByLabelText('Expiry date'))
     const calendarDay = await waitFor(() => {
       const day = document.querySelector<HTMLElement>(
         '.flatpickr-calendar.open .flatpickr-day:not(.flatpickr-disabled):not(.prevMonthDay):not(.nextMonthDay)',

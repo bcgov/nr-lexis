@@ -304,13 +304,15 @@ describe('Provincial Exemption Search Actions', () => {
     20_000,
   )
 
-  it('shows exemption result list and expiry dates in ISO format', async () => {
+  it('shows exemption result list and expiry dates in words', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     renderPage()
     const exemption = await screen.findByText('EX-1001')
     const row = within(exemption.closest('tr') as HTMLElement)
-    expect(row.getByRole('cell', { name: '2026-01-10' })).toBeVisible()
-    expect(row.getByRole('cell', { name: '2026-12-31' })).toBeVisible()
+    expect(row.getByRole('cell', { name: 'Jan 10, 2026' })).toBeVisible()
+    expect(row.getByRole('cell', { name: 'Dec 31, 2026' })).toBeVisible()
+    expect(row.queryByRole('cell', { name: '2026-01-10' })).not.toBeInTheDocument()
+    expect(row.queryByRole('cell', { name: '2026-12-31' })).not.toBeInTheDocument()
   })
 
   it('uses option descriptions for raw row codes while retaining code-based eligibility, colours and requests', async () => {
@@ -370,8 +372,12 @@ describe('Provincial Exemption Search Actions', () => {
       const row = (await screen.findByRole('link', { name: number })).closest('tr') as HTMLElement
       expect(await within(row).findByText(type)).toBeInTheDocument()
       expect(within(row).getByText(status)).toHaveAttribute('data-status-variant', variant)
-      if (number === 'RAW-NEW') expect(within(row).getByRole('checkbox')).toBeEnabled()
-      else expect(within(row).queryByRole('checkbox')).not.toBeInTheDocument()
+      if (number === 'RAW-NEW') {
+        expect(within(row).getByRole('checkbox')).toBeEnabled()
+        expect(within(row).getByRole('checkbox')).not.toHaveAttribute('aria-disabled')
+      } else {
+        expect(within(row).getByRole('checkbox')).toHaveAttribute('aria-disabled', 'true')
+      }
     }
     await userEvent.click(screen.getByRole('combobox', { name: 'Exemption type' }))
     await userEvent.click(screen.getByRole('option', { name: 'Ministerial' }))
@@ -388,7 +394,7 @@ describe('Provincial Exemption Search Actions', () => {
     )
   })
 
-  it('submits and restores None as literal NULL, while clearing restores All types', async () => {
+  it('submits and restores None as literal NULL, while clearing restores All', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     const page = renderPage()
     await screen.findByText('EX-1001')
@@ -396,7 +402,7 @@ describe('Provincial Exemption Search Actions', () => {
 
     const exemptionType = screen.getByRole('combobox', { name: 'Exemption type' })
     expect(exemptionType).toHaveValue('')
-    expect(exemptionType).toHaveAttribute('placeholder', 'All types')
+    expect(exemptionType).toHaveAttribute('placeholder', 'All')
     await userEvent.click(exemptionType)
     await userEvent.click(screen.getByRole('option', { name: 'None' }))
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
@@ -452,9 +458,11 @@ describe('Provincial Exemption Search Actions', () => {
 
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
     expect(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' })).toBeEnabled()
-    expect(
-      screen.queryByRole('checkbox', { name: 'Select exemption EX-2002' }),
-    ).not.toBeInTheDocument()
+    const lockedCheckbox = screen.getByRole('checkbox', { name: 'Select exemption EX-2002' })
+    expect(lockedCheckbox).toHaveAttribute('aria-disabled', 'true')
+    expect(lockedCheckbox).toHaveAccessibleDescription(
+      expect.stringContaining('This exemption is currently locked and cannot be approved.'),
+    )
     expect(screen.getByText('Locked')).toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
@@ -733,7 +741,9 @@ describe('Provincial Exemption Search Actions', () => {
 
     renderPage()
     await screen.findByText('EX-1001')
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const dialog = screen.getByRole('dialog', { name: 'Approve 2 exemptions' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /I certify/ }))
@@ -783,7 +793,9 @@ describe('Provincial Exemption Search Actions', () => {
 
     renderPage()
     await screen.findByText('EX-1001')
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const dialog = screen.getByRole('dialog', { name: 'Approve 3 exemptions' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: /I certify/ }))
@@ -1044,14 +1056,22 @@ describe('Provincial Exemption Search Actions', () => {
 
     expect(
       screen.getByRole('checkbox', { name: 'Select exemption TEST-M-NEW' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('checkbox', { name: 'Select exemption TEST-B-NEW' }),
-    ).not.toBeInTheDocument()
+    ).not.toHaveAttribute('aria-disabled')
+    const boicCheckbox = screen.getByRole('checkbox', { name: 'Select exemption TEST-B-NEW' })
+    expect(boicCheckbox).toHaveAttribute('aria-disabled', 'true')
+    expect(boicCheckbox).toHaveAccessibleDescription(
+      expect.stringContaining('Only Ministerial exemptions can be approved from search.'),
+    )
     expect(
       screen.getAllByText('Only Ministerial exemptions can be approved from search.').length,
     ).toBeGreaterThan(0)
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    // jsdom flips a cancelled checkbox click instead of restoring it, so assert the
+    // cancelled click and the unchanged selection rather than the DOM checked state.
+    expect(fireEvent.click(boicCheckbox)).toBe(false)
+    expect(screen.queryByText('1 exemption selected')).not.toBeInTheDocument()
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    )
     expect(screen.getByText('1 exemption selected')).toBeInTheDocument()
   })
 
@@ -1117,7 +1137,9 @@ describe('Provincial Exemption Search Actions', () => {
 
     renderPage()
     await screen.findByText('TEST-EX-001')
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
     const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
     await userEvent.click(
@@ -1220,7 +1242,9 @@ describe('Provincial Exemption Search Actions', () => {
 
     renderPage()
     await screen.findByText('TEST-EX-001')
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
@@ -1282,9 +1306,16 @@ describe('Provincial Exemption Search Actions', () => {
 
     await screen.findByText('EX-LOCKED')
     expect(screen.getByText('Locked')).toBeInTheDocument()
-    expect(
-      screen.queryByRole('checkbox', { name: 'Select exemption EX-LOCKED' }),
-    ).not.toBeInTheDocument()
+    const lockedCheckbox = screen.getByRole('checkbox', { name: 'Select exemption EX-LOCKED' })
+    expect(lockedCheckbox).toHaveAttribute('aria-disabled', 'true')
+    expect(lockedCheckbox).not.toBeChecked()
+    expect(lockedCheckbox).toHaveAccessibleDescription(
+      expect.stringContaining('This exemption is currently locked and cannot be approved.'),
+    )
+    // jsdom flips a cancelled checkbox click instead of restoring it, so assert the
+    // cancelled click and the unchanged selection rather than the DOM checked state.
+    expect(fireEvent.click(lockedCheckbox)).toBe(false)
+    expect(screen.queryByText('1 exemption selected')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
   })
 
@@ -1318,7 +1349,7 @@ describe('Provincial Exemption Search Actions', () => {
 
     await screen.findByText('EX-APPROVED')
     const selectAllCheckbox = screen.getByRole('checkbox', {
-      name: 'Select all rows on this page',
+      name: 'Select all eligible rows on this page',
     })
     expect(selectAllCheckbox).toBeDisabled()
 
@@ -1367,7 +1398,7 @@ describe('Provincial Exemption Search Actions', () => {
       screen.queryByRole('checkbox', { name: 'Select exemption EX-1001' }),
     ).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('checkbox', { name: 'Select all rows on this page' }),
+      screen.queryByRole('checkbox', { name: 'Select all eligible rows on this page' }),
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
   })
@@ -1839,7 +1870,9 @@ describe('Provincial Exemption Search Actions', () => {
     expect(
       await screen.findByRole('heading', { name: 'Exemption search unavailable' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Unable to retrieve exemption search results.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Unable to retrieve exemption search results. Try again.'),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'No results found' })).not.toBeInTheDocument()
   })
   it.each([['List date from', 'List date to']])(

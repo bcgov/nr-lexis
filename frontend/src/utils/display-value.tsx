@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import EmptyValue from '@/components/EmptyValue'
+import { formatIsoDateLabel } from '@/utils/date'
 
 type DisplayableValue = string | number | null | undefined
 
@@ -13,9 +14,12 @@ const isBlankValue = (value: DisplayableValue): value is null | undefined | '' =
 export const displayValueText = (value: DisplayableValue): string =>
   isBlankValue(value) ? EMPTY_VALUE_TEXT : String(value)
 
-/** A read-only value; blank shows "—" and reads as "Not provided". */
+/**
+ * A read-only value; blank shows "—" and reads as "Not provided". A YYYY-MM-DD calendar date reads
+ * in words (Sep 28, 2026); date inputs keep the numeric form.
+ */
 export const displayValue = (value: DisplayableValue): ReactNode =>
-  isBlankValue(value) ? <EmptyValue /> : String(value)
+  isBlankValue(value) ? <EmptyValue /> : formatIsoDateLabel(String(value))
 
 /** Table cells use the same empty value as every other read-only value. */
 export const displayTableValue = displayValue

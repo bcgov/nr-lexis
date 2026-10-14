@@ -566,10 +566,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
     configureMinisterialActivePermit()
     renderPermitDetails()
     await selectPermitDetailTab('Fees')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee details' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit receipt number' }))
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Edit fee details' })).toHaveFocus(),
+      expect(screen.getByRole('button', { name: 'Edit receipt number' })).toHaveFocus(),
     )
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
     expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
@@ -997,7 +997,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       within(pageHeader as HTMLElement).queryByText('Check and manage this provincial permit'),
     ).not.toBeInTheDocument()
     expect(within(pageHeader as HTMLElement).getByText(/^Author: /)).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'Back to Provincial permit search' })).toHaveAttribute(
+    expect(screen.getByRole('link', { name: 'Back to Permit search' })).toHaveAttribute(
       'href',
       '/provincial/permit',
     )
@@ -1029,7 +1029,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       within(permitSummaryTile as HTMLElement).queryByText('Received date'),
     ).not.toBeInTheDocument()
-    expect(within(permitSummaryTile as HTMLElement).getAllByText('2026-04-10')).toHaveLength(1)
+    expect(within(permitSummaryTile as HTMLElement).getAllByText('Apr 10, 2026')).toHaveLength(1)
     expect(within(permitSummaryTile as HTMLElement).queryByText('Author')).not.toBeInTheDocument()
     expect(screen.getByText(/Author:/)).toBeInTheDocument()
     expect(screen.getByText(/idir\\permit-author/)).toBeInTheDocument()
@@ -7448,6 +7448,38 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
   })
 
+  it("checks a new Ministerial permit's untouched Shipping fields before saving", async () => {
+    configureMinisterialActivePermit({
+      destinationCompanyName: '',
+      destinationCountryCode: '',
+      transportTypeCode: '',
+      transportName: '',
+      estimatedShippingDate: '',
+      portOfExportCode: '',
+    })
+    render(
+      <MemoryRouter
+        initialEntries={[{ pathname: '/provincial/permit/777', state: { permitCreated: true } }]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/permit/:permitNumber"
+            element={<ProvincialPermitDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.type(await screen.findByLabelText('Remarks'), ' updated')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await waitFor(() => expect(screen.getByLabelText('Purchaser')).toHaveFocus())
+    expect(screen.getByRole('tab', { name: 'Shipping' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByLabelText('Purchaser')).toHaveAttribute('aria-invalid', 'true')
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+  })
+
   it('asks before leaving a tab with unsaved changes and edits one section at a time', async () => {
     configureActivePermit()
     renderPermitDetails()
@@ -7750,9 +7782,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ['Status', 'Active'],
       ['Exemption type', 'Blanket OIC'],
       ['Region', permitDetail.region ?? ''],
-      ['Submit date', '2026-04-10'],
-      ['Issued date', '2026-05-01'],
-      ['Expiry date', '2026-06-01'],
+      ['Submit date', 'Apr 10, 2026'],
+      ['Issued date', 'May 1, 2026'],
+      ['Expiry date', 'Jun 1, 2026'],
     ]
     for (const [label, value] of savedSummaryFields) {
       const field = within(permitTile as HTMLElement)
@@ -8833,7 +8865,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(screen.queryByRole('dialog', { name: /Email permit .* approval/ })).toBeNull()
       expect(screen.getByText('Permit review request email sent.')).toBeInTheDocument()
     })
-    expect(screen.getAllByText('2026-07-10')).toHaveLength(1)
+    expect(screen.getAllByText('Jul 10, 2026')).toHaveLength(1)
   })
 
   it('saves a permit fee override without changing unrelated permit fields', async () => {
@@ -8887,7 +8919,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
-  it('keeps reviewed fee actions singular and hides the stale override summary while editing', async () => {
+  it('keeps reviewed fee actions singular and hides them and the stale override summary while editing', async () => {
     configureMinisterialActivePermit()
     mockedFetchPermitFeeOverrideContext.mockResolvedValue({
       overrideEnabled: false,
@@ -8900,15 +8932,20 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Fees')
-    await userEvent.click(await screen.findByRole('button', { name: 'Edit fee details' }))
-    expect(screen.getAllByRole('button', { name: 'Edit fee override' })).toHaveLength(1)
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit receipt number' }))
+    expect(screen.queryByRole('button', { name: 'Edit receipt number' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit fee override' })).not.toBeInTheDocument()
 
     await userEvent.click(
       within(screen.getByRole('tabpanel', { name: 'Fees' })).getByRole('button', {
         name: 'Cancel',
       }),
     )
+    expect(screen.getAllByRole('button', { name: 'Edit receipt number' })).toHaveLength(1)
+    expect(screen.getAllByRole('button', { name: 'Edit fee override' })).toHaveLength(1)
     await userEvent.click(screen.getByRole('button', { name: 'Edit fee override' }))
+    expect(screen.queryByRole('button', { name: 'Edit receipt number' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit fee override' })).not.toBeInTheDocument()
 
     expect(screen.queryByText('Override fees?', { selector: 'dt' })).not.toBeInTheDocument()
     expect(screen.getByRole('radio', { name: 'No', checked: true })).toBeEnabled()
@@ -8917,6 +8954,113 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     const save = screen.getByRole('button', { name: 'Save changes' })
     expect(cancel.compareDocumentPosition(save) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+  })
+
+  it.each([
+    { receiptNumber: 'R-77', interior: false, shown: 'R-77' },
+    { receiptNumber: null, interior: true, shown: '—' },
+  ])(
+    'shows the reviewed receipt number and Edit receipt number on the Permit fees card (%o)',
+    async ({ receiptNumber, interior, shown }) => {
+      configureMinisterialActivePermit({ receiptNumber })
+      mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+        ...tabsResult,
+        packages: [{ ...editableBlanketOicPackage, packageNumber: 'MIN-1' }],
+      })
+      mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+        overrideEnabled: false,
+        overrideFee: '',
+        overrideComment: '',
+        locked: false,
+        lockMessage: '',
+        interior,
+      })
+      renderPermitDetails()
+
+      await selectPermitDetailTab('Fees')
+      const permitFeesTile = (await screen.findByRole('heading', { name: 'Permit fees' })).closest(
+        '.cds--tile',
+      ) as HTMLElement
+      const packageFeesTile = screen
+        .getByRole('heading', { name: 'Package fees' })
+        .closest('.cds--tile') as HTMLElement
+      const editReceipt = await within(permitFeesTile).findByRole('button', {
+        name: 'Edit receipt number',
+      })
+      expect(
+        within(permitFeesTile)
+          .getAllByRole('button', { name: /^Edit / })
+          .map((button) => button.textContent),
+      ).toEqual(['Edit receipt number', 'Edit fee override'])
+      expect(within(packageFeesTile).queryByRole('button', { name: /^Edit / })).toBeNull()
+      expect(
+        Array.from(permitFeesTile.querySelectorAll('dt'), (term) => term.textContent).slice(0, 3),
+      ).toEqual(['Receipt number', 'Total volume (m³)', 'Total fees (CAD)'])
+      const receiptField = within(permitFeesTile)
+        .getByText('Receipt number', { selector: 'dt' })
+        .closest('.record-field') as HTMLElement
+      expect(within(receiptField).getByText(shown)).toBeVisible()
+
+      await userEvent.click(editReceipt)
+      expect(within(permitFeesTile).getByLabelText('Receipt number')).toHaveValue(
+        receiptNumber ?? '',
+      )
+      expect(within(packageFeesTile).queryByLabelText('Receipt number')).not.toBeInTheDocument()
+    },
+  )
+
+  it('hides the reviewed receipt number without a receipt on a non-Interior permit', async () => {
+    configureMinisterialActivePermit({ receiptNumber: null })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [{ ...editableBlanketOicPackage, packageNumber: 'MIN-1' }],
+    })
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: false,
+      overrideFee: '',
+      overrideComment: '',
+      locked: false,
+      lockMessage: '',
+      interior: false,
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    const permitFeesTile = (await screen.findByRole('heading', { name: 'Permit fees' })).closest(
+      '.cds--tile',
+    ) as HTMLElement
+    expect(
+      await within(permitFeesTile).findByRole('button', { name: 'Edit fee override' }),
+    ).toBeEnabled()
+    expect(screen.queryByRole('button', { name: 'Edit receipt number' })).not.toBeInTheDocument()
+    expect(within(permitFeesTile).queryByText('Receipt number')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { permitStatusCode: 'COM', permitStatusDescription: 'Completed' },
+    { permitStatusCode: 'PPD', permitStatusDescription: 'Payment pending' },
+  ])('keeps a stored receipt number read-only without Edit receipt number (%o)', async (status) => {
+    configureMinisterialActivePermit({ ...status, receiptNumber: 'R-77' })
+    mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+      ...tabsResult,
+      packages: [{ ...editableBlanketOicPackage, packageNumber: 'MIN-1' }],
+    })
+    mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+      overrideEnabled: false,
+      overrideFee: '',
+      overrideComment: '',
+      locked: false,
+      lockMessage: '',
+      interior: false,
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    const permitFeesTile = (await screen.findByRole('heading', { name: 'Permit fees' })).closest(
+      '.cds--tile',
+    ) as HTMLElement
+    expect(await within(permitFeesTile).findByText('R-77')).toBeVisible()
+    expect(screen.queryByRole('button', { name: 'Edit receipt number' })).not.toBeInTheDocument()
   })
 
   it('shows fee override fields only when Yes is selected', async () => {
