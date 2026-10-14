@@ -1146,12 +1146,13 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument()
   })
 
-  it('omits placeholder totals and their lookup for Blanket OIC permits', async () => {
+  it('shows the Blanket OIC completed-permit totals above the related permits', async () => {
     mockedFetchProvincialExemptionDetail.mockResolvedValue({
       ...exemptionDetail,
       exemptionTypeCode: 'B',
       exemptionTypeDescription: 'Blanket Order in Council',
       blanketOic: true,
+      completedPermitVolume: 9,
     })
 
     render(
@@ -1168,13 +1169,19 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Permits')
     expect(await screen.findByText('P1 (Pending)')).toBeInTheDocument()
     const permits = within(screen.getByRole('tabpanel'))
-    expect(permits.getByRole('heading', { name: 'Permits' })).toBeInTheDocument()
-    expect(permits.queryByRole('heading', { name: 'Exemption details' })).not.toBeInTheDocument()
-    expect(permits.queryByLabelText('Blanket OIC permit volume totals')).not.toBeInTheDocument()
-    expect(permits.queryByText('Approved volume (m³)')).not.toBeInTheDocument()
-    expect(permits.queryByText('Sum of completed permits (m³)')).not.toBeInTheDocument()
-    expect(permits.queryByText('Balance remaining (m³)')).not.toBeInTheDocument()
-    expect(permits.queryByText('Blanket OIC totals unavailable')).not.toBeInTheDocument()
+    const headings = permits.getAllByRole('heading').map((heading) => heading.textContent)
+    expect(headings.indexOf('Exemption details')).toBeLessThan(headings.indexOf('Related permits'))
+    const totals = permits.getByLabelText('Exemption permit volume totals')
+    for (const [label, value] of [
+      ['Approved volume (m³)', '99.0'],
+      ['Sum of completed permits (m³)', '9.0'],
+      ['Balance remaining (m³)', '90.0'],
+    ]) {
+      const field = within(totals).getByText(label).closest('.record-field')
+      expect(within(field as HTMLElement).getByText(value)).toBeInTheDocument()
+    }
+    expect(permits.queryByText('Sum of application scales (m³)')).not.toBeInTheDocument()
+    expect(permits.queryByText('Requested volume (m³)')).not.toBeInTheDocument()
   })
 
   it('keeps application and fee eligibility unavailable when associated applications fail', async () => {

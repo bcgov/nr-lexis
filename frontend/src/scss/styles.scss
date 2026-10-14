@@ -5179,6 +5179,11 @@ $notification-types: 'error', 'info', 'success', 'warning';
   color: var(--cds-link-primary);
 }
 
+.provincial-blanket-oic-permit-create-page .boic-permit-unsaved-tab-note {
+  margin: 0;
+  padding-block-start: 2rem;
+}
+
 .provincial-blanket-oic-permit-create-page .legacy-search-grid {
   grid-template-columns: repeat(auto-fit, minmax(min(220px, 100%), 1fr));
 }

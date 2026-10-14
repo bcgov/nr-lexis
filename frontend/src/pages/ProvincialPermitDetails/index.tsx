@@ -1108,6 +1108,7 @@ const ProvincialPermitDetailsPage = () => {
     EMPTY_DEFERRED_PERMIT_TAB_STATE,
   )
   const [actionResult, setActionResult] = useState<PermitActionResult | null>(null)
+  const [focusCreatedPermitTitle, setFocusCreatedPermitTitle] = useState(false)
   const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
   const pageActionResult = actionResult?.source ? null : actionResult
   const [permitApprovalEmailErrorMessage, setPermitApprovalEmailErrorMessage] = useState('')
@@ -2947,6 +2948,9 @@ const ProvincialPermitDetailsPage = () => {
         title: 'The permit was saved.',
         message: '',
       })
+      // The create page's Save button is gone, so focus starts again at the new permit's title.
+      // eslint-disable-next-line @eslint-react/set-state-in-effect
+      setFocusCreatedPermitTitle(true)
     }
     const remainingState: Record<string, unknown> = { ...location.state }
     delete remainingState.blanketOicPermitCreated
@@ -6415,6 +6419,7 @@ const ProvincialPermitDetailsPage = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={permitPageTitle}
+          focusTitle={focusCreatedPermitTitle}
           subtitle={detailMatchesRoute ? `Author: ${displayValueText(detail.author)}` : undefined}
           status={
             detail && detailMatchesRoute ? (

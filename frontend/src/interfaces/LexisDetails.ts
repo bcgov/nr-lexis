@@ -66,6 +66,7 @@ export type ProvincialExemptionDetail = {
   expiryDate: string | null
   approvedVolume: number | null
   usedVolume: number | null
+  /** Stored volume of completed permits; the Blanket OIC Permits tab total. */
   completedPermitVolume?: number | null
   remainingVolume: number | null
   otherConditions: string | null

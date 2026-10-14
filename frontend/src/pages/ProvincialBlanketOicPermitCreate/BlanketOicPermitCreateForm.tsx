@@ -15,7 +15,6 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { AddDocument, Cardboard, Invoice } from '@carbon/pictograms-react'
 import {
   Box,
   Certificate,
@@ -27,7 +26,6 @@ import {
 } from '@carbon/icons-react'
 import { Link, useLocation } from 'react-router-dom'
 import DetailCardTitle from '@/components/DetailCardTitle'
-import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import IsoDatePicker from '@/components/IsoDatePicker'
 import PendingIcon from '@/components/PendingIcon'
@@ -61,7 +59,6 @@ import {
 } from '@/service/shipping-reference-service'
 import { formatBusinessIsoDate } from '@/utils/date'
 import { fieldErrorText } from '@/utils/field-error'
-import { focusFirstInvalidField } from '@/utils/focus'
 import { requiredLabel } from '@/utils/required-label'
 import { resolveBlanketOicRegionContext } from './region-context'
 
@@ -227,8 +224,11 @@ const requiredTextError = (value: string, label: string, maxLength: number): str
     : `${label} must be ${maxLength} characters or fewer.`
 }
 
-const clientNumberError = (value: string, label: string): string | undefined =>
-  /^\d{8}$/.test(value.trim()) ? undefined : `${label} must be exactly 8 digits.`
+const clientNumberError = (value: string, fieldLabel: string): string | undefined => {
+  const normalized = value.trim()
+  if (!normalized) return `${fieldLabel} is required.`
+  return /^\d{8}$/.test(normalized) ? undefined : `${fieldLabel} number must be exactly 8 digits.`
+}
 
 const isPopulatedIsoDate = (value: string): boolean => !!value.trim() && isValidIsoDate(value)
 
@@ -266,7 +266,7 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
     permitIssueDate: optionalDateError(form.permitIssueDate, 'Issued date'),
     permitExpiryDate: optionalDateError(form.permitExpiryDate, 'Expiry date'),
     orgUnitNumber: form.orgUnitNumber.trim() ? undefined : 'Region is required.',
-    ownerClientNumber: clientNumberError(form.ownerClientNumber, 'Client number'),
+    ownerClientNumber: clientNumberError(form.ownerClientNumber, 'Client'),
     ownerClientLocation: form.ownerClientLocation.trim()
       ? undefined
       : 'Client location is required.',
@@ -334,7 +334,7 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
   }
 
   if (agentUsed) {
-    errors.agentClientNumber = clientNumberError(form.agentClientNumber, 'Agent client number')
+    errors.agentClientNumber = clientNumberError(form.agentClientNumber, 'Agent client')
     errors.agentClientLocation = form.agentClientLocation.trim()
       ? undefined
       : 'Agent client location is required.'
@@ -430,11 +430,11 @@ const BlanketOicPermitCreateForm = ({
   )
   const isDraftDirty = formEdited && !formValuesEqual({ form, agentUsed }, draftBaselineRef.current)
 
-  // A failed save shows the first tab with an error and focuses its first invalid field. Errors
-  // that belong to no field, such as options still loading, leave focus on the summary.
+  // A failed save shows the first tab with an error and moves focus to the error summary, so
+  // keyboard and screen reader users hear why Save did nothing.
   useEffect(() => {
     if (failedSubmitCount === 0) return
-    if (!focusFirstInvalidField(formSectionRef.current)) errorSummaryRef.current?.focus()
+    errorSummaryRef.current?.focus()
   }, [failedSubmitCount])
 
   useEffect(() => {
@@ -945,7 +945,8 @@ const BlanketOicPermitCreateForm = ({
                 <legend className="cds--visually-hidden">Permit details</legend>
                 <RecordFieldGrid editing>
                   <RecordFieldRow>
-                    <RecordField label={requiredLabel('Status')} value="Active" />
+                    {/* New permits are always created Active, so Status is a fixed value. */}
+                    <RecordField label="Status" value="Active" />
                   </RecordFieldRow>
                   <RecordFieldRow>
                     <RecordField
@@ -1453,31 +1454,13 @@ const BlanketOicPermitCreateForm = ({
             </Tile>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
-            <EmptyState
-              variant="tab"
-              icon={<Cardboard width={48} height={48} />}
-              title="Save the permit first"
-              description="Available after the permit is saved."
-              headingLevel={2}
-            />
+            <p className="boic-permit-unsaved-tab-note">Available after the permit is saved.</p>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
-            <EmptyState
-              variant="tab"
-              icon={<AddDocument width={48} height={48} />}
-              title="Save the permit first"
-              description="Available after the permit is saved."
-              headingLevel={2}
-            />
+            <p className="boic-permit-unsaved-tab-note">Available after the permit is saved.</p>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
-            <EmptyState
-              variant="tab"
-              icon={<Invoice width={48} height={48} />}
-              title="Save the permit first"
-              description="Available after the permit is saved."
-              headingLevel={2}
-            />
+            <p className="boic-permit-unsaved-tab-note">Available after the permit is saved.</p>
           </TabPanel>
         </TabPanels>
       </Tabs>

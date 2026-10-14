@@ -27,19 +27,20 @@ const PREFERRED_COUNTRY_CODES = ['US', 'JP', 'CN', 'KR', 'TW', 'CA']
 const itemToString = (item: PermitCountrySelectOption | null | undefined): string =>
   item?.label ?? ''
 
+/** Type-ahead matches the start of the country name, or its exact two-letter code. */
 const matchesCountrySearch = (item: PermitCountrySelectOption, inputValue: string): boolean => {
   const query = inputValue.trim().toLocaleLowerCase()
   return (
     !query ||
-    item.label.toLocaleLowerCase().includes(query) ||
-    item.value.toLocaleLowerCase().includes(query)
+    item.label.toLocaleLowerCase().startsWith(query) ||
+    item.value.toLocaleLowerCase() === query
   )
 }
 
 /**
  * Keeps the legacy country ordering useful without hiding active country codes.
- * Preferred countries appear once at the top, followed by the remaining countries
- * alphabetically. Search keeps preferred matches first without a group divider.
+ * Preferred countries appear once at the top, followed by a divider and the remaining
+ * countries alphabetically. Search keeps preferred matches first without a group divider.
  */
 export default function PermitCountrySelect({
   id,
