@@ -9112,6 +9112,7 @@ class OraclePermitDetailsRpcServiceTest {
         detail.approvedVolume(),
         detail.approvedVolume() - remainingVolume,
         remainingVolume,
+        detail.completedPermitVolume(),
         detail.otherConditions(),
         detail.blanketOic(),
         detail.permitNumbers(),

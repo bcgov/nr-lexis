@@ -111,11 +111,13 @@ class ExemptionDetailQueriesTest {
     var detail = repository.findByExemptionNumber("EX-205").orElseThrow();
 
     assertThat(jdbc.queryForList(ExemptionDetailQueries.BY_NUMBER, "EX-205")).hasSize(1);
+    assertThat(detail.completedPermitVolume()).isEqualTo(45.0d);
     // Completed 45 + active 20 + payment-pending 5; cancelled 7 and unassigned 8 do not reserve.
     assertThat(detail.usedVolume()).isEqualTo(70.0d);
     assertThat(detail.remainingVolume()).isEqualTo(30.0d);
 
     var empty = repository.findByExemptionNumber("EMPTY").orElseThrow();
+    assertThat(empty.completedPermitVolume()).isZero();
     assertThat(empty.usedVolume()).isZero();
     assertThat(empty.remainingVolume()).isEqualTo(100.0d);
   }
@@ -125,6 +127,7 @@ class ExemptionDetailQueriesTest {
     jdbc.update("UPDATE THE.EXPORT_PERMIT_DETAIL SET EXPORT_PERMIT_STATUS_CODE = 'CAN' "
         + "WHERE EXPORT_PERMIT_DETAIL_NUMBER IN (101, 103)");
     var cancelled = repository.findByExemptionNumber("EX-205").orElseThrow();
+    assertThat(cancelled.completedPermitVolume()).isEqualTo(15.0d);
     assertThat(cancelled.usedVolume()).isEqualTo(20.0d);
     assertThat(cancelled.remainingVolume()).isEqualTo(80.0d);
 
@@ -133,6 +136,7 @@ class ExemptionDetailQueriesTest {
     jdbc.update("UPDATE THE.EXPORT_PERMIT_DETAIL SET EXPORT_PERMIT_STATUS_CODE = 'ACT' "
         + "WHERE EXPORT_PERMIT_DETAIL_NUMBER = 103");
     var reopened = repository.findByExemptionNumber("EX-205").orElseThrow();
+    assertThat(reopened.completedPermitVolume()).isEqualTo(45.0d);
     assertThat(reopened.usedVolume()).isEqualTo(70.0d);
     assertThat(reopened.remainingVolume()).isEqualTo(30.0d);
   }

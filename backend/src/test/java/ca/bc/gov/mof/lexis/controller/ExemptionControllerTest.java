@@ -541,6 +541,7 @@ class ExemptionControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().exemptionNumber()).isEqualTo(dto.exemptionNumber());
     assertThat(response.getBody().permitNumbers()).isEmpty();
+    assertThat(response.getBody().completedPermitVolume()).isEqualTo(7.5d);
     assertThat(response.getBody().usedVolume()).isEqualTo(12.0d);
     assertThat(response.getBody().remainingVolume()).isEqualTo(83.0d);
     assertThat(response.getBody().remarks()).isEqualTo(dto.remarks());
@@ -578,6 +579,7 @@ class ExemptionControllerTest {
         95.0,
         12.0,
         83.0,
+        7.5,
         "Pending final confirmation",
         false,
         List.of("P-88009"),

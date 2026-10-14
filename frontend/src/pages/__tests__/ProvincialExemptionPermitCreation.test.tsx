@@ -247,6 +247,7 @@ const openPermitsTab = async () => {
 const openBlanketOicCreatePage = async () => {
   await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
   const dialog = await screen.findByRole('dialog', { name: 'Apply for new permit' })
+  expect(within(dialog).getByText(/^Blanket OIC Exemption .+\.$/).tagName).toBe('STRONG')
   expect(within(dialog).getByText(/The permit is created when you save it/)).toBeInTheDocument()
   expect(addPermitDetail).not.toHaveBeenCalled()
   expect(createPermitFromExemption).not.toHaveBeenCalled()
@@ -692,7 +693,7 @@ describe('permit creation from an exemption', () => {
     expect(router.state.location.state.permitCreated).toBe(false)
   })
 
-  it('keeps the Permits card until a successful empty request completes', async () => {
+  it('keeps the Related permits card until a successful empty request completes', async () => {
     mockRole(['ADMIN'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
     let resolvePermits: (rows: Awaited<ReturnType<typeof fetchExemptionPermits>>) => void = () =>
@@ -705,14 +706,18 @@ describe('permit creation from an exemption', () => {
     vi.mocked(fetchExemptionPermits).mockReturnValueOnce(pendingPermits)
     renderPage(activeBlanketOicExemption, '', { lexisDetailTab: 'permits' })
 
-    expect(await screen.findByRole('heading', { name: 'Permits', level: 2 })).toBeInTheDocument()
+    expect(
+      await screen.findByRole('heading', { name: 'Related permits', level: 2 }),
+    ).toBeInTheDocument()
     expect(screen.getByRole('status')).toHaveTextContent('Refreshing provincial exemption detail')
 
     await act(async () => resolvePermits([]))
 
     const emptyTitle = await screen.findByRole('heading', { name: 'No permits for this exemption' })
     expect(emptyTitle.closest('.cds--tile')).toBeNull()
-    expect(screen.queryByRole('heading', { name: 'Permits', level: 2 })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('heading', { name: 'Related permits', level: 2 }),
+    ).not.toBeInTheDocument()
   })
 
   it('keeps permission-filtered permits in their read-only card', async () => {
@@ -731,7 +736,7 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
     await openPermitsTab()
 
-    expect(screen.getByRole('heading', { name: 'Permits', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Related permits', level: 2 })).toBeInTheDocument()
     const emptyTitle = screen.getByRole('heading', { name: 'No permits available' })
     expect(emptyTitle.closest('.cds--tile')).not.toBeNull()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
@@ -753,7 +758,7 @@ describe('permit creation from an exemption', () => {
 
     const errorTitle = await screen.findByRole('heading', { name: 'Permits unavailable' })
     expect(errorTitle.closest('.cds--tile')).not.toBeNull()
-    expect(screen.getByRole('heading', { name: 'Permits', level: 2 })).toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Related permits', level: 2 })).toBeInTheDocument()
     expect(screen.getByRole('alert')).toHaveTextContent(
       'Unable to retrieve permits associated with this exemption.',
     )
@@ -1306,9 +1311,7 @@ describe('permit creation from an exemption', () => {
       within(page).getByRole('tab', { name: /^Applicant, \d+ required fields outstanding$/ }),
     )
 
-    expect(
-      await within(page).findAllByText('Client number must be exactly 8 digits'),
-    ).not.toHaveLength(0)
+    expect(await within(page).findAllByText('Client is required')).not.toHaveLength(0)
     expect(addPermitDetail).not.toHaveBeenCalled()
   })
 

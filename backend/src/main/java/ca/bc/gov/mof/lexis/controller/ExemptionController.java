@@ -322,6 +322,7 @@ public class ExemptionController {
         detail.approvedVolume(),
         detail.usedVolume(),
         detail.remainingVolume(),
+        detail.completedPermitVolume(),
         detail.otherConditions(),
         detail.blanketOic(),
         List.of(),
