@@ -520,7 +520,7 @@ const reviewValueWarning = (
   const hasPositiveNewValue = typeof parsedValue === 'number' && parsedValue > 0
 
   if (currentValue === null && hasPositiveNewValue) {
-    return `${comparisonMonthName} had no value for this grade. Confirm this species and grade combination is valid.`
+    return `${comparisonMonthName} had none. Confirm this species and grade combination is valid.`
   }
   if (currentValue !== null && parsedValue === null) {
     return `${comparisonMonthName} had ${formatMoney(currentValue)}. Enter a value, or 0 for none.`
@@ -901,7 +901,7 @@ const RtmEmsLogAmvUploadPage = () => {
 
   useEffect(() => {
     const previousTitle = document.title
-    document.title = 'Average market values | NR LEXIS'
+    document.title = 'Average market values'
 
     return () => {
       document.title = previousTitle
@@ -1765,17 +1765,18 @@ const RtmEmsLogAmvUploadPage = () => {
               : 'Discard these values?'
           }
           description={
-            discardConfirmation === 'file'
-              ? 'The values on screen will be cleared. Nothing has been saved.'
-              : discardConfirmation === 'saved-changes'
-                ? 'The table will return to your last saved values. Changes made since then will be discarded.'
+            discardConfirmation === 'saved-changes' ||
+            (discardConfirmation === 'file' && replacementUploadOpen)
+              ? 'The values on screen will go back to your last save.'
+              : discardConfirmation === 'file'
+                ? 'The values on screen will be cleared. Nothing has been saved.'
                 : 'The file and all values on screen will be cleared. Nothing has been saved.'
           }
           cancelLabel={
             discardConfirmation === 'file'
               ? 'Keep file'
               : discardConfirmation === 'saved-changes'
-                ? 'Discard changes'
+                ? 'Discard values'
                 : 'Keep editing'
           }
           confirmLabel={

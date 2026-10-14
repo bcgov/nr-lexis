@@ -136,11 +136,11 @@ export const exemptionApprovalResults = (
     email.status === 'notSent' || email.status === 'unknown'
 
   if (approved.length === 1 && failures.length === 0 && unconfirmedNumbers.length === 0) {
-    const [{ email }] = approved
+    const [{ exemptionNumber, email }] = approved
     return [
       {
         kind: notes.length || emailProblem(email) ? 'warning' : 'success',
-        title: 'Exemption approved and now Active.',
+        title: `Exemption ${exemptionNumber} approved and now Active.`,
         message: joined([emailNotice(email), ...notes]),
       },
     ]

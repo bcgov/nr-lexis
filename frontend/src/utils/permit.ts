@@ -25,5 +25,5 @@ export const formatPermitStatus = (
     normalizedDescription === 'PPD' ||
     normalizedDescription === 'PAYMENT PENDING'
 
-  return isPaymentPending ? 'Payment Pending' : description || code
+  return isPaymentPending ? 'Payment pending' : description || code
 }

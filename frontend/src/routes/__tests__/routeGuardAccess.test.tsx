@@ -101,7 +101,7 @@ describe('Protected route guard access', () => {
     expect(screen.getByRole('button', { name: 'Go to my landing page' })).toHaveClass(
       'cds--btn--md',
     )
-    expect(screen.getByRole('button', { name: 'Sign out' })).toHaveClass('cds--btn--md')
+    expect(screen.getByRole('button', { name: 'Log out' })).toHaveClass('cds--btn--md')
   })
 
   it('rejects generic data upload when only a supporting-document action is granted', async () => {

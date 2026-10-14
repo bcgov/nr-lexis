@@ -333,17 +333,17 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     await waitFor(() => expect(volume).toBeEnabled())
     await userEvent.click(volume)
     await userEvent.clear(volume)
-    expect(drawer.queryByText('Package volume is required')).not.toBeInTheDocument()
+    expect(drawer.queryByText('Package volume (m³) is required')).not.toBeInTheDocument()
 
     await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
 
-    expect(await drawer.findByText('Package volume is required')).toBeInTheDocument()
+    expect(await drawer.findByText('Package volume (m³) is required')).toBeInTheDocument()
     await waitFor(() => expect(volume).toHaveFocus())
     expect(drawer.queryByText('Package save failed')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
 
     await userEvent.type(volume, '9')
-    expect(drawer.queryByText('Package volume is required')).not.toBeInTheDocument()
+    expect(drawer.queryByText('Package volume (m³) is required')).not.toBeInTheDocument()
   })
 
   it('shows a duplicate package number from the server on the package number field', async () => {
@@ -607,7 +607,7 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     await userEvent.type(screen.getByLabelText('Remark'), 'Pending note')
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
 
-    expect(await screen.findByRole('button', { name: 'Saving…' })).toBeDisabled()
+    expect(await screen.findByRole('button', { name: 'Saving remark' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add remark' })).toBeDisabled()
     expect(
       within(screen.getByRole('row', { name: /ok/ })).getByRole('button', { name: 'Edit' }),

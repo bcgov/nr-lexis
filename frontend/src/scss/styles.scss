@@ -1898,6 +1898,28 @@ $notification-types: 'error', 'info', 'success', 'warning';
   grid-column: 1 / span 2;
 }
 
+// Client filters sit together on their own row, two columns each.
+.provincial-permit-search-grid > .forest-client-combobox {
+  grid-column: span 2;
+}
+
+.provincial-permit-search-grid > .forest-client-combobox:has(#applicantClientNumber),
+.provincial-offer-search-grid > .forest-client-combobox {
+  grid-column: 1 / span 2;
+}
+
+// "All" is these filters' value until an option is chosen, so it uses the primary text colour.
+:is(
+    .provincial-application-search-grid,
+    .provincial-exemption-search-grid,
+    .provincial-offer-search-grid,
+    .provincial-permit-search-grid
+  )
+  .cds--combo-box:not(.cds--multi-select--selected)
+  input:not(:disabled)::placeholder {
+  color: var(--cds-text-primary);
+}
+
 .legacy-search-grid > .search-date-range {
   grid-column: span 2;
 
@@ -5179,9 +5201,15 @@ $notification-types: 'error', 'info', 'success', 'warning';
   color: var(--cds-link-primary);
 }
 
-.provincial-blanket-oic-permit-create-page .boic-permit-unsaved-tab-note {
+.unsaved-tab-note {
   margin: 0;
   padding-block-start: 2rem;
+}
+
+// The page notice keeps the same space above the tabs as the other create pages.
+.boic-permit-create-form > .cds--inline-notification,
+.boic-permit-create-form > [role='group'] {
+  margin-block-end: 2.5rem;
 }
 
 .provincial-blanket-oic-permit-create-page .legacy-search-grid {
@@ -5994,6 +6022,9 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
   .provincial-application-search-grid > .forest-client-combobox,
   .provincial-application-search-grid > .forest-client-combobox:has(#ownerClientNumber),
+  .provincial-permit-search-grid > .forest-client-combobox,
+  .provincial-permit-search-grid > .forest-client-combobox:has(#applicantClientNumber),
+  .provincial-offer-search-grid > .forest-client-combobox,
   .federal-application-search-grid > .forest-client-combobox,
   .legacy-search-grid > .search-date-range {
     grid-column: auto;
@@ -6320,4 +6351,13 @@ $notification-types: 'error', 'info', 'success', 'warning';
     height: 22rem;
     min-height: 22rem;
   }
+}
+
+.exemption-permits-empty--after-totals {
+  border-block-start: 1px solid var(--cds-border-subtle);
+}
+
+// A disabled combo box can't be cleared, so it shows no clear button.
+.cds--list-box--disabled .cds--list-box__selection {
+  display: none;
 }

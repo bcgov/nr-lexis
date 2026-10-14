@@ -109,7 +109,7 @@ describe('ExemptionApprovalModal', () => {
     await waitFor(() => expect(screen.getByRole('checkbox', { name: /I certify/ })).toHaveFocus())
     expect(
       screen.getByText(
-        'Enter an email address, or clear “Send approval email to the applicant” to notify the applicant another way.',
+        'Enter at least one email, or clear “Send approval email” to notify the applicant another way.',
       ),
     ).toBeVisible()
 
@@ -147,6 +147,7 @@ describe('ExemptionApprovalModal', () => {
     expect(screen.queryByText('Agent email')).not.toBeInTheDocument()
     await user.click(screen.getByRole('button', { name: 'Edit recipients' }))
     expect(screen.getByRole('textbox', { name: 'Owner email' })).toBeVisible()
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Owner email' })).toHaveFocus())
     expect(screen.getByText('Changes apply to this approval only.')).toBeVisible()
     expect(screen.queryByRole('textbox', { name: 'Agent email' })).not.toBeInTheDocument()
   })

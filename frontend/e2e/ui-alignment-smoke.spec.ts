@@ -408,7 +408,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       'height',
       '40px',
     )
-    await expect(page.getByRole('button', { name: 'Sign out' })).toHaveCSS('height', '40px')
+    await expect(page.getByRole('button', { name: 'Log out' })).toHaveCSS('height', '40px')
     const pageWidth = await page.evaluate(() => ({
       clientWidth: document.documentElement.clientWidth,
       scrollWidth: document.documentElement.scrollWidth,
@@ -441,7 +441,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
     await expect(page.getByRole('heading', { level: 1, name: 'Access not granted' })).toBeVisible()
     await expect(page.getByText(/UI\.NO\.ACCESS/)).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Sign out' })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Log out' })).toBeVisible()
     await expect(page.locator('.app-shell')).toHaveCount(0)
     await expect(page.getByTestId('unauthorized-page')).toBeVisible()
   })
@@ -1325,7 +1325,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await to.press('Tab')
     await expect(to).toHaveAttribute('aria-invalid', 'true')
     await expect(
-      page.getByText('Must be on or after List date from', { exact: true }),
+      page.getByText('Must be on or after List date from.', { exact: true }),
     ).toBeVisible()
     await expect(search).toBeDisabled()
     await to.press('Enter')
@@ -1521,10 +1521,13 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(new URL((await withoutApplicant).url()).searchParams.get('ownerClientNumber')).toBe(
       '00020001',
     )
-    await expect(page.getByText('0 applications found', { exact: true })).toHaveCount(2)
+    // No results show only the empty state, without counts or pagination.
+    await expect(page.getByRole('heading', { name: 'No results found', exact: true })).toBeVisible()
+    await expect(page.locator('.legacy-search-result-count--footer')).toHaveCount(0)
+    await expect(page.locator('.cds--pagination')).toHaveCount(0)
   })
 
-  test('keeps application ranges and client groups aligned without changing offer layout', async ({
+  test('keeps search ranges and client groups aligned on application, permit and offer search', async ({
     page,
   }) => {
     const readFieldLayout = async (gridSelector: string, fieldIds: string[]) =>
@@ -1641,6 +1644,63 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         )
       }
 
+      // "All" reads as the filter's value, in the field's own text colour.
+      const applicationStatus = page.locator('#applicationStatus')
+      await expect(applicationStatus).toBeEnabled()
+      await expect(applicationStatus).toHaveAttribute('placeholder', 'All')
+      const allColours = await applicationStatus.evaluate((input) => ({
+        placeholder: getComputedStyle(input, '::placeholder').color,
+        text: getComputedStyle(input).color,
+      }))
+      expect(allColours.placeholder).toBe(allColours.text)
+
+      await gotoSyntheticRoute(page, '/provincial/permit', {
+        waitUntil: 'domcontentloaded',
+        ready: page.locator('.provincial-permit-search-grid'),
+      })
+      const permitLayout = await readFieldLayout('.provincial-permit-search-grid', [
+        'applicationNumber',
+        'packageNumber',
+        'permitNumber',
+        'region',
+        'issuedFromDate',
+        'issuedToDate',
+        'permitStatus',
+        'applicantClientNumber',
+        'ownerClientNumber',
+      ])
+      const permitColumnWidth = permitLayout.applicationNumber.width
+      for (const clientField of ['applicantClientNumber', 'ownerClientNumber']) {
+        expect(
+          Math.abs(permitLayout[clientField].width - (permitColumnWidth * 2 + columnGap)),
+        ).toBeLessThanOrEqual(1)
+        expect(permitLayout[clientField].top).toBeGreaterThan(permitLayout.permitStatus.bottom)
+      }
+      expect(
+        Math.abs(permitLayout.applicantClientNumber.left - permitLayout.applicationNumber.left),
+      ).toBeLessThanOrEqual(1)
+
+      if (viewport.columns === 4) {
+        expectSameRow(permitLayout, [
+          'applicationNumber',
+          'packageNumber',
+          'permitNumber',
+          'region',
+        ])
+        expect(
+          Math.abs(permitLayout.region.left - applicationLayout.region.left),
+        ).toBeLessThanOrEqual(1)
+        expectSameRow(permitLayout, ['issuedFromDate', 'issuedToDate', 'permitStatus'])
+        expectSameRow(permitLayout, ['applicantClientNumber', 'ownerClientNumber'])
+      } else {
+        expectSameRow(permitLayout, ['applicationNumber', 'packageNumber'])
+        expectSameRow(permitLayout, ['permitNumber', 'region'])
+        expectSameRow(permitLayout, ['issuedFromDate', 'issuedToDate'])
+        expect(permitLayout.ownerClientNumber.top).toBeGreaterThan(
+          permitLayout.applicantClientNumber.bottom,
+        )
+      }
+
       await gotoSyntheticRoute(page, '/provincial/offers', {
         waitUntil: 'domcontentloaded',
         ready: page.locator('.provincial-offer-search-grid'),
@@ -1648,16 +1708,27 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       const offerLayout = await readFieldLayout('.provincial-offer-search-grid', [
         'applicationNumber',
         'packageNumber',
-        'clientNumber',
         'region',
         'listingFromDate',
         'listingToDate',
         'withdrawalFromDate',
         'withdrawalToDate',
+        'clientNumber',
       ])
+      expect(
+        Math.abs(
+          offerLayout.clientNumber.width - (offerLayout.applicationNumber.width * 2 + columnGap),
+        ),
+      ).toBeLessThanOrEqual(1)
+      expect(
+        Math.abs(offerLayout.clientNumber.left - offerLayout.applicationNumber.left),
+      ).toBeLessThanOrEqual(1)
+      expect(offerLayout.clientNumber.top).toBeGreaterThan(
+        Math.max(offerLayout.listingToDate.bottom, offerLayout.withdrawalToDate.bottom),
+      )
 
       if (viewport.columns === 4) {
-        expectSameRow(offerLayout, ['applicationNumber', 'packageNumber', 'clientNumber', 'region'])
+        expectSameRow(offerLayout, ['applicationNumber', 'packageNumber', 'region'])
         expectSameRow(offerLayout, [
           'listingFromDate',
           'listingToDate',
@@ -1666,7 +1737,6 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         ])
       } else {
         expectSameRow(offerLayout, ['applicationNumber', 'packageNumber'])
-        expectSameRow(offerLayout, ['clientNumber', 'region'])
         expectSameRow(offerLayout, ['listingFromDate', 'listingToDate'])
         expectSameRow(offerLayout, ['withdrawalFromDate', 'withdrawalToDate'])
       }
@@ -1888,7 +1958,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       }),
     })
     await page.getByRole('tab', { name: 'Remarks' }).click()
-    await expect(page.getByRole('region', { name: 'Remarks' })).toHaveText(
+    await expect(page.getByRole('tabpanel', { name: 'Remarks' })).toHaveText(
       'Available after the application is saved.',
     )
     await page.getByRole('tab', { name: 'Scale' }).click()
@@ -1952,7 +2022,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     })
     for (const section of ['Documents', 'Remarks', 'Offers', 'Review']) {
       await page.getByRole('tab', { name: section, exact: true }).click()
-      await expect(page.getByRole('region', { name: section, exact: true })).toHaveText(
+      await expect(page.getByRole('tabpanel', { name: section, exact: true })).toHaveText(
         'Available after the application is saved.',
       )
     }
@@ -1969,7 +2039,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(
       page.getByRole('heading', { level: 1, name: 'Average market values' }),
     ).toBeVisible()
-    await expect(page).toHaveTitle('Average market values | NR LEXIS')
+    await expect(page).toHaveTitle('Average market values')
     await expect(page.locator('main.app-main')).toHaveCSS('padding-bottom', '0px')
     await expect(page.getByRole('region', { name: 'Upload spreadsheet' })).toBeVisible()
     await expect(page.getByRole('link', { name: 'Download template' })).toBeVisible()
@@ -2513,9 +2583,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
   })
 
   test('keeps record summaries and footer actions within the form', async ({ page }, testInfo) => {
+    // Create new exemption shows its status in the form, with no record summary footer.
+    await gotoSyntheticRoute(page, '/provincial/exemption/create', {
+      ready: page.getByRole('heading', { level: 1, name: 'Create new exemption', exact: true }),
+    })
+    await expect(page.locator('.legacy-form-footer')).toHaveCount(0)
+
     const routes = [
       ['/provincial/offers/create', 'Create new offer'],
-      ['/provincial/exemption/create', 'Create new exemption'],
       ['/provincial/offers/81001', 'Offer 81001'],
     ]
     const bounds: unknown[] = []

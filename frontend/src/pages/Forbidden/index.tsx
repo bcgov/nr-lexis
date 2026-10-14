@@ -47,7 +47,7 @@ const ForbiddenPage = () => {
                   void logout()
                 }}
               >
-                Sign out
+                Log out
               </Button>
             </div>
           </div>

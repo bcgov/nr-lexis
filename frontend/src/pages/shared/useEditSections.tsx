@@ -45,8 +45,8 @@ export type EditSections<S extends string> = {
   confirmLeave: (action: () => void) => void
   /** Marks an element that holds the fields of one or more sections in edit mode. */
   sectionRef: (...sections: S[]) => ElementRef
-  /** Marks the section's Edit button, which takes focus back after Save or Cancel. */
-  editButtonRef: (section: S) => ElementRef
+  /** Marks the sections' Edit button, which takes focus back after Save or Cancel. */
+  editButtonRef: (...sections: S[]) => ElementRef
   discardModal: ReactNode
 }
 
@@ -110,7 +110,7 @@ export const useEditSections = <S extends string>({
   const sectionElementsRef = useRef(new Map<S, Set<HTMLElement>>())
   const editButtonsRef = useRef(new Map<S, Set<HTMLElement>>())
   const sectionRefCallbacksRef = useRef(new Map<string, ElementRef>())
-  const editButtonRefCallbacksRef = useRef(new Map<S, ElementRef>())
+  const editButtonRefCallbacksRef = useRef(new Map<string, ElementRef>())
   const previousSectionRef = useRef<S | null>(null)
   const leavingRef = useRef(false)
   const focusIntentRef = useRef<FocusIntent<S> | null>(null)
@@ -254,12 +254,17 @@ export const useEditSections = <S extends string>({
     return ref
   }, [])
 
-  const editButtonRef = useCallback((section: S) => {
-    let ref = editButtonRefCallbacksRef.current.get(section)
+  const editButtonRef = useCallback((...sections: S[]) => {
+    const key = sections.join(' ')
+    let ref = editButtonRefCallbacksRef.current.get(key)
     if (!ref) {
-      ref = (element: HTMLElement | null) =>
-        registerElement(editButtonsRef.current, section, element)
-      editButtonRefCallbacksRef.current.set(section, ref)
+      ref = (element: HTMLElement | null) => {
+        const cleanups = sections.map((section) =>
+          registerElement(editButtonsRef.current, section, element),
+        )
+        return element ? () => cleanups.forEach((cleanup) => cleanup?.()) : undefined
+      }
+      editButtonRefCallbacksRef.current.set(key, ref)
     }
     return ref
   }, [])

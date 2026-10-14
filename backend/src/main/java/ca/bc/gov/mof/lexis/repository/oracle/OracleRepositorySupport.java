@@ -505,7 +505,7 @@ public abstract class OracleRepositorySupport {
               new CodeNameDto("CAN", "Cancelled"),
               new CodeNameDto("COM", "Complete"),
               new CodeNameDto("EXP", "Expired"),
-              new CodeNameDto("PPD", "Payment Pending"));
+              new CodeNameDto("PPD", "Payment pending"));
       case LEXIS_CODES_PACKAGE + "FIND_ALL_JURISDICTION_CODES(?)" ->
           List.of(
               new CodeNameDto("P", "Provincial"),

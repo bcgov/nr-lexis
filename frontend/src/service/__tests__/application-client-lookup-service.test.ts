@@ -75,6 +75,46 @@ describe('application-client-lookup-service', () => {
     ])
   })
 
+  it('names the counterparty client when looking up the other applicant', async () => {
+    getCachedDataMock
+      .mockResolvedValueOnce([{ locationCode: '01', locationName: '01 - OWNER', selected: true }])
+      .mockResolvedValueOnce({ clientNumber: '00099999', companyName: 'Owner Ltd.' })
+
+    await fetchApplicationClientLocations('00099999', 'owner', '', ' 00077881 ')
+    await fetchApplicationClientData('00099999', '01', { counterpartyClientNumber: '00077881' })
+
+    expect(getCachedDataMock).toHaveBeenNthCalledWith(
+      1,
+      '/lexis/rpc/application-details/client-locations',
+      {
+        params: {
+          applicantType: 'owner',
+          clientNumber: '00099999',
+          counterpartyClientNumber: '00077881',
+        },
+      },
+      {
+        cacheKey: 'application-client-locations:owner:00099999:counterparty-00077881',
+        ttlMs: 300000,
+      },
+    )
+    expect(getCachedDataMock).toHaveBeenNthCalledWith(
+      2,
+      '/lexis/rpc/application-details/client-data',
+      {
+        params: {
+          counterpartyClientNumber: '00077881',
+          clientLocationCode: '01',
+          clientNumber: '00099999',
+        },
+      },
+      {
+        cacheKey: 'application-client-data:00099999:01:counterparty:00077881',
+        ttlMs: 300000,
+      },
+    )
+  })
+
   it('includes the parent application when loading related client locations', async () => {
     getCachedDataMock.mockResolvedValue([
       { locationCode: '01', locationName: '01 - AGENT LOCATION', selected: true },

@@ -366,7 +366,13 @@ const ExemptionApprovalModal = ({
   const primaryLabel = pending
     ? approved
       ? 'Sending…'
-      : 'Approving…'
+      : sendEmail
+        ? plural
+          ? 'Approving and sending emails'
+          : 'Approving and sending email'
+        : plural
+          ? 'Approving exemptions'
+          : 'Approving exemption'
     : retrying
       ? queueStatusUnknown
         ? 'Queue status unknown'
@@ -442,8 +448,8 @@ const ExemptionApprovalModal = ({
                     <p className="exemption-approval-modal__error" role="alert">
                       <WarningFilled aria-hidden="true" />
                       <span>
-                        Enter an email address, or clear “Send approval email to the applicant” to
-                        notify the applicant another way.
+                        Enter at least one email, or clear “Send approval email” to notify the
+                        applicant another way.
                       </span>
                     </p>
                   )}
@@ -556,9 +562,17 @@ const ExemptionApprovalModal = ({
                                   kind="ghost"
                                   size="md"
                                   disabled={pending || queueStatusUnknown}
-                                  onClick={() =>
+                                  onClick={() => {
                                     setEditing((current) => [...current, row.exemptionNumber])
-                                  }
+                                    // The button leaves with the summary, so focus the first email.
+                                    requestAnimationFrame(() =>
+                                      document
+                                        .getElementById(
+                                          `approval-${id}-${row.exemptionNumber}-${contactFields(row)[0]}`,
+                                        )
+                                        ?.focus(),
+                                    )
+                                  }}
                                 >
                                   Edit recipients
                                 </Button>

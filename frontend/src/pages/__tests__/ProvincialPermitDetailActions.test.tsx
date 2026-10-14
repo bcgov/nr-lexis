@@ -1644,6 +1644,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     await userEvent.click(screen.getByRole('button', { name: 'Permit tab' }))
     expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Permit' })).toHaveFocus())
 
     await selectPermitDetailTab('Documents')
     expect(
@@ -1671,6 +1672,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('heading', { name: 'Package fees' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Permit tab' }))
     expect(screen.getByRole('tab', { name: 'Permit' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Permit' })).toHaveFocus())
   })
 
   it('shows a failed Ministerial application lookup once and retries only when requested', async () => {
@@ -2962,6 +2964,12 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(feeAmountCell(feeRow)).toHaveTextContent('Not provided')
     expect(within(feeRow).queryByText('$')).not.toBeInTheDocument()
     expect(within(feeRow).queryByText('3.75')).not.toBeInTheDocument()
+
+    // Editing again replaces the notice from the last save.
+    await selectPermitDetailTab('Shipping')
+    expect(screen.getByText('Shipping details saved.')).toBeVisible()
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
+    expect(screen.queryByText('Shipping details saved.')).not.toBeInTheDocument()
   })
 
   it('refreshes fee rows when a fee override is enabled and disabled', async () => {
@@ -6926,7 +6934,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(permitStatusSelect).toHaveValue('COM')
     expect(within(permitStatusSelect).getByRole('option', { name: /Active/ })).toBeInTheDocument()
     expect(
-      within(permitStatusSelect).queryByRole('option', { name: /Payment Pending/ }),
+      within(permitStatusSelect).queryByRole('option', { name: /Payment pending/i }),
     ).not.toBeInTheDocument()
     expect(within(permitStatusSelect).getByRole('option', { name: /Expired/ })).toBeInTheDocument()
     await userEvent.selectOptions(permitStatusSelect, 'ACT')
@@ -8601,7 +8609,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       await screen.findByText(/Receipt number should not be empty for a complete permit/),
     ).toBeInTheDocument()
-    expect(screen.getAllByText('Payment Pending').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Payment pending').length).toBeGreaterThan(0)
     const financialTile = screen
       .getByRole('heading', { name: 'Financial and volume' })
       .closest('.cds--tile')
@@ -8693,13 +8701,13 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    expect((await screen.findAllByText('Payment Pending')).length).toBeGreaterThan(0)
+    expect((await screen.findAllByText('Payment pending')).length).toBeGreaterThan(0)
     await userEvent.click(screen.getByRole('button', { name: /Edit permit(?: details)?/ }))
 
     const permitStatusSelect = screen.getByLabelText('Status')
     expect(permitStatusSelect).toHaveValue('PPD')
     expect(
-      within(permitStatusSelect).getByRole('option', { name: 'Payment Pending' }),
+      within(permitStatusSelect).getByRole('option', { name: 'Payment pending' }),
     ).toBeInTheDocument()
   })
 
@@ -8783,14 +8791,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(await screen.findByText('Canada (CA)')).toBeInTheDocument()
     expect(screen.getByText('Ship (S)')).toBeInTheDocument()
     expect(screen.getByText('Vancouver (VA)')).toBeInTheDocument()
-    expect(screen.queryByText('Other port of export')).not.toBeInTheDocument()
+    expect(screen.queryByText('Other port of export name')).not.toBeInTheDocument()
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
     await userEvent.selectOptions(screen.getByLabelText('Customs port of export'), 'OT')
-    await userEvent.type(screen.getByLabelText('Other port of export'), 'Boundary Bay')
+    await userEvent.type(screen.getByLabelText('Other port of export name'), 'Boundary Bay')
     await userEvent.selectOptions(screen.getByLabelText('Customs port of export'), 'VA')
 
-    expect(screen.queryByLabelText('Other port of export')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Other port of export name')).not.toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Transport name'), ' Updated')
     await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
     await waitFor(() => {

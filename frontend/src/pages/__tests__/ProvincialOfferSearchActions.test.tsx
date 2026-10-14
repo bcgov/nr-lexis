@@ -14,7 +14,7 @@ import {
   fetchProvincialApplicationOptions,
   fetchProvincialOfferOptions,
 } from '@/service/search-options-service'
-import { createTestAuthContext } from '@/test-utils/auth'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -78,7 +78,7 @@ const offerSearchResponse = (
 const renderPage = (
   path = '/provincial/offers?region=11&page=1&pageSize=10&sortField=listingDate&sortDirection=asc',
 ) => {
-  render(
+  return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/provincial/offers" element={<ProvincialOffersPage />} />
@@ -404,13 +404,42 @@ describe('Provincial Offer Search Actions', () => {
     expect(fieldLabels).toEqual([
       'Application number',
       'Package number',
-      'Client number',
       'Region',
       'List date from',
       'List date to',
       'Offer withdrawn date from',
       'Offer withdrawn date to',
+      'Client number',
     ])
+  })
+
+  it('hides the client filter from Provincial Submitters', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['PROVINCIAL_SUBMITTER'] }),
+        canPerform: () => false,
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('OFF-1001')
+
+    expect(screen.getByRole('heading', { name: 'Offer search' })).toBeVisible()
+    expect(screen.getByText('Find offers and check their status')).toBeVisible()
+    expect(screen.queryByLabelText('Client number')).not.toBeInTheDocument()
+  })
+
+  it('shows only the empty state when a search finds no offers', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedSearchProvincialOffers.mockResolvedValue(offerSearchResponse([]))
+    const { container } = renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'No results found' })).toBeVisible()
+    expect(container.querySelector('.legacy-search-table-toolbar')).toHaveClass(
+      'cds--visually-hidden',
+    )
+    expect(container.querySelector('.legacy-search-result-count--footer')).toBeNull()
+    expect(container.querySelector('.cds--pagination')).toBeNull()
   })
 
   it('uses the canonical client selection in the offer search request', async () => {
@@ -538,7 +567,7 @@ describe('Provincial Offer Search Actions', () => {
     expect(from).toHaveValue('2026-10-12')
     expect(to).toHaveValue('2026-10-01')
     expect(to).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText(`Must be on or after ${fromLabel}`)).toBeVisible()
+    expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
     expect(search).toBeDisabled()
     fireEvent.submit(to.closest('form') as HTMLFormElement)
     expect(mockedSearchProvincialOffers).toHaveBeenCalledTimes(callsBeforeEdit)

@@ -153,6 +153,47 @@ describe('Provincial exemption client parity', () => {
     )
   })
 
+  it('opens on Applicant without first showing tabs that lack it', async () => {
+    const applications = await vi.mocked(fetchExemptionApplications)('26-8758')
+    let resolveApplications: (value: typeof applications) => void = () => undefined
+    vi.mocked(fetchExemptionApplications).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveApplications = resolve
+      }),
+    )
+    const selectedTabs: string[] = []
+    const observer = new MutationObserver(() => {
+      const selected = document.querySelector('[role="tab"][aria-selected="true"]')
+      const label = selected?.textContent ?? ''
+      if (label && selectedTabs.at(-1) !== label) selectedTabs.push(label)
+    })
+    observer.observe(document.body, {
+      subtree: true,
+      childList: true,
+      attributes: true,
+      attributeFilter: ['aria-selected'],
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/26-8758']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(fetchProvincialExemptionDetail).toHaveBeenCalled())
+    resolveApplications(applications)
+    expect(await screen.findByRole('tab', { name: 'Applicant' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    observer.disconnect()
+    expect(selectedTabs[0]).toBe('Applicant')
+  })
+
   it('shows eligible applicant and agent details together on Applicant', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/26-8758']}>

@@ -115,6 +115,7 @@ public class ApplicationDetailsRpcController {
   private static final String LEGACY_APPLICATION_LOCK_SESSION_KEY = "exemptionApplication";
   private static final String LEGACY_APPLICATION_NUMBER_SESSION_KEY = "applicationNumber";
   private static final String APPLICATION_APPLICANT_TYPE_OWNER = "O";
+  private static final String APPLICATION_APPLICANT_TYPE_AGENT = "A";
   private static final String APPLICATION_STATUS_APPROVED = "APP";
   private static final String APPLICATION_STATUS_EXPIRED = "EXP";
   private static final String APPLICATION_STATUS_PERMITTED = "PMT";
@@ -571,7 +572,7 @@ public class ApplicationDetailsRpcController {
 
     String requestedApplicantType =
         trimToNull(first(parameters, "ownerApplicantType", "applicantType"));
-    if (!canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)
+    if (!canRequestApplicantType(authentication, requestedApplicantType)
         && requestedApplicantType != null
         && !APPLICATION_APPLICANT_TYPE_OWNER.equalsIgnoreCase(requestedApplicantType)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -585,7 +586,7 @@ public class ApplicationDetailsRpcController {
 
     String userId = userId(authentication);
     ApplicationDetailsRpcService.CreateApplicationRequest createRequest =
-        withScopedSubmitterOwnerIdentity(
+        withScopedSubmitterClientIdentity(
             toCreateApplicationRequest(
                 parameters,
                 canPerform(authentication, LEGACY_ACTION_APPLICATION_REMARKS)),
@@ -719,7 +720,7 @@ public class ApplicationDetailsRpcController {
         trimToNull(first(parameters, "ownerApplicantType", "applicantType"));
     if (saveSource.updatesApplicantType()
         && requestedApplicantType != null
-        && !canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)) {
+        && !canRequestApplicantType(authentication, requestedApplicantType)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -801,6 +802,12 @@ public class ApplicationDetailsRpcController {
           if (changesApprovedListDate(service, request, authentication)) {
             return approvedListDateLocked(request.applicationNumber());
           }
+          if (changesAgentFromListDate(service, request, authentication)) {
+            return agentListDateLocked(request.applicationNumber());
+          }
+          if (removesSavedSubmitterAgent(service, request, authentication)) {
+            return savedSubmitterAgentLocked(request.applicationNumber());
+          }
           ApplicationDetailsRpcService.CreateApplicationResult result =
               service.updateApplicationSummary(request, userId);
           return ResponseEntity.ok(
@@ -842,13 +849,27 @@ public class ApplicationDetailsRpcController {
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
+  public ResponseEntity<ApplicationClientDataResponseDto> getClientData(
+      String clientNumber,
+      String clientLocationCode,
+      String applicationNumber,
+      String permitNumber) {
+    return getClientData(clientNumber, clientLocationCode, applicationNumber, permitNumber, null);
+  }
+
+  /**
+   * The counterparty is the client in the other applicant slot, so a Provincial Submitter can
+   * look up the owner they act for, or the agent they name.
+   */
   @GetMapping("/rpc/application-details/client-data")
   public ResponseEntity<ApplicationClientDataResponseDto> getClientData(
       @RequestParam(name = "clientNumber", required = false) String clientNumber,
       @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
-      @RequestParam(name = "permitNumber", required = false) String permitNumber) {
-    requireClientAccess(clientNumber, applicationNumber, permitNumber);
+      @RequestParam(name = "permitNumber", required = false) String permitNumber,
+      @RequestParam(name = "counterpartyClientNumber", required = false)
+          String counterpartyClientNumber) {
+    requireClientAccess(clientNumber, counterpartyClientNumber, applicationNumber, permitNumber);
     ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
     if (clientLookupService == null) {
       LOGGER.warn("Client lookup service unavailable - returning no content for application client data");
@@ -873,12 +894,19 @@ public class ApplicationDetailsRpcController {
     return getClientData(clientNumber, clientLocationCode, null, null);
   }
 
+  public ResponseEntity<List<ApplicationClientLocationResponseDto>> getClientLocations(
+      String clientNumber, String applicationNumber, String applicantType) {
+    return getClientLocations(clientNumber, applicationNumber, applicantType, null);
+  }
+
   @GetMapping("/rpc/application-details/client-locations")
   public ResponseEntity<List<ApplicationClientLocationResponseDto>> getClientLocations(
       @RequestParam(name = "clientNumber", required = false) String clientNumber,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
-      @RequestParam(name = "applicantType", required = false) String applicantType) {
-    requireClientAccess(clientNumber, applicationNumber, null);
+      @RequestParam(name = "applicantType", required = false) String applicantType,
+      @RequestParam(name = "counterpartyClientNumber", required = false)
+          String counterpartyClientNumber) {
+    requireClientAccess(clientNumber, counterpartyClientNumber, applicationNumber, null);
     ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
     if (clientLookupService == null) {
       LOGGER.warn("Client lookup service unavailable - returning no content for application client locations");
@@ -918,7 +946,7 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "clientLocationCode", required = false) String clientLocationCode,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       @RequestParam(name = "applicantType", required = false) String applicantType) {
-    requireClientAccess(clientNumber, applicationNumber, null);
+    requireClientAccess(clientNumber, null, applicationNumber, null);
     ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
     if (clientLookupService == null) {
       LOGGER.warn("Client lookup service unavailable - returning no content for application contacts");
@@ -1606,6 +1634,109 @@ public class ApplicationDetailsRpcController {
             List.of()));
   }
 
+  /**
+   * Staff choose any applicant type. A Provincial Submitter can only act as, or stop using, an
+   * agent; their forest client must still be the owner, or the agent when one is used.
+   */
+  private boolean canRequestApplicantType(Authentication authentication, String applicantType) {
+    if (canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)) {
+      return true;
+    }
+    return (APPLICATION_APPLICANT_TYPE_OWNER.equalsIgnoreCase(applicantType)
+            || APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(applicantType))
+        && provincialAuthorizationService.hasClientScope(authentication);
+  }
+
+  // INTENTIONAL_LEGACY_DIVERGENCE(SUBMITTER_APPLICATION_AGENT): Provincial Submitters cannot add
+  // or remove an agent once the list date arrives.
+  private boolean changesAgentFromListDate(
+      ApplicationDetailsRpcService service,
+      ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request,
+      Authentication authentication) {
+    String requestedApplicantType = trimToNull(request.applicantTypeCode());
+    if (!request.saveSource().updatesApplicantType()
+        || requestedApplicantType == null
+        || canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)) {
+      return false;
+    }
+    boolean requestsAgent = APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(requestedApplicantType);
+    boolean savedAgent =
+        service
+            .getApplicationSummarySnapshot(request.applicationNumber())
+            .map(
+                snapshot ->
+                    APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(
+                        trimToNull(snapshot.applicantTypeCode())))
+            .orElse(false);
+    return requestsAgent != savedAgent
+        && applicationEditPolicyService.listDateReached(service, request.applicationNumber());
+  }
+
+  /**
+   * A Provincial Submitter who is the saved agent can't remove or replace that agent, since doing so
+   * would end their own access. Staff keep their applicant type rules.
+   */
+  private boolean removesSavedSubmitterAgent(
+      ApplicationDetailsRpcService service,
+      ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request,
+      Authentication authentication) {
+    if (canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)) {
+      return false;
+    }
+    String scopedClientNumber =
+        normalizeClientNumber(
+            provincialAuthorizationService.scopedForestClientNumber(authentication));
+    if (scopedClientNumber == null) {
+      return false;
+    }
+    boolean savedAsAgent =
+        service
+            .getApplicationSummarySnapshot(request.applicationNumber())
+            .map(
+                snapshot ->
+                    APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(
+                            trimToNull(snapshot.applicantTypeCode()))
+                        && scopedClientNumber.equals(
+                            normalizeClientNumber(snapshot.agentClientNumber())))
+            .orElse(false);
+    if (!savedAsAgent) {
+      return false;
+    }
+    String requestedApplicantType = trimToNull(request.applicantTypeCode());
+    boolean removesAgent =
+        request.saveSource().updatesApplicantType()
+            && requestedApplicantType != null
+            && !APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(requestedApplicantType);
+    String requestedAgentClientNumber = normalizeClientNumber(request.agentClientNumber());
+    boolean replacesAgent =
+        request.saveSource().updatesAgentFields()
+            && requestedAgentClientNumber != null
+            && !scopedClientNumber.equals(requestedAgentClientNumber);
+    return removesAgent || replacesAgent;
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> savedSubmitterAgentLocked(
+      Long applicationNumber) {
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            false,
+            null,
+            applicationNumber,
+            List.of("You're the agent on this application, so the agent can't be removed or changed."),
+            List.of()));
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> agentListDateLocked(
+      Long applicationNumber) {
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            false,
+            null,
+            applicationNumber,
+            List.of("An agent cannot be added or removed on or after the list date."),
+            List.of()));
+  }
+
   private boolean canPerform(List<String> roles, String action) {
     return authorizationService.canPerformAction(roles, action);
   }
@@ -1655,9 +1786,13 @@ public class ApplicationDetailsRpcController {
   }
 
   private void requireClientAccess(
-      String clientNumber, String applicationNumber, String permitNumber) {
+      String clientNumber,
+      String counterpartyClientNumber,
+      String applicationNumber,
+      String permitNumber) {
     Authentication authentication = currentAuthentication();
-    if (provincialAuthorizationService.canCreateForClient(authentication, clientNumber, null)) {
+    if (provincialAuthorizationService.canCreateForClient(
+        authentication, clientNumber, normalizeClientNumber(counterpartyClientNumber))) {
       return;
     }
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
@@ -1904,7 +2039,12 @@ public class ApplicationDetailsRpcController {
         true);
   }
 
-  private ApplicationDetailsRpcService.CreateApplicationRequest withScopedSubmitterOwnerIdentity(
+  /**
+   * A Provincial Submitter's forest client is the owner, or the agent when they act as one. An
+   * agent application that names neither is refused; otherwise the owner becomes their client.
+   * The location saved for their client must be one of its own.
+   */
+  private ApplicationDetailsRpcService.CreateApplicationRequest withScopedSubmitterClientIdentity(
       ApplicationDetailsRpcService.CreateApplicationRequest request,
       Authentication authentication) {
     String scopedClientNumber =
@@ -1913,23 +2053,61 @@ public class ApplicationDetailsRpcController {
     if (scopedClientNumber == null) {
       return request;
     }
-    String ownerClientLocationCode =
-        firstTrimmedNonBlank(request.ownerClientLocationCode(), "00").toUpperCase(Locale.ROOT);
+    boolean agentApplicant =
+        APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(trimToNull(request.applicantTypeCode()));
+    if (agentApplicant
+        && scopedClientNumber.equals(normalizeClientNumber(request.agentClientNumber()))) {
+      return withApplicantClients(
+          request,
+          scopedClientNumber,
+          verifiedScopedClientLocation(
+              scopedClientNumber, request.agentClientLocationCode(), "agent"),
+          request.ownerClientNumber(),
+          request.ownerClientLocationCode());
+    }
+    if (agentApplicant
+        && !scopedClientNumber.equals(normalizeClientNumber(request.ownerClientNumber()))) {
+      throw new AccessDeniedException(
+          "The authenticated client must be the application owner or agent.");
+    }
+    return withApplicantClients(
+        request,
+        request.agentClientNumber(),
+        request.agentClientLocationCode(),
+        scopedClientNumber,
+        verifiedScopedClientLocation(
+            scopedClientNumber, request.ownerClientLocationCode(), "owner"));
+  }
+
+  private String verifiedScopedClientLocation(
+      String scopedClientNumber, String requestedLocationCode, String applicantSlot) {
+    String clientLocationCode =
+        firstTrimmedNonBlank(requestedLocationCode, "00").toUpperCase(Locale.ROOT);
     ClientLookupService clientLookupService = clientLookupServiceProvider.getIfAvailable();
     if (clientLookupService == null) {
       throw new ResponseStatusException(
           HttpStatus.SERVICE_UNAVAILABLE, "Client location verification is unavailable.");
     }
     clientLookupService
-        .getClientDataRequired(scopedClientNumber, ownerClientLocationCode)
+        .getClientDataRequired(scopedClientNumber, clientLocationCode)
         .filter(
             client ->
                 scopedClientNumber.equals(normalizeClientNumber(client.clientNumber())))
         .orElseThrow(
             () ->
                 new AccessDeniedException(
-                    "The selected owner location is not valid for the authenticated client."));
+                    "The selected "
+                        + applicantSlot
+                        + " location is not valid for the authenticated client."));
+    return clientLocationCode;
+  }
 
+  private ApplicationDetailsRpcService.CreateApplicationRequest withApplicantClients(
+      ApplicationDetailsRpcService.CreateApplicationRequest request,
+      String agentClientNumber,
+      String agentClientLocationCode,
+      String ownerClientNumber,
+      String ownerClientLocationCode) {
     return new ApplicationDetailsRpcService.CreateApplicationRequest(
         request.federalApplicationNumber(),
         request.applicationDate(),
@@ -1939,9 +2117,9 @@ public class ApplicationDetailsRpcController {
         request.averageLogVolume(),
         request.productLocation(),
         request.exportScheduleId(),
-        request.agentClientNumber(),
-        request.agentClientLocationCode(),
-        scopedClientNumber,
+        agentClientNumber,
+        agentClientLocationCode,
+        ownerClientNumber,
         ownerClientLocationCode,
         request.exemptionNumber(),
         request.exemptionReasonCode(),
@@ -1993,9 +2171,16 @@ public class ApplicationDetailsRpcController {
           ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request) {
     if (request.saveSource()
         == ApplicationDetailsRpcService.ApplicationSummarySaveSource.FULL) {
+      // A full save naming the Owner or Ministerial type clears the agent.
+      String requestedApplicantType = trimToNull(request.applicantTypeCode());
       return Optional.of(
           new ApplicationSummaryUpdateAuthorization(
-              request.orgUnitNumber(), request.ownerClientNumber(), request.agentClientNumber()));
+              request.orgUnitNumber(),
+              request.ownerClientNumber(),
+              requestedApplicantType == null
+                      || APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(requestedApplicantType)
+                  ? request.agentClientNumber()
+                  : null));
     }
     return service
         .getApplicationSummarySnapshot(request.applicationNumber())

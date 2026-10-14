@@ -31,6 +31,7 @@ import type {
 } from '@/interfaces/ProvincialOfferSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
+import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
 import { hasInvalidIsoDateRange } from '@/pages/shared/create-form-utils'
 import {
@@ -167,6 +168,9 @@ const ProvincialOffersPage = () => {
   const [applicationOptionsUnavailable, setApplicationOptionsUnavailable] = useState(false)
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateOffer = canPerform('createOffer')
+  // Provincial Submitter searches are always scoped to the authenticated forest client;
+  // client-number criteria are meaningful only for provincial staff searches.
+  const canFilterByClient = hasProvincialStaffRole(capabilities.roles)
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
@@ -213,6 +217,8 @@ const ProvincialOffersPage = () => {
   const hasSearchQuery = searchParams.toString().length > 0
   // A saved link with invalid dates doesn't run its search, so it has no results to show.
   const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
+  // No results show only the empty state, without counts or pagination.
+  const noResults = results.content.length === 0 && results.page.totalElements === 0
   const updateFilter = useCallback(
     <K extends keyof ProvincialOfferSearchFilters>(
       key: K,
@@ -518,7 +524,7 @@ const ProvincialOffersPage = () => {
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Offer search"
-          subtitle="Find provincial purchase offers and open offer details."
+          subtitle="Find offers and check their status"
           actions={
             canCreateOffer ? (
               <Button
@@ -563,13 +569,6 @@ const ProvincialOffersPage = () => {
                   value={filters.packageNumber}
                   onChange={(event) => updateFilter('packageNumber', event.target.value)}
                 />
-                <ForestClientComboBox
-                  id="clientNumber"
-                  labelText="Client number"
-                  value={filters.clientNumber}
-                  resetKey={clientSearchResetKey}
-                  onChange={(value) => updateFilter('clientNumber', value)}
-                />
                 <RegionMultiSelect
                   id="region"
                   titleText="Region"
@@ -606,6 +605,15 @@ const ProvincialOffersPage = () => {
                     setFilters((current) => ({ ...current, withdrawalFromDate, withdrawalToDate }))
                   }
                 />
+                {canFilterByClient && (
+                  <ForestClientComboBox
+                    id="clientNumber"
+                    labelText="Client number"
+                    value={filters.clientNumber}
+                    resetKey={clientSearchResetKey}
+                    onChange={(value) => updateFilter('clientNumber', value)}
+                  />
+                )}
               </div>
               <div className="legacy-search-actions">
                 <Button
@@ -645,6 +653,7 @@ const ProvincialOffersPage = () => {
                 ? undefined
                 : results.page.totalElements
             }
+            hideZeroCount
             totalItemsLabel={formatDeferredSearchTotalLabel(
               results.page.totalElements,
               totalStatus,
@@ -713,7 +722,7 @@ const ProvincialOffersPage = () => {
                 description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
-            {!errorMessage && (!resultsLoading || results.content.length > 0) && (
+            {!errorMessage && !noResults && (!resultsLoading || results.content.length > 0) && (
               <>
                 <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(

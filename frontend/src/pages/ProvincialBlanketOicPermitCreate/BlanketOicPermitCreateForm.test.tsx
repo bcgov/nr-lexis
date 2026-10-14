@@ -303,7 +303,9 @@ describe('BlanketOicPermitCreateForm', () => {
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
     const summary = await screen.findByRole('group', { name: 'Permit needs attention' })
-    expect(within(summary).getByText(/Complete the required fields in Shipping tab/)).toBeVisible()
+    expect(
+      within(summary).getByText(/Complete the required fields in the Shipping tab/),
+    ).toBeVisible()
     expect(screen.getByRole('tab', { name: /^Shipping,/ })).toHaveAttribute('aria-selected', 'true')
     expect(screen.getByRole('group', { name: 'Permit needs attention' })).toHaveFocus()
     expect(addPermitDetail).not.toHaveBeenCalled()
@@ -676,7 +678,7 @@ describe('BlanketOicPermitCreateForm', () => {
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
     expect(
-      await screen.findByText('Complete the required fields in Applicant tab.'),
+      await screen.findByText('Complete the required fields in the Applicant tab.'),
     ).toBeInTheDocument()
     expect(screen.getByText(scenario.errorMessage)).toBeInTheDocument()
     expect(

@@ -31,9 +31,9 @@ import {
   DataDefinition,
   DocumentAttachment,
   Enterprise,
+  Result,
   Save,
   Stamp,
-  Task,
 } from '@carbon/icons-react'
 import SearchableSelect from '../../components/SearchableSelect'
 import { AppNotification } from '../../components/AppNotification'
@@ -176,7 +176,7 @@ const joinTabLabels = (labels: string[]): string | undefined =>
 
 const APPLICATION_CREATE_TAB_ICONS = {
   owner: Enterprise,
-  application: Task,
+  application: Result,
   items: Box,
   documents: DocumentAttachment,
   remarks: Chat,
@@ -275,29 +275,29 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
 const buildInitialFormFromQuery = (
   query: URLSearchParams,
   provincialSubmitterIdentityLocked: boolean,
-  authoritativeOwnerClientNumber: string,
-  canChangeApplicantType: boolean,
+  authoritativeClientNumber: string,
+  canPrefillAgent: boolean,
 ): ProvincialApplicationCreateForm => {
   const today = formatBusinessIsoDate()
   return {
     ...INITIAL_FORM,
     ownerClientNumber: provincialSubmitterIdentityLocked
-      ? authoritativeOwnerClientNumber
+      ? authoritativeClientNumber
       : (query.get('ownerClientNumber') ?? ''),
     ownerClientLocationCode: provincialSubmitterIdentityLocked
-      ? authoritativeOwnerClientNumber
+      ? authoritativeClientNumber
         ? '00'
         : ''
       : (query.get('ownerClientLocationCode') ?? query.get('ownerClientLocation') ?? ''),
     ownerContactName: query.get('ownerContactName') ?? query.get('ownerName') ?? '',
-    agentClientNumber: canChangeApplicantType
+    agentClientNumber: canPrefillAgent
       ? (query.get('agentClientNumber') ?? query.get('applicantClientNumber') ?? '')
       : '',
-    agentClientLocationCode: canChangeApplicantType
+    agentClientLocationCode: canPrefillAgent
       ? (query.get('agentClientLocationCode') ?? query.get('agentClientLocation') ?? '')
       : '',
-    agentContactName: canChangeApplicantType ? (query.get('agentContactName') ?? '') : '',
-    applicantTypeCode: canChangeApplicantType
+    agentContactName: canPrefillAgent ? (query.get('agentContactName') ?? '') : '',
+    applicantTypeCode: canPrefillAgent
       ? (query.get('ownerApplicantType') ?? query.get('applicantType') ?? 'O')
       : 'O',
     productTypeCode: query.get('productTypeCode') ?? INITIAL_FORM.productTypeCode,
@@ -358,6 +358,61 @@ const applyScheduleDefaults = (
   const matchingSchedule = schedules.find((option) => option.label === form.listingDate)
   return matchingSchedule ? { ...form, exportScheduleId: matchingSchedule.value } : form
 }
+
+/**
+ * Ticking "I'm an agent" adds the agent fields. A Provincial Submitter who ticks it is the agent,
+ * so their own client moves from the owner to the agent, and unticking moves it back.
+ */
+const withAgentChoice = (
+  current: ProvincialApplicationCreateForm,
+  agentUsed: boolean,
+  submitterClientNumber: string | null,
+): ProvincialApplicationCreateForm => {
+  const next = {
+    ...current,
+    applicantTypeCode: agentUsed ? 'A' : 'O',
+    agentClientNumber: agentUsed ? current.agentClientNumber : '',
+    agentClientLocationCode: agentUsed ? current.agentClientLocationCode : '',
+    agentContactName: agentUsed ? current.agentContactName : '',
+  }
+  if (submitterClientNumber === null) {
+    return next
+  }
+
+  const submitterLocationCode = submitterClientNumber ? '00' : ''
+  return agentUsed
+    ? {
+        ...next,
+        ownerClientNumber: '',
+        ownerClientLocationCode: '',
+        agentClientNumber: submitterClientNumber,
+        agentClientLocationCode: submitterLocationCode,
+      }
+    : {
+        ...next,
+        ownerClientNumber: submitterClientNumber,
+        ownerClientLocationCode: submitterLocationCode,
+      }
+}
+
+// A scoped submitter can look up another client only beside their own.
+const fetchClientLocations = (
+  clientNumber: string,
+  applicantType: 'owner' | 'agent',
+  counterpartyClientNumber: string,
+): Promise<ApplicationClientLocation[]> =>
+  counterpartyClientNumber
+    ? fetchApplicationClientLocations(clientNumber, applicantType, '', counterpartyClientNumber)
+    : fetchApplicationClientLocations(clientNumber, applicantType)
+
+const fetchClientData = (
+  clientNumber: string,
+  clientLocationCode: string,
+  counterpartyClientNumber: string,
+): Promise<ApplicationClientData | null> =>
+  counterpartyClientNumber
+    ? fetchApplicationClientData(clientNumber, clientLocationCode, { counterpartyClientNumber })
+    : fetchApplicationClientData(clientNumber, clientLocationCode)
 
 type PageStatus = {
   kind: 'success' | 'error'
@@ -427,16 +482,19 @@ const ProvincialApplicationCreatePage = () => {
   const canReviewApplications = canPerform('/applicationsReview')
   const canViewRemarks = canPerform('/applicationRemarks')
   const provincialSubmitterIdentityLocked = hasProvincialSubmitterRole(capabilities.roles)
-  const authoritativeOwnerClientNumber = capabilities.forestClientNumber?.trim() ?? ''
+  // INTENTIONAL_LEGACY_DIVERGENCE(SUBMITTER_APPLICATION_AGENT): staff name any agent; a
+  // Provincial Submitter ticks "I'm an agent" to act as the agent themselves.
+  const canUseAgent = canChangeApplicantType || provincialSubmitterIdentityLocked
+  const authoritativeClientNumber = capabilities.forestClientNumber?.trim() ?? ''
   const authoritativeOrgUnitNo = capabilities.orgUnitNo?.trim() ?? ''
   const provincialSubmitterScopeUnavailable =
-    provincialSubmitterIdentityLocked && !authoritativeOwnerClientNumber
+    provincialSubmitterIdentityLocked && !authoritativeClientNumber
   const [form, setForm] = useState<ProvincialApplicationCreateForm>(() =>
     buildInitialFormFromQuery(
       searchParams,
       provincialSubmitterIdentityLocked,
-      authoritativeOwnerClientNumber,
-      canChangeApplicantType,
+      authoritativeClientNumber,
+      canChangeApplicantType && !provincialSubmitterIdentityLocked,
     ),
   )
   const draftBaselineRef = useRef(form)
@@ -509,6 +567,8 @@ const ProvincialApplicationCreatePage = () => {
   const [selectedApplicationTab, setSelectedApplicationTab] =
     useState<ApplicationCreateTab>('owner')
   const hasAgentDetails = isAgentApplicant(form.applicantTypeCode)
+  const submitterActsAsAgent = provincialSubmitterIdentityLocked && hasAgentDetails
+  const ownerLookupCounterparty = submitterActsAsAgent ? authoritativeClientNumber : ''
   const visibleApplicationTabs = useMemo(
     () =>
       APPLICATION_CREATE_TABS.filter(
@@ -609,17 +669,26 @@ const ProvincialApplicationCreatePage = () => {
       }
 
       setForm((current) => {
-        const ownerClientLocationCode = authoritativeOwnerClientNumber ? '00' : ''
+        const clientLocationCode = authoritativeClientNumber ? '00' : ''
+        if (isAgentApplicant(current.applicantTypeCode)) {
+          return current.agentClientNumber === authoritativeClientNumber
+            ? current
+            : {
+                ...current,
+                agentClientNumber: authoritativeClientNumber,
+                agentClientLocationCode: clientLocationCode,
+              }
+        }
         if (
-          current.ownerClientNumber === authoritativeOwnerClientNumber &&
-          current.ownerClientLocationCode === ownerClientLocationCode
+          current.ownerClientNumber === authoritativeClientNumber &&
+          current.ownerClientLocationCode === clientLocationCode
         ) {
           return current
         }
         return {
           ...current,
-          ownerClientNumber: authoritativeOwnerClientNumber,
-          ownerClientLocationCode,
+          ownerClientNumber: authoritativeClientNumber,
+          ownerClientLocationCode: clientLocationCode,
         }
       })
     })
@@ -627,10 +696,10 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [authoritativeOwnerClientNumber, provincialSubmitterIdentityLocked])
+  }, [authoritativeClientNumber, provincialSubmitterIdentityLocked])
 
   useEffect(() => {
-    if (canChangeApplicantType) {
+    if (canUseAgent) {
       return undefined
     }
 
@@ -658,7 +727,7 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [canChangeApplicantType])
+  }, [canUseAgent])
 
   useEffect(() => {
     if (exemptionReasons.length === 0) {
@@ -719,7 +788,7 @@ const ProvincialApplicationCreatePage = () => {
       }
     })
 
-    void fetchApplicationClientLocations(ownerClientNumber, 'owner')
+    void fetchClientLocations(ownerClientNumber, 'owner', ownerLookupCounterparty)
       .then((locations) => {
         if (
           !isActive ||
@@ -761,7 +830,12 @@ const ProvincialApplicationCreatePage = () => {
     return () => {
       isActive = false
     }
-  }, [applyLoadedFormValues, ownerClientNumberForLookup, updateClientLookupFailure])
+  }, [
+    applyLoadedFormValues,
+    ownerClientNumberForLookup,
+    ownerLookupCounterparty,
+    updateClientLookupFailure,
+  ])
 
   useEffect(() => {
     if (!isAgentApplicant(form.applicantTypeCode)) {
@@ -896,7 +970,7 @@ const ProvincialApplicationCreatePage = () => {
       }
     })
 
-    void fetchApplicationClientData(ownerClientNumber, ownerClientLocationCode)
+    void fetchClientData(ownerClientNumber, ownerClientLocationCode, ownerLookupCounterparty)
       .then((clientData) => {
         const currentForm = currentFormRef.current
         if (
@@ -946,6 +1020,7 @@ const ProvincialApplicationCreatePage = () => {
     applyLoadedFormValues,
     form.ownerClientLocationCode,
     ownerClientNumberForLookup,
+    ownerLookupCounterparty,
     updateClientLookupFailure,
   ])
 
@@ -1423,7 +1498,10 @@ const ProvincialApplicationCreatePage = () => {
     ),
   ).map((tab) => APPLICATION_CREATE_TAB_LABELS[tab])
   const invalidTabsText = joinTabLabels(invalidTabLabels)
-  const requiredTabsMessage = `Complete the required fields in ${invalidTabsText} ${invalidTabLabels.length === 1 ? 'tab' : 'tabs'}.`
+  const requiredTabsMessage =
+    invalidTabLabels.length === 1
+      ? `Complete the required fields in the ${invalidTabsText} tab.`
+      : `Complete the required fields in ${invalidTabsText} tabs.`
 
   const saveUnavailableReason =
     !optionsLoaded || optionsUnavailable || requiredApplicationOptionsMissing
@@ -1471,20 +1549,26 @@ const ProvincialApplicationCreatePage = () => {
       const confirmClientNumber = async (
         clientNumber: string,
         clientLocationCode: string,
+        counterpartyClientNumber = '',
       ): Promise<string> => {
         const normalizedClientNumber = clientNumber.trim()
         if (!/^\d{1,7}$/.test(normalizedClientNumber) || !clientLocationCode.trim()) {
           return normalizedClientNumber
         }
 
-        const clientData = await fetchApplicationClientData(
+        const clientData = await fetchClientData(
           normalizedClientNumber,
           clientLocationCode,
+          counterpartyClientNumber,
         )
         return clientData?.clientNumber.trim() || normalizedClientNumber
       }
       const [ownerClientNumber, agentClientNumber] = await Promise.all([
-        confirmClientNumber(form.ownerClientNumber, form.ownerClientLocationCode),
+        confirmClientNumber(
+          form.ownerClientNumber,
+          form.ownerClientLocationCode,
+          ownerLookupCounterparty,
+        ),
         isAgentApplicant(form.applicantTypeCode)
           ? confirmClientNumber(form.agentClientNumber, form.agentClientLocationCode)
           : Promise.resolve(''),
@@ -1780,7 +1864,7 @@ const ProvincialApplicationCreatePage = () => {
                   </RecordFieldRow>
                   <RecordFieldRow>
                     <RecordFieldCell span="wide">
-                      {provincialSubmitterIdentityLocked ? (
+                      {provincialSubmitterIdentityLocked && !submitterActsAsAgent ? (
                         <TextInput
                           id="ownerClientNumber"
                           labelText={requiredLabel('Client')}
@@ -1868,8 +1952,8 @@ const ProvincialApplicationCreatePage = () => {
                     </RecordFieldCell>
                   </RecordFieldRow>
                 </RecordFieldGrid>
-                {/* The divider belongs to the checkbox, so users who can't change the type see neither. */}
-                {canChangeApplicantType && (
+                {/* The divider belongs to the checkbox, so users who can't use an agent see neither. */}
+                {canUseAgent && (
                   <div className="application-create-applicant-type">
                     <Checkbox
                       id="applicationCreateAgentUsed"
@@ -1880,13 +1964,19 @@ const ProvincialApplicationCreatePage = () => {
                       disabled={isSubmitting}
                       onChange={(_, { checked }) => {
                         markFormEdited()
-                        setForm((current) => ({
-                          ...current,
-                          applicantTypeCode: checked ? 'A' : 'O',
-                          agentClientNumber: checked ? current.agentClientNumber : '',
-                          agentClientLocationCode: checked ? current.agentClientLocationCode : '',
-                          agentContactName: checked ? current.agentContactName : '',
-                        }))
+                        if (provincialSubmitterIdentityLocked) {
+                          setOwnerClientLocations([])
+                          setOwnerClientData(null)
+                          setAgentClientLocations([])
+                          setAgentClientData(null)
+                        }
+                        setForm((current) =>
+                          withAgentChoice(
+                            current,
+                            checked,
+                            provincialSubmitterIdentityLocked ? authoritativeClientNumber : null,
+                          ),
+                        )
                       }}
                     />
                   </div>
@@ -1924,28 +2014,42 @@ const ProvincialApplicationCreatePage = () => {
                       </RecordFieldRow>
                       <RecordFieldRow>
                         <RecordFieldCell span="wide">
-                          <ForestClientComboBox
-                            id="agentClientNumber"
-                            labelText={requiredLabel('Agent client')}
-                            value={form.agentClientNumber}
-                            resetKey={clientSearchResetKey}
-                            selectedClientName={agentClientData?.companyName}
-                            counterpartyClientNumber={form.ownerClientNumber}
-                            required
-                            invalid={!!fieldError('agentClientNumber')}
-                            invalidText={fieldError('agentClientNumber')}
-                            onBlur={() => markFieldTouched('agentClientNumber')}
-                            onChange={(agentClientNumber) => {
-                              markFormEdited()
-                              setAgentClientLocations([])
-                              setAgentClientData(null)
-                              setForm((current) => ({
-                                ...current,
-                                agentClientNumber,
-                                agentClientLocationCode: '',
-                              }))
-                            }}
-                          />
+                          {submitterActsAsAgent ? (
+                            <TextInput
+                              id="agentClientNumber"
+                              labelText={requiredLabel('Agent client')}
+                              aria-required="true"
+                              value={form.agentClientNumber}
+                              readOnly
+                              helperText="Loaded from your authenticated forest client access."
+                              invalid={!!fieldError('agentClientNumber')}
+                              invalidText={fieldError('agentClientNumber')}
+                              onBlur={() => markFieldTouched('agentClientNumber')}
+                            />
+                          ) : (
+                            <ForestClientComboBox
+                              id="agentClientNumber"
+                              labelText={requiredLabel('Agent client')}
+                              value={form.agentClientNumber}
+                              resetKey={clientSearchResetKey}
+                              selectedClientName={agentClientData?.companyName}
+                              counterpartyClientNumber={form.ownerClientNumber}
+                              required
+                              invalid={!!fieldError('agentClientNumber')}
+                              invalidText={fieldError('agentClientNumber')}
+                              onBlur={() => markFieldTouched('agentClientNumber')}
+                              onChange={(agentClientNumber) => {
+                                markFormEdited()
+                                setAgentClientLocations([])
+                                setAgentClientData(null)
+                                setForm((current) => ({
+                                  ...current,
+                                  agentClientNumber,
+                                  agentClientLocationCode: '',
+                                }))
+                              }}
+                            />
+                          )}
                         </RecordFieldCell>
                         <RecordFieldCell span="wide">
                           <SearchableSelect
@@ -2001,7 +2105,7 @@ const ProvincialApplicationCreatePage = () => {
                 aria-label="Application"
               >
                 <div className="detail-section-card__header">
-                  <DetailCardTitle icon={Task}>Application details</DetailCardTitle>
+                  <DetailCardTitle icon={Result}>Application details</DetailCardTitle>
                 </div>
                 <RequiredFieldsLegend className="application-create-required" />
                 <RecordFieldGrid editing>
@@ -2321,51 +2425,29 @@ const ProvincialApplicationCreatePage = () => {
                 </Tile>
               </div>
             </TabPanel>
-            <TabPanel className="application-detail-tab-panel">
-              <Tile
-                className="create-form-tile application-detail-section"
-                role="region"
-                aria-label="Documents"
-              >
-                <p className="detail-empty-message">Available after the application is saved.</p>
-              </Tile>
+            <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
+              <p className="unsaved-tab-note">Available after the application is saved.</p>
             </TabPanel>
             {canViewRemarks
               ? [
-                  <TabPanel key="remarks" className="application-detail-tab-panel">
-                    <Tile
-                      className="create-form-tile application-detail-section"
-                      role="region"
-                      aria-label="Remarks"
-                    >
-                      <p className="detail-empty-message">
-                        Available after the application is saved.
-                      </p>
-                    </Tile>
+                  <TabPanel
+                    key="remarks"
+                    className="application-detail-tab-panel application-detail-tab-panel--empty"
+                  >
+                    <p className="unsaved-tab-note">Available after the application is saved.</p>
                   </TabPanel>,
                 ]
               : []}
-            <TabPanel className="application-detail-tab-panel">
-              <Tile
-                className="create-form-tile application-detail-section"
-                role="region"
-                aria-label="Offers"
-              >
-                <p className="detail-empty-message">Available after the application is saved.</p>
-              </Tile>
+            <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
+              <p className="unsaved-tab-note">Available after the application is saved.</p>
             </TabPanel>
             {canReviewApplications
               ? [
-                  <TabPanel key="review" className="application-detail-tab-panel">
-                    <Tile
-                      className="create-form-tile application-detail-section"
-                      role="region"
-                      aria-label="Review"
-                    >
-                      <p className="detail-empty-message">
-                        Available after the application is saved.
-                      </p>
-                    </Tile>
+                  <TabPanel
+                    key="review"
+                    className="application-detail-tab-panel application-detail-tab-panel--empty"
+                  >
+                    <p className="unsaved-tab-note">Available after the application is saved.</p>
                   </TabPanel>,
                 ]
               : []}

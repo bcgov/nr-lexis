@@ -491,7 +491,7 @@ describe('search-service contracts', () => {
   )
 
   it.each([
-    ['PPD', 'Payment Pending'],
+    ['PPD', 'Payment pending'],
     ['Completed', 'Completed'],
   ])('maps provincial permit search status %s to %s', async (statusDescription, expectedStatus) => {
     getCachedResponseMock.mockResolvedValue({

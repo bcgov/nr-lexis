@@ -63,7 +63,7 @@ describe('ForestClientSelectionPage', () => {
       </AuthContext>,
     )
 
-    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Log out' }))
 
     expect(logout).toHaveBeenCalledOnce()
   })

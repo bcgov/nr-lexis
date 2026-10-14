@@ -191,8 +191,8 @@ const SORT_COLUMNS: {
   { id: 'exemptionNumber', label: 'Exemption' },
   { id: 'type', label: 'Type' },
   { id: 'status', label: 'Status' },
-  { id: 'ownerClientNumber', label: 'Owner client' },
-  { id: 'applicantClientNumber', label: 'Agent client' },
+  { id: 'ownerClientNumber', label: 'Owner client number' },
+  { id: 'applicantClientNumber', label: 'Agent client number' },
   { id: 'approvedVolume', label: 'Approval volume (m³)' },
   { id: 'balanceRemaining', label: 'Balance remaining (m³)' },
   { id: 'listingDate', label: 'List date' },
@@ -365,6 +365,8 @@ const ProvincialExemptionPage = () => {
   const hasSearchQuery = searchParams.toString().length > 0
   // A saved link with invalid dates doesn't run its search, so it has no results to show.
   const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
+  // No results show only the empty state, without counts or pagination.
+  const noResults = results.content.length === 0 && results.page.totalElements === 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
   }, [])
@@ -692,6 +694,9 @@ const ProvincialExemptionPage = () => {
     if (selectableRows.length === 0) return false
     return selectableRows.every((item) => Boolean(selectedRowsById[item.exemptionNumber]))
   }, [selectableRows, selectedRowsById])
+  const someSelectableRowsAreSelected = selectableRows.some((item) =>
+    Boolean(selectedRowsById[item.exemptionNumber]),
+  )
 
   const toggleRowSelection = (row: ProvincialExemptionSearchItem, checked: boolean) => {
     setSelectedRowsById((current) => {
@@ -888,7 +893,7 @@ const ProvincialExemptionPage = () => {
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Exemption search"
-          subtitle="Find, review, and manage provincial exemptions."
+          subtitle="Find exemptions and check their status"
           actions={
             canCreateExemption ? (
               <Button
@@ -1060,6 +1065,16 @@ const ProvincialExemptionPage = () => {
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"
         >
+          {canApproveExemption && (
+            // The batch bar only mounts once something is selected, so the count is announced here.
+            <div className="cds--visually-hidden" aria-live="polite" aria-atomic="true">
+              {selectedRowsCount > 0
+                ? EXEMPTION_BATCH_SELECTION('carbon.table.batch.items.selected', {
+                    totalSelected: selectedRowsCount,
+                  })
+                : null}
+            </div>
+          )}
           <SearchResultsTableFrame
             resultName="exemption"
             loading={resultsLoading}
@@ -1070,6 +1085,7 @@ const ProvincialExemptionPage = () => {
                 ? undefined
                 : results.page.totalElements
             }
+            hideZeroCount
             totalItemsLabel={formatDeferredSearchTotalLabel(
               results.page.totalElements,
               totalStatus,
@@ -1120,6 +1136,9 @@ const ProvincialExemptionPage = () => {
                             hideLabel
                             labelText="Select all eligible rows on this page"
                             checked={allSelectableRowsAreSelected}
+                            indeterminate={
+                              someSelectableRowsAreSelected && !allSelectableRowsAreSelected
+                            }
                             disabled={selectableRows.length === 0}
                             onChange={(_, payload) =>
                               toggleSelectAllRowsOnPage(Boolean(payload.checked))
@@ -1227,7 +1246,7 @@ const ProvincialExemptionPage = () => {
                 description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
-            {!errorMessage && (!resultsLoading || results.content.length > 0) && (
+            {!errorMessage && !noResults && (!resultsLoading || results.content.length > 0) && (
               <>
                 <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(
@@ -1246,6 +1265,7 @@ const ProvincialExemptionPage = () => {
                   pagesUnknown={totalStatus !== 'exact'}
                   isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
                   onChange={({ page, pageSize: nextPageSize }) => {
+                    clearSelection()
                     setSearchParams(
                       buildSearchParams(
                         appliedFilters,

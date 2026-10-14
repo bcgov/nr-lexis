@@ -545,7 +545,7 @@ const ProvincialSummaryPage = () => {
                             <StatusTag status={row.status} />
                           </TableCell>
                           <TableCell>{displayVolume(row.approvedVolume)}</TableCell>
-                          <TableCell>{formatNumber(row.balanceRemaining)}</TableCell>
+                          <TableCell>{displayVolume(row.balanceRemaining)}</TableCell>
                           <TableCell>{displayValue(row.approvalDate)}</TableCell>
                           <TableCell>{displayValue(row.expiryDate)}</TableCell>
                         </TableRow>

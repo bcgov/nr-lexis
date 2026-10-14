@@ -131,7 +131,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       '/templates/rtm-ems-log-amv-template.xlsx',
     )
     expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument()
-    expect(document.title).toBe('Average market values | NR LEXIS')
+    expect(document.title).toBe('Average market values')
   })
 
   it('restores next-month saved values as an editable review without file metadata', async () => {
@@ -453,7 +453,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       name: 'Are you sure you want to remove this file?',
     })
     expect(removeReplacementDialog).toHaveAccessibleDescription(
-      'The values on screen will be cleared. Nothing has been saved.',
+      'The values on screen will go back to your last save.',
     )
     await userEvent.click(
       within(removeReplacementDialog).getByRole('button', { name: 'Keep file' }),
@@ -477,7 +477,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     const discardDialog = screen.getByRole('dialog', { name: 'Discard these values?' })
-    await userEvent.click(within(discardDialog).getByRole('button', { name: 'Discard changes' }))
+    await userEvent.click(within(discardDialog).getByRole('button', { name: 'Discard values' }))
 
     expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
       '78.14',
@@ -1066,7 +1066,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(newHemlockCombination).toHaveValue('120.00')
     expect(
       within(hemlockTable).getByText(
-        'August had no value for this grade. Confirm this species and grade combination is valid.',
+        'August had none. Confirm this species and grade combination is valid.',
       ),
     ).toBeVisible()
     expect(
@@ -1101,7 +1101,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(missingHemlockValue).toHaveValue('81.43')
     expect(
       within(hemlockTable).queryByText(
-        'August had no value for this grade. Confirm this species and grade combination is valid.',
+        'August had none. Confirm this species and grade combination is valid.',
       ),
     ).not.toBeInTheDocument()
     expect(
@@ -1156,9 +1156,9 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     const savedChangesDialog = screen.getByRole('dialog', { name: 'Discard these values?' })
     expect(savedChangesDialog).toHaveAccessibleDescription(
-      'The table will return to your last saved values. Changes made since then will be discarded.',
+      'The values on screen will go back to your last save.',
     )
-    expect(within(savedChangesDialog).getByRole('button', { name: 'Discard changes' })).toHaveClass(
+    expect(within(savedChangesDialog).getByRole('button', { name: 'Discard values' })).toHaveClass(
       'cds--btn--danger--tertiary',
     )
     expect(within(savedChangesDialog).getByRole('button', { name: 'Save changes' })).toHaveClass(
@@ -1166,7 +1166,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
 
     await userEvent.click(
-      within(savedChangesDialog).getByRole('button', { name: 'Discard changes' }),
+      within(savedChangesDialog).getByRole('button', { name: 'Discard values' }),
     )
     expect(missingHemlockValue).toHaveValue('81.43')
     expect(screen.getByText('Changes discarded')).toBeVisible()

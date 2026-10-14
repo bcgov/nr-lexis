@@ -280,7 +280,9 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
       ownerClientError,
       'Client location',
     ),
-    destinationCompanyName: requiredTextError(form.destinationCompanyName, 'Purchaser', 52),
+    destinationCompanyName: form.destinationCompanyName.trim()
+      ? requiredTextError(form.destinationCompanyName, 'Purchaser', 52)
+      : 'Purchaser is required. Enter company name.',
     destinationCountry:
       form.destinationCountry.trim().length === 2
         ? undefined
@@ -293,7 +295,7 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
       form.portOfExport.trim().length === 2 ? undefined : 'Customs port of export is required.',
     otherPortOfExport:
       form.portOfExport.trim().toUpperCase() === 'OT'
-        ? requiredTextError(form.otherPortOfExport, 'Other port name', 34)
+        ? requiredTextError(form.otherPortOfExport, 'Other port of export name', 34)
         : undefined,
   }
 
@@ -877,7 +879,11 @@ const BlanketOicPermitCreateForm = ({
   )
 
   const content = (
-    <section ref={formSectionRef} aria-label="Blanket OIC permit details">
+    <section
+      ref={formSectionRef}
+      aria-label="Blanket OIC permit details"
+      className="boic-permit-create-form"
+    >
       {invalidTabLabels.length > 0 || errorMessages.length > 0 ? (
         <div ref={errorSummaryRef} tabIndex={-1} role="group" aria-label="Permit needs attention">
           <InlineNotification
@@ -886,7 +892,9 @@ const BlanketOicPermitCreateForm = ({
             title={invalidTabLabels.length > 0 ? 'Cannot save yet.' : 'Permit needs attention'}
             subtitle={
               invalidTabLabels.length > 0
-                ? `Complete the required fields in ${invalidTabsText} ${invalidTabLabels.length === 1 ? 'tab' : 'tabs'}.`
+                ? invalidTabLabels.length === 1
+                  ? `Complete the required fields in the ${invalidTabsText} tab.`
+                  : `Complete the required fields in ${invalidTabsText} tabs.`
                 : undefined
             }
             lowContrast
@@ -1445,12 +1453,12 @@ const BlanketOicPermitCreateForm = ({
                       }
                     />
                     <RecordField
-                      label="Other port of export"
+                      label="Other port of export name"
                       hidden={form.portOfExport.trim().toUpperCase() !== 'OT'}
                       edit={
                         <TextInput
                           id="boic-permit-other-port"
-                          labelText={requiredLabel('Other port of export')}
+                          labelText={requiredLabel('Other port of export name')}
                           aria-required="true"
                           value={form.otherPortOfExport}
                           invalid={!!fieldError('otherPortOfExport')}
@@ -1466,13 +1474,13 @@ const BlanketOicPermitCreateForm = ({
             </Tile>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
-            <p className="boic-permit-unsaved-tab-note">Available after the permit is saved.</p>
+            <p className="unsaved-tab-note">Available after the permit is saved.</p>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
-            <p className="boic-permit-unsaved-tab-note">Available after the permit is saved.</p>
+            <p className="unsaved-tab-note">Available after the permit is saved.</p>
           </TabPanel>
           <TabPanel className="application-detail-tab-panel application-detail-tab-panel--empty">
-            <p className="boic-permit-unsaved-tab-note">Available after the permit is saved.</p>
+            <p className="unsaved-tab-note">Available after the permit is saved.</p>
           </TabPanel>
         </TabPanels>
       </Tabs>

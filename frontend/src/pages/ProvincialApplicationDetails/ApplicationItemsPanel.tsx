@@ -23,7 +23,7 @@ import {
   TextInput,
 } from '@carbon/react'
 import { Add, Box, Edit, TrashCan } from '@carbon/icons-react'
-import { Archive } from '@carbon/pictograms-react'
+import { Cardboard } from '@carbon/pictograms-react'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '../../components/ConfirmationModal'
@@ -297,21 +297,28 @@ const GRADE_HELPER_TEXT = 'Available once species are selected'
 
 // A package or scale saved from its side panel reports inside the section that shows it.
 const PACKAGE_SAVED_TITLE = 'Package saved.'
+const PACKAGE_DELETED_TITLE = 'Package deleted.'
 const SCALE_SAVED_TITLE = 'Scale saved.'
 const SCALE_DELETED_TITLE = 'Scale deleted.'
 const NO_SPECIES_CODES: string[] = []
+
+// Validation messages name each field by its label.
+const PACKAGE_VOLUME_LABEL = 'Package volume (m³)'
+const VOLUME_LABEL = 'Volume (m³)'
+const AVERAGE_LENGTH_LABEL = 'Average length (m)'
+const AVERAGE_DIAMETER_LABEL = 'Average top diameter (rads)'
 
 const normalizePackageNumberInput = (value: string): string => value.toUpperCase()
 
 const PACKAGE_COMMENTS_MAX_LENGTH = 180
 const PACKAGE_COMMENTS_ASCII_PATTERN = /^[\u0000-\u007f]*$/
 
-const packageCommentsFieldError = (value: string): string | undefined => {
+const packageCommentsFieldError = (value: string, label: string): string | undefined => {
   if (!PACKAGE_COMMENTS_ASCII_PATTERN.test(value)) {
-    return 'Package comments contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
+    return `${label} contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.`
   }
   return value.length > PACKAGE_COMMENTS_MAX_LENGTH
-    ? `Package comments must be ${PACKAGE_COMMENTS_MAX_LENGTH} characters or fewer.`
+    ? `${label} must be ${PACKAGE_COMMENTS_MAX_LENGTH} characters or fewer.`
     : undefined
 }
 
@@ -537,25 +544,24 @@ function ProvincialApplicationItemsPanel({
   const [packageLoadWarning, setPackageLoadWarning] = useState('')
   const [itemsErrorMessage, setItemsErrorMessage] = useState('')
   // A failure inside an open drawer stays in that drawer.
-  const showItemActionError = (message: string) => {
+  const showItemActionError = (message: string, title: string) => {
     if (activeDrawer === 'scale') {
       setScaleActionErrorMessage(message)
     } else if (activeDrawer) {
       setItemsErrorMessage(message)
     } else {
-      onActionResult({ kind: 'error', title: 'Item action failed', message })
+      onActionResult({ kind: 'error', title, message })
     }
   }
-  const showItemActionResult = (kind: 'success' | 'warning', message: string) =>
-    onActionResult({
-      kind,
-      title: kind === 'success' ? 'Item action completed' : 'Item action needs attention',
-      message,
-    })
+  // A change that saved but couldn't be shown again asks for a reload.
+  const showItemRefreshWarning = (title: string, message: string) =>
+    onActionResult({ kind: 'warning', title, message })
+  const packageFirstEmptyState = packageNumbers.length === 0
   const actionResultSection =
     actionResult?.kind !== 'success'
       ? 'items'
-      : actionResult.title === PACKAGE_SAVED_TITLE
+      : actionResult.title === PACKAGE_SAVED_TITLE ||
+          (actionResult.title === PACKAGE_DELETED_TITLE && !packageFirstEmptyState)
         ? 'package'
         : actionResult.title === SCALE_SAVED_TITLE || actionResult.title === SCALE_DELETED_TITLE
           ? 'scales'
@@ -580,6 +586,9 @@ function ProvincialApplicationItemsPanel({
   const [packagePendingDeletion, setPackagePendingDeletion] = useState('')
   const [scalePendingDeletion, setScalePendingDeletion] =
     useState<ApplicationPackageScaleRow | null>(null)
+  const [pendingItemFocus, setPendingItemFocus] = useState<'package' | 'scales' | 'items' | null>(
+    null,
+  )
   const scalesSectionRef = useRef<HTMLElement>(null)
   const lastScrolledToScalesRequestIdRef = useRef(0)
   const lastHandledFocusedPackageRequestRef = useRef('')
@@ -645,6 +654,48 @@ function ProvincialApplicationItemsPanel({
     onBusyChange?.(itemsBusy)
   }, [itemsBusy, onBusyChange])
 
+  // A result replaces the drawer or dialog that made it, so once the panel settles, focus moves to
+  // where the result shows, unless it already landed somewhere.
+  useEffect(() => {
+    if (
+      !pendingItemFocus ||
+      itemsBusy ||
+      itemsLoading ||
+      activeDrawer ||
+      packagePendingDeletion ||
+      scalePendingDeletion
+    ) {
+      return
+    }
+    const timer = window.setTimeout(() => {
+      setPendingItemFocus(null)
+      const active = document.activeElement
+      if (active instanceof HTMLElement && active !== document.body && active.isConnected) {
+        return
+      }
+      const target =
+        pendingItemFocus === 'scales'
+          ? scalesSectionRef.current
+          : pendingItemFocus === 'package' && !packageFirstEmptyState
+            ? document.getElementById('application-items-package')
+            : pendingItemFocus === 'package'
+              ? (document.querySelector<HTMLElement>(
+                  '.application-items-empty-package button:not(:disabled)',
+                ) ?? document.getElementById('application-items'))
+              : document.getElementById('application-items')
+      target?.focus()
+    })
+    return () => window.clearTimeout(timer)
+  }, [
+    activeDrawer,
+    itemsBusy,
+    itemsLoading,
+    packageFirstEmptyState,
+    packagePendingDeletion,
+    pendingItemFocus,
+    scalePendingDeletion,
+  ])
+
   useEffect(() => {
     onEditingChange?.(isEditingItems)
   }, [isEditingItems, onEditingChange])
@@ -686,41 +737,45 @@ function ProvincialApplicationItemsPanel({
           packageNumbers,
           selectedPackageNumber,
         ),
-      packageComments: packageCommentsFieldError(packageForm.comments),
+      packageComments: packageCommentsFieldError(packageForm.comments, 'Package comments'),
       packageVolume: firstValidationError(
-        () => requiredNumericFieldError(packageForm.volume, 'Package volume'),
-        () => greaterThanOrEqualFieldError(packageForm.volume, 'Package volume', 0),
-        () => atMostOneDecimalFieldError(packageForm.volume, 'Package volume'),
+        () => requiredNumericFieldError(packageForm.volume, PACKAGE_VOLUME_LABEL),
+        () => greaterThanOrEqualFieldError(packageForm.volume, PACKAGE_VOLUME_LABEL, 0),
+        () => atMostOneDecimalFieldError(packageForm.volume, PACKAGE_VOLUME_LABEL),
       ),
       packageAverageLength: firstValidationError(
-        () => requiredNumericFieldError(packageForm.averageLength, 'Average length'),
-        () => greaterThanFieldError(packageForm.averageLength, 'Average length', 0),
-        () => lessThanOrEqualFieldError(packageForm.averageLength, 'Average length', 99),
+        () => requiredNumericFieldError(packageForm.averageLength, AVERAGE_LENGTH_LABEL),
+        () => greaterThanFieldError(packageForm.averageLength, AVERAGE_LENGTH_LABEL, 0),
+        () => lessThanOrEqualFieldError(packageForm.averageLength, AVERAGE_LENGTH_LABEL, 99),
       ),
       packageAverageDiameter: firstValidationError(
-        () => requiredNumericFieldError(packageForm.averageDiameter, 'Average diameter'),
-        () => greaterThanFieldError(packageForm.averageDiameter, 'Average diameter', 0),
-        () => lessThanOrEqualFieldError(packageForm.averageDiameter, 'Average diameter', 99.99),
+        () => requiredNumericFieldError(packageForm.averageDiameter, AVERAGE_DIAMETER_LABEL),
+        () => greaterThanFieldError(packageForm.averageDiameter, AVERAGE_DIAMETER_LABEL, 0),
+        () => lessThanOrEqualFieldError(packageForm.averageDiameter, AVERAGE_DIAMETER_LABEL, 99.99),
       ),
       packageStatus: requiredFieldError(packageForm.status, 'Package status code') ?? undefined,
       createPackageNumber:
         requiredFieldError(createPackageForm.packageNumber, 'Package number') ??
         existingPackageNumberError(createPackageForm.packageNumber, packageNumbers),
       createPackageVolume: firstValidationError(
-        () => requiredNumericFieldError(createPackageForm.volume, 'Volume'),
-        () => greaterThanFieldError(createPackageForm.volume, 'Volume', 0),
-        () => atMostOneDecimalFieldError(createPackageForm.volume, 'Volume'),
+        () => requiredNumericFieldError(createPackageForm.volume, VOLUME_LABEL),
+        () => greaterThanFieldError(createPackageForm.volume, VOLUME_LABEL, 0),
+        () => atMostOneDecimalFieldError(createPackageForm.volume, VOLUME_LABEL),
       ),
       createPackageAverageLength: firstValidationError(
-        () => requiredNumericFieldError(createPackageForm.averageLength, 'Average length'),
-        () => greaterThanFieldError(createPackageForm.averageLength, 'Average length', 0),
-        () => lessThanOrEqualFieldError(createPackageForm.averageLength, 'Average length', 99),
+        () => requiredNumericFieldError(createPackageForm.averageLength, AVERAGE_LENGTH_LABEL),
+        () => greaterThanFieldError(createPackageForm.averageLength, AVERAGE_LENGTH_LABEL, 0),
+        () => lessThanOrEqualFieldError(createPackageForm.averageLength, AVERAGE_LENGTH_LABEL, 99),
       ),
       createPackageAverageDiameter: firstValidationError(
-        () => requiredNumericFieldError(createPackageForm.averageDiameter, 'Average diameter'),
-        () => greaterThanFieldError(createPackageForm.averageDiameter, 'Average diameter', 0),
+        () => requiredNumericFieldError(createPackageForm.averageDiameter, AVERAGE_DIAMETER_LABEL),
+        () => greaterThanFieldError(createPackageForm.averageDiameter, AVERAGE_DIAMETER_LABEL, 0),
         () =>
-          lessThanOrEqualFieldError(createPackageForm.averageDiameter, 'Average diameter', 99.99),
+          lessThanOrEqualFieldError(
+            createPackageForm.averageDiameter,
+            AVERAGE_DIAMETER_LABEL,
+            99.99,
+          ),
       ),
       createPackageStatus:
         requiredFieldError(createPackageForm.status, 'Package status code') ?? undefined,
@@ -729,7 +784,7 @@ function ProvincialApplicationItemsPanel({
       createPackageAgeClass: packageRequiresAgeClass(createPackageForm.productType)
         ? (requiredFieldError(createPackageForm.ageClass, 'Age class') ?? undefined)
         : undefined,
-      createPackageComments: packageCommentsFieldError(createPackageForm.comments),
+      createPackageComments: packageCommentsFieldError(createPackageForm.comments, 'Comments'),
       scaleTimberMark: requiredFieldError(scaleForm.timberMark, 'Timber mark') ?? undefined,
       scaleSpeciesCode: requiredFieldError(scaleForm.speciesCode, 'Species') ?? undefined,
       // Grade only becomes available, and required, once a species is chosen.
@@ -744,13 +799,13 @@ function ProvincialApplicationItemsPanel({
         () => lessThanOrEqualFieldError(scaleForm.pieces, 'Pieces', 999999999),
       ),
       scaleVolume: firstValidationError(
-        () => requiredFieldError(scaleForm.volume, 'Volume'),
-        () => numericFieldError(scaleForm.volume, 'Volume'),
-        () => greaterThanOrEqualFieldError(scaleForm.volume, 'Volume', 0),
+        () => requiredFieldError(scaleForm.volume, VOLUME_LABEL),
+        () => numericFieldError(scaleForm.volume, VOLUME_LABEL),
+        () => greaterThanOrEqualFieldError(scaleForm.volume, VOLUME_LABEL, 0),
         // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_PACKAGE_PANELS): saved as entered, to the
         // database's two decimals.
-        () => atMostTwoDecimalFieldError(scaleForm.volume, 'Volume'),
-        () => lessThanOrEqualFieldError(scaleForm.volume, 'Volume', 99999.9),
+        () => atMostTwoDecimalFieldError(scaleForm.volume, VOLUME_LABEL),
+        () => lessThanOrEqualFieldError(scaleForm.volume, VOLUME_LABEL, 99999.9),
         () =>
           scaleVolumeWithinPackageFieldError(scaleForm.volume, selectedPackageRemainingScaleVolume),
       ),
@@ -1181,7 +1236,6 @@ function ProvincialApplicationItemsPanel({
   const createPackageReferenceOptionsAvailable =
     baseReferenceOptionsAvailable && !createEndUseOptionsLoading && !createEndUseOptionsUnavailable
   const canManageItems = !hideMutationActions && (canEditPackages || canAddPackages || canAddScales)
-  const packageFirstEmptyState = packageNumbers.length === 0
   // A single package has no selector, so focus returns to its card.
   const packageFocusFallbackSelector =
     packageNumbers.length > 1 ? '#applicationItemsPackageSelect' : '#application-items-package'
@@ -1265,18 +1319,25 @@ function ProvincialApplicationItemsPanel({
             ? 'Loading authoritative item options…'
             : referenceOptionsUnavailableMessage
           : packageLoadWarning || 'Selected package data unavailable',
+        'Package not saved',
       )
       focusFirstDrawerError()
       return
     }
 
     if (packageForm.newPackageNumber !== selectedPackageNumber && !canUpdatePackageNumber) {
-      showItemActionError('Package number changes are not allowed for this application.')
+      showItemActionError(
+        'Package number changes are not allowed for this application.',
+        'Package not saved',
+      )
       return
     }
 
     if (selectedPackageHasPermittedScale) {
-      showItemActionError('Package changes are not allowed after a scale has been permitted.')
+      showItemActionError(
+        'Package changes are not allowed after a scale has been permitted.',
+        'Package not saved',
+      )
       return
     }
 
@@ -1287,7 +1348,7 @@ function ProvincialApplicationItemsPanel({
 
     if (hasPackageValidationError) {
       setShowPackageValidationErrors(true)
-      showItemActionError(firstItemError('packageStatus') ?? '')
+      showItemActionError(firstItemError('packageStatus') ?? '', 'Package not saved')
       focusFirstDrawerError()
       return
     }
@@ -1305,7 +1366,7 @@ function ProvincialApplicationItemsPanel({
           EDIT_PACKAGE_SERVER_FIELDS,
         )
         setServerFieldErrors(fieldErrors)
-        showItemActionError(otherMessages.join(' '))
+        showItemActionError(otherMessages.join(' '), 'Package not saved')
         focusFirstDrawerError()
         return
       }
@@ -1324,13 +1385,13 @@ function ProvincialApplicationItemsPanel({
         await loadPackageItems(nextPackageNumber)
         onActionResult({ kind: 'success', title: PACKAGE_SAVED_TITLE, message: '' })
       } catch {
-        showItemActionResult(
-          'warning',
+        showItemRefreshWarning(
+          'Package saved, not refreshed',
           `Package ${nextPackageNumber} was saved, but application items could not be refreshed. Reload before changing packages again.`,
         )
       }
     } catch {
-      showItemActionError('Unable to save package details.')
+      showItemActionError('Unable to save package details.', 'Package not saved')
       focusFirstDrawerError()
     } finally {
       setIsSavingPackage(false)
@@ -1352,6 +1413,7 @@ function ProvincialApplicationItemsPanel({
           'createPackageProductType',
           'createPackageAgeClass',
         ) ?? '',
+        'Package not created',
       )
       focusFirstDrawerError()
       return
@@ -1361,6 +1423,7 @@ function ProvincialApplicationItemsPanel({
         baseReferenceOptionsUnavailable || createEndUseOptionsUnavailable
           ? referenceOptionsUnavailableMessage
           : 'Loading authoritative item options…',
+        'Package not created',
       )
       focusFirstDrawerError()
       return
@@ -1390,7 +1453,7 @@ function ProvincialApplicationItemsPanel({
           CREATE_PACKAGE_SERVER_FIELDS,
         )
         setServerFieldErrors(fieldErrors)
-        showItemActionError(otherMessages.join(' '))
+        showItemActionError(otherMessages.join(' '), 'Package not created')
         focusFirstDrawerError()
         return
       }
@@ -1405,13 +1468,13 @@ function ProvincialApplicationItemsPanel({
         await loadPackageItems(nextPackageNumber)
         onActionResult({ kind: 'success', title: PACKAGE_SAVED_TITLE, message: '' })
       } catch {
-        showItemActionResult(
-          'warning',
+        showItemRefreshWarning(
+          'Package created, not refreshed',
           `Package ${nextPackageNumber} was created, but application items could not be refreshed. Reload before changing packages again.`,
         )
       }
     } catch {
-      showItemActionError('Unable to create package.')
+      showItemActionError('Unable to create package.', 'Package not created')
       focusFirstDrawerError()
     } finally {
       setIsSavingPackage(false)
@@ -1448,13 +1511,15 @@ function ProvincialApplicationItemsPanel({
       dispatchPackageSelection({ type: 'delete', packageNumber })
       try {
         await onDetailChanged()
-        showItemActionResult('success', `Package ${packageNumber} deleted.`)
+        onActionResult({ kind: 'success', title: PACKAGE_DELETED_TITLE, message: '' })
+        setPendingItemFocus('package')
       } catch (refreshError) {
         console.error(refreshError)
-        showItemActionResult(
-          'warning',
+        showItemRefreshWarning(
+          'Package deleted, not refreshed',
           `Package ${packageNumber} was deleted. Reload before changing packages again.`,
         )
+        setPendingItemFocus('items')
       }
     } catch (error) {
       console.error(error)
@@ -1478,6 +1543,7 @@ function ProvincialApplicationItemsPanel({
             ? 'Loading authoritative item options…'
             : referenceOptionsUnavailableMessage
           : packageLoadWarning || 'Selected package data unavailable',
+        'Scale not saved',
       )
       focusFirstDrawerError()
       return
@@ -1507,7 +1573,7 @@ function ProvincialApplicationItemsPanel({
           SCALE_SERVER_FIELDS,
         )
         setServerFieldErrors(fieldErrors)
-        showItemActionError(otherMessages.join(' '))
+        showItemActionError(otherMessages.join(' '), 'Scale not saved')
         focusFirstDrawerError()
         return
       }
@@ -1520,12 +1586,14 @@ function ProvincialApplicationItemsPanel({
         await onDetailChanged()
         await loadPackageItems(selectedPackageNumber)
         onActionResult({ kind: 'success', title: SCALE_SAVED_TITLE, message: '' })
+        setPendingItemFocus('scales')
       } catch (refreshError) {
         console.error(refreshError)
-        showItemActionResult(
-          'warning',
+        showItemRefreshWarning(
+          'Scale saved, not refreshed',
           `Scale ${result.result.id} added. Reload before adding another scale row.`,
         )
+        setPendingItemFocus('items')
       }
     } catch {
       setScaleActionErrorMessage('Unable to add scale.')
@@ -1553,12 +1621,14 @@ function ProvincialApplicationItemsPanel({
         await onDetailChanged()
         await loadPackageItems(selectedPackageNumber)
         onActionResult({ kind: 'success', title: SCALE_DELETED_TITLE, message: '' })
+        setPendingItemFocus('scales')
       } catch (refreshError) {
         console.error(refreshError)
-        showItemActionResult(
-          'warning',
+        showItemRefreshWarning(
+          'Scale deleted, not refreshed',
           `Scale ${row.id} deleted. Reload before changing scale rows again.`,
         )
+        setPendingItemFocus('items')
       }
     } catch (error) {
       console.error(error)
@@ -1595,7 +1665,7 @@ function ProvincialApplicationItemsPanel({
             <EmptyState
               title="No packages for this application"
               description="Create a package, then add Summary of scale."
-              icon={<Archive width={48} height={48} />}
+              icon={<Cardboard width={48} height={48} />}
               headingLevel={4}
               action={
                 canOpenItemsEditor ? (
@@ -1644,7 +1714,7 @@ function ProvincialApplicationItemsPanel({
         {!!itemsErrorMessage && !activeDrawer && (
           <AppNotification
             kind="error"
-            title="Item action failed"
+            title="Package details unavailable"
             subtitle={itemsErrorMessage}
             lowContrast
             onCloseButtonClick={() => setItemsErrorMessage('')}
@@ -1796,7 +1866,7 @@ function ProvincialApplicationItemsPanel({
                 />
                 <TextInput
                   id="applicationItemsPackageVolume"
-                  labelText={requiredLabel('Package volume (m³)')}
+                  labelText={requiredLabel(PACKAGE_VOLUME_LABEL)}
                   aria-required="true"
                   value={packageForm.volume}
                   disabled={!canSaveSelectedPackage}
@@ -1807,7 +1877,7 @@ function ProvincialApplicationItemsPanel({
                 />
                 <TextInput
                   id="applicationItemsPackageLength"
-                  labelText={requiredLabel('Average length (m)')}
+                  labelText={requiredLabel(AVERAGE_LENGTH_LABEL)}
                   aria-required="true"
                   value={packageForm.averageLength}
                   disabled={!canSaveSelectedPackage}
@@ -1818,7 +1888,7 @@ function ProvincialApplicationItemsPanel({
                 />
                 <TextInput
                   id="applicationItemsPackageDiameter"
-                  labelText={requiredLabel('Average top diameter (rads)')}
+                  labelText={requiredLabel(AVERAGE_DIAMETER_LABEL)}
                   aria-required="true"
                   value={packageForm.averageDiameter}
                   disabled={!canSaveSelectedPackage}
@@ -1996,7 +2066,7 @@ function ProvincialApplicationItemsPanel({
                 </div>
                 <TextInput
                   id="applicationItemsScaleVolume"
-                  labelText={requiredLabel('Volume (m³)')}
+                  labelText={requiredLabel(VOLUME_LABEL)}
                   aria-required="true"
                   helperText={
                     selectedPackageRemainingScaleVolume === null
@@ -2129,7 +2199,7 @@ function ProvincialApplicationItemsPanel({
             />
             <TextInput
               id="applicationItemsCreatePackageVolume"
-              labelText={requiredLabel('Volume (m³)')}
+              labelText={requiredLabel(VOLUME_LABEL)}
               aria-required="true"
               helperText="Must be less than or equal to application request volume. Must be greater than 0"
               value={createPackageForm.volume}
@@ -2141,7 +2211,7 @@ function ProvincialApplicationItemsPanel({
             />
             <TextInput
               id="applicationItemsCreatePackageLength"
-              labelText={requiredLabel('Average length (m)')}
+              labelText={requiredLabel(AVERAGE_LENGTH_LABEL)}
               aria-required="true"
               helperText="Must be greater than 0"
               value={createPackageForm.averageLength}
@@ -2153,7 +2223,7 @@ function ProvincialApplicationItemsPanel({
             />
             <TextInput
               id="applicationItemsCreatePackageDiameter"
-              labelText={requiredLabel('Average top diameter (rads)')}
+              labelText={requiredLabel(AVERAGE_DIAMETER_LABEL)}
               aria-required="true"
               helperText="Must be greater than 0"
               value={createPackageForm.averageDiameter}

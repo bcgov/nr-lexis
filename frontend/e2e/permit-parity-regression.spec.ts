@@ -149,7 +149,12 @@ const installPermitParityFixtures = async (
     region: 'Cariboo Natural Resource Region',
   })
 
-  const packageList =
+  const packageList: Array<{
+    packageNumber: string
+    packageInfo: Record<string, string>
+    packageDetails?: Record<string, string>
+    scaleList: Array<Record<string, string>>
+  }> =
     scenario === 'normal' || scenario === 'ministerial'
       ? [
           {

@@ -4,7 +4,7 @@ export type ProvincialPermitStatus =
   | 'Expired'
   | 'Cancelled'
   | 'Completed'
-  | 'Payment Pending'
+  | 'Payment pending'
 
 export type ProvincialPermitSearchFilters = {
   applicationNumber: string

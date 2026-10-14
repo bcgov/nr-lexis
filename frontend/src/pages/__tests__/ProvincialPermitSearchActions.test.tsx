@@ -12,7 +12,7 @@ import {
   searchProvincialPermits,
 } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions } from '@/service/search-options-service'
-import { createTestAuthContext } from '@/test-utils/auth'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -527,14 +527,69 @@ describe('Provincial Permit Search Actions', () => {
     expect(filterLabels).toEqual([
       'Application number',
       'Package number',
+      'Permit number',
       'Region',
       'Issued date from',
       'Issued date to',
       'Permit status',
-      'Permit number',
       'Applicant client number',
       'Owner client number',
     ])
+  })
+
+  it('hides the client filters from Provincial Submitters', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['PROVINCIAL_SUBMITTER'] }),
+        canPerform: () => true,
+      }),
+    )
+
+    renderPage()
+    await screen.findByText('7001')
+
+    expect(screen.getByRole('heading', { name: 'Permit search' })).toBeVisible()
+    expect(screen.getByText('Find permits and check their status')).toBeVisible()
+    expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Owner client number')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Permit number')).toBeVisible()
+  })
+
+  it('shows the Payment pending status in sentence case in the filter', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedFetchProvincialPermitOptions.mockResolvedValueOnce({
+      permitStatuses: [
+        { value: 'ACT', label: 'Active' },
+        { value: 'PPD', label: 'Payment Pending' },
+      ],
+      regions: [{ value: '11', label: 'Cariboo' }],
+    })
+
+    renderPage()
+    await screen.findByText('7001')
+
+    const statusCombobox = await screen.findByRole('combobox', { name: 'Permit status' })
+    await userEvent.click(statusCombobox)
+    const listbox = document.getElementById(statusCombobox.getAttribute('aria-controls') ?? '')
+    expect(
+      within(listbox as HTMLElement).getByRole('option', { name: 'Payment pending' }),
+    ).toBeInTheDocument()
+    expect(
+      within(listbox as HTMLElement).queryByRole('option', { name: 'Payment Pending' }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('shows only the empty state when a search finds no permits', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedSearchProvincialPermits.mockResolvedValue(permitSearchResponse([]))
+    const { container } = renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'No results found' })).toBeVisible()
+    expect(container.querySelector('.legacy-search-table-toolbar')).toHaveClass(
+      'cds--visually-hidden',
+    )
+    expect(container.querySelector('.legacy-search-result-count--footer')).toBeNull()
+    expect(container.querySelector('.cds--pagination')).toBeNull()
   })
 
   it('uses canonical applicant and owner client selections in the search request', async () => {
@@ -645,7 +700,7 @@ describe('Provincial Permit Search Actions', () => {
       expect(from).toHaveValue('2026-10-12')
       expect(to).toHaveValue('2026-10-01')
       expect(to).toHaveAttribute('aria-invalid', 'true')
-      expect(screen.getByText(`Must be on or after ${fromLabel}`)).toBeVisible()
+      expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
       expect(search).toBeDisabled()
       fireEvent.submit(to.closest('form') as HTMLFormElement)
       expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(callsBeforeEdit)

@@ -169,7 +169,7 @@ describe('exemptionApprovalResults', () => {
     ).toEqual([
       {
         kind: 'warning',
-        title: 'Exemption approved and now Active.',
+        title: 'Exemption TEST-1 approved and now Active.',
         message:
           'Approval email sent to the owner (owner@example.test). Refresh the page to see the latest status.',
       },

@@ -19,8 +19,8 @@ describe('permit utilities', () => {
   })
 
   it.each([
-    ['PPD', undefined, 'Payment Pending'],
-    [' ppd ', 'payment pending', 'Payment Pending'],
+    ['PPD', undefined, 'Payment pending'],
+    [' ppd ', 'Payment Pending', 'Payment pending'],
     ['COM', 'Completed', 'Completed'],
     [null, null, ''],
   ])('formats %s as %s', (statusCode, statusDescription, expected) => {

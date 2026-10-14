@@ -129,7 +129,7 @@ browser-only state, so refresh returns to the compact saved review. Save and Can
 keyboard-focusable but are announced as unavailable until a value changes or a replacement
 workbook has been accepted; the helper text is linked through `aria-describedby`. Editing a value
 clears the saved confirmation. Cancel then offers to save the changes or return the table to the
-last saved values; Discard changes uses the danger-tertiary style. Restoring the saved values shows
+last saved values; Discard values uses the danger-tertiary style. Restoring the saved values shows
 a dismissible confirmation that also clears on the next edit. Leaving the page or closing the tab
 with edited values, or with an accepted workbook that is not saved, asks "Discard changes?" first.
 Confirmation dialogs return focus to the action that opened them. The page header does not show

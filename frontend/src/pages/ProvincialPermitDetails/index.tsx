@@ -233,6 +233,14 @@ type PermitActionResultSource =
   | 'fees'
   | 'email'
 type PermitActionResult = ActionResult & { source?: PermitActionResultSource }
+const SECTION_SAVE_RESULT_SOURCES = new Set<PermitActionResultSource>([
+  'permit',
+  'applicant',
+  'agent',
+  'shipping',
+  'fees',
+  'scale-summary',
+])
 
 /** A package change, or a package change whose refresh failed, with what to do next. */
 const packageActionResult = (title: string, followUp = ''): PermitActionResult => ({
@@ -2670,9 +2678,10 @@ const ProvincialPermitDetailsPage = () => {
         () => requiredFieldError(permitForm.estimatedShippingDate, 'Estimated shipping date'),
         () => isoDateFieldError(permitForm.estimatedShippingDate),
       ),
-      destinationCompanyName:
-        requiredMaxLengthFieldError(permitForm.destinationCompanyName, 52, 'Purchaser') ??
-        undefined,
+      destinationCompanyName: permitForm.destinationCompanyName.trim()
+        ? (requiredMaxLengthFieldError(permitForm.destinationCompanyName, 52, 'Purchaser') ??
+          undefined)
+        : 'Purchaser is required. Enter company name.',
       destinationCountry:
         requiredExactLengthFieldError(
           permitForm.destinationCountry,
@@ -2691,7 +2700,7 @@ const ProvincialPermitDetailsPage = () => {
           ? (requiredMaxLengthFieldError(
               permitForm.otherPortOfExport,
               34,
-              'Other port of export',
+              'Other port of export name',
             ) ?? undefined)
           : undefined,
       permitTotalVolume:
@@ -3142,17 +3151,48 @@ const ProvincialPermitDetailsPage = () => {
       },
     },
   })
+  // A new section edit replaces the notice from the last section save.
+  const clearSectionSaveResult = () =>
+    setActionResult((current) =>
+      current?.source && SECTION_SAVE_RESULT_SOURCES.has(current.source) ? null : current,
+    )
   const startPermitEdit = () =>
-    permitEditSections.startEditing('permit', () => resetPermitFormSection(false))
+    permitEditSections.startEditing('permit', () => {
+      clearSectionSaveResult()
+      resetPermitFormSection(false)
+    })
   const startPermitClientEdit = () =>
-    permitEditSections.startEditing('applicant', preparePermitClientEdit)
+    permitEditSections.startEditing('applicant', () => {
+      clearSectionSaveResult()
+      preparePermitClientEdit()
+    })
   const startShippingEdit = () =>
-    permitEditSections.startEditing('shipping', () => resetPermitFormSection(true))
+    permitEditSections.startEditing('shipping', () => {
+      clearSectionSaveResult()
+      resetPermitFormSection(true)
+    })
   const startFeeOverrideEdit = () =>
-    permitEditSections.startEditing('feeOverride', () => setFeeOverrideFieldErrors({}))
+    permitEditSections.startEditing('feeOverride', () => {
+      clearSectionSaveResult()
+      setFeeOverrideFieldErrors({})
+    })
   const startScaleSelectionEdit = () =>
-    permitEditSections.startEditing('scaleSelection', () => setMinisterialScaleSelectionDraft({}))
+    permitEditSections.startEditing('scaleSelection', () => {
+      clearSectionSaveResult()
+      setMinisterialScaleSelectionDraft({})
+    })
 
+  // A link to the Permit tab leaves with its tab panel, so focus moves to the Permit tab.
+  const showPermitTabFromLink = () => {
+    selectPermitTab('permit')
+    requestAnimationFrame(() =>
+      document
+        .querySelector<HTMLElement>(
+          '[aria-label="Permit detail sections"] [role="tab"][aria-selected="true"]',
+        )
+        ?.focus(),
+    )
+  }
   const openPermitTab = (tabId: PermitDetailTabId): void => {
     selectPermitTab(tabId)
     if (tabId === 'owner' || tabId === 'agent') {
@@ -5091,12 +5131,13 @@ const ProvincialPermitDetailsPage = () => {
 
     return (
       <>
-        {canEditPermitApplications && (
-          <p className="ministerial-permit-details__application-help">
-            Select applications, then choose Add application to include them in this permit. Save
-            does not add selected applications.
-          </p>
-        )}
+        {canEditPermitApplications &&
+          ministerialAvailablePermitApplicationItems.some((item) => !item.disabled) && (
+            <p className="ministerial-permit-details__application-help">
+              Select applications, then choose Add application to include them in this permit. Save
+              does not add selected applications.
+            </p>
+          )}
         {ministerialAvailablePermitApplicationItems.length > 0 ? (
           <TableFrame ariaLabel="Applications available for this permit">
             <Table size="md" useZebraStyles>
@@ -5293,15 +5334,9 @@ const ProvincialPermitDetailsPage = () => {
           <RecordFieldRow>
             <RecordField
               label="Status"
-              value={
-                <StatusTag
-                  status={formatPermitStatus(
-                    detail.permitStatusCode,
-                    detail.permitStatusDescription,
-                  )}
-                  fallbackLabel="Not provided"
-                />
-              }
+              value={displayValue(
+                formatPermitStatus(detail.permitStatusCode, detail.permitStatusDescription),
+              )}
               edit={() => (
                 <Select
                   id="permit-permitStatus"
@@ -5485,12 +5520,9 @@ const ProvincialPermitDetailsPage = () => {
         <RecordFieldRow>
           <RecordField
             label="Status"
-            value={
-              <StatusTag
-                status={formatPermitStatus(detail.permitStatusCode, detail.permitStatusDescription)}
-                fallbackLabel="Not provided"
-              />
-            }
+            value={displayValue(
+              formatPermitStatus(detail.permitStatusCode, detail.permitStatusDescription),
+            )}
             edit={() => (
               <Select
                 id="permit-permitStatus"
@@ -5772,11 +5804,17 @@ const ProvincialPermitDetailsPage = () => {
             )}
           />
           <RecordField
-            label="Other port of export"
+            label="Other port of export name"
             hidden={!otherPortSelected}
             value={detail.otherPortOfExport}
             edit={() =>
-              renderPermitTextInput('otherPortOfExport', 'Other port of export', false, 34, true)
+              renderPermitTextInput(
+                'otherPortOfExport',
+                'Other port of export name',
+                false,
+                34,
+                true,
+              )
             }
           />
         </RecordFieldRow>
@@ -6001,7 +6039,7 @@ const ProvincialPermitDetailsPage = () => {
                   <Button
                     kind="tertiary"
                     size="md"
-                    ref={permitEditSections.editButtonRef('permit')}
+                    ref={permitEditSections.editButtonRef('permit', 'newPermit')}
                     onClick={startPermitEdit}
                   >
                     Edit permit
@@ -6584,21 +6622,23 @@ const ProvincialPermitDetailsPage = () => {
             (canRequestPermitReview || canSendPermitApproval || canOpenPermitReport) ? (
               <>
                 {canRequestPermitReview && (
-                  <Button
-                    kind="tertiary"
-                    size="md"
-                    disabled={isSendingPermitEmail || !permitReviewReady}
-                    title={
-                      permitReviewReady
-                        ? undefined
-                        : isPermitTablesLoading
-                          ? 'Checking permit review readiness…'
-                          : 'An active permit requires an application, package, and scale detail before review can be requested.'
+                  <DisabledButtonTooltip
+                    disabled={!permitReviewReady}
+                    description={
+                      isPermitTablesLoading
+                        ? 'Checking permit review readiness…'
+                        : 'An active permit requires an application, package, and scale detail before review can be requested.'
                     }
-                    onClick={() => void onSendPermitEmail('request')}
                   >
-                    Email review request
-                  </Button>
+                    <Button
+                      kind="tertiary"
+                      size="md"
+                      disabled={isSendingPermitEmail || !permitReviewReady}
+                      onClick={() => void onSendPermitEmail('request')}
+                    >
+                      Email review request
+                    </Button>
+                  </DisabledButtonTooltip>
                 )}
                 {/* INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_APPROVAL_EMAIL_RESEND):
                     Modern permit detail supports previewing and resending the approval email. */}
@@ -6796,7 +6836,7 @@ const ProvincialPermitDetailsPage = () => {
                                 kind="tertiary"
                                 size="md"
                                 renderIcon={Edit}
-                                ref={permitEditSections.editButtonRef('permit')}
+                                ref={permitEditSections.editButtonRef('permit', 'newPermit')}
                                 onClick={startPermitEdit}
                               >
                                 Edit permit details
@@ -6814,7 +6854,7 @@ const ProvincialPermitDetailsPage = () => {
                                 kind="tertiary"
                                 size="md"
                                 renderIcon={Edit}
-                                ref={permitEditSections.editButtonRef('permit')}
+                                ref={permitEditSections.editButtonRef('permit', 'newPermit')}
                                 onClick={startPermitEdit}
                               >
                                 Edit permit details
@@ -6832,7 +6872,7 @@ const ProvincialPermitDetailsPage = () => {
                               <Button
                                 kind="tertiary"
                                 size="md"
-                                ref={permitEditSections.editButtonRef('permit')}
+                                ref={permitEditSections.editButtonRef('permit', 'newPermit')}
                                 onClick={startPermitEdit}
                               >
                                 Edit permit
@@ -7027,7 +7067,7 @@ const ProvincialPermitDetailsPage = () => {
                                   kind="tertiary"
                                   size="md"
                                   renderIcon={Edit}
-                                  ref={permitEditSections.editButtonRef('applicant')}
+                                  ref={permitEditSections.editButtonRef('applicant', 'newPermit')}
                                   onClick={startPermitClientEdit}
                                 >
                                   Edit applicant details
@@ -7263,7 +7303,7 @@ const ProvincialPermitDetailsPage = () => {
                                   size="md"
                                   renderIcon={usesReviewedPermitFlow ? Edit : undefined}
                                   disabled={isShippingReferencesLoading || !shippingReferences}
-                                  ref={permitEditSections.editButtonRef('shipping')}
+                                  ref={permitEditSections.editButtonRef('shipping', 'newPermit')}
                                   onClick={startShippingEdit}
                                 >
                                   {usesReviewedPermitFlow
@@ -7311,7 +7351,7 @@ const ProvincialPermitDetailsPage = () => {
                                 <button
                                   type="button"
                                   className="cds--link"
-                                  onClick={() => selectPermitTab('permit')}
+                                  onClick={showPermitTabFromLink}
                                 >
                                   Permit tab
                                 </button>
@@ -7700,7 +7740,7 @@ const ProvincialPermitDetailsPage = () => {
                               <button
                                 type="button"
                                 className="cds--link"
-                                onClick={() => selectPermitTab('permit')}
+                                onClick={showPermitTabFromLink}
                               >
                                 Permit tab
                               </button>
@@ -7728,7 +7768,10 @@ const ProvincialPermitDetailsPage = () => {
                                         kind="tertiary"
                                         size="md"
                                         renderIcon={Edit}
-                                        ref={permitEditSections.editButtonRef('permit')}
+                                        ref={permitEditSections.editButtonRef(
+                                          'permit',
+                                          'newPermit',
+                                        )}
                                         onClick={startPermitEdit}
                                       >
                                         Edit receipt number

@@ -55,7 +55,7 @@ describe('Unauthorized page actions', () => {
 
     renderPage()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Sign out' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Log out' }))
 
     expect(logout).toHaveBeenCalledTimes(1)
     expect(logout).toHaveBeenCalledWith()
@@ -81,6 +81,6 @@ describe('Unauthorized page actions', () => {
       ),
     ).toBeVisible()
     expect(screen.queryByText(/Approver/)).not.toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Sign out' })).toBeVisible()
+    expect(screen.getByRole('button', { name: 'Log out' })).toBeVisible()
   })
 })

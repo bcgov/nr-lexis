@@ -31,6 +31,7 @@ import type {
 } from '@/interfaces/ProvincialPermitSearch'
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
+import { hasProvincialStaffRole } from '@/context/auth/role-utils'
 import { canUseDefaultRegionPreference } from '@/context/auth/region-utils'
 import { hasInvalidIsoDateRange } from '@/pages/shared/create-form-utils'
 import {
@@ -81,7 +82,7 @@ import {
 } from '@/service/provincial-permit-search-service'
 import { fetchProvincialPermitOptions, type SearchOption } from '@/service/search-options-service'
 import { resolveDefaultZoneRegionIds } from '@/service/user-preference-service'
-import { formatPermitNumber } from '@/utils/permit'
+import { formatPermitNumber, formatPermitStatus } from '@/utils/permit'
 import { displayTableValue } from '@/utils/text'
 import { displayVolume } from '@/utils/volume'
 
@@ -166,6 +167,9 @@ const ProvincialPermitPage = () => {
   const resultsLoading = loading || !searched
   const [errorMessage, setErrorMessage] = useState('')
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
+  // Provincial Submitter searches are always scoped to the authenticated forest client;
+  // client-number criteria are meaningful only for provincial staff searches.
+  const canFilterByClient = hasProvincialStaffRole(capabilities.roles)
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
     [searchParams],
@@ -213,6 +217,8 @@ const ProvincialPermitPage = () => {
   const hasSearchQuery = searchParams.toString().length > 0
   // A saved link with invalid dates doesn't run its search, so it has no results to show.
   const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
+  // No results show only the empty state, without counts or pagination.
+  const noResults = results.content.length === 0 && results.page.totalElements === 0
   const updateFilter = useCallback(
     <K extends keyof ProvincialPermitSearchFilters>(
       key: K,
@@ -381,7 +387,12 @@ const ProvincialPermitPage = () => {
     const loadOptions = async () => {
       try {
         const options = await fetchProvincialPermitOptions()
-        setPermitStatusOptions(options.permitStatuses)
+        setPermitStatusOptions(
+          options.permitStatuses.map((option) => ({
+            ...option,
+            label: formatPermitStatus(option.value, option.label),
+          })),
+        )
         setAllRegionOptions(mapValueLabelOptionsToIdTextOptions(options.regions))
         setOptionsUnavailable(false)
       } catch {
@@ -486,10 +497,7 @@ const ProvincialPermitPage = () => {
   return (
     <Grid fullWidth className="default-grid fullbleed-table-page provincial-permit-search-page">
       <Column sm={4} md={8} lg={16}>
-        <PageHeader
-          title="Permit search"
-          subtitle="Find provincial export permits and open permit details."
-        />
+        <PageHeader title="Permit search" subtitle="Find permits and check their status" />
       </Column>
 
       {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
@@ -516,6 +524,12 @@ const ProvincialPermitPage = () => {
                   labelText="Package number"
                   value={filters.packageNumber}
                   onChange={(event) => updateFilter('packageNumber', event.target.value)}
+                />
+                <TextInput
+                  id="permitNumber"
+                  labelText="Permit number"
+                  value={filters.permitNumber}
+                  onChange={(event) => updateFilter('permitNumber', event.target.value)}
                 />
                 <RegionMultiSelect
                   id="region"
@@ -551,26 +565,24 @@ const ProvincialPermitPage = () => {
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('permitStatus', value)}
                 />
-                <TextInput
-                  id="permitNumber"
-                  labelText="Permit number"
-                  value={filters.permitNumber}
-                  onChange={(event) => updateFilter('permitNumber', event.target.value)}
-                />
-                <ForestClientComboBox
-                  id="applicantClientNumber"
-                  labelText="Applicant client number"
-                  value={filters.applicantClientNumber}
-                  resetKey={clientSearchResetKey}
-                  onChange={(value) => updateFilter('applicantClientNumber', value)}
-                />
-                <ForestClientComboBox
-                  id="ownerClientNumber"
-                  labelText="Owner client number"
-                  value={filters.ownerClientNumber}
-                  resetKey={clientSearchResetKey}
-                  onChange={(value) => updateFilter('ownerClientNumber', value)}
-                />
+                {canFilterByClient && (
+                  <>
+                    <ForestClientComboBox
+                      id="applicantClientNumber"
+                      labelText="Applicant client number"
+                      value={filters.applicantClientNumber}
+                      resetKey={clientSearchResetKey}
+                      onChange={(value) => updateFilter('applicantClientNumber', value)}
+                    />
+                    <ForestClientComboBox
+                      id="ownerClientNumber"
+                      labelText="Owner client number"
+                      value={filters.ownerClientNumber}
+                      resetKey={clientSearchResetKey}
+                      onChange={(value) => updateFilter('ownerClientNumber', value)}
+                    />
+                  </>
+                )}
               </div>
               <div className="legacy-search-actions">
                 <Button
@@ -610,6 +622,7 @@ const ProvincialPermitPage = () => {
                 ? undefined
                 : results.page.totalElements
             }
+            hideZeroCount
             totalItemsLabel={formatDeferredSearchTotalLabel(
               results.page.totalElements,
               totalStatus,
@@ -679,7 +692,7 @@ const ProvincialPermitPage = () => {
                 description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
-            {!errorMessage && (!resultsLoading || results.content.length > 0) && (
+            {!errorMessage && !noResults && (!resultsLoading || results.content.length > 0) && (
               <>
                 <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(

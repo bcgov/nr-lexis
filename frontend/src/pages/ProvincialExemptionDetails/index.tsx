@@ -16,6 +16,7 @@ import {
 import {
   Add,
   Certificate,
+  CheckmarkOutline,
   Currency,
   DocumentAttachment,
   Edit,
@@ -621,6 +622,11 @@ const ProvincialExemptionDetailsPage = () => {
   const [isAddingApplication, setIsAddingApplication] = useState(false)
   const addApplicationButtonRef = useRef<HTMLButtonElement>(null)
   const applyForPermitButtonRef = useRef<HTMLButtonElement>(null)
+  // Returning from a cancelled permit creation focuses Apply for new permit once it renders.
+  const focusApplyForPermitRef = useRef(
+    (location.state as { permitCreationCancelled?: unknown } | null)?.permitCreationCancelled ===
+      true,
+  )
   const addApplicationInputRef = useRef<HTMLInputElement>(null)
   const tabsColumnRef = useRef<HTMLDivElement>(null)
   const [applicationMutationNumber, setApplicationMutationNumber] = useState<string | null>(null)
@@ -902,8 +908,8 @@ const ProvincialExemptionDetailsPage = () => {
         if (!isLatestRequest()) {
           return
         }
-        setDetail(response)
         if (!response) {
+          setDetail(null)
           setErrorMessage(`No provincial exemption found for ${exemptionNumber}.`)
           setDocumentRows([])
           setApplications([])
@@ -929,6 +935,8 @@ const ProvincialExemptionDetailsPage = () => {
           return
         }
 
+        // The record renders with its related data, so its tabs don't change once shown.
+        setDetail(response)
         if (documentsResult.status === 'fulfilled') {
           setDocumentRows(documentsResult.value.rows)
         } else {
@@ -1637,6 +1645,10 @@ const ProvincialExemptionDetailsPage = () => {
       if (currentDetail) setEditForm(toEditForm(currentDetail, editContext))
       resetFieldErrors()
       setSaveAttempted(false)
+      // A new edit replaces the notice from the last section save.
+      setActionResult((current) =>
+        current?.source === 'summary' || current?.source === 'fees' ? null : current,
+      )
     })
 
   const closeApprovalConfirmation = useCallback((targetNumber: string) => {
@@ -2111,6 +2123,16 @@ const ProvincialExemptionDetailsPage = () => {
     currentDetail?.blanketOic && permitsLoaded && permitRows.length === 0
   const PermitsContainer = emptyBlanketOicPermits ? 'section' : Tile
 
+  useEffect(() => {
+    if (!focusApplyForPermitRef.current || loading) return
+    const frame = requestAnimationFrame(() => {
+      if (!applyForPermitButtonRef.current) return
+      focusApplyForPermitRef.current = false
+      applyForPermitButtonRef.current.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  })
+
   const sectionResult = (source: ExemptionActionResult['source']) =>
     actionResult && actionResult.source === source ? (
       <ActionResultNotification result={actionResult} onClose={() => setActionResult(null)} />
@@ -2154,6 +2176,7 @@ const ProvincialExemptionDetailsPage = () => {
                     kind="primary"
                     size="md"
                     disabled={approving}
+                    renderIcon={CheckmarkOutline}
                     onClick={() => {
                       setActionResult(null)
                       approvalTargetRef.current = currentDetail.exemptionNumber
@@ -2706,10 +2729,14 @@ const ProvincialExemptionDetailsPage = () => {
                           </div>
                           {sectionResult('applications')}
                           {!applicationsErrorMessage && (
-                            <p>
-                              Total requested volume (m³):{' '}
-                              {formatExemptionVolume(requestedApplicationVolume)}
-                            </p>
+                            <RecordFieldGrid>
+                              <RecordFieldRow>
+                                <RecordField
+                                  label="Total requested volume (m³)"
+                                  value={formatExemptionVolume(requestedApplicationVolume)}
+                                />
+                              </RecordFieldRow>
+                            </RecordFieldGrid>
                           )}
                           {canLinkApplications && (
                             <DetailSidePanel
@@ -2729,14 +2756,18 @@ const ProvincialExemptionDetailsPage = () => {
                                     confirmApplicationDraftDiscard(closeAddApplication),
                                 },
                                 {
-                                  label: applicationMutationNumber ? 'Saving…' : 'Save application',
+                                  label: applicationMutationNumber
+                                    ? 'Saving application'
+                                    : 'Save application',
                                   kind: 'primary',
                                   disabled: Boolean(applicationMutationNumber),
+                                  renderIcon: applicationMutationNumber ? PendingIcon : undefined,
                                   onClick: () => void onAddApplication(),
                                 },
                               ]}
                               onClose={() => confirmApplicationDraftDiscard(closeAddApplication)}
                             >
+                              <RequiredFieldsLegend />
                               <TextInput
                                 ref={addApplicationInputRef}
                                 id="exemptionApplicationNumberToAdd"
@@ -3010,6 +3041,11 @@ const ProvincialExemptionDetailsPage = () => {
                             action={applyForPermitButton}
                             headingLevel={3}
                             variant={emptyBlanketOicPermits ? 'tab' : undefined}
+                            className={
+                              detail.blanketOic
+                                ? undefined
+                                : 'exemption-permits-empty--after-totals'
+                            }
                           />
                         )}
                       </PermitsContainer>
@@ -3024,7 +3060,8 @@ const ProvincialExemptionDetailsPage = () => {
                       className="application-detail-tab-grid"
                     >
                       <Column sm={4} md={8} lg={16}>
-                        {applicationsErrorMessage || !editContextLoaded ? (
+                        {applicationsErrorMessage ||
+                        (!editContextLoaded && !editContextRefreshing) ? (
                           <Tile>
                             <DetailCardTitle icon={Currency}>Fees</DetailCardTitle>
                             {applicationsErrorMessage ? (
@@ -3050,7 +3087,8 @@ const ProvincialExemptionDetailsPage = () => {
                               <RecordFieldRow>
                                 <RecordFieldCell>
                                   <RadioButtonGroup
-                                    legendText="Override fee rate?"
+                                    legendText={requiredLabel('Override fee rate?')}
+                                    required
                                     name="exemptionFeeRateOverride"
                                     valueSelected={editForm.enableRateOverride ? 'yes' : 'no'}
                                     orientation="horizontal"
@@ -3219,8 +3257,8 @@ const ProvincialExemptionDetailsPage = () => {
           title="Are you sure you want to remove this application?"
           description={
             <>
-              <strong>{applicationPendingRemoval}</strong> will be removed from exemption{' '}
-              {currentDetail?.exemptionNumber ?? exemptionNumber ?? ''}.
+              <strong>Application {applicationPendingRemoval}</strong> will be removed from this
+              exemption.
             </>
           }
           confirmLabel="Remove"
@@ -3266,10 +3304,13 @@ const ProvincialExemptionDetailsPage = () => {
                 <p>The permit is created when you save it, and cannot be deleted afterwards.</p>
               </>
             ) : (
-              <p>
-                A new permit will be created for Exemption {currentDetail.exemptionNumber}. Once
-                created, a permit cannot be deleted.
-              </p>
+              <>
+                <p>
+                  A new permit will be created for{' '}
+                  <strong>Exemption {currentDetail.exemptionNumber}.</strong>
+                </p>
+                <p>Once created, a permit cannot be deleted.</p>
+              </>
             )}
           </div>
           {(currentDetail.exemptionTypeCode ?? '').trim().toUpperCase() === 'O' && (

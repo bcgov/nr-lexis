@@ -304,21 +304,21 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    for (const tabName of [
-      'Applicant',
-      'Application',
-      'Scale',
-      'Documents',
-      'Remarks',
-      'Offers',
-      'Review',
-    ]) {
+    for (const tabName of ['Applicant', 'Application', 'Scale']) {
       await selectApplicationCreateTab(tabName)
       const panelRegion = screen.getByRole('region', { name: tabName })
       expect(panelRegion).toBeVisible()
       expect(
         within(panelRegion).queryByRole('heading', { level: 2, name: tabName }),
       ).not.toBeInTheDocument()
+    }
+    // Tabs that need a saved application show a plain note on the tab background, not a card.
+    for (const tabName of ['Documents', 'Remarks', 'Offers', 'Review']) {
+      await selectApplicationCreateTab(tabName)
+      const panel = screen.getByRole('tabpanel', { name: tabName })
+      expect(panel).toHaveTextContent(/^Available after the application is saved\.$/)
+      expect(panel).toHaveClass('application-detail-tab-panel--empty')
+      expect(panel.querySelector('.cds--tile')).toBeNull()
     }
   })
 
@@ -470,7 +470,7 @@ describe('Create Page Core Flows', () => {
       expect(
         within(screen.getByRole('tabpanel')).getByText('Available after the application is saved.'),
       ).toBeVisible()
-      expect(screen.getByRole('region', { name }).querySelector('input, textarea')).toBeNull()
+      expect(screen.getByRole('tabpanel', { name }).querySelector('input, textarea')).toBeNull()
     }
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
@@ -1045,7 +1045,7 @@ describe('Create Page Core Flows', () => {
     await waitForApplicationCreateLoads('Applicant client details')
     await userEvent.click(save)
     expect(await screen.findByText('Cannot save yet.')).toBeVisible()
-    expect(screen.getByText('Complete the required fields in Applicant tab.')).toBeVisible()
+    expect(screen.getByText('Complete the required fields in the Applicant tab.')).toBeVisible()
     // The agent location waits on the agent client, so only the client and contact are counted.
     const applicant = screen.getByRole('tab', {
       name: 'Applicant, 2 required fields outstanding',
@@ -1467,7 +1467,7 @@ describe('Create Page Core Flows', () => {
     )
   }, 20_000)
 
-  it('ignores forged agent prefill when applicant type changes are not authorized', async () => {
+  const renderSubmitterApplicationCreate = (query = '') => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -1480,13 +1480,8 @@ describe('Create Page Core Flows', () => {
           action !== '/changeApplicantType' && action !== '/applicationsReview',
       }),
     )
-
     render(
-      <MemoryRouter
-        initialEntries={[
-          '/provincial/application/create?ownerApplicantType=A&agentClientNumber=00033333&agentClientLocationCode=01&agentContactName=Forged%20Agent',
-        ]}
-      >
+      <MemoryRouter initialEntries={[`/provincial/application/create${query}`]}>
         <Routes>
           <Route
             path="/provincial/application/create"
@@ -1495,15 +1490,133 @@ describe('Create Page Core Flows', () => {
         </Routes>
       </MemoryRouter>,
     )
+  }
+
+  const READY_SUBMITTER_APPLICATION_QUERY =
+    '?ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA'
+
+  const confirmSubmitterSave = async () => {
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+    const dialog = await screen.findByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save application' }))
+  }
+
+  it('ignores forged agent prefill for a provincial submitter', async () => {
+    renderSubmitterApplicationCreate(
+      '?ownerApplicantType=A&agentClientNumber=00033333&agentClientLocationCode=01&agentContactName=Forged%20Agent',
+    )
 
     await selectApplicationCreateTab('Applicant')
     expect(screen.getByRole('heading', { name: 'Owner', level: 3 })).toBeInTheDocument()
     expect(screen.queryByLabelText('Applicant type')).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('checkbox', { name: "I'm an agent" })).not.toBeInTheDocument()
-    // No empty divider is left where the checkbox would be.
-    expect(document.querySelector('.application-create-applicant-type')).toBeNull()
+    expect(screen.getByRole('checkbox', { name: "I'm an agent" })).not.toBeChecked()
+    expect(screen.queryByRole('region', { name: 'Agent information' })).not.toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Client' })).toHaveValue('00077881')
     expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalledWith('00033333', 'agent')
+  })
+
+  it('lets a provincial submitter create an application as the owner', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('910'))
+    renderSubmitterApplicationCreate(READY_SUBMITTER_APPLICATION_QUERY)
+
+    await selectApplicationCreateTab('Applicant')
+    const agentChoice = screen.getByRole('checkbox', { name: "I'm an agent" })
+    expect(agentChoice).toBeEnabled()
+    expect(agentChoice).not.toBeChecked()
+    expect(agentChoice.closest('.application-create-applicant-type')).toBeInTheDocument()
+    expect(screen.getByRole('textbox', { name: 'Client' })).toHaveAttribute('readonly')
+    await waitForApplicationCreateLoads('Applicant client details')
+    await confirmSubmitterSave()
+
+    await waitFor(() =>
+      expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicantTypeCode: 'O',
+          ownerClientNumber: '00077881',
+          ownerClientLocationCode: '00',
+          agentClientNumber: '',
+          agentClientLocationCode: '',
+          agentContactName: '',
+        }),
+      ),
+    )
+  })
+
+  it('lets a provincial submitter act as the agent for an owner they look up', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('911'))
+    renderSubmitterApplicationCreate(READY_SUBMITTER_APPLICATION_QUERY)
+
+    await selectApplicationCreateTab('Applicant')
+    await waitForApplicationCreateLoads('Applicant client details')
+    await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+
+    const agentInformation = screen.getByRole('region', { name: 'Agent information' })
+    const agentClient = within(agentInformation).getByRole('textbox', { name: 'Agent client' })
+    expect(agentClient).toHaveValue('00077881')
+    expect(agentClient).toHaveAttribute('readonly')
+    await waitFor(() =>
+      expect(
+        within(agentInformation).getByRole('combobox', { name: 'Agent location' }),
+      ).toBeEnabled(),
+    )
+    const ownerClient = screen.getByRole('textbox', { name: 'Client' })
+    expect(ownerClient).toHaveValue('')
+    expect(ownerClient).not.toHaveAttribute('readonly')
+    expect(ownerClient).toHaveAttribute('data-counterparty-client-number', '00077881')
+
+    fireEvent.change(ownerClient, { target: { value: '00011111' } })
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+        '00011111',
+        'owner',
+        '',
+        '00077881',
+      ),
+    )
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00011111', '00', {
+        counterpartyClientNumber: '00077881',
+      }),
+    )
+    fireEvent.change(within(agentInformation).getByRole('textbox', { name: 'Contact name' }), {
+      target: { value: 'Agent Contact' },
+    })
+    await waitForApplicationCreateLoads('Applicant client details', 'Agent client details')
+    await confirmSubmitterSave()
+
+    await waitFor(() =>
+      expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          applicantTypeCode: 'A',
+          ownerClientNumber: '00011111',
+          ownerClientLocationCode: '00',
+          ownerContactName: 'Owner Contact',
+          agentClientNumber: '00077881',
+          agentClientLocationCode: '00',
+          agentContactName: 'Agent Contact',
+        }),
+      ),
+    )
+  }, 20_000)
+
+  it('restores the submitter as the owner when the agent choice is cleared', async () => {
+    renderSubmitterApplicationCreate()
+
+    await selectApplicationCreateTab('Applicant')
+    const agentChoice = screen.getByRole('checkbox', { name: "I'm an agent" })
+    await userEvent.click(agentChoice)
+    expect(screen.getByRole('textbox', { name: 'Client' })).toHaveValue('')
+
+    await userEvent.click(agentChoice)
+    expect(screen.queryByRole('region', { name: 'Agent information' })).not.toBeInTheDocument()
+    const ownerClient = screen.getByRole('textbox', { name: 'Client' })
+    expect(ownerClient).toHaveValue('00077881')
+    expect(ownerClient).toHaveAttribute('readonly')
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Client location' })).toHaveValue('00'),
+    )
   })
 
   it('hides Review on application create without review authority', async () => {
@@ -1552,9 +1665,9 @@ describe('Create Page Core Flows', () => {
     )
 
     expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('region', { name: 'Remarks' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('tabpanel', { name: 'Remarks' })).not.toBeInTheDocument()
     await userEvent.click(screen.getByRole('tab', { name: 'Offers' }))
-    expect(screen.getByRole('region', { name: 'Offers' })).toBeInTheDocument()
+    expect(screen.getByRole('tabpanel', { name: 'Offers' })).toBeInTheDocument()
 
     const saveButton = screen.getByRole('button', { name: 'Save application' })
     await waitForApplicationCreateLoads('Applicant client details')
@@ -2079,8 +2192,10 @@ describe('Create Page Core Flows', () => {
       'Permits',
     ])
     await selectExemptionCreateTab('Documents')
-    expect(screen.getByText('Save the exemption before uploading documents.')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Add document' })).toBeDisabled()
+    expect(screen.getByRole('tabpanel', { name: 'Documents' })).toHaveTextContent(
+      /^Available after the exemption is saved\.$/,
+    )
+    expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: 'Client' })).not.toBeInTheDocument()
     await selectExemptionCreateTab('Exemption details')
     const exemptionDetails = screen.getByRole('group', { name: 'Exemption details' })
@@ -2106,21 +2221,24 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('group', { name: 'New exemption state' })).not.toBeInTheDocument()
     expect(screen.queryByRole('textbox', { name: /exemption number/i })).not.toBeInTheDocument()
     await waitFor(() => expect(screen.getByRole('radio', { name: 'Ministerial' })).toBeChecked())
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('New'),
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('New'))
+    expect(screen.getByText('Status', { selector: 'label, .required-label' })).not.toHaveClass(
+      'required-label',
     )
-    expect(screen.getByText('Exemption status')).not.toHaveClass('required-label')
-    expect(screen.getByRole('combobox', { name: 'Exemption status' })).not.toHaveAttribute(
+    expect(screen.getByRole('combobox', { name: 'Status' })).not.toHaveAttribute(
       'aria-required',
       'true',
     )
+    expect(screen.queryByText('Exemption holder')).not.toBeInTheDocument()
     await chooseExemptionType('Section 1')
-    expect(screen.getByText('Exemption status')).toHaveClass('required-label')
-    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveAttribute(
+    expect(screen.getByText('Status', { selector: 'label, .required-label' })).toHaveClass(
+      'required-label',
+    )
+    expect(screen.getByRole('combobox', { name: 'Status' })).toHaveAttribute(
       'aria-required',
       'true',
     )
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Status' }), 'New')
     await userEvent.type(screen.getByLabelText('Approval date'), '2026-02-01')
     await userEvent.type(screen.getByLabelText('Expiry date'), '2026-12-31')
     await userEvent.type(screen.getByLabelText(/Approval Volume/i), '500')
@@ -2202,9 +2320,9 @@ describe('Create Page Core Flows', () => {
     expect(screen.getByLabelText('Expiry date')).toHaveValue('')
     expect(screen.queryByText('Prefilled from selected applications')).not.toBeInTheDocument()
     await selectExemptionCreateTab('Applications')
-    expect(
-      screen.getByText('Applications can be added after you save the exemption.'),
-    ).toBeVisible()
+    expect(screen.getByRole('tabpanel', { name: 'Applications' })).toHaveTextContent(
+      /^Available after the exemption is saved\.$/,
+    )
     expect(screen.queryByRole('list', { name: 'Selected applications' })).not.toBeInTheDocument()
 
     await selectExemptionCreateTab('Exemption details')
@@ -2242,10 +2360,8 @@ describe('Create Page Core Flows', () => {
       await waitFor(() => expect(screen.getByRole('radio', { name: typeName })).toBeChecked())
       await selectExemptionCreateTab('Applications')
 
-      const applications = screen.getByRole('region', { name: 'Applications' })
-      expect(
-        within(applications).getByText('Applications can be added after you save the exemption.'),
-      ).toBeVisible()
+      const applications = screen.getByRole('tabpanel', { name: 'Applications' })
+      expect(applications).toHaveTextContent(/^Available after the exemption is saved\.$/)
       expect(within(applications).queryByRole('combobox')).not.toBeInTheDocument()
       expect(within(applications).queryByRole('button')).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()
@@ -2255,20 +2371,14 @@ describe('Create Page Core Flows', () => {
   it.each([
     [
       'Order in Council',
-      'Applications, documents and permits',
       'Applications, documents and permits can be added after you save the exemption.',
     ],
     [
       'Ministerial',
-      'Applications, documents and permits',
       'Applications, documents and permits can be added after you save the exemption.',
     ],
-    [
-      'Blanket OIC',
-      'Documents and permits',
-      'Documents and Permits can be added after you save the exemption.',
-    ],
-  ])('lists what a %s exemption can add after saving', async (typeName, title, subtitle) => {
+    ['Blanket OIC', 'Documents and Permits can be added after you save the exemption.'],
+  ])('lists what a %s exemption can add after saving', async (typeName, subtitle) => {
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/create']}>
         <Routes>
@@ -2281,8 +2391,11 @@ describe('Create Page Core Flows', () => {
     await chooseExemptionType(typeName)
     await waitFor(() => expect(screen.getByRole('radio', { name: typeName })).toBeChecked())
 
-    const notice = screen.getByText(title).closest('.cds--inline-notification')
-    expect(notice).toHaveTextContent(`${title}${subtitle}`)
+    const notice = screen.getByText(subtitle).closest('.cds--inline-notification')
+    expect(notice?.querySelector('.cds--inline-notification__text-wrapper')).toHaveTextContent(
+      new RegExp(`^${subtitle}$`),
+    )
+    expect(notice?.querySelector('.cds--inline-notification__title')).toBeNull()
   })
 
   it('submits a standalone Ministerial exemption without an application', async () => {
@@ -2298,11 +2411,13 @@ describe('Create Page Core Flows', () => {
 
     await selectExemptionCreateTab('Exemption details')
     await waitFor(() => expect(screen.getByRole('radio', { name: 'Ministerial' })).toBeChecked())
-    const statusSelect = screen.getByRole('combobox', { name: 'Exemption status' })
+    const statusSelect = screen.getByRole('combobox', { name: 'Status' })
     expect(statusSelect).toHaveValue('New')
     expect(statusSelect).toBeDisabled()
     expect(statusSelect).not.toHaveAttribute('aria-required', 'true')
-    expect(screen.getByText('Exemption status')).not.toHaveClass('required-label')
+    expect(screen.getByText('Status', { selector: 'label, .required-label' })).not.toHaveClass(
+      'required-label',
+    )
     expect(screen.getByLabelText('Approval date')).toBeDisabled()
     await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '250.5')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
@@ -2338,8 +2453,8 @@ describe('Create Page Core Flows', () => {
     await selectExemptionCreateTab('Exemption details')
     await chooseExemptionType('Order in Council')
 
-    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('Active')
-    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toBeDisabled()
+    expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('Active')
+    expect(screen.getByRole('combobox', { name: 'Status' })).toBeDisabled()
     expect(screen.getByLabelText('Approval date')).toBeEnabled()
     expect(screen.getByLabelText('Exemption number')).toHaveAttribute('maxlength', '8')
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
@@ -2352,9 +2467,9 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('tab', { name: 'Applicant' })).not.toBeInTheDocument()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     await selectExemptionCreateTab('Applications')
-    expect(
-      screen.getByText('Applications can be added after you save the exemption.'),
-    ).toBeVisible()
+    expect(screen.getByRole('tabpanel', { name: 'Applications' })).toHaveTextContent(
+      /^Available after the exemption is saved\.$/,
+    )
     await selectExemptionCreateTab('Fees')
     expect(
       within(screen.getByRole('region', { name: 'Fees' })).getByRole('radio', { name: 'No' }),
@@ -2409,7 +2524,9 @@ describe('Create Page Core Flows', () => {
 
     await selectExemptionCreateTab('Exemption details')
     await chooseExemptionType('Blanket OIC')
-    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('Active')
+    expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('Active')
+    expect(screen.getByText('Exemption holder')).toBeVisible()
+    expect(screen.getByText('No applications associated with this exemption')).toBeVisible()
     expect(screen.getByLabelText('Approval volume (m³)')).toHaveValue('9999999.9')
     expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
 
@@ -2671,12 +2788,12 @@ describe('Create Page Core Flows', () => {
     await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
     await selectExemptionCreateTab('Exemption details')
     await chooseExemptionType('Section 1')
-    await clearComboBox(screen.getByRole('combobox', { name: 'Exemption status' }))
+    await clearComboBox(screen.getByRole('combobox', { name: 'Status' }))
     await userEvent.clear(screen.getByLabelText(/Approval Volume/i))
     await userEvent.type(screen.getByLabelText(/Approval Volume/i), '500')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
-    expect(screen.getAllByText('Exemption status is required').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Status is required').length).toBeGreaterThan(0)
     expect(mockedSubmitProvincialExemptionCreate).not.toHaveBeenCalled()
   })
 
@@ -2692,7 +2809,7 @@ describe('Create Page Core Flows', () => {
     await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
     await selectExemptionCreateTab('Exemption details')
     await chooseExemptionType('Section 1')
-    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
+    await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Status' }), 'New')
     await userEvent.clear(screen.getByLabelText(/Approval Volume/i))
     await userEvent.type(screen.getByLabelText(/Approval Volume/i), '121212122')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))

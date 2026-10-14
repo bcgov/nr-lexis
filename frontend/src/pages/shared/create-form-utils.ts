@@ -35,7 +35,9 @@ export const isoDateRangeEndError = (
   fromLabel: string,
 ): string | undefined => {
   if (!isValidIsoDate(toValue)) return 'Date must be YYYY-MM-DD'
-  return isReversedIsoDateRange(fromValue, toValue) ? `Must be on or after ${fromLabel}` : undefined
+  return isReversedIsoDateRange(fromValue, toValue)
+    ? `Must be on or after ${fromLabel}.`
+    : undefined
 }
 
 const isPositiveNumeric = (value: string): boolean => {

@@ -38,6 +38,7 @@ import {
   selectApplicationSummaryTile,
 } from './ProvincialApplicationDetailActions.support'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
+import { formatBusinessIsoDate } from '@/utils/date'
 
 const getOwnerClientDetailsTile = (): HTMLElement => {
   const title = screen.getByRole('heading', {
@@ -61,6 +62,18 @@ const getAgentDetailsTile = (): HTMLElement => {
 
 describe.sequential('Provincial Application Detail Actions - application', () => {
   beforeEach(setupApplicationDetailTests)
+
+  const renderApplicationDetailPage = () =>
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
 
   it('does not render a top-right application highlights widget', async () => {
     render(
@@ -122,6 +135,20 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
   })
 
   it('shows a green creation confirmation after redirecting from application creation', async () => {
+    // Browsers ignore focus inside an inert region, so the title must be focused after loading.
+    const focusedWhileInert: boolean[] = []
+    const recordTitleFocus = (event: FocusEvent) => {
+      const target = event.target as HTMLElement
+      if (target.tagName === 'H1') focusedWhileInert.push(!!target.closest('[inert]'))
+    }
+    document.addEventListener('focusin', recordTitleFocus)
+    let resolveSnapshot: (snapshot: typeof applicationSummarySnapshot) => void = () => undefined
+    mockedFetchApplicationSummarySnapshot.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSnapshot = resolve
+        }),
+    )
     render(
       <MemoryRouter
         initialEntries={[
@@ -146,9 +173,15 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
     expect(screen.queryByText('Action complete')).not.toBeInTheDocument()
+    await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalled())
+    await act(async () => {
+      resolveSnapshot(applicationSummarySnapshot)
+    })
     await waitFor(() =>
       expect(screen.getByRole('heading', { level: 1, name: 'Application 321' })).toHaveFocus(),
     )
+    document.removeEventListener('focusin', recordTitleFocus)
+    expect(focusedWhileInert).toEqual([false])
   })
 
   it('shows each summary field once while editing and restores display values on cancel', async () => {
@@ -478,6 +511,170 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     observer.disconnect()
     expect(warningShown).toBe(false)
     expect(screen.queryByText('Client details unavailable')).not.toBeInTheDocument()
+  })
+
+  it('keeps the client details shown while a package save refreshes the application', async () => {
+    renderApplicationDetailPage()
+    const ownerSection = await screen.findByRole('region', { name: 'Owner' })
+    expect(
+      await within(ownerSection).findByText('Owner Forestry Ltd. · 00011122'),
+    ).toBeInTheDocument()
+
+    // The refreshed summary arrives after the application itself, as it does over the network.
+    mockedFetchApplicationSummarySnapshot.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          window.setTimeout(() => resolve(applicationSummarySnapshot), 50)
+        }),
+    )
+    let warningShown = false
+    let bareClientShown = false
+    const observer = new MutationObserver(() => {
+      warningShown ||= document.body.textContent?.includes('Client details unavailable') ?? false
+      bareClientShown ||= [...document.querySelectorAll('dd')].some(
+        (node) => node.textContent?.trim() === '00011122',
+      )
+    })
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+
+    await selectApplicationDetailTab('Scale')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
+    const comments = await screen.findByLabelText('Package comments')
+    await userEvent.type(comments, ' updated')
+    await userEvent.click(screen.getByRole('button', { name: 'Save package' }))
+    expect(await screen.findByText('Package saved.')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(within(ownerSection).getByText('Owner Forestry Ltd. · 00011122')).toBeInTheDocument(),
+    )
+    observer.disconnect()
+
+    expect(mockedFetchProvincialApplicationDetail.mock.calls.length).toBeGreaterThan(1)
+    expect(warningShown).toBe(false)
+    expect(bareClientShown).toBe(false)
+  })
+
+  it('keeps the client name shown while an Applicant save refreshes the application', async () => {
+    renderApplicationDetailPage()
+    const ownerSection = await screen.findByRole('region', { name: 'Owner' })
+    expect(
+      await within(ownerSection).findByText('Owner Forestry Ltd. · 00011122'),
+    ).toBeInTheDocument()
+    mockedFetchApplicationSummarySnapshot.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          window.setTimeout(() => resolve(applicationSummarySnapshot), 50)
+        }),
+    )
+    let bareClientShown = false
+    const observer = new MutationObserver(() => {
+      bareClientShown ||= [...document.querySelectorAll('dd')].some(
+        (node) => node.textContent?.trim() === '00011122',
+      )
+    })
+
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    fireEvent.change(ownerControls.getAllByRole('textbox', { name: 'Contact name' })[0], {
+      target: { value: 'Updated Owner' },
+    })
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+    expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(mockedFetchApplicationSummarySnapshot.mock.calls.length).toBeGreaterThan(1),
+    )
+    await act(async () => {
+      await new Promise((resolve) => window.setTimeout(resolve, 100))
+    })
+    observer.disconnect()
+
+    expect(
+      within(screen.getByRole('region', { name: 'Owner' })).getByText(
+        'Owner Forestry Ltd. · 00011122',
+      ),
+    ).toBeInTheDocument()
+    expect(bareClientShown).toBe(false)
+  })
+
+  it('shows no placeholder subtitle while the application loads', async () => {
+    let resolveDetail: (detail: ProvincialApplicationDetail) => void = () => undefined
+    mockedFetchProvincialApplicationDetail.mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          resolveDetail = resolve
+        }),
+    )
+    let placeholderShown = false
+    const observer = new MutationObserver(() => {
+      placeholderShown ||=
+        document.body.textContent?.includes('Check and manage this provincial application') ?? false
+    })
+    observer.observe(document.body, { childList: true, subtree: true, characterData: true })
+
+    renderApplicationDetailPage()
+    expect(screen.getByRole('heading', { level: 1, name: 'Application 321' })).toBeInTheDocument()
+    expect(document.querySelector('.lexis-page-header__subtitle')).toBeNull()
+    await act(async () => resolveDetail(applicationDetail))
+    expect(await screen.findByText('Author: idir\\application-author')).toBeInTheDocument()
+    observer.disconnect()
+
+    expect(placeholderShown).toBe(false)
+  })
+
+  it('waits for client locations before warning about a client without a location', async () => {
+    let resolveLocations: (
+      locations: { locationCode: string; locationName: string; selected: boolean }[],
+    ) => void = () => undefined
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicantTypeCode: 'O',
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      ownerClientLocationCode: '',
+    })
+    mockedFetchApplicationClientLocations.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveLocations = resolve
+        }),
+    )
+    mockedFetchApplicationClientData.mockReturnValue(new Promise(() => undefined))
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [],
+      remarks: [],
+      offers: [],
+    })
+
+    let warningShown = false
+    const observer = new MutationObserver((records) => {
+      warningShown ||= records.some((record) =>
+        [...record.addedNodes].some((node) =>
+          node.textContent?.includes('Client details unavailable'),
+        ),
+      )
+    })
+    observer.observe(document.body, { childList: true, subtree: true })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await waitFor(() => expect(mockedFetchApplicationClientLocations).toHaveBeenCalled())
+    await act(async () => {
+      resolveLocations([{ locationCode: '00', locationName: 'Main', selected: true }])
+    })
+    await waitFor(() => expect(mockedFetchApplicationClientData).toHaveBeenCalled())
+    observer.disconnect()
+    expect(warningShown).toBe(false)
   })
 
   it('keeps saved client values visible when enrichment fails', async () => {
@@ -1721,6 +1918,148 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(saved).not.toHaveProperty('agentClientNumber')
     expect(saved).not.toHaveProperty('agentClientLocationCode')
     expect(saved).not.toHaveProperty('agentContactName')
+  })
+
+  const mockSubmitterApplication = (
+    forestClientNumber: string,
+    listingDate: string,
+    agentUsed: boolean,
+  ) => {
+    mockApplicationDetailAuth(
+      (action: string) => action === 'createApplication',
+      [`LEXIS_PROVINCIAL_SUBMITTER_${forestClientNumber}`],
+      { forestClientNumber },
+    )
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'NEW',
+      statusDescription: 'New',
+      industryUser: true,
+      listingDate,
+      agentClientNumber: agentUsed ? applicationDetail.agentClientNumber : null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicationStatusCode: 'NEW',
+      ...(agentUsed
+        ? {}
+        : {
+            applicantTypeCode: 'O',
+            agentClientNumber: '',
+            agentClientLocationCode: '',
+            agentContactName: '',
+          }),
+    })
+  }
+
+  it('lets a provincial submitter who owns the application add an agent before the list date', async () => {
+    mockSubmitterApplication('00011122', '2099-01-11', false)
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    const agentChoice = ownerControls.getByLabelText("I'm an agent")
+    expect(agentChoice).toBeEnabled()
+    expect(agentChoice).not.toBeChecked()
+    await userEvent.click(agentChoice)
+
+    const agentControls = within(getAgentDetailsTile())
+    const agentClient = agentControls.getByLabelText('Agent client')
+    expect(agentClient).toHaveAttribute('data-counterparty-client-number', '00011122')
+    fireEvent.change(agentClient, { target: { value: '00033344' } })
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+        '00033344',
+        'agent',
+        '321',
+        '00011122',
+      ),
+    )
+    await waitFor(() =>
+      expect(agentControls.getByRole('combobox', { name: 'Agent location' })).toBeEnabled(),
+    )
+    await chooseComboBoxOption(
+      agentControls.getByRole('combobox', { name: 'Agent location' }),
+      '01 - Agent Main Location',
+    )
+    fireEvent.change(agentControls.getByRole('textbox', { name: 'Contact name' }), {
+      target: { value: 'Agent Contact' },
+    })
+    await waitFor(() =>
+      expect(ownerControls.getByRole('button', { name: 'Save changes' })).toBeEnabled(),
+    )
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+    const accuracyDialog = await screen.findByRole('dialog', {
+      name: 'Confirm application accuracy',
+    })
+    await userEvent.click(within(accuracyDialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(accuracyDialog).getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          saveSource: 'owner-agent',
+          applicantTypeCode: 'A',
+          ownerClientNumber: '00011122',
+          agentClientNumber: '00033344',
+          agentClientLocationCode: '01',
+          agentContactName: 'Agent Contact',
+        }),
+      ),
+    )
+    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01', {
+      applicationNumber: '321',
+      counterpartyClientNumber: '00011122',
+    })
+  })
+
+  it('keeps a provincial submitter who is the saved agent from removing the agent', async () => {
+    mockSubmitterApplication('00033344', '2099-01-11', true)
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    const agentChoice = ownerControls.getByLabelText("I'm an agent")
+    expect(agentChoice).toBeChecked()
+    expect(agentChoice).toBeDisabled()
+    expect(
+      ownerControls.getByText(
+        "You're the agent on this application, so the agent can't be removed.",
+      ),
+    ).toBeVisible()
+    const agentControls = within(getAgentDetailsTile())
+    expect(agentControls.getByText('Agent client', { selector: 'dt' })).toBeInTheDocument()
+    expect(agentControls.getByRole('textbox', { name: 'Contact name' })).not.toHaveAttribute(
+      'readonly',
+    )
+  })
+
+  it('locks the agent choice and agent details for a provincial submitter from the list date', async () => {
+    mockSubmitterApplication('00011122', formatBusinessIsoDate(), true)
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    const agentChoice = ownerControls.getByLabelText("I'm an agent")
+    expect(agentChoice).toBeChecked()
+    expect(agentChoice).toBeDisabled()
+    expect(
+      ownerControls.getByText("An agent can't be added or removed on or after the list date."),
+    ).toBeVisible()
+    const agentControls = within(getAgentDetailsTile())
+    expect(agentControls.getByRole('textbox', { name: 'Contact name' })).toHaveValue(
+      'Agent Contact',
+    )
+    expect(agentControls.getByRole('textbox', { name: 'Contact name' })).toHaveAttribute('readonly')
+    expect(agentControls.getByRole('combobox', { name: 'Agent location' })).toHaveAttribute(
+      'readonly',
+    )
+    expect(ownerControls.getByRole('combobox', { name: 'Client location' })).not.toHaveAttribute(
+      'readonly',
+    )
   })
 
   it('keeps the agent choice and workflow fields read-only for scoped submitters', async () => {
