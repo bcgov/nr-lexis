@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, Column, ComboBox, Grid, TextArea } from '@carbon/react'
 import {
   ArrowRight,
@@ -9,7 +9,7 @@ import {
   ErrorFilled,
   InformationFilled,
 } from '@carbon/icons-react'
-import { Link, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useSearchParams } from 'react-router-dom'
 import { ActionResultNotifications } from '../../components/ActionResultNotification'
 import PageHeader from '@/components/PageHeader'
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
@@ -26,6 +26,7 @@ import {
   DOCUMENT_UPLOAD_GUIDANCE,
   DOCUMENT_UPLOAD_READY_MESSAGE,
   extractUploadErrorDetails,
+  formatScaleRows,
   GENERIC_SUBMISSION_FAILURE_MESSAGE,
   GENERIC_UPLOAD_FAILURE_MESSAGE,
   validateDocumentUploadDescription,
@@ -56,8 +57,9 @@ import {
 } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
-import { actionMessageResults, type ActionResult } from '@/utils/action-result'
+import type { ActionResult, ActionResultItem } from '@/utils/action-result'
 import { fieldErrorText } from '@/utils/field-error'
+import { useSubmissionSummaryLabels } from './useSubmissionSummaryLabels'
 
 type DataUploadWorkflowType = Exclude<UploadWorkflowType, 'invoice'>
 
@@ -361,6 +363,14 @@ const uploadTargetSummary = (
 const defaultSuccessTitle = (workflowType: DataUploadWorkflowType): string =>
   workflowType === 'applicationSubmission' ? 'Application submission complete' : 'Upload submitted'
 
+const createdApplicationResultText = (details: UploadQueueReviewDetails | undefined): string => {
+  const contents = [
+    details?.packageNumber ? `package ${details.packageNumber}` : '',
+    typeof details?.scaleRows === 'number' ? formatScaleRows(details.scaleRows) : '',
+  ].filter(Boolean)
+  return ` created${contents.length > 0 ? ` with ${contents.join(' and ')}` : ''}.`
+}
+
 type ApplicationSubmissionValidationContentProps = {
   items: UploadQueueItem[]
   isSubmitting: boolean
@@ -586,6 +596,7 @@ function UploadStepReviewButton({
 
 function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPageProps) {
   const { canPerform } = useAuth()
+  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
   const initialWorkflow =
     lockedWorkflowType ?? getWorkflowFromQuery(searchParams.get('type'), 'application', false)
@@ -597,8 +608,18 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
   const [fileInputKey, setFileInputKey] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
-  const [successMessage, setSuccessMessage] = useState('')
+  const [successResult, setSuccessResult] = useState<{
+    message: string
+    items: ActionResultItem[]
+  }>({ message: '', items: [] })
+  const { message: successMessage, items: successItems } = successResult
+  const setSuccessMessage = useCallback(
+    (message: string, items: ActionResultItem[] = []) => setSuccessResult({ message, items }),
+    [],
+  )
   const [successTitle, setSuccessTitle] = useState(() => defaultSuccessTitle(initialWorkflow))
+  const uploadResultsRef = useRef<HTMLDivElement>(null)
+  const [uploadResultsFocusRequest, setUploadResultsFocusRequest] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<UploadField>>({})
   const [showValidationErrors, setShowValidationErrors] = useState(false)
@@ -693,7 +714,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             : uploadQueue.length > 0
               ? undefined
               : selectedWorkflowType === 'applicationSubmission'
-                ? 'Please upload a file before continuing.'
+                ? 'Submission file is required.'
                 : 'Choose at least one file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
@@ -1075,7 +1096,13 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         `${failureCount} submission${failureCount === 1 ? '' : 's'} failed validation. Review the queue for details.`,
       )
     }
-  }, [currentUploadTargetSummary, setQueueItemStatus, uploadQueue, validateQueuedLexisFile])
+  }, [
+    currentUploadTargetSummary,
+    setQueueItemStatus,
+    setSuccessMessage,
+    uploadQueue,
+    validateQueuedLexisFile,
+  ])
 
   useEffect(() => {
     if (
@@ -1096,10 +1123,38 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     validateLexisQueue,
   ])
 
+  // Focus follows a submit to its result; a fully submitted queue no longer has a Submit button.
+  useEffect(() => {
+    if (uploadResultsFocusRequest === 0) {
+      return
+    }
+    const frame = requestAnimationFrame(() =>
+      uploadResultsRef.current?.focus({ preventScroll: true }),
+    )
+    return () => cancelAnimationFrame(frame)
+  }, [uploadResultsFocusRequest])
+
+  const createdApplicationResultItem = (
+    fileName: string,
+    result: QueuedUploadResult,
+  ): ActionResultItem => ({
+    id: result.applicationNumber ? `Application ${result.applicationNumber}` : fileName,
+    text: createdApplicationResultText(result.details),
+    ...(result.applicationNumber && canPerform('/applicationDetails')
+      ? {
+          to: `/provincial/application/${result.applicationNumber}`,
+          state: {
+            returnTo: { label: resolvedPageTitle, to: `${location.pathname}${location.search}` },
+          },
+        }
+      : {}),
+    details: result.details?.warnings?.map((warning) => `Warning: ${warning}`),
+  })
+
   const submitValidatedLexisQueue = async (): Promise<void> => {
     let successCount = 0
     let failureCount = 0
-    let lastSuccessMessage = ''
+    const createdApplications: ActionResultItem[] = []
 
     for (const item of uploadQueue) {
       if (item.status !== 'validated') {
@@ -1119,7 +1174,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       try {
         const result = await submitQueuedFile(item)
         successCount += 1
-        lastSuccessMessage = result.message
+        createdApplications.push(createdApplicationResultItem(item.file.name, result))
         setQueueItemStatus(
           item.id,
           'complete',
@@ -1146,11 +1201,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       setSuccessTitle(
         successCount === 1 ? 'Application submission complete' : 'Application submissions complete',
       )
-      setSuccessMessage(
-        successCount === 1
-          ? lastSuccessMessage
-          : `${successCount} application submissions created. Verify the created application and package details.`,
-      )
+      setSuccessMessage('', createdApplications)
+      setUploadResultsFocusRequest((current) => current + 1)
       if (failureCount === 0) {
         resetUploadQueueAfterSuccess()
       }
@@ -1276,6 +1328,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           ? lastSuccessMessage
           : `${successCount} files uploaded. Verify updates in the target details view.`,
       )
+      setUploadResultsFocusRequest((current) => current + 1)
       if (failureCount === 0) {
         resetUploadQueueAfterSuccess()
       }
@@ -1311,10 +1364,21 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       ? APPLICATION_SUBMISSION_UPLOAD_STEPS
       : DOCUMENT_UPLOAD_STEPS
   const activeCompletedSteps = activeUploadStep === 'review' ? ['upload'] : []
-  const uploadActionResults = actionMessageResults(successMessage, errorMessage, {
-    error: 'Upload error',
-    success: successTitle,
-  })
+  const uploadActionResults: ActionResult[] = [
+    ...(successMessage || successItems.length > 0
+      ? [
+          {
+            kind: 'success' as const,
+            title: successTitle,
+            message: successMessage,
+            items: successItems,
+          },
+        ]
+      : []),
+    ...(errorMessage
+      ? [{ kind: 'error' as const, title: 'Upload error', message: errorMessage }]
+      : []),
+  ]
   const dismissUploadResult = ({ kind }: ActionResult) =>
     kind === 'error' ? setErrorMessage('') : setSuccessMessage('')
   const showGlobalUploadFeedback =
@@ -1331,6 +1395,14 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           item.submitted,
       ),
     [uploadQueue],
+  )
+  const labelledApplicationSubmissionReviewItems = useSubmissionSummaryLabels(
+    applicationSubmissionReviewItems,
+    {
+      applicationOptions: canPerform('/applicationSearch') || canPerform('/applicationDetails'),
+      endUses: canPerform('/applicationDetails'),
+      jurisdictions: canPerform('/applicationReport'),
+    },
   )
   const workflowProgressLabel =
     selectedWorkflowType === 'applicationSubmission'
@@ -1520,10 +1592,12 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content">
         <div className="admin-upload-workflow">
           {showGlobalUploadFeedback && (
-            <ActionResultNotifications
-              results={uploadActionResults}
-              onClose={dismissUploadResult}
-            />
+            <div ref={uploadResultsRef} tabIndex={-1}>
+              <ActionResultNotifications
+                results={uploadActionResults}
+                onClose={dismissUploadResult}
+              />
+            </div>
           )}
 
           {activeUploadStep === 'upload' ? (
@@ -1587,7 +1661,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
               <UploadQueuePreview
                 items={
                   selectedWorkflowType === 'applicationSubmission'
-                    ? applicationSubmissionReviewItems
+                    ? labelledApplicationSubmissionReviewItems
                     : uploadQueue
                 }
                 targetSummary={currentUploadTargetSummary}

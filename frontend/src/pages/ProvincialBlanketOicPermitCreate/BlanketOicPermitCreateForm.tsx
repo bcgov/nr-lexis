@@ -230,6 +230,13 @@ const clientNumberError = (value: string, fieldLabel: string): string | undefine
   return /^\d{8}$/.test(normalized) ? undefined : `${fieldLabel} number must be exactly 8 digits.`
 }
 
+// A location waits on a valid client, which shows its own error until then.
+const clientLocationError = (
+  location: string,
+  clientError: string | undefined,
+  fieldLabel: string,
+): string | undefined => (clientError || location.trim() ? undefined : `${fieldLabel} is required.`)
+
 const isPopulatedIsoDate = (value: string): boolean => !!value.trim() && isValidIsoDate(value)
 
 const firstInvalidTabIndex = (errors: FormErrors): number => {
@@ -261,15 +268,18 @@ const firstInvalidTabIndex = (errors: FormErrors): number => {
 }
 
 const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormErrors => {
+  const ownerClientError = clientNumberError(form.ownerClientNumber, 'Client')
   const errors: FormErrors = {
     permitSubmitDate: requiredDateError(form.permitSubmitDate, 'Submit date'),
     permitIssueDate: optionalDateError(form.permitIssueDate, 'Issued date'),
     permitExpiryDate: optionalDateError(form.permitExpiryDate, 'Expiry date'),
     orgUnitNumber: form.orgUnitNumber.trim() ? undefined : 'Region is required.',
-    ownerClientNumber: clientNumberError(form.ownerClientNumber, 'Client'),
-    ownerClientLocation: form.ownerClientLocation.trim()
-      ? undefined
-      : 'Client location is required.',
+    ownerClientNumber: ownerClientError,
+    ownerClientLocation: clientLocationError(
+      form.ownerClientLocation,
+      ownerClientError,
+      'Client location',
+    ),
     destinationCompanyName: requiredTextError(form.destinationCompanyName, 'Purchaser', 52),
     destinationCountry:
       form.destinationCountry.trim().length === 2
@@ -335,9 +345,11 @@ const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormError
 
   if (agentUsed) {
     errors.agentClientNumber = clientNumberError(form.agentClientNumber, 'Agent client')
-    errors.agentClientLocation = form.agentClientLocation.trim()
-      ? undefined
-      : 'Agent client location is required.'
+    errors.agentClientLocation = clientLocationError(
+      form.agentClientLocation,
+      errors.agentClientNumber,
+      'Agent client location',
+    )
   }
 
   return Object.fromEntries(Object.entries(errors).filter(([, error]) => Boolean(error)))

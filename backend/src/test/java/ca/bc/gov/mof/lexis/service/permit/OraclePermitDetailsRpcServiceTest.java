@@ -671,14 +671,31 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void totalFeesShouldMaskForCanadaAfterCutoverDate() {
+  void totalFeesShouldHaveNoAmountForCanadaAfterCutoverDate() {
     when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 12.40d, 5L, "7000123", "PKG-903")));
 
     PermitTotalFeesRpcResponseDto response =
         service.getTotalFeesForPermit(7000123L, "CA", "2024-06-27");
 
-    assertThat(response.totalFees()).isEqualTo("$");
+    assertThat(response.totalFees()).isNull();
+  }
+
+  @Test
+  void permitSummaryShouldHaveNoFeeAmountsForCanadaAfterCutoverDate() {
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("101", "TM1", "HEM", "J", 12.40d, 5L, "7000123", "PKG-903")));
+    when(applicationService.findPackageByPackageNumber("PKG-903"))
+        .thenReturn(Optional.of(new LexisPackageLookupDto("PKG-903", 1000456L, 12.40d, "S")));
+    when(repository.findGrowthTypeDescription("S")).thenReturn(Optional.of("Standing"));
+    when(repository.findAverageMarketValueByScaleId("101"))
+        .thenReturn(Optional.of(BigDecimal.valueOf(125.0d)));
+
+    PermitSummaryRpcResponseDto response =
+        service.getPermitSummary(7000123L, "CA", "2024-06-27", "PKG-903", true);
+
+    assertThat(response.totalFees()).isNull();
+    assertThat(response.totalFeeForPackage()).isNull();
   }
 
   @Test
@@ -869,9 +886,9 @@ class OraclePermitDetailsRpcServiceTest {
   @ParameterizedTest
   @CsvSource({
       "2024-06-27, US, 0.0, $0.00",
-      "2024-06-26, US, 0.0, $",
-      "2024-06-27, CA, 0.0, $",
-      "2024-06-27, US, 25.0, $"
+      "2024-06-26, US, 0.0,",
+      "2024-06-27, CA, 0.0,",
+      "2024-06-27, US, 25.0,"
   })
   void allScaleFeesShouldRetainAllEmptyPackagesWithExistingTotalMasking(
       LocalDate applicationDate, String countryCode, double overrideFee, String expectedTotal) {
@@ -897,6 +914,25 @@ class OraclePermitDetailsRpcServiceTest {
     verify(repository, never()).findScaleDetailsByPackageNumber(any());
     verify(repository, never()).findGrowthTypeDescription(any());
     verifyNoInteractions(applicationService);
+  }
+
+  @Test
+  void allScaleFeesShouldHaveNoFeeAmountsForCanadaAfterCutoverDate() {
+    when(repository.findPermitPolicyContextByPermitNumber(7000123L))
+        .thenReturn(Optional.of(new PermitPolicyContextRow(
+            7000123L, 1835L, FEE_MASK_EFFECTIVE_DATE, "EX-700", "CA", 0.0d)));
+    when(repository.findPermitFeeScaleRows(7000123L))
+        .thenReturn(List.of(new PermitFeeScaleRow(
+            scale("101", "TM1", "HEM", "J", 1.04d, 1L, "7000123", "PKG-903"),
+            "T", "Hemlock", "Grade J", "S", "Second Growth", BigDecimal.ONE)));
+
+    PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
+
+    assertThat(response.packageList()).hasSize(1);
+    assertThat(response.packageList().get(0).totalFeeForPackage()).isNull();
+    assertThat(response.packageList().get(0).scaleList())
+        .extracting("fee")
+        .containsExactly((Object) null);
   }
 
   @Test
@@ -9112,7 +9148,6 @@ class OraclePermitDetailsRpcServiceTest {
         detail.approvedVolume(),
         detail.approvedVolume() - remainingVolume,
         remainingVolume,
-        detail.completedPermitVolume(),
         detail.otherConditions(),
         detail.blanketOic(),
         detail.permitNumbers(),

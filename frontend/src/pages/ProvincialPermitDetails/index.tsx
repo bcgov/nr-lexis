@@ -218,10 +218,20 @@ const formatAmount = (value: number): string => {
 
 /**
  * Where a result shows: Documents results in the Documents tab, package results at the top of the
- * Scale tab, and scale results in the package's Summary of scale. Every other result stays at page
- * level.
+ * Scale tab, scale results in the package's Summary of scale, and a section's save at the top of
+ * the tab it was saved from. Every other result stays at page level, where an email action's
+ * result also takes focus.
  */
-type PermitActionResultSource = 'documents' | 'scale' | 'scale-summary'
+type PermitActionResultSource =
+  | 'documents'
+  | 'scale'
+  | 'scale-summary'
+  | 'permit'
+  | 'applicant'
+  | 'agent'
+  | 'shipping'
+  | 'fees'
+  | 'email'
 type PermitActionResult = ActionResult & { source?: PermitActionResultSource }
 
 /** A package change, or a package change whose refresh failed, with what to do next. */
@@ -968,15 +978,31 @@ const withUpdatedPermitDetail = (
   }
 }
 
-const withPersistedPermitClientValues = (
+type PermitExemptionTotals = Pick<
+  ProvincialPermitDetail,
+  'approvedExemptionVolume' | 'exemptionVolumeRemaining'
+>
+
+/**
+ * The saved permit's values that the server sets: its client details, the dates a status change
+ * can clear, and the exemption totals the save changed.
+ */
+const withPersistedPermitValues = (
   currentDetail: ProvincialPermitDetail,
   persistedDetail: ProvincialPermitDetail,
+  exemptionTotals: PermitExemptionTotals | null,
 ): ProvincialPermitDetail => ({
   ...currentDetail,
   ownerClientNumber: persistedDetail.ownerClientNumber,
   ownerClientLocationCode: persistedDetail.ownerClientLocationCode,
   applicantClientNumber: persistedDetail.applicantClientNumber,
   agentClientLocationCode: persistedDetail.agentClientLocationCode,
+  issueDate: persistedDetail.issueDate,
+  expiryDate: persistedDetail.expiryDate,
+  approvedExemptionVolume:
+    exemptionTotals?.approvedExemptionVolume ?? currentDetail.approvedExemptionVolume,
+  exemptionVolumeRemaining:
+    exemptionTotals?.exemptionVolumeRemaining ?? currentDetail.exemptionVolumeRemaining,
 })
 
 const withoutPermitClientValues = (
@@ -1033,8 +1059,37 @@ const withPermitMutationResult = (
   }
 }
 
-const permitMutationMessage = (result: PermitDetailMutationResult, fallback: string): string =>
-  [result.message || fallback, ...result.warnings].filter(Boolean).join(' ')
+/** The tab a section's save reports in: the one it was saved from. */
+const permitSaveResultSource = (tab: PermitDetailTabId): PermitActionResultSource =>
+  tab === 'owner'
+    ? 'applicant'
+    : tab === 'agent' || tab === 'shipping' || tab === 'fees'
+      ? tab
+      : 'permit'
+
+/** A section's save, named for what it saved. Warnings or a follow-up make it a warning. */
+const sectionSaveResult = (
+  subject: string,
+  source: PermitActionResultSource,
+  followUp = '',
+): PermitActionResult => ({
+  kind: followUp ? 'warning' : 'success',
+  title: `${subject} saved.`,
+  message: followUp,
+  source,
+})
+
+/** A section's save that failed, named for what it didn't save. The form stays open. */
+const sectionSaveError = (
+  subject: string,
+  source: PermitActionResultSource,
+  message: string,
+): PermitActionResult => ({ kind: 'error', title: `${subject} not saved.`, message, source })
+
+const onlyReceiptNumberChanged = (form: PermitDetailForm, baseline: PermitDetailForm): boolean =>
+  (Object.keys(form) as PermitDetailFormField[]).every(
+    (field) => field === 'permitReceiptNo' || form[field] === baseline[field],
+  )
 
 const ProvincialPermitDetailsPage = () => {
   const { capabilities, canPerform, defaultRoute } = useAuth()
@@ -1110,8 +1165,18 @@ const ProvincialPermitDetailsPage = () => {
   const [actionResult, setActionResult] = useState<PermitActionResult | null>(null)
   const [focusCreatedPermitTitle, setFocusCreatedPermitTitle] = useState(false)
   const documentActionResult = actionResult?.source === 'documents' ? actionResult : null
-  const pageActionResult = actionResult?.source ? null : actionResult
+  const pageActionResult =
+    actionResult?.source && actionResult.source !== 'email' ? null : actionResult
+  const emailResultRef = useRef<HTMLDivElement>(null)
+  // The email buttons are disabled while sending, so their result takes focus once the dialog
+  // closes.
+  useEffect(() => {
+    if (actionResult?.source !== 'email' || permitApprovalEmailOpen) return
+    const frame = requestAnimationFrame(() => emailResultRef.current?.focus())
+    return () => cancelAnimationFrame(frame)
+  }, [actionResult, permitApprovalEmailOpen])
   const [permitApprovalEmailErrorMessage, setPermitApprovalEmailErrorMessage] = useState('')
+  const [showPermitApprovalEmailError, setShowPermitApprovalEmailError] = useState(false)
   const clearActionNotifications = useCallback(() => {
     setActionResult(null)
     setPermitApprovalEmailErrorMessage('')
@@ -2324,7 +2389,8 @@ const ProvincialPermitDetailsPage = () => {
     tabsData.items.length > 0
   const totalFeeVolume = tabsData?.totalFeeVolume
   const calculatedPermitFee = (tabsData?.fees ?? []).reduce((total, row) => total + row.amount, 0)
-  const permitFeesMasked = (tabsData?.fees ?? []).some((row) => row.amountDisplay.trim() === '$')
+  // A fee row without an amount means the permit's calculated fee has no amount either.
+  const permitFeesMasked = (tabsData?.fees ?? []).some((row) => !row.amountDisplay.trim())
   const feeSummaryStatus =
     permitTablesErrorMessage || permitFeesErrorMessage
       ? 'Unavailable'
@@ -3124,6 +3190,22 @@ const ProvincialPermitDetailsPage = () => {
     [selectPermitTab],
   )
 
+  // What Save permit saves, to name its result.
+  const permitSaveSubject = useCallback(
+    (includeShipping: boolean): string =>
+      permitEditSection === 'applicant'
+        ? 'Applicant details'
+        : includeShipping
+          ? 'Permit and shipping details'
+          : permitEditSection === 'permit' &&
+              !!permitForm &&
+              !!permitBaselineForm &&
+              onlyReceiptNumberChanged(permitForm, permitBaselineForm)
+            ? 'Receipt number'
+            : 'Permit details',
+    [permitBaselineForm, permitEditSection, permitForm],
+  )
+
   const savePermitMutation = useCallback(
     async (includeShipping = false, deferStatusTransition = false): Promise<boolean> => {
       setActionResult(null)
@@ -3172,13 +3254,18 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       let confirmedRequest: PermitDetailMutationRequest = request
+      const resultSubject = permitSaveSubject(includeShipping)
+      const resultSource = permitSaveResultSource(activePermitTabId)
 
       const isLatestRequest = tryBeginPermitMutation()
       if (!isLatestRequest) {
-        setActionResult({
-          kind: 'error',
-          message: 'Wait for the current permit change to finish before saving again.',
-        })
+        setActionResult(
+          sectionSaveError(
+            resultSubject,
+            resultSource,
+            'Wait for the current permit change to finish before saving again.',
+          ),
+        )
         return false
       }
       setPermitDetailRefreshRequired(false)
@@ -3246,25 +3333,44 @@ const ProvincialPermitDetailsPage = () => {
           return false
         }
         if (!result.success) {
-          setActionResult({
-            kind: 'error',
-            message: result.errors[0] || result.message || 'Unable to save permit.',
-          })
+          setActionResult(
+            sectionSaveError(
+              resultSubject,
+              resultSource,
+              result.errors[0] || result.message || 'Unable to save permit.',
+            ),
+          )
           return false
         }
 
         let persistedDetail: ProvincialPermitDetail | null = null
+        let exemptionTotals: PermitExemptionTotals | null = null
+        let exemptionTotalsRefreshFailed = false
         if (resolvedPermitNumber) {
-          try {
-            persistedDetail = await fetchProvincialPermitDetail(resolvedPermitNumber)
-          } catch (error) {
-            console.warn('Unable to refresh persisted permit client details.', error)
+          const savedExemptionNumber = confirmedRequest.exemptionNumber.trim()
+          const [persistedResult, exemptionResult] = await Promise.allSettled([
+            fetchProvincialPermitDetail(resolvedPermitNumber),
+            savedExemptionNumber
+              ? fetchProvincialPermitExemptionContext(savedExemptionNumber)
+              : Promise.resolve(null),
+          ])
+          if (persistedResult.status === 'fulfilled') {
+            persistedDetail = persistedResult.value
+          } else {
+            console.warn('Unable to refresh persisted permit details.', persistedResult.reason)
+          }
+          if (exemptionResult.status === 'fulfilled') {
+            exemptionTotals = exemptionResult.value
+          } else {
+            console.warn('Unable to refresh exemption totals.', exemptionResult.reason)
+            exemptionTotalsRefreshFailed = true
           }
           if (!isLatestRequest()) {
             return false
           }
         }
-        const permitDetailRefreshFailed = persistedDetail == null
+        // Stale exemption totals need the same reload as stale permit details.
+        const permitDetailRefreshFailed = persistedDetail == null || exemptionTotalsRefreshFailed
 
         const detailWithPermitChanges = withUpdatedPermitDetail(
           detail,
@@ -3281,7 +3387,7 @@ const ProvincialPermitDetailsPage = () => {
         const persistedUpdatedDetail =
           persistedDetail == null
             ? withoutPermitClientValues(updatedDetail)
-            : withPersistedPermitClientValues(updatedDetail, persistedDetail)
+            : withPersistedPermitValues(updatedDetail, persistedDetail, exemptionTotals)
         setAgentUsed(Boolean(persistedUpdatedDetail.applicantClientNumber?.trim()))
         setDetail((current) => {
           if (!current) return current
@@ -3299,7 +3405,7 @@ const ProvincialPermitDetailsPage = () => {
           )
           return persistedDetail == null
             ? withoutPermitClientValues(currentUpdatedDetail)
-            : withPersistedPermitClientValues(currentUpdatedDetail, persistedDetail)
+            : withPersistedPermitValues(currentUpdatedDetail, persistedDetail, exemptionTotals)
         })
         setPermitForm((current) => {
           const savedForm = includeShipping
@@ -3326,39 +3432,27 @@ const ProvincialPermitDetailsPage = () => {
         }
 
         setShowPermitValidationErrors(false)
-        const mutationMessage = permitMutationMessage(
-          result,
-          deferStatusTransition
-            ? 'Permit fields were saved before the status transition.'
-            : includeShipping
-              ? 'Permit and shipping details were saved.'
-              : activePermitTabId === 'owner'
-                ? 'Applicant details were saved.'
-                : 'Permit details were saved.',
+        setActionResult(
+          sectionSaveResult(
+            resultSubject,
+            resultSource,
+            [
+              ...result.warnings,
+              permitDetailRefreshFailed
+                ? 'Current permit details could not be refreshed; reload before making another change.'
+                : '',
+            ]
+              .filter(Boolean)
+              .join(' '),
+          ),
         )
-        if (permitDetailRefreshFailed) {
-          setActionResult({
-            kind: 'warning',
-            message: `${mutationMessage} Current permit details could not be refreshed; reload before making another change.`,
-          })
-        } else {
-          setActionResult({
-            kind: 'success',
-            title: includeShipping
-              ? 'Permit and shipping details saved'
-              : activePermitTabId === 'owner'
-                ? 'Applicant details saved'
-                : 'Permit details saved',
-            message: mutationMessage,
-          })
-        }
         refreshLoadedPermitFees()
         // The mutation committed, but callers must stop until canonical permit details reload.
         return !permitDetailRefreshFailed
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setActionResult({ kind: 'error', message: 'Unable to save permit.' })
+          setActionResult(sectionSaveError(resultSubject, resultSource, 'Unable to save permit.'))
         }
         return false
       } finally {
@@ -3391,6 +3485,7 @@ const ProvincialPermitDetailsPage = () => {
       permitClientLookupCanSave,
       permitForm,
       permitNumber,
+      permitSaveSubject,
       refreshLoadedPermitFees,
       activePermitTabId,
       tryBeginPermitMutation,
@@ -3399,18 +3494,22 @@ const ProvincialPermitDetailsPage = () => {
 
   const onSaveShipping = useCallback(async (): Promise<boolean> => {
     setActionResult(null)
+    const resultSource = permitSaveResultSource(activePermitTabId)
     const request: PermitDetailMutationRequest | null =
       detail && permitForm
         ? mergePermitFormSection(buildPermitDetailForm(detail), permitForm, true)
         : null
     if (!detail || !request || !canEditShipping || !shippingReferences || isSavingShipping) {
       if (canEditShipping && !shippingReferences) {
-        setActionResult({
-          kind: 'error',
-          message: isShippingReferencesLoading
-            ? 'Shipping reference options are still loading. Try saving again when they are ready.'
-            : 'Shipping reference options are unavailable. Reload the page before saving shipping.',
-        })
+        setActionResult(
+          sectionSaveError(
+            'Shipping details',
+            resultSource,
+            isShippingReferencesLoading
+              ? 'Shipping reference options are still loading. Try saving again when they are ready.'
+              : 'Shipping reference options are unavailable. Reload the page before saving shipping.',
+          ),
+        )
       }
       return false
     }
@@ -3432,10 +3531,13 @@ const ProvincialPermitDetailsPage = () => {
 
     const isLatestRequest = tryBeginPermitMutation()
     if (!isLatestRequest) {
-      setActionResult({
-        kind: 'error',
-        message: 'Wait for the current permit change to finish before saving again.',
-      })
+      setActionResult(
+        sectionSaveError(
+          'Shipping details',
+          resultSource,
+          'Wait for the current permit change to finish before saving again.',
+        ),
+      )
       return false
     }
     setActionResult(null)
@@ -3446,10 +3548,13 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       if (!result.success) {
-        setActionResult({
-          kind: 'error',
-          message: result.errors[0] || result.message || 'Unable to save shipping.',
-        })
+        setActionResult(
+          sectionSaveError(
+            'Shipping details',
+            resultSource,
+            result.errors[0] || result.message || 'Unable to save shipping.',
+          ),
+        )
         return false
       }
 
@@ -3469,17 +3574,17 @@ const ProvincialPermitDetailsPage = () => {
       setPermitEditSection((current) => (current === 'shipping' ? null : current))
 
       setShowPermitValidationErrors(false)
-      setActionResult({
-        kind: 'success',
-        title: 'Shipping details saved',
-        message: permitMutationMessage(result, 'Shipping details were saved.'),
-      })
+      setActionResult(
+        sectionSaveResult('Shipping details', resultSource, result.warnings.join(' ')),
+      )
       refreshLoadedPermitFees()
       return true
     } catch (error) {
       if (isLatestRequest()) {
         console.error(error)
-        setActionResult({ kind: 'error', message: 'Unable to save shipping.' })
+        setActionResult(
+          sectionSaveError('Shipping details', resultSource, 'Unable to save shipping.'),
+        )
       }
       return false
     } finally {
@@ -3487,6 +3592,7 @@ const ProvincialPermitDetailsPage = () => {
       setIsSavingShipping(false)
     }
   }, [
+    activePermitTabId,
     isPermitBusy,
     permitShippingDirty,
     permitEditSections,
@@ -3588,11 +3694,16 @@ const ProvincialPermitDetailsPage = () => {
 
   const onSavePermit = useCallback(async (): Promise<boolean> => {
     setActionResult(null)
+    const resultSubject = permitSaveSubject(permitShippingDirty)
+    const resultSource = permitSaveResultSource(activePermitTabId)
     if (paymentPendingReceiptRequiresCompletion) {
-      setActionResult({
-        kind: 'error',
-        message: 'Select Completed on the Permit tab before saving a payment-pending receipt.',
-      })
+      setActionResult(
+        sectionSaveError(
+          resultSubject,
+          resultSource,
+          'Select Completed on the Permit tab before saving a payment-pending receipt.',
+        ),
+      )
       return false
     }
     if (
@@ -3601,14 +3712,17 @@ const ProvincialPermitDetailsPage = () => {
       blanketOicRegionSelectionUnavailable ||
       requiredPermitOptionsMissing
     ) {
-      setActionResult({
-        kind: 'error',
-        message: permitOptionsUnavailable
-          ? SEARCH_OPTIONS_UNAVAILABLE_MESSAGE
-          : blanketOicRegionOptionsLoading
-            ? 'Blanket OIC region options are still loading.'
-            : 'Required permit status or region options are not configured.',
-      })
+      setActionResult(
+        sectionSaveError(
+          resultSubject,
+          resultSource,
+          permitOptionsUnavailable
+            ? SEARCH_OPTIONS_UNAVAILABLE_MESSAGE
+            : blanketOicRegionOptionsLoading
+              ? 'Blanket OIC region options are still loading.'
+              : 'Required permit status or region options are not configured.',
+        ),
+      )
       return false
     }
     // A new permit's first save also checks Shipping fields nobody has touched yet, and opens the
@@ -3634,6 +3748,8 @@ const ProvincialPermitDetailsPage = () => {
     }
     return savePermitMutation(includeShipping)
   }, [
+    activePermitTabId,
+    permitSaveSubject,
     blanketOicRegionOptionsLoading,
     blanketOicRegionSelectionUnavailable,
     onSaveShipping,
@@ -3687,10 +3803,13 @@ const ProvincialPermitDetailsPage = () => {
     }
     const isLatestRequest = tryBeginPermitMutation()
     if (!isLatestRequest) {
-      setActionResult({
-        kind: 'error',
-        message: 'Wait for the current permit change to finish before saving again.',
-      })
+      setActionResult(
+        sectionSaveError(
+          'Fee override',
+          'fees',
+          'Wait for the current permit change to finish before saving again.',
+        ),
+      )
       return false
     }
     setActionResult(null)
@@ -3701,10 +3820,13 @@ const ProvincialPermitDetailsPage = () => {
         return false
       }
       if (!result.success) {
-        setActionResult({
-          kind: 'error',
-          message: result.errors[0] || result.message || 'Unable to save the permit fee override.',
-        })
+        setActionResult(
+          sectionSaveError(
+            'Fee override',
+            'fees',
+            result.errors[0] || result.message || 'Unable to save the permit fee override.',
+          ),
+        )
         return false
       }
 
@@ -3720,17 +3842,15 @@ const ProvincialPermitDetailsPage = () => {
       setFeeOverrideForm(savedContext)
       setFeeOverrideFieldErrors({})
       setPermitEditSection((current) => (current === 'feeOverride' ? null : current))
-      setActionResult({
-        kind: 'success',
-        title: 'Fee override saved',
-        message: result.message || 'The fee override was saved.',
-      })
+      setActionResult(sectionSaveResult('Fee override', 'fees'))
       refreshLoadedPermitFees()
       return true
     } catch (error) {
       if (isLatestRequest()) {
         console.error(error)
-        setActionResult({ kind: 'error', message: 'Unable to save the permit fee override.' })
+        setActionResult(
+          sectionSaveError('Fee override', 'fees', 'Unable to save the permit fee override.'),
+        )
       }
       return false
     } finally {
@@ -4521,10 +4641,16 @@ const ProvincialPermitDetailsPage = () => {
       ) {
         return false
       }
+      // An approval failure shows in its dialog, which stays open to retry.
       const showEmailError = (message: string) =>
         type === 'approval'
           ? setPermitApprovalEmailErrorMessage(message)
-          : setActionResult({ kind: 'error', message })
+          : setActionResult({
+              kind: 'error',
+              title: 'Review request email not sent.',
+              message,
+              source: 'email',
+            })
       setActionResult(null)
       setPermitApprovalEmailErrorMessage('')
       const clientEmail = normalizeTrimmedText(approvalEmailAddress)
@@ -4539,7 +4665,21 @@ const ProvincialPermitDetailsPage = () => {
             ? await sendPermitReviewRequestEmail(resolvedPermitNumber)
             : await sendPermitApprovalEmail(resolvedPermitNumber, clientEmail)
         if (result.success) {
-          setActionResult({ kind: 'success', message: result.message || 'Permit email sent.' })
+          setActionResult(
+            type === 'request'
+              ? {
+                  kind: 'success',
+                  title: 'Review request email sent.',
+                  message: '',
+                  source: 'email',
+                }
+              : {
+                  kind: 'success',
+                  title: 'Permit approval email sent.',
+                  message: `Sent to the applicant (${clientEmail}).`,
+                  source: 'email',
+                },
+          )
           if (type === 'request' && result.permitRequestDate) {
             setDetail((current) =>
               current
@@ -4586,12 +4726,15 @@ const ProvincialPermitDetailsPage = () => {
     try {
       const defaultEmail = await fetchPermitApprovalEmailDefault(resolvedPermitNumber)
       setPermitApprovalEmailAddress(defaultEmail.trim())
+      setShowPermitApprovalEmailError(false)
       setPermitApprovalEmailOpen(true)
     } catch (error) {
       console.error(error)
       setActionResult({
         kind: 'error',
+        title: 'Approval email unavailable.',
         message: 'Unable to resolve the permit applicant notification email.',
+        source: 'email',
       })
     } finally {
       setIsSendingPermitEmail(false)
@@ -4948,10 +5091,12 @@ const ProvincialPermitDetailsPage = () => {
 
     return (
       <>
-        <p className="ministerial-permit-details__application-help">
-          Select applications, then choose Add application to include them in this permit. Save does
-          not add selected applications.
-        </p>
+        {canEditPermitApplications && (
+          <p className="ministerial-permit-details__application-help">
+            Select applications, then choose Add application to include them in this permit. Save
+            does not add selected applications.
+          </p>
+        )}
         {ministerialAvailablePermitApplicationItems.length > 0 ? (
           <TableFrame ariaLabel="Applications available for this permit">
             <Table size="md" useZebraStyles>
@@ -5754,7 +5899,7 @@ const ProvincialPermitDetailsPage = () => {
         : feeOverrideContext.overrideEnabled
           ? `$${formatAmount(Number(feeOverrideContext.overrideFee))}`
           : permitFeesMasked
-            ? '$'
+            ? ''
             : `$${formatAmount(calculatedPermitFee)}`)
     return (
       <fieldset ref={permitEditSections.sectionRef('permit')} className="legacy-form-fieldset">
@@ -5812,7 +5957,7 @@ const ProvincialPermitDetailsPage = () => {
                 <TextInput
                   id="permitTotalFees"
                   labelText="Total fees (CAD)"
-                  value={totalFeesValue}
+                  value={displayValueText(totalFeesValue)}
                   disabled
                 />
               </RecordFieldCell>
@@ -5934,6 +6079,10 @@ const ProvincialPermitDetailsPage = () => {
     (actionResult?.source === 'scale-summary' && !scaleSummaryShown)
       ? actionResult
       : null
+  const renderSectionSaveResult = (source: PermitActionResultSource) =>
+    actionResult?.source === source ? (
+      <ActionResultNotification result={actionResult} onClose={() => setActionResult(null)} />
+    ) : null
 
   const renderScaleSummary = () => {
     if (!detail) return null
@@ -6158,6 +6307,9 @@ const ProvincialPermitDetailsPage = () => {
     const showDisplayedMinistryFeeColumn = ministerialPermit
       ? displayedFeeRows.some((row) => row.ministryUser)
       : showMinistryFeeColumn
+    const selectedPackageFeeSummary = ministerialPermit
+      ? selectedMinisterialPackageFeeSummary
+      : selectedBlanketOicPackageFeeSummary
     return (
       <>
         {(ministerialPermit || detail.blanketOic) &&
@@ -6229,13 +6381,9 @@ const ProvincialPermitDetailsPage = () => {
                   <RecordField
                     label="Package fee (CAD)"
                     value={
-                      <>
-                        {' '}
-                        {(ministerialPermit
-                          ? selectedMinisterialPackageFeeSummary
-                          : selectedBlanketOicPackageFeeSummary
-                        )?.totalFeeForPackage ?? 'Unavailable'}{' '}
-                      </>
+                      selectedPackageFeeSummary
+                        ? selectedPackageFeeSummary.totalFeeForPackage
+                        : 'Unavailable'
                     }
                   />
                 </RecordFieldRow>
@@ -6287,7 +6435,7 @@ const ProvincialPermitDetailsPage = () => {
                             '-'
                           )}
                         </TableCell>
-                        <TableCell>{summary.totalFeeForPackage}</TableCell>
+                        <TableCell>{displayTableValue(summary.totalFeeForPackage)}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -6356,7 +6504,9 @@ const ProvincialPermitDetailsPage = () => {
                     <TableCell>{displayTableValue(row.filPercent)}</TableCell>
                     <TableCell>{displayTableValue(row.mfPercent)}</TableCell>
                     <TableCell>
-                      {row.amountDisplay.trim() === '$' ? '$' : `$${formatAmount(row.amount)}`}
+                      {row.amountDisplay.trim()
+                        ? `$${formatAmount(row.amount)}`
+                        : displayTableValue('')}
                     </TableCell>
                   </TableRow>
                 ))}
@@ -6571,10 +6721,12 @@ const ProvincialPermitDetailsPage = () => {
           )}
           {!!pageActionResult && (
             <Column sm={4} md={8} lg={16} className="detail-page-error">
-              <ActionResultNotification
-                result={pageActionResult}
-                onClose={() => setActionResult(null)}
-              />
+              <div ref={emailResultRef} tabIndex={-1} className="permit-page-result">
+                <ActionResultNotification
+                  result={pageActionResult}
+                  onClose={() => setActionResult(null)}
+                />
+              </div>
             </Column>
           )}
 
@@ -6617,6 +6769,7 @@ const ProvincialPermitDetailsPage = () => {
                     className="application-detail-tab-grid"
                   >
                     <Column sm={4} md={8} lg={16}>
+                      {renderSectionSaveResult('permit')}
                       {isReviewedPermitEdit ? (
                         <Tile className="ministerial-permit-details">
                           <DetailCardTitle icon={Certificate}>Permit details</DetailCardTitle>
@@ -6864,6 +7017,7 @@ const ProvincialPermitDetailsPage = () => {
                   >
                     {!ownerEditMode && (
                       <Column sm={4} md={8} lg={16}>
+                        {renderSectionSaveResult('applicant')}
                         {usesReviewedPermitFlow ? (
                           <Tile className="detail-section-card permit-applicant-card">
                             <div className="detail-section-card__header">
@@ -6959,6 +7113,7 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                     {ownerEditMode && permitForm && (
                       <Column sm={4} md={8} lg={16}>
+                        {renderSectionSaveResult('applicant')}
                         <Tile>
                           <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
                           <RequiredFieldsLegend className="permit-client-editor__required-hint" />
@@ -7001,6 +7156,7 @@ const ProvincialPermitDetailsPage = () => {
                     >
                       {ownerEditMode && permitForm ? (
                         <Column sm={4} md={8} lg={16}>
+                          {renderSectionSaveResult('agent')}
                           <Tile>
                             <DetailCardTitle>Edit agent</DetailCardTitle>
                             <RequiredFieldsLegend />
@@ -7010,6 +7166,7 @@ const ProvincialPermitDetailsPage = () => {
                         </Column>
                       ) : (
                         <Column sm={4} md={8} lg={16}>
+                          {renderSectionSaveResult('agent')}
                           <PermitClientTile
                             title="Agent"
                             kind="agent"
@@ -7040,6 +7197,7 @@ const ProvincialPermitDetailsPage = () => {
                     className="application-detail-tab-grid"
                   >
                     <Column sm={4} md={8} lg={16}>
+                      {renderSectionSaveResult('shipping')}
                       {isEditingShipping && permitForm ? (
                         <Tile>
                           <DetailCardTitle icon={EarthFilled}>
@@ -7554,6 +7712,7 @@ const ProvincialPermitDetailsPage = () => {
                     ) : usesReviewedPermitFlow ? (
                       <>
                         <Column sm={4} md={8} lg={16}>
+                          {renderSectionSaveResult('fees')}
                           <Tile>
                             <div className="detail-section-card__header">
                               <DetailCardTitle icon={Currency}>Permit fees</DetailCardTitle>
@@ -7601,6 +7760,7 @@ const ProvincialPermitDetailsPage = () => {
                       </>
                     ) : (
                       <Column sm={4} md={8} lg={16}>
+                        {renderSectionSaveResult('fees')}
                         <Tile>
                           <DetailCardTitle icon={Currency}>Fee calculation details</DetailCardTitle>
                           {renderPermitFeeSummary()}
@@ -7724,14 +7884,21 @@ const ProvincialPermitDetailsPage = () => {
           description="Confirm the applicant email address for this notification."
           confirmLabel="Send approval"
           pendingLabel="Sending…"
-          confirmDisabled={!isValidEmail(permitApprovalEmailAddress)}
           onClose={() => {
             setPermitApprovalEmailOpen(false)
             setPermitApprovalEmailErrorMessage('')
           }}
+          errorTitle="Approval email not sent."
           errorMessage={permitApprovalEmailErrorMessage}
           onError={() => undefined}
           onConfirm={async () => {
+            if (!isValidEmail(normalizeTrimmedText(permitApprovalEmailAddress))) {
+              setShowPermitApprovalEmailError(true)
+              requestAnimationFrame(() =>
+                document.getElementById('permit-approval-email-address')?.focus(),
+              )
+              throw new Error('Enter one valid email address.')
+            }
             const sent = await onSendPermitEmail('approval', permitApprovalEmailAddress)
             if (!sent) {
               throw new Error('Permit approval email was not sent.')
@@ -7744,9 +7911,12 @@ const ProvincialPermitDetailsPage = () => {
             labelText={requiredLabel('Applicant email address')}
             aria-required="true"
             value={permitApprovalEmailAddress}
-            invalid={!isValidEmail(permitApprovalEmailAddress)}
+            invalid={showPermitApprovalEmailError && !isValidEmail(permitApprovalEmailAddress)}
             invalidText="Enter one valid email address."
-            onChange={(event) => setPermitApprovalEmailAddress(event.target.value)}
+            onChange={(event) => {
+              setShowPermitApprovalEmailError(true)
+              setPermitApprovalEmailAddress(event.target.value)
+            }}
           />
         </ConfirmationModal>
       )}

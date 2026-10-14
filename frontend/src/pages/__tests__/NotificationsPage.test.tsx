@@ -271,7 +271,7 @@ describe('Notifications page', () => {
     expect(content()).not.toHaveTextContent('Final detail.')
   })
 
-  it('shows a status tag only for scheduled notifications', async () => {
+  it('tags scheduled notifications and shows when past ones ended', async () => {
     mockedFetchAdminNotifications.mockResolvedValue([
       {
         ...notification,
@@ -307,6 +307,8 @@ describe('Notifications page', () => {
     expect(screen.getByText('Scheduled', { exact: true })).toBeVisible()
     expect(screen.queryByText('Active', { exact: true })).not.toBeInTheDocument()
     expect(screen.queryByText('Past', { exact: true })).not.toBeInTheDocument()
+    expect(screen.getByText(/Ended Jan 2, 2000/)).toBeVisible()
+    expect(screen.getByText(/Shows until Dec 31, 9999/)).toBeVisible()
   })
 
   it('does not expose notification audit data in administrator cards', async () => {
@@ -321,7 +323,7 @@ describe('Notifications page', () => {
     await screen.findByText('Winter service update')
 
     expect(screen.getByText(/Posted Jan 1, 2026/)).toBeVisible()
-    expect(screen.getByText(/Shows until Jan 8, 2026/)).toBeVisible()
+    expect(screen.getByText(/Ended Jan 8, 2026/)).toBeVisible()
     expect(screen.queryByText('Created', { exact: true })).not.toBeInTheDocument()
     expect(screen.queryByText('Last updated', { exact: true })).not.toBeInTheDocument()
     expect(screen.queryByText('Audience', { exact: true })).not.toBeInTheDocument()

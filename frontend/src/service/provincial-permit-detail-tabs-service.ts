@@ -56,13 +56,15 @@ type ProvincialPermitFeeRow = {
   filPercent: string
   mfPercent: string
   amount: number
+  /** Blank when the row has no fee amount, such as a fee that is waived or overridden. */
   amountDisplay: string
 }
 
 type ProvincialPermitPackageFeeSummary = {
   packageNumber: string
   growthType: string
-  totalFeeForPackage: string
+  /** Null when the package has no fee amount, such as a fee that is waived or overridden. */
+  totalFeeForPackage: string | null
 }
 
 type ProvincialPermitEventRow = {
@@ -503,8 +505,12 @@ const fetchAllScaleFees = async (permitNumber: string): Promise<ProvincialPermit
     const packageFees = payload.packageList.map((packageValue, packageIndex) => {
       const packageFee = recordOrEmpty(packageValue)
       const packageNumber = asString(packageFee.packageNumber)
-      const totalFeeForPackage = asString(packageFee.totalFeeForPackage).trim()
-      if (!packageNumber || !totalFeeForPackage || !Array.isArray(packageFee.scaleList)) {
+      // A null subtotal has no fee amount; a missing or blank one is an invalid response.
+      const totalFeeForPackage =
+        packageFee.totalFeeForPackage === null
+          ? null
+          : asString(packageFee.totalFeeForPackage).trim()
+      if (!packageNumber || totalFeeForPackage === '' || !Array.isArray(packageFee.scaleList)) {
         throw new Error(`Invalid package fee data at index ${packageIndex} from ${path}`)
       }
       return {

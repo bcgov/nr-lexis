@@ -164,7 +164,7 @@ const renderPage = (
 }
 
 const confirmSelectedApplicationApproval = async () => {
-  await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+  await userEvent.click(screen.getByRole('button', { name: 'Approve selected applications' }))
   const dialog = await screen.findByRole('dialog', { name: 'Approve applications' })
   expect(within(dialog).getByText('2 applications selected')).toBeInTheDocument()
   const applicationList = within(dialog).getByRole('list', { name: 'Applications to approve' })
@@ -190,6 +190,15 @@ const revealSendToField = async () => {
 }
 
 Element.prototype.scrollIntoView = vi.fn()
+
+// Notifications take focus only once they are laid out.
+const mockLaidOutElements = () =>
+  vi
+    .spyOn(HTMLElement.prototype, 'getClientRects')
+    .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+
+const notice = (text: string) =>
+  screen.getByText(text).closest('.app-inline-notification') as HTMLElement
 
 describe('Provincial Review Action State Smoke', () => {
   beforeEach(() => {
@@ -284,7 +293,7 @@ describe('Provincial Review Action State Smoke', () => {
 
     expect(screen.getByText('Searching')).toBeInTheDocument()
     expect(screen.getByRole('table', { name: 'Searching' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeDisabled()
     expect(container.querySelectorAll('.legacy-search-table-toolbar')).toHaveLength(1)
     expect(container.querySelector('.provincial-review-table-toolbar')).not.toBeInTheDocument()
   })
@@ -381,7 +390,7 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000123')
 
-    const approveButton = screen.getByRole('button', { name: 'Approve Selected Applications' })
+    const approveButton = screen.getByRole('button', { name: 'Approve selected applications' })
     expect(approveButton).toBeDisabled()
     expect(screen.queryByRole('button', { name: 'Update Selected Status' })).not.toBeInTheDocument()
     expect(
@@ -408,7 +417,7 @@ describe('Provincial Review Action State Smoke', () => {
 
     expect(newRowCheckbox).toBeChecked()
     expect(pendingRowCheckbox).toBeChecked()
-    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeEnabled()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
   })
 
@@ -524,11 +533,12 @@ describe('Provincial Review Action State Smoke', () => {
   })
 
   it('approves a selected PND application', async () => {
+    const layout = mockLaidOutElements()
     renderPage()
     await screen.findByText('1000456')
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected applications' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Approve application' })
     expect(within(dialog).getByText('1 application selected')).toBeInTheDocument()
@@ -547,9 +557,12 @@ describe('Provincial Review Action State Smoke', () => {
     })
     expect(await screen.findByText('Approved 1 application.')).toBeInTheDocument()
     expect(screen.getByText('Application approved')).toBeInTheDocument()
+    await waitFor(() => expect(notice('Approved 1 application.')).toHaveFocus())
+    layout.mockRestore()
   })
 
   it('approves a single reviewable application from the row action', async () => {
+    const layout = mockLaidOutElements()
     renderPage()
     await screen.findByText('1000456')
 
@@ -568,6 +581,8 @@ describe('Provincial Review Action State Smoke', () => {
     })
     expect(await screen.findByText('Approved 1 application.')).toBeInTheDocument()
     expect(screen.getByText('Application approved')).toBeInTheDocument()
+    await waitFor(() => expect(notice('Approved 1 application.')).toHaveFocus())
+    layout.mockRestore()
   })
 
   it('returns focus from the application editor without changing a review decision', async () => {
@@ -585,7 +600,7 @@ describe('Provincial Review Action State Smoke', () => {
       screen.queryByRole('dialog', { name: 'Update application 1000123' }),
     ).not.toBeInTheDocument()
     expect(panel).not.toHaveAttribute('aria-modal')
-    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeDisabled()
     const table = within(launcher.closest('table') as HTMLTableElement)
     table.getAllByRole('button', { name: 'Approve' }).forEach((button) => {
       expect(button).toBeDisabled()
@@ -632,7 +647,7 @@ describe('Provincial Review Action State Smoke', () => {
     await waitFor(() => expect(launcher).toHaveFocus())
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeEnabled()
   })
 
   it('keeps the application editor locked during save and retains a failed draft', async () => {
@@ -884,6 +899,9 @@ describe('Provincial Review Action State Smoke', () => {
     })
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
     expect(await screen.findByText('Updated application 1000123.')).toBeInTheDocument()
+    expect(
+      within(notice('Updated application 1000123.')).getByText('Application expired'),
+    ).toBeVisible()
   }, 15000)
 
   it('prefills the agent client email when rejecting an agent application', async () => {
@@ -1031,6 +1049,8 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.type(screen.getByLabelText('Remarks'), 'Rejection reason')
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
     expect(await screen.findByText('Unable to reject application.')).toBeInTheDocument()
+    expect(screen.getByText('Application not updated')).toBeVisible()
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Send status email' }))
     expect(
@@ -1118,6 +1138,10 @@ describe('Provincial Review Action State Smoke', () => {
     })
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
     expect(await screen.findByText('Updated application 1000123.')).toBeInTheDocument()
+    expect(
+      within(notice('Updated application 1000123.')).getByText('Application rejected'),
+    ).toBeVisible()
+    expect(screen.queryByText('Action complete')).not.toBeInTheDocument()
   }, 15000)
 
   it('leaves regions unfiltered and waits for an explicit search', async () => {
@@ -1378,7 +1402,7 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000456')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected applications' }))
     const dialog = await screen.findByRole('dialog', { name: 'Approve application' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
 
@@ -1399,7 +1423,7 @@ describe('Provincial Review Action State Smoke', () => {
         .map((item) => item.textContent),
     ).toEqual(['1000456: Application owner location does not exist.'])
     expect(screen.getByRole('checkbox', { name: 'Select application 1000456' })).toBeChecked()
-    await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Approve selected applications' }))
     const reopened = await screen.findByRole('dialog', { name: 'Approve application' })
     expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
     expect(within(reopened).queryByText('1 application was not approved')).not.toBeInTheDocument()
@@ -1482,13 +1506,13 @@ describe('Provincial Review Action State Smoke', () => {
     expect(
       screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
     ).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeDisabled()
     expect(within(reviewRow).getByRole('button', { name: 'Approve' })).toBeDisabled()
     expect(within(reviewRow).getByRole('button', { name: 'Disapprove' })).toBeDisabled()
     // jsdom flips a cancelled checkbox click instead of restoring it, so assert the
     // cancelled click and the unchanged selection rather than the DOM checked state.
     expect(fireEvent.click(rowCheckbox)).toBe(false)
-    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeDisabled()
 
     const tooltipTrigger = rowCheckbox.closest('.ineligible-row-checkbox') as HTMLElement
     expect(tooltipTrigger).toBeTruthy()
@@ -1527,7 +1551,7 @@ describe('Provincial Review Action State Smoke', () => {
     // jsdom flips a cancelled checkbox click instead of restoring it, so assert the
     // cancelled click and the unchanged selection rather than the DOM checked state.
     expect(fireEvent.click(rowCheckbox)).toBe(false)
-    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeDisabled()
 
     const selectAllCheckbox = screen.getByRole('checkbox', {
       name: 'Select all eligible rows on this page',

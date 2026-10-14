@@ -594,7 +594,7 @@ describe('Create Page Core Flows', () => {
     )
   })
 
-  it('shows create validation only in the accuracy dialog until it closes', async () => {
+  it('validates a submitter application before asking for the accuracy agreement', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         capabilities: createTestCapabilities({
@@ -620,27 +620,78 @@ describe('Create Page Core Flows', () => {
     const saveButton = await screen.findByRole('button', { name: 'Save application' })
     await waitForApplicationCreateLoads('Applicant client details')
     await userEvent.click(saveButton)
-    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
-    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Save application' }))
 
-    const dialogFeedback = await within(dialog).findByRole('status')
-    expect(dialogFeedback).toHaveTextContent('Cannot save yet.')
-    expect(screen.getAllByRole('status')).toEqual([dialogFeedback])
+    const feedback = await screen.findByRole('status')
+    expect(feedback).toHaveTextContent('Cannot save yet.')
+    expect(
+      screen.queryByRole('dialog', { name: 'Confirm application accuracy' }),
+    ).not.toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
 
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
-    await waitFor(() => expect(dialog).not.toBeInTheDocument())
-    expect(screen.getByRole('status')).toHaveTextContent('Cannot save yet.')
+    await selectApplicationCreateTab('Scale')
+    const scaleTab = screen.getByRole('tab', { name: /^Scale, \d+ required fields? outstanding$/ })
+    const scale = screen.getByRole('region', { name: 'Scale' })
+    expect(scale.querySelectorAll('.cds--form-requirement')).toHaveLength(
+      Number(scaleTab.textContent?.replace(/\D/g, '')),
+    )
+  })
 
+  it('counts species once a region is chosen and explains the wait until then', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const saveButton = await screen.findByRole('button', { name: 'Save application' })
+    await waitForApplicationCreateLoads()
     await userEvent.click(saveButton)
-    expect(screen.queryByRole('status')).not.toBeInTheDocument()
-    expect(
-      within(screen.getByRole('dialog', { name: 'Confirm application accuracy' })).getByRole(
-        'button',
-        { name: 'Save application' },
-      ),
-    ).toBeDisabled()
+    await screen.findByText('Cannot save yet.')
+
+    await selectApplicationCreateTab('Scale')
+    const scaleTab = screen.getByRole('tab', { name: /^Scale, \d+ required fields? outstanding$/ })
+    const scale = screen.getByRole('region', { name: 'Scale' })
+    expect(scale.querySelectorAll('.cds--form-requirement')).toHaveLength(
+      Number(scaleTab.textContent?.replace(/\D/g, '')),
+    )
+    expect(within(scale).getByText('Select a region before adding species')).toBeVisible()
+    expect(within(scale).queryByText(/At least one species is required/)).toBeNull()
+  })
+
+  it.each([
+    ['staff', undefined, 'Documents, Remarks, Offers and Review can be added after that.'],
+    [
+      'provincial submitters',
+      ['PROVINCIAL_SUBMITTER_00077881'],
+      'Documents and Offers can be added after that.',
+    ],
+  ])('names the tabs %s can use once the application is saved', async (_, roles, text) => {
+    if (roles) {
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          capabilities: createTestCapabilities({ roles, forestClientNumber: '00077881' }),
+          canPerform: (action) => ['/applicationSearch', 'createApplication'].includes(action),
+        }),
+      )
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText(text)).toBeVisible()
   })
 
   it('requires and resets application accuracy confirmation for a provincial submitter', async () => {
@@ -995,10 +1046,13 @@ describe('Create Page Core Flows', () => {
     await userEvent.click(save)
     expect(await screen.findByText('Cannot save yet.')).toBeVisible()
     expect(screen.getByText('Complete the required fields in Applicant tab.')).toBeVisible()
+    // The agent location waits on the agent client, so only the client and contact are counted.
     const applicant = screen.getByRole('tab', {
-      name: 'Applicant, 3 required fields outstanding',
+      name: 'Applicant, 2 required fields outstanding',
     })
     expect(applicant).toHaveAttribute('aria-selected', 'true')
+    const agentInformation = screen.getByRole('region', { name: 'Agent information' })
+    expect(within(agentInformation).queryByText(/Agent location is required/)).toBeNull()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
     fireEvent.change(screen.getByRole('textbox', { name: 'Agent client' }), {
       target: { value: '00033333' },
@@ -1009,6 +1063,7 @@ describe('Create Page Core Flows', () => {
     await waitFor(() =>
       expect(applicant).toHaveAccessibleName('Applicant, 2 required fields outstanding'),
     )
+    expect(within(agentInformation).getByText('Agent location is required')).toBeVisible()
     await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
     expect(screen.queryByRole('region', { name: 'Agent information' })).not.toBeInTheDocument()
     expect(applicant).toHaveAccessibleName('Applicant')

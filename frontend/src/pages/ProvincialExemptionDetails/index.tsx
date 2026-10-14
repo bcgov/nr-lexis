@@ -644,6 +644,8 @@ const ProvincialExemptionDetailsPage = () => {
   const createdExemptionNumber = navigationState?.exemptionCreationNotice?.exemptionNumber ?? ''
   // Read by the first load, which otherwise clears page results before showing the record.
   const createdExemptionNumberRef = useRef(createdExemptionNumber)
+  // The Create exemption button is on the page left behind, so focus starts at the new title.
+  const [focusCreatedExemptionTitle] = useState(() => !!createdExemptionNumber)
   const createdFromApplicationNumbersRef = useRef<string[]>(
     (() => {
       const numbers = navigationState?.exemptionCreationNotice?.applicationNumbers
@@ -2108,11 +2110,6 @@ const ProvincialExemptionDetailsPage = () => {
   const emptyBlanketOicPermits =
     currentDetail?.blanketOic && permitsLoaded && permitRows.length === 0
   const PermitsContainer = emptyBlanketOicPermits ? 'section' : Tile
-  const blanketOicCompletedVolume = currentDetail?.completedPermitVolume ?? 0
-  const blanketOicBalanceRemaining =
-    currentDetail?.approvedVolume == null
-      ? null
-      : currentDetail.approvedVolume - blanketOicCompletedVolume
 
   const sectionResult = (source: ExemptionActionResult['source']) =>
     actionResult && actionResult.source === source ? (
@@ -2131,6 +2128,7 @@ const ProvincialExemptionDetailsPage = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={exemptionPageTitle}
+          focusTitle={focusCreatedExemptionTitle && !!currentDetail}
           subtitle={`Author: ${displayValueText(currentDetail?.author)}`}
           status={
             currentDetail ? (
@@ -2888,37 +2886,11 @@ const ProvincialExemptionDetailsPage = () => {
                   className={`application-detail-tab-panel${emptyBlanketOicPermits ? ' application-detail-tab-panel--empty' : ''}`}
                 >
                   <Grid fullWidth className="application-detail-tab-grid">
-                    {detail.blanketOic && (
-                      <Column sm={4} md={8} lg={16}>
-                        <Tile>
-                          <DetailCardTitle icon={Rule}>Exemption details</DetailCardTitle>
-                          {/* Blanket OIC balance remaining subtracts completed permits only. */}
-                          <RecordFieldGrid aria-label="Exemption permit volume totals">
-                            <RecordFieldRow>
-                              <RecordField
-                                label="Approved volume (m³)"
-                                value={formatExemptionVolume(detail.approvedVolume)}
-                              />
-                              <RecordField
-                                label="Sum of completed permits (m³)"
-                                value={formatExemptionVolume(blanketOicCompletedVolume)}
-                              />
-                              <RecordField
-                                label="Balance remaining (m³)"
-                                value={formatExemptionVolume(blanketOicBalanceRemaining)}
-                              />
-                            </RecordFieldRow>
-                          </RecordFieldGrid>
-                        </Tile>
-                      </Column>
-                    )}
                     <Column sm={4} md={8} lg={16}>
                       <PermitsContainer>
                         {!emptyBlanketOicPermits && (
                           <div className="detail-section-card__header">
-                            <DetailCardTitle icon={Certificate}>
-                              {detail.blanketOic ? 'Related permits' : 'Permits'}
-                            </DetailCardTitle>
+                            <DetailCardTitle icon={Certificate}>Permits</DetailCardTitle>
                             {(visiblePermitRows.length > 0 || Boolean(permitsErrorMessage)) &&
                               applyForPermitButton}
                           </div>

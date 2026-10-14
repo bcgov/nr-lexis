@@ -6,7 +6,6 @@ import {
   Column,
   Grid,
   InlineNotification,
-  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -21,7 +20,8 @@ import { Information } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import { ActionResultNotifications } from '@/components/ActionResultNotification'
-import { actionResultText, type ActionResult } from '@/utils/action-result'
+import Pagination from '@/components/Pagination'
+import { actionResultText, actionResultTitle, type ActionResult } from '@/utils/action-result'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import DetailSidePanel from '@/components/DetailSidePanel'
 import { useDiscardPrompt } from '@/components/DiscardChangesModal'
@@ -281,9 +281,12 @@ const ProvincialReviewPage = () => {
   const [searchResult, setSearchResult] = useState<{
     results: ApplicationReviewSearchResponse
     totalStatus: DeferredSearchTotalStatus
-  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
-  const { results, totalStatus } = searchResult
+    searched: boolean
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact', searched: false })
+  const { results, totalStatus, searched } = searchResult
   const [loading, setLoading] = useState(false)
+  // Results show as loading, not as zero results, until the first search returns.
+  const resultsLoading = loading || !searched
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRowsById, setSelectedRowsById] = useState<Record<string, boolean>>({})
   const [submittingApproval, setSubmittingApproval] = useState(false)
@@ -412,7 +415,7 @@ const ProvincialReviewPage = () => {
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
     (nextResults: ApplicationReviewSearchResponse, nextTotalStatus: DeferredSearchTotalStatus) => {
-      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus, searched: true })
     },
     [],
   )
@@ -754,6 +757,7 @@ const ProvincialReviewPage = () => {
         setReviewActionResults([
           {
             kind: 'error',
+            title: 'Application not updated',
             message: 'Your account is not authorized to disapprove applications.',
           },
         ])
@@ -763,6 +767,7 @@ const ProvincialReviewPage = () => {
         setReviewActionResults([
           {
             kind: 'error',
+            title: 'Application not updated',
             message: 'Application status options are unavailable.',
           },
         ])
@@ -816,6 +821,12 @@ const ProvincialReviewPage = () => {
       remark,
       clientEmailAddress: sendStatusEmail ? clientEmailAddress : '',
     }
+    const statusLabel = rejectStatusSelectOptions.find(
+      (option) => option.value === statusCode,
+    )?.label
+    const updatedStatusTitle = statusLabel
+      ? `Application ${statusLabel.toLowerCase()}`
+      : 'Application updated'
 
     setSubmittingReject(true)
     setReviewActionResults([])
@@ -832,6 +843,7 @@ const ProvincialReviewPage = () => {
         setReviewActionResults([
           {
             kind: 'error',
+            title: 'Application not updated',
             message: updateResult.message || 'Unable to reject application.',
           },
         ])
@@ -842,6 +854,7 @@ const ProvincialReviewPage = () => {
         setReviewActionResults([
           {
             kind: 'success',
+            title: updatedStatusTitle,
             message: `Updated application ${rejectApplicationNumber}.`,
           },
         ])
@@ -851,6 +864,7 @@ const ProvincialReviewPage = () => {
           setReviewActionResults([
             {
               kind: 'error',
+              title: 'Status email not sent',
               message:
                 emailResult.message === EMAIL_NOT_CONFIGURED_MESSAGE
                   ? 'Application status updated, but status email is not configured yet.'
@@ -862,6 +876,7 @@ const ProvincialReviewPage = () => {
           setReviewActionResults([
             {
               kind: 'success',
+              title: updatedStatusTitle,
               message: `Updated application ${rejectApplicationNumber} and email sent.`,
             },
           ])
@@ -885,6 +900,7 @@ const ProvincialReviewPage = () => {
       setReviewActionResults([
         {
           kind: 'error',
+          title: 'Application not updated',
           message: 'Unable to update application.',
         },
       ])
@@ -985,6 +1001,7 @@ const ProvincialReviewPage = () => {
       setReviewActionResults([
         {
           kind: 'error',
+          title: 'Applications not approved',
           message: 'Your account is not authorized to approve applications.',
         },
       ])
@@ -996,6 +1013,7 @@ const ProvincialReviewPage = () => {
       setReviewActionResults([
         {
           kind: 'error',
+          title: 'No applications approved',
           message: 'Select at least one NEW or PND application before approving.',
         },
       ])
@@ -1019,6 +1037,7 @@ const ProvincialReviewPage = () => {
       setReviewActionResults([
         {
           kind: 'error',
+          title: 'Application not approved',
           message: 'Your account is not authorized to approve applications.',
         },
       ])
@@ -1029,6 +1048,7 @@ const ProvincialReviewPage = () => {
       setReviewActionResults([
         {
           kind: 'error',
+          title: 'Application not approved',
           message: 'Only NEW or PND applications can be approved.',
         },
       ])
@@ -1049,13 +1069,11 @@ const ProvincialReviewPage = () => {
 
       {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
 
+      {/* Outcomes appear once their dialog or panel closes, and take focus so they are heard. */}
       {approvalConfirmationNumbers.length === 0 && !rejectApplicationNumber && (
         <ActionResultNotifications
-          results={reviewActionResults.map((result) => ({
-            ...result,
-            title:
-              result.title ?? (result.kind === 'success' ? 'Action complete' : 'Action failed'),
-          }))}
+          results={reviewActionResults}
+          focusOnReveal
           onClose={({ kind }) =>
             setReviewActionResults((current) => current.filter((result) => result.kind !== kind))
           }
@@ -1294,7 +1312,7 @@ const ProvincialReviewPage = () => {
         {rejectApplicationNumber && reviewActionStatus?.kind === 'error' && (
           <AppNotification
             kind="error"
-            title={reviewActionStatus.title ?? 'Action failed'}
+            title={actionResultTitle(reviewActionStatus)}
             subtitle={reviewActionStatus.message}
             onCloseButtonClick={() => setReviewActionResults([])}
           />
@@ -1321,13 +1339,13 @@ const ProvincialReviewPage = () => {
         >
           <SearchResultsTableFrame
             resultName="application"
-            loading={loading}
+            loading={resultsLoading}
             loadingDescription="Searching"
             columnCount={RESULT_COLUMNS.length + 2}
             totalItems={
               errorMessage
                 ? 0
-                : loading && results.content.length === 0
+                : resultsLoading && results.content.length === 0
                   ? undefined
                   : results.page.totalElements
             }
@@ -1376,7 +1394,7 @@ const ProvincialReviewPage = () => {
                     !canApproveApplications
                   }
                 >
-                  Approve Selected Applications
+                  Approve selected applications
                 </Button>
               </DisabledButtonTooltip>
             }
@@ -1541,13 +1559,13 @@ const ProvincialReviewPage = () => {
                   ))}
                 </TableBody>
               </Table>
-            ) : !loading ? (
+            ) : !resultsLoading ? (
               <EmptyState
                 title="No results found"
                 description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
-            {!errorMessage && (!loading || results.content.length > 0) && (
+            {!errorMessage && (!resultsLoading || results.content.length > 0) && (
               <>
                 <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(

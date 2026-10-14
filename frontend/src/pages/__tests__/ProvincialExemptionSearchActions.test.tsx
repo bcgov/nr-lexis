@@ -546,10 +546,10 @@ describe('Provincial Exemption Search Actions', () => {
     ).not.toBeChecked()
     await userEvent.click(within(postApprovalDialog).getByRole('button', { name: 'Cancel' }))
 
-    const addExemptionAction = screen.getByRole('link', { name: 'Add exemption' })
-    expect(addExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
-    expect(addExemptionAction).toHaveClass('cds--btn--primary')
-    expect(addExemptionAction.closest('.lexis-page-header__actions')).not.toBeNull()
+    const createExemptionAction = screen.getByRole('link', { name: 'Create exemption' })
+    expect(createExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
+    expect(createExemptionAction).toHaveClass('cds--btn--tertiary')
+    expect(createExemptionAction.closest('.lexis-page-header__actions')).not.toBeNull()
   }, 20_000)
 
   it('preserves selected exemptions while paging through approval results', async () => {
@@ -1393,7 +1393,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
 
-    expect(screen.queryByRole('link', { name: 'Add exemption' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Create exemption' })).not.toBeInTheDocument()
     expect(
       screen.queryByRole('checkbox', { name: 'Select exemption EX-1001' }),
     ).not.toBeInTheDocument()
@@ -1418,6 +1418,24 @@ describe('Provincial Exemption Search Actions', () => {
 
     expect(screen.getByRole('link', { name: 'EX-1001' })).toBeInTheDocument()
     expect(screen.getByRole('link', { name: 'EX-2002' })).toBeInTheDocument()
+  })
+
+  it('groups approval and balance volumes the same way', async () => {
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([
+        {
+          ...selectableExemption('EX-3003'),
+          approvedVolume: 9999999.9,
+          balanceRemaining: 1234567.5,
+        },
+      ]),
+    )
+
+    renderPage()
+    const row = (await screen.findByText('EX-3003')).closest('tr') as HTMLElement
+
+    expect(within(row).getByText('9,999,999.9')).toBeInTheDocument()
+    expect(within(row).getByText('1,234,567.5')).toBeInTheDocument()
   })
 
   it('hides client-number filters for client-scoped provincial submitters', async () => {
@@ -1548,9 +1566,9 @@ describe('Provincial Exemption Search Actions', () => {
     })
 
     expect(mockedSearchProvincialExemptions).not.toHaveBeenCalled()
-    const addExemptionAction = screen.getByRole('link', { name: 'Add exemption' })
-    expect(addExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
-    expect(addExemptionAction.closest('.lexis-page-header__actions')).not.toBeNull()
+    const createExemptionAction = screen.getByRole('link', { name: 'Create exemption' })
+    expect(createExemptionAction).toHaveAttribute('href', '/provincial/exemption/create')
+    expect(createExemptionAction.closest('.lexis-page-header__actions')).not.toBeNull()
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()
@@ -1578,6 +1596,75 @@ describe('Provincial Exemption Search Actions', () => {
       expect(resultsTable).not.toBeVisible()
     })
     expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(searchCallsBeforeClear)
+  })
+
+  const mockExemptionApprover = () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['EXEMPTION_APPROVER'], orgUnitNo: '11' }),
+        canPerform: () => true,
+      }),
+    )
+    mockedFetchProvincialExemptionOptions.mockResolvedValue({
+      exemptionTypes: [{ value: 'M', label: 'Ministerial' }],
+      exemptionStatuses: [
+        { value: 'NEW', label: 'New' },
+        { value: 'ACT', label: 'Active' },
+      ],
+      regions: [{ value: '11', label: 'Cariboo' }],
+    })
+  }
+
+  it('runs a saved exemption approver search on New exemptions when it has no status', async () => {
+    mockExemptionApprover()
+
+    renderPage()
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ exemptionTypeCode: 'M', exemptionStatusCode: 'NEW' }),
+        }),
+        expect.any(Object),
+      )
+    })
+    const status = screen.getByRole('combobox', { name: 'Exemption status' })
+    await waitFor(() => expect(status).toHaveValue('New'))
+    expect(status).not.toHaveAttribute('readonly')
+  })
+
+  it('keeps an exemption approver search of every status and clears back to Ministerial New', async () => {
+    mockExemptionApprover()
+
+    renderPage(
+      '/provincial/exemption?region=11&exemptionStatusCode=&page=1&pageSize=10&sortField=exemptionNumber&sortDirection=desc',
+    )
+
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ exemptionTypeCode: 'M', exemptionStatusCode: '' }),
+        }),
+        expect.any(Object),
+      )
+    })
+    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('New'),
+    )
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('Ministerial')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({ exemptionTypeCode: 'M', exemptionStatusCode: 'NEW' }),
+        }),
+        expect.any(Object),
+      )
+    })
   })
 
   it('renders a full result page before count and then prefetches the next page', async () => {

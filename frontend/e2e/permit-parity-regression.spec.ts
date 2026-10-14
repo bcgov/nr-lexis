@@ -921,11 +921,9 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(page.getByText('4 Mill Road', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Save changes', exact: true }).click()
 
-    await expect(
-      page.getByText('The permit was updated successfully.', { exact: true }),
-    ).toBeVisible()
     const successNotice = page.locator('.app-inline-notification.cds--inline-notification--success')
-    await expect(successNotice).toContainText('Applicant details saved')
+    await expect(successNotice).toContainText('Applicant details saved.')
+    await expect(successNotice).toBeVisible()
     expect(fixture.writes).toEqual([
       expect.objectContaining({
         method: 'POST',

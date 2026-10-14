@@ -143,6 +143,20 @@ describe('OIDC session service', () => {
     expect(mocks.manager.removeUser).toHaveBeenCalledOnce()
   })
 
+  it('removes a restored session with no refresh token before a fresh login', async () => {
+    mocks.manager.getUser.mockResolvedValue({ ...storedUser(0), refresh_token: undefined })
+    const { restoreOidcUser, startOidcLogin } = await import('../oidc-service')
+
+    expect(await restoreOidcUser()).toBeNull()
+    expect(mocks.manager.removeUser).toHaveBeenCalledOnce()
+    expect(mocks.manager.signinSilent).not.toHaveBeenCalled()
+
+    await startOidcLogin('idir')
+    expect(mocks.manager.signinRedirect).toHaveBeenCalledWith({
+      extraQueryParams: { kc_idp_hint: 'azureidir' },
+    })
+  })
+
   it('keeps a restored session after a temporary failure so a reload can recover', async () => {
     mocks.manager.getUser.mockResolvedValue(storedUser(0))
     const { restoreOidcUser } = await import('../oidc-service')

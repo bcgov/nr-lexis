@@ -6,7 +6,6 @@ import {
   Column,
   DismissibleTag,
   Grid,
-  Pagination,
   Table,
   TableBody,
   TableBatchActions,
@@ -22,6 +21,7 @@ import {
 import { Add, Checkmark } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
+import Pagination from '@/components/Pagination'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
 import IneligibleRowCheckbox from '@/components/IneligibleRowCheckbox'
@@ -233,8 +233,9 @@ const buildSearchParams = (
   sortDirection: 'asc' | 'desc',
   page: number,
   pageSize: number,
-): URLSearchParams =>
-  createSearchParams([
+  defaultStatusCode = '',
+): URLSearchParams => {
+  const params = createSearchParams([
     ['applicationNumber', filters.applicationNumber],
     ['packageNumber', filters.packageNumber],
     ['exemptionNumber', filters.exemptionNumber],
@@ -251,6 +252,12 @@ const buildSearchParams = (
     ['page', page],
     ['pageSize', pageSize],
   ])
+  // Where a missing status means the default, a blank one records a search of every status.
+  if (defaultStatusCode && !filters.exemptionStatusCode) {
+    params.set('exemptionStatusCode', '')
+  }
+  return params
+}
 
 const ProvincialExemptionPage = () => {
   const { capabilities, canPerform } = useAuth()
@@ -267,9 +274,12 @@ const ProvincialExemptionPage = () => {
   const [searchResult, setSearchResult] = useState<{
     results: ProvincialExemptionSearchResponse
     totalStatus: DeferredSearchTotalStatus
-  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
-  const { results, totalStatus } = searchResult
+    searched: boolean
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact', searched: false })
+  const { results, totalStatus, searched } = searchResult
   const [loading, setLoading] = useState(false)
+  // Results show as loading, not as zero results, until the first search returns.
+  const resultsLoading = loading || !searched
   const [errorMessage, setErrorMessage] = useState('')
   const [selectedRowsById, setSelectedRowsById] = useState<
     Record<string, ProvincialExemptionSearchItem>
@@ -301,6 +311,8 @@ const ProvincialExemptionPage = () => {
     false
   // The server searches only Ministerial exemptions for these users, so the filter shows that.
   const exemptionTypeLocked = isPureExemptionApprover(capabilities?.roles)
+  // These users start on New exemptions and can choose any other status.
+  const defaultStatusCode = exemptionTypeLocked ? 'NEW' : ''
   const selectedRowsCount = Object.keys(selectedRowsById).length
   const selectedExemptionNumbers = Object.keys(selectedRowsById)
   const withCurrentSearch = useCallback(
@@ -318,7 +330,7 @@ const ProvincialExemptionPage = () => {
       listFromDate: searchParams.get('listFromDate') ?? '',
       listToDate: searchParams.get('listToDate') ?? '',
       exemptionTypeCode: exemptionTypeLocked ? 'M' : (searchParams.get('exemptionTypeCode') ?? ''),
-      exemptionStatusCode: searchParams.get('exemptionStatusCode') ?? '',
+      exemptionStatusCode: searchParams.get('exemptionStatusCode') ?? defaultStatusCode,
       applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
       agentClientNumber: searchParams.get('agentClientNumber') ?? '',
@@ -342,7 +354,7 @@ const ProvincialExemptionPage = () => {
         SEARCH_PAGE_SIZE_OPTIONS,
       ),
     }
-  }, [exemptionTypeLocked, searchParams])
+  }, [defaultStatusCode, exemptionTypeLocked, searchParams])
   const appliedFilters = urlState.filters
   const [filters, setFilters] = useSearchFilterDraft(appliedFilters)
   const [clientSearchResetKey, setClientSearchResetKey] = useState(0)
@@ -393,7 +405,7 @@ const ProvincialExemptionPage = () => {
       nextResults: ProvincialExemptionSearchResponse,
       nextTotalStatus: DeferredSearchTotalStatus,
     ) => {
-      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus, searched: true })
     },
     [],
   )
@@ -585,6 +597,7 @@ const ProvincialExemptionPage = () => {
           urlState.sortDirection,
           urlState.page,
           urlState.pageSize,
+          defaultStatusCode,
         ),
         { replace: true },
       )
@@ -596,6 +609,7 @@ const ProvincialExemptionPage = () => {
       region: defaultZoneRegionIds,
     }))
   }, [
+    defaultStatusCode,
     defaultZoneRegionIds,
     hasSearchQuery,
     optionsLoading,
@@ -618,6 +632,7 @@ const ProvincialExemptionPage = () => {
       sortDirection,
       DEFAULT_SEARCH_PAGE,
       pageSize,
+      defaultStatusCode,
     )
     if (nextSearchParams.toString() === searchParams.toString()) {
       void runSearch(
@@ -655,7 +670,14 @@ const ProvincialExemptionPage = () => {
     const nextDirection = getNextSortDirection(sortField, sortDirection, column)
     clearSelection()
     setSearchParams(
-      buildSearchParams(appliedFilters, column, nextDirection, DEFAULT_SEARCH_PAGE, pageSize),
+      buildSearchParams(
+        appliedFilters,
+        column,
+        nextDirection,
+        DEFAULT_SEARCH_PAGE,
+        pageSize,
+        defaultStatusCode,
+      ),
     )
   }
 
@@ -872,11 +894,11 @@ const ProvincialExemptionPage = () => {
               <Button
                 as={Link}
                 to="/provincial/exemption/create"
-                kind="primary"
+                kind="tertiary"
                 size="md"
                 renderIcon={Add}
               >
-                Add exemption
+                Create exemption
               </Button>
             ) : undefined
           }
@@ -1040,11 +1062,11 @@ const ProvincialExemptionPage = () => {
         >
           <SearchResultsTableFrame
             resultName="exemption"
-            loading={loading}
+            loading={resultsLoading}
             loadingDescription="Searching"
             columnCount={SORT_COLUMNS.length + (canApproveExemption ? 1 : 0)}
             totalItems={
-              errorMessage || (loading && results.content.length === 0)
+              errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
                 : results.page.totalElements
             }
@@ -1186,7 +1208,7 @@ const ProvincialExemptionPage = () => {
                         <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
                         <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
                         <TableCell>{formatVolume(row.approvedVolume)}</TableCell>
-                        <TableCell>{row.balanceRemaining.toFixed(1)}</TableCell>
+                        <TableCell>{formatVolume(row.balanceRemaining)}</TableCell>
                         <TableCell className="legacy-search-table-date">
                           {displayTableValue(row.listingDate)}
                         </TableCell>
@@ -1199,13 +1221,13 @@ const ProvincialExemptionPage = () => {
                   })}
                 </TableBody>
               </Table>
-            ) : !loading ? (
+            ) : !resultsLoading ? (
               <EmptyState
                 title="No results found"
                 description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
-            {!errorMessage && (!loading || results.content.length > 0) && (
+            {!errorMessage && (!resultsLoading || results.content.length > 0) && (
               <>
                 <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(
@@ -1230,6 +1252,7 @@ const ProvincialExemptionPage = () => {
                         sortDirection,
                         page,
                         nextPageSize,
+                        defaultStatusCode,
                       ),
                     )
                   }}

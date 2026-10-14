@@ -942,7 +942,6 @@ class ExemptionRepositoryTest {
     when(resultSet.getString("UPDATE_USERID")).thenReturn("IDIR\\EDITOR");
     when(resultSet.getDouble("APPROVED_VOLUME")).thenReturn(100.0d);
     when(resultSet.getDouble("VOLUME_REMAINING")).thenReturn(87.5d);
-    when(resultSet.getDouble("COMPLETED_PERMIT_VOLUME")).thenReturn(7.5d);
     when(resultSet.wasNull()).thenReturn(false);
     // These optional fields were absent from the legacy detail cursor too.
     when(resultSet.getString("TYPE_DESCRIPTION")).thenThrow(new SQLException("Missing column"));
@@ -957,7 +956,6 @@ class ExemptionRepositoryTest {
     assertThat(detail.approvedVolume()).isEqualTo(100.0d);
     assertThat(detail.usedVolume()).isEqualTo(12.5d);
     assertThat(detail.remainingVolume()).isEqualTo(87.5d);
-    assertThat(detail.completedPermitVolume()).isEqualTo(7.5d);
     assertThat(detail.blanketOic()).isTrue();
     assertThat(detail.author()).isEqualTo("IDIR\\EDITOR");
     assertThat(detail.exemptionTypeDescription()).isNull();

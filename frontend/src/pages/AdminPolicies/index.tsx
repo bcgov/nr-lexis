@@ -6,7 +6,6 @@ import {
   Grid,
   InlineNotification,
   Loading,
-  Pagination,
   Select,
   SelectItem,
   Table,
@@ -23,6 +22,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
 import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
+import Pagination from '@/components/Pagination'
 import { useDiscardPrompt } from '@/components/DiscardChangesModal'
 import EmptyState from '@/components/EmptyState'
 import DetailSidePanel from '@/components/DetailSidePanel'

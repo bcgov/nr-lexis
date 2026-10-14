@@ -550,7 +550,7 @@ describe('provincial permit detail services', () => {
     expect(getCachedResponseMock).toHaveBeenCalledTimes(1)
   })
 
-  it('preserves a masked package subtotal when individual fee rows are numeric', async () => {
+  it('keeps a package subtotal without an amount when individual fee rows are numeric', async () => {
     getCachedResponseMock.mockResolvedValue(
       response({
         totalVolume: '10.0',
@@ -558,7 +558,7 @@ describe('provincial permit detail services', () => {
           {
             packageNumber: 'PKG-A',
             growthType: 'Old growth',
-            totalFeeForPackage: '$',
+            totalFeeForPackage: null,
             scaleList: [{ id: 'SCALE-1', volume: '10.0', fee: '$45.00' }],
           },
         ],
@@ -568,9 +568,29 @@ describe('provincial permit detail services', () => {
     const result = await fetchProvincialPermitFees({ permitNumber: '777' })
 
     expect(result.packageFeeSummaries).toEqual([
-      { packageNumber: 'PKG-A', growthType: 'Old growth', totalFeeForPackage: '$' },
+      { packageNumber: 'PKG-A', growthType: 'Old growth', totalFeeForPackage: null },
     ])
     expect(result.fees[0]?.amount).toBe(45)
+  })
+
+  it('leaves a fee row without an amount blank', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        totalVolume: '10.0',
+        packageList: [
+          {
+            packageNumber: 'PKG-A',
+            growthType: 'Old growth',
+            totalFeeForPackage: null,
+            scaleList: [{ id: 'SCALE-1', volume: '10.0', fee: null }],
+          },
+        ],
+      }),
+    )
+
+    const result = await fetchProvincialPermitFees({ permitNumber: '777' })
+
+    expect(result.fees[0]).toMatchObject({ amount: 0, amountDisplay: '' })
   })
 
   it.each([undefined, '', ' '])(

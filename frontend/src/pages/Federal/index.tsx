@@ -4,7 +4,6 @@ import {
   Button,
   Column,
   Grid,
-  Pagination,
   Table,
   TableBody,
   TableCell,
@@ -16,6 +15,7 @@ import {
 } from '@carbon/react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
+import Pagination from '@/components/Pagination'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import PageHeader from '@/components/PageHeader'
 import SearchSubmitButton from '@/components/SearchSubmitButton'
@@ -128,9 +128,12 @@ const FederalPage = () => {
   const [searchResult, setSearchResult] = useState<{
     results: FederalApplicationSearchResponse
     totalStatus: DeferredSearchTotalStatus
-  }>({ results: EMPTY_RESULTS, totalStatus: 'exact' })
-  const { results, totalStatus } = searchResult
+    searched: boolean
+  }>({ results: EMPTY_RESULTS, totalStatus: 'exact', searched: false })
+  const { results, totalStatus, searched } = searchResult
   const [loading, setLoading] = useState(false)
+  // Results show as loading, not as zero results, until the first search returns.
+  const resultsLoading = loading || !searched
   const [errorMessage, setErrorMessage] = useState('')
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canFilterFederalByClient = canPerform('searchClients')
@@ -181,7 +184,7 @@ const FederalPage = () => {
   const beginSearchRequest = useLatestRequestGuard()
   const commitResults = useCallback(
     (nextResults: FederalApplicationSearchResponse, nextTotalStatus: DeferredSearchTotalStatus) => {
-      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus })
+      setSearchResult({ results: nextResults, totalStatus: nextTotalStatus, searched: true })
     },
     [],
   )
@@ -462,11 +465,11 @@ const FederalPage = () => {
         >
           <SearchResultsTableFrame
             resultName="application"
-            loading={loading}
+            loading={resultsLoading}
             loadingDescription="Searching"
             columnCount={RESULT_COLUMNS.length}
             totalItems={
-              errorMessage || (loading && results.content.length === 0)
+              errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
                 : results.page.totalElements
             }
@@ -524,13 +527,13 @@ const FederalPage = () => {
                   ))}
                 </TableBody>
               </Table>
-            ) : !loading ? (
+            ) : !resultsLoading ? (
               <EmptyState
                 title="No results found"
                 description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
-            {!errorMessage && (!loading || results.content.length > 0) && (
+            {!errorMessage && (!resultsLoading || results.content.length > 0) && (
               <>
                 <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(
