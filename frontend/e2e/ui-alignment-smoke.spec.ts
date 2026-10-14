@@ -1352,8 +1352,14 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(pageSize).toHaveValue('10')
     await expect(pageSize.locator('option[value="100"]')).toHaveCount(1)
 
-    // A date calendar left open can take focus back as it closes, so close it before typing.
-    await to.press('Escape')
+    // Tab from a Carbon date field opens its calendar, which can take focus back from the next
+    // field, so close the pickers and leave the dates before typing.
+    await page.evaluate(() => {
+      for (const input of document.querySelectorAll('input')) {
+        ;(input as HTMLInputElement & { _flatpickr?: { close: () => void } })._flatpickr?.close()
+      }
+      ;(document.activeElement as HTMLElement | null)?.blur()
+    })
     await expect(page.locator('.flatpickr-calendar.open')).toHaveCount(0)
     const applicationNumber = page.getByRole('textbox', { name: 'Application number', exact: true })
     await applicationNumber.fill('9999999999')
