@@ -83,16 +83,14 @@ export const getOidcUser = async ({
   }
 }
 
-// Startup and login treat a session that cannot be renewed as signed out. When
-// SSO rejected its refresh token as invalid_grant (expired, revoked or its
-// session ended), also remove it so each load does not spend a request on it.
+// Startup and login discard sessions with a missing or rejected refresh token.
 // Other failures, including OAuth errors such as temporarily_unavailable or
 // server_error, keep it so a reload can still recover the session.
 export const restoreOidcUser = async (): Promise<User | null> => {
   try {
     return await getOidcUser()
   } catch (error) {
-    if (isRefreshTokenRejected(error)) {
+    if (isSessionEnded(error)) {
       await getUserManager()
         .removeUser()
         .catch(() => undefined)
