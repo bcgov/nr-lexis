@@ -7,7 +7,7 @@ import {
   type OptimisticConflictRequest,
   type OptimisticRecordType,
 } from '@/service/optimistic-conflict'
-import { formatBusinessIsoDate, LEXIS_BUSINESS_TIME_ZONE } from '@/utils/date'
+import { formatBusinessIsoDate, formatIsoDateLabel, LEXIS_BUSINESS_TIME_ZONE } from '@/utils/date'
 
 import './OptimisticConflictModal.scss'
 
@@ -24,7 +24,7 @@ const formatSavedAt = (value: string | undefined): { date: string; time: string 
   const savedAt = new Date(value)
   if (Number.isNaN(savedAt.getTime())) return undefined
   return {
-    date: formatBusinessIsoDate(savedAt),
+    date: formatIsoDateLabel(formatBusinessIsoDate(savedAt)),
     // "10:39 a.m."
     time: new Intl.DateTimeFormat('en-CA', {
       timeZone: LEXIS_BUSINESS_TIME_ZONE,
@@ -97,9 +97,7 @@ const OptimisticConflictModal = ({ onOpenChange }: { onOpenChange?: (open: boole
         ) : (
           <>
             <p>{staleRecordMessage(activeConflict, recordNoun)}</p>
-            <p>
-              Refresh to load the latest version, then save again. What you entered will be lost.
-            </p>
+            <p>Refresh to load the latest version, then save again.</p>
           </>
         )}
 

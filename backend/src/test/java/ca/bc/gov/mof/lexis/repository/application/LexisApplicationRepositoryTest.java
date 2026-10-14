@@ -840,6 +840,17 @@ class LexisApplicationRepositoryTest {
   }
 
   @Test
+  void detailShouldNameItsRegionRatherThanGiveItsCode() {
+    DetailReadLexisApplicationRepository repository =
+        new DetailReadLexisApplicationRepository(null, true);
+
+    assertThat(repository.findByApplicationNumber(900123L))
+        .get()
+        .extracting(LexisApplicationDetailDto::orgUnitName)
+        .isEqualTo("South Coast Natural Resource Region");
+  }
+
+  @Test
   void detailShouldPreserveLegitimatelyEmptyChildCursors() {
     DetailReadLexisApplicationRepository repository =
         new DetailReadLexisApplicationRepository(null, true);
@@ -1561,6 +1572,8 @@ class LexisApplicationRepositoryTest {
     when(resultSet.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
     when(resultSet.getString("ENTRY_USERID")).thenReturn("idir\\application-author");
     when(resultSet.getString("UPDATE_USERID")).thenReturn("idir\\application-editor");
+    when(resultSet.getString("REGION_CODE")).thenReturn("RSC");
+    when(resultSet.getString("REGION")).thenReturn("South Coast Natural Resource Region");
     when(resultSet.wasNull()).thenReturn(false);
     return resultSet;
   }

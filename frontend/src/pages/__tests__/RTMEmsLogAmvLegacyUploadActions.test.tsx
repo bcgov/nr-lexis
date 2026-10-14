@@ -1,5 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import RtmEmsLogAmvUploadPage from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
@@ -261,6 +262,59 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       ]),
     )
     expect(screen.getByText('Values saved')).toBeVisible()
+  })
+
+  it('asks before leaving the page with edited saved values', async () => {
+    const nextMonth = monthOffset(`${formatBusinessIsoDate().slice(0, 7)}-01`, 1)
+    mockedSearch.mockResolvedValueOnce([
+      {
+        species: 'BA',
+        grade: 'D',
+        growthIndicator: 'O',
+        retrievalDate: nextMonth,
+        updateDate: nextMonth,
+        currentValue: 78.14,
+        newValue: 78.14,
+        returnCode: '0',
+      },
+    ])
+    const router = createMemoryRouter(
+      [
+        { path: '/admin/rtm/emslogamv/upload', element: <RtmEmsLogAmvUploadPage /> },
+        { path: '/provincial/review', element: <h1>Application review</h1> },
+      ],
+      { initialEntries: ['/admin/rtm/emslogamv/upload'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    const table = await screen.findByRole('table', {
+      name: 'Balsam average market value review',
+    })
+    const value = within(table).getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
+    await userEvent.clear(value)
+    await userEvent.type(value, '0')
+
+    await act(async () => {
+      await router.navigate('/provincial/review')
+    })
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Keep editing',
+      }),
+    )
+    expect(router.state.location.pathname).toBe('/admin/rtm/emslogamv/upload')
+    expect(value).toHaveValue('0')
+
+    await act(async () => {
+      await router.navigate('/provincial/review')
+    })
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    )
+    expect(await screen.findByRole('heading', { name: 'Application review' })).toBeVisible()
+    expect(mockedSaveBatch).not.toHaveBeenCalled()
   })
 
   it('confirms removal of manually edited replacement values and updates only after save', async () => {

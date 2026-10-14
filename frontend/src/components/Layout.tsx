@@ -121,7 +121,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/provincial/application/create',
-        label: 'Create/Edit Application',
+        label: 'Create application',
         requiredActions: ['/applicationSearch', 'createApplication'],
         requiredActionsMatch: 'all',
       },
@@ -139,7 +139,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/provincial/exemption/create',
-        label: 'Create/Edit Exemption',
+        label: 'Create exemption',
         requiredActions: ['/exemptionSearch', '/createExemption'],
         requiredActionsMatch: 'all',
       },
@@ -151,7 +151,7 @@ const NAVIGATION_SECTIONS: NavigationSection[] = [
       },
       {
         to: '/provincial/offers/create',
-        label: 'Create/Edit Offer',
+        label: 'Create offer',
         requiredActions: ['/offersSearch', 'createOffer'],
         requiredActionsMatch: 'all',
       },

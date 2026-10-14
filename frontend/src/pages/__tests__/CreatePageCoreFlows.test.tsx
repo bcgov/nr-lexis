@@ -341,7 +341,7 @@ describe('Create Page Core Flows', () => {
     )
 
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Create provincial application' }),
+      screen.getByRole('heading', { level: 1, name: 'Create new application' }),
     ).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(screen.getByRole('region', { name: 'Applicant' })).toBeInTheDocument()
@@ -983,13 +983,21 @@ describe('Create Page Core Flows', () => {
     )
     await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
     expect(screen.getByRole('region', { name: 'Agent information' })).toBeVisible()
+    expect(
+      within(screen.getByRole('region', { name: 'Agent information' })).getByText(
+        'Available once a client is selected.',
+      ),
+    ).toBeVisible()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     await selectApplicationCreateTab('Application')
     const save = screen.getByRole('button', { name: 'Save application' })
     await waitForApplicationCreateLoads('Applicant client details')
     await userEvent.click(save)
     expect(await screen.findByText('Cannot save yet.')).toBeVisible()
-    const applicant = screen.getByRole('tab', { name: 'Applicant, 3 fields need attention' })
+    expect(screen.getByText('Complete the required fields in Applicant tab.')).toBeVisible()
+    const applicant = screen.getByRole('tab', {
+      name: 'Applicant, 3 required fields outstanding',
+    })
     expect(applicant).toHaveAttribute('aria-selected', 'true')
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
     fireEvent.change(screen.getByRole('textbox', { name: 'Agent client' }), {
@@ -999,7 +1007,7 @@ describe('Create Page Core Flows', () => {
       expect(screen.getByRole('combobox', { name: 'Agent location' })).toBeEnabled(),
     )
     await waitFor(() =>
-      expect(applicant).toHaveAccessibleName('Applicant, 2 fields need attention'),
+      expect(applicant).toHaveAccessibleName('Applicant, 2 required fields outstanding'),
     )
     await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
     expect(screen.queryByRole('region', { name: 'Agent information' })).not.toBeInTheDocument()
@@ -1049,7 +1057,7 @@ describe('Create Page Core Flows', () => {
         expect(feedback).toHaveTextContent('Cannot save yet.')
         await waitFor(() => expect(feedback).toHaveFocus())
         expect(
-          screen.getByRole('tab', { name: 'Applicant, 1 field needs attention' }),
+          screen.getByRole('tab', { name: 'Applicant, 1 required field outstanding' }),
         ).toBeVisible()
         expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
       }
@@ -1268,9 +1276,7 @@ describe('Create Page Core Flows', () => {
       await waitFor(() => expect(submitButton).toBeEnabled())
       await userEvent.click(submitButton)
 
-      expect(
-        await screen.findAllByText('Applicant client number must be 1 to 8 digits'),
-      ).not.toHaveLength(0)
+      expect(await screen.findAllByText('Client must be 1 to 8 digits')).not.toHaveLength(0)
       expect(mockedFetchApplicationClientLocations).not.toHaveBeenCalled()
       expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
     },
@@ -1318,7 +1324,11 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('region', { name: 'Agent client details' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
-    expect(await screen.findAllByText('Agent client number is required')).not.toHaveLength(0)
+    expect(
+      await screen.findAllByText(
+        'Agent client is required. Enter name, acronym, or client number (min. 3 characters).',
+      ),
+    ).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   }, 20_000)
 
@@ -1367,7 +1377,7 @@ describe('Create Page Core Flows', () => {
 
     expect(
       await screen.findAllByText(
-        'Applicant contact name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+        'Contact name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
       ),
     ).not.toHaveLength(0)
     await selectApplicationCreateTab('Scale')
@@ -1525,9 +1535,7 @@ describe('Create Page Core Flows', () => {
     await waitFor(() => expect(submitButton).toBeEnabled())
     await userEvent.click(submitButton)
 
-    expect(
-      await screen.findAllByText('Applicant client location code is required'),
-    ).not.toHaveLength(0)
+    expect(await screen.findAllByText('Client location is required')).not.toHaveLength(0)
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
@@ -1568,15 +1576,16 @@ describe('Create Page Core Flows', () => {
       expect(screen.getByRole('combobox', { name: 'Product type' })).toHaveValue('Harvested Timber')
       expect(screen.getByRole('combobox', { name: 'Exemption reason' })).toHaveValue('Surplus')
       expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue('')
-      expect(screen.getByRole('textbox', { name: 'Application date (YYYY-MM-DD)' })).toHaveValue(
-        today,
-      )
+      expect(screen.getByRole('textbox', { name: 'Application date' })).toHaveValue(today)
       expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
       expect(screen.queryByRole('textbox', { name: /Date received/i })).not.toBeInTheDocument()
-      expect(screen.getByRole('radio', { name: '2026-08-05' })).toBeChecked()
-      expect(screen.getByRole('radio', { name: '2026-08-12' })).not.toBeChecked()
+      expect(screen.getByRole('radio', { name: 'Aug 5, 2026' })).toBeChecked()
+      expect(screen.getByRole('radio', { name: 'Aug 12, 2026' })).not.toBeChecked()
       expect(screen.getByRole('radio', { name: 'No list date' })).not.toBeChecked()
     })
+    expect(screen.getByRole('radio', { name: 'Aug 5, 2026' })).toHaveAttribute('value', '1002')
+    expect(screen.getByRole('radio', { name: 'Aug 12, 2026' })).toHaveAttribute('value', '1003')
+    expect(screen.queryByRole('radio', { name: '2026-08-05' })).not.toBeInTheDocument()
 
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
     await selectApplicationCreateTab('Applicant')
@@ -1637,8 +1646,9 @@ describe('Create Page Core Flows', () => {
     })
     expect(screen.getByRole('combobox', { name: 'Region' })).toBeEnabled()
     expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
-    expect(screen.getByRole('radio', { name: '2026-10-07' })).toBeChecked()
-    expect(screen.getByRole('radio', { name: '2026-10-14' })).not.toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Oct 7, 2026' })).toBeChecked()
+    expect(screen.getByRole('radio', { name: 'Oct 7, 2026' })).toHaveAttribute('value', '1002')
+    expect(screen.getByRole('radio', { name: 'Oct 14, 2026' })).not.toBeChecked()
     expect(screen.queryByRole('radio', { name: 'No list date' })).not.toBeInTheDocument()
 
     await selectApplicationCreateTab('Applicant')
@@ -2056,8 +2066,8 @@ describe('Create Page Core Flows', () => {
       'true',
     )
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Exemption status' }), 'New')
-    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-02-01')
-    await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2026-12-31')
+    await userEvent.type(screen.getByLabelText('Approval date'), '2026-02-01')
+    await userEvent.type(screen.getByLabelText('Expiry date'), '2026-12-31')
     await userEvent.type(screen.getByLabelText(/Approval Volume/i), '500')
 
     expect(screen.queryByRole('button', { name: 'Submit' })).not.toBeInTheDocument()
@@ -2134,7 +2144,7 @@ describe('Create Page Core Flows', () => {
     await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
     await waitFor(() => expect(screen.getByRole('radio', { name: 'Ministerial' })).toBeChecked())
     expect(screen.getByLabelText('Approval volume (m³)')).toHaveValue('')
-    expect(screen.getByLabelText('Expiry date (YYYY-MM-DD)')).toHaveValue('')
+    expect(screen.getByLabelText('Expiry date')).toHaveValue('')
     expect(screen.queryByText('Prefilled from selected applications')).not.toBeInTheDocument()
     await selectExemptionCreateTab('Applications')
     expect(
@@ -2238,7 +2248,7 @@ describe('Create Page Core Flows', () => {
     expect(statusSelect).toBeDisabled()
     expect(statusSelect).not.toHaveAttribute('aria-required', 'true')
     expect(screen.getByText('Exemption status')).not.toHaveClass('required-label')
-    expect(screen.getByLabelText('Approval date (YYYY-MM-DD)')).toBeDisabled()
+    expect(screen.getByLabelText('Approval date')).toBeDisabled()
     await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '250.5')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
@@ -2275,7 +2285,7 @@ describe('Create Page Core Flows', () => {
 
     expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('Active')
     expect(screen.getByRole('combobox', { name: 'Exemption status' })).toBeDisabled()
-    expect(screen.getByLabelText('Approval date (YYYY-MM-DD)')).toBeEnabled()
+    expect(screen.getByLabelText('Approval date')).toBeEnabled()
     expect(screen.getByLabelText('Exemption number')).toHaveAttribute('maxlength', '8')
     expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Exemption details',
@@ -2349,8 +2359,8 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('tab', { name: 'Applications' })).not.toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Exemption number'), 'BOIC-1')
-    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
-    await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
+    await userEvent.type(screen.getByLabelText('Approval date'), '2026-07-01')
+    await userEvent.type(screen.getByLabelText('Expiry date'), '2027-07-01')
     const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
     await userEvent.click(regionComboBox)
     fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
@@ -2396,8 +2406,8 @@ describe('Create Page Core Flows', () => {
     await selectExemptionCreateTab('Exemption details')
     await chooseExemptionType('Blanket OIC')
     await userEvent.type(screen.getByLabelText('Exemption number'), 'BOIC-1')
-    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
-    await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
+    await userEvent.type(screen.getByLabelText('Approval date'), '2026-07-01')
+    await userEvent.type(screen.getByLabelText('Expiry date'), '2027-07-01')
     const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
     await userEvent.click(regionComboBox)
     fireEvent.change(regionComboBox, { target: { value: 'Cariboo' } })
@@ -2432,11 +2442,11 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(volumeInput, '125.5')
     await chooseExemptionType('Blanket OIC')
     expect(volumeInput).toHaveValue('125.5')
-    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-10-02')
+    await userEvent.type(screen.getByLabelText('Approval date'), '2026-10-02')
     await chooseExemptionType('Ministerial')
     expect(volumeInput).toHaveValue('125.5')
-    expect(screen.getByLabelText('Approval date (YYYY-MM-DD)')).toHaveValue('')
-    expect(screen.getByLabelText('Approval date (YYYY-MM-DD)')).toBeDisabled()
+    expect(screen.getByLabelText('Approval date')).toHaveValue('')
+    expect(screen.getByLabelText('Approval date')).toBeDisabled()
 
     await userEvent.clear(volumeInput)
     await chooseExemptionType('Blanket OIC')
@@ -2462,8 +2472,8 @@ describe('Create Page Core Flows', () => {
     expect(
       screen.queryByText('Exemption number must be 8 characters or fewer'),
     ).not.toBeInTheDocument()
-    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
-    await userEvent.type(screen.getByLabelText('Expiry date (YYYY-MM-DD)'), '2027-07-01')
+    await userEvent.type(screen.getByLabelText('Approval date'), '2026-07-01')
+    await userEvent.type(screen.getByLabelText('Expiry date'), '2027-07-01')
     await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '250.5')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
@@ -2651,8 +2661,8 @@ describe('Create Page Core Flows', () => {
 
     await selectExemptionCreateTab('Exemption details')
     await chooseExemptionType('Section 1')
-    await userEvent.type(screen.getByLabelText('Approval date (YYYY-MM-DD)'), '2026-07-01')
-    const expiryDate = screen.getByLabelText('Expiry date (YYYY-MM-DD)')
+    await userEvent.type(screen.getByLabelText('Approval date'), '2026-07-01')
+    const expiryDate = screen.getByLabelText('Expiry date')
     await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '500')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
@@ -2753,7 +2763,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(screen.getByText('Enter offer details and save a new offer.')).toBeInTheDocument()
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     const offerFormActions = screen.getByRole('group', { name: 'Offer form actions' })
@@ -2763,7 +2773,7 @@ describe('Create Page Core Flows', () => {
         .map((button) => button.textContent),
     ).toEqual(['Cancel', 'Save new offer'])
     expect(
-      screen.getByRole('heading', { level: 1, name: 'Create provincial offer' }).closest('header'),
+      screen.getByRole('heading', { level: 1, name: 'Create new offer' }).closest('header'),
     ).toContainElement(offerFormActions)
     expect(within(offerFormActions).getByRole('button', { name: 'Cancel' })).toHaveAttribute(
       'type',
@@ -3195,7 +3205,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     const applicationNumberInput = screen.getByLabelText('Application number')
     mockedValidateOfferApplication.mockClear()
     mockedFetchOfferApplicationDetails.mockClear()
@@ -3229,7 +3239,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     mockedValidateOfferApplication.mockClear()
     fireEvent.change(screen.getByLabelText('Application number'), {
       target: { value: '1e3' },
@@ -3339,7 +3349,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(await screen.findByDisplayValue('Authoritative Buyer Ltd.')).toHaveAttribute('readonly')
     expect(mockedFetchOfferClientData).toHaveBeenCalledWith('77881')
     expect(screen.queryByLabelText('Offering client number')).not.toBeInTheDocument()
@@ -3398,7 +3408,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(await screen.findByDisplayValue('Authoritative Buyer Ltd.')).toHaveAttribute('readonly')
     expect(screen.queryByLabelText('Offering client number')).not.toBeInTheDocument()
     expect(screen.queryByDisplayValue('00099999')).not.toBeInTheDocument()
@@ -3463,7 +3473,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Bell Pole Company')).toBeInTheDocument()
     expect(screen.getByDisplayValue('Dave Kohlen')).toBeInTheDocument()
@@ -3490,7 +3500,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(await screen.findByDisplayValue('PKG-10')).toBeInTheDocument()
 
     await userEvent.type(screen.getByLabelText('Offer amount ($/m³)'), '25000')
@@ -3523,7 +3533,7 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { level: 1, name: 'Create provincial offer' })
+    await screen.findByRole('heading', { level: 1, name: 'Create new offer' })
     expect(await screen.findByDisplayValue('No Packages')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'See scale detail' })).toBeDisabled()
     expect(screen.getByDisplayValue('100.0')).toBeInTheDocument()

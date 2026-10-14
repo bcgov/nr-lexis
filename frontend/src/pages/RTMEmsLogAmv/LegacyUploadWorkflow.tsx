@@ -37,6 +37,7 @@ import { AppNotification } from '../../components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import PageHeader from '@/components/PageHeader'
 import PendingIcon from '@/components/PendingIcon'
+import UnsavedChangesGuard from '@/components/UnsavedChangesGuard'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   getRtmEmsLogAmvLastSaved,
@@ -1821,6 +1822,12 @@ const RtmEmsLogAmvUploadPage = () => {
           onClose={() => setDiscardConfirmation(null)}
         />
       )}
+      <UnsavedChangesGuard
+        isDirty={hasUnsavedChanges || hasValidatedUpload}
+        isBusy={isUploading}
+        onDiscard={clearUploadState}
+        subject="the average market values"
+      />
     </Grid>
   )
 }

@@ -14,6 +14,7 @@ type SearchableSelectProps = {
   value: string
   options: SearchableSelectOption[]
   placeholder?: string
+  helperText?: ReactNode
   allowCustomValue?: boolean
   required?: boolean
   disabled?: boolean
@@ -34,6 +35,7 @@ export default function SearchableSelect({
   value,
   options,
   placeholder = 'Search and select',
+  helperText,
   allowCustomValue = false,
   required = false,
   disabled = false,
@@ -58,6 +60,7 @@ export default function SearchableSelect({
         shouldFilterSearchableDropdownItem({ item, inputValue, optionCount: options.length })
       }
       placeholder={placeholder}
+      helperText={helperText}
       allowCustomValue={allowCustomValue}
       aria-required={required || undefined}
       disabled={disabled}

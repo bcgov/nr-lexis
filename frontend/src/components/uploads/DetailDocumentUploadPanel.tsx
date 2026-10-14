@@ -628,6 +628,11 @@ const DetailDocumentUploadPanel = ({
     return { message, details: buildUploadReviewDetails(message, result) }
   }
 
+  // A missing file is reported on the Files field alone, and the field takes focus.
+  const focusFileField = (): void => {
+    document.getElementById(`${inputId}File-drop-zone`)?.focus()
+  }
+
   const onSubmitUpload = async (): Promise<void> => {
     if (isSubmitting) return
     if (isDrawerPanel) setShowFileValidationError(uploadQueue.length === 0)
@@ -665,6 +670,10 @@ const DetailDocumentUploadPanel = ({
     }
 
     if (readyUploadItems.length === 0) {
+      if (isDrawerPanel && uploadQueue.length === 0) {
+        focusFileField()
+        return
+      }
       setErrorMessage(
         invalidUploadCount > 0
           ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before ${isDrawerPanel ? 'saving documents' : 'review'}.`
@@ -762,6 +771,11 @@ const DetailDocumentUploadPanel = ({
 
     if (pendingValidationCount > 0) {
       setErrorMessage('Wait for file validation to finish before reviewing the upload.')
+      return
+    }
+
+    if (uploadQueue.length === 0) {
+      focusFileField()
       return
     }
 

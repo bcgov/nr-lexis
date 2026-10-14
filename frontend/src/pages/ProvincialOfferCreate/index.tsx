@@ -851,7 +851,7 @@ const ProvincialOfferCreatePage = () => {
     <Grid fullWidth className="default-grid create-page-grid provincial-offer-create-page">
       <Column sm={4} md={8} lg={16}>
         <PageHeader
-          title="Create provincial offer"
+          title="Create new offer"
           subtitle="Enter offer details and save a new offer."
           focusTitle
           actionsLabel="Offer form actions"

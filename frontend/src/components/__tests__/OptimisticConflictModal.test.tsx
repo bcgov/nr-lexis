@@ -40,13 +40,11 @@ describe('OptimisticConflictModal', () => {
     expect(dialog).toBeVisible()
     expect(
       within(dialog).getByText(
-        'IDIR\\JSMITH saved changes on 2026-10-06 at 2:35 p.m., after you opened this permit. Your scale was not saved.',
+        'IDIR\\JSMITH saved changes on Oct 6, 2026 at 2:35 p.m., after you opened this permit. Your scale was not saved.',
       ),
     ).toBeVisible()
     expect(
-      within(dialog).getByText(
-        'Refresh to load the latest version, then save again. What you entered will be lost.',
-      ),
+      within(dialog).getByText('Refresh to load the latest version, then save again.'),
     ).toBeVisible()
     expect(screen.queryByText('Permit 9021022 was saved by another user.')).not.toBeInTheDocument()
     expect(screen.queryByText(/Permit remarks/)).not.toBeInTheDocument()

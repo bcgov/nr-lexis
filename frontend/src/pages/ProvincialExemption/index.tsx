@@ -24,6 +24,7 @@ import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import EmptyState from '@/components/EmptyState'
 import ForestClientComboBox from '@/components/ForestClientComboBox'
 import DisabledButtonTooltip from '@/components/DisabledButtonTooltip'
+import IneligibleRowCheckbox from '@/components/IneligibleRowCheckbox'
 import ExemptionApprovalModal, {
   type ExemptionApprovalOutcome,
 } from '@/components/ExemptionApprovalModal'
@@ -493,7 +494,7 @@ const ProvincialExemptionPage = () => {
       } catch (error) {
         if (isLatestRequest()) {
           console.error(error)
-          setErrorMessage('Unable to retrieve exemption search results.')
+          setErrorMessage('Unable to retrieve exemption search results. Try again.')
           commitResults(EMPTY_RESULTS, 'exact')
         }
         return false
@@ -918,7 +919,7 @@ const ProvincialExemptionPage = () => {
                   id="region"
                   titleText="Region"
                   items={regionOptions}
-                  placeholder="Select region(s)"
+                  placeholder="All"
                   selectedItems={selectedRegions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(nextSelected) => {
@@ -944,7 +945,7 @@ const ProvincialExemptionPage = () => {
                   id="exemptionTypeCode"
                   labelText="Exemption type"
                   value={filters.exemptionTypeCode}
-                  placeholder="All types"
+                  placeholder="All"
                   options={exemptionTypeOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   readOnly={exemptionTypeLocked}
@@ -954,7 +955,7 @@ const ProvincialExemptionPage = () => {
                   id="exemptionStatusCode"
                   labelText="Exemption status"
                   value={filters.exemptionStatusCode}
-                  placeholder="All statuses"
+                  placeholder="All"
                   options={exemptionStatusOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('exemptionStatusCode', value)}
@@ -1040,7 +1041,7 @@ const ProvincialExemptionPage = () => {
           <SearchResultsTableFrame
             resultName="exemption"
             loading={loading}
-            loadingDescription="Loading exemption search results…"
+            loadingDescription="Searching"
             columnCount={SORT_COLUMNS.length + (canApproveExemption ? 1 : 0)}
             totalItems={
               errorMessage || (loading && results.content.length === 0)
@@ -1095,7 +1096,7 @@ const ProvincialExemptionPage = () => {
                           <Checkbox
                             id="selectAllCurrentPageRows"
                             hideLabel
-                            labelText="Select all rows on this page"
+                            labelText="Select all eligible rows on this page"
                             checked={allSelectableRowsAreSelected}
                             disabled={selectableRows.length === 0}
                             onChange={(_, payload) =>
@@ -1129,27 +1130,23 @@ const ProvincialExemptionPage = () => {
                         {canApproveExemption && (
                           <TableCell>
                             <div className="provincial-exemption-search-row-action">
-                              <DisabledButtonTooltip
-                                disabled={!canSelectRow}
-                                description={disabledApprovalSelectionDescription(row)}
-                              >
-                                {canSelectRow ? (
-                                  <Checkbox
-                                    id={`selectRow-${row.exemptionNumber}`}
-                                    hideLabel
-                                    labelText={`Select exemption ${row.exemptionNumber}`}
-                                    checked={Boolean(selectedRowsById[row.exemptionNumber])}
-                                    disabled={!canSelectRow}
-                                    onChange={(_, payload) =>
-                                      toggleRowSelection(row, Boolean(payload.checked))
-                                    }
-                                  />
-                                ) : (
-                                  <span className="sr-only">
-                                    {disabledApprovalSelectionDescription(row)}
-                                  </span>
-                                )}
-                              </DisabledButtonTooltip>
+                              {canSelectRow ? (
+                                <Checkbox
+                                  id={`selectRow-${row.exemptionNumber}`}
+                                  hideLabel
+                                  labelText={`Select exemption ${row.exemptionNumber}`}
+                                  checked={Boolean(selectedRowsById[row.exemptionNumber])}
+                                  onChange={(_, payload) =>
+                                    toggleRowSelection(row, Boolean(payload.checked))
+                                  }
+                                />
+                              ) : (
+                                <IneligibleRowCheckbox
+                                  id={`selectRow-${row.exemptionNumber}`}
+                                  labelText={`Select exemption ${row.exemptionNumber}`}
+                                  reason={disabledApprovalSelectionDescription(row)}
+                                />
+                              )}
                               {row.isLocked && <Tag type="gray">Locked</Tag>}
                             </div>
                           </TableCell>

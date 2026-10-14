@@ -23,6 +23,12 @@
   }
 }
 
+.permit-fee-card__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
 // The package fee rows sit 24px from the package selector above and the fee table below.
 .permit-package-fee-fields.record-field-grid {
   margin-block: 1.5rem;

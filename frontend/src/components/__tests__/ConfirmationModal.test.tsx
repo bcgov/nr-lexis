@@ -1,5 +1,6 @@
 import { within, act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { useState } from 'react'
 import { afterEach, vi } from 'vitest'
 
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -232,4 +233,44 @@ describe('ConfirmationModal', () => {
     await user.click(confirmButton)
     expect(onConfirm).not.toHaveBeenCalled()
   })
+
+  it.each(['Cancel', 'Escape'])(
+    'returns focus to the control that opened it after %s',
+    async (dismissal) => {
+      const user = userEvent.setup()
+      const DeleteScale = () => {
+        const [open, setOpen] = useState(false)
+        return (
+          <>
+            <button type="button" onClick={() => setOpen(true)}>
+              Delete scale
+            </button>
+            {open && (
+              <ConfirmationModal
+                open
+                danger
+                title="Delete scale?"
+                confirmLabel="Delete"
+                onConfirm={vi.fn()}
+                onClose={() => setOpen(false)}
+              />
+            )}
+          </>
+        )
+      }
+
+      render(<DeleteScale />)
+      await user.click(screen.getByRole('button', { name: 'Delete scale' }))
+      await screen.findByRole('dialog', { name: 'Delete scale?' })
+      if (dismissal === 'Escape') await user.keyboard('{Escape}')
+      else await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Delete scale?' })).not.toBeInTheDocument(),
+      )
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Delete scale' })).toHaveFocus(),
+      )
+    },
+  )
 })

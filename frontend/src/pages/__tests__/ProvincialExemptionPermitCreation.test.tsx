@@ -600,7 +600,7 @@ describe('permit creation from an exemption', () => {
     expect(within(table).getByRole('cell', { name: '2.0' })).toBeVisible()
   })
 
-  it('renders the legacy permit issue date in ISO format without shifting its day', async () => {
+  it('renders the legacy permit issue date in words without shifting its day', async () => {
     const actualService = await vi.importActual<{
       fetchExemptionPermits: typeof fetchExemptionPermits
     }>('@/service/provincial-exemption-detail-service')
@@ -621,7 +621,8 @@ describe('permit creation from an exemption', () => {
       await openPermitsTab()
 
       const table = await screen.findByRole('region', { name: 'Related exemption permits' })
-      expect(within(table).getByText('2026-03-10')).toBeVisible()
+      expect(within(table).getByText('Mar 10, 2026')).toBeVisible()
+      expect(within(table).queryByText('Mar 9, 2026')).not.toBeInTheDocument()
       expect(within(table).queryByText('03/10/2026')).not.toBeInTheDocument()
     } finally {
       get.mockRestore()
@@ -771,6 +772,9 @@ describe('permit creation from an exemption', () => {
     expect(within(dialog).getByText(/created when you save it/)).toBeInTheDocument()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2')
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Apply for new permit' })).toHaveFocus(),
+    )
     expect(addPermitDetail).not.toHaveBeenCalled()
     expect(createPermitFromExemption).not.toHaveBeenCalled()
   })

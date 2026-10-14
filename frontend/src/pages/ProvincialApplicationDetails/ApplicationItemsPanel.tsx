@@ -73,7 +73,8 @@ import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { fieldErrorText } from '@/utils/field-error'
 import { markRequired, requiredLabel } from '@/utils/required-label'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
-import { displayTableValue, formatPackageNumberLabel } from '@/utils/text'
+import { formatPackageNumberLabel } from '@/utils/text'
+import { RecordField, RecordFieldGrid, RecordFieldRow } from '@/pages/shared/RecordFieldGrid'
 import './ApplicationItemsPanel.scss'
 import { formatVolume } from '@/utils/volume'
 
@@ -297,6 +298,7 @@ const GRADE_HELPER_TEXT = 'Available once species are selected'
 // A package or scale saved from its side panel reports inside the section that shows it.
 const PACKAGE_SAVED_TITLE = 'Package saved.'
 const SCALE_SAVED_TITLE = 'Scale saved.'
+const SCALE_DELETED_TITLE = 'Scale deleted.'
 const NO_SPECIES_CODES: string[] = []
 
 const normalizePackageNumberInput = (value: string): string => value.toUpperCase()
@@ -555,7 +557,7 @@ function ProvincialApplicationItemsPanel({
       ? 'items'
       : actionResult.title === PACKAGE_SAVED_TITLE
         ? 'package'
-        : actionResult.title === SCALE_SAVED_TITLE
+        : actionResult.title === SCALE_SAVED_TITLE || actionResult.title === SCALE_DELETED_TITLE
           ? 'scales'
           : 'items'
   const actionResultNotification = (section: typeof actionResultSection) =>
@@ -1320,7 +1322,7 @@ function ProvincialApplicationItemsPanel({
       try {
         await onDetailChanged()
         await loadPackageItems(nextPackageNumber)
-        showItemActionResult('success', `Package ${nextPackageNumber} saved.`)
+        onActionResult({ kind: 'success', title: PACKAGE_SAVED_TITLE, message: '' })
       } catch {
         showItemActionResult(
           'warning',
@@ -1550,7 +1552,7 @@ function ProvincialApplicationItemsPanel({
       try {
         await onDetailChanged()
         await loadPackageItems(selectedPackageNumber)
-        showItemActionResult('success', `Scale ${row.id} deleted.`)
+        onActionResult({ kind: 'success', title: SCALE_DELETED_TITLE, message: '' })
       } catch (refreshError) {
         console.error(refreshError)
         showItemActionResult(
@@ -1652,6 +1654,40 @@ function ProvincialApplicationItemsPanel({
       </section>
 
       <div className="application-items-grid">
+        {!packageFirstEmptyState &&
+          (packageNumbers.length > 1 || (canOpenItemsEditor && canAddPackages)) && (
+            <div className="application-items-package-toolbar">
+              {/* INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_PACKAGE_SELECTION): A single
+                  package is identified by its card title, as in the application design. */}
+              {packageNumbers.length > 1 && (
+                <div className="application-items-package-select">
+                  <SearchableSelect
+                    id="applicationItemsPackageSelect"
+                    labelText="Selected package"
+                    value={selectedPackageNumber}
+                    placeholder="Select package"
+                    disabled={itemsBusy}
+                    options={packageNumbers.map((packageNumber) => ({
+                      value: packageNumber,
+                      label: formatPackageNumberLabel(packageNumber),
+                    }))}
+                    onChange={requestPackageSelection}
+                  />
+                </div>
+              )}
+              {canOpenItemsEditor && canAddPackages && (
+                <Button
+                  kind="tertiary"
+                  size="md"
+                  renderIcon={Add}
+                  disabled={itemsBusy}
+                  onClick={(event) => startItemEditing('create', event.currentTarget)}
+                >
+                  Create package
+                </Button>
+              )}
+            </div>
+          )}
         <section
           id="application-items-package"
           tabIndex={-1}
@@ -1667,17 +1703,6 @@ function ProvincialApplicationItemsPanel({
               </span>
             </h3>
             <div className="application-items-card-actions">
-              {canOpenItemsEditor && canEditPackages && selectedPackageNumber && (
-                <Button
-                  kind="tertiary"
-                  size="md"
-                  renderIcon={Edit}
-                  disabled={itemsBusy || !packageDataLoaded || selectedPackageHasPermittedScale}
-                  onClick={(event) => startItemEditing('edit', event.currentTarget)}
-                >
-                  Edit package
-                </Button>
-              )}
               {canOpenItemsEditor && canDeleteSelectedPackage && (
                 <Button
                   kind="danger--ghost"
@@ -1695,57 +1720,30 @@ function ProvincialApplicationItemsPanel({
                   Delete package
                 </Button>
               )}
-              {canOpenItemsEditor && canAddPackages && (
+              {canOpenItemsEditor && canEditPackages && selectedPackageNumber && (
                 <Button
                   kind="tertiary"
                   size="md"
-                  renderIcon={Add}
-                  disabled={itemsBusy}
-                  onClick={(event) => startItemEditing('create', event.currentTarget)}
+                  renderIcon={Edit}
+                  disabled={itemsBusy || !packageDataLoaded || selectedPackageHasPermittedScale}
+                  onClick={(event) => startItemEditing('edit', event.currentTarget)}
                 >
-                  Create package
+                  Edit package
                 </Button>
               )}
             </div>
-            {/* INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_PACKAGE_SELECTION): A single
-                package is identified by its card title, as in the application design. */}
-            {packageNumbers.length > 1 && (
-              <SearchableSelect
-                id="applicationItemsPackageSelect"
-                labelText="Selected package"
-                value={selectedPackageNumber}
-                placeholder="Select package"
-                disabled={itemsBusy}
-                options={packageNumbers.map((packageNumber) => ({
-                  value: packageNumber,
-                  label: formatPackageNumberLabel(packageNumber),
-                }))}
-                onChange={requestPackageSelection}
-              />
-            )}
           </div>
           {actionResultNotification('package')}
-          <dl className="detail-field-grid application-items-summary">
-            {[
-              ['Package number', selectedPackageNumber || 'None selected'],
-              ['Package volume (m³)', formatVolume(packageForm.volume)],
-              ['Total scale volume (m³)', formatVolume(packageForm.scaledVolume)],
-              [
-                'Total pieces',
-                packageScalesUnavailable
-                  ? 'Not available'
-                  : selectedPackageTotalPieces.toLocaleString(),
-              ],
-              ['Average length (m)', packageForm.averageLength],
-              ['Average top diameter (rads)', packageForm.averageDiameter],
-              ['Comments', packageForm.comments],
-            ].map(([label, value]) => (
-              <div key={label} className="detail-field-item">
-                <dt className="detail-field-label">{label}</dt>
-                <dd className="detail-field-value">{displayTableValue(value)}</dd>
-              </div>
-            ))}
-          </dl>
+          <RecordFieldGrid>
+            <RecordFieldRow>
+              <RecordField label="Volume (m³)" value={formatVolume(packageForm.volume)} />
+              <RecordField label="Average length (m)" value={packageForm.averageLength} />
+              <RecordField
+                label="Average top diameter (rads)"
+                value={packageForm.averageDiameter}
+              />
+            </RecordFieldRow>
+          </RecordFieldGrid>
           <DetailSidePanel
             open={activeDrawer === 'edit'}
             title="Edit package"
@@ -1846,6 +1844,237 @@ function ProvincialApplicationItemsPanel({
               />
             </div>
           </DetailSidePanel>
+          <section
+            id="application-items-scales"
+            tabIndex={-1}
+            ref={scalesSectionRef}
+            className="application-items-scale-summary"
+            aria-labelledby="application-items-scales-title"
+          >
+            <div className="application-items-scale-summary__header">
+              <h4 id="application-items-scales-title" className="detail-section-subtitle">
+                Summary of scale
+              </h4>
+              {canOpenItemsEditor && canAddScales && selectedPackageNumber && (
+                <Button
+                  kind="tertiary"
+                  size="md"
+                  renderIcon={Add}
+                  disabled={itemsBusy || !packageDataLoaded}
+                  onClick={(event) => startItemEditing('scale', event.currentTarget)}
+                >
+                  Add scale
+                </Button>
+              )}
+            </div>
+            {actionResultNotification('scales')}
+            <RecordFieldGrid>
+              <RecordFieldRow>
+                <RecordField
+                  label="Total pieces"
+                  value={
+                    itemsLoading
+                      ? 'Loading…'
+                      : packageScalesUnavailable
+                        ? 'Not available'
+                        : selectedPackageTotalPieces.toLocaleString()
+                  }
+                />
+                <RecordField
+                  label="Total scale volume (m³)"
+                  value={
+                    itemsLoading
+                      ? 'Loading…'
+                      : packageScalesUnavailable
+                        ? 'Not available'
+                        : formatVolume(selectedPackageScaleVolume)
+                  }
+                />
+              </RecordFieldRow>
+            </RecordFieldGrid>
+            <DetailSidePanel
+              open={activeDrawer === 'scale'}
+              title="Add scale"
+              className="application-items-drawer"
+              contentSelector=".provincial-application-detail"
+              initialFocusSelector="#applicationItemsScaleTimberMark"
+              launcherRef={scaleLauncherRef}
+              fallbackFocusSelector="#application-items-scales"
+              busy={isSavingScale}
+              onClose={requestDrawerClose}
+              actions={[
+                {
+                  label: 'Cancel',
+                  kind: 'tertiary',
+                  disabled: isSavingScale,
+                  onClick: requestDrawerClose,
+                },
+                {
+                  label: isSavingScale ? 'Saving scale' : 'Save scale',
+                  kind: 'primary',
+                  disabled: !canSubmitScale,
+                  renderIcon: isSavingScale ? PendingIcon : undefined,
+                  onClick: () => void onAddScale(),
+                },
+              ]}
+            >
+              <div className="application-items-panel-form" ref={drawerFormRef}>
+                <RequiredFieldsLegend />
+                {!!scaleActionErrorMessage && (
+                  <div tabIndex={-1} data-drawer-error>
+                    <InlineNotification
+                      kind="error"
+                      title="Scale creation failed"
+                      subtitle={scaleActionErrorMessage}
+                      lowContrast
+                      hideCloseButton
+                    />
+                  </div>
+                )}
+                <div className="application-items-panel-form__pair">
+                  <TextInput
+                    id="applicationItemsScaleTimberMark"
+                    labelText={requiredLabel('Timber mark')}
+                    aria-required="true"
+                    value={scaleForm.timberMark}
+                    disabled={scaleFieldsDisabled}
+                    invalid={!!scaleFieldError('scaleTimberMark')}
+                    invalidText={scaleFieldError('scaleTimberMark')}
+                    onBlur={() => markItemFieldTouched('scaleTimberMark')}
+                    onChange={(event) => setScaleField('timberMark', event.target.value)}
+                  />
+                  <TextInput
+                    id="applicationItemsScalePieces"
+                    labelText={requiredLabel('Pieces')}
+                    aria-required="true"
+                    value={scaleForm.pieces}
+                    disabled={scaleFieldsDisabled}
+                    invalid={!!scaleFieldError('scalePieces')}
+                    invalidText={scaleFieldError('scalePieces')}
+                    onBlur={() => markItemFieldTouched('scalePieces')}
+                    onChange={(event) => setScaleField('pieces', event.target.value)}
+                  />
+                </div>
+                <div className="application-items-panel-form__pair">
+                  <Dropdown<ApplicationCodeOption | null>
+                    id="applicationItemsScaleSpecies"
+                    ref={markRequired}
+                    titleText={requiredLabel('Species')}
+                    label=""
+                    items={scaleSpeciesOptions}
+                    itemToString={optionName}
+                    selectedItem={findOption(scaleSpeciesOptions, scaleForm.speciesCode)}
+                    disabled={scaleFieldsDisabled}
+                    invalid={!!scaleFieldError('scaleSpeciesCode')}
+                    invalidText={scaleFieldError('scaleSpeciesCode')}
+                    onChange={({ selectedItem }) => {
+                      const speciesCode = selectedItem?.code ?? ''
+                      if (speciesCode === scaleForm.speciesCode) return
+                      markItemFieldTouched('scaleSpeciesCode')
+                      // Grades depend on the species, so a new species starts with no grade.
+                      setScaleField('speciesCode', speciesCode)
+                      setScaleField('gradeCode', '')
+                    }}
+                  />
+                  <Dropdown<ApplicationCodeOption | null>
+                    id="applicationItemsScaleGrade"
+                    ref={markRequired}
+                    titleText={requiredLabel('Grade')}
+                    label=""
+                    items={gradeOptions}
+                    itemToString={optionName}
+                    selectedItem={findOption(gradeOptions, scaleForm.gradeCode)}
+                    disabled={scaleFieldsDisabled || !scaleForm.speciesCode}
+                    invalid={!!scaleFieldError('scaleGradeCode')}
+                    invalidText={scaleFieldError('scaleGradeCode')}
+                    helperText={scaleForm.speciesCode ? undefined : GRADE_HELPER_TEXT}
+                    onChange={({ selectedItem }) => {
+                      markItemFieldTouched('scaleGradeCode')
+                      setScaleField('gradeCode', selectedItem?.code ?? '')
+                    }}
+                  />
+                </div>
+                <TextInput
+                  id="applicationItemsScaleVolume"
+                  labelText={requiredLabel('Volume (m³)')}
+                  aria-required="true"
+                  helperText={
+                    selectedPackageRemainingScaleVolume === null
+                      ? undefined
+                      : scaleVolumeLimitText(selectedPackageRemainingScaleVolume)
+                  }
+                  value={scaleForm.volume}
+                  disabled={scaleFieldsDisabled}
+                  invalid={!!scaleFieldError('scaleVolume')}
+                  invalidText={scaleFieldError('scaleVolume')}
+                  onBlur={() => markItemFieldTouched('scaleVolume')}
+                  onChange={(event) => setScaleField('volume', event.target.value)}
+                />
+              </div>
+            </DetailSidePanel>
+            {packageScalesUnavailable ? (
+              <p className="application-items-scale-summary__empty">
+                Package scales could not be loaded.
+              </p>
+            ) : scales.length === 0 ? (
+              <p className="application-items-scale-summary__empty">No scales yet.</p>
+            ) : (
+              <div className="application-items-table-scroll application-items-table-scroll--scales">
+                <Table size="md" useZebraStyles>
+                  <TableHead>
+                    <TableRow>
+                      <TableHeader>Timber mark</TableHeader>
+                      <TableHeader>Scale type</TableHeader>
+                      <TableHeader>Pieces</TableHeader>
+                      <TableHeader>Species</TableHeader>
+                      <TableHeader>Grade</TableHeader>
+                      <TableHeader>Volume (m³)</TableHeader>
+                      {canOpenItemsEditor && <TableHeader>Actions</TableHeader>}
+                    </TableRow>
+                  </TableHead>
+                  <TableBody>
+                    {scales.map((row) => (
+                      <TableRow key={row.id}>
+                        <TableCell>{row.timberMark}</TableCell>
+                        <TableCell>{displayScaleType(row.cascadeSplitCode)}</TableCell>
+                        <TableCell>{row.pieces.toLocaleString()}</TableCell>
+                        <TableCell>{row.species}</TableCell>
+                        <TableCell>{row.grade}</TableCell>
+                        <TableCell>{formatVolume(row.volume)}</TableCell>
+                        {canOpenItemsEditor && (
+                          <TableCell>
+                            <Button
+                              type="button"
+                              kind="danger--ghost"
+                              size="md"
+                              disabled={
+                                !canAddScales ||
+                                itemsBusy ||
+                                !packageDataLoaded ||
+                                deletingScaleId === row.id ||
+                                row.permitted
+                              }
+                              renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
+                              onClick={() => {
+                                if (itemsBusy) return
+                                confirmItemDiscard(() => {
+                                  cancelItemEditing()
+                                  onActionResult(null)
+                                  setScalePendingDeletion(row)
+                                })
+                              }}
+                            >
+                              {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
+                            </Button>
+                          </TableCell>
+                        )}
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              </div>
+            )}
+          </section>
         </section>
 
         <DetailSidePanel
@@ -1949,246 +2178,16 @@ function ProvincialApplicationItemsPanel({
             />
           </div>
         </DetailSidePanel>
-
-        <section
-          id="application-items-scales"
-          tabIndex={-1}
-          ref={scalesSectionRef}
-          className="application-items-card application-items-section application-items-section--scales"
-          hidden={packageFirstEmptyState}
-          style={packageFirstEmptyState ? { display: 'none' } : undefined}
-        >
-          <div className="application-items-section-header">
-            <h3>Summary of scale</h3>
-            {canOpenItemsEditor && canAddScales && selectedPackageNumber && (
-              <Button
-                kind="tertiary"
-                size="md"
-                renderIcon={Add}
-                disabled={itemsBusy || !packageDataLoaded}
-                onClick={(event) => startItemEditing('scale', event.currentTarget)}
-              >
-                Add scale
-              </Button>
-            )}
-          </div>
-          {actionResultNotification('scales')}
-          <div className="application-items-scale-totals">
-            <span>
-              Total pieces:{' '}
-              {itemsLoading
-                ? 'Loading…'
-                : packageScalesUnavailable
-                  ? 'Not available'
-                  : selectedPackageTotalPieces.toLocaleString()}
-            </span>
-            <span>
-              Total scale volume (m³):{' '}
-              {itemsLoading
-                ? 'Loading…'
-                : packageScalesUnavailable
-                  ? 'Not available'
-                  : formatVolume(selectedPackageScaleVolume)}
-            </span>
-          </div>
-          <DetailSidePanel
-            open={activeDrawer === 'scale'}
-            title="Add scale"
-            className="application-items-drawer"
-            contentSelector=".provincial-application-detail"
-            initialFocusSelector="#applicationItemsScaleTimberMark"
-            launcherRef={scaleLauncherRef}
-            fallbackFocusSelector="#application-items-scales"
-            busy={isSavingScale}
-            onClose={requestDrawerClose}
-            actions={[
-              {
-                label: 'Cancel',
-                kind: 'tertiary',
-                disabled: isSavingScale,
-                onClick: requestDrawerClose,
-              },
-              {
-                label: isSavingScale ? 'Saving scale' : 'Save scale',
-                kind: 'primary',
-                disabled: !canSubmitScale,
-                renderIcon: isSavingScale ? PendingIcon : undefined,
-                onClick: () => void onAddScale(),
-              },
-            ]}
-          >
-            <div className="application-items-panel-form" ref={drawerFormRef}>
-              <RequiredFieldsLegend />
-              {!!scaleActionErrorMessage && (
-                <div tabIndex={-1} data-drawer-error>
-                  <InlineNotification
-                    kind="error"
-                    title="Scale creation failed"
-                    subtitle={scaleActionErrorMessage}
-                    lowContrast
-                    hideCloseButton
-                  />
-                </div>
-              )}
-              <div className="application-items-panel-form__pair">
-                <TextInput
-                  id="applicationItemsScaleTimberMark"
-                  labelText={requiredLabel('Timber mark')}
-                  aria-required="true"
-                  value={scaleForm.timberMark}
-                  disabled={scaleFieldsDisabled}
-                  invalid={!!scaleFieldError('scaleTimberMark')}
-                  invalidText={scaleFieldError('scaleTimberMark')}
-                  onBlur={() => markItemFieldTouched('scaleTimberMark')}
-                  onChange={(event) => setScaleField('timberMark', event.target.value)}
-                />
-                <TextInput
-                  id="applicationItemsScalePieces"
-                  labelText={requiredLabel('Pieces')}
-                  aria-required="true"
-                  value={scaleForm.pieces}
-                  disabled={scaleFieldsDisabled}
-                  invalid={!!scaleFieldError('scalePieces')}
-                  invalidText={scaleFieldError('scalePieces')}
-                  onBlur={() => markItemFieldTouched('scalePieces')}
-                  onChange={(event) => setScaleField('pieces', event.target.value)}
-                />
-              </div>
-              <div className="application-items-panel-form__pair">
-                <Dropdown<ApplicationCodeOption | null>
-                  id="applicationItemsScaleSpecies"
-                  ref={markRequired}
-                  titleText={requiredLabel('Species')}
-                  label=""
-                  items={scaleSpeciesOptions}
-                  itemToString={optionName}
-                  selectedItem={findOption(scaleSpeciesOptions, scaleForm.speciesCode)}
-                  disabled={scaleFieldsDisabled}
-                  invalid={!!scaleFieldError('scaleSpeciesCode')}
-                  invalidText={scaleFieldError('scaleSpeciesCode')}
-                  onChange={({ selectedItem }) => {
-                    const speciesCode = selectedItem?.code ?? ''
-                    if (speciesCode === scaleForm.speciesCode) return
-                    markItemFieldTouched('scaleSpeciesCode')
-                    // Grades depend on the species, so a new species starts with no grade.
-                    setScaleField('speciesCode', speciesCode)
-                    setScaleField('gradeCode', '')
-                  }}
-                />
-                <Dropdown<ApplicationCodeOption | null>
-                  id="applicationItemsScaleGrade"
-                  ref={markRequired}
-                  titleText={requiredLabel('Grade')}
-                  label=""
-                  items={gradeOptions}
-                  itemToString={optionName}
-                  selectedItem={findOption(gradeOptions, scaleForm.gradeCode)}
-                  disabled={scaleFieldsDisabled || !scaleForm.speciesCode}
-                  invalid={!!scaleFieldError('scaleGradeCode')}
-                  invalidText={scaleFieldError('scaleGradeCode')}
-                  helperText={scaleForm.speciesCode ? undefined : GRADE_HELPER_TEXT}
-                  onChange={({ selectedItem }) => {
-                    markItemFieldTouched('scaleGradeCode')
-                    setScaleField('gradeCode', selectedItem?.code ?? '')
-                  }}
-                />
-              </div>
-              <TextInput
-                id="applicationItemsScaleVolume"
-                labelText={requiredLabel('Volume (m³)')}
-                aria-required="true"
-                helperText={
-                  selectedPackageRemainingScaleVolume === null
-                    ? undefined
-                    : scaleVolumeLimitText(selectedPackageRemainingScaleVolume)
-                }
-                value={scaleForm.volume}
-                disabled={scaleFieldsDisabled}
-                invalid={!!scaleFieldError('scaleVolume')}
-                invalidText={scaleFieldError('scaleVolume')}
-                onBlur={() => markItemFieldTouched('scaleVolume')}
-                onChange={(event) => setScaleField('volume', event.target.value)}
-              />
-            </div>
-          </DetailSidePanel>
-          <div className="application-items-table-scroll application-items-table-scroll--scales">
-            <Table size="md" useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>Timber mark</TableHeader>
-                  <TableHeader>Scale type</TableHeader>
-                  <TableHeader>Pieces</TableHeader>
-                  <TableHeader>Species</TableHeader>
-                  <TableHeader>Grade</TableHeader>
-                  <TableHeader>Volume (m³)</TableHeader>
-                  {canOpenItemsEditor && <TableHeader>Delete</TableHeader>}
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {packageScalesUnavailable ? (
-                  <TableRow>
-                    <TableCell colSpan={canOpenItemsEditor ? 7 : 6}>
-                      Package scales could not be loaded.
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  scales.map((row) => (
-                    <TableRow key={row.id}>
-                      <TableCell>{row.timberMark}</TableCell>
-                      <TableCell>{displayScaleType(row.cascadeSplitCode)}</TableCell>
-                      <TableCell>{row.pieces.toLocaleString()}</TableCell>
-                      <TableCell>{row.species}</TableCell>
-                      <TableCell>{row.grade}</TableCell>
-                      <TableCell>{formatVolume(row.volume)}</TableCell>
-                      {canOpenItemsEditor && (
-                        <TableCell>
-                          <Button
-                            type="button"
-                            kind="danger--ghost"
-                            size="md"
-                            disabled={
-                              !canAddScales ||
-                              itemsBusy ||
-                              !packageDataLoaded ||
-                              deletingScaleId === row.id ||
-                              row.permitted
-                            }
-                            renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
-                            onClick={() => {
-                              if (itemsBusy) return
-                              confirmItemDiscard(() => {
-                                cancelItemEditing()
-                                onActionResult(null)
-                                setScalePendingDeletion(row)
-                              })
-                            }}
-                          >
-                            {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
-                          </Button>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))
-                )}
-                {!packageScalesUnavailable && scales.length === 0 && (
-                  <TableRow>
-                    <TableCell colSpan={canOpenItemsEditor ? 7 : 6}>No scales yet.</TableCell>
-                  </TableRow>
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        </section>
       </div>
       {packagePendingDeletion && (
         <ConfirmationModal
           open
           danger
-          title="Delete package"
+          title="Are you sure you want to delete this package?"
           description={
             <>
-              Permanently delete package <strong>{packagePendingDeletion}</strong> from application{' '}
-              {applicationNumber}? This cannot be undone.
+              <strong>Package {formatPackageNumberLabel(packagePendingDeletion)}</strong> will be
+              deleted. This action cannot be undone.
             </>
           }
           confirmLabel="Delete"
@@ -2202,12 +2201,18 @@ function ProvincialApplicationItemsPanel({
         <ConfirmationModal
           open
           danger
-          title="Delete scale"
+          title="Are you sure you want to delete this scale?"
           description={
             <>
-              Permanently delete scale <strong>{scalePendingDeletion.id}</strong> (
-              {scalePendingDeletion.timberMark}) from package {selectedPackageNumber}? This cannot
-              be undone.
+              <strong>
+                {[
+                  `Timber mark ${scalePendingDeletion.timberMark}`,
+                  scalePendingDeletion.species,
+                  `Grade ${scalePendingDeletion.grade.replace(/^Grade\s+/i, '')}`,
+                  `${formatVolume(scalePendingDeletion.volume)} m³`,
+                ].join(' · ')}
+              </strong>{' '}
+              will be deleted. This action cannot be undone.
             </>
           }
           confirmLabel="Delete"

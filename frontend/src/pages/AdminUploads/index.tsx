@@ -1171,6 +1171,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       setShowValidationErrors(true)
       if (selectedWorkflowType !== 'applicationSubmission') {
         setErrorMessage(validationErrors.join(' '))
+      } else if (fieldErrors.uploadFile) {
+        document.getElementById('uploadFile-drop-zone')?.focus()
       }
       return
     }

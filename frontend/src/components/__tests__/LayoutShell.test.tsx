@@ -410,7 +410,7 @@ describe('Layout shell', () => {
   })
 
   it.each([
-    ['/provincial/application/create', 'Create/Edit Application'],
+    ['/provincial/application/create', 'Create application'],
     ['/provincial/application/upload', 'Upload'],
   ])('gives exact route %s priority over the application detail pattern', (path, linkName) => {
     renderLayout(path)

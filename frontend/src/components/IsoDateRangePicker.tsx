@@ -186,6 +186,7 @@ export default function IsoDateRangePicker({
             id={id}
             labelText={label}
             placeholder="YYYY-MM-DD"
+            helperText="year-month-day"
             pattern={String.raw`\d{4}-\d{2}-\d{2}`}
             data-1p-ignore="true"
             data-lpignore="true"

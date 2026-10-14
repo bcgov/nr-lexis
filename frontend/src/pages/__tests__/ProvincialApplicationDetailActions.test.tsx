@@ -763,7 +763,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
   })
 
-  it('edits agent details using the legacy editable fields', async () => {
+  it('keeps the saved agent client and edits its location and contact', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -795,7 +795,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     )
     agentControls = within(getAgentDetailsTile())
 
-    expect(agentControls.getByLabelText('Agent client')).toHaveValue('00033344')
+    expect(agentControls.queryByLabelText('Agent client')).not.toBeInTheDocument()
+    const savedAgentClient = agentControls.getByText('Agent client').closest('.detail-field-item')
+    expect(within(savedAgentClient as HTMLElement).getByText(/00033344$/)).toBeInTheDocument()
     expect(within(getOwnerClientDetailsTile()).getByLabelText("I'm an agent")).toBeChecked()
 
     await chooseComboBoxOption(
@@ -836,6 +838,32 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.getByText('The application was saved.')).toBeInTheDocument()
   })
 
+  it("keeps the saved agent client when I'm an agent is cleared and checked again", async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await selectApplicationDetailTab('Applicant')
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    const agentChoice = ownerControls.getByLabelText("I'm an agent")
+    await userEvent.click(agentChoice)
+    await userEvent.click(agentChoice)
+
+    const agentControls = within(getAgentDetailsTile())
+    expect(agentControls.queryByLabelText('Agent client')).not.toBeInTheDocument()
+    const savedAgentClient = agentControls.getByText('Agent client').closest('.detail-field-item')
+    expect(within(savedAgentClient as HTMLElement).getByText(/00033344$/)).toBeInTheDocument()
+  })
+
   it('cancels agent edits without changing the persisted summary', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -857,8 +885,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       }),
     )
     agentControls = within(getAgentDetailsTile())
-    fireEvent.change(agentControls.getByLabelText('Agent client'), {
-      target: { value: '00099988' },
+    await waitFor(() =>
+      expect(agentControls.getByRole('textbox', { name: 'Contact name' })).toBeEnabled(),
+    )
+    fireEvent.change(agentControls.getByRole('textbox', { name: 'Contact name' }), {
+      target: { value: 'Discarded Agent Contact' },
     })
     await userEvent.click(
       within(getOwnerClientDetailsTile()).getByRole('button', { name: 'Cancel' }),
@@ -867,6 +898,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     agentControls = within(getAgentDetailsTile())
+    expect(agentControls.queryByText('Discarded Agent Contact')).not.toBeInTheDocument()
     expect(agentControls.queryByLabelText('Agent client')).not.toBeInTheDocument()
     const agentClientField = agentControls
       .getByText('Agent client')
@@ -994,7 +1026,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     expect(await screen.findByRole('region', { name: 'Application offers' })).toBeInTheDocument()
     expect(await screen.findByText('Example Lumber')).toBeInTheDocument()
-    expect(screen.getByText('2026-04-05')).toBeInTheDocument()
+    expect(screen.getByText('Apr 5, 2026')).toBeInTheDocument()
     expect(screen.queryByText('OFF-77')).not.toBeInTheDocument()
 
     expect(screen.queryByLabelText('Filter offers')).not.toBeInTheDocument()
@@ -1078,8 +1110,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByText('EX-555')).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Permits' })).not.toBeInTheDocument()
     expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
-    expect(within(summaryTile).getByText('2026-01-01')).toBeInTheDocument()
-    expect(within(summaryTile).getByText('2026-01-03')).toBeInTheDocument()
+    expect(within(summaryTile).getByText('Jan 1, 2026')).toBeInTheDocument()
+    expect(within(summaryTile).getByText('Jan 3, 2026')).toBeInTheDocument()
 
     await selectApplicationDetailTab('Scale')
     const scaleTile = screen.getByRole('heading', { name: 'Scale details' }).closest('.cds--tile')
@@ -1830,8 +1862,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(getSummaryComboBox(summaryControls, 'Region')).toHaveValue(
         'Historic Natural Resource Region',
       )
-      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
+      expect(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' })).toBeChecked()
     })
+    expect(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' })).toHaveAttribute(
+      'value',
+      '31885',
+    )
 
     fireEvent.change(termDaysInput, {
       target: { value: '31' },
@@ -1885,12 +1921,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const summaryControls = within(await selectApplicationSummaryTile())
     await waitFor(() => {
-      expect(summaryControls.getByRole('radio', { name: '2011-11-25' })).toBeChecked()
+      expect(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' })).toBeChecked()
     })
 
     await userEvent.click(summaryControls.getByRole('radio', { name: 'Jan 25, 2026' }))
     expect(summaryControls.getByRole('radio', { name: 'Jan 25, 2026' })).toBeChecked()
-    await userEvent.click(summaryControls.getByRole('radio', { name: '2011-11-25' }))
+    await userEvent.click(summaryControls.getByRole('radio', { name: 'Nov 25, 2011' }))
     await userEvent.click(summaryControls.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() =>

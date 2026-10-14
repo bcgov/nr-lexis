@@ -121,7 +121,7 @@ describe('Provincial Offer Search Actions', () => {
     )
   })
 
-  it('shows the add offer result action only when createOffer is granted', async () => {
+  it('shows the create offer header action only when createOffer is granted', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
         canPerform: (action: string) => action === 'createOffer',
@@ -131,19 +131,38 @@ describe('Provincial Offer Search Actions', () => {
     renderPage()
     await screen.findByText('OFF-1001')
 
-    const addOfferAction = screen.getByRole('link', { name: 'Add offer' })
-    expect(addOfferAction).toHaveAttribute('href', '/provincial/offers/create')
-    expect(addOfferAction).toHaveClass('cds--btn--primary')
-    expect(addOfferAction.closest('.legacy-search-table-toolbar__actions')).not.toBeNull()
+    const createOfferAction = screen.getByRole('link', { name: 'Create offer' })
+    expect(createOfferAction).toHaveAttribute('href', '/provincial/offers/create')
+    expect(createOfferAction).toHaveClass('cds--btn--tertiary')
+    expect(createOfferAction.closest('.lexis-page-header__actions')).not.toBeNull()
+    expect(createOfferAction.closest('.legacy-search-table-toolbar')).toBeNull()
   })
 
-  it('hides add offer link when createOffer action is not granted', async () => {
+  it('shows the create offer header action before any search has run', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === 'createOffer',
+      }),
+    )
+
+    renderPage('/provincial/offers')
+    await waitFor(() => {
+      expect(mockedFetchProvincialOfferOptions).toHaveBeenCalledOnce()
+    })
+
+    expect(mockedSearchProvincialOffers).not.toHaveBeenCalled()
+    const createOfferAction = screen.getByRole('link', { name: 'Create offer' })
+    expect(createOfferAction).toHaveAttribute('href', '/provincial/offers/create')
+    expect(createOfferAction.closest('.lexis-page-header__actions')).not.toBeNull()
+  })
+
+  it('hides create offer link when createOffer action is not granted', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => false }))
 
     renderPage()
     await screen.findByText('OFF-1001')
 
-    expect(screen.queryByRole('link', { name: 'Add offer' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('link', { name: 'Create offer' })).not.toBeInTheDocument()
   })
 
   it('opens without results or a search request when no search has been applied', async () => {
@@ -178,7 +197,7 @@ describe('Provincial Offer Search Actions', () => {
       'aria-busy',
       'true',
     )
-    expect(screen.getByText('Loading offer search results…')).toBeVisible()
+    expect(screen.getByText('Searching')).toBeVisible()
     expect(screen.queryByText('0 offers found')).not.toBeInTheDocument()
 
     await act(async () => {
@@ -261,7 +280,7 @@ describe('Provincial Offer Search Actions', () => {
     renderPage('/provincial/offers')
 
     await waitFor(() => {
-      expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-11')
+      expect(screen.getByLabelText('List date to')).toHaveValue('2026-07-11')
     })
     expect(
       screen.getByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
@@ -329,20 +348,21 @@ describe('Provincial Offer Search Actions', () => {
 
     renderPage('/provincial/offers')
     await waitFor(() => {
-      expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-11')
+      expect(screen.getByLabelText('List date to')).toHaveValue('2026-07-11')
     })
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await screen.findByText('OFF-1001')
 
     await userEvent.type(screen.getByLabelText('Application number'), '46053')
-    await userEvent.clear(screen.getByLabelText('Listing to date'))
+    fireEvent.change(screen.getByLabelText('List date to'), { target: { value: '' } })
+    expect(screen.getByLabelText('List date to')).toHaveValue('')
     const resultsTable = screen.getByRole('region', { name: 'Search results table' })
     const searchCallsBeforeClear = mockedSearchProvincialOffers.mock.calls.length
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
 
     await waitFor(() => {
       expect(screen.getByLabelText('Application number')).toHaveValue('')
-      expect(screen.getByLabelText('Listing to date')).toHaveValue('2026-07-11')
+      expect(screen.getByLabelText('List date to')).toHaveValue('2026-07-11')
       expect(resultsTable).not.toBeVisible()
     })
     expect(mockedSearchProvincialOffers).toHaveBeenCalledTimes(searchCallsBeforeClear)
@@ -377,22 +397,19 @@ describe('Provincial Offer Search Actions', () => {
 
     const filterGrid = document.querySelector('.provincial-offer-search-grid')
     expect(filterGrid).toBeTruthy()
-    const fieldLabels = Array.from((filterGrid as HTMLElement).children).map((field) =>
-      field
-        .querySelector('label, .cds--label')
-        ?.textContent?.replace(/Total items selected:.*/, '')
-        .trim(),
-    )
+    const fieldLabels = Array.from(
+      (filterGrid as HTMLElement).querySelectorAll('label, .cds--label'),
+    ).map((field) => field?.textContent?.replace(/Total items selected:.*/, '').trim())
 
     expect(fieldLabels).toEqual([
       'Application number',
       'Package number',
       'Client number',
       'Region',
-      'Listing from date',
-      'Listing to date',
-      'Withdrawn from date',
-      'Withdrawn to date',
+      'List date from',
+      'List date to',
+      'Offer withdrawn date from',
+      'Offer withdrawn date to',
     ])
   })
 
@@ -424,18 +441,19 @@ describe('Provincial Offer Search Actions', () => {
     const searchButton = screen.getByRole('button', { name: 'Search' })
     expect(searchButton).toBeEnabled()
 
-    await userEvent.type(screen.getByLabelText('Listing from date'), '2026-50-99')
+    const listDateFrom = screen.getByLabelText('List date from')
+    fireEvent.change(listDateFrom, { target: { value: '2026-50-99' } })
     await waitFor(() => {
       expect(searchButton).toBeDisabled()
     })
 
-    await userEvent.clear(screen.getByLabelText('Listing from date'))
-    await userEvent.type(screen.getByLabelText('Listing from date'), '2026-02-01')
+    fireEvent.change(listDateFrom, { target: { value: '' } })
+    fireEvent.change(listDateFrom, { target: { value: '2026-02-01' } })
     await waitFor(() => {
       expect(searchButton).toBeEnabled()
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Listing date' }))
+    await userEvent.click(screen.getByRole('button', { name: 'List date' }))
 
     await waitFor(() => {
       expect(
@@ -455,7 +473,9 @@ describe('Provincial Offer Search Actions', () => {
     expect(
       await screen.findByRole('heading', { name: 'Offer search unavailable' }),
     ).toBeInTheDocument()
-    expect(screen.getByText('Unable to retrieve offer search results.')).toBeInTheDocument()
+    expect(
+      screen.getByText('Unable to retrieve offer search results. Try again.'),
+    ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'No results found' })).not.toBeInTheDocument()
   })
 
@@ -489,8 +509,8 @@ describe('Provincial Offer Search Actions', () => {
 
     expect(await screen.findByText('OFF-8100')).toBeInTheDocument()
     expect(
-      await screen.findByText('At least 10 offers found — exact count unavailable'),
-    ).toBeInTheDocument()
+      await screen.findAllByText('At least 10 offers found — exact count unavailable'),
+    ).toHaveLength(2)
     expect(
       screen.queryByRole('heading', { name: 'Offer search unavailable' }),
     ).not.toBeInTheDocument()
@@ -503,8 +523,8 @@ describe('Provincial Offer Search Actions', () => {
     expect(mockedCountProvincialOffers).toHaveBeenCalledOnce()
   })
   it.each([
-    ['Listing from date', 'Listing to date'],
-    ['Withdrawn from date', 'Withdrawn to date'],
+    ['List date from', 'List date to'],
+    ['Offer withdrawn date from', 'Offer withdrawn date to'],
   ])('blocks a reversed %s range until To is corrected', async (fromLabel, toLabel) => {
     renderPage()
     await waitFor(() => expect(mockedSearchProvincialOffers).toHaveBeenCalled())
@@ -535,7 +555,7 @@ describe('Provincial Offer Search Actions', () => {
   it('does not request a reversed date range restored from a saved link', async () => {
     renderPage('/provincial/offers?listingFromDate=2026-10-12&listingToDate=2026-10-01')
     await waitFor(() =>
-      expect(screen.getByLabelText('Listing to date')).toHaveAttribute('aria-invalid', 'true'),
+      expect(screen.getByLabelText('List date to')).toHaveAttribute('aria-invalid', 'true'),
     )
     expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
     expect(mockedSearchProvincialOffers).not.toHaveBeenCalled()

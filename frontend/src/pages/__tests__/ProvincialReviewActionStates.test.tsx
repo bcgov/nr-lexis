@@ -282,8 +282,8 @@ describe('Provincial Review Action State Smoke', () => {
     const { container } = renderPage()
     await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1))
 
-    expect(screen.getByText('Loading review queue…')).toBeInTheDocument()
-    expect(screen.getByRole('table', { name: 'Loading review queue…' })).toBeInTheDocument()
+    expect(screen.getByText('Searching')).toBeInTheDocument()
+    expect(screen.getByRole('table', { name: 'Searching' })).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
     expect(container.querySelectorAll('.legacy-search-table-toolbar')).toHaveLength(1)
     expect(container.querySelector('.provincial-review-table-toolbar')).not.toBeInTheDocument()
@@ -316,15 +316,15 @@ describe('Provincial Review Action State Smoke', () => {
 
     await waitFor(() => expect(mockedCountApplicationReviews).toHaveBeenCalledOnce())
     expect(await screen.findByText('3000000')).toBeInTheDocument()
-    expect(screen.getByRole('status', { name: 'Counting search results' })).toBeInTheDocument()
+    expect(screen.getAllByRole('status', { name: 'Counting search results' })).toHaveLength(2)
     expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
-    expect(screen.queryByText('Loading results…')).not.toBeInTheDocument()
+    expect(screen.queryByText('Searching')).not.toBeInTheDocument()
 
     await act(async () => {
       resolveCount(125)
     })
 
-    expect(await screen.findByText('125 applications found')).toBeInTheDocument()
+    expect(await screen.findAllByText('125 applications found')).toHaveLength(2)
     expect(screen.getByText('3000000')).toBeInTheDocument()
   })
 
@@ -336,7 +336,7 @@ describe('Provincial Review Action State Smoke', () => {
 
     renderPage()
 
-    expect(await screen.findByText('1 application found')).toBeInTheDocument()
+    expect(await screen.findAllByText('1 application found')).toHaveLength(2)
   })
 
   it('uses the legacy provincial application review page title', async () => {
@@ -388,10 +388,12 @@ describe('Provincial Review Action State Smoke', () => {
       screen.queryByRole('button', { name: 'Update Status and Send Email' }),
     ).not.toBeInTheDocument()
 
-    const newRowCheckbox = screen.getByRole('checkbox', { name: 'Select 1000123' })
-    const pendingRowCheckbox = screen.getByRole('checkbox', { name: 'Select 1000456' })
+    const newRowCheckbox = screen.getByRole('checkbox', { name: 'Select application 1000123' })
+    const pendingRowCheckbox = screen.getByRole('checkbox', { name: 'Select application 1000456' })
     expect(newRowCheckbox).toBeEnabled()
     expect(pendingRowCheckbox).toBeEnabled()
+    expect(newRowCheckbox).not.toHaveAttribute('aria-disabled')
+    expect(pendingRowCheckbox).not.toHaveAttribute('aria-disabled')
 
     const approveButtons = screen.getAllByRole('button', { name: 'Approve' })
     const disapproveButtons = screen.getAllByRole('button', { name: 'Disapprove' })
@@ -400,7 +402,9 @@ describe('Provincial Review Action State Smoke', () => {
     expect(disapproveButtons[0]).toBeEnabled()
     expect(disapproveButtons[1]).toBeEnabled()
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    )
 
     expect(newRowCheckbox).toBeChecked()
     expect(pendingRowCheckbox).toBeChecked()
@@ -437,7 +441,7 @@ describe('Provincial Review Action State Smoke', () => {
       'Status',
       'Application volume (m³)',
       'Species end use sort',
-      'Listing date',
+      'List date',
       'Region',
       'Actions',
     ])
@@ -477,7 +481,7 @@ describe('Provincial Review Action State Smoke', () => {
   })
 
   it.each([
-    ['Listing date', 'listingDate'],
+    ['List date', 'listingDate'],
     ['Region', 'regionCode'],
   ] as const)('dispatches the legacy review %s sort key', async (header, expectedSortField) => {
     renderPage()
@@ -523,7 +527,7 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000456')
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000456' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Approve application' })
@@ -569,7 +573,7 @@ describe('Provincial Review Action State Smoke', () => {
   it('returns focus from the application editor without changing a review decision', async () => {
     renderPage()
     await screen.findByText('1000123')
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000456' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
     const launcher = screen.getAllByRole('button', { name: 'Disapprove' })[0]
     await userEvent.click(launcher)
 
@@ -593,10 +597,39 @@ describe('Provincial Review Action State Smoke', () => {
     await userEvent.type(remarks, 'Unsaved reason')
     fireEvent.keyDown(remarks, { key: 'Escape', code: 'Escape', keyCode: 27, which: 27 })
 
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Keep editing',
+      }),
+    )
+    await waitFor(() => expect(remarks).toHaveFocus())
+    expect(remarks).toHaveValue('Unsaved reason')
+
+    await userEvent.click(within(panel).getByRole('button', { name: 'Close' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
+        name: 'Discard changes',
+      }),
+    )
+
     await waitFor(() => expect(launcher).toHaveFocus())
     expect(
       screen.queryByRole('complementary', { name: 'Update application 1000123' }),
     ).not.toBeInTheDocument()
+    await userEvent.click(launcher)
+    expect(
+      within(
+        screen.getByRole('complementary', { name: 'Update application 1000123' }),
+      ).getByLabelText('Remarks'),
+    ).toHaveValue('')
+    await userEvent.click(
+      within(screen.getByRole('complementary', { name: 'Update application 1000123' })).getByRole(
+        'button',
+        { name: 'Cancel' },
+      ),
+    )
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    await waitFor(() => expect(launcher).toHaveFocus())
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
     expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeEnabled()
@@ -642,6 +675,7 @@ describe('Provincial Review Action State Smoke', () => {
     expect(remarks).toHaveValue('Draft reason')
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
     await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     await waitFor(() => expect(launcher).toHaveFocus())
   })
 
@@ -754,6 +788,7 @@ describe('Provincial Review Action State Smoke', () => {
         { name: 'Cancel' },
       ),
     )
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[1])
 
     expect(
@@ -1178,7 +1213,7 @@ describe('Provincial Review Action State Smoke', () => {
     },
   )
 
-  it('keeps review pagination at 100 by default with expanded page size options', async () => {
+  it('opens review with 100 rows and the shared page size options', async () => {
     renderPage()
     await screen.findByText('1000123')
 
@@ -1194,24 +1229,21 @@ describe('Provincial Review Action State Smoke', () => {
     expect(rowsPerPage).toHaveValue('100')
     expect(
       Array.from(rowsPerPage.querySelectorAll('option')).map((option) => option.value),
-    ).toEqual(['10', '25', '50', '100', '150', '200'])
+    ).toEqual(['10', '25', '50', '100', '200'])
   })
 
-  it.each([150, 200])(
-    'accepts the supported review page size %i from the URL',
-    async (pageSize) => {
-      renderPage(`/provincial/review?pageSize=${pageSize}`)
-      await screen.findByText('1000123')
+  it.each([10, 200])('accepts the supported review page size %i from the URL', async (pageSize) => {
+    renderPage(`/provincial/review?pageSize=${pageSize}`)
+    await screen.findByText('1000123')
 
-      expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
-        expect.objectContaining({
-          page: 0,
-          pageSize,
-        }),
-        expect.objectContaining({ knownTotal: expect.any(Number) }),
-      )
-    },
-  )
+    expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+      expect.objectContaining({
+        page: 0,
+        pageSize,
+      }),
+      expect.objectContaining({ knownTotal: expect.any(Number) }),
+    )
+  })
 
   it('approves selected applications sequentially', async () => {
     mockedSearchApplicationReviews.mockResolvedValue(twoNewReviewResponse)
@@ -1238,7 +1270,9 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('2000001')
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    )
     await confirmSelectedApplicationApproval()
 
     await waitFor(() => {
@@ -1310,7 +1344,9 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('2000001')
 
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    )
     await confirmSelectedApplicationApproval()
 
     // Approvals and failures each get their own notification.
@@ -1324,8 +1360,8 @@ describe('Provincial Review Action State Smoke', () => {
         .getAllByRole('listitem')
         .map((item) => item.textContent),
     ).toEqual(['2000002: Application owner location does not exist.'])
-    expect(screen.getByRole('checkbox', { name: 'Select 2000001' })).not.toBeChecked()
-    expect(screen.getByRole('checkbox', { name: 'Select 2000002' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select application 2000001' })).not.toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select application 2000002' })).toBeChecked()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
 
@@ -1341,7 +1377,7 @@ describe('Provincial Review Action State Smoke', () => {
 
     renderPage()
     await screen.findByText('1000456')
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select 1000456' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
     const dialog = await screen.findByRole('dialog', { name: 'Approve application' })
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
@@ -1362,7 +1398,7 @@ describe('Provincial Review Action State Smoke', () => {
         .getAllByRole('listitem')
         .map((item) => item.textContent),
     ).toEqual(['1000456: Application owner location does not exist.'])
-    expect(screen.getByRole('checkbox', { name: 'Select 1000456' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select application 1000456' })).toBeChecked()
     await userEvent.click(screen.getByRole('button', { name: 'Approve Selected Applications' }))
     const reopened = await screen.findByRole('dialog', { name: 'Approve application' })
     expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
@@ -1437,15 +1473,24 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000123')
 
-    const rowCheckbox = screen.getByRole('checkbox', { name: 'Select 1000123' })
+    const rowCheckbox = screen.getByRole('checkbox', { name: 'Select application 1000123' })
     const reviewRow = screen.getByText('1000123').closest('tr') as HTMLTableRowElement
-    expect(rowCheckbox).toBeDisabled()
-    expect(screen.getByRole('checkbox', { name: 'Select all rows on this page' })).toBeDisabled()
+    expect(rowCheckbox).toHaveAttribute('aria-disabled', 'true')
+    expect(rowCheckbox).toHaveAccessibleDescription(
+      expect.stringContaining('You do not have permission to approve applications.'),
+    )
+    expect(
+      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    ).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
     expect(within(reviewRow).getByRole('button', { name: 'Approve' })).toBeDisabled()
     expect(within(reviewRow).getByRole('button', { name: 'Disapprove' })).toBeDisabled()
+    // jsdom flips a cancelled checkbox click instead of restoring it, so assert the
+    // cancelled click and the unchanged selection rather than the DOM checked state.
+    expect(fireEvent.click(rowCheckbox)).toBe(false)
+    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
 
-    const tooltipTrigger = rowCheckbox.closest('.disabled-button-tooltip') as HTMLElement
+    const tooltipTrigger = rowCheckbox.closest('.ineligible-row-checkbox') as HTMLElement
     expect(tooltipTrigger).toBeTruthy()
 
     await userEvent.hover(tooltipTrigger)
@@ -1474,8 +1519,18 @@ describe('Provincial Review Action State Smoke', () => {
     renderPage()
     await screen.findByText('1000123')
 
+    const rowCheckbox = screen.getByRole('checkbox', { name: 'Select application 1000123' })
+    expect(rowCheckbox).toHaveAttribute('aria-disabled', 'true')
+    expect(rowCheckbox).toHaveAccessibleDescription(
+      expect.stringContaining('Only New and Pending applications can be approved.'),
+    )
+    // jsdom flips a cancelled checkbox click instead of restoring it, so assert the
+    // cancelled click and the unchanged selection rather than the DOM checked state.
+    expect(fireEvent.click(rowCheckbox)).toBe(false)
+    expect(screen.getByRole('button', { name: 'Approve Selected Applications' })).toBeDisabled()
+
     const selectAllCheckbox = screen.getByRole('checkbox', {
-      name: 'Select all rows on this page',
+      name: 'Select all eligible rows on this page',
     })
     expect(selectAllCheckbox).toBeDisabled()
 
@@ -1498,13 +1553,13 @@ describe('Provincial Review Action State Smoke', () => {
       await screen.findByRole('heading', { name: 'Review queue unavailable' }),
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Unable to retrieve application review search results.'),
+      screen.getByText('Unable to retrieve application review search results. Try again.'),
     ).toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'No results found' })).not.toBeInTheDocument()
   })
   it.each([
-    ['Received from date', 'Received to date'],
-    ['Listing from date', 'Listing to date'],
+    ['Received date from', 'Received date to'],
+    ['List date from', 'List date to'],
   ])('blocks a reversed %s range until To is corrected', async (fromLabel, toLabel) => {
     renderPage()
     await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalled())
@@ -1535,7 +1590,7 @@ describe('Provincial Review Action State Smoke', () => {
   it('does not request a reversed date range restored from a saved link', async () => {
     renderPage('/provincial/review?listingFromDate=2026-10-12&listingToDate=2026-10-01')
     await waitFor(() =>
-      expect(screen.getByLabelText('Listing to date')).toHaveAttribute('aria-invalid', 'true'),
+      expect(screen.getByLabelText('List date to')).toHaveAttribute('aria-invalid', 'true'),
     )
     expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
     expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
 import { describe, expect, it, vi } from 'vitest'
@@ -156,5 +156,46 @@ describe('IsoDatePicker', () => {
     })
 
     expect(onChange).not.toHaveBeenCalled()
+  })
+
+  it('places the calendar again once the panel it opened in stops moving', async () => {
+    class TestKeyframeEffect {
+      constructor(readonly target: Element) {}
+    }
+    vi.stubGlobal('KeyframeEffect', TestKeyframeEffect)
+    let finishSlide!: () => void
+    const slide = new Promise<void>((resolve) => {
+      finishSlide = resolve
+    })
+    render(
+      <aside aria-label="Add fee policy">
+        <IsoDatePicker id="effectiveDate" labelText="Effective date" value="" onChange={vi.fn()} />
+      </aside>,
+    )
+    const panel = screen.getByRole('complementary', { name: 'Add fee policy' })
+    Object.defineProperty(document, 'getAnimations', {
+      configurable: true,
+      value: () => [{ effect: new TestKeyframeEffect(panel), finished: slide }],
+    })
+    const input = screen.getByLabelText('Effective date') as HTMLInputElement & {
+      _flatpickr: { isOpen: boolean; _positionCalendar: () => void }
+    }
+    const placeCalendar = vi.spyOn(input._flatpickr, '_positionCalendar')
+
+    try {
+      await userEvent.click(input)
+      expect(input._flatpickr.isOpen).toBe(true)
+      placeCalendar.mockClear()
+
+      await act(async () => {
+        finishSlide()
+        await slide
+      })
+
+      expect(placeCalendar).toHaveBeenCalledTimes(1)
+    } finally {
+      Reflect.deleteProperty(document, 'getAnimations')
+      vi.unstubAllGlobals()
+    }
   })
 })
