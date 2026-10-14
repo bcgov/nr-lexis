@@ -4040,7 +4040,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"ACT", "COM"})
+  @ValueSource(strings = {"ACT", "COM", "PPD"})
   void updatePermitShouldRejectReactivationBeyondTheExemptionBalance(String targetStatus) {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("CAN")));
