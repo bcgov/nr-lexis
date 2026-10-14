@@ -127,7 +127,7 @@ const ForestClientSelectionPage = ({ onSelected }: ForestClientSelectionPageProp
                   disabled={isSubmitting}
                   onClick={() => void logout()}
                 >
-                  Sign out
+                  Log out
                 </Button>
               </div>
             </form>

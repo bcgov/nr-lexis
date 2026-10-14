@@ -25,7 +25,6 @@ import {
 } from '@carbon/react'
 import IsoDatePicker from '../../components/IsoDatePicker'
 import { AppNotification } from '../../components/AppNotification'
-import DetailDocumentUploadPanel from '../../components/uploads/DetailDocumentUploadPanel'
 import SearchableSelect from '../../components/SearchableSelect'
 import RegionMultiSelect from '@/components/RegionMultiSelect'
 import PageHeader from '@/components/PageHeader'
@@ -57,7 +56,6 @@ import {
 } from '@/service/search-options-service'
 import { submitProvincialExemptionCreate } from '@/service/create-submit-service'
 import { requiredLabel } from '@/utils/required-label'
-import { displayAuditIdentity, displayValue } from '@/utils/text'
 import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
@@ -189,7 +187,6 @@ const ProvincialExemptionCreatePage = () => {
     ? selectedExemptionTab
     : 'summary'
   const selectedExemptionTabIndex = Math.max(0, visibleExemptionTabs.indexOf(activeExemptionTab))
-  const author = displayAuditIdentity(capabilities?.principal)
   // M, O, and B creation uses a system-selected initial status, so it is a payload invariant,
   // not a required user input.
   const canEditInitialExemptionStatus =
@@ -484,7 +481,6 @@ const ProvincialExemptionCreatePage = () => {
       <Column sm={4} md={8} lg={16}>
         <InlineNotification
           kind="info"
-          title={showApplications ? 'Applications, documents and permits' : 'Documents and permits'}
           subtitle={
             showApplications
               ? 'Applications, documents and permits can be added after you save the exemption.'
@@ -745,46 +741,24 @@ const ProvincialExemptionCreatePage = () => {
                 </Tile>
               </TabPanel>,
               showApplications && (
-                <TabPanel key="applications" className="application-detail-tab-panel">
-                  <Tile
-                    className="create-form-tile application-detail-section"
-                    role="region"
-                    aria-label="Applications"
-                  >
-                    <p className="detail-empty-message">
-                      Applications can be added after you save the exemption.
-                    </p>
-                  </Tile>
+                <TabPanel
+                  key="applications"
+                  className="application-detail-tab-panel application-detail-tab-panel--empty"
+                >
+                  <p className="unsaved-tab-note">Available after the exemption is saved.</p>
                 </TabPanel>
               ),
-              <TabPanel key="documents" className="application-detail-tab-panel">
-                <Tile
-                  className="create-form-tile application-detail-section"
-                  role="region"
-                  aria-label="Documents"
-                >
-                  <p className="detail-empty-message">
-                    Save the exemption before uploading documents.
-                  </p>
-                  <DetailDocumentUploadPanel
-                    workflowType="exemption"
-                    targetNumber=""
-                    inputId="exemptionCreateDocumentUpload"
-                    disabled
-                    disabledReason="Save the exemption before uploading documents."
-                  />
-                </Tile>
+              <TabPanel
+                key="documents"
+                className="application-detail-tab-panel application-detail-tab-panel--empty"
+              >
+                <p className="unsaved-tab-note">Available after the exemption is saved.</p>
               </TabPanel>,
-              <TabPanel key="permits" className="application-detail-tab-panel">
-                <Tile
-                  className="create-form-tile application-detail-section"
-                  role="region"
-                  aria-label="Permits"
-                >
-                  <p className="detail-empty-message">
-                    Save the exemption before adding or viewing permits.
-                  </p>
-                </Tile>
+              <TabPanel
+                key="permits"
+                className="application-detail-tab-panel application-detail-tab-panel--empty"
+              >
+                <p className="unsaved-tab-note">Available after the exemption is saved.</p>
               </TabPanel>,
               oicLike && (
                 <TabPanel key="fees" className="application-detail-tab-panel">
@@ -802,7 +776,8 @@ const ProvincialExemptionCreatePage = () => {
                         <RequiredFieldsLegend className="application-detail-required" />
                       )}
                       <RadioButtonGroup
-                        legendText="Override fee rate?"
+                        legendText={requiredLabel('Override fee rate?')}
+                        required
                         name="enableExemptionRateOverride"
                         valueSelected={form.enableRateOverride ? 'yes' : 'no'}
                         orientation="horizontal"
@@ -849,21 +824,6 @@ const ProvincialExemptionCreatePage = () => {
             ].filter(Boolean)}
           </TabPanels>
         </Tabs>
-        <div className="legacy-form-footer">
-          <RecordFieldGrid>
-            <RecordFieldRow>
-              <RecordField label="Exemption number" value={displayValue(form.exemptionNumber)} />
-              <RecordField
-                label="Status"
-                value={displayValue(
-                  exemptionStatuses.find((option) => option.value === form.exemptionStatusCode)
-                    ?.label ?? form.exemptionStatusCode,
-                )}
-              />
-              <RecordField label="Author" value={author} />
-            </RecordFieldRow>
-          </RecordFieldGrid>
-        </div>
       </Column>
       <UnsavedChangesGuard
         isDirty={isCreateDraftDirty}

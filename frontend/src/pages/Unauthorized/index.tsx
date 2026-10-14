@@ -46,7 +46,7 @@ const UnauthorizedPage = () => {
                   void logout()
                 }}
               >
-                Sign out
+                Log out
               </Button>
             </div>
           </div>

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import {
   Button,
@@ -17,7 +17,7 @@ import {
   TextInput,
   Tile,
 } from '@carbon/react'
-import { Add } from '@carbon/icons-react'
+import { Add, Rule } from '@carbon/icons-react'
 import SearchResultsTableFrame from '../../components/SearchResultsTableFrame'
 import { AppNotification } from '../../components/AppNotification'
 import EmptyState from '@/components/EmptyState'
@@ -106,6 +106,53 @@ import { formatVolume } from '@/utils/volume'
 type ExemptionStatus = {
   kind: 'error'
   message: string
+}
+
+const EXEMPTION_PERMISSION_MESSAGE = "You don't have permission to create this exemption."
+
+// The exemption create checks report these server messages; the search explains them in its own
+// words. A status change also refreshes the results so the new status shows.
+const EXEMPTION_CREATE_ERRORS: {
+  pattern: RegExp
+  message: (match: RegExpExecArray) => string
+  statusChanged?: boolean
+}[] = [
+  {
+    pattern: /^Application (\S+) must have a status of approved\.$/,
+    message: ([, application]) =>
+      `Application ${application} is no longer Approved. Its current status now shows in the results.`,
+    statusChanged: true,
+  },
+  {
+    pattern: /^Application (\S+) is already assigned to exemption (\S+?)\.$/,
+    message: ([, application, exemption]) =>
+      `Application ${application} is already in exemption ${exemption}. Remove it from your selection and try again.`,
+  },
+  {
+    pattern: /^Application (\S+) has valid offers and cannot be added to an exemption\.$/,
+    message: ([, application]) =>
+      `Application ${application} has a valid offer, so it can't be exempted. Remove it from your selection and try again.`,
+  },
+  {
+    pattern: /^Application (\S+) listing date has not passed\.$/,
+    message: ([, application]) =>
+      `Application ${application} can't be exempted until its list date has passed. Remove it from your selection and try again.`,
+  },
+  {
+    pattern: /^Insufficient privileges to add application \S+\.$/,
+    message: () => EXEMPTION_PERMISSION_MESSAGE,
+  },
+]
+
+const exemptionCreateError = (
+  error: unknown,
+): { message: string; statusChanged: boolean } | null => {
+  const serverMessage = error instanceof Error ? error.message.trim() : ''
+  for (const { pattern, message, statusChanged = false } of EXEMPTION_CREATE_ERRORS) {
+    const match = pattern.exec(serverMessage)
+    if (match) return { message: message(match), statusChanged }
+  }
+  return null
 }
 
 const hasInvalidSearchDates = (filters: ProvincialApplicationSearchFilters): boolean =>
@@ -225,6 +272,8 @@ const ProvincialApplicationPage = () => {
   const [exemptionConfirmationNumbers, setExemptionConfirmationNumbers] = useState<string[] | null>(
     null,
   )
+  // The batch action that opened the confirmation gets focus back when it closes.
+  const createExemptionActionRef = useRef<HTMLElement | null>(null)
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canCreateExemption = canPerform('/createExemption')
   const canCreateApplication = canPerform('createApplication')
@@ -283,6 +332,8 @@ const ProvincialApplicationPage = () => {
   const hasSearchQuery = searchParams.toString().length > 0
   // A saved link with invalid dates doesn't run its search, so it has no results to show.
   const showResults = hasSearchQuery && !hasInvalidSearchDates(appliedFilters)
+  // No results show only the empty state, without counts or pagination.
+  const noResults = results.content.length === 0 && results.page.totalElements === 0
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
     setExemptionStatus(null)
@@ -578,6 +629,9 @@ const ProvincialApplicationPage = () => {
     if (selectableRows.length === 0) return false
     return selectableRows.every((item) => Boolean(selectedRowsById[item.applicationNumber]))
   }, [selectableRows, selectedRowsById])
+  const someSelectableRowsAreSelected = selectableRows.some((item) =>
+    Boolean(selectedRowsById[item.applicationNumber]),
+  )
 
   const toggleRowSelection = (row: ProvincialApplicationSearchItem, checked: boolean) => {
     setExemptionStatus(null)
@@ -607,15 +661,13 @@ const ProvincialApplicationPage = () => {
     })
   }
 
-  const onCreateExemptionClick = () => {
+  const onCreateExemptionClick = (event: MouseEvent<HTMLElement>) => {
+    createExemptionActionRef.current = event.currentTarget
     const selectedRows = Object.values(selectedRowsById)
     // The selection stays while the confirmation is open, so Cancel returns to it.
     if (!canCreateExemption) {
       clearSelection()
-      setExemptionStatus({
-        kind: 'error',
-        message: 'Your account is not authorized to create exemptions.',
-      })
+      setExemptionStatus({ kind: 'error', message: EXEMPTION_PERMISSION_MESSAGE })
       return
     }
 
@@ -635,18 +687,31 @@ const ProvincialApplicationPage = () => {
         row.ownerClientNumber === firstRow.ownerClientNumber,
     )
 
+    // The selection and the focused batch action stay, so the selection can be changed.
     if (!allRowsMatchClientNumbers) {
-      clearSelection()
       setExemptionStatus({
         kind: 'error',
         message:
-          'Selected applications do not share the same client numbers. Multi-application exemptions require matching clients.',
+          'The selected applications must have the same owner and agent. Change your selection and try again.',
       })
       return
     }
 
+    setExemptionStatus(null)
     setExemptionConfirmationNumbers(selectedRows.map((row) => row.applicationNumber))
   }
+
+  const refreshResults = () =>
+    void runSearch(
+      {
+        filters: appliedFilters,
+        page: urlState.page - 1,
+        pageSize,
+        sortField,
+        sortDirection,
+      },
+      { force: true },
+    )
 
   // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_SEARCH_CREATE_EXEMPTION)
   // Figma: confirm, create the exemption from the applications, then open it on its Applicant tab.
@@ -690,6 +755,19 @@ const ProvincialApplicationPage = () => {
         returnTo: { label: 'Application search', to: withCurrentSearch('/provincial/application') },
       },
     })
+  }
+
+  // A rejected application closes the confirmation and shows the reason above the results, with
+  // the selection kept. Other failures stay in the confirmation so it can be retried.
+  const confirmExemptionCreate = async (applicationNumbers: string[]) => {
+    try {
+      await createExemptionFromApplications(applicationNumbers)
+    } catch (error) {
+      const createError = exemptionCreateError(error)
+      if (!createError) throw error
+      setExemptionStatus({ kind: 'error', message: createError.message })
+      if (createError.statusChanged) refreshResults()
+    }
   }
 
   return (
@@ -849,19 +927,20 @@ const ProvincialApplicationPage = () => {
                 </Button>
                 <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
               </div>
-              {exemptionStatus && (
-                <AppNotification
-                  className="legacy-inline-notification"
-                  kind={exemptionStatus.kind}
-                  title="Validation failed"
-                  subtitle={exemptionStatus.message}
-                  onCloseButtonClick={() => setExemptionStatus(null)}
-                />
-              )}
             </form>
           </Tile>
         </section>
       </Column>
+
+      {exemptionStatus && (
+        <AppNotification
+          kind={exemptionStatus.kind}
+          role="alert"
+          title="Exemption not created"
+          subtitle={exemptionStatus.message}
+          onCloseButtonClick={() => setExemptionStatus(null)}
+        />
+      )}
 
       <Column
         sm={4}
@@ -874,6 +953,16 @@ const ProvincialApplicationPage = () => {
           className="legacy-search-section legacy-search-section--results"
           aria-label="Search results"
         >
+          {canCreateExemption && (
+            // The batch bar only mounts once something is selected, so the count is announced here.
+            <div className="cds--visually-hidden" aria-live="polite" aria-atomic="true">
+              {selectedRowsCount > 0
+                ? APPLICATION_BATCH_SELECTION('carbon.table.batch.items.selected', {
+                    totalSelected: selectedRowsCount,
+                  })
+                : null}
+            </div>
+          )}
           <SearchResultsTableFrame
             resultName="application"
             loading={resultsLoading}
@@ -884,6 +973,7 @@ const ProvincialApplicationPage = () => {
                 ? undefined
                 : results.page.totalElements
             }
+            hideZeroCount
             totalItemsLabel={formatDeferredSearchTotalLabel(
               results.page.totalElements,
               totalStatus,
@@ -898,7 +988,7 @@ const ProvincialApplicationPage = () => {
                   onCancel={clearSelection}
                   translateWithId={APPLICATION_BATCH_SELECTION}
                 >
-                  <TableBatchAction renderIcon={Add} onClick={onCreateExemptionClick}>
+                  <TableBatchAction renderIcon={Rule} onClick={onCreateExemptionClick}>
                     Create exemption
                   </TableBatchAction>
                 </TableBatchActions>
@@ -930,6 +1020,9 @@ const ProvincialApplicationPage = () => {
                             hideLabel
                             labelText="Select all eligible rows on this page"
                             checked={allSelectableRowsAreSelected}
+                            indeterminate={
+                              someSelectableRowsAreSelected && !allSelectableRowsAreSelected
+                            }
                             disabled={selectableRows.length === 0}
                             onChange={(_, payload) =>
                               toggleSelectAllRowsOnPage(Boolean(payload.checked))
@@ -1038,7 +1131,7 @@ const ProvincialApplicationPage = () => {
                 description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
-            {!errorMessage && (!resultsLoading || results.content.length > 0) && (
+            {!errorMessage && !noResults && (!resultsLoading || results.content.length > 0) && (
               <>
                 <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(
@@ -1083,7 +1176,8 @@ const ProvincialApplicationPage = () => {
           confirmLabel="Create exemption"
           pendingLabel="Creating exemption…"
           errorTitle="Exemption not created"
-          onConfirm={() => createExemptionFromApplications(exemptionConfirmationNumbers)}
+          launcherButtonRef={createExemptionActionRef}
+          onConfirm={() => confirmExemptionCreate(exemptionConfirmationNumbers)}
           onClose={() => setExemptionConfirmationNumbers(null)}
         >
           <ul className="application-exemption-confirmation__list">

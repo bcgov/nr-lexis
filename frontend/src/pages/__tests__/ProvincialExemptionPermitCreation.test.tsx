@@ -646,8 +646,9 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
 
     const dialog = screen.getByRole('dialog', { name: 'Apply for new permit' })
+    expect(dialog).toHaveTextContent('A new permit will be created for Exemption EX-205.')
     expect(
-      within(dialog).getByText(/A new permit will be created for Exemption EX-205/i),
+      within(dialog).getByText('Exemption EX-205.', { selector: 'strong' }),
     ).toBeInTheDocument()
     expect(
       within(dialog).queryByText(
@@ -683,8 +684,9 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Apply for new permit' }))
 
     const dialog = screen.getByRole('dialog', { name: 'Apply for new permit' })
+    expect(dialog).toHaveTextContent('A new permit will be created for Exemption OIC-205.')
     expect(
-      within(dialog).getByText(/A new permit will be created for Exemption OIC-205/i),
+      within(dialog).getByText('Exemption OIC-205.', { selector: 'strong' }),
     ).toBeInTheDocument()
     await userEvent.click(within(dialog).getByRole('button', { name: 'Create permit' }))
 
@@ -693,7 +695,20 @@ describe('permit creation from an exemption', () => {
     expect(router.state.location.state.permitCreated).toBe(false)
   })
 
-  it('keeps the Permits card until a successful empty request completes', async () => {
+  it('focuses Apply for new permit after a permit creation is cancelled', async () => {
+    mockRole(['ADMIN'], ['createPermit', 'savePermit'])
+    configureBlanketOicCreationDependencies()
+    renderPage(activeBlanketOicExemption, '', {
+      lexisDetailTab: 'permits',
+      permitCreationCancelled: true,
+    })
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Apply for new permit' })).toHaveFocus(),
+    )
+  })
+
+  it('shows no empty Permits state until a successful empty request completes', async () => {
     mockRole(['ADMIN'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
     let resolvePermits: (rows: Awaited<ReturnType<typeof fetchExemptionPermits>>) => void = () =>
@@ -706,8 +721,10 @@ describe('permit creation from an exemption', () => {
     vi.mocked(fetchExemptionPermits).mockReturnValueOnce(pendingPermits)
     renderPage(activeBlanketOicExemption, '', { lexisDetailTab: 'permits' })
 
-    expect(await screen.findByRole('heading', { name: 'Permits', level: 2 })).toBeInTheDocument()
-    expect(screen.getByRole('status')).toHaveTextContent('Refreshing provincial exemption detail')
+    await waitFor(() => expect(fetchExemptionPermits).toHaveBeenCalled())
+    expect(
+      screen.queryByRole('heading', { name: 'No permits for this exemption' }),
+    ).not.toBeInTheDocument()
 
     await act(async () => resolvePermits([]))
 

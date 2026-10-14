@@ -427,6 +427,36 @@ class ApplicationEditPolicyServiceTest {
         .hasMessage("Oracle unavailable");
   }
 
+  @ParameterizedTest
+  @CsvSource({"1, false", "0, true", "-1, true"})
+  void listDateIsReachedFromTheListDateItself(long daysFromToday, boolean reached) {
+    context("NEW", TODAY.plusDays(daysFromToday), false, false, false);
+
+    assertThat(policyService.listDateReached(applicationService, APPLICATION_NUMBER))
+        .isEqualTo(reached);
+  }
+
+  @Test
+  void listDateIsNotReachedWithoutAListDateOrApplication() {
+    context("NEW", null, false, false, false);
+
+    assertThat(policyService.listDateReached(applicationService, APPLICATION_NUMBER)).isFalse();
+    assertThat(policyService.listDateReached(applicationService, null)).isFalse();
+  }
+
+  @Test
+  void listDateFollowsBusinessTimeRatherThanUtc() {
+    ApplicationEditPolicyService lateEveningPolicyService =
+        new ApplicationEditPolicyService(
+            sessionService,
+            authorizationService,
+            Clock.fixed(Instant.parse("2026-07-11T06:30:00Z"), LexisBusinessTime.ZONE));
+    context("NEW", TODAY.plusDays(1), false, false, false);
+
+    assertThat(lateEveningPolicyService.listDateReached(applicationService, APPLICATION_NUMBER))
+        .isFalse();
+  }
+
   private void allowRoles(String... roles) {
     List<String> grantedRoles = List.of(roles);
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(grantedRoles);

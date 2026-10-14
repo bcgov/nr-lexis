@@ -91,8 +91,7 @@ public class ApplicationEditPolicyService {
         context.exportScheduleId() != null
             && advertisingDate != null
             && today.isBefore(advertisingDate.plusDays(1));
-    boolean listingDateHasPassed =
-        advertisingDate != null && !advertisingDate.isAfter(today);
+    boolean listingDateHasPassed = listDateReached(advertisingDate, today);
     boolean withinSixDays =
         advertisingDate == null || advertisingDate.isAfter(today.minusDays(6));
 
@@ -153,6 +152,22 @@ public class ApplicationEditPolicyService {
         industryUser,
         readOnly,
         exemptionApprover);
+  }
+
+  /** True once the application's list date has arrived in business time. */
+  public boolean listDateReached(
+      ApplicationDetailsRpcService applicationService, Long applicationNumber) {
+    if (applicationService == null || applicationNumber == null || applicationNumber < 1) {
+      return false;
+    }
+    return applicationService
+        .getApplicationEditContext(applicationNumber)
+        .map(context -> listDateReached(context.advertisingDate(), LocalDate.now(clock)))
+        .orElse(false);
+  }
+
+  private static boolean listDateReached(LocalDate advertisingDate, LocalDate today) {
+    return advertisingDate != null && !advertisingDate.isAfter(today);
   }
 
   public void requireSummaryEdit(

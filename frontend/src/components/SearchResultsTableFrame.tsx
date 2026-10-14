@@ -12,6 +12,8 @@ type SearchResultsTableFrameProps = {
   resultName?: string
   actions?: ReactNode
   columnCount?: number
+  /** With no results, the toolbar is hidden from view but still announces the count. */
+  hideZeroCount?: boolean
 }
 
 function SearchResultsTableFrame({
@@ -23,12 +25,14 @@ function SearchResultsTableFrame({
   resultName = 'result',
   actions,
   columnCount = 6,
+  hideZeroCount = false,
 }: SearchResultsTableFrameProps) {
+  const toolbarHidden = hideZeroCount && !loading && totalItems === 0 && !actions
   return (
     <div className="legacy-search-table-frame">
       {(loading || totalItems !== undefined || actions) && (
         <div
-          className={`legacy-search-table-toolbar${actions ? ' legacy-search-table-toolbar--with-actions' : ''}`}
+          className={`legacy-search-table-toolbar${actions ? ' legacy-search-table-toolbar--with-actions' : ''}${toolbarHidden ? ' cds--visually-hidden' : ''}`}
         >
           <TableToolbar>
             <TableToolbarContent>

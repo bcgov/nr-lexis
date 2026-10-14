@@ -1141,6 +1141,118 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void addApplicationShouldLetScopedSubmitterActAsAgentForAnotherOwner() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00077881");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getClientDataRequired("00077881", "02"))
+        .thenReturn(Optional.of(clientData("00077881")));
+    when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("bceid\\submitter")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicantType", "A");
+    params.add("ownerClientNumber", "00099999");
+    params.add("ownerClientLocationCode", "01");
+    params.add("agentClientNumber", "77881");
+    params.add("agentClientLocationCode", "02");
+    params.add("agentContactName", "Agent Contact");
+    params.add("exportScheduleId", "987");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
+    verify(service)
+        .addApplication(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("bceid\\submitter"));
+    ApplicationDetailsRpcService.CreateApplicationRequest request = requestCaptor.getValue();
+    assertThat(request.applicantTypeCode()).isEqualTo("A");
+    assertThat(request.ownerClientNumber()).isEqualTo("00099999");
+    assertThat(request.ownerClientLocationCode()).isEqualTo("01");
+    assertThat(request.agentClientNumber()).isEqualTo("00077881");
+    assertThat(request.agentClientLocationCode()).isEqualTo("02");
+    verify(clientLookupService, never()).getClientDataRequired("00099999", "01");
+    verify(provincialAuthorizationService)
+        .canCreateForClient(authentication, "00099999", "00077881");
+  }
+
+  @Test
+  void addApplicationShouldLetScopedSubmitterOwnerNameAnAgent() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00077881");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getClientDataRequired("00077881", "00"))
+        .thenReturn(Optional.of(clientData("00077881")));
+    when(service.addApplication(any(), org.mockito.ArgumentMatchers.eq("bceid\\submitter")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicantType", "A");
+    params.add("ownerClientNumber", "00077881");
+    params.add("ownerClientLocationCode", "00");
+    params.add("agentClientNumber", "00033333");
+    params.add("agentClientLocationCode", "03");
+    params.add("exportScheduleId", "987");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<ApplicationDetailsRpcService.CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
+    verify(service)
+        .addApplication(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("bceid\\submitter"));
+    assertThat(requestCaptor.getValue().ownerClientNumber()).isEqualTo("00077881");
+    assertThat(requestCaptor.getValue().agentClientNumber()).isEqualTo("00033333");
+    verify(provincialAuthorizationService)
+        .canCreateForClient(authentication, "00077881", "00033333");
+  }
+
+  @Test
+  void addApplicationShouldRejectScopedSubmitterNamingOtherClientsAsOwnerAndAgent() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00077881");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicantType", "A");
+    params.add("ownerClientNumber", "00099999");
+    params.add("ownerClientLocationCode", "01");
+    params.add("agentClientNumber", "00088888");
+    params.add("agentClientLocationCode", "02");
+    params.add("exportScheduleId", "987");
+
+    assertThatThrownBy(() -> controller.addApplicationLegacy(params, authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("The authenticated client must be the application owner or agent.");
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @Test
+  void addApplicationShouldRejectAnAgentLocationOutsideTheScopedSubmitterClient() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00077881");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getClientDataRequired("00077881", "09"))
+        .thenReturn(Optional.empty());
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicantType", "A");
+    params.add("ownerClientNumber", "00099999");
+    params.add("agentClientNumber", "00077881");
+    params.add("agentClientLocationCode", "09");
+    params.add("exportScheduleId", "987");
+
+    assertThatThrownBy(() -> controller.addApplicationLegacy(params, authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("The selected agent location is not valid for the authenticated client.");
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @Test
   void provincialSubmitterCannotCreateApplicationWithoutListDate() {
     TestingAuthenticationToken authentication =
         authenticatedWithActions(
@@ -1667,7 +1779,7 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void updateApplicationSummaryShouldRejectScopedSubmitterApplicantTypeChange() {
+  void updateApplicationSummaryShouldRejectScopedSubmitterMinisterialApplicantType() {
     TestingAuthenticationToken authentication =
         authenticatedWithActions(
             "idir\\submitter",
@@ -1677,13 +1789,120 @@ class ApplicationDetailsRpcControllerTest {
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("applicationNumber", "1000456");
     params.add("ownerClientNumber", "00011111");
-    params.add("applicantType", "A");
+    params.add("applicantType", "M");
 
     ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
         controller.updateApplicationLegacy(params, authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldLetScopedSubmitterOwnerAddAnAgentBeforeTheListDate() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00011111");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithApplicantType("O")));
+    when(applicationEditPolicyService.listDateReached(service, 1000456L)).thenReturn(false);
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("bceid\\submitter")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            ownerAgentSaveParams("00011111", "A", "00033333"), authentication);
+
+    assertThat(response.getBody().valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest.class);
+    verify(service)
+        .updateApplicationSummary(
+            requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("bceid\\submitter"));
+    assertThat(requestCaptor.getValue().applicantTypeCode()).isEqualTo("A");
+    assertThat(requestCaptor.getValue().agentClientNumber()).isEqualTo("00033333");
+    verify(provincialAuthorizationService, times(2))
+        .canCreateForClient(authentication, "00011111", "00033333");
+  }
+
+  @Test
+  void updateApplicationSummaryShouldLetScopedSubmitterAgentSaveTheApplicant() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00022222");
+    matchScopedClient(authentication, "00022222");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("bceid\\submitter")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            ownerAgentSaveParams("00011111", "A", "00022222"), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isTrue();
+    verify(applicationEditPolicyService, never()).listDateReached(any(), any());
+    verify(service).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRejectScopedSubmitterNamingOtherClientsAsOwnerAndAgent() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00011111");
+    matchScopedClient(authentication, "00011111");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            ownerAgentSaveParams("00099999", "A", "00088888"), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"O, owner-agent, A", "A, owner, O"})
+  void updateApplicationSummaryShouldRejectScopedSubmitterAgentChangeFromTheListDate(
+      String savedApplicantType, String saveSource, String requestedApplicantType) {
+    TestingAuthenticationToken authentication = scopedSubmitter("00011111");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithApplicantType(savedApplicantType)));
+    when(applicationEditPolicyService.listDateReached(service, 1000456L)).thenReturn(true);
+    MultiValueMap<String, String> params =
+        ownerAgentSaveParams("00011111", requestedApplicantType, "00033333");
+    params.set("saveSource", saveSource);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("An agent cannot be added or removed on or after the list date.");
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldLetApproversAddAnAgentFromTheListDate() {
+    TestingAuthenticationToken authentication =
+        authorized("createApplication", "/changeApplicantType");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithApplicantType("O")));
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            ownerAgentSaveParams("00011111", "A", "00033333"), authentication);
+
+    assertThat(response.getBody().valid()).isTrue();
+    verify(applicationEditPolicyService, never()).listDateReached(any(), any());
   }
 
   @ParameterizedTest
@@ -2026,6 +2245,21 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().clientNumber()).isEqualTo("00022222");
     verify(provincialAuthorizationService)
         .canAccessApplicationClientLookup(null, 1000456L, "22222");
+  }
+
+  @Test
+  void getClientDataShouldAllowAScopedSubmitterToLookUpTheirCounterparty() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(provincialAuthorizationService.canCreateForClient(null, "00099999", "00077881"))
+        .thenReturn(true);
+    when(clientLookupService.getClientData("00099999", "01"))
+        .thenReturn(Optional.of(clientData("00099999")));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationClientDataResponseDto> response =
+        controller.getClientData("00099999", "01", null, null, "77881");
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().clientNumber()).isEqualTo("00099999");
   }
 
   @Test
@@ -2831,6 +3065,78 @@ class ApplicationDetailsRpcControllerTest {
       when(authorizationService.canPerformAction(roles, action)).thenReturn(true);
     }
     return authentication;
+  }
+
+  private TestingAuthenticationToken scopedSubmitter(String clientNumber) {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_" + clientNumber),
+            "createApplication");
+    lenient()
+        .when(provincialAuthorizationService.scopedForestClientNumber(authentication))
+        .thenReturn(clientNumber);
+    lenient().when(provincialAuthorizationService.hasClientScope(authentication)).thenReturn(true);
+    return authentication;
+  }
+
+  // Mirrors the real check: the scoped client must be the owner or the agent in use.
+  private void matchScopedClient(TestingAuthenticationToken authentication, String clientNumber) {
+    when(
+            provincialAuthorizationService.canCreateForClient(
+                org.mockito.ArgumentMatchers.eq(authentication),
+                org.mockito.ArgumentMatchers.nullable(String.class),
+                org.mockito.ArgumentMatchers.nullable(String.class)))
+        .thenAnswer(
+            invocation ->
+                clientNumber.equals(invocation.getArgument(1))
+                    || clientNumber.equals(invocation.getArgument(2)));
+  }
+
+  private MultiValueMap<String, String> ownerAgentSaveParams(
+      String ownerClientNumber, String applicantType, String agentClientNumber) {
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("saveSource", "owner-agent");
+    params.add("ownerClientNumber", ownerClientNumber);
+    params.add("ownerClientLocationCode", "02");
+    params.add("ownerContactName", "Owner Contact");
+    params.add("applicantType", applicantType);
+    params.add("agentClientNumber", agentClientNumber);
+    params.add("agentClientLocationCode", "03");
+    params.add("agentContactName", "Agent Contact");
+    return params;
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshotWithApplicantType(
+      String applicantTypeCode) {
+    ApplicationDetailsRpcService.ApplicationSummarySnapshot snapshot = summarySnapshot();
+    boolean agentApplicant = "A".equals(applicantTypeCode);
+    return new ApplicationDetailsRpcService.ApplicationSummarySnapshot(
+        snapshot.applicationNumber(),
+        snapshot.federalApplicationNumber(),
+        snapshot.applicationDate(),
+        snapshot.termDays(),
+        snapshot.receivedDate(),
+        snapshot.applicationVolume(),
+        snapshot.averageLogVolume(),
+        snapshot.productLocation(),
+        snapshot.exportScheduleId(),
+        agentApplicant ? snapshot.agentClientNumber() : snapshot.ownerClientNumber(),
+        agentApplicant ? snapshot.agentClientLocationCode() : snapshot.ownerClientLocationCode(),
+        snapshot.ownerClientNumber(),
+        snapshot.ownerClientLocationCode(),
+        snapshot.exemptionNumber(),
+        snapshot.exemptionReasonCode(),
+        snapshot.applicationStatusCode(),
+        applicantTypeCode,
+        snapshot.orgUnitNumber(),
+        snapshot.productTypeCode(),
+        snapshot.jurisdictionCode(),
+        snapshot.growthTypeCode(),
+        agentApplicant ? snapshot.agentContactName() : null,
+        snapshot.ownerContactName(),
+        snapshot.oicIndicator());
   }
 
   private TestingAuthenticationToken unauthorized(String action) {

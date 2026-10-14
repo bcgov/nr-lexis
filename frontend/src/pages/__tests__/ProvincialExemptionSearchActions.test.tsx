@@ -125,12 +125,14 @@ const renderPage = (
 }
 
 // Approval results list each exemption, and an item's text follows its linked number.
-const resultNotification = (title: string) =>
+const resultNotification = (title: string | RegExp) =>
   screen.getByText(title).closest('.app-inline-notification') as HTMLElement
 const resultItems = (title: string) =>
   within(resultNotification(title))
     .getAllByRole('listitem')
     .map((item) => item.textContent)
+// The batch bar's summary, apart from the live region that announces the same count.
+const batchSummary = () => document.querySelector('.cds--batch-summary__para')
 const UNCONFIRMED_ITEM =
   ': The approval could not be confirmed. Check its current status before approving again.'
 const UNRESOLVED_TITLE = '2 exemptions were not approved or could not be confirmed'
@@ -531,7 +533,9 @@ describe('Provincial Exemption Search Actions', () => {
         { exemptionNumber: 'EX-1001', ownerEmail: 'updated@example.test', agentEmail: '' },
       ]),
     )
-    expect(await screen.findByText('Exemption approved and now Active.')).toBeInTheDocument()
+    expect(
+      await screen.findByText(/^Exemption EX-\d+ approved and now Active\.$/),
+    ).toBeInTheDocument()
     expect(
       screen.getByText('Approval email sent to the owner (updated@example.test).'),
     ).toBeInTheDocument()
@@ -552,7 +556,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(createExemptionAction.closest('.lexis-page-header__actions')).not.toBeNull()
   }, 20_000)
 
-  it('preserves selected exemptions while paging through approval results', async () => {
+  it('clears the selection when the page or page size changes', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
     )
@@ -605,14 +609,78 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-PAGE-1')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-PAGE-1' }))
+    expect(batchSummary()).toHaveTextContent('1 exemption selected')
 
     await userEvent.click(screen.getByLabelText('Next page'))
     await screen.findByText('EX-PAGE-2')
-    expect(screen.getByRole('button', { name: 'Approve' })).toBeEnabled()
+    expect(batchSummary()).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByLabelText('Previous page'))
     await screen.findByText('EX-PAGE-1')
-    expect(screen.getByRole('checkbox', { name: 'Select exemption EX-PAGE-1' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select exemption EX-PAGE-1' })).not.toBeChecked()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-PAGE-1' }))
+    expect(batchSummary()).toHaveTextContent('1 exemption selected')
+    await userEvent.selectOptions(screen.getByLabelText('Items per page:'), '25')
+    await waitFor(() =>
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({ pageSize: 25 }),
+        expect.any(Object),
+      ),
+    )
+    expect(batchSummary()).toBeNull()
+  })
+
+  it('shows the select-all checkbox as partly selected and announces the selected count', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([selectableExemption('TEST-1'), selectableExemption('TEST-2')]),
+    )
+
+    renderPage()
+    await screen.findByText('TEST-1')
+    const selectAll = screen.getByRole('checkbox', {
+      name: 'Select all eligible rows on this page',
+    })
+    const announcement = screen
+      .getByRole('region', { name: 'Search results' })
+      .querySelector('.cds--visually-hidden[aria-live="polite"]')
+    expect(announcement).toBeEmptyDOMElement()
+    expect(selectAll).not.toBePartiallyChecked()
+
+    const first = screen.getByRole('checkbox', { name: 'Select exemption TEST-1' })
+    await userEvent.click(first)
+    expect(selectAll).toBePartiallyChecked()
+    expect(selectAll).not.toBeChecked()
+    expect(announcement).toHaveTextContent('1 exemption selected')
+    expect(announcement?.closest('.cds--batch-actions')).toBeNull()
+    expect(first).toHaveFocus()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption TEST-2' }))
+    expect(selectAll).not.toBePartiallyChecked()
+    expect(selectAll).toBeChecked()
+    expect(announcement).toHaveTextContent('2 exemptions selected')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(announcement).toBeEmptyDOMElement()
+  })
+
+  it('shows only the empty state when a search finds no exemptions', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedSearchProvincialExemptions.mockResolvedValue(exemptionSearchResponse([]))
+    const { container } = renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'No results found' })).toBeVisible()
+    expect(container.querySelector('.legacy-search-table-toolbar')).toHaveClass(
+      'cds--visually-hidden',
+    )
+    expect(container.querySelector('.legacy-search-result-count--footer')).toBeNull()
+    expect(container.querySelector('.cds--pagination')).toBeNull()
   })
 
   it('blocks invalid approval recipients and keeps a skipped notification separate from approval', async () => {
@@ -655,7 +723,7 @@ describe('Provincial Exemption Search Actions', () => {
     )
     expect(mockedApproveExemptions).toHaveBeenCalledWith(['EX-1001'], 'exemption-EX-1001-version')
     expect(mockedSendExemptionApprovalNotifications).not.toHaveBeenCalled()
-    expect(screen.getByText('Exemption approved and now Active.')).toBeInTheDocument()
+    expect(screen.getByText(/^Exemption EX-\d+ approved and now Active\.$/)).toBeInTheDocument()
     expect(
       screen.getByText('No approval email was sent. Notify the applicant another way.'),
     ).toBeInTheDocument()
@@ -681,7 +749,7 @@ describe('Provincial Exemption Search Actions', () => {
         'Approval email sent to the owner (client@example.test). Refresh the page to see the latest status.',
       ),
     ).toBeVisible()
-    expect(resultNotification('Exemption approved and now Active.')).toHaveClass(
+    expect(resultNotification(/^Exemption EX-\d+ approved and now Active\.$/)).toHaveClass(
       'cds--inline-notification--warning',
     )
     expect(mockedApproveExemptions).toHaveBeenCalledTimes(1)
@@ -845,7 +913,9 @@ describe('Provincial Exemption Search Actions', () => {
     await within(dialog).findByText('client@example.test')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and send email' }))
     await waitFor(() => expect(mockedApproveExemptions).toHaveBeenCalledTimes(1))
-    expect(within(dialog).getByRole('button', { name: /Approving…$/ })).toBeDisabled()
+    expect(
+      within(dialog).getByRole('button', { name: /Approving and sending email$/ }),
+    ).toBeDisabled()
 
     await act(async () => {
       await router.navigate('/elsewhere')
@@ -865,7 +935,7 @@ describe('Provincial Exemption Search Actions', () => {
         warnings: [],
       })
     })
-    expect(await screen.findByText('Exemption approved and now Active.')).toBeVisible()
+    expect(await screen.findByText(/^Exemption EX-\d+ approved and now Active\.$/)).toBeVisible()
     expect(router.state.location.pathname).toBe('/provincial/exemption')
   })
 
@@ -932,7 +1002,7 @@ describe('Provincial Exemption Search Actions', () => {
         outcomes: [{ exemptionNumber: 'EX-1001', queued: true, message: 'Queued.' }],
       })
     })
-    expect(await screen.findByText('Exemption approved and now Active.')).toBeVisible()
+    expect(await screen.findByText(/^Exemption EX-\d+ approved and now Active\.$/)).toBeVisible()
     expect(router.state.location.pathname).toBe('/provincial/exemption')
     expect(mockedApproveExemptions).toHaveBeenCalledTimes(1)
     await act(async () => {
@@ -990,7 +1060,7 @@ describe('Provincial Exemption Search Actions', () => {
     renderPage()
     await screen.findByText('EX-1001')
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select exemption EX-1001' }))
-    expect(screen.getByText('1 exemption selected')).toBeInTheDocument()
+    expect(batchSummary()).toHaveTextContent('1 exemption selected')
     await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
 
     const approvalDialog = screen.getByRole('dialog', { name: /^Approve (exemption|[0-9])/ })
@@ -1072,7 +1142,7 @@ describe('Provincial Exemption Search Actions', () => {
     await userEvent.click(
       screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
     )
-    expect(screen.getByText('1 exemption selected')).toBeInTheDocument()
+    expect(batchSummary()).toHaveTextContent('1 exemption selected')
   })
 
   it('approves selected exemptions one at a time with a freshly loaded version', async () => {
@@ -1977,7 +2047,7 @@ describe('Provincial Exemption Search Actions', () => {
       expect(from).toHaveValue('2026-10-12')
       expect(to).toHaveValue('2026-10-01')
       expect(to).toHaveAttribute('aria-invalid', 'true')
-      expect(screen.getByText(`Must be on or after ${fromLabel}`)).toBeVisible()
+      expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
       expect(search).toBeDisabled()
       fireEvent.submit(to.closest('form') as HTMLFormElement)
       expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(callsBeforeEdit)

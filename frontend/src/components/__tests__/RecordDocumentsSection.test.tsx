@@ -167,6 +167,35 @@ describe('RecordDocumentsSection', () => {
     expect(onDeleteStart).toHaveBeenCalledTimes(2)
   })
 
+  it('moves focus to Add documents after deleting the last document', async () => {
+    const DeletingHost = () => {
+      const [remaining, setRemaining] = useState([rows[0]])
+      return (
+        <RecordDocumentsSection
+          id="permit-documents"
+          recordType="permit"
+          rows={remaining}
+          upload={upload}
+          onOpen={vi.fn()}
+          canDelete
+          removingId={null}
+          onDelete={async (row) => {
+            setRemaining((current) => current.filter((item) => item.id !== row.id))
+          }}
+        />
+      )
+    }
+    render(<DeletingHost />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this document?',
+    })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add documents' })).toHaveFocus())
+  })
+
   it('shows loading, unavailable documents and the in-tab result', async () => {
     const onDismissResult = vi.fn()
     const { rerender } = renderSection({ loading: true })

@@ -732,6 +732,17 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(within(drawer).getByRole('button', { name: 'Save package' })).toBeInTheDocument()
   })
 
+  it('explains the application volume rule when editing scale details', async () => {
+    renderApplicationItems()
+
+    await selectApplicationItemDetailsTile()
+    await waitFor(() =>
+      expect(document.getElementById('applicationSummaryVolume')).toHaveAccessibleDescription(
+        'Must be greater than 0',
+      ),
+    )
+  })
+
   it('moves focus to the new package card after creating the first package', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
@@ -2093,12 +2104,14 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await userEvent.click(save)
 
     expect(screen.getAllByText('Package number is required').length).toBeGreaterThan(0)
-    expect(createPackageControls.getByText('Volume must be greater than 0')).toBeInTheDocument()
     expect(
-      createPackageControls.getByText('Average length must be greater than 0'),
+      createPackageControls.getByText('Volume (m³) must be greater than 0'),
     ).toBeInTheDocument()
     expect(
-      createPackageControls.getByText('Average diameter must be greater than 0'),
+      createPackageControls.getByText('Average length (m) must be greater than 0'),
+    ).toBeInTheDocument()
+    expect(
+      createPackageControls.getByText('Average top diameter (rads) must be greater than 0'),
     ).toBeInTheDocument()
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
     expect(createPackageControls.queryByText('Package creation failed')).not.toBeInTheDocument()
@@ -2163,10 +2176,12 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await userEvent.click(save)
 
     expect(
-      screen.getAllByText('Volume must have no more than one decimal place').length,
+      screen.getAllByText('Volume (m³) must have no more than one decimal place').length,
     ).toBeGreaterThan(0)
-    expect(screen.getByText('Average length must be 99 or less')).toBeInTheDocument()
-    expect(screen.getByText('Average diameter must be 99.99 or less')).toBeInTheDocument()
+    expect(screen.getByText('Average length (m) must be 99 or less')).toBeInTheDocument()
+    expect(
+      screen.getByText('Average top diameter (rads) must be 99.99 or less'),
+    ).toBeInTheDocument()
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
   })
 
@@ -2346,7 +2361,63 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => {
       expect(mockedDeleteApplicationPackage).toHaveBeenCalledWith('PKG-1', '321')
     })
-    expect(await screen.findByText('Package PKG-1 deleted.')).toBeInTheDocument()
+    const deleted = await screen.findByText('Package deleted.')
+    expect(
+      deleted
+        .closest('.cds--inline-notification')
+        ?.querySelector('.cds--inline-notification__text-wrapper'),
+    ).toHaveTextContent(/^Package deleted\.$/)
+    expect(screen.queryByText('Item action completed')).not.toBeInTheDocument()
+    expect(screen.queryByText('Package PKG-1 deleted.')).not.toBeInTheDocument()
+  })
+
+  it('moves focus to Create package after deleting the only package', async () => {
+    mockedFetchApplicationPackageScales.mockResolvedValue([])
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 0 }],
+    })
+    renderApplicationItems()
+
+    await selectApplicationDetailTab('Scale')
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete package' }))
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this package?',
+    })
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({ ...applicationDetail, packages: [] })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByText('Package deleted.')).toBeInTheDocument()
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Create package' })).toHaveFocus(),
+    )
+  })
+
+  it('moves focus to the remaining package after deleting one of several', async () => {
+    mockedFetchApplicationPackageScales.mockResolvedValue([])
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [
+        { packageNumber: 'PKG-1', volume: 100, pieceCount: 0 },
+        { packageNumber: 'PKG-2', volume: 50, pieceCount: 0 },
+      ],
+    })
+    renderApplicationItems()
+
+    await selectApplicationDetailTab('Scale')
+    await userEvent.click(await screen.findByRole('button', { name: 'Delete package' }))
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this package?',
+    })
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [{ packageNumber: 'PKG-2', volume: 50, pieceCount: 0 }],
+    })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+
+    const packageCard = document.getElementById('application-items-package')
+    await waitFor(() => expect(packageCard).toHaveFocus())
+    expect(within(packageCard as HTMLElement).getByText('Package deleted.')).toBeInTheDocument()
   })
 
   it('keeps a failed package deletion open for retry', async () => {
@@ -2679,6 +2750,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(
       (await screen.findByText('Scale deleted.')).closest('#application-items-scales'),
     ).not.toBeNull()
+    await waitFor(() => expect(document.getElementById('application-items-scales')).toHaveFocus())
   })
 
   it.each([
@@ -2760,7 +2832,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
 
     expect(
-      drawer.getAllByText('Volume must have no more than two decimal places').length,
+      drawer.getAllByText('Volume (m³) must have no more than two decimal places').length,
     ).toBeGreaterThan(0)
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
@@ -2891,11 +2963,11 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
       expect(mockedAddApplicationScaleToPackage).toHaveBeenCalledTimes(1)
       expect(onDetailChanged).toHaveBeenCalledTimes(1)
     })
-    expect(
-      (await screen.findByText('Scale 56 added. Reload before adding another scale row.')).closest(
-        '.cds--inline-notification',
-      ),
-    ).toHaveClass('cds--inline-notification--warning')
+    const refreshWarning = (
+      await screen.findByText('Scale 56 added. Reload before adding another scale row.')
+    ).closest('.cds--inline-notification')
+    expect(refreshWarning).toHaveClass('cds--inline-notification--warning')
+    expect(refreshWarning).toHaveTextContent('Scale saved, not refreshed')
     expect(screen.queryByText('Unable to add scale.')).not.toBeInTheDocument()
 
     const scaleRow = screen.getByText('TM001').closest('tr')
@@ -3033,7 +3105,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
 
     expect(drawer.getAllByText('Pieces must be a whole number').length).toBeGreaterThan(0)
-    expect(drawer.getByText('Volume must be 99999.9 or less')).toBeInTheDocument()
+    expect(drawer.getByText('Volume (m³) must be 99999.9 or less')).toBeInTheDocument()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
   })
 

@@ -363,7 +363,18 @@ describe('Provincial exemption edit context', () => {
 
     await userEvent.type(feeRate, '12.50')
     expect(screen.queryByText('Fee rate is required')).not.toBeInTheDocument()
+    // The refresh after a save keeps the Fees card instead of its unavailable state.
+    const refreshedContext = await vi.mocked(fetchExemptionEditContext)('BOIC-205')
+    let finishRefresh: () => void = () => undefined
+    vi.mocked(fetchExemptionEditContext).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishRefresh = () => resolve(refreshedContext)
+      }),
+    )
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() => expect(vi.mocked(fetchExemptionEditContext)).toHaveBeenCalledTimes(3))
+    expect(screen.queryByText('Fee rate unavailable')).not.toBeInTheDocument()
+    await act(async () => finishRefresh())
 
     await waitFor(() => expect(vi.mocked(updateExemption)).toHaveBeenCalledTimes(1))
     expect(vi.mocked(updateExemption)).toHaveBeenCalledWith({
@@ -1886,7 +1897,9 @@ describe('Provincial exemption edit context', () => {
         outcomes: [{ exemptionNumber: 'EX-205', queued: true, message: 'Queued.' }],
       })
     })
-    expect(await screen.findByText('Exemption approved and now Active.')).toBeInTheDocument()
+    expect(
+      await screen.findByText(/^Exemption [\w-]+ approved and now Active\.$/),
+    ).toBeInTheDocument()
     expect(screen.getByText(/^Approval email sent to the owner \(/)).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/provincial/exemption/EX-205')
     expect(
@@ -2125,7 +2138,7 @@ describe('Provincial exemption edit context', () => {
         screen.queryByRole('dialog', { name: 'Approve exemption EX-205' }),
       ).not.toBeInTheDocument(),
     )
-    expect(screen.getByText('Exemption approved and now Active.')).toBeInTheDocument()
+    expect(screen.getByText(/^Exemption [\w-]+ approved and now Active\.$/)).toBeInTheDocument()
     expect(
       screen.getByText('No approval email was sent. Notify the applicant another way.'),
     ).toBeInTheDocument()
@@ -2331,7 +2344,9 @@ describe('Provincial exemption edit context', () => {
     await userEvent.click(within(retryDialog).getByRole('button', { name: 'Retry notifications' }))
     await waitFor(() => expect(mockedSendExemptionApprovalNotifications).toHaveBeenCalledTimes(2))
     expect(approveExemptions).toHaveBeenCalledTimes(1)
-    expect(await screen.findByText('Exemption approved and now Active.')).toBeInTheDocument()
+    expect(
+      await screen.findByText(/^Exemption [\w-]+ approved and now Active\.$/),
+    ).toBeInTheDocument()
     expect(screen.getByText(/^Approval email sent to the owner \(/)).toBeInTheDocument()
   })
 

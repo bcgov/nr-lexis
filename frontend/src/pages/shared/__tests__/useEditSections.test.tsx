@@ -149,6 +149,36 @@ const ReusedEditButtonHarness = () => {
   )
 }
 
+const OpenedInEditHarness = () => {
+  const [editingSection, setEditingSection] = useState<'permit' | 'newPermit' | null>('newPermit')
+  const sections = useEditSections<'permit' | 'newPermit'>({
+    isDirty: false,
+    onDiscard: vi.fn(),
+    state: [editingSection, setEditingSection],
+  })
+  return (
+    <section ref={sections.sectionRef('permit', 'newPermit')}>
+      {sections.isEditing('newPermit') ? (
+        <>
+          <label htmlFor="new-permit-status">Status</label>
+          <input id="new-permit-status" defaultValue="Active" />
+          <button type="button" onClick={sections.cancelEditing}>
+            Cancel
+          </button>
+        </>
+      ) : (
+        <button
+          type="button"
+          ref={sections.editButtonRef('permit', 'newPermit')}
+          onClick={() => sections.startEditing('permit')}
+        >
+          Edit permit details
+        </button>
+      )}
+    </section>
+  )
+}
+
 describe('useEditSections', () => {
   afterEach(() => {
     vi.useRealTimers()
@@ -452,5 +482,16 @@ describe('useEditSections', () => {
     })
 
     expect(screen.getByRole('button', { name: 'Edit permit' })).toHaveFocus()
+  })
+
+  it('returns focus to an Edit button shared by a record that opened in edit mode', async () => {
+    render(<OpenedInEditHarness />)
+
+    await waitFor(() => expect(screen.getByLabelText('Status')).toHaveFocus())
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Edit permit details' })).toHaveFocus(),
+    )
   })
 })

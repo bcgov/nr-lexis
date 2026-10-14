@@ -136,6 +136,12 @@ const searchRowsWithMixedEligibility = [
   },
 ]
 
+// The batch bar's summary, apart from the live region that announces the same count.
+const batchSummary = () => document.querySelector('.cds--batch-summary__para')
+// The create exemption error, which Carbon text inputs' empty alert regions sit beside.
+const exemptionError = () =>
+  screen.getByText('Exemption not created').closest('[role="alert"]') as HTMLElement
+
 describe('Provincial Application Search Actions', () => {
   beforeEach(() => {
     vi.clearAllMocks()
@@ -346,10 +352,10 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.queryByText('1 application selected')).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
-    expect(screen.getByText('1 application selected')).toBeInTheDocument()
+    expect(batchSummary()).toHaveTextContent('1 application selected')
     expect(screen.getByRole('button', { name: 'Create exemption' })).toBeEnabled()
     expect(fireEvent.click(ineligibleCheckbox)).toBe(false)
-    expect(screen.getByText('1 application selected')).toBeInTheDocument()
+    expect(batchSummary()).toHaveTextContent('1 application selected')
 
     mockedFetchExemptionCreatePreview.mockResolvedValueOnce(exemptionPreview(['321']))
     mockedSubmitExemptionCreate.mockResolvedValueOnce({
@@ -449,7 +455,7 @@ describe('Provincial Application Search Actions', () => {
     )
     // Cancel returns to the selection so it can be changed or confirmed again.
     expect(screen.getByRole('checkbox', { name: 'Select application 321' })).toBeChecked()
-    expect(screen.getByText('1 application selected')).toBeInTheDocument()
+    expect(batchSummary()).toHaveTextContent('1 application selected')
   })
 
   it.each([
@@ -955,7 +961,7 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('shows validation when selected rows do not share client numbers', async () => {
+  it('keeps the selection and focus when selected rows have a different owner or agent', async () => {
     mockedSearchProvincialApplications.mockResolvedValue({
       content: [
         {
@@ -983,23 +989,205 @@ describe('Provincial Application Search Actions', () => {
     await userEvent.click(
       screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
     )
-    await userEvent.click(screen.getByRole('button', { name: 'Create exemption' }))
+    const createExemption = screen.getByRole('button', { name: 'Create exemption' })
+    await userEvent.click(createExemption)
 
-    await waitFor(() => {
-      expect(screen.getByText('Validation failed')).toBeInTheDocument()
-      expect(
-        screen.getByText(
-          'Selected applications do not share the same client numbers. Multi-application exemptions require matching clients.',
-        ),
-      ).toBeInTheDocument()
-    })
-    expect(mockNavigate).not.toHaveBeenCalled()
-    expect(screen.getByRole('checkbox', { name: 'Select application 321' })).not.toBeChecked()
+    await screen.findByText('Exemption not created')
+    const alert = exemptionError()
+    expect(alert).toHaveTextContent(
+      'The selected applications must have the same owner and agent. Change your selection and try again.',
+    )
+    expect(screen.queryByText('Validation failed')).not.toBeInTheDocument()
+    // The error sits above the results, outside the filters.
+    expect(alert.closest('form')).toBeNull()
     expect(
-      screen.queryByRole('button', {
-        name: 'Create exemption',
+      alert.compareDocumentPosition(screen.getByRole('region', { name: 'Search results' })) &
+        Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
+    expect(screen.queryByRole('dialog', { name: 'Create new exemption' })).not.toBeInTheDocument()
+    expect(mockedFetchExemptionCreatePreview).not.toHaveBeenCalled()
+    expect(mockNavigate).not.toHaveBeenCalled()
+    expect(screen.getByRole('checkbox', { name: 'Select application 321' })).toBeChecked()
+    expect(screen.getByRole('checkbox', { name: 'Select application 654' })).toBeChecked()
+    expect(batchSummary()).toHaveTextContent('2 applications selected')
+    expect(createExemption).toHaveFocus()
+  })
+
+  it.each([
+    {
+      serverMessage: 'Application 321 is already assigned to exemption 26-8849.',
+      expected:
+        'Application 321 is already in exemption 26-8849. Remove it from your selection and try again.',
+    },
+    {
+      serverMessage: 'Application 321 has valid offers and cannot be added to an exemption.',
+      expected:
+        "Application 321 has a valid offer, so it can't be exempted. Remove it from your selection and try again.",
+    },
+    {
+      serverMessage: 'Application 321 listing date has not passed.',
+      expected:
+        "Application 321 can't be exempted until its list date has passed. Remove it from your selection and try again.",
+    },
+    {
+      serverMessage: 'Insufficient privileges to add application 321.',
+      expected: "You don't have permission to create this exemption.",
+    },
+  ])(
+    'closes the confirmation and explains "$serverMessage" above the results',
+    async ({ serverMessage, expected }) => {
+      mockedFetchExemptionCreatePreview.mockRejectedValueOnce(new Error(serverMessage))
+      renderPage()
+      await screen.findByText('321')
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
+      const createExemption = screen.getByRole('button', { name: 'Create exemption' })
+      await userEvent.click(createExemption)
+      const confirmation = screen.getByRole('dialog', { name: 'Create new exemption' })
+      await userEvent.click(within(confirmation).getByRole('button', { name: 'Create exemption' }))
+
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('dialog', { name: 'Create new exemption' }),
+        ).not.toBeInTheDocument(),
+      )
+      const alert = exemptionError()
+      expect(alert).toHaveTextContent(expected)
+      expect(screen.queryByText(serverMessage)).not.toBeInTheDocument()
+      expect(alert.closest('form')).toBeNull()
+      expect(screen.getByRole('checkbox', { name: 'Select application 321' })).toBeChecked()
+      expect(batchSummary()).toHaveTextContent('1 application selected')
+      await waitFor(() => expect(createExemption).toHaveFocus())
+      expect(mockedSubmitExemptionCreate).not.toHaveBeenCalled()
+      expect(mockNavigate).not.toHaveBeenCalled()
+    },
+  )
+
+  it('refreshes the results when a selected application is no longer approved', async () => {
+    renderPage()
+    await screen.findByText('321')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
+    const searchCalls = mockedSearchProvincialApplications.mock.calls.length
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: [
+        { ...searchRowsWithMixedEligibility[0], status: 'PND', allowCreateExemption: false },
+        searchRowsWithMixedEligibility[1],
+      ],
+      page: { number: 0, size: 10, totalElements: 2, totalPages: 1 },
+    })
+    mockedFetchExemptionCreatePreview.mockResolvedValueOnce(exemptionPreview(['321']))
+    mockedSubmitExemptionCreate.mockResolvedValueOnce({
+      success: false,
+      message: '',
+      createdId: undefined,
+      errors: ['Application 321 must have a status of approved.'],
+      warnings: [],
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Create exemption' }))
+    const confirmation = screen.getByRole('dialog', { name: 'Create new exemption' })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Create exemption' }))
+
+    await screen.findByText('Exemption not created')
+    expect(exemptionError()).toHaveTextContent(
+      'Application 321 is no longer Approved. Its current status now shows in the results.',
+    )
+    expect(screen.queryByRole('dialog', { name: 'Create new exemption' })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(mockedSearchProvincialApplications.mock.calls.length).toBeGreaterThan(searchCalls),
+    )
+    expect(mockedSearchProvincialApplications).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        page: 0,
+        pageSize: 10,
+        sortField: 'applicationNumber',
+        sortDirection: 'desc',
+        filters: expect.objectContaining({ region: ['11'] }),
       }),
-    ).not.toBeInTheDocument()
+      expect.any(Object),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('checkbox', { name: 'Select application 321' })).toHaveAttribute(
+        'aria-disabled',
+        'true',
+      ),
+    )
+    expect(exemptionError()).toHaveTextContent(
+      'Application 321 is no longer Approved. Its current status now shows in the results.',
+    )
+    expect(batchSummary()).toHaveTextContent('1 application selected')
+    expect(mockNavigate).not.toHaveBeenCalled()
+  })
+
+  it('shows the select-all checkbox as partly selected when some eligible rows are selected', async () => {
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: searchRowsWithMixedEligibility.map((row) => ({
+        ...row,
+        allowCreateExemption: true,
+      })),
+      page: { number: 0, size: 10, totalElements: 2, totalPages: 1 },
+    })
+    renderPage()
+    await screen.findByText('321')
+    const selectAll = screen.getByRole('checkbox', {
+      name: 'Select all eligible rows on this page',
+    })
+    expect(selectAll).not.toBePartiallyChecked()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
+    expect(selectAll).toBePartiallyChecked()
+    expect(selectAll).not.toBeChecked()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 654' }))
+    expect(selectAll).not.toBePartiallyChecked()
+    expect(selectAll).toBeChecked()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 654' }))
+    expect(selectAll).toBePartiallyChecked()
+    await userEvent.click(selectAll)
+    expect(selectAll).toBeChecked()
+    expect(batchSummary()).toHaveTextContent('2 applications selected')
+  })
+
+  it('announces the selected count without moving focus', async () => {
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: searchRowsWithMixedEligibility.map((row) => ({
+        ...row,
+        allowCreateExemption: true,
+      })),
+      page: { number: 0, size: 10, totalElements: 2, totalPages: 1 },
+    })
+    renderPage()
+    await screen.findByText('321')
+    const results = screen.getByRole('region', { name: 'Search results' })
+    const announcement = results.querySelector('.cds--visually-hidden[aria-live="polite"]')
+    expect(announcement).toBeEmptyDOMElement()
+    expect(announcement?.closest('.cds--batch-actions')).toBeNull()
+
+    const first = screen.getByRole('checkbox', { name: 'Select application 321' })
+    await userEvent.click(first)
+    expect(announcement).toHaveTextContent('1 application selected')
+    expect(first).toHaveFocus()
+
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 654' }))
+    expect(announcement).toHaveTextContent('2 applications selected')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(announcement).toBeEmptyDOMElement()
+  })
+
+  it('shows only the empty state when a search finds no applications', async () => {
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: [],
+      page: { number: 0, size: 10, totalElements: 0, totalPages: 0 },
+    })
+    const { container } = renderPage()
+
+    expect(await screen.findByRole('heading', { name: 'No results found' })).toBeVisible()
+    expect(container.querySelector('.legacy-search-table-toolbar')).toHaveClass(
+      'cds--visually-hidden',
+    )
+    expect(container.querySelector('.legacy-search-result-count--footer')).toBeNull()
+    expect(container.querySelector('.cds--pagination')).toBeNull()
+    expect(screen.queryByText('Items per page:')).not.toBeInTheDocument()
   })
 
   it('clears selected rows when filters change', async () => {
@@ -1222,10 +1410,13 @@ describe('Provincial Application Search Actions', () => {
       expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
     })
 
-    await userEvent.type(applicationNumberInput, '2')
-    const searchForm = screen.getByRole('button', { name: 'Searching...' }).closest('form')
+    const searchButton = screen.getByRole('button', { name: 'Search' })
+    expect(searchButton).toHaveFocus()
+    expect(searchButton).toHaveAttribute('aria-disabled', 'true')
+    await userEvent.click(searchButton)
+    await userEvent.type(applicationNumberInput, '2{Enter}')
+    const searchForm = searchButton.closest('form')
     expect(searchForm).not.toBeNull()
-    expect(screen.getByRole('button', { name: 'Searching...' })).toBeDisabled()
     fireEvent.submit(searchForm!)
     expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(1)
 
@@ -1244,7 +1435,7 @@ describe('Provincial Application Search Actions', () => {
       },
     })
     expect(await screen.findByText('111')).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Search' })).not.toHaveAttribute('aria-disabled')
   })
 
   it('shows a request failure instead of a no-results state', async () => {
@@ -1275,7 +1466,7 @@ describe('Provincial Application Search Actions', () => {
       expect(from).toHaveValue('2026-10-12')
       expect(to).toHaveValue('2026-10-01')
       expect(to).toHaveAttribute('aria-invalid', 'true')
-      expect(screen.getByText(`Must be on or after ${fromLabel}`)).toBeVisible()
+      expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
       expect(search).toBeDisabled()
       fireEvent.submit(to.closest('form') as HTMLFormElement)
       expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(callsBeforeEdit)

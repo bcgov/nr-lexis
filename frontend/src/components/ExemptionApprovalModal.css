@@ -56,8 +56,17 @@
   gap: 1rem;
   margin: 0;
 }
+.exemption-approval-modal__recipient:last-of-type {
+  border-bottom: 1px solid var(--cds-border-subtle-01, #c6c6c6);
+  padding-bottom: 1rem;
+}
+.exemption-approval-modal__recipient dt {
+  color: var(--cds-text-secondary, #525252);
+}
 .exemption-approval-modal__recipient dd {
   margin: 0;
+  font-size: 1rem;
+  line-height: 1.375rem;
   overflow-wrap: anywhere;
 }
 .exemption-approval-modal__error,

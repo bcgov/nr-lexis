@@ -2343,7 +2343,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expectAccessiblePage(page, '/admin/rtm/emslogamv', /average market values/i)
 
     await expect(page).toHaveURL(/\/admin\/rtm\/emslogamv\/upload$/)
-    await expect(page).toHaveTitle('Average market values | NR LEXIS')
+    await expect(page).toHaveTitle('Average market values')
     const uploadSpreadsheet = page.getByRole('region', { name: 'Upload spreadsheet' })
     const replaceFile = page.getByRole('button', { name: 'Replace file' })
     await expect
@@ -2683,7 +2683,7 @@ test.describe('TEST IDIR admin regression', () => {
     const reviewTab = page.getByRole('tab', { name: 'Review' })
     await expect(reviewTab).toBeVisible()
     await reviewTab.click()
-    await expect(page.getByRole('region', { name: 'Review' })).toHaveText(
+    await expect(page.getByRole('tabpanel', { name: 'Review' })).toHaveText(
       'Available after the application is saved.',
     )
 
@@ -2729,7 +2729,7 @@ test.describe('TEST IDIR admin regression', () => {
 
     for (const section of ['Documents', 'Remarks', 'Offers', 'Review']) {
       await page.getByRole('tab', { name: section }).click()
-      const panel = page.getByRole('region', { name: section, exact: true })
+      const panel = page.getByRole('tabpanel', { name: section, exact: true })
       await expect(panel).toHaveText('Available after the application is saved.')
       await expect(panel.locator('input, textarea')).toHaveCount(0)
     }

@@ -34,6 +34,8 @@ const CLIENT_LOCATION_CACHE_TTL_MS = 5 * 60_000
 type ClientLookupContext = {
   applicationNumber?: string
   permitNumber?: string
+  /** The client in the other applicant slot, which lets a scoped submitter look this one up. */
+  counterpartyClientNumber?: string
 }
 
 const parseClientData = (input: unknown): ApplicationClientData | null => {
@@ -100,6 +102,7 @@ export const fetchApplicationClientData = async (
   const normalizedClientLocationCode = clientLocationCode.trim()
   const normalizedApplicationNumber = context.applicationNumber?.trim() ?? ''
   const normalizedPermitNumber = context.permitNumber?.trim() ?? ''
+  const normalizedCounterpartyClientNumber = context.counterpartyClientNumber?.trim() ?? ''
   if (!normalizedClientNumber || !normalizedClientLocationCode) {
     return null
   }
@@ -107,6 +110,9 @@ export const fetchApplicationClientData = async (
   const contextParams = {
     ...(normalizedApplicationNumber ? { applicationNumber: normalizedApplicationNumber } : {}),
     ...(normalizedPermitNumber ? { permitNumber: normalizedPermitNumber } : {}),
+    ...(normalizedCounterpartyClientNumber
+      ? { counterpartyClientNumber: normalizedCounterpartyClientNumber }
+      : {}),
   }
   const contextCacheKey = normalizedApplicationNumber
     ? `:application:${normalizedApplicationNumber}`
@@ -161,9 +167,11 @@ export const fetchApplicationClientLocations = async (
   clientNumber: string,
   applicantType: 'owner' | 'agent' = 'owner',
   applicationNumber = '',
+  counterpartyClientNumber = '',
 ): Promise<ApplicationClientLocation[]> => {
   const normalizedClientNumber = clientNumber.trim()
   const normalizedApplicationNumber = applicationNumber.trim()
+  const normalizedCounterpartyClientNumber = counterpartyClientNumber.trim()
   if (!normalizedClientNumber) {
     return []
   }
@@ -175,6 +183,9 @@ export const fetchApplicationClientLocations = async (
         applicantType,
         ...(normalizedApplicationNumber ? { applicationNumber: normalizedApplicationNumber } : {}),
         clientNumber: normalizedClientNumber,
+        ...(normalizedCounterpartyClientNumber
+          ? { counterpartyClientNumber: normalizedCounterpartyClientNumber }
+          : {}),
       },
     },
     {

@@ -35,13 +35,13 @@ describe('IsoDateRangePicker', () => {
     })
     expect(from).not.toHaveAttribute('aria-invalid', 'true')
     expect(to).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('Must be on or after List date from')).toBeVisible()
+    expect(screen.getByText('Must be on or after List date from.')).toBeVisible()
 
     fireEvent.change(to, { target: { value: '2026-10-12' } })
     await waitFor(() => expect(to).not.toHaveAttribute('aria-invalid', 'true'))
     expect(from).toHaveValue('2026-10-12')
     expect(to).toHaveValue('2026-10-12')
-    expect(screen.queryByText('Must be on or after List date from')).not.toBeInTheDocument()
+    expect(screen.queryByText('Must be on or after List date from.')).not.toBeInTheDocument()
   })
   it('restores both dates and an end-only search without shifting the calendar date', async () => {
     const page = render(<Range initial={['2026-01-10', '2026-01-20']} />)

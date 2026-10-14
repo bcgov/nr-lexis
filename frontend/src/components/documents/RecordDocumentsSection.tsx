@@ -124,6 +124,9 @@ const RecordDocumentsSection = <Row extends DocumentRowBase>({
   const launcherRef = useRef<HTMLButtonElement>(null)
   const returnFocusRef = useRef(false)
   const [pendingDeletion, setPendingDeletion] = useState<Row | null>(null)
+  // A deleted row takes its Delete button with it, so focus moves to Add documents for a short
+  // while after the deletion, including when the emptied list re-renders that button.
+  const focusAddUntilRef = useRef(0)
 
   // The host unmounts the side panel when it closes, so return focus to Add documents here once
   // the save that closed it has finished.
@@ -137,6 +140,15 @@ const RecordDocumentsSection = <Row extends DocumentRowBase>({
     const frame = requestAnimationFrame(() => launcherRef.current?.focus())
     return () => cancelAnimationFrame(frame)
   }, [upload.busy, upload.open])
+  useEffect(() => {
+    if (pendingDeletion || loading || Date.now() > focusAddUntilRef.current) return
+    const frame = requestAnimationFrame(() => {
+      const active = document.activeElement
+      if (active && active !== document.body && active.isConnected) return
+      launcherRef.current?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [loading, pendingDeletion, rows])
   const recordLabel = RECORD_TYPE_LABELS[recordType]
   const empty = !loading && !errorMessage && rows.length === 0
   const pendingDeletionConsequence = pendingDeletion
@@ -292,7 +304,10 @@ const RecordDocumentsSection = <Row extends DocumentRowBase>({
           pendingLabel="Deleting…"
           errorTitle="Failed to delete document"
           onClose={() => setPendingDeletion(null)}
-          onConfirm={() => onDelete(pendingDeletion)}
+          onConfirm={async () => {
+            await onDelete(pendingDeletion)
+            focusAddUntilRef.current = Date.now() + 2_000
+          }}
         />
       )}
     </section>

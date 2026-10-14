@@ -233,7 +233,10 @@ const ProvincialBlanketOicPermitCreatePage = () => {
   const roles = capabilities?.roles ?? []
 
   const cancel = () => {
-    navigate(detailReturnTo.to, { state: detailReturnTo.state })
+    // The exemption puts focus back on Apply for new permit.
+    navigate(detailReturnTo.to, {
+      state: { ...detailReturnTo.state, permitCreationCancelled: true },
+    })
   }
 
   const created = (permitNumber: string) => {

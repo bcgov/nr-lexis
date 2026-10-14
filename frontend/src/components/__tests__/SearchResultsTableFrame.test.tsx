@@ -131,6 +131,37 @@ describe('SearchResultsTableFrame', () => {
     expect(liveRegion).toHaveTextContent('3 results found')
   })
 
+  it('can hide a zero count from view while still announcing it', () => {
+    const frame = (loading: boolean, totalItems?: number, hideZeroCount = true) => (
+      <SearchResultsTableFrame
+        loading={loading}
+        loadingDescription="Searching"
+        totalItems={totalItems}
+        resultName="application"
+        hideZeroCount={hideZeroCount}
+      >
+        <p>No results found</p>
+      </SearchResultsTableFrame>
+    )
+    const { container, rerender } = render(frame(true))
+    const toolbar = container.querySelector('.legacy-search-table-toolbar')
+    const liveRegion = container.querySelector('[aria-live="polite"]')
+    expect(toolbar).not.toHaveClass('cds--visually-hidden')
+
+    rerender(frame(false, 0))
+    expect(container.querySelector('.legacy-search-table-toolbar')).toBe(toolbar)
+    expect(toolbar).toHaveClass('cds--visually-hidden')
+    expect(container.querySelector('[aria-live="polite"]')).toBe(liveRegion)
+    expect(liveRegion).toHaveTextContent('0 applications found')
+
+    rerender(frame(false, 3))
+    expect(toolbar).not.toHaveClass('cds--visually-hidden')
+    expect(liveRegion).toHaveTextContent('3 applications found')
+
+    rerender(frame(false, 0, false))
+    expect(toolbar).not.toHaveClass('cds--visually-hidden')
+  })
+
   it('renders a result count label when total items are provided', () => {
     render(
       <SearchResultsTableFrame

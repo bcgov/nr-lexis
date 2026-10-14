@@ -37,6 +37,7 @@ import {
 } from '@/pages/shared/invoice-storage-validation'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 import './DetailDocumentUploadPanel.scss'
+import PendingIcon from '@/components/PendingIcon'
 
 type DetailDocumentUploadType = 'application' | 'exemption' | 'permit' | 'invoice'
 type DetailDocumentUploadStep = 'upload' | 'review'
@@ -1129,9 +1130,10 @@ const DetailDocumentUploadPanel = ({
               onClick: closeUploadModal,
             },
             {
-              label: isSubmitting ? 'Saving documents…' : 'Save documents',
+              label: isSubmitting ? 'Saving documents' : 'Save documents',
               kind: 'primary',
               disabled: disabled || isSubmitting || pendingValidationCount > 0,
+              renderIcon: isSubmitting ? PendingIcon : undefined,
               onClick: () => void onSubmitUpload(),
             },
           ]}
