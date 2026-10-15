@@ -1966,6 +1966,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const agentControls = within(getAgentDetailsTile())
     const agentClient = agentControls.getByLabelText('Agent client')
+    expect(agentClient).toHaveValue('')
     expect(agentClient).toHaveAttribute('data-counterparty-client-number', '00011122')
     fireEvent.change(agentClient, { target: { value: '00033344' } })
     await waitFor(() =>
@@ -2012,6 +2013,49 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       applicationNumber: '321',
       counterpartyClientNumber: '00011122',
     })
+  })
+
+  it('refuses the submitter owner as their own agent', async () => {
+    mockSubmitterApplication('00011122', '2099-01-11', false)
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    await userEvent.click(ownerControls.getByLabelText("I'm an agent"))
+    const agentControls = within(getAgentDetailsTile())
+    fireEvent.change(agentControls.getByLabelText('Agent client'), {
+      target: { value: '00011122' },
+    })
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      (await screen.findAllByText('The agent must be a different client from the owner')).length,
+    ).toBeGreaterThan(0)
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
+  it('lets a submitter who is both owner and saved agent remove the agent', async () => {
+    mockSubmitterApplication('00011122', '2099-01-11', true)
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicationStatusCode: 'NEW',
+      applicantTypeCode: 'A',
+      agentClientNumber: '00011122',
+    })
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    const agentChoice = ownerControls.getByLabelText("I'm an agent")
+    expect(agentChoice).toBeChecked()
+    expect(agentChoice).toBeEnabled()
+    expect(
+      ownerControls.queryByText(
+        "You're the agent on this application, so the agent can't be removed.",
+      ),
+    ).not.toBeInTheDocument()
   })
 
   it('keeps a provincial submitter who is the saved agent from removing the agent', async () => {

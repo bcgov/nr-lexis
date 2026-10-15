@@ -1258,7 +1258,12 @@ const ProvincialApplicationCreatePage = () => {
       : undefined
   const fieldErrors = useMemo<FieldErrors<ProvincialApplicationCreateField>>(
     () => ({
-      ownerClientNumber: clientNumberFieldError(form.ownerClientNumber, 'Client'),
+      ownerClientNumber:
+        clientNumberFieldError(form.ownerClientNumber, 'Client') ||
+        (submitterActsAsAgent &&
+        clientLookupNumbersMatch(form.ownerClientNumber, form.agentClientNumber)
+          ? 'The owner must be a different client from the agent.'
+          : undefined),
       ownerClientLocationCode: clientLocationFieldError(
         form.ownerClientLocationCode,
         form.ownerClientNumber,
@@ -1372,6 +1377,7 @@ const ProvincialApplicationCreatePage = () => {
           : undefined,
     }),
     [
+      submitterActsAsAgent,
       applicationSpeciesOptions.length,
       canReviewApplications,
       currentSchedules,

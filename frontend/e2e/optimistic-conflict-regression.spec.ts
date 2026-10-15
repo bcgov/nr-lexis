@@ -242,7 +242,9 @@ for (const mode of ['add', 'edit'] as const) {
           await expect(field).toHaveAccessibleName(/Remark/)
           await expect(field).toHaveValue('Updated synthetic remark')
           await expect(field).toBeDisabled()
-          await expect(panel.getByRole('button', { name: 'Saving…', exact: true })).toBeDisabled()
+          await expect(
+            panel.getByRole('button', { name: 'Saving remark', exact: true }),
+          ).toBeDisabled()
         } finally {
           releaseRefresh()
         }

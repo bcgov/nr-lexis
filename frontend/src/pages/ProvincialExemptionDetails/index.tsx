@@ -564,7 +564,9 @@ const ProvincialExemptionDetailsPage = () => {
   const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
-  const [clientContextLoading, setClientContextLoading] = useState(false)
+  // Client details count as loading until the first lookup settles, so the Applicant card
+  // doesn't show its values and then swap them for a loading state.
+  const [clientContextLoading, setClientContextLoading] = useState(true)
   const [clientContextErrorMessage, setClientContextErrorMessage] = useState('')
   const [documentRows, setDocumentRows] = useState<ProvincialExemptionDocumentRow[]>([])
   const [applications, setApplications] = useState<ExemptionApplicationRow[]>([])
@@ -2151,7 +2153,7 @@ const ProvincialExemptionDetailsPage = () => {
         <PageHeader
           title={exemptionPageTitle}
           focusTitle={focusCreatedExemptionTitle && !!currentDetail}
-          subtitle={`Author: ${displayValueText(currentDetail?.author)}`}
+          subtitle={currentDetail ? `Author: ${displayValueText(currentDetail.author)}` : undefined}
           status={
             currentDetail ? (
               <StatusTag

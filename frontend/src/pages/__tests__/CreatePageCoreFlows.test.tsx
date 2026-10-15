@@ -1601,6 +1601,23 @@ describe('Create Page Core Flows', () => {
     )
   }, 20_000)
 
+  it('refuses the submitter agent as the owner too', async () => {
+    renderSubmitterApplicationCreate(READY_SUBMITTER_APPLICATION_QUERY)
+
+    await selectApplicationCreateTab('Applicant')
+    await waitForApplicationCreateLoads('Applicant client details')
+    await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+    fireEvent.change(screen.getByRole('textbox', { name: 'Client' }), {
+      target: { value: '00077881' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+
+    expect(
+      (await screen.findAllByText('The owner must be a different client from the agent')).length,
+    ).toBeGreaterThan(0)
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
   it('restores the submitter as the owner when the agent choice is cleared', async () => {
     renderSubmitterApplicationCreate()
 

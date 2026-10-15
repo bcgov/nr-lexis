@@ -1319,7 +1319,11 @@ const ProvincialApplicationDetailsPage = () => {
   const submitterIsSavedAgent =
     !!authoritativeClientNumber &&
     !!savedAgentClientNumber &&
-    clientLookupNumbersMatch(savedAgentClientNumber, authoritativeClientNumber)
+    clientLookupNumbersMatch(savedAgentClientNumber, authoritativeClientNumber) &&
+    !clientLookupNumbersMatch(
+      summaryBaselineForm?.ownerClientNumber.trim() ?? '',
+      authoritativeClientNumber,
+    )
   const submitterAgentLocked = submitterManagesAgent && agentListDateReached
   const canChooseAgent =
     canChangeApplicantType ||
@@ -1602,7 +1606,11 @@ const ProvincialApplicationDetailsPage = () => {
         true,
       ),
       agentClientNumber: isAgentApplicant(summaryForm.applicantTypeCode)
-        ? applicationClientNumberFieldError(summaryForm.agentClientNumber, 'Agent client')
+        ? applicationClientNumberFieldError(summaryForm.agentClientNumber, 'Agent client') ||
+          (submitterManagesAgent &&
+          clientLookupNumbersMatch(summaryForm.agentClientNumber, summaryForm.ownerClientNumber)
+            ? 'The agent must be a different client from the owner.'
+            : undefined)
         : undefined,
       agentClientLocationCode: isAgentApplicant(summaryForm.applicantTypeCode)
         ? (requiredMaxLengthFieldError(summaryForm.agentClientLocationCode, 2, 'Agent location') ??
@@ -1725,6 +1733,7 @@ const ProvincialApplicationDetailsPage = () => {
     summaryRegionOptions,
     summaryScheduleOptions,
     summaryBaselineForm,
+    submitterManagesAgent,
   ])
   /**
    * Checks a save from the card being edited. Field errors show on their fields and focus the
@@ -2738,9 +2747,12 @@ const ProvincialApplicationDetailsPage = () => {
         const next = {
           ...current,
           applicantTypeCode,
+          // A submitter owner chooses the agent; their own client is never prefilled as one.
           agentClientNumber:
             applicantTypeCode === 'A'
-              ? current.agentClientNumber || savedAgentClientNumber || current.ownerClientNumber
+              ? current.agentClientNumber ||
+                savedAgentClientNumber ||
+                (submitterManagesAgent ? '' : current.ownerClientNumber)
               : current.agentClientNumber,
         }
         return normalizeSummaryAgentFields(next)
@@ -2748,7 +2760,7 @@ const ProvincialApplicationDetailsPage = () => {
       setSummaryVolumeWarningAccepted(false)
       setActionResult(withoutVolumeWarning)
     },
-    [savedAgentClientNumber],
+    [savedAgentClientNumber, submitterManagesAgent],
   )
 
   const discardOwnerDetailsDraft = useCallback(() => {

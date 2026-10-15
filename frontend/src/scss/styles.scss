@@ -6355,6 +6355,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
 .exemption-permits-empty--after-totals {
   border-block-start: 1px solid var(--cds-border-subtle);
+  margin-block-start: 1.5rem;
 }
 
 // A disabled combo box can't be cleared, so it shows no clear button.

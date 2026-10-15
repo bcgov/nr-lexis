@@ -808,6 +808,9 @@ public class ApplicationDetailsRpcController {
           if (removesSavedSubmitterAgent(service, request, authentication)) {
             return savedSubmitterAgentLocked(request.applicationNumber());
           }
+          if (submitterNamesOwnerAsAgent(service, request, authentication)) {
+            return ownerNamedAsAgent(request.applicationNumber());
+          }
           ApplicationDetailsRpcService.CreateApplicationResult result =
               service.updateApplicationSummary(request, userId);
           return ResponseEntity.ok(
@@ -1697,7 +1700,9 @@ public class ApplicationDetailsRpcController {
                     APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(
                             trimToNull(snapshot.applicantTypeCode()))
                         && scopedClientNumber.equals(
-                            normalizeClientNumber(snapshot.agentClientNumber())))
+                            normalizeClientNumber(snapshot.agentClientNumber()))
+                        && !scopedClientNumber.equals(
+                            normalizeClientNumber(snapshot.ownerClientNumber())))
             .orElse(false);
     if (!savedAsAgent) {
       return false;
@@ -1713,6 +1718,49 @@ public class ApplicationDetailsRpcController {
             && requestedAgentClientNumber != null
             && !scopedClientNumber.equals(requestedAgentClientNumber);
     return removesAgent || replacesAgent;
+  }
+
+  /** A Provincial Submitter's agent must be a different client from the owner. */
+  private boolean submitterNamesOwnerAsAgent(
+      ApplicationDetailsRpcService service,
+      ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request,
+      Authentication authentication) {
+    if (canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)
+        || !request.saveSource().updatesAgentFields()) {
+      return false;
+    }
+    String requestedAgentClientNumber = normalizeClientNumber(request.agentClientNumber());
+    if (requestedAgentClientNumber == null) {
+      return false;
+    }
+    return service
+        .getApplicationSummarySnapshot(request.applicationNumber())
+        .map(
+            snapshot -> {
+              String requestedApplicantType = trimToNull(request.applicantTypeCode());
+              String applicantType =
+                  request.saveSource().updatesApplicantType() && requestedApplicantType != null
+                      ? requestedApplicantType
+                      : trimToNull(snapshot.applicantTypeCode());
+              String ownerClientNumber =
+                  request.saveSource().updatesOwnerFields() && request.ownerClientNumber() != null
+                      ? request.ownerClientNumber()
+                      : snapshot.ownerClientNumber();
+              return APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(applicantType)
+                  && requestedAgentClientNumber.equals(normalizeClientNumber(ownerClientNumber));
+            })
+        .orElse(false);
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> ownerNamedAsAgent(
+      Long applicationNumber) {
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            false,
+            null,
+            applicationNumber,
+            List.of("The agent must be a different client from the owner."),
+            List.of()));
   }
 
   private ResponseEntity<ApplicationPersistenceResponseDto> savedSubmitterAgentLocked(
@@ -2055,6 +2103,13 @@ public class ApplicationDetailsRpcController {
     }
     boolean agentApplicant =
         APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(trimToNull(request.applicantTypeCode()));
+    String requestedOwnerClientNumber = normalizeClientNumber(request.ownerClientNumber());
+    if (agentApplicant
+        && requestedOwnerClientNumber != null
+        && requestedOwnerClientNumber.equals(normalizeClientNumber(request.agentClientNumber()))) {
+      throw new ResponseStatusException(
+          HttpStatus.BAD_REQUEST, "The agent must be a different client from the owner.");
+    }
     if (agentApplicant
         && scopedClientNumber.equals(normalizeClientNumber(request.agentClientNumber()))) {
       return withApplicantClients(
