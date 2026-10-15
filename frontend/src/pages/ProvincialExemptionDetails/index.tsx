@@ -1208,6 +1208,9 @@ const ProvincialExemptionDetailsPage = () => {
       : ''
   const cancelledBlanketOic = persistedTypeCode === 'B' && persistedStatusCode === 'CAN'
   const cancelledExemption = persistedStatusCode === 'CAN'
+  // Only a cancelled Ministerial exemption can be reopened; OIC and Blanket OIC stay cancelled.
+  const cancelledOrderInCouncil =
+    cancelledExemption && (persistedTypeCode === 'O' || persistedTypeCode === 'B')
   const approvalDateRequired =
     !cancelledExemption && (currentTypeCode === 'O' || currentTypeCode === 'B')
   const expiryDateRequired = !cancelledExemption
@@ -1217,7 +1220,7 @@ const ProvincialExemptionDetailsPage = () => {
     canEditSummaryFields &&
     currentTypeCode === 'O' &&
     editForm?.exemptionNumber.trim() !== currentDetail?.exemptionNumber
-  const canEditStatus = editingSection === 'summary' && canSaveExemption
+  const canEditStatus = editingSection === 'summary' && canSaveExemption && !cancelledOrderInCouncil
   const canEditExemptionType =
     optionsAvailability === 'available' &&
     exemptionTypeOptions.length > 0 &&
@@ -1315,7 +1318,7 @@ const ProvincialExemptionDetailsPage = () => {
         if (option.value === 'EXP' && persistedStatusCode !== 'EXP') return false
         if (option.value === 'ACT' && persistedStatusCode !== 'ACT') return false
         if ((currentTypeCode === 'B' || currentTypeCode === 'O') && option.value === 'NEW') {
-          return persistedStatusCode === 'NEW' || persistedStatusCode === 'CAN'
+          return persistedStatusCode === 'NEW'
         }
         return true
       }),
@@ -2572,7 +2575,7 @@ const ProvincialExemptionDetailsPage = () => {
                         <Tile className="detail-section-card exemption-summary-card">
                           <div className="detail-section-card__header">
                             <DetailCardTitle icon={Rule}>Exemption details</DetailCardTitle>
-                            {canSaveExemption && !editing && (
+                            {canSaveExemption && !editing && !cancelledOrderInCouncil && (
                               <Button
                                 ref={sections.editButtonRef('summary')}
                                 kind="tertiary"
