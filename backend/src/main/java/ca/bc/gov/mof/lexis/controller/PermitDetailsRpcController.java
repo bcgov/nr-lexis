@@ -667,7 +667,7 @@ public class PermitDetailsRpcController {
     if (requestsMinistryPermitMutation(mutationRequest, permitNumber)
         && !canReviewPermits(authentication)) {
       throw new AccessDeniedException(
-          "Permit status and date changes require permit review authority.");
+          "Permit status, date and receipt changes require permit review authority.");
     }
     List<String> exemptionNumbers =
         exemptionNumbersForPermitMutation(service, mutationRequest);
@@ -846,6 +846,7 @@ public class PermitDetailsRpcController {
         () -> {
           requirePermitAccess(permitNumber, authentication);
           requirePermitEditable(permitNumber, authentication);
+          requireSubmitterPortsUnchanged(permitNumber, mutationRequest, authentication);
           return ResponseEntity.ok(
               service.updateShipping(mutationRequest, userId(authentication)));
         });
@@ -1491,6 +1492,7 @@ public class PermitDetailsRpcController {
                         request.permitSubmitDate(), detail.applicationDate())
                     || submittedDateChanged(request.permitIssueDate(), detail.issueDate())
                     || submittedDateChanged(request.permitExpiryDate(), detail.expiryDate())
+                    || submittedValueChanged(request.permitReceiptNo(), detail.receiptNumber())
                     || clearsActiveDraftDate(request, detail))
         .orElse(true);
   }
@@ -1745,6 +1747,36 @@ public class PermitDetailsRpcController {
       throw new AccessDeniedException(
           "Completed permit details are read-only for Provincial Submitters. Shipping can still be updated.");
     }
+  }
+
+  private void requireSubmitterPortsUnchanged(
+      Long permitNumber, PermitMutationRequestDto request, Authentication authentication) {
+    if (permitService == null || isMinistryUser(authentication)) {
+      return;
+    }
+    permitService
+        .findByPermitNumber(permitNumber)
+        .filter(
+            detail ->
+                PERMIT_STATUS_COMPLETE.equalsIgnoreCase(trimToEmpty(detail.permitStatusCode())))
+        .filter(
+            detail ->
+                submittedValueChanged(request.portOfExport(), detail.portOfExportCode())
+                    || submittedValueChanged(
+                        request.otherPortOfExport(), detail.otherPortOfExport()))
+        .ifPresent(
+            detail -> {
+              throw new AccessDeniedException(
+                  "Provincial Submitters can't change the port of export on a completed permit.");
+            });
+  }
+
+  private static boolean submittedValueChanged(String submitted, String current) {
+    return submitted != null && !trimToEmpty(submitted).equalsIgnoreCase(trimToEmpty(current));
+  }
+
+  private static String trimToEmpty(String value) {
+    return value == null ? "" : value.trim();
   }
 
   private String requireCanonicalPermitMutable(Long permitNumber) {

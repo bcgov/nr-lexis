@@ -3967,6 +3967,25 @@ class OraclePermitDetailsRpcServiceTest {
     verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"COM", "PPD"})
+  void updatePermitShouldRejectExpiryDateChangesWhilePermitRemainsInvoiced(String status) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow(status)));
+    stubTargetMinisterialExemption("EX-700");
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            withExpiryAndPort(formCheckRequest(status, "42", "Legacy notes"), "01/31/2027", "VA"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
   @Test
   void updatePermitShouldRejectBlanketOicRequestLimitChangesAfterInvoicing() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
@@ -5831,6 +5850,24 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors()).containsExactly("Expired permits are read-only.");
     verify(repository, never()).findExemptionTypeCode(any());
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updateShippingShouldRejectAPortChangeOnACancelledPermit() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("CAN")));
+    stubTargetMinisterialExemption("EX-700");
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            withExpiryAndPort(
+                updateShippingRequest("2026-06-10", "Updated destination"), null, "PR"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Customs port of export cannot be changed on a cancelled permit.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -8579,6 +8616,44 @@ class OraclePermitDetailsRpcServiceTest {
         null,
         null,
         null);
+  }
+
+  private PermitMutationRequestDto withExpiryAndPort(
+      PermitMutationRequestDto request, String permitExpiryDate, String portOfExport) {
+    return new PermitMutationRequestDto(
+        request.permitNumber(),
+        request.permitStatus(),
+        request.permitSubmitDate(),
+        request.permitIssueDate(),
+        permitExpiryDate,
+        request.permitRequestDate(),
+        request.exemptionNumber(),
+        request.destinationCompanyName(),
+        request.destinationCountry(),
+        request.transportType(),
+        request.transportName(),
+        request.estimatedShippingDate(),
+        portOfExport,
+        request.otherPortOfExport(),
+        request.permitReceiptNo(),
+        request.permitRemarks(),
+        request.permitGrowthType(),
+        request.permitTotalVolume(),
+        request.permitNumberOfPieces(),
+        request.orgUnitNumber(),
+        request.ownerClientNumber(),
+        request.ownerClientLocation(),
+        request.agentClientNumber(),
+        request.agentClientLocation(),
+        request.oicApplicationNumber(),
+        request.oicRegion(),
+        request.oicPermitTotalPieces(),
+        request.oicPermitTotalVolume(),
+        request.packageAgeClass(),
+        request.packageProductType(),
+        request.overrideInd(),
+        request.overrideFee(),
+        request.overrideComment());
   }
 
   private PermitMutationRequestDto updateShippingRequest(String estimatedShippingDate) {

@@ -2180,6 +2180,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           List.of("Destination country cannot be changed after permit invoicing."),
           permitNumber);
     }
+    if (EXPORT_PERMIT_STATUS_CANCELLED.equalsIgnoreCase(current.permitStatusCode())
+        && hasStringChanged(current.portOfExportCode(), updated.portOfExportCode())) {
+      return failureMutationResponse(
+          List.of("Customs port of export cannot be changed on a cancelled permit."),
+          permitNumber);
+    }
 
     ValidationResult validation =
         permitMutationValidator.validate(updated, exemption.detail());
@@ -4500,6 +4506,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         || !java.util.Objects.equals(current.orgUnitNo(), target.orgUnitNo())
         || !java.util.Objects.equals(current.applicationDate(), target.applicationDate())
         || !java.util.Objects.equals(current.permitIssueDate(), target.permitIssueDate())
+        || !java.util.Objects.equals(current.expiryDate(), target.expiryDate())
         || (!paymentPendingCompletion
             && hasStringChanged(current.receiptNumber(), target.receiptNumber()))
         || !java.util.Objects.equals(current.permitVolume(), target.permitVolume())

@@ -2156,11 +2156,11 @@ const ProvincialPermitDetailsPage = () => {
     !permitEditLocked &&
     !permitExpired
   const permitCancelled = permitStatusCode === 'CAN'
+  const submitterCompletedPermit =
+    permitStatusCode === 'COM' && hasProvincialSubmitterRole(capabilities.roles)
   // A cancelled permit is read-only apart from its shipping details and documents.
-  const canSavePermit =
-    canMutatePermit &&
-    !permitCancelled &&
-    !(permitStatusCode === 'COM' && hasProvincialSubmitterRole(capabilities.roles))
+  const canSavePermit = canMutatePermit && !permitCancelled && !submitterCompletedPermit
+  const portOfExportLocked = permitCancelled || submitterCompletedPermit
   const canReviewPermits = canPerform('/permitsReview', permitOrgUnit)
   const canCorrectPermitSubmitDate = canSavePermit && canReviewPermits && permitStatusCode === 'ACT'
   const canEditShipping = canMutatePermit
@@ -2265,7 +2265,8 @@ const ProvincialPermitDetailsPage = () => {
     !feeOverrideLockedStatuses.has(permitStatusCode ?? '')
   const showReceiptNumber = !!detail?.receiptNumber?.trim() || feeOverrideContext?.interior === true
   const receiptNumberLocked = invoiceMaterialLocked && !canEnterPaymentReceipt
-  const canEditReceiptNumber = canSavePermit && showReceiptNumber && !receiptNumberLocked
+  const canEditReceiptNumber =
+    canSavePermit && canReviewPermits && showReceiptNumber && !receiptNumberLocked
   const permitBaselineForm = useMemo(
     () => (detail ? buildPermitDetailForm(detail) : null),
     [detail],
@@ -5439,8 +5440,8 @@ const ProvincialPermitDetailsPage = () => {
                 renderPermitDateInput(
                   'permitExpiryDate',
                   'Expiry date',
-                  !canReviewPermits,
-                  requiresPermitCompletionDates && canReviewPermits,
+                  !canReviewPermits || invoiceMaterialLocked,
+                  requiresPermitCompletionDates && canReviewPermits && !invoiceMaterialLocked,
                 )
               }
             />
@@ -5595,8 +5596,8 @@ const ProvincialPermitDetailsPage = () => {
               renderPermitDateInput(
                 'permitExpiryDate',
                 'Expiry date',
-                !canReviewPermits,
-                requiresPermitCompletionDates && canReviewPermits,
+                !canReviewPermits || invoiceMaterialLocked,
+                requiresPermitCompletionDates && canReviewPermits && !invoiceMaterialLocked,
               )
             }
           />
@@ -5794,7 +5795,7 @@ const ProvincialPermitDetailsPage = () => {
                       : current,
                   )
                 }}
-                disabled={isShippingReferencesLoading || !shippingReferences}
+                disabled={portOfExportLocked || isShippingReferencesLoading || !shippingReferences}
               >
                 <SelectItem value="" text="Select a customs port of export" />
                 {(shippingReferences?.ports ?? []).map((option) => (
@@ -5815,7 +5816,7 @@ const ProvincialPermitDetailsPage = () => {
               renderPermitTextInput(
                 'otherPortOfExport',
                 'Other port of export name',
-                false,
+                submitterCompletedPermit,
                 34,
                 true,
               )
@@ -5974,7 +5975,7 @@ const ProvincialPermitDetailsPage = () => {
                     renderPermitTextInput(
                       'permitReceiptNo',
                       'Receipt number',
-                      receiptNumberLocked,
+                      receiptNumberLocked || !canReviewPermits,
                       50,
                     )
                   ) : (
