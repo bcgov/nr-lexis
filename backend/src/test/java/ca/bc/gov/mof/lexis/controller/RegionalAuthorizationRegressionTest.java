@@ -123,7 +123,7 @@ class RegionalAuthorizationRegressionTest {
         applicationBeans.getBeanProvider(ApplicationDetailsRpcService.class),
         applicationBeans.getBeanProvider(ClientLookupService.class),
         applicationBeans.getBeanProvider(ApplicationReviewService.class),
-        session, authorization, new ApplicationEditLockService(), regional, null, null,
+        session, authorization, new ApplicationEditLockService(), regional, null,
         new ApplicationPermitOperationCoordinator(new PermitOperationMutex()));
     applicationController.setLexisPrincipalService(principal);
   }

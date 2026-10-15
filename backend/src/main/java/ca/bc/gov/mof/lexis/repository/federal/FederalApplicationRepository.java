@@ -16,7 +16,6 @@ import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
-import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.stereotype.Repository;
@@ -297,14 +296,6 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
                 getLocalDate(rs, "ENTRY_TIMESTAMP")));
   }
 
-  public List<String> findPackageNumbersByApplicationNumber(Long applicationNumber) {
-    return findPackageNumbersByApplicationNumber(applicationNumber, false);
-  }
-
-  public List<String> findPackageNumbersByApplicationNumberRequired(Long applicationNumber) {
-    return findPackageNumbersByApplicationNumber(applicationNumber, true);
-  }
-
   private List<String> findPackageNumbersByApplicationNumberFailClosed(Long applicationNumber) {
     if (applicationNumber == null || applicationNumber < 1) {
       return List.of();
@@ -318,40 +309,10 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
             rs -> getString(rs, "PACKAGE_NUMBER")));
   }
 
-  private List<String> findPackageNumbersByApplicationNumber(
-      Long applicationNumber, boolean required) {
-    if (applicationNumber == null || applicationNumber < 1) {
-      return List.of();
-    }
-
-    List<String> packageNumbers =
-        required
-            ? queryCursorProcedureRequired(
-                FIND_PACKAGES_BY_APPLICATION,
-                cs -> cs.setString(1, applicationNumber.toString()),
-                2,
-                rs -> getString(rs, "PACKAGE_NUMBER"))
-            : queryCursorProcedure(
-                FIND_PACKAGES_BY_APPLICATION,
-                cs -> cs.setString(1, applicationNumber.toString()),
-                2,
-                rs -> getString(rs, "PACKAGE_NUMBER"));
-    return normalizePackageNumbers(packageNumbers);
-  }
-
   private List<String> normalizePackageNumbers(List<String> packageNumbers) {
     return packageNumbers.stream()
         .filter(packageNumber -> packageNumber != null && !packageNumber.isBlank())
         .toList();
-  }
-
-  public Optional<FederalApplicationPermitDto> findPermitByApplicationNumber(Long applicationNumber) {
-    return findPermitByApplicationNumber(applicationNumber, false);
-  }
-
-  public Optional<FederalApplicationPermitDto> findPermitByApplicationNumberRequired(
-      Long applicationNumber) {
-    return findPermitByApplicationNumber(applicationNumber, true);
   }
 
   private Optional<FederalApplicationPermitDto> findPermitByApplicationNumberFailClosed(
@@ -361,31 +322,6 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
     }
 
     return queryCursorSingleFailClosed(
-        FIND_FEDERAL_PERMIT_BY_APP,
-        cs -> cs.setString(1, applicationNumber.toString()),
-        2,
-        this::mapFederalPermit);
-  }
-
-  private Optional<FederalApplicationPermitDto> findPermitByApplicationNumber(
-      Long applicationNumber, boolean required) {
-    if (applicationNumber == null || applicationNumber < 1) {
-      return Optional.empty();
-    }
-
-    if (required) {
-      List<FederalApplicationPermitDto> permits =
-          queryCursorProcedureRequired(
-              FIND_FEDERAL_PERMIT_BY_APP,
-              cs -> cs.setString(1, applicationNumber.toString()),
-              2,
-              this::mapFederalPermit);
-      if (permits.size() > 1) {
-        throw new IncorrectResultSizeDataAccessException(1, permits.size());
-      }
-      return permits.stream().findFirst();
-    }
-    return queryCursorSingle(
         FIND_FEDERAL_PERMIT_BY_APP,
         cs -> cs.setString(1, applicationNumber.toString()),
         2,

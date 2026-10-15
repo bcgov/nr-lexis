@@ -389,6 +389,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       ...reviewableApplicationDetail,
       applicationStatusCode: 'APP',
       statusDescription: 'Approved',
+      listingDate: '2026-01-03',
       canEditApplicationDetails: false,
     })
 
@@ -408,7 +409,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(review.queryByRole('group', { name: /Application status/ })).not.toBeInTheDocument()
   })
 
-  it('keeps remarks read-only when application detail editing is not allowed', async () => {
+  it('keeps saved remarks editable after the application details lock', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...reviewableApplicationDetail,
       applicationStatusCode: 'PMT',
@@ -428,9 +429,77 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     )
 
     await selectApplicationDetailTab('Remarks')
+    const remarkRow = (await screen.findByText('ok')).closest('tr') as HTMLElement
     expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(await screen.findByText('ok')).toBeInTheDocument()
+    await userEvent.click(within(remarkRow).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Remark'), {
+      target: { value: 'Corrected application note' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Update remark' }))
+
+    await waitFor(() =>
+      expect(mockedSaveApplicationRemark).toHaveBeenCalledWith({
+        applicationNumber: '321',
+        remarkBody: 'Corrected application note',
+        remarkId: '88',
+      }),
+    )
+  })
+
+  it('keeps remarks read-only on an expired application', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...reviewableApplicationDetail,
+      applicationStatusCode: 'EXP',
+      statusDescription: 'Expired',
+      canEditApplicationDetails: false,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Remarks')
+    const remarksTable = within(
+      await screen.findByRole('region', { name: 'Application remarks' }),
+    ).getByRole('table')
+    expect(within(remarksTable).getByText('ok')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
+    expect(within(remarksTable).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+  })
+
+  it('shows the lock notice instead of Update status while another user holds the lock', async () => {
+    const lockMessage =
+      'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.'
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...reviewableApplicationDetail,
+      locked: true,
+      lockedBy: 'Reviewer One',
+      lockMessage,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const review = within(await selectApplicationReviewTile(false))
+    expect(screen.getByText('Application locked')).toBeInTheDocument()
+    expect(screen.getAllByText(lockMessage).length).toBeGreaterThanOrEqual(1)
+    expect(review.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Approve application' })).not.toBeInTheDocument()
   })
 
   it('asks before replacing a remark draft with a package edit', async () => {
@@ -719,6 +788,52 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       ),
     ).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
+  })
+
+  it('shows a refused remark edit once and clears it when the edit is discarded', async () => {
+    const sharedRemarkMessage =
+      "This older remark can't be edited because its number is shared with another application's remark. Add a new remark instead."
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...reviewableApplicationDetail,
+      applicationStatusCode: 'PMT',
+      statusDescription: 'Permitted',
+      canEditApplicationDetails: false,
+    })
+    mockedSaveApplicationRemark.mockResolvedValueOnce({
+      success: false,
+      status: 'validation_error',
+      remarkId: '',
+      remark: '',
+      title: '',
+      user: '',
+      message: sharedRemarkMessage,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationDetailTab('Remarks')
+    const remarkRow = (await screen.findByText('ok')).closest('tr') as HTMLElement
+    await userEvent.click(within(remarkRow).getByRole('button', { name: 'Edit' }))
+    fireEvent.change(await screen.findByLabelText('Remark'), {
+      target: { value: 'Corrected application note' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Update remark' }))
+
+    expect(await screen.findAllByText(sharedRemarkMessage)).toHaveLength(1)
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+
+    await waitFor(() => expect(screen.queryByLabelText('Remark')).not.toBeInTheDocument())
+    expect(screen.queryByText(sharedRemarkMessage)).not.toBeInTheDocument()
   })
 
   it('shows the explicit remark validation failure without clearing the draft', async () => {

@@ -2,6 +2,7 @@ package ca.bc.gov.mof.lexis.service.admin;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyInt;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
@@ -30,6 +31,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
@@ -398,6 +401,11 @@ class OracleLexisAdminRpcServiceTest {
   void shouldRejectFeePolicyUpdateWhenBusinessKeyBelongsToAnotherRecord() {
     OracleLexisAdminRpcService service = new OracleLexisAdminRpcService(repository);
     LocalDate effectiveDate = LexisBusinessTime.today().plusDays(5);
+    when(repository.findFeePolicyById(8L))
+        .thenReturn(
+            Optional.of(
+                new LexisAdminPolicyRepository.FeePolicyRow(
+                    8L, effectiveDate, 31L, 12L, "idir\\owner", effectiveDate, "", null)));
     when(repository.findFeePolicy(effectiveDate, 30L))
         .thenReturn(
             Optional.of(
@@ -505,6 +513,55 @@ class OracleLexisAdminRpcServiceTest {
     assertThat(((Map<?, ?>) filResponse).get("success")).isEqualTo(true);
     verify(repository).updateFeePolicy(8L, feeDate, 30L, 12, null);
     verify(repository).updateFilPolicy(9L, filDate, 20, null);
+  }
+
+  @ParameterizedTest
+  @ValueSource(ints = {0, -30})
+  void shouldRejectFeeAndFilPolicyUpdatesOncePoliciesAreInForce(int storedDaysFromToday) {
+    OracleLexisAdminRpcService service = new OracleLexisAdminRpcService(repository);
+    LocalDate storedDate = LexisBusinessTime.today().plusDays(storedDaysFromToday);
+    LocalDate newDate = LexisBusinessTime.today().plusDays(5);
+    when(repository.findFeePolicyById(8L))
+        .thenReturn(
+            Optional.of(
+                new LexisAdminPolicyRepository.FeePolicyRow(
+                    8L, storedDate, 30L, 12L, "idir\\owner", storedDate, "", null)));
+    when(repository.findFilPolicyById(9L))
+        .thenReturn(
+            Optional.of(
+                new LexisAdminPolicyRepository.FilPolicyRow(
+                    9L, storedDate, 20L, "idir\\owner", storedDate, "", null)));
+
+    Object feeResponse =
+        service
+            .executeFeePolicyRpc(
+                new LexisAdminRpcRequestDto(
+                    "updatePolicy",
+                    Map.of(
+                        "feePolicyId", "8",
+                        "effectiveDate", newDate.toString(),
+                        "orgUnitNo", "30",
+                        "feeIncrease", "15")))
+            .orElseThrow();
+    Object filResponse =
+        service
+            .executeFilPolicyRpc(
+                new LexisAdminRpcRequestDto(
+                    "updateFilPolicy",
+                    Map.of(
+                        "filPolicyId", "9",
+                        "effectiveDate", newDate.toString(),
+                        "filPolicyPercentage", "25")))
+            .orElseThrow();
+
+    assertThat(((Map<?, ?>) feeResponse).get("success")).isEqualTo(false);
+    assertThat(((Map<?, ?>) feeResponse).get("errors"))
+        .isEqualTo(List.of("Only future-dated fee policies can be edited."));
+    assertThat(((Map<?, ?>) filResponse).get("success")).isEqualTo(false);
+    assertThat(((Map<?, ?>) filResponse).get("errors"))
+        .isEqualTo(List.of("Only future-dated fee in lieu policies can be edited."));
+    verify(repository, never()).updateFeePolicy(any(), any(), any(), any(), any());
+    verify(repository, never()).updateFilPolicy(any(), any(), any(), any());
   }
 
   @Test
@@ -691,7 +748,12 @@ class OracleLexisAdminRpcServiceTest {
     LocalDate feeDate = LexisBusinessTime.today().plusDays(5);
     when(repository.findFeePolicy(feeDate, 30L)).thenReturn(Optional.empty());
     when(repository.updateFeePolicy(8L, feeDate, 30L, 12, null)).thenReturn(true);
-    when(repository.findFeePolicyById(8L)).thenReturn(Optional.empty());
+    when(repository.findFeePolicyById(8L))
+        .thenReturn(
+            Optional.of(
+                new LexisAdminPolicyRepository.FeePolicyRow(
+                    8L, feeDate, 30L, 10L, "idir\\owner", feeDate, "", null)),
+            Optional.empty());
 
     Object response =
         service

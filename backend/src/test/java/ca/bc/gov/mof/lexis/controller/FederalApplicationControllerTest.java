@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -16,7 +17,6 @@ import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationOfferDto;
-import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationRemarkDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
@@ -481,43 +481,6 @@ class FederalApplicationControllerTest {
   }
 
   @Test
-  void permitShouldFailBeforeLookupWhenApplicationIsOutsideReadOnlyOrganizationScope() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    doThrow(new org.springframework.security.access.AccessDeniedException("denied"))
-        .when(provincialAuthorizationService)
-        .requireFederalApplication(authentication, 1000456L);
-
-    assertThatThrownBy(() -> controller.getFederalPermit(1000456L, authentication))
-        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
-
-    verify(service, never()).findPermitByApplicationNumber(any());
-  }
-
-  @Test
-  void permitShouldReturnPayloadWhenServiceReturnsEntity() {
-    when(serviceProvider.getIfAvailable()).thenReturn(service);
-    FederalApplicationPermitDto dto =
-        new FederalApplicationPermitDto(
-            99123L,
-            LocalDate.of(2026, 3, 12),
-            "US",
-            "SEA",
-            "MV Federal",
-            LocalDate.of(2026, 3, 15),
-            "VAN",
-            null);
-    when(service.findPermitByApplicationNumber(1000456L)).thenReturn(Optional.of(dto));
-
-    ResponseEntity<FederalApplicationPermitDto> response =
-        controller.getFederalPermit(1000456L, authentication);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-    assertThat(response.getBody()).isEqualTo(dto);
-    verify(provincialAuthorizationService)
-        .requireFederalApplication(authentication, 1000456L);
-  }
-
-  @Test
   void remarksShouldAllowReadOnlyViewerAndRequireFederalParentAccess() {
     Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
     when(serviceProvider.getIfAvailable()).thenReturn(service);
@@ -628,7 +591,7 @@ class FederalApplicationControllerTest {
             new ApplicationEditLockDto(
                 true, false, null, "Application is locked by another user.", null));
     FederalApplicationService.FederalStatusMutationRequest request =
-        new FederalApplicationService.FederalStatusMutationRequest("APP", "Approved");
+        new FederalApplicationService.FederalStatusMutationRequest("WDN", "Withdrawn");
 
     assertThatThrownBy(
             () -> controller.updateFederalStatus(1000456L, request, authentication))
@@ -640,6 +603,54 @@ class FederalApplicationControllerTest {
   }
 
   @Test
+  void updateFederalStatusShouldRefuseApprovalFromTheDetailPage() {
+    Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "manageFederalApplication"))
+        .thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+
+    FederalApplicationService.FederalMutationResult result =
+        controller
+            .updateFederalStatus(
+                1000456L,
+                new FederalApplicationService.FederalStatusMutationRequest("APP", "Approved"),
+                authentication)
+            .getBody();
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors())
+        .containsExactly("Federal applications are approved from Application review.");
+    verify(service, never()).updateStatus(any(), any(), any());
+  }
+
+  @Test
+  void updateFederalStatusShouldDenyApprovalOutsideTheRecordScope() {
+    Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "manageFederalApplication"))
+        .thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new AccessDeniedException("denied"))
+        .when(provincialAuthorizationService)
+        .requireFederalApplication(authentication, 1000456L);
+
+    assertThatThrownBy(
+            () ->
+                controller.updateFederalStatus(
+                    1000456L,
+                    new FederalApplicationService.FederalStatusMutationRequest("APP", "Approved"),
+                    authentication))
+        .isInstanceOf(AccessDeniedException.class);
+
+    verify(service, never()).updateStatus(any(), any(), any());
+  }
+
+  @Test
   void federalMutationShouldFailBeforeLockAndOracleMutationWhenEditPolicyDeniesMutation() {
     Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
     when(sessionService.parseRolesFromPrincipal(authentication))
@@ -648,8 +659,8 @@ class FederalApplicationControllerTest {
             List.of("LEXIS_APPLICATION_APPROVER"), "manageFederalApplication"))
         .thenReturn(true);
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    FederalApplicationService.FederalRemarkMutationRequest request =
-        new FederalApplicationService.FederalRemarkMutationRequest("New note");
+    FederalApplicationService.FederalStatusMutationRequest request =
+        new FederalApplicationService.FederalStatusMutationRequest("WDN", "Withdrawn");
     FederalApplicationService.FederalApplicationEditContext context =
         new FederalApplicationService.FederalApplicationEditContext(
             "EXP", LocalDate.of(2026, 1, 1));
@@ -658,31 +669,72 @@ class FederalApplicationControllerTest {
         .when(editPolicyService)
         .requireEdit(authentication, context);
 
-    assertThatThrownBy(() -> controller.addRemark(1000456L, request, authentication))
+    assertThatThrownBy(
+            () -> controller.updateFederalStatus(1000456L, request, authentication))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessageContaining("read-only");
 
-    verify(service, never()).addRemark(any(), any(), any());
+    verify(service, never()).updateStatus(any(), any(), any());
     verify(editLockService, never()).requireEditable(any(), any(), any());
   }
 
   @Test
-  void addPermitShouldRequireFederalManagementAction() {
+  void remarkMutationsShouldNotDependOnTheApplicationStatusWindow() {
     Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
     when(sessionService.parseRolesFromPrincipal(authentication))
-        .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
     when(authorizationService.canPerformAction(
-            List.of("LEXIS_EXEMPTION_APPROVER"), "manageFederalApplication"))
+            List.of("LEXIS_APPLICATION_APPROVER"), "manageFederalApplication"))
+        .thenReturn(true);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(authentication.getName()).thenReturn("idir\\approver");
+    FederalApplicationService.FederalApplicationEditContext context =
+        new FederalApplicationService.FederalApplicationEditContext(
+            "EXP", LocalDate.of(2026, 1, 1));
+    lenient().when(service.findEditContext(1000456L)).thenReturn(Optional.of(context));
+    lenient()
+        .doThrow(new AccessDeniedException("completed application is read-only"))
+        .when(editPolicyService)
+        .requireEdit(authentication, context);
+    FederalApplicationService.FederalRemarkMutationRequest addRequest =
+        new FederalApplicationService.FederalRemarkMutationRequest("New note");
+    FederalApplicationService.FederalRemarkMutationRequest updateRequest =
+        new FederalApplicationService.FederalRemarkMutationRequest("Updated note");
+    FederalApplicationService.FederalRemarkMutationResult added =
+        new FederalApplicationService.FederalRemarkMutationResult(true, "Added", null, List.of());
+    FederalApplicationService.FederalRemarkMutationResult updated =
+        new FederalApplicationService.FederalRemarkMutationResult(
+            true, "Updated", null, List.of());
+    when(service.addRemark(1000456L, addRequest, "idir\\approver")).thenReturn(added);
+    when(service.updateRemark(1000456L, 44L, updateRequest, "idir\\approver"))
+        .thenReturn(updated);
+
+    assertThat(controller.addRemark(1000456L, addRequest, authentication).getBody())
+        .isEqualTo(added);
+    assertThat(
+            controller.updateRemark(1000456L, 44L, updateRequest, authentication).getBody())
+        .isEqualTo(updated);
+    verify(provincialAuthorizationService, times(4))
+        .requireFederalApplication(authentication, 1000456L);
+    verify(editPolicyService, never())
+        .requireEdit(any(), any(FederalApplicationService.FederalApplicationEditContext.class));
+  }
+
+  @Test
+  void remarkMutationsShouldStillRequireFederalManagementAction() {
+    Authentication authentication = org.mockito.Mockito.mock(Authentication.class);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_READ_ONLY"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_READ_ONLY"), "manageFederalApplication"))
         .thenReturn(false);
+    FederalApplicationService.FederalRemarkMutationRequest request =
+        new FederalApplicationService.FederalRemarkMutationRequest("New note");
 
-    ResponseEntity<FederalApplicationService.FederalMutationResult> response =
-        controller.addFederalPermit(
-            1000456L,
-            new FederalApplicationService.FederalPermitMutationRequest(
-                null, LocalDate.now(), "US", "TRK", null, LocalDate.now(), "VAN", null),
-            authentication);
-
-    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    assertThat(controller.addRemark(1000456L, request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.FORBIDDEN);
+    assertThat(controller.updateRemark(1000456L, 44L, request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
   }
 

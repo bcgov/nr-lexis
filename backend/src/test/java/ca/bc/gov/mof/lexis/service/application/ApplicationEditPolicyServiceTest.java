@@ -6,8 +6,11 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.lenient;
 
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
+import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService.ApplicationEditContext;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService.ApplicationEditPolicy;
+import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
@@ -36,6 +39,8 @@ class ApplicationEditPolicyServiceTest {
   @Mock private LexisSessionService sessionService;
   @Mock private LexisAuthorizationService authorizationService;
   @Mock private ApplicationDetailsRpcService applicationService;
+  @Mock private ApplicationDetailsRpcRepository applicationRepository;
+  @Mock private ExemptionService exemptionService;
 
   private final TestingAuthenticationToken authentication =
       new TestingAuthenticationToken("user", "password");
@@ -68,7 +73,7 @@ class ApplicationEditPolicyServiceTest {
   }
 
   @Test
-  void industryApprovedApplicationWithPreApprovalPackageCanOnlyAddScales() {
+  void industryApprovedApplicationWithPreApprovalPackageKeepsItemChangesWhileDetailsAreEditable() {
     allowRoles("LEXIS_PROVINCIAL_SUBMITTER");
     context("APP", TODAY.plusDays(1), true, false, false);
 
@@ -76,23 +81,44 @@ class ApplicationEditPolicyServiceTest {
         policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
 
     assertThat(policy.canEditApplicationDetails()).isTrue();
-    assertThat(policy.canEditPackages()).isFalse();
-    assertThat(policy.canAddPackages()).isFalse();
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canDeletePackages()).isTrue();
     assertThat(policy.canAddScales()).isTrue();
+    assertThat(policy.canDeleteScales()).isTrue();
     assertThat(policy.canUpdatePackageNumber()).isFalse();
   }
 
   @Test
-  void industryApprovedApplicationWithPreApprovalScaleCannotMutateItems() {
+  void industryApprovedApplicationWithPreApprovalScaleCanAddButNotDeleteScales() {
     allowRoles("LEXIS_PROVINCIAL_SUBMITTER");
     context("APP", TODAY.plusDays(1), true, true, false);
 
     ApplicationEditPolicy policy =
         policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
 
-    assertThat(policy.canEditPackages()).isFalse();
-    assertThat(policy.canAddPackages()).isFalse();
-    assertThat(policy.canAddScales()).isFalse();
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canDeletePackages()).isTrue();
+    assertThat(policy.canAddScales()).isTrue();
+    assertThat(policy.canDeleteScales()).isFalse();
+    assertThatThrownBy(
+            () ->
+                policyService.requireScaleDelete(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .hasMessageContaining("Scale deletion");
+  }
+
+  @Test
+  void industryApprovedApplicationWithPreApprovalScaleCannotChangeItemsAfterTheListDate() {
+    allowRoles("LEXIS_PROVINCIAL_SUBMITTER");
+    context("APP", TODAY, true, true, false);
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.canEditApplicationDetails()).isFalse();
+    assertThat(policy.anyEditable()).isFalse();
   }
 
   @Test
@@ -126,7 +152,19 @@ class ApplicationEditPolicyServiceTest {
   }
 
   @Test
-  void completePermitDeniesApproverItemMutations() {
+  void completePermitDeniesApproverItemMutationsOnceDetailsAreLocked() {
+    allowRoles("LEXIS_APPLICATION_APPROVER");
+    context("EXE", TODAY.minusDays(30), false, false, true);
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.canEditApplicationDetails()).isFalse();
+    assertThat(policy.anyEditable()).isFalse();
+  }
+
+  @Test
+  void completePermitKeepsItemChangesExceptScaleDeletionWhileDetailsAreEditable() {
     allowRoles("LEXIS_APPLICATION_APPROVER");
     context("NEW", TODAY.plusDays(1), false, false, true);
 
@@ -134,9 +172,38 @@ class ApplicationEditPolicyServiceTest {
         policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
 
     assertThat(policy.canEditApplicationDetails()).isTrue();
-    assertThat(policy.canEditPackages()).isFalse();
-    assertThat(policy.canAddPackages()).isFalse();
-    assertThat(policy.canAddScales()).isFalse();
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isTrue();
+    assertThat(policy.canDeletePackages()).isTrue();
+    assertThat(policy.canAddScales()).isTrue();
+    assertThat(policy.canDeleteScales()).isFalse();
+  }
+
+  @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "LEXIS_ADMIN",
+        "LEXIS_APPLICATION_APPROVER",
+        "LEXIS_PROVINCIAL_SUBMITTER_00012345"
+      })
+  void expiredApplicationDeniesPackageAndScaleChanges(String role) {
+    allowRoles(role);
+    context("EXP", TODAY.minusDays(30), false, false, false, true);
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.anyEditable()).isFalse();
+    assertThatThrownBy(
+            () ->
+                policyService.requirePackageEdit(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .hasMessageContaining("Package editing");
+    assertThatThrownBy(
+            () ->
+                policyService.requireScaleAdd(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .hasMessageContaining("Scale creation");
   }
 
   @ParameterizedTest
@@ -161,14 +228,191 @@ class ApplicationEditPolicyServiceTest {
   }
 
   @Test
-  void exemptionApproverCannotUseMinisterialItemOverride() {
-    allowRoles("LEXIS_APPLICATION_APPROVER", "LEXIS_EXEMPTION_APPROVER");
+  void exemptionApproverChangesExistingItemsWithMinisterialItemOverrideButCannotCreatePackages() {
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
     context("PMT", TODAY.minusDays(30), true, true, true, true);
 
     ApplicationEditPolicy policy =
         policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
 
+    assertThat(policy.canEditApplicationDetails()).isFalse();
+    assertThat(policy.canEditPackages()).isTrue();
+    assertThat(policy.canAddPackages()).isFalse();
+    assertThat(policy.canDeletePackages()).isTrue();
+    assertThat(policy.canAddScales()).isTrue();
+    assertThat(policy.canDeleteScales()).isTrue();
+    assertThat(policy.canUpdatePackageNumber()).isFalse();
+    assertThatThrownBy(
+            () ->
+                policyService.requirePackageAdd(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .hasMessageContaining("Package creation");
+  }
+
+  @Test
+  void exemptionApproverWithoutMinisterialItemOverrideCannotChangeItems() {
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    context("PMT", TODAY.minusDays(30), true, true, false, false);
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
     assertThat(policy.anyEditable()).isFalse();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"LEXIS_ADMIN", "LEXIS_APPLICATION_APPROVER"})
+  void approverCanChangeTheAgentWhileTheMinisterialPermitIsNotCompleteOrCancelled(String role) {
+    allowRoles(role);
+    when(authorizationService.canPerformAction(List.of(role), "/changeApplicantType"))
+        .thenReturn(true);
+    agentPermitContext("EXE");
+
+    ApplicationEditPolicy policy =
+        policyService.resolve(authentication, applicationService, APPLICATION_NUMBER);
+
+    assertThat(policy.canEditApplicationDetails()).isFalse();
+    assertThat(policy.canChangeAgent()).isTrue();
+    assertThat(policy.anyEditable()).isTrue();
+    assertThat(
+            policyService.allowsAgentChangeOnly(
+                authentication, applicationService, APPLICATION_NUMBER))
+        .isTrue();
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "LEXIS_APPLICATION_APPROVER, PPD, true",
+    "LEXIS_APPLICATION_APPROVER, COM, false",
+    "LEXIS_PROVINCIAL_SUBMITTER_00012345, PPD, false"
+  })
+  void onlyAnApproverChangesTheAgentAloneWhileTheMinisterialPermitIsPaymentPending(
+      String role, String permitStatus, boolean agentChangeOnly) {
+    allowRoles(role);
+    lenient()
+        .when(authorizationService.canPerformAction(List.of(role), "/changeApplicantType"))
+        .thenReturn(true);
+    when(applicationRepository.findApplicationEditContext(APPLICATION_NUMBER))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.ApplicationEditContextRow(
+                    APPLICATION_NUMBER,
+                    "PMT",
+                    "P",
+                    "H",
+                    12L,
+                    TODAY.minusDays(30),
+                    null,
+                    null,
+                    "EX-205",
+                    1903L)));
+    when(applicationRepository.findPackageMutationsByApplicationNumber(APPLICATION_NUMBER))
+        .thenReturn(List.of());
+    when(applicationRepository.findScaleMutationsByApplicationNumber(APPLICATION_NUMBER))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ScaleMutationRow(
+                    "S-1",
+                    "TM001",
+                    10L,
+                    5.0d,
+                    "PKG-1",
+                    "FI",
+                    "1",
+                    APPLICATION_NUMBER,
+                    7000123L,
+                    "idir\\creator",
+                    Instant.EPOCH)));
+    when(applicationRepository.findPermitStatusCodeByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitStatus));
+    when(exemptionService.findByExemptionNumber("EX-205"))
+        .thenReturn(Optional.of(ministerialExemption("EX-205")));
+    OracleApplicationDetailsRpcService oracleApplicationService =
+        new OracleApplicationDetailsRpcService(applicationRepository, null, exemptionService);
+
+    assertThat(
+            policyService.allowsAgentChangeOnly(
+                authentication, oracleApplicationService, APPLICATION_NUMBER))
+        .isEqualTo(agentChangeOnly);
+  }
+
+  @Test
+  void agentChangeNeedsTheApplicantTypeAction() {
+    allowRoles("LEXIS_APPLICATION_APPROVER");
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "/changeApplicantType"))
+        .thenReturn(false);
+    agentPermitContext("EXE");
+
+    assertThat(
+            policyService.allowsAgentChangeOnly(
+                authentication, applicationService, APPLICATION_NUMBER))
+        .isFalse();
+  }
+
+  @Test
+  void submitterCannotChangeTheAgentOnAPermittedApplication() {
+    allowRoles("LEXIS_PROVINCIAL_SUBMITTER_00012345");
+    agentPermitContext("EXE");
+
+    assertThat(
+            policyService
+                .resolve(authentication, applicationService, APPLICATION_NUMBER)
+                .canChangeAgent())
+        .isFalse();
+  }
+
+  @Test
+  void agentChangeEndsWhenTheApplicationExpires() {
+    allowRoles("LEXIS_APPLICATION_APPROVER");
+    agentPermitContext("EXP");
+
+    assertThat(
+            policyService
+                .resolve(authentication, applicationService, APPLICATION_NUMBER)
+                .canChangeAgent())
+        .isFalse();
+  }
+
+  @Test
+  void approverUpdatesExistingRemarksAfterTheDetailsLock() {
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    context("PMT", TODAY.minusDays(30), true, true, true);
+
+    assertThatCode(
+            () ->
+                policyService.requireRemarkUpdate(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .doesNotThrowAnyException();
+  }
+
+  @Test
+  void readOnlyCannotUpdateRemarks() {
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_READ_ONLY"));
+    context("PMT", TODAY.minusDays(30), true, true, true);
+
+    assertThatThrownBy(
+            () ->
+                policyService.requireRemarkUpdate(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .hasMessageContaining("Remark editing");
+  }
+
+  @Test
+  void remarksOnAnExpiredApplicationCannotBeUpdated() {
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    context("EXP", TODAY.minusDays(30), true, true, false);
+
+    assertThatThrownBy(
+            () ->
+                policyService.requireRemarkUpdate(
+                    authentication, applicationService, APPLICATION_NUMBER))
+        .hasMessageContaining("Remark editing");
   }
 
   @Test
@@ -210,9 +454,13 @@ class ApplicationEditPolicyServiceTest {
             () -> {
               policyService.requirePackageEdit(
                   authentication, applicationService, APPLICATION_NUMBER);
-              policyService.requirePackageAddOrDelete(
+              policyService.requirePackageAdd(
                   authentication, applicationService, APPLICATION_NUMBER);
-              policyService.requireScaleAddOrDelete(
+              policyService.requirePackageDelete(
+                  authentication, applicationService, APPLICATION_NUMBER);
+              policyService.requireScaleAdd(
+                  authentication, applicationService, APPLICATION_NUMBER);
+              policyService.requireScaleDelete(
                   authentication, applicationService, APPLICATION_NUMBER);
               policyService.requirePackageNumberUpdate(
                   authentication, applicationService, APPLICATION_NUMBER);
@@ -462,6 +710,78 @@ class ApplicationEditPolicyServiceTest {
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(grantedRoles);
     when(authorizationService.canPerformAction(grantedRoles, "createApplication"))
         .thenReturn(true);
+  }
+
+  @ParameterizedTest
+  @CsvSource({"5, true", "6, false"})
+  void approvedReviewWindowShouldCloseSixDaysAfterTheListDate(long daysAgo, boolean open) {
+    context("APP", TODAY.minusDays(daysAgo), false, false, false);
+
+    assertThat(policyService.approvedReviewWindowOpen(applicationService, APPLICATION_NUMBER))
+        .isEqualTo(open);
+  }
+
+  @Test
+  void approvedReviewWindowShouldStayOpenForAnOicApplicationWithinSixDays() {
+    when(applicationService.getApplicationEditContext(APPLICATION_NUMBER))
+        .thenReturn(
+            Optional.of(
+                new ApplicationEditContext(
+                    APPLICATION_NUMBER,
+                    "APP",
+                    "P",
+                    "H",
+                    12L,
+                    TODAY.minusDays(2),
+                    false,
+                    false,
+                    false,
+                    "Y",
+                    false)));
+
+    assertThat(policyService.approvedReviewWindowOpen(applicationService, APPLICATION_NUMBER))
+        .isTrue();
+  }
+
+  private ExemptionDetailDto ministerialExemption(String exemptionNumber) {
+    return new ExemptionDetailDto(
+        exemptionNumber,
+        "M",
+        null,
+        "ACT",
+        null,
+        null,
+        null,
+        APPLICATION_NUMBER,
+        "PMT",
+        null,
+        null,
+        100.0d,
+        100.0d,
+        0.0d,
+        null,
+        false,
+        List.of(),
+        List.of());
+  }
+
+  private void agentPermitContext(String status) {
+    when(applicationService.getApplicationEditContext(APPLICATION_NUMBER))
+        .thenReturn(
+            Optional.of(
+                new ApplicationEditContext(
+                    APPLICATION_NUMBER,
+                    status,
+                    "P",
+                    "H",
+                    12L,
+                    TODAY.minusDays(30),
+                    true,
+                    true,
+                    false,
+                    null,
+                    false,
+                    true)));
   }
 
   private void context(

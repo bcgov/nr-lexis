@@ -152,6 +152,7 @@ import {
   fetchPermitFeeOverrideContext,
   fetchPermitApprovalEmailDefault,
   fetchPermitDocuments,
+  fetchPermitReviewRequestEmailDefaults,
   openPermitDocument,
   releasePermitEditLock,
   removePermitApplicationDocument,
@@ -232,7 +233,11 @@ type PermitActionResultSource =
   | 'shipping'
   | 'fees'
   | 'email'
-type PermitActionResult = ActionResult & { source?: PermitActionResultSource }
+type PermitActionResult = ActionResult & {
+  source?: PermitActionResultSource
+  /** Moves focus to the notice, for a save that removes the control focus would return to. */
+  focusOnReveal?: boolean
+}
 const SECTION_SAVE_RESULT_SOURCES = new Set<PermitActionResultSource>([
   'permit',
   'applicant',
@@ -336,6 +341,19 @@ const ASCII_PATTERN = /^[\u0000-\u007f]*$/
 // Legacy allows an approver to move a permit to EXP; once expired, the record is read-only.
 const EDITABLE_PERMIT_STATUS_CODES = new Set(['ACT', 'COM', 'CAN', 'EXP'])
 const SERVER_ASSIGNED_PAYMENT_PENDING_STATUS = 'PPD'
+
+/**
+ * Whether permit details stay editable in a status: expired and cancelled permits are read-only,
+ * and Completed permits are read-only for Provincial Submitters.
+ */
+const permitDetailsEditableInStatus = (
+  statusCode: string | null | undefined,
+  provincialSubmitter: boolean,
+): boolean => {
+  const status = statusCode?.trim().toUpperCase()
+  return status !== 'EXP' && status !== 'CAN' && !(status === 'COM' && provincialSubmitter)
+}
+
 const SHIPPING_PERMIT_FIELDS = new Set<PermitDetailFormField>([
   'destinationCompanyName',
   'destinationCountry',
@@ -1104,6 +1122,17 @@ const ProvincialPermitDetailsPage = () => {
   const location = useLocation()
   const navigate = useNavigate()
   const { permitNumber } = useParams()
+  // A new object each time the route shows a permit, even the same permit again, so work started
+  // for one visit doesn't write its results into the next.
+  const permitRouteRef = useRef({ permitNumber })
+  if (permitRouteRef.current.permitNumber !== permitNumber) {
+    permitRouteRef.current = { permitNumber }
+  }
+  /** Returns whether the page still shows the permit visit this work started on. */
+  const beginPermitRouteWork = useCallback(() => {
+    const route = permitRouteRef.current
+    return () => permitRouteRef.current === route
+  }, [])
   const detailReturnTo = readDetailReturnTo(location.state) ?? {
     label: canPerform('/permitSearch') ? 'Permit search' : 'Your landing page',
     to: canPerform('/permitSearch') ? '/provincial/permit' : defaultRoute,
@@ -1190,6 +1219,14 @@ const ProvincialPermitDetailsPage = () => {
     setPermitApprovalEmailErrorMessage('')
   }, [])
   const [isRemovingDocumentId, setIsRemovingDocumentId] = useState<string | null>(null)
+  const [permitReviewRequestOpen, setPermitReviewRequestOpen] = useState(false)
+  const [permitReviewRequestSendTo, setPermitReviewRequestSendTo] = useState('')
+  const [permitReviewRequestCopyTo, setPermitReviewRequestCopyTo] = useState('')
+  const [showPermitReviewRequestCopyToError, setShowPermitReviewRequestCopyToError] =
+    useState(false)
+  const [permitReviewRequestErrorMessage, setPermitReviewRequestErrorMessage] = useState('')
+  // The sent result shows on the page once the review request dialog has closed.
+  const permitReviewRequestResultRef = useRef<PermitActionResult | null>(null)
   // INTENTIONAL_LEGACY_DIVERGENCE(MINISTERIAL_SCALE_SELECTION_EDIT): selection stays local until Save changes.
   const [ministerialScaleSelectionDraft, setMinisterialScaleSelectionDraft] = useState<Record<
     string,
@@ -1299,21 +1336,41 @@ const ProvincialPermitDetailsPage = () => {
   const newlyCreatedPermitRouteRef = useRef<string | null>(null)
   const deferredPermitTabLoadsRef = useRef(new Set<DeferredPermitTabId>())
   const loadedDeferredPermitTabsRef = useRef(new Set<DeferredPermitTabId>())
-  const permitMutationInFlightRef = useRef(false)
+  const permitMutationInFlightRef = useRef<(() => boolean) | null>(null)
   const packagePanelLauncherRef = useRef<HTMLButtonElement | null>(null)
+  // A permit change writes its results only while it is the latest change and the page still
+  // shows its permit; the server write itself still completes.
   const tryBeginPermitMutation = useCallback(() => {
     if (permitMutationInFlightRef.current) return null
-    permitMutationInFlightRef.current = true
-    return beginPermitMutationRequest()
-  }, [beginPermitMutationRequest])
-  const endPermitMutation = useCallback(() => {
-    permitMutationInFlightRef.current = false
+    const isLatestMutation = beginPermitMutationRequest()
+    const onSamePermit = beginPermitRouteWork()
+    const isCurrentMutation = () => isLatestMutation() && onSamePermit()
+    permitMutationInFlightRef.current = isCurrentMutation
+    return isCurrentMutation
+  }, [beginPermitMutationRequest, beginPermitRouteWork])
+  // A change left behind on another permit doesn't end the one now in progress.
+  const endPermitMutation = useCallback((mutation: () => boolean) => {
+    if (permitMutationInFlightRef.current === mutation) permitMutationInFlightRef.current = null
   }, [])
 
   const resetPermitRouteDrafts = useCallback(() => {
     beginPermitFeesRequest()
     beginPermitDocumentsRequest()
     beginPermitGbmsRequest()
+    beginDocumentRefreshRequest()
+    // Changes still running for the previous permit no longer keep this page busy.
+    permitMutationInFlightRef.current = null
+    scaleSaveInFlightRef.current = false
+    setIsSavingPermit(false)
+    setIsSavingShipping(false)
+    setIsSavingFeeOverride(false)
+    setIsSendingPermitEmail(false)
+    setIsRemovingDocumentId(null)
+    setIsUpdatingScaleId(null)
+    setIsSavingPermitApplication(false)
+    setIsRemovingPermitApplication(null)
+    setPermitApplicationPendingRemoval(null)
+    setBoicScalePendingRemoval(null)
     deferredPermitTabLoadsRef.current.clear()
     loadedDeferredPermitTabsRef.current.clear()
     setDeferredPermitTabLoaded(EMPTY_DEFERRED_PERMIT_TAB_STATE)
@@ -1361,6 +1418,10 @@ const ProvincialPermitDetailsPage = () => {
     agentClientLookupRequestRef.current += 1
     setOwnerEditClientData(null)
     setAgentEditClientData(null)
+    setPermitReviewRequestOpen(false)
+    setPermitReviewRequestCopyTo('')
+    setPermitReviewRequestErrorMessage('')
+    permitReviewRequestResultRef.current = null
     setOwnerClientLocations([])
     setAgentClientLocations([])
     setIsOwnerClientLookupLoading(false)
@@ -1382,6 +1443,7 @@ const ProvincialPermitDetailsPage = () => {
   }, [
     beginAvailablePermitApplicationsRequest,
     beginBoicPackageEditRequest,
+    beginDocumentRefreshRequest,
     beginPermitDocumentsRequest,
     beginPermitFeesRequest,
     beginPermitGbmsRequest,
@@ -2156,17 +2218,35 @@ const ProvincialPermitDetailsPage = () => {
     !permitEditLocked &&
     !permitExpired
   const permitCancelled = permitStatusCode === 'CAN'
-  const submitterCompletedPermit =
-    permitStatusCode === 'COM' && hasProvincialSubmitterRole(capabilities.roles)
+  const provincialSubmitter = hasProvincialSubmitterRole(capabilities.roles)
+  const submitterCompletedPermit = permitStatusCode === 'COM' && provincialSubmitter
   // A cancelled permit is read-only apart from its shipping details and documents.
-  const canSavePermit = canMutatePermit && !permitCancelled && !submitterCompletedPermit
+  const canSavePermit =
+    canMutatePermit && permitDetailsEditableInStatus(permitStatusCode, provincialSubmitter)
+  // Provincial Submitters can't change the other port name once a permit is Payment pending, or
+  // either port once it is Completed.
   const portOfExportLocked = permitCancelled || submitterCompletedPermit
+  const otherPortOfExportLocked = invoiceMaterialLocked && provincialSubmitter
   const canReviewPermits = canPerform('/permitsReview', permitOrgUnit)
+  // Provincial Submitters can change the status of a Payment pending permit.
+  const canEditPermitStatus =
+    canReviewPermits ||
+    (provincialSubmitter && permitStatusCode === SERVER_ASSIGNED_PAYMENT_PENDING_STATUS)
   const canCorrectPermitSubmitDate = canSavePermit && canReviewPermits && permitStatusCode === 'ACT'
   const canEditShipping = canMutatePermit
   const canEditPermitClients =
     canSavePermit && !invoiceMaterialLocked && (detail?.blanketOic === true || ministerialPermit)
-  const ownerEditMode = canEditPermitClients && isEditingPermitClients
+  // A saved agent's client stays read-only; it can only be removed, and an agent added when there
+  // is none. Both stay available while the permit is Payment pending.
+  const canChangePermitAgent =
+    canSavePermit &&
+    blanketOicPermit &&
+    (!invoiceMaterialLocked || permitStatusCode === SERVER_ASSIGNED_PAYMENT_PENDING_STATUS) &&
+    !provincialSubmitter &&
+    canPerform('/changeApplicantType', permitOrgUnit)
+  const canEditPermitApplicant = canEditPermitClients || canChangePermitAgent
+  const addingPermitAgent = canChangePermitAgent && !detail?.applicantClientNumber?.trim()
+  const ownerEditMode = canEditPermitApplicant && isEditingPermitClients
   const hasVerifiedOwnerClientLocation = ownerClientLocations.some(
     (clientLocation) =>
       isSelectableClientLocation(clientLocation) &&
@@ -2184,17 +2264,17 @@ const ProvincialPermitDetailsPage = () => {
       !isOwnerClientLookupLoading &&
       !ownerClientLookupError &&
       (!agentUsed ||
-        (usesReviewedPermitFlow && !permitForm.agentClientNumber.trim()) ||
+        (usesReviewedPermitFlow && !canChangePermitAgent && !permitForm.agentClientNumber.trim()) ||
         (!!permitForm.agentClientNumber.trim() &&
           hasVerifiedAgentClientLocation &&
           !isAgentClientLookupLoading &&
           !agentClientLookupError)))
   const canEnterPaymentReceipt =
     canReviewPermits && permitStatusCode === 'PPD' && !detail?.receiptNumber?.trim()
-  const canSendPermitApproval =
-    canSavePermit && canReviewPermits && (permitStatusCode === 'COM' || permitStatusCode === 'PPD')
+  const canSendPermitApproval = canSavePermit && canReviewPermits && permitStatusCode === 'COM'
   const canRequestPermitReview =
     hasProvincialSubmitterRole(capabilities.roles) &&
+    permitStatusCode === 'ACT' &&
     permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
@@ -2226,18 +2306,21 @@ const ProvincialPermitDetailsPage = () => {
     hasDocumentActorRole &&
     (adminUser || !readOnlyUser) &&
     permitStatusCode === 'ACT'
-  const scaleAttachmentLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
+  // Scale rows and the permit's applications stay changeable while it is Payment pending.
+  const scaleAttachmentLockedStatuses = new Set(['COM', 'EXP', 'CAN'])
   const feeOverrideLockedStatuses = new Set(['COM', 'PPD', 'EXP', 'CAN'])
   const canOpenPermitReport = canPerform('/permitReport') && permitStatusCode === 'COM'
   const permitTablesAvailable =
     !isPermitTablesLoading && tabsData !== null && !permitTablesErrorMessage
-  const canEditPermitApplications =
+  const canRemovePermitApplications =
     ministerialScaleSelectionDraft === null &&
     permitTablesAvailable &&
     canSavePermit &&
     !!detail?.permitNumber &&
     !detail?.blanketOic &&
     !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '')
+  // Applications are added only while the permit is Active.
+  const canAddPermitApplications = canRemovePermitApplications && permitStatusCode !== 'PPD'
   const canEditNormalPermitScaleRows =
     permitTablesAvailable &&
     canSavePermit &&
@@ -2273,7 +2356,7 @@ const ProvincialPermitDetailsPage = () => {
   )
   const permitAgentToggleDirty =
     isEditingPermitForm &&
-    !usesReviewedPermitFlow &&
+    (!usesReviewedPermitFlow || canChangePermitAgent) &&
     !!permitBaselineForm &&
     agentUsed !== Boolean(permitBaselineForm.agentClientNumber.trim())
   const permitDetailDirty =
@@ -2436,6 +2519,7 @@ const ProvincialPermitDetailsPage = () => {
     const reloadFees =
       loadedDeferredPermitTabsRef.current.has('fees') ||
       deferredPermitTabLoadsRef.current.has('fees')
+    const onSamePermit = beginPermitRouteWork()
     beginPermitGbmsRequest()
     setIsPermitTablesLoading(true)
     try {
@@ -2444,6 +2528,7 @@ const ProvincialPermitDetailsPage = () => {
         receiptNumber: detail.receiptNumber,
         blanketOic: detail.blanketOic,
       })
+      if (!onSamePermit()) return
       setTabsData(tabsResult)
       setPermitTablesErrorMessage('')
       loadPermitGbmsEvents({
@@ -2463,9 +2548,16 @@ const ProvincialPermitDetailsPage = () => {
         })
       }
     } finally {
-      setIsPermitTablesLoading(false)
+      if (onSamePermit()) setIsPermitTablesLoading(false)
     }
-  }, [beginPermitGbmsRequest, detail, loadDeferredPermitTab, loadPermitGbmsEvents, permitNumber])
+  }, [
+    beginPermitGbmsRequest,
+    beginPermitRouteWork,
+    detail,
+    loadDeferredPermitTab,
+    loadPermitGbmsEvents,
+    permitNumber,
+  ])
 
   const reloadPermitScaleState = useCallback(async () => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
@@ -2474,6 +2566,7 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     const exemptionNumber = detail?.exemptionNumber
+    const onSamePermit = beginPermitRouteWork()
     const [, refreshedDetail, refreshedExemptionContext] = await Promise.all([
       reloadPermitTabs(),
       fetchProvincialPermitDetail(resolvedPermitNumber),
@@ -2481,6 +2574,7 @@ const ProvincialPermitDetailsPage = () => {
         ? fetchProvincialPermitExemptionContext(exemptionNumber)
         : Promise.resolve(null),
     ])
+    if (!onSamePermit()) return
     if (!refreshedDetail) {
       throw new Error(`No provincial permit found for ${resolvedPermitNumber}.`)
     }
@@ -2508,11 +2602,17 @@ const ProvincialPermitDetailsPage = () => {
           }
         : buildPermitDetailForm(refreshedDetail),
     )
-  }, [detail?.exemptionNumber, detail?.permitNumber, permitNumber, reloadPermitTabs])
+  }, [
+    beginPermitRouteWork,
+    detail?.exemptionNumber,
+    detail?.permitNumber,
+    permitNumber,
+    reloadPermitTabs,
+  ])
 
   const reloadAvailablePermitApplications = useCallback(async () => {
     const isLatestRequest = beginAvailablePermitApplicationsRequest()
-    if (!canEditPermitApplications || !detail?.exemptionNumber) {
+    if (!canAddPermitApplications || !detail?.exemptionNumber) {
       if (isLatestRequest()) {
         setAvailablePermitApplications([])
         setAvailablePermitApplicationItems(null)
@@ -2569,7 +2669,7 @@ const ProvincialPermitDetailsPage = () => {
   }, [
     associatedPermitApplications,
     beginAvailablePermitApplicationsRequest,
-    canEditPermitApplications,
+    canAddPermitApplications,
     detail?.exemptionNumber,
   ])
 
@@ -2587,7 +2687,7 @@ const ProvincialPermitDetailsPage = () => {
     if (
       ministerialPermit &&
       activePermitTabId === 'permit' &&
-      canEditPermitApplications &&
+      canAddPermitApplications &&
       !hasLoadedAvailablePermitApplications &&
       !isLoadingAvailableApplications &&
       !availablePermitApplicationsError
@@ -2597,16 +2697,20 @@ const ProvincialPermitDetailsPage = () => {
   }, [
     activePermitTabId,
     availablePermitApplicationsError,
-    canEditPermitApplications,
+    canAddPermitApplications,
     hasLoadedAvailablePermitApplications,
     isLoadingAvailableApplications,
     ministerialPermit,
     reloadAvailablePermitApplications,
   ])
-  const requiresOicRequestLimits = blanketOicPermit && !invoiceMaterialLocked
-  const requiresPositiveOicRequestLimits =
-    requiresOicRequestLimits && permitForm?.permitStatus.trim().toUpperCase() === 'COM'
-  const requiresPermitCompletionDates = permitForm?.permitStatus.trim().toUpperCase() === 'COM'
+  const completingPermit = permitForm?.permitStatus.trim().toUpperCase() === 'COM'
+  // A Payment pending permit saved without a request total may keep that total blank.
+  const requiresOicRequestLimit = (savedLimit: number | null | undefined) =>
+    blanketOicPermit && (!invoiceMaterialLocked || completingPermit || savedLimit != null)
+  const requiresOicRequestPieces = requiresOicRequestLimit(detail?.oicRequestPieces)
+  const requiresOicRequestVolume = requiresOicRequestLimit(detail?.oicRequestVolume)
+  const requiresPositiveOicRequestLimits = blanketOicPermit && completingPermit
+  const requiresPermitCompletionDates = completingPermit
   const requiresCompletionSubmitDate =
     requiresPermitCompletionDates && ['ACT', 'CAN'].includes(permitStatusCode ?? '')
   const permitFieldErrors = useMemo<FieldErrors<PermitDetailFormField>>(() => {
@@ -2713,10 +2817,16 @@ const ProvincialPermitDetailsPage = () => {
       permitNumberOfPieces: permitForm.permitNumberOfPieces.trim()
         ? (integerFieldError(permitForm.permitNumberOfPieces, 'Current permit pieces') ?? undefined)
         : undefined,
-      oicPermitTotalPieces: requiresOicRequestLimits
+      oicPermitTotalPieces: blanketOicPermit
         ? firstValidationError(
-            () => requiredFieldError(permitForm.oicPermitTotalPieces, 'Permit request pieces'),
-            () => integerFieldError(permitForm.oicPermitTotalPieces, 'Permit request pieces'),
+            () =>
+              requiresOicRequestPieces
+                ? requiredFieldError(permitForm.oicPermitTotalPieces, 'Permit request pieces')
+                : null,
+            () =>
+              permitForm.oicPermitTotalPieces.trim()
+                ? integerFieldError(permitForm.oicPermitTotalPieces, 'Permit request pieces')
+                : null,
             () =>
               requiresPositiveOicRequestLimits
                 ? positiveNumericFieldError(permitForm.oicPermitTotalPieces)
@@ -2729,9 +2839,12 @@ const ProvincialPermitDetailsPage = () => {
               ),
           )
         : undefined,
-      oicPermitTotalVolume: requiresOicRequestLimits
+      oicPermitTotalVolume: blanketOicPermit
         ? firstValidationError(
-            () => requiredFieldError(permitForm.oicPermitTotalVolume, 'Permit request volume'),
+            () =>
+              requiresOicRequestVolume
+                ? requiredFieldError(permitForm.oicPermitTotalVolume, 'Permit request volume')
+                : null,
             () => numericFieldError(permitForm.oicPermitTotalVolume, 'Permit request volume'),
             () =>
               requiresPositiveOicRequestLimits
@@ -2758,7 +2871,8 @@ const ProvincialPermitDetailsPage = () => {
     permitForm,
     requiresCompletionSubmitDate,
     requiresPermitCompletionDates,
-    requiresOicRequestLimits,
+    requiresOicRequestPieces,
+    requiresOicRequestVolume,
   ])
   const hasPermitValidationError = Object.entries(permitFieldErrors).some(
     ([field, error]) => !!error && !SHIPPING_PERMIT_FIELDS.has(field as PermitDetailFormField),
@@ -2774,6 +2888,13 @@ const ProvincialPermitDetailsPage = () => {
       !hasVerifiedOwnerClientLocation
     )
       return 'Select a client location'
+    if (
+      isEditingPermitClients &&
+      field === 'agentClientNumber' &&
+      agentUsed &&
+      !permitForm?.agentClientNumber.trim()
+    )
+      return 'Select a client'
     if (
       isEditingPermitClients &&
       field === 'agentClientLocation' &&
@@ -2967,11 +3088,21 @@ const ProvincialPermitDetailsPage = () => {
 
   const setPermitAgentUsed = (checked: boolean): void => {
     setAgentUsed(checked)
-    if (!checked && !usesReviewedPermitFlow) {
+    if (!checked) {
       resetPermitClientLookup('agent')
       setPermitForm((current) =>
         current ? { ...current, agentClientNumber: '', agentClientLocation: '' } : current,
       )
+      return
+    }
+    // Ticking the box again brings back a saved Blanket OIC agent.
+    if (usesReviewedPermitFlow && detail?.applicantClientNumber?.trim()) {
+      const agentClientNumber = detail.applicantClientNumber
+      const agentClientLocation = detailValue(detail.agentClientLocationCode)
+      setPermitForm((current) =>
+        current ? { ...current, agentClientNumber, agentClientLocation } : current,
+      )
+      void loadPermitClientLocations('agent', agentClientNumber, agentClientLocation)
     }
   }
 
@@ -3116,6 +3247,33 @@ const ProvincialPermitDetailsPage = () => {
     setBoicPackageBaselineForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageFieldErrors({})
   }, [beginBoicPackageEditRequest])
+
+  // A reviewer's save that leaves the permit Completed offers the approval email.
+  const onOpenPermitApprovalEmail = useCallback(
+    async (resolvedPermitNumber: string, onSamePermit: () => boolean) => {
+      if (!onSamePermit()) return
+      setIsSendingPermitEmail(true)
+      try {
+        const defaultEmail = await fetchPermitApprovalEmailDefault(resolvedPermitNumber)
+        if (!onSamePermit()) return
+        setPermitApprovalEmailAddress(defaultEmail.trim())
+        setShowPermitApprovalEmailError(false)
+        setPermitApprovalEmailOpen(true)
+      } catch (error) {
+        console.error(error)
+        if (!onSamePermit()) return
+        setActionResult({
+          kind: 'error',
+          title: 'Approval email unavailable.',
+          message: 'Unable to resolve the permit applicant notification email.',
+          source: 'email',
+        })
+      } finally {
+        if (onSamePermit()) setIsSendingPermitEmail(false)
+      }
+    },
+    [],
+  )
 
   const onDiscardPermitChanges = useCallback(() => {
     if (detail) {
@@ -3288,8 +3446,16 @@ const ProvincialPermitDetailsPage = () => {
         !permitDetailDirty &&
         !includeShipping
       ) {
+        // Saving a Completed permit's details again, even unchanged, offers its approval email.
+        const offerApprovalEmail = canSendPermitApproval && permitEditSections.isEditing('permit')
         setActionResult(null)
         permitEditSections.finishEditing()
+        if (offerApprovalEmail) {
+          void onOpenPermitApprovalEmail(
+            String(detail.permitNumber ?? permitNumber ?? ''),
+            beginPermitRouteWork(),
+          )
+        }
         return true
       }
       if (isEditingPermitClients && !permitClientLookupCanSave) {
@@ -3346,6 +3512,9 @@ const ProvincialPermitDetailsPage = () => {
           confirmClientNumber(originalOwnerClientNumber, originalOwnerClientLocation),
           confirmClientNumber(originalAgentClientNumber, originalAgentClientLocation),
         ])
+        if (!isLatestRequest()) {
+          return false
+        }
         confirmedRequest = { ...confirmedRequest, ownerClientNumber, agentClientNumber }
         setPermitForm((current) => {
           if (
@@ -3477,21 +3646,33 @@ const ProvincialPermitDetailsPage = () => {
         }
 
         setShowPermitValidationErrors(false)
+        const savedResult = sectionSaveResult(
+          resultSubject,
+          resultSource,
+          [
+            ...result.warnings,
+            permitDetailRefreshFailed
+              ? 'Current permit details could not be refreshed; reload before making another change.'
+              : '',
+          ]
+            .filter(Boolean)
+            .join(' '),
+        )
+        const savedPermitStatus = persistedUpdatedDetail.permitStatusCode?.trim().toUpperCase()
+        // A status that leaves the permit read-only removes its Edit button, so the notice takes
+        // focus.
         setActionResult(
-          sectionSaveResult(
-            resultSubject,
-            resultSource,
-            [
-              ...result.warnings,
-              permitDetailRefreshFailed
-                ? 'Current permit details could not be refreshed; reload before making another change.'
-                : '',
-            ]
-              .filter(Boolean)
-              .join(' '),
-          ),
+          permitDetailsEditableInStatus(savedPermitStatus, provincialSubmitter)
+            ? savedResult
+            : { ...savedResult, focusOnReveal: true },
         )
         refreshLoadedPermitFees()
+        if (canReviewPermits && !permitDetailRefreshFailed && savedPermitStatus === 'COM') {
+          void onOpenPermitApprovalEmail(
+            String(confirmedRequest.permitNumber),
+            beginPermitRouteWork(),
+          )
+        }
         // The mutation committed, but callers must stop until canonical permit details reload.
         return !permitDetailRefreshFailed
       } catch (error) {
@@ -3501,8 +3682,8 @@ const ProvincialPermitDetailsPage = () => {
         }
         return false
       } finally {
-        endPermitMutation()
-        setIsSavingPermit(false)
+        endPermitMutation(isLatestRequest)
+        if (isLatestRequest()) setIsSavingPermit(false)
       }
     },
     [
@@ -3513,8 +3694,11 @@ const ProvincialPermitDetailsPage = () => {
       permitDetailDirty,
       permitEditSections,
       showPermitFieldErrors,
+      beginPermitRouteWork,
       blanketOicRegionSelectionUnavailable,
+      canReviewPermits,
       canSavePermit,
+      canSendPermitApproval,
       detail,
       endPermitMutation,
       editablePermitRegionOptions,
@@ -3524,6 +3708,7 @@ const ProvincialPermitDetailsPage = () => {
       isEditingPermitClients,
       isSavingPermit,
       isPermitOptionsLoading,
+      onOpenPermitApprovalEmail,
       permitOptionsUnavailable,
       requiredPermitOptionsMissing,
       permitFieldErrors,
@@ -3531,6 +3716,7 @@ const ProvincialPermitDetailsPage = () => {
       permitForm,
       permitNumber,
       permitSaveSubject,
+      provincialSubmitter,
       refreshLoadedPermitFees,
       activePermitTabId,
       tryBeginPermitMutation,
@@ -3633,8 +3819,8 @@ const ProvincialPermitDetailsPage = () => {
       }
       return false
     } finally {
-      endPermitMutation()
-      setIsSavingShipping(false)
+      endPermitMutation(isLatestRequest)
+      if (isLatestRequest()) setIsSavingShipping(false)
     }
   }, [
     activePermitTabId,
@@ -3721,7 +3907,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       return false
     } finally {
-      endPermitMutation()
+      endPermitMutation(isLatestRequest)
       if (isLatestRequest()) setIsSavingScaleSelection(false)
     }
   }, [
@@ -3899,8 +4085,8 @@ const ProvincialPermitDetailsPage = () => {
       }
       return false
     } finally {
-      endPermitMutation()
-      setIsSavingFeeOverride(false)
+      endPermitMutation(isLatestRequest)
+      if (isLatestRequest()) setIsSavingFeeOverride(false)
     }
   }, [
     isPermitBusy,
@@ -3956,6 +4142,7 @@ const ProvincialPermitDetailsPage = () => {
         setHasLoadedAvailablePermitApplications(false)
         setAvailablePermitApplicationsError('')
         await reloadPermitScaleState()
+        if (!isLatestRequest()) return
         setActionResult({
           kind: 'success',
           message: result.message || 'Permit item rows were updated.',
@@ -3966,8 +4153,8 @@ const ProvincialPermitDetailsPage = () => {
           setActionResult({ kind: 'error', message: 'Unable to update permit item rows.' })
         }
       } finally {
-        endPermitMutation()
-        setIsUpdatingScaleId(null)
+        endPermitMutation(isLatestRequest)
+        if (isLatestRequest()) setIsUpdatingScaleId(null)
       }
     },
     [
@@ -3987,7 +4174,7 @@ const ProvincialPermitDetailsPage = () => {
       : selectedPermitApplicationToAdd
         ? [selectedPermitApplicationToAdd]
         : []
-    if (!canEditPermitApplications || !resolvedPermitNumber || selectedApplications.length === 0) {
+    if (!canAddPermitApplications || !resolvedPermitNumber || selectedApplications.length === 0) {
       return
     }
 
@@ -4034,11 +4221,13 @@ const ProvincialPermitDetailsPage = () => {
       )
       try {
         await reloadPermitScaleState()
+        if (!isLatestRequest()) return
         setActionResult({
           kind: 'success',
           message: result.message || 'Application was added to the permit.',
         })
       } catch (refreshError) {
+        if (!isLatestRequest()) return
         console.error(refreshError)
         setPermitTablesErrorMessage(
           'The application was added, but permit tables could not be refreshed. Reload the page.',
@@ -4054,11 +4243,11 @@ const ProvincialPermitDetailsPage = () => {
         setActionResult({ kind: 'error', message: 'Unable to add application to the permit.' })
       }
     } finally {
-      endPermitMutation()
-      setIsSavingPermitApplication(false)
+      endPermitMutation(isLatestRequest)
+      if (isLatestRequest()) setIsSavingPermitApplication(false)
     }
   }, [
-    canEditPermitApplications,
+    canAddPermitApplications,
     detail?.permitNumber,
     endPermitMutation,
     ministerialPermit,
@@ -4072,7 +4261,7 @@ const ProvincialPermitDetailsPage = () => {
   const onRemovePermitApplication = useCallback(
     async (applicationNumber: string) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-      if (!canEditPermitApplications || !resolvedPermitNumber || !applicationNumber) {
+      if (!canRemovePermitApplications || !resolvedPermitNumber || !applicationNumber) {
         throw new Error('This application cannot be removed from the current permit.')
       }
 
@@ -4115,11 +4304,13 @@ const ProvincialPermitDetailsPage = () => {
         setAvailablePermitApplicationsError('')
         try {
           await reloadPermitScaleState()
+          if (!isLatestRequest()) return
           setActionResult({
             kind: 'success',
             message: result.message || 'Application was removed from the permit.',
           })
         } catch (refreshError) {
+          if (!isLatestRequest()) return
           console.error(refreshError)
           setPermitTablesErrorMessage(
             'The application was removed, but permit tables could not be refreshed. Reload the page.',
@@ -4137,12 +4328,12 @@ const ProvincialPermitDetailsPage = () => {
           ? error
           : new Error('Unable to remove application from the permit.')
       } finally {
-        endPermitMutation()
-        setIsRemovingPermitApplication(null)
+        endPermitMutation(isLatestRequest)
+        if (isLatestRequest()) setIsRemovingPermitApplication(null)
       }
     },
     [
-      canEditPermitApplications,
+      canRemovePermitApplications,
       detail?.permitNumber,
       endPermitMutation,
       permitNumber,
@@ -4319,10 +4510,12 @@ const ProvincialPermitDetailsPage = () => {
     setBoicPackageErrorMessage('')
     setActionResult(keepActionError)
     setIsSavingBoicPackage(true)
+    const onSamePermit = beginPermitRouteWork()
     try {
       const result = editingBoicPackageNumber
         ? await updateBlanketOicPackage(request)
         : await addBlanketOicPackage(request)
+      if (!onSamePermit()) return false
       if (!result.success) {
         const message =
           result.errors[0] || result.message || 'Unable to save the Blanket OIC package.'
@@ -4346,8 +4539,10 @@ const ProvincialPermitDetailsPage = () => {
       resetBlanketOicPackageForm()
       try {
         await reloadPermitTabs()
+        if (!onSamePermit()) return true
         setActionResult(packageActionResult('Package saved.'))
       } catch (refreshError) {
+        if (!onSamePermit()) return true
         console.error(refreshError)
         setPermitTablesErrorMessage(
           'The Blanket OIC package was saved, but permit tables could not be refreshed.',
@@ -4359,12 +4554,13 @@ const ProvincialPermitDetailsPage = () => {
       return true
     } catch (error) {
       console.error(error)
-      setBoicPackageErrorMessage('Unable to save the Blanket OIC package.')
+      if (onSamePermit()) setBoicPackageErrorMessage('Unable to save the Blanket OIC package.')
       return false
     } finally {
-      setIsSavingBoicPackage(false)
+      if (onSamePermit()) setIsSavingBoicPackage(false)
     }
   }, [
+    beginPermitRouteWork,
     blanketOicPackageDirty,
     boicPackageForm,
     boicPackageVolumeLimit,
@@ -4395,9 +4591,11 @@ const ProvincialPermitDetailsPage = () => {
       setActionResult(null)
       setBoicPackageErrorMessage('')
       setIsDeletingBoicPackageNumber(packageNumberToDelete)
+      const onSamePermit = beginPermitRouteWork()
       let failureMessage = ''
       try {
         const result = await deleteBlanketOicPackage(resolvedPermitNumber, packageNumberToDelete)
+        if (!onSamePermit()) return
         if (!result.success) {
           failureMessage =
             result.errors[0] || result.message || 'Unable to delete the Blanket OIC package.'
@@ -4407,6 +4605,7 @@ const ProvincialPermitDetailsPage = () => {
           resetBlanketOicPackageForm()
         }
         await reloadPermitTabs()
+        if (!onSamePermit()) return
         setActionResult(packageActionResult('Package deleted.'))
       } catch (error) {
         if (!failureMessage) {
@@ -4415,10 +4614,11 @@ const ProvincialPermitDetailsPage = () => {
         }
         throw new Error(failureMessage)
       } finally {
-        setIsDeletingBoicPackageNumber(null)
+        if (onSamePermit()) setIsDeletingBoicPackageNumber(null)
       }
     },
     [
+      beginPermitRouteWork,
       canEditBlanketOicPackages,
       blanketOicPackageActionsDisabled,
       detail?.permitNumber,
@@ -4498,8 +4698,10 @@ const ProvincialPermitDetailsPage = () => {
     setBoicScaleErrorMessage('')
     scaleSaveInFlightRef.current = true
     setIsSavingBoicScale(true)
+    const onSamePermit = beginPermitRouteWork()
     try {
       const result = await addBlanketOicScale(request)
+      if (!onSamePermit()) return false
       if (!result.success) {
         const { fieldErrors: serverFieldErrors, otherMessages } = blanketOicScaleServerErrors(
           result.errors.length > 0
@@ -4520,8 +4722,10 @@ const ProvincialPermitDetailsPage = () => {
       setIsAddingBoicScale(false)
       try {
         await reloadPermitScaleState()
+        if (!onSamePermit()) return true
         setActionResult(scaleActionResult('Scale saved.'))
       } catch (refreshError) {
+        if (!onSamePermit()) return true
         console.error(refreshError)
         setPermitTablesErrorMessage(
           'The Blanket OIC scale detail was added, but permit tables could not be refreshed.',
@@ -4533,13 +4737,16 @@ const ProvincialPermitDetailsPage = () => {
       return true
     } catch (error) {
       console.error(error)
-      setBoicScaleErrorMessage('Unable to add Blanket OIC scale detail.')
+      if (onSamePermit()) setBoicScaleErrorMessage('Unable to add Blanket OIC scale detail.')
       return false
     } finally {
-      scaleSaveInFlightRef.current = false
-      setIsSavingBoicScale(false)
+      if (onSamePermit()) {
+        scaleSaveInFlightRef.current = false
+        setIsSavingBoicScale(false)
+      }
     }
   }, [
+    beginPermitRouteWork,
     boicScaleForm,
     boicScaleRemainingVolume,
     canEditBlanketOicScaleRows,
@@ -4560,11 +4767,13 @@ const ProvincialPermitDetailsPage = () => {
 
       setActionResult(null)
       setIsDeletingBoicScaleId(row.id)
+      const onSamePermit = beginPermitRouteWork()
       try {
         const result = await deleteBlanketOicScale({
           scaleId: row.id,
           permitNumber: resolvedPermitNumber,
         })
+        if (!onSamePermit()) return
         if (!result.success) {
           throw new Error(
             result.errors[0] || result.message || 'Unable to remove Blanket OIC scale detail.',
@@ -4573,8 +4782,10 @@ const ProvincialPermitDetailsPage = () => {
 
         try {
           await reloadPermitScaleState()
+          if (!onSamePermit()) return
           setActionResult(scaleActionResult('Scale deleted.'))
         } catch (refreshError) {
+          if (!onSamePermit()) return
           console.error(refreshError)
           setPermitTablesErrorMessage(
             'The Blanket OIC scale was removed, but permit tables could not be refreshed. Reload the page.',
@@ -4589,10 +4800,16 @@ const ProvincialPermitDetailsPage = () => {
           ? error
           : new Error('Unable to remove Blanket OIC scale detail.')
       } finally {
-        setIsDeletingBoicScaleId(null)
+        if (onSamePermit()) setIsDeletingBoicScaleId(null)
       }
     },
-    [canEditBlanketOicScaleRows, detail?.permitNumber, permitNumber, reloadPermitScaleState],
+    [
+      beginPermitRouteWork,
+      canEditBlanketOicScaleRows,
+      detail?.permitNumber,
+      permitNumber,
+      reloadPermitScaleState,
+    ],
   )
 
   const refreshPermitDocuments = useCallback(async () => {
@@ -4619,6 +4836,10 @@ const ProvincialPermitDetailsPage = () => {
       }
     }
   }, [beginPermitDocumentsRequest, detail?.permitNumber, permitNumber])
+
+  // An upload can finish after the page moves to another permit, so its results apply only to the
+  // permit it started on.
+  const onUploadPermitVisit = beginPermitRouteWork()
 
   const onCancelPermitDocumentEditing = useCallback(() => {
     setPermitDocumentUploadDirty(false)
@@ -4677,119 +4898,147 @@ const ProvincialPermitDetailsPage = () => {
     }
   }, [canOpenPermitReport, detail?.permitNumber, permitNumber])
 
-  const onSendPermitEmail = useCallback(
-    async (type: 'request' | 'approval', approvalEmailAddress = ''): Promise<boolean> => {
+  const onSendPermitApprovalEmail = useCallback(
+    async (approvalEmailAddress: string): Promise<boolean> => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-      if (
-        !resolvedPermitNumber ||
-        (type === 'request' ? !permitReviewReady : !canSendPermitApproval)
-      ) {
+      if (!resolvedPermitNumber || !canSendPermitApproval) {
         return false
       }
-      // An approval failure shows in its dialog, which stays open to retry.
-      const showEmailError = (message: string) =>
-        type === 'approval'
-          ? setPermitApprovalEmailErrorMessage(message)
-          : setActionResult({
-              kind: 'error',
-              title: 'Review request email not sent.',
-              message,
-              source: 'email',
-            })
+      // A failure shows in the dialog, which stays open to retry.
       setActionResult(null)
       setPermitApprovalEmailErrorMessage('')
       const clientEmail = normalizeTrimmedText(approvalEmailAddress)
-      if (type === 'approval' && !isValidEmail(clientEmail)) {
-        showEmailError('Enter one valid applicant email address.')
+      if (!isValidEmail(clientEmail)) {
+        setPermitApprovalEmailErrorMessage('Enter one valid applicant email address.')
         return false
       }
       setIsSendingPermitEmail(true)
+      const onSamePermit = beginPermitRouteWork()
       try {
-        const result =
-          type === 'request'
-            ? await sendPermitReviewRequestEmail(resolvedPermitNumber)
-            : await sendPermitApprovalEmail(resolvedPermitNumber, clientEmail)
+        const result = await sendPermitApprovalEmail(resolvedPermitNumber, clientEmail)
+        if (!onSamePermit()) return false
         if (result.success) {
-          setActionResult(
-            type === 'request'
-              ? {
-                  kind: 'success',
-                  title: 'Review request email sent.',
-                  message: '',
-                  source: 'email',
-                }
-              : {
-                  kind: 'success',
-                  title: 'Permit approval email sent.',
-                  message: `Sent to the applicant (${clientEmail}).`,
-                  source: 'email',
-                },
-          )
-          if (type === 'request' && result.permitRequestDate) {
-            setDetail((current) =>
-              current
-                ? {
-                    ...current,
-                    applicationDate: result.permitRequestDate,
-                    receivedDate: result.permitRequestDate,
-                  }
-                : current,
-            )
-            setPermitForm((current) =>
-              current
-                ? {
-                    ...current,
-                    permitSubmitDate: result.permitRequestDate,
-                    permitRequestDate: result.permitRequestDate,
-                  }
-                : current,
-            )
-          }
+          setActionResult({
+            kind: 'success',
+            title: 'Permit approval email sent.',
+            message: `Sent to the applicant (${clientEmail}).`,
+            source: 'email',
+          })
           return true
-        } else {
-          showEmailError(result.message || 'Permit email could not be sent.')
-          return false
         }
+        setPermitApprovalEmailErrorMessage(result.message || 'Permit email could not be sent.')
+        return false
       } catch (error) {
         console.error(error)
-        showEmailError('Unable to send permit email.')
+        if (onSamePermit()) setPermitApprovalEmailErrorMessage('Unable to send permit email.')
         return false
       } finally {
-        setIsSendingPermitEmail(false)
+        if (onSamePermit()) setIsSendingPermitEmail(false)
       }
     },
-    [canSendPermitApproval, detail?.permitNumber, permitReviewReady, permitNumber],
+    [beginPermitRouteWork, canSendPermitApproval, detail?.permitNumber, permitNumber],
   )
 
-  const onOpenPermitApprovalEmail = useCallback(async () => {
+  const onOpenPermitReviewRequest = useCallback(async () => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-    if (!resolvedPermitNumber || !canSendPermitApproval || isSendingPermitEmail) {
+    if (!resolvedPermitNumber || !permitReviewReady || isSendingPermitEmail) {
       return
     }
     clearActionNotifications()
     setIsSendingPermitEmail(true)
+    const onSamePermit = beginPermitRouteWork()
+    let defaults = { regionalEmailAddress: '', copyToEmailAddress: '' }
     try {
-      const defaultEmail = await fetchPermitApprovalEmailDefault(resolvedPermitNumber)
-      setPermitApprovalEmailAddress(defaultEmail.trim())
-      setShowPermitApprovalEmailError(false)
-      setPermitApprovalEmailOpen(true)
+      defaults = await fetchPermitReviewRequestEmailDefaults(resolvedPermitNumber)
     } catch (error) {
       console.error(error)
-      setActionResult({
-        kind: 'error',
-        title: 'Approval email unavailable.',
-        message: 'Unable to resolve the permit applicant notification email.',
-        source: 'email',
-      })
-    } finally {
-      setIsSendingPermitEmail(false)
     }
+    if (!onSamePermit()) return
+    setIsSendingPermitEmail(false)
+    permitReviewRequestResultRef.current = null
+    setPermitReviewRequestSendTo(defaults.regionalEmailAddress.trim())
+    setPermitReviewRequestCopyTo(defaults.copyToEmailAddress.trim())
+    setShowPermitReviewRequestCopyToError(false)
+    setPermitReviewRequestErrorMessage('')
+    setPermitReviewRequestOpen(true)
   }, [
+    beginPermitRouteWork,
     clearActionNotifications,
-    canSendPermitApproval,
     detail?.permitNumber,
     isSendingPermitEmail,
     permitNumber,
+    permitReviewReady,
+  ])
+
+  // A failure shows in the dialog, which stays open to retry; an invalid copy recipient shows on
+  // its field.
+  const onSendPermitReviewRequest = useCallback(async (): Promise<boolean> => {
+    setPermitReviewRequestErrorMessage('')
+    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    if (!resolvedPermitNumber || !permitReviewReady) {
+      setPermitReviewRequestErrorMessage(
+        'An active permit requires an application, package, and scale detail before review can be requested.',
+      )
+      return false
+    }
+    const copyTo = normalizeTrimmedText(permitReviewRequestCopyTo)
+    if (copyTo && !isValidEmail(copyTo)) {
+      setShowPermitReviewRequestCopyToError(true)
+      requestAnimationFrame(() => document.getElementById('permit-review-request-copy-to')?.focus())
+      return false
+    }
+    setIsSendingPermitEmail(true)
+    const onSamePermit = beginPermitRouteWork()
+    try {
+      const result = await sendPermitReviewRequestEmail(resolvedPermitNumber, copyTo)
+      if (!onSamePermit()) return false
+      if (!result.success) {
+        setPermitReviewRequestErrorMessage(
+          result.message || 'Permit review request email could not be sent.',
+        )
+        return false
+      }
+      permitReviewRequestResultRef.current = {
+        kind: 'success',
+        title: 'Review request email sent.',
+        message: copyTo ? `A copy was sent to ${copyTo}.` : '',
+        source: 'email',
+      }
+      if (result.permitRequestDate) {
+        setDetail((current) =>
+          current
+            ? {
+                ...current,
+                applicationDate: result.permitRequestDate,
+                receivedDate: result.permitRequestDate,
+              }
+            : current,
+        )
+        setPermitForm((current) =>
+          current
+            ? {
+                ...current,
+                permitSubmitDate: result.permitRequestDate,
+                permitRequestDate: result.permitRequestDate,
+              }
+            : current,
+        )
+      }
+      return true
+    } catch (error) {
+      console.error(error)
+      if (onSamePermit())
+        setPermitReviewRequestErrorMessage('Unable to send the review request email.')
+      return false
+    } finally {
+      if (onSamePermit()) setIsSendingPermitEmail(false)
+    }
+  }, [
+    beginPermitRouteWork,
+    detail?.permitNumber,
+    permitNumber,
+    permitReviewReady,
+    permitReviewRequestCopyTo,
   ])
 
   const onRemoveDocument = useCallback(
@@ -4913,6 +5162,7 @@ const ProvincialPermitDetailsPage = () => {
     const isLoading = isOwner ? isOwnerClientLookupLoading : isAgentClientLookupLoading
     const errorMessage = isOwner ? ownerClientLookupError : agentClientLookupError
     const labels = permitClientLabels(kind)
+    const clientReadOnly = usesReviewedPermitFlow && (isOwner || !addingPermitAgent)
 
     return (
       <>
@@ -4921,7 +5171,7 @@ const ProvincialPermitDetailsPage = () => {
             client={{
               label: labels.client,
               value: isLoading ? 'Loading…' : clientDisplayName(clientData, clientNumber),
-              edit: usesReviewedPermitFlow
+              edit: clientReadOnly
                 ? undefined
                 : () => (
                     <ForestClientComboBox
@@ -4936,6 +5186,8 @@ const ProvincialPermitDetailsPage = () => {
                           : (permitForm?.ownerClientNumber ?? '')
                       }
                       required
+                      invalid={!!permitFieldError(clientNumberField)}
+                      invalidText={permitFieldError(clientNumberField)}
                       disabled={isDisabled}
                       onChange={(selectedClientNumber) => {
                         setPermitClientNumber(kind, selectedClientNumber)
@@ -5030,8 +5282,11 @@ const ProvincialPermitDetailsPage = () => {
     detailMatchesRoute ? detail?.permitNumber : permitNumber,
     detailMatchesRoute ? (detail?.permitStatusCode ?? detail?.permitStatusDescription) : null,
   )
-  // Pages opened from this one name it by its title in their back link or breadcrumb.
-  const permitPageTitle = `Permit ${permitDisplayNumber}`.trim()
+  // Pages opened from this one name it by its title in their back link or breadcrumb. "(Pending)"
+  // comes from the loaded status, so the title waits for this permit instead of changing once it
+  // loads. A permit that fails to load is still named by its number.
+  const permitPageTitle =
+    detailMatchesRoute || errorMessage ? `Permit ${permitDisplayNumber}`.trim() : ''
   const isMinisterialPermitEdit = ministerialPermit && isEditingPermit && !!permitForm
   const isReviewedPermitEdit = usesReviewedPermitFlow && isEditingPermit && !!permitForm
 
@@ -5110,7 +5365,7 @@ const ProvincialPermitDetailsPage = () => {
           headingLevel={3}
           role="alert"
           action={
-            canEditPermitApplications ? (
+            canAddPermitApplications ? (
               <Button
                 kind="tertiary"
                 size="md"
@@ -5136,7 +5391,7 @@ const ProvincialPermitDetailsPage = () => {
 
     return (
       <>
-        {canEditPermitApplications &&
+        {canAddPermitApplications &&
           ministerialAvailablePermitApplicationItems.some((item) => !item.disabled) && (
             <p className="ministerial-permit-details__application-help">
               Select applications, then choose Add application to include them in this permit. Save
@@ -5157,10 +5412,10 @@ const ProvincialPermitDetailsPage = () => {
               <TableBody>
                 {ministerialAvailablePermitApplicationItems.map((item) => {
                   const disabled =
-                    item.disabled || !canEditPermitApplications || isUpdatingPermitApplications
+                    item.disabled || !canAddPermitApplications || isUpdatingPermitApplications
                   const disabledDescription = item.disabled
                     ? item.disabledReason
-                    : !canEditPermitApplications
+                    : !canAddPermitApplications
                       ? 'You do not have permission to add applications to this permit.'
                       : isUpdatingPermitApplications
                         ? 'Wait for the application update to finish.'
@@ -5223,7 +5478,7 @@ const ProvincialPermitDetailsPage = () => {
             headingLevel={3}
           />
         )}
-        {canEditPermitApplications && (
+        {canAddPermitApplications && (
           <div className="legacy-search-actions">
             <DisabledButtonTooltip
               disabled={
@@ -5261,7 +5516,7 @@ const ProvincialPermitDetailsPage = () => {
                 <TableHead>
                   <TableRow>
                     <TableHeader>Application number</TableHeader>
-                    {canEditPermitApplications && <TableHeader>Actions</TableHeader>}
+                    {canRemovePermitApplications && <TableHeader>Actions</TableHeader>}
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -5282,7 +5537,7 @@ const ProvincialPermitDetailsPage = () => {
                           {applicationNumber}
                         </Link>
                       </TableCell>
-                      {canEditPermitApplications && (
+                      {canRemovePermitApplications && (
                         <TableCell>
                           <Button
                             kind="ghost"
@@ -5352,7 +5607,9 @@ const ProvincialPermitDetailsPage = () => {
                   invalidText={permitFieldError('permitStatus')}
                   onChange={(event) => setPermitFormField('permitStatus', event.target.value)}
                   disabled={
-                    !canReviewPermits || isPermitOptionsLoading || permitStatusOptions.length === 0
+                    !canEditPermitStatus ||
+                    isPermitOptionsLoading ||
+                    permitStatusOptions.length === 0
                   }
                 >
                   <SelectItem value="" text="Select a permit status" />
@@ -5469,9 +5726,9 @@ const ProvincialPermitDetailsPage = () => {
                 renderPermitTextInput(
                   'oicPermitTotalPieces',
                   'Permit request pieces',
-                  invoiceMaterialLocked,
+                  false,
                   undefined,
-                  requiresOicRequestLimits,
+                  requiresOicRequestPieces,
                 )
               }
             />
@@ -5482,9 +5739,9 @@ const ProvincialPermitDetailsPage = () => {
                 renderPermitTextInput(
                   'oicPermitTotalVolume',
                   'Permit request volume (m³)',
-                  invoiceMaterialLocked,
+                  false,
                   undefined,
-                  requiresOicRequestLimits,
+                  requiresOicRequestVolume,
                 )
               }
             />
@@ -5538,7 +5795,7 @@ const ProvincialPermitDetailsPage = () => {
                 invalidText={permitFieldError('permitStatus')}
                 onChange={(event) => setPermitFormField('permitStatus', event.target.value)}
                 disabled={
-                  !canReviewPermits || isPermitOptionsLoading || permitStatusOptions.length === 0
+                  !canEditPermitStatus || isPermitOptionsLoading || permitStatusOptions.length === 0
                 }
               >
                 <SelectItem value="" text="Select a permit status" />
@@ -5643,6 +5900,12 @@ const ProvincialPermitDetailsPage = () => {
     const otherPortSelected = editing
       ? permitForm?.portOfExport.trim().toUpperCase() === 'OT'
       : detail.portOfExportCode?.trim().toUpperCase() === 'OT'
+    // A locked other port name can't be filled in, so Other stays an option only as the saved port.
+    const otherPortSaved = detail.portOfExportCode?.trim().toUpperCase() === 'OT'
+    const portOptions = (shippingReferences?.ports ?? []).filter(
+      (option) =>
+        !otherPortOfExportLocked || otherPortSaved || option.code.trim().toUpperCase() !== 'OT',
+    )
     return (
       <RecordFieldGrid editing={editing}>
         <RecordFieldRow>
@@ -5685,9 +5948,7 @@ const ProvincialPermitDetailsPage = () => {
                     invalid={!!permitFieldError('destinationCountry')}
                     invalidText={permitFieldError('destinationCountry')}
                     onChange={(value) => setPermitFormField('destinationCountry', value)}
-                    disabled={
-                      invoiceMaterialLocked || isShippingReferencesLoading || !shippingReferences
-                    }
+                    disabled={isShippingReferencesLoading || !shippingReferences}
                   />
                 ) : (
                   <Select
@@ -5700,9 +5961,7 @@ const ProvincialPermitDetailsPage = () => {
                     onChange={(event) =>
                       setPermitFormField('destinationCountry', event.target.value)
                     }
-                    disabled={
-                      invoiceMaterialLocked || isShippingReferencesLoading || !shippingReferences
-                    }
+                    disabled={isShippingReferencesLoading || !shippingReferences}
                   >
                     <SelectItem value="" text="Select a final destination country" />
                     {(shippingReferences?.countries ?? []).map((option) => (
@@ -5790,7 +6049,11 @@ const ProvincialPermitDetailsPage = () => {
                           ...current,
                           portOfExport: portCode,
                           otherPortOfExport:
-                            portCode.toUpperCase() === 'OT' ? current.otherPortOfExport : '',
+                            portCode.toUpperCase() !== 'OT'
+                              ? ''
+                              : otherPortOfExportLocked
+                                ? detailValue(detail.otherPortOfExport)
+                                : current.otherPortOfExport,
                         }
                       : current,
                   )
@@ -5798,7 +6061,7 @@ const ProvincialPermitDetailsPage = () => {
                 disabled={portOfExportLocked || isShippingReferencesLoading || !shippingReferences}
               >
                 <SelectItem value="" text="Select a customs port of export" />
-                {(shippingReferences?.ports ?? []).map((option) => (
+                {portOptions.map((option) => (
                   <SelectItem
                     key={option.code}
                     value={option.code}
@@ -5816,7 +6079,7 @@ const ProvincialPermitDetailsPage = () => {
               renderPermitTextInput(
                 'otherPortOfExport',
                 'Other port of export name',
-                submitterCompletedPermit,
+                otherPortOfExportLocked,
                 34,
                 true,
               )
@@ -6014,7 +6277,7 @@ const ProvincialPermitDetailsPage = () => {
         )}
         {showReviewedPermitFeeSummary
           ? null
-          : canSavePermit && (
+          : (isEditingPermit || canEditReceiptNumber) && (
               <div className="legacy-search-actions">
                 {isEditingPermit ? (
                   <>
@@ -6124,7 +6387,11 @@ const ProvincialPermitDetailsPage = () => {
       : null
   const renderSectionSaveResult = (source: PermitActionResultSource) =>
     actionResult?.source === source ? (
-      <ActionResultNotification result={actionResult} onClose={() => setActionResult(null)} />
+      <ActionResultNotification
+        result={actionResult}
+        onClose={() => setActionResult(null)}
+        focusOnReveal={actionResult.focusOnReveal}
+      />
     ) : null
 
   const renderScaleSummary = () => {
@@ -6422,6 +6689,11 @@ const ProvincialPermitDetailsPage = () => {
                     }
                   />
                   <RecordField
+                    label="Override rate"
+                    value="Yes"
+                    hidden={!detail.blanketOic || !tabsData?.exemptionRateOverride}
+                  />
+                  <RecordField
                     label="Package fee (CAD)"
                     value={
                       selectedPackageFeeSummary
@@ -6623,8 +6895,7 @@ const ProvincialPermitDetailsPage = () => {
             ) : undefined
           }
           actions={
-            detailMatchesRoute &&
-            (canRequestPermitReview || canSendPermitApproval || canOpenPermitReport) ? (
+            detailMatchesRoute && (canRequestPermitReview || canOpenPermitReport) ? (
               <>
                 {canRequestPermitReview && (
                   <DisabledButtonTooltip
@@ -6639,23 +6910,11 @@ const ProvincialPermitDetailsPage = () => {
                       kind="tertiary"
                       size="md"
                       disabled={isSendingPermitEmail || !permitReviewReady}
-                      onClick={() => void onSendPermitEmail('request')}
+                      onClick={() => void onOpenPermitReviewRequest()}
                     >
                       Email review request
                     </Button>
                   </DisabledButtonTooltip>
-                )}
-                {/* INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_APPROVAL_EMAIL_RESEND):
-                    Modern permit detail supports previewing and resending the approval email. */}
-                {canSendPermitApproval && (
-                  <Button
-                    kind="tertiary"
-                    size="md"
-                    disabled={isSendingPermitEmail}
-                    onClick={() => void onOpenPermitApprovalEmail()}
-                  >
-                    Email approval
-                  </Button>
                 )}
                 {canOpenPermitReport && (
                   <Button
@@ -6943,7 +7202,7 @@ const ProvincialPermitDetailsPage = () => {
                                 <TableHead>
                                   <TableRow>
                                     <TableHeader>Application number</TableHeader>
-                                    {canEditPermitApplications && (
+                                    {canRemovePermitApplications && (
                                       <TableHeader>Actions</TableHeader>
                                     )}
                                   </TableRow>
@@ -6966,7 +7225,7 @@ const ProvincialPermitDetailsPage = () => {
                                           {applicationNumber}
                                         </Link>
                                       </TableCell>
-                                      {canEditPermitApplications && (
+                                      {canRemovePermitApplications && (
                                         <TableCell>
                                           <Button
                                             kind="ghost"
@@ -6998,7 +7257,7 @@ const ProvincialPermitDetailsPage = () => {
                               headingLevel={3}
                             />
                           )}
-                          {canEditPermitApplications && !ministerialPermit && (
+                          {canAddPermitApplications && !ministerialPermit && (
                             <>
                               <RecordFieldGrid editing>
                                 <RecordFieldRow>
@@ -7067,7 +7326,7 @@ const ProvincialPermitDetailsPage = () => {
                           <Tile className="detail-section-card permit-applicant-card">
                             <div className="detail-section-card__header">
                               <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
-                              {canEditPermitClients && (
+                              {canEditPermitApplicant && (
                                 <Button
                                   kind="tertiary"
                                   size="md"
@@ -7173,9 +7432,11 @@ const ProvincialPermitDetailsPage = () => {
                             id="permit-agent-used"
                             labelText="I'm an agent"
                             checked={usesReviewedPermitFlow ? hasPermitAgent : agentUsed}
-                            disabled={usesReviewedPermitFlow || invoiceMaterialLocked}
+                            disabled={
+                              usesReviewedPermitFlow ? !canChangePermitAgent : invoiceMaterialLocked
+                            }
                             onChange={
-                              usesReviewedPermitFlow
+                              usesReviewedPermitFlow && !canChangePermitAgent
                                 ? undefined
                                 : (_, { checked }) => setPermitAgentUsed(Boolean(checked))
                             }
@@ -7183,7 +7444,10 @@ const ProvincialPermitDetailsPage = () => {
                           {usesReviewedPermitFlow && agentUsed && (
                             <>
                               <h3 className="permit-client-subheading">Agent</h3>
-                              {renderPermitClientEditor('agent', invoiceMaterialLocked)}
+                              {renderPermitClientEditor(
+                                'agent',
+                                invoiceMaterialLocked && !addingPermitAgent,
+                              )}
                             </>
                           )}
                           {renderPermitClientEditActions()}
@@ -7371,7 +7635,13 @@ const ProvincialPermitDetailsPage = () => {
                         {blanketOicPackageCreationRequired && (
                           <EmptyState
                             title="No packages for this permit"
-                            description="Scale is recorded by package. Create a package, then add Summary of scale."
+                            description={
+                              permitCancelled
+                                ? "This permit is cancelled, so packages can't be added."
+                                : canEditBlanketOicPackages
+                                  ? 'Scale is recorded by package. Create a package, then add Summary of scale.'
+                                  : 'No package has been created for this Blanket OIC permit.'
+                            }
                             icon={<Cardboard width={48} height={48} />}
                             action={createBlanketOicPackageButton}
                             headingLevel={3}
@@ -7523,6 +7793,19 @@ const ProvincialPermitDetailsPage = () => {
                                       value={displayValue(
                                         selectedBlanketOicPackage.averageTopDiameter,
                                       )}
+                                    />
+                                  </RecordFieldRow>
+                                  {/* Users who can't open Edit package read the comments here. */}
+                                  <RecordFieldRow
+                                    hidden={
+                                      canEditBlanketOicPackages ||
+                                      !selectedBlanketOicPackage.comments.trim()
+                                    }
+                                  >
+                                    <RecordField
+                                      label="Comments"
+                                      span="full"
+                                      value={selectedBlanketOicPackage.comments}
                                     />
                                   </RecordFieldRow>
                                 </RecordFieldGrid>
@@ -7895,12 +8178,15 @@ const ProvincialPermitDetailsPage = () => {
                           onClose: onCancelPermitDocumentEditing,
                           onDirtyChange: setPermitDocumentUploadDirty,
                           onBusyChange: setPermitDocumentUploadBusy,
-                          onUploadComplete: refreshPermitDocuments,
-                          onSaved: (savedCount) =>
+                          onUploadComplete: () =>
+                            onUploadPermitVisit() ? refreshPermitDocuments() : undefined,
+                          onSaved: (savedCount) => {
+                            if (!onUploadPermitVisit()) return
                             setActionResult({
                               ...documentsSavedResult(savedCount),
                               source: 'documents',
-                            }),
+                            })
+                          },
                         }}
                         openDisabled={!canPerform('/permitDetails')}
                         onOpen={(row, preview) => void onOpenDocument(row, preview)}
@@ -7929,7 +8215,7 @@ const ProvincialPermitDetailsPage = () => {
         <ConfirmationModal
           open
           title={`Email permit ${detail?.permitNumber ?? permitNumber ?? ''} approval?`}
-          description="Confirm the applicant email address for this notification."
+          description="Permit saved. Confirm the applicant email address for this notification."
           confirmLabel="Send approval"
           pendingLabel="Sending…"
           onClose={() => {
@@ -7947,7 +8233,7 @@ const ProvincialPermitDetailsPage = () => {
               )
               throw new Error('Enter one valid email address.')
             }
-            const sent = await onSendPermitEmail('approval', permitApprovalEmailAddress)
+            const sent = await onSendPermitApprovalEmail(permitApprovalEmailAddress)
             if (!sent) {
               throw new Error('Permit approval email was not sent.')
             }
@@ -7985,6 +8271,53 @@ const ProvincialPermitDetailsPage = () => {
           onClose={() => setPermitApplicationPendingRemoval(null)}
           onConfirm={() => onRemovePermitApplication(permitApplicationPendingRemoval)}
         />
+      )}
+      {permitReviewRequestOpen && (
+        <ConfirmationModal
+          open
+          title={`Email permit ${detail?.permitNumber ?? permitNumber ?? ''} review request?`}
+          description="An email notification of your Request for Permit to Transport Unmanufactured Timber from BC will be sent to the regional office on your behalf."
+          confirmLabel="Send request"
+          pendingLabel="Sending…"
+          errorTitle="Review request email not sent."
+          errorMessage={permitReviewRequestErrorMessage}
+          onError={() => undefined}
+          onClose={() => {
+            setPermitReviewRequestOpen(false)
+            setPermitReviewRequestErrorMessage('')
+            const result = permitReviewRequestResultRef.current
+            permitReviewRequestResultRef.current = null
+            if (result) setActionResult(result)
+          }}
+          onConfirm={async () => {
+            if (!(await onSendPermitReviewRequest())) {
+              throw new Error('Review request email was not sent.')
+            }
+          }}
+        >
+          <TextInput
+            id="permit-review-request-send-to"
+            labelText="Send to"
+            value={permitReviewRequestSendTo || 'Regional office'}
+            readOnly
+          />
+          <TextInput
+            id="permit-review-request-copy-to"
+            type="email"
+            labelText="Copy to"
+            value={permitReviewRequestCopyTo}
+            invalid={
+              showPermitReviewRequestCopyToError &&
+              !!normalizeTrimmedText(permitReviewRequestCopyTo) &&
+              !isValidEmail(normalizeTrimmedText(permitReviewRequestCopyTo))
+            }
+            invalidText="Enter one valid email address."
+            onChange={(event) => {
+              setShowPermitReviewRequestCopyToError(false)
+              setPermitReviewRequestCopyTo(event.target.value)
+            }}
+          />
+        </ConfirmationModal>
       )}
       {boicScalePendingRemoval && (
         <ConfirmationModal

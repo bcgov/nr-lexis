@@ -6,17 +6,13 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationClientContextDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
-import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationRemarkDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
-import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository.PackageMutationRecord;
-import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository.PackageMutationRow;
 import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
-import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
@@ -30,9 +26,7 @@ import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Locale;
-import java.util.Map;
 import java.util.Optional;
-import java.util.TreeMap;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
@@ -48,9 +42,10 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 public class FederalApplicationOracleService implements FederalApplicationService {
 
   private static final int REMARK_MAX_LENGTH = 254;
+  private static final List<String> APPROVAL_SOURCE_STATUSES = List.of("NEW", "PND");
+  private static final List<String> POST_APPROVAL_TARGET_STATUSES = List.of("REJ", "WDN");
 
   private final FederalApplicationRepository repository;
-  private final FederalPermitDetailRepository permitRepository;
   private final ApplicationDetailsRpcRepository applicationDetailsRepository;
   private final ApplicationDetailsRpcService applicationDetailsService;
   private final ApplicationReviewRepository applicationReviewRepository;
@@ -61,7 +56,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
   @Autowired
   public FederalApplicationOracleService(
       FederalApplicationRepository repository,
-      FederalPermitDetailRepository permitRepository,
       ApplicationDetailsRpcRepository applicationDetailsRepository,
       ApplicationDetailsRpcService applicationDetailsService,
       ApplicationReviewRepository applicationReviewRepository,
@@ -69,7 +63,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       ClientLookupService clientLookupService) {
     this(
         repository,
-        permitRepository,
         applicationDetailsRepository,
         applicationDetailsService,
         applicationReviewRepository,
@@ -80,7 +73,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
 
   FederalApplicationOracleService(
       FederalApplicationRepository repository,
-      FederalPermitDetailRepository permitRepository,
       ApplicationDetailsRpcRepository applicationDetailsRepository,
       ApplicationDetailsRpcService applicationDetailsService,
       ApplicationReviewRepository applicationReviewRepository,
@@ -88,7 +80,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       ClientLookupService clientLookupService,
       Clock clock) {
     this.repository = repository;
-    this.permitRepository = permitRepository;
     this.applicationDetailsRepository = applicationDetailsRepository;
     this.applicationDetailsService = applicationDetailsService;
     this.applicationReviewRepository = applicationReviewRepository;
@@ -200,17 +191,6 @@ public class FederalApplicationOracleService implements FederalApplicationServic
   }
 
   @Override
-  public Optional<FederalApplicationPermitDto> findPermitByApplicationNumber(Long applicationNumber) {
-    if (applicationNumber == null || applicationNumber < 1) {
-      return Optional.empty();
-    }
-    if (repository.findMutationContextRequired(applicationNumber).isEmpty()) {
-      return Optional.empty();
-    }
-    return repository.findPermitByApplicationNumberRequired(applicationNumber);
-  }
-
-  @Override
   @Transactional(readOnly = true)
   public Optional<List<FederalApplicationRemarkDto>> findRemarksByApplicationNumber(
       Long applicationNumber) {
@@ -230,100 +210,28 @@ public class FederalApplicationOracleService implements FederalApplicationServic
 
   @Override
   @Transactional
-  public FederalMutationResult addPermit(
-      Long applicationNumber, FederalPermitMutationRequest request, String userId) {
-    request = normalizePermitMutationRequest(request);
-    List<String> errors = validatePermitMutation(applicationNumber, request, false);
-    if (!errors.isEmpty()) {
-      return failure(errors);
+  public FederalMutationResult approve(Long applicationNumber, String userId) {
+    if (applicationNumber == null || applicationNumber < 1) {
+      return failure(List.of("Federal application was not found."));
     }
     FederalApplicationRepository.FederalMutationContextRow context =
         repository.findMutationContextRequired(applicationNumber).orElse(null);
     if (context == null) {
       return failure(List.of("Federal application was not found."));
     }
-    String applicationStatus = trimToNull(context.statusCode());
-    if (applicationStatus == null) {
+    String currentStatus = normalizedCode(context.statusCode());
+    if (currentStatus == null) {
       return failure(List.of("Federal application status could not be verified."));
     }
-    if (!"APP".equalsIgnoreCase(applicationStatus)) {
-      return failure(
-          List.of("Federal permits can only be added to approved applications."));
+    if (!APPROVAL_SOURCE_STATUSES.contains(currentStatus)) {
+      return failure(List.of("Federal applications can only be approved from NEW or PND."));
     }
-    List<String> codeErrors = validatePermitCodes(request);
-    if (!codeErrors.isEmpty()) {
-      return failure(codeErrors);
+    ApplicationApprovalEligibilityService.Eligibility eligibility =
+        approvalEligibilityService.evaluate(applicationNumber);
+    if (!eligibility.eligible()) {
+      return failure(eligibility.errors());
     }
-    try {
-      if (repository.findPermitByApplicationNumberRequired(applicationNumber).isPresent()) {
-        return failure(List.of("A federal permit already exists for this application."));
-      }
-    } catch (DataAccessException ex) {
-      return failure(List.of("Federal permit availability could not be verified."));
-    }
-    String mutationUser = TextUtils.defaultSystemUser(userId);
-    FederalPermitDetailRepository.FederalPermitDetailRecord permitRecord =
-        toPermitRecord(request, context, mutationUser);
-    Optional<FederalPermitDetailRepository.FederalPermitDetailRow> inserted =
-        permitRepository.insertFederalPermitDetail(permitRecord);
-    if (inserted.filter(row -> matchesInsertedPermit(row, permitRecord)).isEmpty()) {
-      markRollbackOnly();
-      return failure(List.of("Federal permit could not be saved."));
-    }
-    if (!linkPackages(applicationNumber, inserted.get().permitNumber(), mutationUser)) {
-      markRollbackOnly();
-      return failure(List.of("Federal permit was created, but its application packages could not be linked."));
-    }
-    return success("Federal permit added.", toPermitDto(inserted.get()));
-  }
-
-  @Override
-  @Transactional
-  public FederalMutationResult updatePermit(
-      Long applicationNumber, FederalPermitMutationRequest request, String userId) {
-    request = normalizePermitMutationRequest(request);
-    List<String> errors = validatePermitMutation(applicationNumber, request, true);
-    if (!errors.isEmpty()) {
-      return failure(errors);
-    }
-    FederalApplicationRepository.FederalMutationContextRow context =
-        repository.findMutationContextRequired(applicationNumber).orElse(null);
-    if (context == null) {
-      return failure(List.of("Federal permit was not found."));
-    }
-    Optional<FederalApplicationPermitDto> current =
-        repository.findPermitByApplicationNumberRequired(applicationNumber);
-    if (current.isEmpty()) {
-      return failure(List.of("Federal permit was not found."));
-    }
-    if (!request.permitNumber().equals(current.get().permitNumber())) {
-      return failure(List.of("Federal permit number does not match this application."));
-    }
-    List<String> codeErrors = validatePermitCodes(request);
-    if (!codeErrors.isEmpty()) {
-      return failure(codeErrors);
-    }
-    String mutationUser = TextUtils.defaultSystemUser(userId);
-    Long expectedPermitNumber = request.permitNumber();
-    FederalPermitDetailRepository.FederalPermitDetailRecord expected =
-        toPermitRecord(request, context, mutationUser);
-    boolean updated =
-        permitRepository.updateFederalPermitDetail(
-            expectedPermitNumber, expected, mutationUser);
-    if (!updated) {
-      markRollbackOnly();
-      return failure(List.of("Federal permit could not be updated."));
-    }
-
-    Optional<FederalPermitDetailRepository.FederalPermitDetailRow> persisted =
-        permitRepository.findFederalPermitDetailByIdRequired(expectedPermitNumber);
-    if (persisted
-        .filter(permit -> matchesPersistedPermit(permit, expectedPermitNumber, expected))
-        .isEmpty()) {
-      markRollbackOnly();
-      return failure(List.of("Federal permit update could not be verified."));
-    }
-    return success("Federal permit updated.", toPermitDto(persisted.get()));
+    return transitionStatus(applicationNumber, "APP", null, userId, APPROVAL_SOURCE_STATUSES);
   }
 
   @Override
@@ -333,18 +241,15 @@ public class FederalApplicationOracleService implements FederalApplicationServic
     if (applicationNumber == null || applicationNumber < 1) {
       return failure(List.of("Federal application was not found."));
     }
-    String status = request == null ? null : trimToNull(request.statusCode());
-    if (status == null
-        || !List.of("APP", "REJ", "WDN").contains(status.toUpperCase(Locale.ROOT))) {
-      return failure(List.of("Federal status must be APP, REJ, or WDN."));
+    String status = request == null ? null : normalizedCode(request.statusCode());
+    if (status == null || !POST_APPROVAL_TARGET_STATUSES.contains(status)) {
+      return failure(List.of("Federal status must be REJ or WDN."));
     }
-    String normalizedStatus = status.toUpperCase(Locale.ROOT);
-    String remark = request == null ? null : trimToNull(request.remark());
-    if (("REJ".equals(normalizedStatus) || "WDN".equals(normalizedStatus))
-        && remark == null) {
+    String remark = trimToNull(request.remark());
+    if (remark == null) {
       return failure(List.of("A remark is required when rejecting or withdrawing a federal application."));
     }
-    if (remark != null && remark.length() > REMARK_MAX_LENGTH) {
+    if (remark.length() > REMARK_MAX_LENGTH) {
       return failure(List.of("Remark is too long to save. Shorten it and try again."));
     }
 
@@ -353,45 +258,35 @@ public class FederalApplicationOracleService implements FederalApplicationServic
     if (context == null) {
       return failure(List.of("Federal application was not found."));
     }
-
-    String currentStatus = trimToNull(context.statusCode());
+    String currentStatus = normalizedCode(context.statusCode());
     if (currentStatus == null) {
       return failure(List.of("Federal application status could not be verified."));
     }
-    currentStatus = currentStatus.toUpperCase(Locale.ROOT);
-
-    List<String> allowedSourceStatuses;
-    if ("APP".equals(normalizedStatus)) {
-      allowedSourceStatuses = List.of("NEW", "PND");
-      if (!allowedSourceStatuses.contains(currentStatus)) {
-        return failure(List.of("Federal applications can only be approved from NEW or PND."));
-      }
-      ApplicationApprovalEligibilityService.Eligibility eligibility =
-          approvalEligibilityService.evaluate(applicationNumber);
-      if (!eligibility.eligible()) {
-        return failure(eligibility.errors());
-      }
-    } else {
-      allowedSourceStatuses = List.of("APP");
-      if (!"APP".equals(currentStatus)) {
-        return failure(
-            List.of("Federal applications can only be rejected or withdrawn from APP."));
-      }
-      LocalDate listingDate = context.listingDate();
-      if (listingDate == null) {
-        return failure(List.of("Federal application listing date could not be verified."));
-      }
-      if (!LocalDate.now(clock).isBefore(listingDate.plusDays(1))) {
-        return failure(
-            List.of(
-                "Federal applications can only be rejected or withdrawn through the listing day."));
-      }
+    if (!"APP".equals(currentStatus)) {
+      return failure(List.of("Federal applications can only be rejected or withdrawn from APP."));
     }
+    LocalDate listingDate = context.listingDate();
+    if (listingDate == null) {
+      return failure(List.of("Federal application listing date could not be verified."));
+    }
+    if (!LocalDate.now(clock).isBefore(listingDate.plusDays(1))) {
+      return failure(
+          List.of(
+              "Federal applications can only be rejected or withdrawn through the listing day."));
+    }
+    return transitionStatus(applicationNumber, status, remark, userId, List.of("APP"));
+  }
 
+  private FederalMutationResult transitionStatus(
+      Long applicationNumber,
+      String targetStatus,
+      String remark,
+      String userId,
+      List<String> allowedSourceStatuses) {
     ApplicationReviewRepository.ApplicationStatusTransitionRow result =
         applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
             applicationNumber,
-            normalizedStatus,
+            targetStatus,
             remark,
             TextUtils.defaultSystemUser(userId),
             allowedSourceStatuses);
@@ -406,7 +301,12 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       markRollbackOnly();
       return failure(List.of("Federal application status could not be updated."));
     }
-    return success("Federal application status updated.", null);
+    return new FederalMutationResult(true, "Federal application status updated.", List.of());
+  }
+
+  private String normalizedCode(String value) {
+    String normalized = trimToNull(value);
+    return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
   }
 
   @Override
@@ -460,11 +360,11 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       if (repository.findMutationContextRequired(applicationNumber).isEmpty()) {
         return remarkFailure(List.of("Federal application was not found."));
       }
-      Optional<ApplicationDetailsRpcRepository.RemarkRow> current =
-          applicationDetailsRepository.findRemarkByNumberRequired(remarkId);
-      if (current.isEmpty()
-          || !applicationNumber.equals(current.get().applicationNumber())) {
+      if (applicationDetailsRepository.findRemarkRequired(remarkId, applicationNumber).isEmpty()) {
         return remarkFailure(List.of("Federal application remark was not found."));
+      }
+      if (applicationDetailsRepository.isRemarkNumberShared(remarkId)) {
+        return remarkFailure(List.of(ApplicationDetailsRpcService.SHARED_REMARK_NUMBER_MESSAGE));
       }
 
       if (!applicationDetailsRepository.updateRemark(
@@ -478,7 +378,7 @@ public class FederalApplicationOracleService implements FederalApplicationServic
       }
 
       Optional<ApplicationDetailsRpcRepository.RemarkRow> updated =
-          applicationDetailsRepository.findRemarkByNumberRequired(remarkId);
+          applicationDetailsRepository.findRemarkRequired(remarkId, applicationNumber);
       if (updated.isEmpty()) {
         markRollbackOnly();
         return remarkFailure(List.of("Federal application remark could not be verified."));
@@ -539,255 +439,8 @@ public class FederalApplicationOracleService implements FederalApplicationServic
     return new FederalRemarkMutationResult(false, null, null, List.copyOf(errors));
   }
 
-  private List<String> validatePermitMutation(
-      Long applicationNumber, FederalPermitMutationRequest request, boolean update) {
-    List<String> errors = new ArrayList<>();
-    if (applicationNumber == null || applicationNumber < 1) {
-      errors.add("Application number is required.");
-    }
-    if (request == null) {
-      return List.of("Federal permit details are required.");
-    }
-    if (update && (request.permitNumber() == null || request.permitNumber() < 1)) {
-      errors.add("Permit number is required.");
-    }
-    if (request.permitIssueDate() == null) {
-      errors.add("Permit issue date is required.");
-    }
-    validateRequiredCode(request.destinationCountry(), "Destination country", 2, errors);
-    validateRequiredCode(request.transportType(), "Transport type", 1, errors);
-    validateRequiredText(request.transportName(), "Transport name", 26, errors);
-    if (request.shippingDate() == null) {
-      errors.add("Estimated shipping date is required.");
-    }
-    validateRequiredCode(request.portOfExport(), "Port of export", 2, errors);
-    if ("OT".equals(request.portOfExport())) {
-      validateRequiredText(request.otherPortOfExport(), "Other port of export", 34, errors);
-    }
-    return errors;
-  }
-
-  private void validateRequiredCode(
-      String value, String description, int requiredLength, List<String> errors) {
-    if (value == null) {
-      errors.add(description + " is required.");
-    } else if (value.length() != requiredLength) {
-      errors.add(
-          description
-              + " must be exactly "
-              + requiredLength
-              + (requiredLength == 1 ? " character." : " characters."));
-    }
-  }
-
-  private void validateRequiredText(
-      String value, String description, int maxLength, List<String> errors) {
-    if (value == null) {
-      errors.add(description + " is required.");
-    } else if (!isUsAscii(value)) {
-      errors.add(description + " contains characters the current LEXIS database cannot store.");
-    } else if (value.length() > maxLength) {
-      errors.add(description + " must not exceed " + maxLength + " bytes.");
-    }
-  }
-
-  private boolean isUsAscii(String value) {
-    return value.chars().allMatch(character -> character <= 0x7f);
-  }
-
-  private FederalPermitMutationRequest normalizePermitMutationRequest(
-      FederalPermitMutationRequest request) {
-    if (request == null) {
-      return null;
-    }
-    String portCode = normalizedCode(request.portOfExport());
-    return new FederalPermitMutationRequest(
-        request.permitNumber(),
-        request.permitIssueDate(),
-        normalizedCode(request.destinationCountry()),
-        normalizedCode(request.transportType()),
-        trimToNull(request.transportName()),
-        request.shippingDate(),
-        portCode,
-        "OT".equals(portCode) ? trimToNull(request.otherPortOfExport()) : null);
-  }
-
-  private String normalizedCode(String value) {
-    String normalized = trimToNull(value);
-    return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
-  }
-
-  private List<String> validatePermitCodes(FederalPermitMutationRequest request) {
-    try {
-      List<String> errors = new ArrayList<>();
-      if (!permitRepository.countryCodeExistsRequired(request.destinationCountry())) {
-        errors.add("Destination country is invalid.");
-      }
-      if (!permitRepository.portOfExportCodeExistsRequired(request.portOfExport())) {
-        errors.add("Port of export is invalid.");
-      }
-      if (!permitRepository.transportTypeCodeExistsRequired(request.transportType())) {
-        errors.add("Transport type is invalid.");
-      }
-      return errors;
-    } catch (DataAccessException ex) {
-      return List.of("Federal permit reference codes could not be verified.");
-    }
-  }
-
-  private FederalPermitDetailRepository.FederalPermitDetailRecord toPermitRecord(
-      FederalPermitMutationRequest request,
-      FederalApplicationRepository.FederalMutationContextRow context,
-      String userId) {
-    return new FederalPermitDetailRepository.FederalPermitDetailRecord(
-        request.permitIssueDate(), request.shippingDate(), request.otherPortOfExport(),
-        request.transportName(), userId, request.transportType(), request.destinationCountry(),
-        request.portOfExport(), context.applicationDate(), context.orgUnitNumber(),
-        context.clientLocationCode(), context.clientNumber());
-  }
-
-  private boolean linkPackages(Long applicationNumber, Long permitNumber, String userId) {
-    try {
-      List<String> packageNumbers =
-          normalizedPackageNumbers(
-              repository.findPackageNumbersByApplicationNumberRequired(applicationNumber));
-      if (packageNumbers.isEmpty()) {
-        return false;
-      }
-
-      Map<String, PackageMutationRow> currentPackages =
-          packageRowsByNumber(
-              applicationNumber,
-              applicationDetailsRepository.findPackageMutationsByApplicationNumber(
-                  applicationNumber));
-      if (!packageNumbers.equals(List.copyOf(currentPackages.keySet()))) {
-        return false;
-      }
-
-      for (String packageNumber : packageNumbers) {
-        PackageMutationRow row = currentPackages.get(packageNumber);
-        boolean updated =
-            applicationDetailsRepository.updatePackagePreservingEndUses(
-                new PackageMutationRecord(
-                    row.packageNumber(),
-                    row.applicationNumber(),
-                    row.reprocessedIndicator(),
-                    row.packageVolume(),
-                    row.averageLength(),
-                    row.averageDiameter(),
-                    row.comments(),
-                    row.packageFee(),
-                    permitNumber,
-                    row.reservePermitNumber(),
-                    row.packageStatusCode(),
-                    row.growthTypeCode(),
-                    row.productTypeCode(),
-                    row.entryUserId(),
-                    row.entryTimestamp(),
-                    userId,
-                    List.of()));
-        if (!updated) return false;
-      }
-
-      List<String> persistedPackageNumbers =
-          normalizedPackageNumbers(
-              repository.findPackageNumbersByApplicationNumberRequired(applicationNumber));
-      if (!packageNumbers.equals(persistedPackageNumbers)) {
-        return false;
-      }
-      Map<String, PackageMutationRow> persistedPackages =
-          packageRowsByNumber(
-              applicationNumber,
-              applicationDetailsRepository.findPackageMutationsByApplicationNumber(
-                  applicationNumber));
-      return packageNumbers.equals(List.copyOf(persistedPackages.keySet()))
-          && persistedPackages.values().stream()
-              .allMatch(row -> java.util.Objects.equals(permitNumber, row.federalPermitNumber()));
-    } catch (DataAccessException ex) {
-      return false;
-    }
-  }
-
-  private Map<String, PackageMutationRow> packageRowsByNumber(
-      Long applicationNumber, List<PackageMutationRow> rows) {
-    Map<String, PackageMutationRow> packagesByNumber = new TreeMap<>();
-    for (PackageMutationRow row : safeList(rows)) {
-      String packageNumber = row == null ? null : trimToNull(row.packageNumber());
-      if (packageNumber == null
-          || !java.util.Objects.equals(applicationNumber, row.applicationNumber())
-          || packagesByNumber.putIfAbsent(packageNumber, row) != null) {
-        return Map.of();
-      }
-    }
-    return packagesByNumber;
-  }
-
-  private List<String> normalizedPackageNumbers(List<String> packageNumbers) {
-    return safeList(packageNumbers).stream()
-        .map(TextUtils::trimToNull)
-        .filter(java.util.Objects::nonNull)
-        .distinct()
-        .sorted()
-        .toList();
-  }
-
-  private FederalApplicationPermitDto toPermitDto(
-      FederalPermitDetailRepository.FederalPermitDetailRow row) {
-    return new FederalApplicationPermitDto(
-        row.permitNumber(), row.permitIssueDate(), row.countryCode(), row.transportTypeCode(),
-        row.transportName(), row.estimatedShippingDate(), row.portOfExportCode(), row.otherPortOfExport());
-  }
-
-  private boolean matchesInsertedPermit(
-      FederalPermitDetailRepository.FederalPermitDetailRow row,
-      FederalPermitDetailRepository.FederalPermitDetailRecord expected) {
-    return row != null
-        && row.permitNumber() != null
-        && row.permitNumber() > 0
-        && java.util.Objects.equals(expected.permitIssueDate(), row.permitIssueDate())
-        && java.util.Objects.equals(
-            expected.estimatedShippingDate(), row.estimatedShippingDate())
-        && sameText(expected.countryCode(), row.countryCode())
-        && sameText(expected.transportTypeCode(), row.transportTypeCode())
-        && sameText(expected.transportName(), row.transportName())
-        && sameText(expected.portOfExportCode(), row.portOfExportCode())
-        && sameText(expected.otherPortOfExport(), row.otherPortOfExport())
-        && java.util.Objects.equals(expected.applicationDate(), row.applicationDate())
-        && java.util.Objects.equals(expected.orgUnitNumber(), row.orgUnitNumber())
-        && sameText(expected.clientLocationCode(), row.clientLocationCode())
-        && sameText(expected.clientNumber(), row.clientNumber());
-  }
-
-  private boolean matchesPersistedPermit(
-      FederalPermitDetailRepository.FederalPermitDetailRow row,
-      Long expectedPermitNumber,
-      FederalPermitDetailRepository.FederalPermitDetailRecord expected) {
-    return row != null
-        && java.util.Objects.equals(expectedPermitNumber, row.permitNumber())
-        && java.util.Objects.equals(expected.permitIssueDate(), row.permitIssueDate())
-        && java.util.Objects.equals(
-            expected.estimatedShippingDate(), row.estimatedShippingDate())
-        && sameText(expected.countryCode(), row.countryCode())
-        && sameText(expected.transportTypeCode(), row.transportTypeCode())
-        && sameText(expected.transportName(), row.transportName())
-        && sameText(expected.portOfExportCode(), row.portOfExportCode())
-        && sameText(expected.otherPortOfExport(), row.otherPortOfExport())
-        && java.util.Objects.equals(expected.applicationDate(), row.applicationDate())
-        && java.util.Objects.equals(expected.orgUnitNumber(), row.orgUnitNumber())
-        && sameText(expected.clientLocationCode(), row.clientLocationCode())
-        && sameText(expected.clientNumber(), row.clientNumber());
-  }
-
-  private boolean sameText(String expected, String actual) {
-    return java.util.Objects.equals(trimToNull(expected), trimToNull(actual));
-  }
-
-  private FederalMutationResult success(String message, FederalApplicationPermitDto permit) {
-    return new FederalMutationResult(true, message, permit, List.of());
-  }
-
   private FederalMutationResult failure(List<String> errors) {
-    return new FederalMutationResult(false, null, null, List.copyOf(errors));
+    return new FederalMutationResult(false, null, List.copyOf(errors));
   }
 
   private void markRollbackOnly() {

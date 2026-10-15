@@ -13,6 +13,7 @@ import static org.mockito.Mockito.when;
 
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.repository.application.DuplicatePackageNumberException;
+import ca.bc.gov.mof.lexis.repository.application.SharedRemarkNumberTestDatabase;
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
@@ -194,9 +195,79 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void getRemarkShouldReturnEmptyForInvalidRemarkId() {
-    assertThat(service.getRemark(null)).isEmpty();
-    verifyNoInteractions(repository);
+  void getRemarkShouldLookUpTheRemarkByApplicationAndNumber() {
+    when(repository.findRemark(44L, 1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.RemarkRow(
+                    44L, 1000456L, "hello", "idir\\jsmith", Instant.EPOCH)));
+
+    assertThat(service.getRemark(44L, 1000456L)).contains("hello");
+    assertThat(service.remarkBelongsToApplication(44L, 1000456L)).isTrue();
+  }
+
+  @Test
+  void sharedRemarkNumberShouldBeRefusedWithoutCallingTheProcedure() {
+    try (SharedRemarkNumberTestDatabase database = new SharedRemarkNumberTestDatabase()) {
+      SharedRemarkNumberTestDatabase.RemarkProcedureRepository sharedNumberRepository =
+          database.repository();
+      OracleApplicationDetailsRpcService sharedNumberService =
+          new OracleApplicationDetailsRpcService(
+              sharedNumberRepository, clientRepository, exemptionService);
+      long remarkNumber = SharedRemarkNumberTestDatabase.REMARK_NUMBER;
+      long applicationNumber = SharedRemarkNumberTestDatabase.APPLICATION_NUMBER;
+      List<java.util.Map<String, Object>> before = database.rows();
+
+      assertThat(sharedNumberService.remarkBelongsToApplication(remarkNumber, applicationNumber))
+          .isTrue();
+      assertThat(
+              sharedNumberService.remarkBelongsToApplication(
+                  remarkNumber, SharedRemarkNumberTestDatabase.APPLICATION_WITHOUT_REMARK))
+          .isFalse();
+      assertThat(sharedNumberService.getRemark(remarkNumber, applicationNumber))
+          .contains(SharedRemarkNumberTestDatabase.REMARK);
+      assertThat(
+              sharedNumberService.getRemark(
+                  remarkNumber, SharedRemarkNumberTestDatabase.OTHER_APPLICATION_NUMBER))
+          .contains(SharedRemarkNumberTestDatabase.OTHER_REMARK);
+      assertThat(sharedNumberService.isRemarkNumberShared(remarkNumber)).isTrue();
+      assertThat(
+              sharedNumberService.persistRemark(
+                  Long.toString(remarkNumber),
+                  applicationNumber,
+                  "Corrected remark",
+                  "idir\\jsmith"))
+          .isEmpty();
+
+      assertThat(sharedNumberRepository.remarkUpdateCalls()).isEmpty();
+      assertThat(database.rows()).isEqualTo(before);
+    }
+  }
+
+  @Test
+  void uniqueRemarkNumberShouldStillBeEditedThroughTheProcedure() {
+    try (SharedRemarkNumberTestDatabase database = new SharedRemarkNumberTestDatabase()) {
+      SharedRemarkNumberTestDatabase.RemarkProcedureRepository uniqueNumberRepository =
+          database.repository();
+      OracleApplicationDetailsRpcService uniqueNumberService =
+          new OracleApplicationDetailsRpcService(
+              uniqueNumberRepository, clientRepository, exemptionService);
+      long remarkNumber = SharedRemarkNumberTestDatabase.UNIQUE_REMARK_NUMBER;
+
+      assertThat(uniqueNumberService.isRemarkNumberShared(remarkNumber)).isFalse();
+      assertThat(
+              uniqueNumberService.persistRemark(
+                  Long.toString(remarkNumber),
+                  SharedRemarkNumberTestDatabase.APPLICATION_NUMBER,
+                  "Corrected remark",
+                  "idir\\jsmith"))
+          .hasValueSatisfying(
+              persisted -> {
+                assertThat(persisted.remarkId()).isEqualTo(remarkNumber);
+                assertThat(persisted.remark()).isEqualTo("Corrected remark");
+              });
+      assertThat(uniqueNumberRepository.remarkUpdateCalls()).hasSize(1);
+    }
   }
 
   @Test
@@ -261,7 +332,7 @@ class OracleApplicationDetailsRpcServiceTest {
   void persistRemarkShouldUpdateWhenRemarkIdExists() {
     Instant now = Instant.parse("2026-05-27T17:45:00Z");
     when(repository.updateRemark(org.mockito.ArgumentMatchers.eq(44L), org.mockito.ArgumentMatchers.eq(1000456L), org.mockito.ArgumentMatchers.eq("updated"), org.mockito.ArgumentMatchers.eq("idir\\jsmith"), any(Instant.class))).thenReturn(true);
-    when(repository.findRemarkByNumberRequired(44L))
+    when(repository.findRemarkRequired(44L, 1000456L))
         .thenReturn(
             Optional.of(
                 new ApplicationDetailsRpcRepository.RemarkRow(
@@ -279,7 +350,7 @@ class OracleApplicationDetailsRpcServiceTest {
             org.mockito.ArgumentMatchers.eq("updated"),
             org.mockito.ArgumentMatchers.eq("idir\\jsmith"),
             any(Instant.class));
-    verify(repository).findRemarkByNumberRequired(44L);
+    verify(repository).findRemarkRequired(44L, 1000456L);
   }
 
   @Test
@@ -291,7 +362,7 @@ class OracleApplicationDetailsRpcServiceTest {
             org.mockito.ArgumentMatchers.eq("idir\\jsmith"),
             any(Instant.class)))
         .thenReturn(true);
-    when(repository.findRemarkByNumberRequired(44L)).thenReturn(Optional.empty());
+    when(repository.findRemarkRequired(44L, 1000456L)).thenReturn(Optional.empty());
     RecordingTransactionManager transactionManager = new RecordingTransactionManager();
     TransactionInterceptor transactionInterceptor =
         new TransactionInterceptor(
@@ -1833,7 +1904,7 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"COM", "PPD", "EXP", "CAN"})
+  @ValueSource(strings = {"COM", "com"})
   void getScalesForPackageShouldMarkLockedPermitRowsAsImmutable(String permitStatus) {
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(
@@ -1871,6 +1942,29 @@ class OracleApplicationDetailsRpcServiceTest {
             tuple(false, "Unmanufactured", "Hemlock", 8L, "Grade U", "6.0", "56", ""));
     verify(repository).findScaleDetailsByPackageNumber("PKG-903");
     verify(repository).findPermitStatusCodeByPermitNumber(7000123L);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"PPD", "EXP", "CAN"})
+  void getScalesForPackageShouldKeepScalesOnPermitsThatAreNotCompleteEditable(String permitStatus) {
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "55", "TM001", "FIR", "J", 10.55d, 12L, 1000456L, "7000123", "PKG-903", "C")));
+    when(repository.findSpeciesCode("FIR"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("FIR", "Douglas-fir", 1L, 1L)));
+    when(repository.findGradeCode("J"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("J", "Grade J", 1L, 1L)));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitStatus));
+
+    List<ApplicationDetailsRpcService.ApplicationPackageScaleItem> response =
+        service.getScalesForPackage("PKG-903");
+
+    assertThat(response)
+        .extracting(ApplicationDetailsRpcService.ApplicationPackageScaleItem::permitted)
+        .containsExactly(false);
   }
 
   @Test
@@ -2981,7 +3075,7 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"COM", "PPD", "EXP", "CAN"})
+  @ValueSource(strings = {"COM", "com"})
   void updatePackageShouldRejectWhenPackageHasLockedPermitScale(String permitStatus) {
     Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
     when(repository.findPackageMutationByPackageNumber("PKG-903"))
@@ -3020,6 +3114,47 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.errors())
         .contains("Package changes are not allowed after a scale has been permitted.");
     verify(repository, never()).updatePackage(any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"PPD", "EXP", "CAN"})
+  void updatePackageShouldNotTreatScalesOnPermitsThatAreNotCompleteAsPermitted(
+      String permitStatus) {
+    Instant entryTimestamp = Instant.parse("2026-05-01T12:00:00Z");
+    when(repository.findPackageMutationByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageMutationRow(
+                    "PKG-903", 1000456L, "N", 20.0d, 10.0d, 20.0d, "Old", null,
+                    null, null, "A", "O", "H", "idir\\old", entryTimestamp)));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetailsRow("55", "PKG-903", 0L, 5.0d, "7000123")));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitStatus));
+    when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
+    when(repository.findPackagesByApplicationNumber(1000456L))
+        .thenReturn(List.of(packageDetailsRow("PKG-903", 20.0d)));
+
+    ApplicationDetailsRpcService.PackagePersistenceResult response =
+        service.updatePackage(
+            new ApplicationDetailsRpcService.PackageMutationRequest(
+                "PKG-903",
+                null,
+                1000456L,
+                20.0d,
+                10.0d,
+                20.0d,
+                "A",
+                "Updated",
+                "N",
+                "O",
+                "H",
+                null,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.errors())
+        .doesNotContain("Package changes are not allowed after a scale has been permitted.");
   }
 
   @Test
@@ -3697,7 +3832,7 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"COM", "PPD", "EXP", "CAN"})
+  @ValueSource(strings = {"COM", "com"})
   void addScaleToPackageShouldRejectWhenPackageHasLockedPermitScale(String permitStatus) {
     when(repository.packageExists("PKG-903")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
@@ -3720,6 +3855,31 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.errors())
         .contains("Scale changes are not allowed after a permit has been completed.");
     verify(repository, never()).insertScaleDetail(any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"PPD", "EXP", "CAN"})
+  void addScaleToPackageShouldNotTreatScalesOnPermitsThatAreNotCompleteAsPermitted(
+      String permitStatus) {
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(List.of(scaleDetailsRow("55", "PKG-903", 1L, 12.5d, "7000123")));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitStatus));
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageDetailsRow(
+                    "PKG-903", 100.0d, 10.0d, 20.0d, "A", "", "N", "O", "H")));
+
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addScaleToPackage(
+            new ApplicationDetailsRpcService.ScaleMutationRequest(
+                "TM002", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
+            "idir\\jsmith");
+
+    assertThat(response.errors())
+        .doesNotContain("Scale changes are not allowed after a permit has been completed.");
   }
 
   @Test
@@ -4970,6 +5130,132 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
+  void agentChangeShouldRemoveTheAgentFromAnExemptedApplication() {
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord agentRecord =
+        applicationUpdateRecordWithAgent();
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithStatusFrom(agentRecord, "EXE")));
+    when(repository.updateApplication(any())).thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationAgent(
+            agentChangeRequest("00011111", "00", "Owner Contact", "O"), "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository).updateApplication(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().applicantTypeCode()).isEqualTo("O");
+    assertThat(recordCaptor.getValue().agentClientNumber()).isNull();
+    assertThat(recordCaptor.getValue().applicationStatusCode()).isEqualTo("EXE");
+  }
+
+  @Test
+  void agentChangeShouldRemoveTheAgentWhenTheStoredOwnerContactNameIsBlank() {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(
+            Optional.of(
+                applicationUpdateRecordWithStatusFrom(
+                    applicationUpdateRecordWithOwnerContactName(
+                        applicationUpdateRecordWithAgent(), null),
+                    "EXE")));
+    when(repository.updateApplication(any())).thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationAgent(
+            agentChangeRequest("00011111", "00", "", "O"), "idir\\jsmith");
+
+    assertThat(response.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository).updateApplication(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().applicantTypeCode()).isEqualTo("O");
+    assertThat(recordCaptor.getValue().agentClientNumber()).isNull();
+    assertThat(recordCaptor.getValue().ownerContactName()).isNull();
+  }
+
+  @Test
+  void agentChangeShouldAddAnAgentBesideABlankStoredOwnerContactNameOnlyWithTheAgentDetails() {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(
+            Optional.of(
+                applicationUpdateRecordWithStatusFrom(
+                    applicationUpdateRecordWithOwnerContactName(applicationUpdateRecord(), null),
+                    "EXE")));
+    when(repository.updateApplication(any())).thenReturn(true);
+
+    ApplicationDetailsRpcService.CreateApplicationResult withoutAgentName =
+        service.updateApplicationAgent(addAgentChangeRequest(null), "idir\\jsmith");
+
+    assertThat(withoutAgentName.valid()).isFalse();
+    assertThat(withoutAgentName.errors())
+        .containsExactly("A valid application agent name is required.");
+    verify(repository, never()).updateApplication(any());
+
+    ApplicationDetailsRpcService.CreateApplicationResult withAgentName =
+        service.updateApplicationAgent(addAgentChangeRequest("Agent Contact"), "idir\\jsmith");
+
+    assertThat(withAgentName.valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> recordCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcRepository.ApplicationUpdateRecord.class);
+    verify(repository).updateApplication(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().applicantTypeCode()).isEqualTo("A");
+    assertThat(recordCaptor.getValue().agentClientNumber()).isEqualTo("00033333");
+    assertThat(recordCaptor.getValue().agentContactName()).isEqualTo("Agent Contact");
+    assertThat(recordCaptor.getValue().ownerContactName()).isNull();
+  }
+
+  @Test
+  void agentChangeShouldRefuseOwnerChanges() {
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord agentRecord =
+        applicationUpdateRecordWithAgent();
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithStatusFrom(agentRecord, "EXE")));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationAgent(
+            agentChangeRequest("00011111", "00", "Another Contact", "O"), "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Only the agent can be added or removed on this application.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
+  void agentChangeShouldRefuseASaveThatKeepsTheAgent() {
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord agentRecord =
+        applicationUpdateRecordWithAgent();
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithStatusFrom(agentRecord, "EXE")));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationAgent(
+            agentChangeRequest("00011111", "00", "Owner Contact", "A"), "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
+  void summarySaveShouldStillRefuseAnExemptedApplication() {
+    ApplicationDetailsRpcRepository.ApplicationUpdateRecord agentRecord =
+        applicationUpdateRecordWithAgent();
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(applicationUpdateRecordWithStatusFrom(agentRecord, "EXE")));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            agentChangeRequest("00011111", "00", "Owner Contact", "O"), "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Application details can only be edited while the application is new or approved.");
+    verify(repository, never()).updateApplication(any());
+  }
+
+  @Test
   void ownerAgentSaveShouldPersistTheStagedApplicantTransitionOnly() {
     when(repository.findApplicationUpdateRecord(1000456L)).thenReturn(Optional.of(applicationUpdateRecord()));
     when(repository.updateApplication(any())).thenReturn(true);
@@ -5768,7 +6054,7 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"COM", "PPD", "EXP", "CAN"})
+  @ValueSource(strings = {"COM", "com"})
   void applicationEditContextUsesApprovalChildAndLockedPermitFacts(String permitStatus) {
     Instant approvalDate = Instant.parse("2026-07-01T19:00:00Z");
     when(repository.findApplicationEditContext(1000456L))
@@ -5810,6 +6096,37 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(context.get().hasCompletePermit()).isTrue();
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"PPD", "EXP", "CAN"})
+  void applicationEditContextLocksOnlyForACompletePermit(String permitStatus) {
+    when(repository.findApplicationEditContext(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.ApplicationEditContextRow(
+                    1000456L,
+                    "PMT",
+                    "P",
+                    "H",
+                    12L,
+                    LocalDate.of(2026, 7, 8),
+                    Instant.parse("2026-07-01T19:00:00Z"),
+                    null,
+                    null,
+                    null)));
+    when(repository.findPackageMutationsByApplicationNumber(1000456L)).thenReturn(List.of());
+    when(repository.findScaleMutationsByApplicationNumber(1000456L))
+        .thenReturn(
+            List.of(scaleMutationRow("55", 7000123L, Instant.parse("2026-07-02T19:00:00Z"))));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitStatus));
+
+    Optional<ApplicationDetailsRpcService.ApplicationEditContext> context =
+        service.getApplicationEditContext(1000456L);
+
+    assertThat(context).isPresent();
+    assertThat(context.get().hasCompletePermit()).isFalse();
+  }
+
   @Test
   void applicationEditContextTreatsUnknownReferencedPermitAsNonEditable() {
     when(repository.findApplicationEditContext(1000456L))
@@ -5837,6 +6154,49 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(context).isPresent();
     assertThat(context.get().hasCompletePermit()).isTrue();
     assertThat(context.get().oicIndicator()).isEqualTo("Y");
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "M,ACT,true",
+    "B,ACT,true",
+    "M,PPD,true",
+    "B,PPD,true",
+    "M,EXP,false",
+    "M,COM,false",
+    "B,COM,false",
+    "M,CAN,false",
+    "M,XYZ,false",
+    "O,ACT,false",
+    "O,PPD,false"
+  })
+  void applicationEditContextAllowsAgentChangesOnActiveOrPaymentPendingPermits(
+      String exemptionType, String permitStatus, boolean agentChangeable) {
+    stubApplicationEditContext(
+        "EX-205", 1903L, List.of(scaleMutationRow("S-1", 7000123L, Instant.EPOCH)));
+    when(repository.findPermitStatusCodeByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitStatus));
+    when(exemptionService.findByExemptionNumber("EX-205"))
+        .thenReturn(Optional.of(exemption("EX-205", exemptionType, 0.0d)));
+
+    Optional<ApplicationDetailsRpcService.ApplicationEditContext> context =
+        service.getApplicationEditContext(1000456L);
+
+    assertThat(context).isPresent();
+    assertThat(context.get().agentChangeablePermit()).isEqualTo(agentChangeable);
+  }
+
+  @Test
+  void applicationEditContextKeepsAgentChangesToTheDetailsRulesWithoutAPermit() {
+    stubApplicationEditContext("EX-205", 1903L, List.of(scaleMutationRow("S-1", null, Instant.EPOCH)));
+    when(exemptionService.findByExemptionNumber("EX-205"))
+        .thenReturn(Optional.of(exemption("EX-205", "M", 0.0d)));
+
+    Optional<ApplicationDetailsRpcService.ApplicationEditContext> context =
+        service.getApplicationEditContext(1000456L);
+
+    assertThat(context).isPresent();
+    assertThat(context.get().agentChangeablePermit()).isFalse();
   }
 
   @ParameterizedTest
@@ -6681,6 +7041,137 @@ class OracleApplicationDetailsRpcServiceTest {
         record.agentContactName(),
         record.ownerContactName(),
         oicIndicator);
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest agentChangeRequest(
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String ownerContactName,
+      String applicantTypeCode) {
+    return applicationSummaryUpdateRequest(
+        1000456L,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        ownerClientNumber,
+        ownerClientLocationCode,
+        null,
+        applicantTypeCode,
+        null,
+        null,
+        null,
+        null,
+        null,
+        ownerContactName,
+        null,
+        true,
+        ApplicationDetailsRpcService.ApplicationSummarySaveSource.OWNER);
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest addAgentChangeRequest(
+      String agentContactName) {
+    return applicationSummaryUpdateRequest(
+        1000456L,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "00033333",
+        "01",
+        "00011111",
+        "00",
+        null,
+        "A",
+        null,
+        null,
+        null,
+        null,
+        agentContactName,
+        "",
+        null,
+        true,
+        ApplicationDetailsRpcService.ApplicationSummarySaveSource.OWNER_AGENT);
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationUpdateRecord
+      applicationUpdateRecordWithOwnerContactName(
+          ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
+          String ownerContactName) {
+    return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
+        record.applicationNumber(),
+        record.federalApplicationNumber(),
+        record.applicationDate(),
+        record.termDays(),
+        record.receivedDate(),
+        record.applicationVolume(),
+        record.averageLogVolume(),
+        record.productLocation(),
+        record.entryUserId(),
+        record.entryTimestamp(),
+        record.updateUserId(),
+        record.updateTimestamp(),
+        record.exportScheduleId(),
+        record.agentClientNumber(),
+        record.agentClientLocationCode(),
+        record.ownerClientNumber(),
+        record.ownerClientLocationCode(),
+        record.exemptionNumber(),
+        record.exemptionReasonCode(),
+        record.applicationStatusCode(),
+        record.applicantTypeCode(),
+        record.orgUnitNumber(),
+        record.productTypeCode(),
+        record.jurisdictionCode(),
+        record.growthTypeCode(),
+        record.agentContactName(),
+        ownerContactName,
+        record.oicIndicator());
+  }
+
+  private ApplicationDetailsRpcRepository.ApplicationUpdateRecord
+      applicationUpdateRecordWithStatusFrom(
+          ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
+          String applicationStatusCode) {
+    return new ApplicationDetailsRpcRepository.ApplicationUpdateRecord(
+        record.applicationNumber(),
+        record.federalApplicationNumber(),
+        record.applicationDate(),
+        record.termDays(),
+        record.receivedDate(),
+        record.applicationVolume(),
+        record.averageLogVolume(),
+        record.productLocation(),
+        record.entryUserId(),
+        record.entryTimestamp(),
+        record.updateUserId(),
+        record.updateTimestamp(),
+        record.exportScheduleId(),
+        record.agentClientNumber(),
+        record.agentClientLocationCode(),
+        record.ownerClientNumber(),
+        record.ownerClientLocationCode(),
+        record.exemptionNumber(),
+        record.exemptionReasonCode(),
+        applicationStatusCode,
+        record.applicantTypeCode(),
+        record.orgUnitNumber(),
+        record.productTypeCode(),
+        record.jurisdictionCode(),
+        record.growthTypeCode(),
+        record.agentContactName(),
+        record.ownerContactName(),
+        record.oicIndicator());
   }
 
   private ApplicationDetailsRpcRepository.ApplicationUpdateRecord applicationUpdateRecordWithAgent() {

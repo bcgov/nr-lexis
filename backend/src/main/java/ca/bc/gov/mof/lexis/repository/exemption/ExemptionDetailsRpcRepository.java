@@ -633,7 +633,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         valueOrEmpty(getString(rs, "OWNER_COMPANY_NAME")),
         valueOrEmpty(getString(rs, "AGENT_COMPANY_NAME")),
         valueOrEmpty(getString(rs, "EXPORT_JURISDICTION_CODE")),
-        valueOrEmpty(getString(rs, "EXPORT_PRODUCT_TYPE_CODE")));
+        valueOrEmpty(getString(rs, "EXPORT_PRODUCT_TYPE_CODE")),
+        valueOrEmpty(getString(rs, "EXPORT_APPLICATION_STATUS_CODE")));
   }
 
   private PermitSummaryRow mapPermitSummaryRow(ResultSet rs) {
@@ -793,7 +794,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
       String ownerCompanyName,
       String agentCompanyName,
       String jurisdictionCode,
-      String productTypeCode) {
+      String productTypeCode,
+      String applicationStatusCode) {
     public ApplicationSummaryRow(
         long applicationNumber,
         double requestedVolume,
@@ -801,6 +803,24 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
         String ownerClientNumber,
         String jurisdictionCode,
         String productTypeCode) {
+      this(
+          applicationNumber,
+          requestedVolume,
+          scaleVolume,
+          ownerClientNumber,
+          jurisdictionCode,
+          productTypeCode,
+          "");
+    }
+
+    public ApplicationSummaryRow(
+        long applicationNumber,
+        double requestedVolume,
+        double scaleVolume,
+        String ownerClientNumber,
+        String jurisdictionCode,
+        String productTypeCode,
+        String applicationStatusCode) {
       this(
           applicationNumber,
           requestedVolume,
@@ -815,7 +835,8 @@ public class ExemptionDetailsRpcRepository extends OracleRepositorySupport {
           "",
           "",
           jurisdictionCode,
-          productTypeCode);
+          productTypeCode,
+          applicationStatusCode);
     }
   }
 

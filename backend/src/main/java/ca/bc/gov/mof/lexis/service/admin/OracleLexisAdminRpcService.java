@@ -48,6 +48,10 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
       "Only future-dated fee policies can be deleted.";
   private static final String FIL_POLICY_DELETE_FUTURE_ONLY_MESSAGE =
       "Only future-dated fee in lieu policies can be deleted.";
+  private static final String FEE_POLICY_UPDATE_FUTURE_ONLY_MESSAGE =
+      "Only future-dated fee policies can be edited.";
+  private static final String FIL_POLICY_UPDATE_FUTURE_ONLY_MESSAGE =
+      "Only future-dated fee in lieu policies can be edited.";
 
   private static final Set<String> FEE_SORT_COLUMNS =
       Set.of("effective_date", "org_unit_no", "percent_increase");
@@ -261,6 +265,14 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
     if (!errors.isEmpty()) {
       return failureResponse(errors);
     }
+    Optional<LexisAdminPolicyRepository.FeePolicyRow> existingPolicy =
+        repository.findFeePolicyById(feePolicyId);
+    if (existingPolicy.isEmpty()) {
+      return failureResponse(List.of("Fee policy does not exist."));
+    }
+    if (!existingPolicy.get().effectiveDate().isAfter(LexisBusinessTime.today())) {
+      return failureResponse(List.of(FEE_POLICY_UPDATE_FUTURE_ONLY_MESSAGE));
+    }
 
     Optional<LexisAdminPolicyRepository.FeePolicyRow> matchingPolicy =
         repository.findFeePolicy(effectiveDate, orgUnitNo);
@@ -371,6 +383,14 @@ public class OracleLexisAdminRpcService implements LexisAdminRpcService {
 
     if (!errors.isEmpty()) {
       return failureResponse(errors);
+    }
+    Optional<LexisAdminPolicyRepository.FilPolicyRow> existingPolicy =
+        repository.findFilPolicyById(filPolicyId);
+    if (existingPolicy.isEmpty()) {
+      return failureResponse(List.of("Fee in lieu policy does not exist."));
+    }
+    if (!existingPolicy.get().effectiveDate().isAfter(LexisBusinessTime.today())) {
+      return failureResponse(List.of(FIL_POLICY_UPDATE_FUTURE_ONLY_MESSAGE));
     }
 
     boolean updated;

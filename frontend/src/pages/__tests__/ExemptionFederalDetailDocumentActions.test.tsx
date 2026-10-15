@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   createMemoryRouter,
@@ -19,11 +19,6 @@ import {
   fetchProvincialExemptionDetail,
   releaseApplicationEditLock,
 } from '@/service/lexis-detail-service'
-import {
-  fetchFederalApplicationDocuments,
-  openFederalApplicationDocument,
-  removeFederalApplicationDocument,
-} from '@/service/federal-application-documents-service'
 import { fetchApplicationPackageScales } from '@/service/provincial-application-items-service'
 import {
   fetchFederalApplicationRemarks,
@@ -43,11 +38,7 @@ import {
   updateExemption,
 } from '@/service/provincial-exemption-detail-service'
 import { fetchProvincialExemptionOptions } from '@/service/search-options-service'
-import {
-  saveFederalPermit,
-  updateFederalApplicationStatus,
-} from '@/service/federal-application-mutation-service'
-import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
+import { updateFederalApplicationStatus } from '@/service/federal-application-mutation-service'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
@@ -95,12 +86,6 @@ vi.mock('@/service/search-options-service', () => ({
   fetchProvincialExemptionOptions: vi.fn(),
 }))
 
-vi.mock('@/service/federal-application-documents-service', () => ({
-  fetchFederalApplicationDocuments: vi.fn(),
-  openFederalApplicationDocument: vi.fn(),
-  removeFederalApplicationDocument: vi.fn(),
-}))
-
 vi.mock('@/service/admin-upload-service', () => ({
   submitAdminUpload: vi.fn(),
   validateAdminUpload: vi.fn(),
@@ -116,39 +101,19 @@ vi.mock('@/service/federal-application-remarks-service', () => ({
 }))
 
 vi.mock('@/service/federal-application-mutation-service', () => ({
-  saveFederalPermit: vi.fn(),
   updateFederalApplicationStatus: vi.fn(),
-}))
-
-vi.mock('@/service/shipping-reference-service', () => ({
-  fetchShippingReferenceOptions: vi.fn(),
-  formatShippingReferenceOption: (option: { code: string; name: string }) =>
-    `${option.name} (${option.code})`,
-  shippingReferenceLabel: (
-    options: Array<{ code: string; name: string }> | undefined,
-    code: string | null | undefined,
-  ) => {
-    const normalizedCode = code?.trim().toUpperCase() ?? ''
-    const option = options?.find((candidate) => candidate.code === normalizedCode)
-    return option ? `${option.name} (${option.code})` : normalizedCode
-  },
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchFederalApplicationDetail = vi.mocked(fetchFederalApplicationDetail)
 const mockedFetchProvincialExemptionDetail = vi.mocked(fetchProvincialExemptionDetail)
 const mockedReleaseApplicationEditLock = vi.mocked(releaseApplicationEditLock)
-const mockedFetchFederalApplicationDocuments = vi.mocked(fetchFederalApplicationDocuments)
-const mockedOpenFederalApplicationDocument = vi.mocked(openFederalApplicationDocument)
-const mockedRemoveFederalApplicationDocument = vi.mocked(removeFederalApplicationDocument)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
 const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 const mockedFetchApplicationPackageScales = vi.mocked(fetchApplicationPackageScales)
 const mockedFetchFederalApplicationRemarks = vi.mocked(fetchFederalApplicationRemarks)
 const mockedSaveFederalApplicationRemark = vi.mocked(saveFederalApplicationRemark)
-const mockedSaveFederalPermit = vi.mocked(saveFederalPermit)
 const mockedUpdateFederalApplicationStatus = vi.mocked(updateFederalApplicationStatus)
-const mockedFetchShippingReferenceOptions = vi.mocked(fetchShippingReferenceOptions)
 const mockedFetchExemptionDocuments = vi.mocked(fetchExemptionDocuments)
 const mockedOpenExemptionDocument = vi.mocked(openExemptionDocument)
 const mockedRemoveExemptionDocument = vi.mocked(removeExemptionDocument)
@@ -163,11 +128,6 @@ const selectDetailTab = async (name: string) => {
   if (tab.getAttribute('aria-selected') !== 'true') {
     await userEvent.click(tab)
   }
-}
-
-// Documents have no edit mode: their actions show whenever the user may use them.
-const waitForDocumentsSection = async (): Promise<void> => {
-  await waitFor(() => expect(document.querySelector('.detail-documents-section')).not.toBeNull())
 }
 
 const enterFederalStatusEditMode = async (): Promise<void> => {
@@ -333,10 +293,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
       exemptionStatuses: [{ value: 'ACTIVE', label: 'Active' }],
       regions: [],
     })
-    mockedFetchFederalApplicationDocuments.mockResolvedValue({
-      rows: [],
-      source: 'api',
-    })
     mockedFetchApplicationPackageScales.mockResolvedValue([
       {
         permitted: false,
@@ -368,45 +324,17 @@ describe('Exemption and Federal Detail Document Actions', () => {
       },
       errors: [],
     })
-    mockedSaveFederalPermit.mockResolvedValue({
-      success: true,
-      message: 'Federal permit updated.',
-      errors: [],
-    })
     mockedUpdateFederalApplicationStatus.mockResolvedValue({
       success: true,
       message: 'Federal application status updated.',
       errors: [],
-    })
-    mockedFetchShippingReferenceOptions.mockResolvedValue({
-      countries: [
-        { code: 'CA', name: 'Canada' },
-        { code: 'US', name: 'United States' },
-      ],
-      transportTypes: [
-        { code: 'S', name: 'Ship' },
-        { code: 'T', name: 'Truck' },
-      ],
-      ports: [
-        { code: 'OT', name: 'Other' },
-        { code: 'VA', name: 'Vancouver' },
-      ],
     })
     mockedOpenExemptionDocument.mockResolvedValue({
       source: 'api',
       blob: new Blob(['test']),
       filename: 'exemption-doc.pdf',
     })
-    mockedOpenFederalApplicationDocument.mockResolvedValue({
-      source: 'api',
-      blob: new Blob(['test']),
-      filename: 'federal-doc.pdf',
-    })
     mockedRemoveExemptionDocument.mockResolvedValue({
-      success: true,
-      source: 'api',
-    })
-    mockedRemoveFederalApplicationDocument.mockResolvedValue({
       success: true,
       source: 'api',
     })
@@ -555,6 +483,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
           agentContactName: '',
           ownerCompanyName: '',
           agentCompanyName: '',
+          removable: true,
         },
       ],
       containsUnmanu: false,
@@ -717,6 +646,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       agentContactName: '',
       ownerCompanyName: '',
       agentCompanyName: '',
+      removable: true,
     }
     mockedFetchProvincialExemptionDetail.mockResolvedValue({
       ...exemptionDetail,
@@ -883,6 +813,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
     [
       'Insufficient privileges to add this application.',
       "Application 654 can't be added. Insufficient privileges to add this application.",
+    ],
+    [
+      "Application 654 can't be added. The exemption's requested volume would be 102.0 m³, more than its approved volume of 2.0 m³.",
+      "Application 654 can't be added. The exemption's requested volume would be 102.0 m³, more than its approved volume of 2.0 m³.",
     ],
     [
       '',
@@ -1728,7 +1662,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeTruthy()
   })
 
-  it('renders federal application details with the legacy tab structure', async () => {
+  it('renders federal application details with the federal tab structure', async () => {
     render(
       <MemoryRouter initialEntries={['/federal/888']}>
         <Routes>
@@ -1737,17 +1671,16 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    for (const tabName of [
+    await screen.findByRole('tab', { name: 'Applicant' })
+    expect(screen.getAllByRole('tab').map((tab) => tab.textContent)).toEqual([
       'Applicant',
       'Agent',
       'Application',
       'Items',
-      'Offers',
       'Remarks',
-      'Documents',
-      'Shipping details',
-    ]) {
-      expect(await screen.findByRole('tab', { name: tabName })).toBeInTheDocument()
+    ])
+    for (const tabName of ['Offers', 'Documents', 'Shipping details']) {
+      expect(screen.queryByRole('tab', { name: tabName })).not.toBeInTheDocument()
     }
 
     const federalHeading = screen.getByRole('heading', {
@@ -1806,7 +1739,15 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Application')
     expect(await screen.findByText('IDIR\\TESTER')).toBeInTheDocument()
-    expect(screen.getByText('List date')).toBeInTheDocument()
+    const applicationTile = screen
+      .getByRole('heading', { name: 'Application', level: 2 })
+      .closest('.cds--tile') as HTMLElement
+    const receivedDateField = within(applicationTile)
+      .getByText('Received date')
+      .closest('.record-field') as HTMLElement
+    expect(within(receivedDateField).getByText('Jan 11, 2026')).toBeInTheDocument()
+    expect(within(applicationTile).getByText('List date')).toBeInTheDocument()
+    expect(screen.queryByText('Date received')).not.toBeInTheDocument()
     for (const label of [
       'Exemption number',
       'Exemption type',
@@ -1822,30 +1763,18 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByRole('heading', { name: 'Summary of scale' })).toBeInTheDocument()
     expect(mockedFetchApplicationPackageScales).toHaveBeenCalledWith('PKG-1')
     expect(await screen.findByText('TM-1')).toBeInTheDocument()
-
-    await selectDetailTab('Documents')
-    expect(
-      await screen.findByRole('heading', { name: 'No documents for this application', level: 2 }),
-    ).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Add documents' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
+    expect(screen.queryByText('Federal Buyer')).not.toBeInTheDocument()
+    expect(screen.queryByText('Truck')).not.toBeInTheDocument()
   })
 
   it('loads independent federal detail sections concurrently', async () => {
     let resolveScales: (() => void) | undefined
-    let resolveDocuments: (() => void) | undefined
     let resolveRemarks: (() => void) | undefined
 
     mockedFetchApplicationPackageScales.mockImplementation(
       () =>
         new Promise((resolve) => {
           resolveScales = () => resolve([])
-        }),
-    )
-    mockedFetchFederalApplicationDocuments.mockImplementation(
-      () =>
-        new Promise((resolve) => {
-          resolveDocuments = () => resolve({ rows: [], source: 'api' })
         }),
     )
     mockedFetchFederalApplicationRemarks.mockImplementation(
@@ -1866,13 +1795,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
     await waitFor(() => {
       expect(mockedFetchApplicationPackageScales).toHaveBeenCalledWith('PKG-1')
-      expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledWith('888')
       expect(mockedFetchFederalApplicationRemarks).toHaveBeenCalledWith('888')
     })
     expect(screen.getByText('Refreshing federal application detail…')).toBeInTheDocument()
 
     resolveScales?.()
-    resolveDocuments?.()
     resolveRemarks?.()
 
     await waitFor(() => {
@@ -1903,6 +1830,29 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('Review note')).toBeInTheDocument()
   })
 
+  it.each(['offers', 'documents', 'shipping'])(
+    'opens the Applicant tab when the saved tab is %s',
+    async (savedTab) => {
+      render(
+        <MemoryRouter
+          initialEntries={[{ pathname: '/federal/888', state: { lexisDetailTab: savedTab } }]}
+        >
+          <Routes>
+            <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      expect(await screen.findByRole('tab', { name: 'Applicant' })).toHaveAttribute(
+        'aria-selected',
+        'true',
+      )
+      expect(screen.getByRole('heading', { name: 'Applicant', level: 2 })).toBeInTheDocument()
+      await selectDetailTab('Items')
+      expect(screen.getByRole('tab', { name: 'Items' })).toHaveAttribute('aria-selected', 'true')
+    },
+  )
+
   it('hides residual agent data for owner-filed federal applications', async () => {
     mockedFetchFederalApplicationDetail.mockResolvedValue({
       ...federalDetail,
@@ -1932,35 +1882,28 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(within(ownerTile as HTMLElement).queryByText('O')).not.toBeInTheDocument()
 
     await selectDetailTab('Application')
+    expect(screen.getByRole('tab', { name: 'Application' })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     expect(await screen.findByText('FED-888')).toBeInTheDocument()
-
-    await selectDetailTab('Shipping details')
-    expect(
-      await screen.findByRole('heading', { name: 'Shipping details', level: 2 }),
-    ).toBeInTheDocument()
+    await selectDetailTab('Items')
+    expect(screen.getByRole('tab', { name: 'Items' })).toHaveAttribute('aria-selected', 'true')
+    await selectDetailTab('Remarks')
+    expect(screen.getByRole('tab', { name: 'Remarks' })).toHaveAttribute('aria-selected', 'true')
   })
 
-  it('shows the federal lock warning and suppresses every mutation and document control', async () => {
+  it('shows the federal lock warning and suppresses every mutation control', async () => {
     mockedFetchFederalApplicationDetail.mockResolvedValue({
       ...federalDetail,
-      statusCode: 'NEW',
-      statusDescription: 'New',
+      statusCode: 'APP',
+      statusDescription: 'Approved',
+      listingDate: '2999-12-31',
       locked: true,
       lockHeldByCurrentUser: false,
       lockedBy: 'Reviewer One',
       lockMessage:
         'This application is currently locked for editing by Reviewer One. The ability to make changes has been disabled.',
-    })
-    mockedFetchFederalApplicationDocuments.mockResolvedValue({
-      rows: [
-        {
-          id: 'locked-800',
-          name: 'locked-federal-doc.pdf',
-          description: 'Locked document',
-          type: 'Attachment',
-        },
-      ],
-      source: 'api',
     })
 
     render(
@@ -1976,29 +1919,17 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
 
     await selectDetailTab('Application')
+    expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
     expect(screen.queryByRole('heading', { name: 'Update federal status' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
 
     await selectDetailTab('Remarks')
+    expect(await screen.findByText('Review note')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('New remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-
-    await selectDetailTab('Documents')
-    const documentRow = (await screen.findByText('locked-federal-doc.pdf')).closest('tr')
-    expect(documentRow).toBeTruthy()
-    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
-    expect(
-      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
-    ).not.toBeInTheDocument()
-    expect(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' })).toBeEnabled()
-
-    await selectDetailTab('Shipping details')
-    expect(screen.queryByRole('button', { name: 'Edit shipping details' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
     expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
-    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
-    expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
   })
 
   it('releases the held federal application lock when the detail page unmounts', async () => {
@@ -2024,8 +1955,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
       arrange: () =>
         mockedFetchFederalApplicationDetail.mockResolvedValue({
           ...federalDetail,
-          statusCode: 'NEW',
-          statusDescription: 'New',
+          statusCode: 'APP',
+          statusDescription: 'Approved',
+          listingDate: '2999-12-31',
         }),
       edit: async () => {
         await selectDetailTab('Application')
@@ -2040,16 +1972,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
         await selectDetailTab('Remarks')
         await enterFederalRemarkEditMode()
         await userEvent.type(screen.getByLabelText('New remark'), 'Remark draft')
-      },
-    },
-    {
-      draft: 'permit',
-      arrange: () => undefined,
-      edit: async () => {
-        await selectDetailTab('Shipping details')
-        await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
-        await userEvent.clear(screen.getByLabelText('Transport name'))
-        await userEvent.type(screen.getByLabelText('Transport name'), 'Changed transport')
       },
     },
   ])('blocks navigation for an unsaved federal $draft draft', async ({ arrange, edit }) => {
@@ -2067,90 +1989,59 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(router.state.location.pathname).toBe('/elsewhere')
   })
 
-  it('blocks navigation while a federal document remains queued', async () => {
-    const user = userEvent.setup({ applyAccept: false })
-    renderFederalDataRouter()
-    await screen.findByRole('heading', { name: 'Federal application FED-888', level: 1 })
+  it('asks before a tab switch discards a queued exemption document', async () => {
+    mockedValidateAdminUpload.mockResolvedValue({ status: 'validated' })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    const targetTab = 'Exemption details'
     await selectDetailTab('Documents')
-    await user.click(await screen.findByRole('button', { name: 'Add documents' }))
-    await user.upload(
-      screen.getByLabelText('Document File'),
-      new File(['unsupported'], 'evidence.exe'),
+    await userEvent.click(await screen.findByRole('button', { name: 'Add documents' }))
+    const panel = await screen.findByRole('complementary', { name: 'Add documents' })
+    await userEvent.upload(
+      within(panel).getByLabelText('Document File'),
+      new File(['test'], 'pending.pdf', { type: 'application/pdf' }),
     )
 
-    await user.click(screen.getByRole('link', { name: 'Leave federal application' }))
+    await selectDetailTab(targetTab)
+    await userEvent.click(await screen.findByRole('button', { name: 'Keep editing' }))
+    expect(screen.getByRole('tab', { name: 'Documents' })).toHaveAttribute('aria-selected', 'true')
+    expect(within(panel).getByText('pending.pdf')).toBeInTheDocument()
 
-    expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Keep editing' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save and leave' })).not.toBeInTheDocument()
+    await selectDetailTab(targetTab)
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+    expect(screen.getByRole('tab', { name: targetTab })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('complementary', { name: 'Add documents' })).not.toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(false)
   })
 
-  it.each(['exemption', 'federal'] as const)(
-    'asks before a tab switch discards a queued %s document',
-    async (record) => {
-      mockedValidateAdminUpload.mockResolvedValue({ status: 'validated' })
-      if (record === 'federal') renderFederalDataRouter()
-      else
-        render(
-          <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
-            <Routes>
-              <Route
-                path="/provincial/exemption/:exemptionNumber"
-                element={<ProvincialExemptionDetailsPage />}
-              />
-            </Routes>
-          </MemoryRouter>,
-        )
-      const targetTab = record === 'federal' ? 'Application' : 'Exemption details'
-      await selectDetailTab('Documents')
-      await userEvent.click(await screen.findByRole('button', { name: 'Add documents' }))
-      const panel = await screen.findByRole('complementary', { name: 'Add documents' })
-      await userEvent.upload(
-        within(panel).getByLabelText('Document File'),
-        new File(['test'], 'pending.pdf', { type: 'application/pdf' }),
-      )
-
-      await selectDetailTab(targetTab)
-      await userEvent.click(await screen.findByRole('button', { name: 'Keep editing' }))
-      expect(screen.getByRole('tab', { name: 'Documents' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      )
-      expect(within(panel).getByText('pending.pdf')).toBeInTheDocument()
-
-      await selectDetailTab(targetTab)
-      await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
-      expect(screen.getByRole('tab', { name: targetTab })).toHaveAttribute('aria-selected', 'true')
-      expect(screen.queryByRole('complementary', { name: 'Add documents' })).not.toBeInTheDocument()
-      expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
-      const unload = new Event('beforeunload', { cancelable: true })
-      window.dispatchEvent(unload)
-      expect(unload.defaultPrevented).toBe(false)
-    },
-  )
-
-  it.each(['status', 'permit', 'remark'] as const)(
+  it.each(['status', 'remark'] as const)(
     'keeps a committed federal %s save distinct from a failed refresh',
     async (section) => {
       if (section === 'status')
         mockedFetchFederalApplicationDetail.mockResolvedValueOnce({
           ...federalDetail,
-          statusCode: 'NEW',
-          statusDescription: 'New',
+          statusCode: 'APP',
+          statusDescription: 'Approved',
+          listingDate: '2999-12-31',
         })
       renderFederalDataRouter()
       if (section === 'status') {
         await selectDetailTab('Application')
         await enterFederalStatusEditMode()
+        await userEvent.type(screen.getByLabelText('Remark'), 'Not eligible')
         mockedFetchFederalApplicationDetail.mockRejectedValueOnce(new Error('Refresh failed'))
         await userEvent.click(screen.getByRole('button', { name: 'Update status' }))
-      } else if (section === 'permit') {
-        await selectDetailTab('Shipping details')
-        await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
-        await userEvent.clear(screen.getByLabelText('Transport name'))
-        await userEvent.type(screen.getByLabelText('Transport name'), 'Saved ship')
-        mockedFetchFederalApplicationDetail.mockRejectedValueOnce(new Error('Refresh failed'))
-        await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
       } else {
         await selectDetailTab('Remarks')
         await enterFederalRemarkEditMode()
@@ -2161,247 +2052,63 @@ describe('Exemption and Federal Detail Document Actions', () => {
       const message =
         section === 'status'
           ? 'Federal application status updated, but details could not be refreshed. Reload before making more changes.'
-          : section === 'permit'
-            ? 'Federal permit saved, but details could not be refreshed. Reload before making more changes.'
-            : 'Federal application remark saved, but remarks could not be refreshed. Reload before making more changes.'
+          : 'Federal application remark saved, but remarks could not be refreshed. Reload before making more changes.'
       expect((await screen.findByText(message)).closest('.cds--inline-notification')).toHaveClass(
         'cds--inline-notification--warning',
       )
       expect(
         screen.queryByText(
-          /Unable to (update federal application status|save federal permit|save federal application remark)\./,
+          /Unable to (update federal application status|save federal application remark)\./,
         ),
       ).not.toBeInTheDocument()
       const mutation =
         section === 'status'
           ? mockedUpdateFederalApplicationStatus
-          : section === 'permit'
-            ? mockedSaveFederalPermit
-            : mockedSaveFederalApplicationRemark
+          : mockedSaveFederalApplicationRemark
       expect(mutation).toHaveBeenCalledTimes(1)
     },
   )
 
-  it('keeps federal shipping details read-only until editing is requested', async () => {
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+  it.each(['NEW', 'PND'])(
+    'offers no status change on a %s federal application',
+    async (statusCode) => {
+      mockedFetchFederalApplicationDetail.mockResolvedValue({
+        ...federalDetail,
+        statusCode,
+        statusDescription: statusCode === 'NEW' ? 'New' : 'Pending',
+        listingDate: '2999-12-31',
+      })
 
-    await selectDetailTab('Shipping details')
-    const shippingTile = screen
-      .getByRole('heading', { name: 'Shipping details', level: 2 })
-      .closest('.cds--tile')
-    expect(shippingTile).toHaveClass('federal-shipping-details')
-    expect(within(shippingTile as HTMLElement).getByText('Truck')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Transport name')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
-    expect(
-      screen.getByRole('heading', { name: 'Edit shipping details', level: 2 }),
-    ).toBeInTheDocument()
-    expect(screen.getByLabelText('Transport name')).toHaveValue('Truck')
-
-    await userEvent.clear(screen.getByLabelText('Transport name'))
-    await userEvent.type(screen.getByLabelText('Transport name'), 'Rail')
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
-
-    expect(screen.getByRole('heading', { name: 'Shipping details', level: 2 })).toBeInTheDocument()
-    expect(screen.queryByLabelText('Transport name')).not.toBeInTheDocument()
-    expect(screen.getByText('Truck')).toBeInTheDocument()
-  })
-
-  it('hides an existing federal permit number while preserving it on shipping save', async () => {
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectDetailTab('Shipping details')
-    const shippingTile = screen
-      .getByRole('heading', { name: 'Shipping details', level: 2 })
-      .closest('.cds--tile')
-    expect(shippingTile).toBeTruthy()
-    expect(within(shippingTile as HTMLElement).queryByText('Permit number')).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
-    expect(screen.queryByLabelText('Permit number')).not.toBeInTheDocument()
-    await userEvent.clear(screen.getByLabelText('Transport name'))
-    await userEvent.type(screen.getByLabelText('Transport name'), 'Rail')
-    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
-
-    await waitFor(() => {
-      expect(mockedSaveFederalPermit).toHaveBeenCalledWith(
-        '888',
-        expect.objectContaining({ permitNumber: 90001, transportName: 'Rail' }),
-        true,
+      render(
+        <MemoryRouter initialEntries={['/federal/888']}>
+          <Routes>
+            <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
+          </Routes>
+        </MemoryRouter>,
       )
-    })
-  })
 
-  it('rejects federal shipping text that Oracle cannot store', async () => {
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
+      await selectDetailTab('Application')
+      expect(await screen.findByText('FED-888')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
+      expect(screen.queryByLabelText('Status')).not.toBeInTheDocument()
+      expect(screen.queryByRole('option', { name: 'Approved' })).not.toBeInTheDocument()
+      expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
+    },
+  )
 
-    await selectDetailTab('Shipping details')
-    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
-    const transportName = screen.getByLabelText('Transport name')
-    await userEvent.clear(transportName)
-    await userEvent.type(transportName, 'Résumé')
-    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
-
-    expect(
-      await screen.findByText(
-        'Transport name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
-      ),
-    ).toBeInTheDocument()
-    expect(transportName).toHaveAttribute('aria-invalid', 'true')
-    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
-
-    await userEvent.clear(transportName)
-    await userEvent.type(transportName, 'Truck')
-    await userEvent.selectOptions(screen.getByLabelText('Customs port of export'), 'OT')
-    await userEvent.type(screen.getByLabelText('Other port of export'), 'Port d’été')
-    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
-
-    expect(
-      await screen.findByText(
-        'Other port of export contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
-      ),
-    ).toBeInTheDocument()
-    expect(transportName).not.toHaveAttribute('aria-invalid', 'true')
-    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
-  })
-
-  it('uses shared shipping selectors, descriptions, and conditional Other Port', async () => {
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectDetailTab('Shipping details')
-    expect(await screen.findAllByText('United States (US)')).not.toHaveLength(0)
-    expect(screen.getAllByText('Ship (S)')).not.toHaveLength(0)
-    expect(screen.getAllByText('Vancouver (VA)')).not.toHaveLength(0)
-    expect(screen.queryByLabelText('Other port of export')).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
-    await userEvent.selectOptions(screen.getByLabelText('Customs port of export'), 'OT')
-    await userEvent.type(screen.getByLabelText('Other port of export'), 'Boundary Bay')
-    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
-
-    await waitFor(() => {
-      expect(mockedSaveFederalPermit).toHaveBeenCalledWith(
-        '888',
-        expect.objectContaining({ portOfExport: 'OT', otherPortOfExport: 'Boundary Bay' }),
-        true,
-      )
-    })
-  })
-
-  it('disables federal permit save when shipping references fail', async () => {
-    mockedFetchShippingReferenceOptions.mockRejectedValueOnce(new Error('Oracle unavailable'))
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    expect(
-      await screen.findByText(
-        'Shipping reference options could not be loaded. Federal permit changes are unavailable.',
-      ),
-    ).toBeInTheDocument()
-    await selectDetailTab('Shipping details')
-    expect(screen.getByRole('button', { name: 'Edit shipping details' })).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
-    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
-  })
-
-  it('blocks federal permit save when shipping text exceeds the schema width', async () => {
-    mockedFetchFederalApplicationDetail.mockResolvedValueOnce({
-      ...federalDetail,
-      federalPermit: {
-        ...federalDetail.federalPermit!,
-        transportName: 'A'.repeat(27),
-      },
-    })
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectDetailTab('Shipping details')
-    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
-    const save = screen.getByRole('button', { name: 'Save federal permit' })
-    expect(save).toBeEnabled()
-    fireEvent.change(screen.getByLabelText('Permit issue date'), {
-      target: { value: '2026-02-11' },
-    })
-    await userEvent.click(save)
-
-    expect(screen.getByLabelText('Transport name')).toHaveAttribute('aria-invalid', 'true')
-    await waitFor(() => expect(screen.getByLabelText('Transport name')).toHaveFocus())
-    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
-  })
-
-  it('offers only approval from a new federal application', async () => {
-    mockedFetchFederalApplicationDetail.mockResolvedValue({
-      ...federalDetail,
-      statusCode: 'NEW',
-      statusDescription: 'New',
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectDetailTab('Application')
-    await enterFederalStatusEditMode()
-    const statusSelect = await screen.findByLabelText('Status')
-    expect(within(statusSelect).getByRole('option', { name: 'Approved' })).toBeInTheDocument()
-    expect(within(statusSelect).queryByRole('option', { name: 'Rejected' })).not.toBeInTheDocument()
-    expect(
-      within(statusSelect).queryByRole('option', { name: 'Withdrawn' }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('updates a new federal application status and refreshes authoritative detail', async () => {
+  it('withdraws an approved federal application and refreshes authoritative detail', async () => {
     mockedFetchFederalApplicationDetail
       .mockResolvedValueOnce({
         ...federalDetail,
-        statusCode: 'NEW',
-        statusDescription: 'New',
+        statusCode: 'APP',
+        statusDescription: 'Approved',
+        listingDate: '2999-12-31',
       })
       .mockResolvedValue({
         ...federalDetail,
-        statusCode: 'APP',
-        statusDescription: 'Approved',
+        statusCode: 'WDN',
+        statusDescription: 'Withdrawn',
+        listingDate: '2999-12-31',
       })
 
     render(
@@ -2420,58 +2127,22 @@ describe('Exemption and Federal Detail Document Actions', () => {
         .getAllByRole('button')
         .map((button) => button.textContent),
     ).toEqual(['Cancel', 'Update status'])
-    expect(screen.getByLabelText('Status')).toHaveValue('APP')
+    await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
+    await userEvent.type(screen.getByLabelText('Remark'), 'Applicant withdrew')
 
     await userEvent.click(updateButton)
 
     await waitFor(() => {
-      expect(mockedUpdateFederalApplicationStatus).toHaveBeenCalledWith('888', 'APP', '')
+      expect(mockedUpdateFederalApplicationStatus).toHaveBeenCalledWith(
+        '888',
+        'WDN',
+        'Applicant withdrew',
+      )
       expect(mockedFetchFederalApplicationDetail).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('Federal application status updated.')).toBeInTheDocument()
-    expect(screen.getAllByText('Approved').length).toBeGreaterThan(0)
-  })
-
-  it('replaces prior action feedback when opening a federal document fails', async () => {
-    mockedFetchFederalApplicationDetail
-      .mockResolvedValueOnce({
-        ...federalDetail,
-        statusCode: 'NEW',
-        statusDescription: 'New',
-      })
-      .mockResolvedValue({
-        ...federalDetail,
-        statusCode: 'APP',
-        statusDescription: 'Approved',
-      })
-    mockedFetchFederalApplicationDocuments.mockResolvedValue({
-      rows: [{ id: '806', name: 'federal-doc.pdf', description: '', type: 'Attachment' }],
-      source: 'api',
-    })
-    mockedOpenFederalApplicationDocument.mockRejectedValueOnce(new Error('Open failed'))
-
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectDetailTab('Application')
-    await enterFederalStatusEditMode()
-    await userEvent.click(await screen.findByRole('button', { name: 'Update status' }))
-    expect(await screen.findByText('Federal application status updated.')).toBeInTheDocument()
-
-    await selectDetailTab('Documents')
-    const documentRow = (await screen.findByText('federal-doc.pdf')).closest('tr')
-    expect(documentRow).toBeTruthy()
-    await userEvent.click(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' }))
-
-    expect(await screen.findByText('Unable to open the selected document.')).toBeInTheDocument()
-    expect(screen.queryByText('Federal application status updated.')).not.toBeInTheDocument()
-    expect(screen.getByText('Action failed')).toBeInTheDocument()
-    expect(document.querySelectorAll('.app-inline-notification')).toHaveLength(1)
+    expect(screen.getAllByText('Withdrawn').length).toBeGreaterThan(0)
+    expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
   })
 
   it('asks before switching tabs away from an unsaved federal status draft', async () => {
@@ -2487,7 +2158,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
     await userEvent.type(screen.getByLabelText('Remark'), 'Awaiting withdrawal confirmation')
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Shipping details' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Items' }))
     expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument()
     await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
     await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument())
@@ -2498,13 +2169,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByLabelText('Status')).toHaveValue('WDN')
     expect(screen.getByLabelText('Remark')).toHaveValue('Awaiting withdrawal confirmation')
 
-    await userEvent.click(screen.getByRole('tab', { name: 'Shipping details' }))
+    await userEvent.click(screen.getByRole('tab', { name: 'Items' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     await waitFor(() =>
-      expect(screen.getByRole('tab', { name: 'Shipping details' })).toHaveAttribute(
-        'aria-selected',
-        'true',
-      ),
+      expect(screen.getByRole('tab', { name: 'Items' })).toHaveAttribute('aria-selected', 'true'),
     )
     await selectDetailTab('Application')
     expect(screen.queryByLabelText('Status')).not.toBeInTheDocument()
@@ -2513,93 +2181,32 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByRole('heading', { name: 'Elsewhere' })).toBeInTheDocument()
   })
 
-  it.each([false, true])(
-    'leaves a clean shipping edit on a tab switch and shows the refreshed permit (readOnly=%s)',
-    async (readOnly) => {
-      mockedFetchFederalApplicationDetail.mockResolvedValueOnce({
-        ...federalDetail,
-        statusCode: 'APP',
-        statusDescription: 'Approved',
-        listingDate: '2999-12-31',
-      })
-      mockedFetchFederalApplicationDetail.mockResolvedValue({
-        ...federalDetail,
-        statusCode: 'WDN',
-        statusDescription: 'Withdrawn',
-        listingDate: '2999-12-31',
-        readOnly,
-        federalPermit: { ...federalDetail.federalPermit!, transportName: 'Persisted ship' },
-      })
-      renderFederalDataRouter()
-      await selectDetailTab('Shipping details')
-      await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
-
-      await selectDetailTab('Application')
-      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-      await enterFederalStatusEditMode()
-      await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
-      await userEvent.type(screen.getByLabelText('Remark'), 'Withdraw this application')
-      await userEvent.click(screen.getByRole('button', { name: 'Update status' }))
-      await screen.findByText('Federal application status updated.')
-      expect(screen.getAllByText('Withdrawn').length).toBeGreaterThan(0)
-      expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
-
-      await selectDetailTab('Shipping details')
-      expect(screen.queryByLabelText('Transport name')).not.toBeInTheDocument()
-      expect(screen.getByText('Persisted ship')).toBeInTheDocument()
-      if (readOnly) {
-        expect(
-          screen.queryByRole('button', { name: 'Edit shipping details' }),
-        ).not.toBeInTheDocument()
-      }
-      await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
-      expect(await screen.findByRole('heading', { name: 'Elsewhere' })).toBeInTheDocument()
-    },
-  )
-
-  it('waits for a shipping refresh before starting a status draft', async () => {
-    const refresh = Promise.withResolvers<FederalApplicationDetail>()
-    mockedFetchFederalApplicationDetail
-      .mockResolvedValueOnce({
-        ...federalDetail,
-        statusCode: 'APP',
-        statusDescription: 'Approved',
-        listingDate: '2999-12-31',
-      })
-      .mockImplementationOnce(() => refresh.promise)
+  it('holds tab switches until a remark save finishes', async () => {
+    const save = Promise.withResolvers<Awaited<ReturnType<typeof saveFederalApplicationRemark>>>()
+    mockedSaveFederalApplicationRemark.mockImplementationOnce(() => save.promise)
     renderFederalDataRouter()
-    await selectDetailTab('Shipping details')
-    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
-    await userEvent.clear(screen.getByLabelText('Transport name'))
-    await userEvent.type(screen.getByLabelText('Transport name'), 'Updated ship')
-    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
-    await waitFor(() => expect(mockedFetchFederalApplicationDetail).toHaveBeenCalledTimes(2))
+    await selectDetailTab('Remarks')
+    await enterFederalRemarkEditMode()
+    await userEvent.type(screen.getByLabelText('New remark'), 'Pending note')
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
+    await waitFor(() => expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledTimes(1))
 
     await userEvent.click(screen.getByRole('tab', { name: 'Application' }))
-    expect(screen.getByRole('tab', { name: 'Shipping details' })).toHaveAttribute(
+    expect(screen.getByRole('tab', { name: 'Remarks' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+
+    save.resolve({
+      success: true,
+      message: 'Federal application remark saved.',
+      remark: null,
+      errors: [],
+    })
+    expect(await screen.findByText('Federal application remark saved.')).toBeInTheDocument()
+    await selectDetailTab('Application')
+    expect(screen.getByRole('tab', { name: 'Application' })).toHaveAttribute(
       'aria-selected',
       'true',
     )
-    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
-    expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
-    refresh.resolve({
-      ...federalDetail,
-      statusCode: 'APP',
-      statusDescription: 'Approved',
-      listingDate: '2999-12-31',
-      federalPermit: { ...federalDetail.federalPermit!, transportName: 'Updated ship' },
-    })
-
-    await screen.findByText('Federal permit updated.')
-    await selectDetailTab('Application')
-    await enterFederalStatusEditMode()
-    await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
-    await userEvent.type(screen.getByLabelText('Remark'), 'Draft after refresh')
-    expect(screen.getByLabelText('Status')).toHaveValue('WDN')
-    expect(screen.getByLabelText('Remark')).toHaveValue('Draft after refresh')
-    expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('link', { name: 'Leave federal application' }))
-    expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument()
   })
 
   it('offers only listing-day outcomes from an approved federal application', async () => {
@@ -2701,7 +2308,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
     mockedFetchFederalApplicationDetail.mockResolvedValue({
       ...federalDetail,
       packages: [],
-      offers: [],
     })
     mockedFetchFederalApplicationRemarks.mockResolvedValue([])
 
@@ -2725,86 +2331,13 @@ describe('Exemption and Federal Detail Document Actions', () => {
       screen.queryByRole('heading', { name: 'No scale details found' }),
     ).not.toBeInTheDocument()
 
-    await selectDetailTab('Offers')
-    expect(
-      await screen.findByRole('heading', { name: 'No offers found', level: 2 }),
-    ).toBeInTheDocument()
-
     await selectDetailTab('Remarks')
     expect(
       await screen.findByRole('heading', { name: 'No remarks found', level: 2 }),
     ).toBeInTheDocument()
-
-    await selectDetailTab('Documents')
-    expect(
-      await screen.findByRole('heading', { name: 'No documents for this application', level: 2 }),
-    ).toBeInTheDocument()
   })
 
-  it('lists federal offers by company and opens the offer from the company link', async () => {
-    const router = createMemoryRouter(
-      [
-        {
-          path: '/federal/:applicationNumber',
-          element: <FederalApplicationDetailsPage />,
-        },
-        {
-          path: '/provincial/offers/:offerNumber',
-          element: <h1>Offer detail</h1>,
-        },
-      ],
-      { initialEntries: ['/federal/888'] },
-    )
-    render(<RouterProvider router={router} />)
-
-    await selectDetailTab('Offers')
-    const offersTable = await screen.findByRole('region', { name: 'Federal application offers' })
-    expect(
-      within(offersTable)
-        .getAllByRole('columnheader')
-        .map((header) => header.textContent),
-    ).toEqual(['Company', 'Date received'])
-    const companyLink = await within(offersTable).findByRole('link', { name: 'Federal Buyer' })
-    expect(companyLink).toHaveAttribute('href', '/provincial/offers/81001')
-    const offerRow = companyLink.closest('tr')
-    expect(offerRow).toBeTruthy()
-    expect(within(offerRow as HTMLElement).getByText('Jan 13, 2026')).toBeInTheDocument()
-    expect(within(offersTable).queryByText('81001')).not.toBeInTheDocument()
-    expect(within(offersTable).queryByRole('button')).not.toBeInTheDocument()
-
-    await userEvent.click(companyLink)
-
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/provincial/offers/81001')
-    })
-    expect(router.state.location.state).toMatchObject({
-      returnTo: { label: 'Federal application detail', to: '/federal/888' },
-    })
-  })
-
-  it('shows the offer company as text when offer permission is unavailable', async () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        canPerform: (action: string) => action !== '/offerDetails',
-      }),
-    )
-
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectDetailTab('Offers')
-    const offersTable = await screen.findByRole('region', { name: 'Federal application offers' })
-    expect(await within(offersTable).findByText('Federal Buyer')).toBeInTheDocument()
-    expect(within(offersTable).queryByRole('link')).not.toBeInTheDocument()
-  })
-
-  it('does not present federal document or remark lookup failures as empty collections', async () => {
-    mockedFetchFederalApplicationDocuments.mockRejectedValue(new Error('Documents unavailable'))
+  it('does not present a federal remark lookup failure as an empty collection', async () => {
     mockedFetchFederalApplicationRemarks.mockRejectedValue(new Error('Remarks unavailable'))
 
     render(
@@ -2815,90 +2348,14 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findAllByText('Documents unavailable')).not.toHaveLength(0)
-    expect(
-      screen.getAllByText('Unable to retrieve federal application documents.'),
-    ).not.toHaveLength(0)
-    expect(screen.getAllByText('Remarks unavailable')).not.toHaveLength(0)
-    expect(screen.getAllByText('Unable to retrieve federal application remarks.')).not.toHaveLength(
-      0,
-    )
-
     await selectDetailTab('Remarks')
     expect(
       await screen.findByRole('heading', { name: 'Remarks unavailable', level: 3 }),
     ).toBeInTheDocument()
+    expect(screen.getByText('Unable to retrieve federal application remarks.')).toBeInTheDocument()
     expect(
       screen.queryByRole('heading', { name: 'No remarks found', level: 3 }),
     ).not.toBeInTheDocument()
-
-    await selectDetailTab('Documents')
-    expect(
-      await screen.findByRole('heading', { name: 'Documents unavailable', level: 2 }),
-    ).toBeInTheDocument()
-    expect(
-      screen.queryByRole('heading', { name: 'No documents for this application', level: 2 }),
-    ).not.toBeInTheDocument()
-  })
-
-  it('opens federal document from API response', async () => {
-    mockedFetchFederalApplicationDocuments.mockResolvedValue({
-      rows: [
-        {
-          id: '800',
-          name: 'federal-doc.pdf',
-          description: 'API file',
-          type: 'Attachment',
-        },
-      ],
-      source: 'api',
-    })
-    const previewTarget = {
-      closed: false,
-      close: vi.fn(),
-      location: { replace: vi.fn() },
-      opener: null,
-    } as unknown as Window
-    const openSpy = vi.spyOn(window, 'open').mockReturnValue(previewTarget)
-    vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:federal-document')
-    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {})
-    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {})
-
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectDetailTab('Documents')
-    const documentName = await screen.findByText('federal-doc.pdf')
-    expect(screen.getByRole('region', { name: 'Application document rows' })).toContainElement(
-      documentName,
-    )
-    const documentRow = documentName.closest('tr')
-    expect(documentRow).toBeTruthy()
-    await userEvent.click(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' }))
-
-    await waitFor(() => {
-      expect(mockedOpenFederalApplicationDocument).toHaveBeenCalledWith(
-        '800',
-        'federal-doc.pdf',
-        '888',
-      )
-    })
-    expect(openSpy).toHaveBeenCalledWith('about:blank', '_blank')
-    await waitFor(() =>
-      expect(previewTarget.location.replace).toHaveBeenCalledWith('blob:federal-document'),
-    )
-
-    openSpy.mockClear()
-    await userEvent.click(
-      within(documentRow as HTMLElement).getByRole('button', { name: 'Download' }),
-    )
-    await waitFor(() => expect(clickSpy).toHaveBeenCalled())
-    expect(openSpy).not.toHaveBeenCalled()
   })
 
   it('lists, adds, and updates structured federal remarks for approvers', async () => {
@@ -2999,126 +2456,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
   })
 
-  it.each([true, false])(
-    'reports federal document deletion with refreshed rows=%s',
-    async (refreshSucceeds) => {
-      mockedFetchFederalApplicationDocuments.mockResolvedValueOnce({
-        rows: [
-          {
-            id: '800',
-            name: 'federal-doc.pdf',
-            description: 'remove me',
-            type: 'Attachment',
-          },
-        ],
-        source: 'api',
-      })
-      if (refreshSucceeds) {
-        mockedFetchFederalApplicationDocuments.mockResolvedValueOnce({
-          rows: [],
-          source: 'api',
-        })
-      } else {
-        mockedFetchFederalApplicationDocuments.mockRejectedValueOnce(
-          new Error('Refresh unavailable'),
-        )
-      }
-
-      render(
-        <MemoryRouter initialEntries={['/federal/888']}>
-          <Routes>
-            <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-          </Routes>
-        </MemoryRouter>,
-      )
-
-      await selectDetailTab('Documents')
-      await waitForDocumentsSection()
-      const documentName = await screen.findByText('federal-doc.pdf')
-      const documentRow = documentName.closest('tr')
-      expect(documentRow).toBeTruthy()
-      const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
-        name: 'Delete',
-      })
-      await userEvent.click(deleteButton)
-      const confirmation = await screen.findByRole('dialog', {
-        name: 'Are you sure you want to delete this document?',
-      })
-      expect(confirmation).toHaveTextContent(
-        'federal-doc.pdf will be deleted. This action cannot be undone.',
-      )
-      expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
-      await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
-
-      await waitFor(() => {
-        expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('800', '888')
-        expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledTimes(2)
-      })
-      const feedback = await screen.findByText(
-        refreshSucceeds
-          ? 'Document deleted.'
-          : 'federal-doc.pdf was deleted. Reload before changing documents again.',
-      )
-      expect(feedback.closest('.cds--inline-notification')).toHaveClass(
-        refreshSucceeds ? 'cds--inline-notification--success' : 'cds--inline-notification--warning',
-      )
-      expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledTimes(1)
-      if (refreshSucceeds) expect(screen.queryByText('federal-doc.pdf')).not.toBeInTheDocument()
-    },
-  )
-
-  it('keeps a federal delete result in the Documents tab until an upload replaces it', async () => {
-    const remaining = { id: '801', name: 'kept.pdf', description: '', type: 'Attachment' }
-    mockedFetchFederalApplicationDocuments
-      .mockResolvedValueOnce({
-        rows: [
-          { id: '800', name: 'federal-doc.pdf', description: '', type: 'Attachment' },
-          remaining,
-        ],
-        source: 'api',
-      })
-      .mockResolvedValueOnce({ rows: [remaining], source: 'api' })
-      .mockResolvedValueOnce({ rows: [remaining], source: 'api' })
-    mockedValidateAdminUpload.mockResolvedValue({ status: 'validated' })
-    mockedSubmitAdminUpload.mockResolvedValue({ message: 'New federal document uploaded.' })
-
-    render(
-      <MemoryRouter initialEntries={['/federal/888']}>
-        <Routes>
-          <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    await selectDetailTab('Documents')
-    const documentRow = (await screen.findByText('federal-doc.pdf')).closest('tr')
-    await userEvent.click(
-      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
-    )
-    const confirmation = await screen.findByRole('dialog', {
-      name: 'Are you sure you want to delete this document?',
-    })
-    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
-    const documentsSection = document.querySelector('#federal-application-documents') as HTMLElement
-    expect(await within(documentsSection).findByText('Document deleted.')).toBeInTheDocument()
-
-    await openDocumentUploadModal()
-    const file = new File(['new'], 'new.pdf', { type: 'application/pdf' })
-    await userEvent.upload(screen.getByLabelText('Document File'), file)
-    await userEvent.type(screen.getByLabelText(/Document description/), 'New document')
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Save documents' })).toBeEnabled(),
-    )
-    await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
-
-    expect(await within(documentsSection).findByText('1 document saved.')).toBeInTheDocument()
-    expect(screen.queryByText('Document deleted.')).not.toBeInTheDocument()
-    expect(screen.queryByText('Upload submitted')).not.toBeInTheDocument()
-    expect(document.querySelectorAll('.app-inline-notification')).toHaveLength(1)
-  })
-
   it.each(['ADMIN', 'LEXIS_APPLICATION_APPROVER'])(
-    'allows %s to add and delete expired federal documents while other edits stay read-only',
+    'keeps an expired federal application status read-only but its remarks editable for %s',
     async (role) => {
       mockedUseAuth.mockReturnValue(
         createTestAuthContext({
@@ -3132,108 +2471,29 @@ describe('Exemption and Federal Detail Document Actions', () => {
         statusDescription: 'Expired',
         readOnly: true,
       })
-      const document = {
-        id: '804',
-        name: 'reconciliation.pdf',
-        description: 'Received after expiry',
-        type: 'Attachment',
-        source: 'application' as const,
-        deletable: true,
-      }
-      mockedFetchFederalApplicationDocuments
-        .mockResolvedValueOnce({ rows: [], source: 'api' })
-        .mockResolvedValueOnce({ rows: [document], source: 'api' })
-        .mockResolvedValueOnce({ rows: [], source: 'api' })
-      mockedValidateAdminUpload.mockResolvedValue({ status: 'validated' })
-      mockedSubmitAdminUpload.mockResolvedValue({ status: 'success' })
 
       renderFederalDataRouter()
-      await selectDetailTab('Documents')
-      await openDocumentUploadModal()
-      const file = new File(['reconciliation'], 'reconciliation.pdf', {
-        type: 'application/pdf',
-      })
-      await userEvent.upload(screen.getByLabelText('Document File'), file)
-      await userEvent.type(screen.getByLabelText(/Document description/), 'Received after expiry')
-      await waitFor(() =>
-        expect(screen.getByRole('button', { name: 'Save documents' })).toBeEnabled(),
-      )
-      await userEvent.click(screen.getByRole('button', { name: 'Save documents' }))
-
-      await waitFor(() => {
-        expect(mockedSubmitAdminUpload).toHaveBeenCalledWith('application', {
-          applicationNumber: '888',
-          file,
-          fileDescription: 'Received after expiry',
-        })
-        expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledTimes(2)
-        expect(
-          screen.queryByRole('complementary', { name: 'Add documents' }),
-        ).not.toBeInTheDocument()
-      })
-      const documentRow = (await screen.findByText('reconciliation.pdf')).closest('tr')
-      expect(documentRow).toBeTruthy()
-      await userEvent.click(
-        within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
-      )
-      const confirmation = await screen.findByRole('dialog', {
-        name: 'Are you sure you want to delete this document?',
-      })
-      await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
-      await waitFor(() => {
-        expect(mockedRemoveFederalApplicationDocument).toHaveBeenCalledWith('804', '888')
-        expect(mockedFetchFederalApplicationDocuments).toHaveBeenCalledTimes(3)
-        expect(screen.queryByText('reconciliation.pdf')).not.toBeInTheDocument()
-      })
-
       await selectDetailTab('Application')
+      expect(await screen.findByText('FED-888')).toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
       await selectDetailTab('Remarks')
-      expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-      await selectDetailTab('Shipping details')
-      expect(
-        screen.queryByRole('button', { name: 'Edit shipping details' }),
-      ).not.toBeInTheDocument()
+      expect(await screen.findByText('Review note')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+      await enterFederalRemarkEditMode()
+      await userEvent.type(screen.getByLabelText('New remark'), 'Expired note')
+      await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
+
+      await waitFor(() => {
+        expect(mockedSaveFederalApplicationRemark).toHaveBeenCalledWith(
+          '888',
+          'Expired note',
+          undefined,
+        )
+      })
       expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
-      expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
-      expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
     },
+    20_000,
   )
-
-  it.each([
-    { reason: 'read-only role', role: 'LEXIS_READ_ONLY', statusCode: 'EXP', locked: false },
-    { reason: 'another editor lock', role: 'ADMIN', statusCode: 'EXP', locked: true },
-    { reason: 'non-expiry read-only policy', role: 'ADMIN', statusCode: 'APP', locked: false },
-  ])('keeps federal document changes blocked for $reason', async ({ role, statusCode, locked }) => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        capabilities: createTestCapabilities({ roles: [role] }),
-        canPerform: () => true,
-      }),
-    )
-    mockedFetchFederalApplicationDetail.mockResolvedValue({
-      ...federalDetail,
-      statusCode,
-      readOnly: true,
-      locked,
-      lockHeldByCurrentUser: !locked,
-    })
-    mockedFetchFederalApplicationDocuments.mockResolvedValue({
-      rows: [{ id: '805', name: 'protected.pdf', description: '', type: 'Attachment' }],
-      source: 'api',
-    })
-
-    renderFederalDataRouter()
-    await selectDetailTab('Documents')
-
-    expect(await screen.findByText('protected.pdf')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit documents' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
-    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
-    expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
-  })
 
   it('distinguishes the internal LEXIS key from the external federal application number', async () => {
     render(
@@ -3252,94 +2512,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByText('FED-888')).toBeInTheDocument()
   })
 
-  it.each([false, true])(
-    'does not offer delete for inherited federal documents when expired=%s',
-    async (expired) => {
-      mockedFetchFederalApplicationDetail.mockResolvedValue({
-        ...federalDetail,
-        statusCode: expired ? 'EXP' : federalDetail.statusCode,
-        readOnly: expired,
-      })
-      mockedFetchFederalApplicationDocuments.mockResolvedValue({
-        rows: [
-          {
-            id: '803',
-            name: 'inherited-permit-doc.pdf',
-            description: 'permit context',
-            type: 'Permit',
-            source: 'permit',
-            deletable: false,
-          },
-        ],
-        source: 'api',
-      })
-
-      render(
-        <MemoryRouter initialEntries={['/federal/888']}>
-          <Routes>
-            <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-          </Routes>
-        </MemoryRouter>,
-      )
-
-      await selectDetailTab('Documents')
-      await waitForDocumentsSection()
-      const documentRow = (await screen.findByText('inherited-permit-doc.pdf')).closest('tr')
-      expect(documentRow).toBeTruthy()
-      expect(
-        within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
-      ).not.toBeInTheDocument()
-    },
-  )
-
-  it.each([false, true])(
-    'keeps federal delete available to admins without upload permission when expired=%s',
-    async (expired) => {
-      mockedUseAuth.mockReturnValue(
-        createTestAuthContext({
-          canPerform: (action: string) => action !== '/fileApplicationUpload',
-        }),
-      )
-      mockedFetchFederalApplicationDetail.mockResolvedValue({
-        ...federalDetail,
-        statusCode: expired ? 'EXP' : federalDetail.statusCode,
-        readOnly: expired,
-      })
-      mockedFetchFederalApplicationDocuments.mockResolvedValue({
-        rows: [
-          {
-            id: '801',
-            name: 'locked-federal-doc.pdf',
-            description: 'locked',
-            type: 'Attachment',
-          },
-        ],
-        source: 'api',
-      })
-
-      render(
-        <MemoryRouter initialEntries={['/federal/888']}>
-          <Routes>
-            <Route path="/federal/:applicationNumber" element={<FederalApplicationDetailsPage />} />
-          </Routes>
-        </MemoryRouter>,
-      )
-
-      await selectDetailTab('Documents')
-      expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
-      await waitForDocumentsSection()
-      expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
-      const documentName = await screen.findByText('locked-federal-doc.pdf')
-      const documentRow = documentName.closest('tr')
-      expect(documentRow).toBeTruthy()
-      const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
-        name: 'Delete',
-      })
-      expect(deleteButton).toBeEnabled()
-      expect(mockedRemoveFederalApplicationDocument).not.toHaveBeenCalled()
-    },
-  )
-
   it.each(['LEXIS_READ_ONLY', 'LEXIS_FEDERAL_READ_ONLY'])(
     'denies federal detail changes to %s',
     async (role) => {
@@ -3347,7 +2519,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
         createTestAuthContext({
           capabilities: createTestCapabilities({ roles: [role] }),
           canPerform: (action) =>
-            role === 'LEXIS_READ_ONLY' ||
+            (role === 'LEXIS_READ_ONLY' && action !== 'manageFederalApplication') ||
             [
               '/federalApplicationSearch',
               '/federalApplicationDetails',
@@ -3355,17 +2527,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
             ].includes(action),
         }),
       )
-      mockedFetchFederalApplicationDetail.mockResolvedValue({ ...federalDetail, readOnly: true })
-      mockedFetchFederalApplicationDocuments.mockResolvedValue({
-        rows: [
-          {
-            id: '802',
-            name: 'readonly-federal-doc.pdf',
-            description: 'read only',
-            type: 'Attachment',
-          },
-        ],
-        source: 'api',
+      mockedFetchFederalApplicationDetail.mockResolvedValue({
+        ...federalDetail,
+        statusCode: 'APP',
+        statusDescription: 'Approved',
+        listingDate: '2999-12-31',
+        readOnly: true,
       })
 
       render(
@@ -3376,28 +2543,19 @@ describe('Exemption and Federal Detail Document Actions', () => {
         </MemoryRouter>,
       )
 
-      await selectDetailTab('Documents')
-      const documentRow = (await screen.findByText('readonly-federal-doc.pdf')).closest('tr')
-      expect(documentRow).toBeTruthy()
-      expect(
-        within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
-      ).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
-
       await selectDetailTab('Application')
+      expect(await screen.findByText('FED-888')).toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
       expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
       if (role === 'LEXIS_FEDERAL_READ_ONLY') {
         expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
         expect(mockedFetchFederalApplicationRemarks).not.toHaveBeenCalled()
       } else {
         await selectDetailTab('Remarks')
-        expect(screen.queryByLabelText('New remark')).not.toBeInTheDocument()
+        expect(await screen.findByText('Review note')).toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
       }
-      await selectDetailTab('Shipping details')
-      expect(
-        screen.queryByRole('button', { name: 'Edit shipping details' }),
-      ).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Save federal permit' })).not.toBeInTheDocument()
     },
   )
 
@@ -3439,6 +2597,6 @@ describe('Exemption and Federal Detail Document Actions', () => {
         selector: '.app-inline-notification .cds--inline-notification__subtitle',
       }),
     ).toBeInTheDocument()
-    expect(mockedFetchFederalApplicationDocuments).not.toHaveBeenCalled()
+    expect(mockedFetchFederalApplicationRemarks).not.toHaveBeenCalled()
   })
 })

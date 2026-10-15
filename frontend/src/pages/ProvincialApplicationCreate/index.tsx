@@ -1275,8 +1275,13 @@ const ProvincialApplicationCreatePage = () => {
         'Contact name',
         true,
       ),
+      // A submitter acting as the agent changes the owner, so that error shows on the owner.
       agentClientNumber: isAgentApplicant(form.applicantTypeCode)
-        ? clientNumberFieldError(form.agentClientNumber, 'Agent client')
+        ? clientNumberFieldError(form.agentClientNumber, 'Agent client') ||
+          (!submitterActsAsAgent &&
+          clientLookupNumbersMatch(form.agentClientNumber, form.ownerClientNumber)
+            ? 'The agent must be a different client from the owner.'
+            : undefined)
         : undefined,
       agentClientLocationCode: isAgentApplicant(form.applicantTypeCode)
         ? clientLocationFieldError(

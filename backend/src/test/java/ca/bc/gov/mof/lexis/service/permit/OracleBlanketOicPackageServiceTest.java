@@ -334,8 +334,49 @@ class OracleBlanketOicPackageServiceTest {
     verify(applicationService, never()).addHiddenBlanketOicPackage(any(), any());
   }
 
+  @Test
+  void deletePackageStaysAvailableOnPaymentPendingPermit() {
+    OracleBlanketOicPackageService service = service();
+    PermitMutationRow permit = permit(1000456L, 250.0d, "PPD");
+    when(permitRepository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permit));
+    when(permitRepository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(applicationService.findApplicationNumberForPackage("PKG-1"))
+        .thenReturn(Optional.of(1000456L));
+    when(applicationService.getScalesForPackage("PKG-1")).thenReturn(List.of());
+    when(
+            applicationService.deleteHiddenBlanketOicPackageById(
+                "PKG-1", 1000456L, "idir\\jsmith"))
+        .thenReturn(true);
+
+    BlanketOicPackageService.MutationResult result =
+        service.deletePackage(7000123L, "PKG-1", "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(applicationService)
+        .deleteHiddenBlanketOicPackageById("PKG-1", 1000456L, "idir\\jsmith");
+  }
+
+  @Test
+  void addPackageStaysAvailableOnPaymentPendingPermit() {
+    OracleBlanketOicPackageService service = service();
+    PermitMutationRow permit = permit(1000456L, 250.0d, "PPD");
+    when(permitRepository.findPermitMutationByPermitNumber(7000123L)).thenReturn(Optional.of(permit));
+    when(permitRepository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(permitRepository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of());
+    when(applicationService.addHiddenBlanketOicPackage(any(), eq("idir\\jsmith")))
+        .thenReturn(new ApplicationDetailsRpcService.PackagePersistenceResult(
+            true, "PKG-1", "100.0", "10.0", "20.0", "ACT", List.of(), List.of()));
+
+    BlanketOicPackageService.MutationResult result =
+        service.addPackage(request("PKG-1", null, 100.0d), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(applicationService).addHiddenBlanketOicPackage(any(), eq("idir\\jsmith"));
+  }
+
   @ParameterizedTest
-  @ValueSource(strings = {"COM", "PPD", "EXP", "CAN"})
+  @ValueSource(strings = {"COM", "EXP", "CAN"})
   void packageMutationsRejectLockedPermitStatuses(String permitStatus) {
     OracleBlanketOicPackageService service = service();
     PermitMutationRow permit = permit(1000456L, 250.0d, permitStatus);

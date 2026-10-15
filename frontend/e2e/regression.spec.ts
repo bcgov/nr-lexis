@@ -3297,6 +3297,11 @@ test.describe('TEST IDIR admin regression', () => {
       ],
       ['/provincial/offers?packageNumber=LEXIS-E2E-MISSING', /^Offer search$/, 'offer'],
       ['/provincial/permit?permitNumber=LEXIS-E2E-MISSING', /^Permit search$/, 'permit'],
+      [
+        `/federal?applicationNumber=${missingApplicationNumber}`,
+        /^Federal application search$/,
+        'application',
+      ],
     ] as const) {
       await expectAccessiblePage(page, path, heading)
       await expectOnlyEmptySearchState(page, resultName)
@@ -4675,8 +4680,17 @@ test.describe('TEST IDIR admin regression', () => {
             },
           }),
         ))
-      expect(permitApprovalEmail.success).toBe(true)
-      expect(permitApprovalEmail.message).toBe('Permit approval email sent.')
+      expect({
+        success: permitApprovalEmail.success,
+        message: permitApprovalEmail.message,
+      }).toEqual(
+        completedPermit.permitStatus === 'COM'
+          ? { success: true, message: 'Permit approval email sent.' }
+          : {
+              success: false,
+              message: 'Permit approval email is only available for completed permits.',
+            },
+      )
 
       await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
       const reactivatedPermit = await readPermitVersionedJson<Record<string, unknown>>(

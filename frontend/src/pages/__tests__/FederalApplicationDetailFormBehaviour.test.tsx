@@ -9,17 +9,12 @@ import {
   fetchFederalApplicationDetail,
   releaseApplicationEditLock,
 } from '@/service/lexis-detail-service'
-import { fetchFederalApplicationDocuments } from '@/service/federal-application-documents-service'
 import { fetchApplicationPackageScales } from '@/service/provincial-application-items-service'
 import {
   fetchFederalApplicationRemarks,
   saveFederalApplicationRemark,
 } from '@/service/federal-application-remarks-service'
-import {
-  saveFederalPermit,
-  updateFederalApplicationStatus,
-} from '@/service/federal-application-mutation-service'
-import { fetchShippingReferenceOptions } from '@/service/shipping-reference-service'
+import { updateFederalApplicationStatus } from '@/service/federal-application-mutation-service'
 import { createTestAuthContext } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -29,12 +24,6 @@ vi.mock('@/context/auth/useAuth', () => ({
 vi.mock('@/service/lexis-detail-service', () => ({
   fetchFederalApplicationDetail: vi.fn(),
   releaseApplicationEditLock: vi.fn(),
-}))
-
-vi.mock('@/service/federal-application-documents-service', () => ({
-  fetchFederalApplicationDocuments: vi.fn(),
-  openFederalApplicationDocument: vi.fn(),
-  removeFederalApplicationDocument: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-application-items-service', () => ({
@@ -47,23 +36,11 @@ vi.mock('@/service/federal-application-remarks-service', () => ({
 }))
 
 vi.mock('@/service/federal-application-mutation-service', () => ({
-  saveFederalPermit: vi.fn(),
   updateFederalApplicationStatus: vi.fn(),
-}))
-
-vi.mock('@/service/shipping-reference-service', () => ({
-  fetchShippingReferenceOptions: vi.fn(),
-  formatShippingReferenceOption: (option: { code: string; name: string }) =>
-    `${option.name} (${option.code})`,
-  shippingReferenceLabel: (
-    options: Array<{ code: string; name: string }> | undefined,
-    code: string | null | undefined,
-  ) => options?.find((candidate) => candidate.code === code)?.name ?? code ?? '',
 }))
 
 const mockedUseAuth = vi.mocked(useAuth)
 const mockedFetchFederalApplicationDetail = vi.mocked(fetchFederalApplicationDetail)
-const mockedSaveFederalPermit = vi.mocked(saveFederalPermit)
 const mockedUpdateFederalApplicationStatus = vi.mocked(updateFederalApplicationStatus)
 const mockedFetchFederalApplicationRemarks = vi.mocked(fetchFederalApplicationRemarks)
 const mockedSaveFederalApplicationRemark = vi.mocked(saveFederalApplicationRemark)
@@ -133,24 +110,7 @@ const selectTab = async (name: string) => {
   if (tab.getAttribute('aria-selected') !== 'true') await userEvent.click(tab)
 }
 
-const startShippingEdit = async () => {
-  await selectTab('Shipping details')
-  await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
-  await waitFor(() => expect(screen.getByLabelText('Permit issue date')).toHaveFocus())
-}
-
 describe('Federal application detail form behaviour', () => {
-  it('closes unchanged shipping editing without a request or notification', async () => {
-    renderPage()
-    await startShippingEdit()
-    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Edit shipping details' })).toHaveFocus(),
-    )
-    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
-    expect(screen.queryByText('Federal permit updated.')).not.toBeInTheDocument()
-  })
-
   it('closes an unchanged saved remark without a request or notification', async () => {
     renderPage()
     await selectTab('Remarks')
@@ -168,7 +128,6 @@ describe('Federal application detail form behaviour', () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedFetchFederalApplicationDetail.mockResolvedValue(federalDetail)
     vi.mocked(releaseApplicationEditLock).mockResolvedValue(undefined)
-    vi.mocked(fetchFederalApplicationDocuments).mockResolvedValue({ rows: [], source: 'api' })
     vi.mocked(fetchApplicationPackageScales).mockResolvedValue([])
     mockedFetchFederalApplicationRemarks.mockResolvedValue([
       { remarkId: 44, remark: 'First note', user: 'idir\\reviewer', date: '2026-07-18T04:37:21Z' },
@@ -180,111 +139,11 @@ describe('Federal application detail form behaviour', () => {
       remark: null,
       errors: [],
     })
-    mockedSaveFederalPermit.mockResolvedValue({
-      success: true,
-      message: 'Federal permit updated.',
-      errors: [],
-    })
     mockedUpdateFederalApplicationStatus.mockResolvedValue({
       success: true,
       message: 'Federal application status updated.',
       errors: [],
     })
-    vi.mocked(fetchShippingReferenceOptions).mockResolvedValue({
-      countries: [
-        { code: 'CA', name: 'Canada' },
-        { code: 'US', name: 'United States' },
-      ],
-      transportTypes: [
-        { code: 'S', name: 'Ship' },
-        { code: 'T', name: 'Truck' },
-      ],
-      ports: [
-        { code: 'OT', name: 'Other' },
-        { code: 'VA', name: 'Vancouver' },
-      ],
-    })
-  })
-
-  it('focuses the first shipping field on edit and the Edit button after Save', async () => {
-    renderPage()
-    await startShippingEdit()
-    await userEvent.clear(screen.getByLabelText('Transport name'))
-    await userEvent.type(screen.getByLabelText('Transport name'), 'Rail')
-
-    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
-
-    expect(await screen.findByText('Federal permit updated.')).toBeInTheDocument()
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Edit shipping details' })).toHaveFocus(),
-    )
-  })
-
-  it('shows shipping errors on their fields on Save and focuses the first', async () => {
-    renderPage()
-    await startShippingEdit()
-    await userEvent.selectOptions(screen.getByLabelText('Final destination country'), '')
-    await userEvent.clear(screen.getByLabelText('Transport name'))
-
-    const save = screen.getByRole('button', { name: 'Save federal permit' })
-    expect(save).toBeEnabled()
-    await userEvent.click(save)
-
-    const country = screen.getByLabelText('Final destination country')
-    expect(country).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('Final destination country is required')).toBeInTheDocument()
-    expect(screen.getByLabelText('Transport name')).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('Transport name is required')).toBeInTheDocument()
-    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
-    await waitFor(() => expect(country).toHaveFocus())
-    expect(mockedSaveFederalPermit).not.toHaveBeenCalled()
-
-    await userEvent.selectOptions(country, 'CA')
-    expect(country).not.toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText('Transport name is required')).toBeInTheDocument()
-  })
-
-  it('shows a server shipping message on its field', async () => {
-    mockedSaveFederalPermit.mockResolvedValue({
-      success: false,
-      message: null,
-      errors: ['Transport type is invalid.'],
-    })
-    renderPage()
-    await startShippingEdit()
-
-    await userEvent.type(screen.getByLabelText('Transport name'), ' Updated')
-    await userEvent.click(screen.getByRole('button', { name: 'Save federal permit' }))
-
-    const transportType = screen.getByLabelText('Transport type')
-    await waitFor(() => expect(transportType).toHaveAttribute('aria-invalid', 'true'))
-    expect(screen.getByText('Transport type is invalid')).toBeInTheDocument()
-    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
-    await waitFor(() => expect(transportType).toHaveFocus())
-  })
-
-  it('cancels shipping without asking when nothing changed and asks when something did', async () => {
-    renderPage()
-    await startShippingEdit()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    const editButton = screen.getByRole('button', { name: 'Edit shipping details' })
-    await waitFor(() => expect(editButton).toHaveFocus())
-
-    await userEvent.click(editButton)
-    await userEvent.type(await screen.findByLabelText('Transport name'), ' two')
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(await screen.findByRole('dialog', { name: 'Discard changes?' })).toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
-    expect(screen.getByLabelText('Transport name')).toHaveValue('Truck two')
-
-    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Edit shipping details' })).toHaveFocus(),
-    )
-    expect(screen.queryByLabelText('Transport name')).not.toBeInTheDocument()
   })
 
   it('focuses the status field on edit and shows a server remark message on the remark', async () => {
@@ -353,19 +212,9 @@ describe('Federal application detail form behaviour', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add remark' })).toHaveFocus())
   })
 
-  it('shows empty Offers and Remarks tabs without a card and keeps Add remark in reach', async () => {
+  it('shows an empty Remarks tab without a card and keeps Add remark in reach', async () => {
     mockedFetchFederalApplicationRemarks.mockResolvedValue([])
     renderPage()
-
-    await selectTab('Offers')
-    const offersEmpty = (
-      await screen.findByRole('heading', { name: 'No offers found', level: 2 })
-    ).closest('.lexis-empty-state')
-    expect(offersEmpty).toHaveClass('lexis-empty-state--tab')
-    expect(offersEmpty?.closest('.cds--tile')).toBeNull()
-    expect(offersEmpty?.closest('.cds--tab-content')).toHaveClass(
-      'application-detail-tab-panel--empty',
-    )
 
     await selectTab('Remarks')
     const remarksEmpty = (

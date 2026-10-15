@@ -436,6 +436,21 @@ class ProvincialAuthorizationServiceTest {
   }
 
   @Test
+  void federalApplicationDocumentsCannotBeAddedByStaff() {
+    Authentication approver = staff(allRegions("LEXIS_APPLICATION_APPROVER"));
+    Authentication administrator =
+        new TestingAuthenticationToken("administrator", "n/a", "LEXIS_ADMIN");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findByApplicationNumber(1L))
+        .thenReturn(Optional.of(application(1L, "00099999", null, 1903L, "F")));
+
+    assertThatThrownBy(() -> service.requireApplicationAttachmentMutation(approver, 1L))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(() -> service.requireApplicationAttachmentPersistence(administrator, 1L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
   void staffAttachmentWritersWriteInsideTheirRegions() {
     Authentication approver = staff(allRegions("LEXIS_APPLICATION_APPROVER"));
     Authentication administrator =
@@ -479,7 +494,7 @@ class ProvincialAuthorizationServiceTest {
     when(exemptionServiceProvider.getIfAvailable()).thenReturn(exemptionService);
     when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
     when(applicationService.findByApplicationNumber(1L))
-        .thenReturn(Optional.of(application(1L, "00099999", null, 1903L, "F")));
+        .thenReturn(Optional.of(application(1L, "00099999", null, 1903L)));
     when(exemptionService.findByExemptionNumber("E-1"))
         .thenReturn(Optional.of(exemption("E-1", "00099999", null, true)));
     when(exemptionService.findAccessOrgUnitNumbers("E-1")).thenReturn(List.of(1903L));

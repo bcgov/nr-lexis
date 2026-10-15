@@ -94,6 +94,8 @@ export type ProvincialPermitDetailTabsData = {
   fees: ProvincialPermitFeeRow[]
   packageFeeSummaries: ProvincialPermitPackageFeeSummary[]
   totalFeeVolume: number | null
+  /** Whether the permit's exemption has a fixed override rate. Loaded with the fees. */
+  exemptionRateOverride?: boolean
   gbmsEvents: ProvincialPermitGbmsInvoiceHistoryRow[]
   oicItems: ProvincialPermitEventRow[]
   boicItems: ProvincialPermitEventRow[]
@@ -474,6 +476,7 @@ type ProvincialPermitFees = {
   fees: ProvincialPermitFeeRow[]
   packageFeeSummaries: ProvincialPermitPackageFeeSummary[]
   totalFeeVolume: number
+  exemptionRateOverride?: boolean
 }
 
 const fetchAllScaleFees = async (permitNumber: string): Promise<ProvincialPermitFees> => {
@@ -522,6 +525,7 @@ const fetchAllScaleFees = async (permitNumber: string): Promise<ProvincialPermit
       fees: packageFees.flatMap((entry) => entry.rows).map(normalizeScaleFeeRow),
       packageFeeSummaries: packageFees.map((entry) => entry.summary),
       totalFeeVolume,
+      exemptionRateOverride: payload.exemptionRateOverride === true,
     }
   } catch (error) {
     throw toSearchServiceError(`Unable to load permit scale fees from ${path}.`, error)

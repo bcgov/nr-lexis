@@ -309,8 +309,8 @@ public class ApplicationReviewController {
                     })));
   }
 
-  // An Approved application's status can change only while its details can still be edited,
-  // which for approvers ends six days after its list date.
+  // An Approved application's status can change only while its list date is less than six days
+  // ago.
   private void requireApprovedApplicationEditable(
       Long applicationNumber, Authentication authentication) {
     ApplicationDetailsRpcService applicationService =
@@ -326,9 +326,8 @@ public class ApplicationReviewController {
                     "APP".equalsIgnoreCase(String.valueOf(context.applicationStatusCode()).trim()))
             .orElse(false);
     if (approved
-        && !applicationEditPolicyService
-            .resolve(authentication, applicationService, applicationNumber)
-            .canEditApplicationDetails()) {
+        && !applicationEditPolicyService.approvedReviewWindowOpen(
+            applicationService, applicationNumber)) {
       throw new AccessDeniedException(
           "An approved application's status can only change within six days of its list date.");
     }
@@ -417,12 +416,14 @@ public class ApplicationReviewController {
                     withApplicationEditLock(
                         applicationNumber,
                         userId,
-                        () ->
-                            service.updateStatus(
-                                applicationNumber,
-                                new ApplicationReviewStatusUpdateRequestDto(
-                                    statusCode, remark, clientEmail),
-                                userId)));
+                        () -> {
+                          requireApprovedApplicationEditable(applicationNumber, authentication);
+                          return service.updateStatus(
+                              applicationNumber,
+                              new ApplicationReviewStatusUpdateRequestDto(
+                                  statusCode, remark, clientEmail),
+                              userId);
+                        }));
 
     Map<String, Object> payload = legacyStatusUpdatePayload(result);
     payload.put("clientEmail", legacyClientEmail(result.clientEmail()));

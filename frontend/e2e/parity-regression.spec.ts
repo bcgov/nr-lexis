@@ -157,13 +157,6 @@ const installParityFixtures = async (page: Page) => {
         case '/api/lexis/rpc/exemption-details/applications':
           body = { applications: [], containsUnmanu: false, ownerNumber: '' }
           break
-        case '/api/lexis/shipping-reference-options':
-          body = {
-            countries: [{ code: 'US', name: 'United States' }],
-            transportTypes: [{ code: 'T', name: 'Truck' }],
-            ports: [{ code: 'VA', name: 'Vancouver' }],
-          }
-          break
         case '/api/lexis/notifications':
         case '/api/lexis/federal/applications/888/remarks':
         case '/api/lexis/rpc/application-details/document-details':
@@ -178,15 +171,6 @@ const installParityFixtures = async (page: Page) => {
         path === '/api/lexis/rpc/offer-details/release-lock')
     ) {
       body = { success: true }
-    } else if (
-      request.method() === 'PUT' &&
-      path === '/api/lexis/federal/applications/888/permit'
-    ) {
-      const payload = request.postDataJSON() as Record<string, unknown>
-      writes.push({ method: request.method(), path, body: payload })
-      Object.assign(federal.federalPermit, payload)
-      version += 1
-      body = { success: true, message: 'Federal permit updated.', errors: [] }
     } else if (
       request.method() === 'POST' &&
       path === '/api/lexis/federal/applications/888/status'
@@ -275,14 +259,21 @@ test.describe('Frontend parity with mocked API responses', () => {
         exact: true,
       }),
     })
+    await expect(page.getByRole('tab')).toHaveText(['Applicant', 'Application', 'Items', 'Remarks'])
     await selectTab(page, 'Application')
+    await expect(page.getByText('Received date', { exact: true })).toBeVisible()
+    await expect(page.getByText('List date', { exact: true })).toBeVisible()
     await page.getByRole('button', { name: 'Edit federal status' }).click()
+    await expect(page.getByLabel('Status', { exact: true }).locator('option')).toHaveText([
+      'Rejected',
+      'Withdrawn',
+    ])
     await page.getByLabel('Status', { exact: true }).selectOption('WDN')
     await page.getByLabel('Remark', { exact: true }).fill('Pending withdrawal confirmation')
 
     // Only one section edits at a time, so leaving the tab asks before dropping the draft.
     const discard = page.getByRole('dialog', { name: 'Discard changes?', exact: true })
-    await selectTab(page, 'Shipping details')
+    await selectTab(page, 'Items')
     await discard.getByRole('button', { name: 'Keep editing', exact: true }).click()
     await expect(discard).toHaveCount(0)
     await expect(page.getByRole('tab', { name: 'Application', exact: true })).toHaveAttribute(
@@ -294,32 +285,21 @@ test.describe('Frontend parity with mocked API responses', () => {
       'Pending withdrawal confirmation',
     )
 
-    await selectTab(page, 'Shipping details')
+    await selectTab(page, 'Items')
     await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()
-    await expect(page.getByRole('tab', { name: 'Shipping details', exact: true })).toHaveAttribute(
+    await expect(page.getByRole('tab', { name: 'Items', exact: true })).toHaveAttribute(
       'aria-selected',
       'true',
     )
-    await page.getByRole('button', { name: 'Edit shipping details' }).click()
-    await page.getByLabel('Transport name', { exact: true }).fill('Saved truck')
-    await page.getByRole('button', { name: 'Save federal permit' }).click()
-    await expect(page.getByText('Federal permit updated.', { exact: true })).toBeVisible()
-    await expect(page.getByText('Saved truck', { exact: true })).toBeVisible()
 
     await selectTab(page, 'Application')
     await expect(page.getByRole('button', { name: 'Edit federal status' })).toBeVisible()
     await expect(page.getByLabel('Status', { exact: true })).toHaveCount(0)
-    expect(fixture.writes).toEqual([
-      {
-        method: 'PUT',
-        path: '/api/lexis/federal/applications/888/permit',
-        body: expect.objectContaining({ transportName: 'Saved truck' }),
-      },
-    ])
+    expect(fixture.writes).toEqual([])
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
-  test('asks before a tab switch drops an unsaved federal shipping draft', async ({ page }) => {
+  test('asks before a tab switch drops an unsaved federal remark draft', async ({ page }) => {
     const fixture = await installParityFixtures(page)
     await gotoSyntheticRoute(page, '/federal/application/888', {
       ready: page.getByRole('heading', {
@@ -328,21 +308,20 @@ test.describe('Frontend parity with mocked API responses', () => {
         exact: true,
       }),
     })
-    await selectTab(page, 'Shipping details')
-    await page.getByRole('button', { name: 'Edit shipping details' }).click()
-    await page.getByLabel('Transport name', { exact: true }).fill('Unsaved truck')
+    await selectTab(page, 'Remarks')
+    await page.getByRole('button', { name: 'Add remark', exact: true }).click()
+    await page.getByLabel('New remark', { exact: true }).fill('Unsaved note')
 
     // Only one section edits at a time, so leaving the tab asks before dropping the draft.
     const discard = page.getByRole('dialog', { name: 'Discard changes?', exact: true })
     await selectTab(page, 'Application')
     await discard.getByRole('button', { name: 'Keep editing', exact: true }).click()
     await expect(discard).toHaveCount(0)
-    await expect(page.getByRole('tab', { name: 'Shipping details', exact: true })).toHaveAttribute(
+    await expect(page.getByRole('tab', { name: 'Remarks', exact: true })).toHaveAttribute(
       'aria-selected',
       'true',
     )
-    await expect(page.getByLabel('Transport name', { exact: true })).toHaveValue('Unsaved truck')
-    await expect(page.getByRole('button', { name: 'Save federal permit' })).toBeEnabled()
+    await expect(page.getByLabel('New remark', { exact: true })).toHaveValue('Unsaved note')
 
     await selectTab(page, 'Application')
     await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()
@@ -358,9 +337,8 @@ test.describe('Frontend parity with mocked API responses', () => {
       page.getByText('Federal application status updated.', { exact: true }),
     ).toBeVisible()
 
-    await selectTab(page, 'Shipping details')
-    await expect(page.getByText('Original truck', { exact: true })).toBeVisible()
-    await expect(page.getByLabel('Transport name', { exact: true })).toHaveCount(0)
+    await selectTab(page, 'Remarks')
+    await expect(page.getByLabel('New remark', { exact: true })).toHaveCount(0)
     expect(fixture.writes).toEqual([
       {
         method: 'POST',
@@ -371,52 +349,17 @@ test.describe('Frontend parity with mocked API responses', () => {
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
-  test('reopens a cancelled Blanket OIC with empty locked dates', async ({ page }) => {
+  test('keeps a cancelled Blanket OIC read-only', async ({ page }) => {
     const fixture = await installParityFixtures(page)
     await gotoSyntheticRoute(page, '/provincial/exemption/PARITY-BOIC', {
       ready: page.getByRole('heading', { level: 1, name: 'Exemption PARITY-BOIC', exact: true }),
     })
-    const editDetails = page.getByRole('button', { name: 'Edit exemption details', exact: true })
-    const saveChanges = page.getByRole('button', { name: 'Save changes', exact: true })
-    await editDetails.click()
-    await expect(page.getByLabel('Approval date', { exact: true })).toHaveCount(0)
+    // The edit context loads after the heading; let it settle before checking for Edit.
+    await page.waitForLoadState('networkidle')
     await expect(
-      page.locator('dt', { hasText: /^Approval date$/ }).locator('xpath=following-sibling::dd'),
-    ).toHaveText('Not approved')
-    const expiryDate = page.getByLabel('Expiry date', { exact: true })
-    await expect(expiryDate).toBeDisabled()
-    await expect(expiryDate).toHaveValue('')
-    await expect(expiryDate).not.toHaveAttribute('aria-invalid', 'true')
-    await expect(page.getByLabel('Approval volume (m³)', { exact: true })).toBeDisabled()
-    await expect(page.getByLabel('Conditions', { exact: true })).toBeDisabled()
-    // Save stays available; without a change it closes the edit and sends nothing.
-    await expect(saveChanges).toBeEnabled()
-    await saveChanges.click()
-    await expect(editDetails).toBeVisible()
-    await expect(saveChanges).toHaveCount(0)
+      page.getByRole('button', { name: 'Edit exemption details', exact: true }),
+    ).toHaveCount(0)
     expect(fixture.writes).toEqual([])
-
-    await editDetails.click()
-    await page.getByRole('combobox', { name: 'Status', exact: true }).click()
-    await page.getByRole('option', { name: 'New', exact: true }).click()
-    await saveChanges.click()
-    await expect(page.getByText('Exemption details saved.', { exact: true })).toBeVisible()
-
-    expect(fixture.writes).toEqual([
-      {
-        method: 'POST',
-        path: '/api/lexis/rpc/exemption-details/exemption/update',
-        body: expect.objectContaining({
-          exemptionNumber: 'PARITY-BOIC',
-          exemptionStatusCode: 'NEW',
-          exemptionTypeCode: 'B',
-          approvalDate: '',
-          exemptionExpiryDate: '',
-          approvedVolume: '500.0',
-          otherConditions: 'Keep existing conditions',
-        }),
-      },
-    ])
     expect(fixture.unexpectedRequests).toEqual([])
   })
 })

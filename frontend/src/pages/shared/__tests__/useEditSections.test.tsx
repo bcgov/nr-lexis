@@ -457,6 +457,72 @@ describe('useEditSections', () => {
     )
   })
 
+  it('focuses the open tab when Cancel is on a tab without the section Edit button', async () => {
+    const user = userEvent.setup()
+    const TabbedSection = () => {
+      const [tab, setTab] = useState<'permit' | 'fees'>('permit')
+      const sections = useEditSections<Section>({ isDirty: false, onDiscard: vi.fn() })
+      const editing = sections.isEditing('permit')
+      return (
+        <>
+          <div role="tablist">
+            {(['permit', 'fees'] as const).map((id) => (
+              <button
+                key={id}
+                type="button"
+                role="tab"
+                id={`${id}-tab`}
+                aria-controls={`${id}-panel`}
+                aria-selected={tab === id}
+                onClick={() => setTab(id)}
+              >
+                {id} tab
+              </button>
+            ))}
+          </div>
+          <div
+            role="tabpanel"
+            id="permit-panel"
+            aria-labelledby="permit-tab"
+            hidden={tab !== 'permit'}
+          >
+            <section ref={sections.sectionRef('permit')}>
+              {editing ? (
+                <>
+                  <label htmlFor="permit-status">Status</label>
+                  <input id="permit-status" />
+                </>
+              ) : (
+                <button
+                  type="button"
+                  ref={sections.editButtonRef('permit')}
+                  onClick={() => sections.startEditing('permit')}
+                >
+                  Edit permit
+                </button>
+              )}
+            </section>
+          </div>
+          <div role="tabpanel" id="fees-panel" aria-labelledby="fees-tab" hidden={tab !== 'fees'}>
+            {editing && (
+              <button type="button" onClick={sections.cancelEditing}>
+                Cancel
+              </button>
+            )}
+          </div>
+        </>
+      )
+    }
+    render(<TabbedSection />)
+
+    await user.click(screen.getByRole('button', { name: 'Edit permit' }))
+    await waitFor(() => expect(screen.getByLabelText('Status')).toHaveFocus())
+    await user.click(screen.getByRole('tab', { name: 'fees tab' }))
+    await user.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'fees tab' })).toHaveFocus())
+  })
+
   it('returns focus to Edit when a save reloads the record before the button returns', async () => {
     vi.useFakeTimers({
       toFake: [

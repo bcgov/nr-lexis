@@ -560,22 +560,28 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     return true;
   }
 
-  public Optional<RemarkRow> findRemarkByNumber(Long remarkId) {
-    if (remarkId == null || remarkId < 1) {
+  public Optional<RemarkRow> findRemark(Long remarkId, Long applicationNumber) {
+    if (!validRemarkKey(remarkId, applicationNumber)) {
       return Optional.empty();
     }
     return queryDirectFailClosed(
-            LexisRemarkQueries.REMARK_BY_NUMBER, this::mapRemarkRow, remarkId)
+            LexisRemarkQueries.REMARK_BY_APPLICATION_AND_NUMBER,
+            this::mapRemarkRow,
+            applicationNumber,
+            remarkId)
         .stream()
         .findFirst();
   }
 
-  public Optional<RemarkRow> findRemarkByNumberRequired(Long remarkId) {
-    if (remarkId == null || remarkId < 1) {
+  public Optional<RemarkRow> findRemarkRequired(Long remarkId, Long applicationNumber) {
+    if (!validRemarkKey(remarkId, applicationNumber)) {
       return Optional.empty();
     }
     return queryDirectRequired(
-            LexisRemarkQueries.REMARK_BY_NUMBER, this::mapRemarkRow, remarkId)
+            LexisRemarkQueries.REMARK_BY_APPLICATION_AND_NUMBER,
+            this::mapRemarkRow,
+            applicationNumber,
+            remarkId)
         .stream()
         .findFirst();
   }
@@ -629,7 +635,10 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
   public boolean updateRemark(
       Long remarkId, Long applicationNumber, String remarkBody, String updateUserId, Instant remarkDate) {
-    if (remarkId == null || remarkId < 1 || applicationNumber == null || applicationNumber < 1) {
+    // INTENTIONAL_LEGACY_DIVERGENCE(REMARK_EDIT_SHARED_NUMBER): UPDATE_EXEMPTION_APP_REMARK
+    // matches the remark number alone, so it runs only for a number on exactly one application.
+    if (!validRemarkKey(remarkId, applicationNumber)
+        || countApplicationsWithRemarkNumber(remarkId) != 1) {
       return false;
     }
 
@@ -647,6 +656,26 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
           cs.setLong(6, applicationNumber);
         });
     return true;
+  }
+
+  /** Whether remarks on more than one application use this remark number. */
+  public boolean isRemarkNumberShared(Long remarkId) {
+    return remarkId != null && remarkId > 0 && countApplicationsWithRemarkNumber(remarkId) > 1;
+  }
+
+  private long countApplicationsWithRemarkNumber(long remarkId) {
+    return queryDirectRequired(
+            LexisRemarkQueries.REMARK_NUMBER_APPLICATION_COUNT,
+            rs -> getLong(rs, "APPLICATION_COUNT"),
+            remarkId)
+        .stream()
+        .findFirst()
+        .orElseThrow(
+            () -> new DataRetrievalFailureException("Oracle remark number count returned no row."));
+  }
+
+  private static boolean validRemarkKey(Long remarkId, Long applicationNumber) {
+    return remarkId != null && remarkId > 0 && applicationNumber != null && applicationNumber > 0;
   }
 
   public Optional<ApplicationInsertRow> insertApplication(ApplicationInsertRecord record) {

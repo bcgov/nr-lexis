@@ -43,6 +43,7 @@ import ca.bc.gov.mof.lexis.service.permit.PermitService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import jakarta.servlet.http.HttpServletRequest;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
@@ -88,10 +89,13 @@ public class PermitDetailsRpcController {
   private static final String PERMIT_STATUS_ACTIVE = "ACT";
   private static final String PERMIT_STATUS_COMPLETE = "COM";
   private static final String PERMIT_STATUS_EXPIRED = "EXP";
+  private static final String PERMIT_STATUS_PAYMENT_PENDING = "PPD";
+  private static final String PORT_OF_EXPORT_OTHER = "OT";
   private static final String EXEMPTION_TYPE_BLANKET_OIC = "B";
   private static final String LEGACY_ACTION_SAVE_PERMIT = "savePermit";
   private static final String LEGACY_ACTION_REVIEW_PERMITS = "/permitsReview";
   private static final String LEGACY_ACTION_APPLICATION_DETAILS = "/applicationDetails";
+  private static final String LEGACY_ACTION_CHANGE_APPLICANT_TYPE = "/changeApplicantType";
   private static final String LEGACY_PERMIT_LOCK_SESSION_KEY = "PERMIT_LOCK";
 
   private final ObjectProvider<PermitDetailsRpcService> serviceProvider;
@@ -179,6 +183,25 @@ public class PermitDetailsRpcController {
             applicationDate,
             packageNumber,
             isMinistryUser(authentication)));
+  }
+
+  @GetMapping("/request-email-default")
+  public ResponseEntity<PermitRequestEmailDefaultResponseDto> getRequestPermitEmailDefault(
+      @RequestParam(name = "permitNumber") Long permitNumber,
+      Authentication authentication) {
+    if (isMinistryUser(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      return ResponseEntity.noContent().build();
+    }
+    requirePermitAccess(permitNumber, authentication);
+    PermitDetailsRpcService.PermitRequestEmailDefaults defaults =
+        service.getRequestPermitEmailDefaults(permitNumber);
+    return ResponseEntity.ok(
+        new PermitRequestEmailDefaultResponseDto(
+            defaults.regionalEmailAddress(), defaults.copyToEmailAddress()));
   }
 
   @PostMapping("/request-email")
@@ -512,13 +535,19 @@ public class PermitDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    PermitMutationRequestDto mutationRequest = buildPermitMutationRequest(request);
-    if ((requestsFeeOverrideMutation(mutationRequest)
-            || hasText(mutationRequest.permitIssueDate())
-            || hasText(mutationRequest.permitExpiryDate()))
-        && !canReviewPermits(authentication)) {
+    PermitMutationRequestDto submittedRequest = buildPermitMutationRequest(request);
+    boolean permitReviewer = canReviewPermits(authentication);
+    // Provincial Submitters can't set dates on a new permit; it's submitted today.
+    if ((requestsFeeOverrideMutation(submittedRequest)
+            || hasText(submittedRequest.permitIssueDate())
+            || hasText(submittedRequest.permitExpiryDate()))
+        && !permitReviewer) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
+    PermitMutationRequestDto mutationRequest =
+        permitReviewer
+            ? submittedRequest
+            : withPermitSubmitDate(submittedRequest, LexisBusinessTime.today().toString());
     requireExemptionAccess(mutationRequest.exemptionNumber(), authentication);
     requirePermitRegions(mutationRequest, authentication);
     Long requestedOicApplicationNumber = requestedOicApplicationNumber(mutationRequest);
@@ -634,7 +663,7 @@ public class PermitDetailsRpcController {
     Long permitNumber = parsePositiveLong(mutationRequest.permitNumber());
     requirePermitAccess(permitNumber, authentication);
     requirePermitRegions(mutationRequest, authentication);
-    if (requestsMinistryPermitMutation(mutationRequest, permitNumber)
+    if (requestsMinistryPermitMutation(mutationRequest, permitNumber, authentication)
         && !canReviewPermits(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
@@ -664,7 +693,7 @@ public class PermitDetailsRpcController {
       Long permitNumber,
       Authentication authentication) {
     requirePermitAccess(permitNumber, authentication);
-    if (requestsMinistryPermitMutation(mutationRequest, permitNumber)
+    if (requestsMinistryPermitMutation(mutationRequest, permitNumber, authentication)
         && !canReviewPermits(authentication)) {
       throw new AccessDeniedException(
           "Permit status, date and receipt changes require permit review authority.");
@@ -674,6 +703,7 @@ public class PermitDetailsRpcController {
     exemptionNumbers.forEach(
         exemptionNumber -> requireExemptionAccess(exemptionNumber, authentication));
     requirePermitDetailsMutable(permitNumber, authentication);
+    requireSubmitterPortsUnchanged(permitNumber, mutationRequest, authentication);
     List<MutationExemptionLock> exemptionLocks =
         acquireMutationExemptionLocks(exemptionNumbers, authentication);
     List<Long> applicationLocksToRelease = List.of();
@@ -689,7 +719,9 @@ public class PermitDetailsRpcController {
           applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
       applicationLocksToRelease =
           acquireApplicationLocksForMutation(linkedApplicationNumbers, authentication);
-      return service.updatePermit(mutationRequest, userId(authentication));
+      return canChangePermitAgent(authentication)
+          ? service.updatePermitWithAgentChange(mutationRequest, userId(authentication))
+          : service.updatePermit(mutationRequest, userId(authentication));
     } finally {
       releaseApplicationLocks(applicationLocksToRelease, authentication);
       releaseMutationExemptionLocks(exemptionLocks);
@@ -1364,6 +1396,44 @@ public class PermitDetailsRpcController {
         firstPresent(parameters, "overrideComment"));
   }
 
+  private PermitMutationRequestDto withPermitSubmitDate(
+      PermitMutationRequestDto request, String permitSubmitDate) {
+    return new PermitMutationRequestDto(
+        request.permitNumber(),
+        request.permitStatus(),
+        permitSubmitDate,
+        request.permitIssueDate(),
+        request.permitExpiryDate(),
+        request.permitRequestDate(),
+        request.exemptionNumber(),
+        request.destinationCompanyName(),
+        request.destinationCountry(),
+        request.transportType(),
+        request.transportName(),
+        request.estimatedShippingDate(),
+        request.portOfExport(),
+        request.otherPortOfExport(),
+        request.permitReceiptNo(),
+        request.permitRemarks(),
+        request.permitGrowthType(),
+        request.permitTotalVolume(),
+        request.permitNumberOfPieces(),
+        request.orgUnitNumber(),
+        request.ownerClientNumber(),
+        request.ownerClientLocation(),
+        request.agentClientNumber(),
+        request.agentClientLocation(),
+        request.oicApplicationNumber(),
+        request.oicRegion(),
+        request.oicPermitTotalPieces(),
+        request.oicPermitTotalVolume(),
+        request.packageAgeClass(),
+        request.packageProductType(),
+        request.overrideInd(),
+        request.overrideFee(),
+        request.overrideComment());
+  }
+
   private boolean isMinistryUser(Authentication authentication) {
     List<String> roles = sessionService.parseRolesFromPrincipal(authentication);
     if (roles == null || roles.isEmpty()) {
@@ -1465,6 +1535,15 @@ public class PermitDetailsRpcController {
         sessionService.parseRolesFromPrincipal(authentication), LEGACY_ACTION_REVIEW_PERMITS);
   }
 
+  // Ministry users who can change an application's applicant type can also add or remove a
+  // Blanket OIC permit's agent.
+  private boolean canChangePermitAgent(Authentication authentication) {
+    return isMinistryUser(authentication)
+        && authorizationService.canPerformAction(
+            sessionService.parseRolesFromPrincipal(authentication),
+            LEGACY_ACTION_CHANGE_APPLICANT_TYPE);
+  }
+
   private boolean requestsFeeOverrideMutation(PermitMutationRequestDto request) {
     return request != null
         && (request.overrideInd() != null
@@ -1473,7 +1552,7 @@ public class PermitDetailsRpcController {
   }
 
   private boolean requestsMinistryPermitMutation(
-      PermitMutationRequestDto request, Long permitNumber) {
+      PermitMutationRequestDto request, Long permitNumber, Authentication authentication) {
     if (request == null || permitNumber == null) {
       return false;
     }
@@ -1487,7 +1566,8 @@ public class PermitDetailsRpcController {
         .findByPermitNumber(permitNumber)
         .map(
             detail ->
-                submittedCodeChanged(request.permitStatus(), detail.permitStatusCode())
+                (submittedCodeChanged(request.permitStatus(), detail.permitStatusCode())
+                        && !submitterMayChangePermitStatus(detail, authentication))
                     || submittedDateChanged(
                         request.permitSubmitDate(), detail.applicationDate())
                     || submittedDateChanged(request.permitIssueDate(), detail.issueDate())
@@ -1495,6 +1575,13 @@ public class PermitDetailsRpcController {
                     || submittedValueChanged(request.permitReceiptNo(), detail.receiptNumber())
                     || clearsActiveDraftDate(request, detail))
         .orElse(true);
+  }
+
+  // Provincial Submitters can change the status of a Payment pending permit.
+  private boolean submitterMayChangePermitStatus(
+      PermitDetailDto detail, Authentication authentication) {
+    return !isMinistryUser(authentication)
+        && PERMIT_STATUS_PAYMENT_PENDING.equalsIgnoreCase(trimToEmpty(detail.permitStatusCode()));
   }
 
   private boolean clearsActiveDraftDate(
@@ -1749,6 +1836,8 @@ public class PermitDetailsRpcController {
     }
   }
 
+  // Provincial Submitters can't change the other port name once a permit is Payment pending, or
+  // either port once it is Completed.
   private void requireSubmitterPortsUnchanged(
       Long permitNumber, PermitMutationRequestDto request, Authentication authentication) {
     if (permitService == null || isMinistryUser(authentication)) {
@@ -1756,19 +1845,36 @@ public class PermitDetailsRpcController {
     }
     permitService
         .findByPermitNumber(permitNumber)
-        .filter(
-            detail ->
-                PERMIT_STATUS_COMPLETE.equalsIgnoreCase(trimToEmpty(detail.permitStatusCode())))
-        .filter(
-            detail ->
-                submittedValueChanged(request.portOfExport(), detail.portOfExportCode())
-                    || submittedValueChanged(
-                        request.otherPortOfExport(), detail.otherPortOfExport()))
         .ifPresent(
             detail -> {
-              throw new AccessDeniedException(
-                  "Provincial Submitters can't change the port of export on a completed permit.");
+              String permitStatus =
+                  trimToEmpty(detail.permitStatusCode()).toUpperCase(Locale.ROOT);
+              if (PERMIT_STATUS_COMPLETE.equals(permitStatus)
+                  && (submittedValueChanged(request.portOfExport(), detail.portOfExportCode())
+                      || otherPortOfExportChanged(request, detail))) {
+                throw new AccessDeniedException(
+                    "Provincial Submitters can't change the port of export on a completed permit.");
+              }
+              if (PERMIT_STATUS_PAYMENT_PENDING.equals(permitStatus)
+                  && otherPortOfExportChanged(request, detail)) {
+                throw new AccessDeniedException(
+                    "Provincial Submitters can't change the other port of export name on a"
+                        + " payment pending permit.");
+              }
             });
+  }
+
+  /**
+   * The other port name belongs to the Other port only, so it is compared only when the port the
+   * permit keeps (the submitted one, or else the saved one) is Other. A blank name sent with
+   * another port is not a change.
+   */
+  private static boolean otherPortOfExportChanged(
+      PermitMutationRequestDto request, PermitDetailDto detail) {
+    String port =
+        request.portOfExport() == null ? detail.portOfExportCode() : request.portOfExport();
+    return PORT_OF_EXPORT_OTHER.equalsIgnoreCase(trimToEmpty(port))
+        && submittedValueChanged(request.otherPortOfExport(), detail.otherPortOfExport());
   }
 
   private static boolean submittedValueChanged(String submitted, String current) {
@@ -1906,6 +2012,9 @@ public class PermitDetailsRpcController {
   public record PermitApprovalEmailDefaultResponseDto(String clientEmailAddress) {}
 
   public record RemoveDocumentResponseDto(String success) {}
+
+  public record PermitRequestEmailDefaultResponseDto(
+      String regionalEmailAddress, String copyToEmailAddress) {}
 
   private record MutationExemptionLock(
       String exemptionNumber, String userId, boolean releaseAfterMutation) {}

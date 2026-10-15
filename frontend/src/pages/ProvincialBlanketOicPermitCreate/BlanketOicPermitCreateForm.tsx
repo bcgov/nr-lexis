@@ -1013,8 +1013,9 @@ const BlanketOicPermitCreateForm = ({
                       edit={
                         <IsoDatePicker
                           id="boic-permit-submit-date"
-                          labelText={requiredLabel('Submit date')}
-                          required
+                          labelText={requiredLabel('Submit date', canReviewPermits)}
+                          required={canReviewPermits}
+                          disabled={!canReviewPermits}
                           value={form.permitSubmitDate}
                           invalid={!!fieldError('permitSubmitDate')}
                           invalidText={fieldError('permitSubmitDate')}

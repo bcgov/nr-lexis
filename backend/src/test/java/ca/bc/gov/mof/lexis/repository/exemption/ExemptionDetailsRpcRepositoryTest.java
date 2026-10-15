@@ -496,6 +496,7 @@ class ExemptionDetailsRpcRepositoryTest {
                   .isEqualTo("NORSKE SKOG CANADA LIMITED");
               assertThat(application.agentCompanyName())
                   .isEqualTo("INTERNATIONAL FOREST PRODUCTS");
+              assertThat(application.applicationStatusCode()).isEqualTo("EXE");
             });
 
     verify(cursor, never()).getDouble("TOTAL_SCALE_VOLUME");
@@ -566,6 +567,7 @@ class ExemptionDetailsRpcRepositoryTest {
         .thenReturn("INTERNATIONAL FOREST PRODUCTS");
     when(cursor.getString("EXPORT_JURISDICTION_CODE")).thenReturn("P");
     when(cursor.getString("EXPORT_PRODUCT_TYPE_CODE")).thenReturn("T");
+    when(cursor.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("EXE");
     return cursor;
   }
 

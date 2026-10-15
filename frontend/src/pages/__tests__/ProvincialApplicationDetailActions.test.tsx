@@ -60,6 +60,12 @@ const getAgentDetailsTile = (): HTMLElement => {
   return section as HTMLElement
 }
 
+const getReadOnlyField = (container: HTMLElement, label: string): HTMLElement => {
+  const field = within(container).getByText(label, { selector: 'dt' }).closest('.record-field')
+  expect(field).toBeTruthy()
+  return field as HTMLElement
+}
+
 describe.sequential('Provincial Application Detail Actions - application', () => {
   beforeEach(setupApplicationDetailTests)
 
@@ -956,7 +962,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(ownerControls.getByLabelText("I'm an agent"))
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
     let agentControls = within(getAgentDetailsTile())
-    expect(agentControls.getByLabelText('Agent client')).toHaveValue('00011122')
+    expect(agentControls.getByLabelText('Agent client')).toHaveValue('')
     await userEvent.click(ownerControls.getByRole('button', { name: 'Cancel' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
 
@@ -971,6 +977,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(resetOwnerControls.getByLabelText("I'm an agent")).not.toBeChecked()
     await userEvent.click(resetOwnerControls.getByLabelText("I'm an agent"))
     agentControls = within(getAgentDetailsTile())
+    fireEvent.change(agentControls.getByLabelText('Agent client'), {
+      target: { value: '00033344' },
+    })
 
     await waitFor(() =>
       expect(agentControls.getByRole('combobox', { name: 'Agent location' })).toBeEnabled(),
@@ -992,7 +1001,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({
           saveSource: 'owner-agent',
           applicantTypeCode: 'A',
-          agentClientNumber: '00011122',
+          agentClientNumber: '00033344',
           agentClientLocationCode: '01',
           agentContactName: 'Agent Contact',
         }),
@@ -1144,6 +1153,295 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(within(agentClientField as HTMLElement).getByText(/00033344$/)).toBeInTheDocument()
   })
 
+  it('lets an approver remove the agent after the details lock while the permit is open', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'EXE',
+      statusDescription: 'Exempted',
+      canEditApplicationDetails: false,
+      canEditPackages: false,
+      canAddPackages: false,
+      canAddScales: false,
+      canUpdatePackageNumber: false,
+      canChangeAgent: true,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicationStatusCode: 'EXE',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    expect(ownerControls.queryByRole('textbox', { name: 'Contact name' })).not.toBeInTheDocument()
+    const agentChoice = ownerControls.getByLabelText("I'm an agent")
+    expect(agentChoice).toBeEnabled()
+    expect(agentChoice).toBeChecked()
+    await userEvent.click(agentChoice)
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          saveSource: 'owner',
+          ownerContactName: 'Owner Contact',
+          ownerClientLocationCode: '00',
+        }),
+      ),
+    )
+    expect(mockedUpdateApplicationSummary.mock.calls[0][0].applicantTypeCode).not.toBe('A')
+  })
+
+  const mockAgentOnlyApplication = (agentUsed: boolean, ownerContactName = '') => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'EXE',
+      statusDescription: 'Exempted',
+      agentClientNumber: agentUsed ? applicationDetail.agentClientNumber : null,
+      canEditApplicationDetails: false,
+      canEditPackages: false,
+      canAddPackages: false,
+      canAddScales: false,
+      canUpdatePackageNumber: false,
+      canChangeAgent: true,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicationStatusCode: 'EXE',
+      ownerContactName,
+      ...(agentUsed
+        ? {}
+        : {
+            applicantTypeCode: 'O',
+            agentClientNumber: '',
+            agentClientLocationCode: '',
+            agentContactName: '',
+          }),
+    })
+  }
+
+  it('removes the agent after the details lock when the owner contact name is empty', async () => {
+    mockAgentOnlyApplication(true)
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    await userEvent.click(ownerControls.getByLabelText("I'm an agent"))
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({ saveSource: 'owner', ownerContactName: '' }),
+      ),
+    )
+    expect(mockedUpdateApplicationSummary.mock.calls[0][0].applicantTypeCode).not.toBe('A')
+  })
+
+  it('adds an agent after the details lock only with the agent details', async () => {
+    mockAgentOnlyApplication(false)
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    await userEvent.click(ownerControls.getByLabelText("I'm an agent"))
+    const agentControls = within(getAgentDetailsTile())
+    fireEvent.change(agentControls.getByLabelText('Agent client'), {
+      target: { value: '00033344' },
+    })
+    await waitFor(() =>
+      expect(agentControls.getByRole('combobox', { name: 'Agent location' })).toBeEnabled(),
+    )
+    await chooseComboBoxOption(
+      agentControls.getByRole('combobox', { name: 'Agent location' }),
+      '01 - Agent Main Location',
+    )
+    await waitFor(() =>
+      expect(ownerControls.getByRole('button', { name: 'Save changes' })).toBeEnabled(),
+    )
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+
+    const agentContactName = agentControls.getByRole('textbox', { name: 'Contact name' })
+    expect(await agentControls.findByText('Contact name is required')).toBeVisible()
+    await waitFor(() => expect(agentContactName).toHaveFocus())
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    fireEvent.change(agentContactName, { target: { value: 'Agent Contact' } })
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          saveSource: 'owner-agent',
+          applicantTypeCode: 'A',
+          ownerContactName: '',
+          agentClientNumber: '00033344',
+          agentClientLocationCode: '01',
+          agentContactName: 'Agent Contact',
+        }),
+      ),
+    )
+  })
+
+  it('brings back the saved agent details when the agent is checked again after the details lock', async () => {
+    mockAgentOnlyApplication(true)
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    const agentChoice = ownerControls.getByLabelText("I'm an agent")
+    await userEvent.click(agentChoice)
+    await userEvent.click(agentChoice)
+
+    expect(
+      within(getReadOnlyField(getAgentDetailsTile(), 'Contact name')).getByText('Agent Contact'),
+    ).toBeInTheDocument()
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await within(getOwnerClientDetailsTile()).findByRole('button', {
+        name: 'Edit applicant details',
+      }),
+    ).toBeInTheDocument()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
+  it('shows the owner details as text when only the agent can change', async () => {
+    mockAgentOnlyApplication(false, 'Owner Contact')
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerTile = getOwnerClientDetailsTile()
+    const ownerControls = within(ownerTile)
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+
+    expect(ownerControls.queryByRole('textbox', { name: 'Contact name' })).not.toBeInTheDocument()
+    expect(
+      ownerControls.queryByRole('combobox', { name: 'Client location' }),
+    ).not.toBeInTheDocument()
+    expect(ownerControls.queryAllByRole('button', { name: 'Clear selected item' })).toHaveLength(0)
+    expect(
+      within(getReadOnlyField(ownerTile, 'Contact name')).getByText('Owner Contact'),
+    ).toBeInTheDocument()
+    expect(
+      await within(getReadOnlyField(ownerTile, 'Client location')).findByText(
+        '00 - Owner Main Location',
+      ),
+    ).toBeInTheDocument()
+    const agentChoice = ownerControls.getByLabelText("I'm an agent")
+    expect(agentChoice).toBeEnabled()
+
+    await userEvent.click(agentChoice)
+    const agentControls = within(getAgentDetailsTile())
+    expect(agentControls.getByRole('textbox', { name: 'Contact name' })).not.toHaveAttribute(
+      'readonly',
+    )
+    expect(agentControls.getByLabelText('Agent client')).toBeEnabled()
+    expect(agentControls.getByRole('combobox', { name: 'Agent location' })).not.toHaveAttribute(
+      'readonly',
+    )
+  })
+
+  it('shows a saved agent as text when only the agent can change', async () => {
+    mockAgentOnlyApplication(true, 'Owner Contact')
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+
+    const agentTile = getAgentDetailsTile()
+    const agentControls = within(agentTile)
+    expect(agentControls.queryByRole('textbox', { name: 'Contact name' })).not.toBeInTheDocument()
+    expect(
+      agentControls.queryByRole('combobox', { name: 'Agent location' }),
+    ).not.toBeInTheDocument()
+    expect(ownerControls.queryAllByRole('button', { name: 'Clear selected item' })).toHaveLength(0)
+    expect(
+      within(getReadOnlyField(agentTile, 'Contact name')).getByText('Agent Contact'),
+    ).toBeInTheDocument()
+    expect(
+      await within(getReadOnlyField(agentTile, 'Agent location')).findByText(
+        '01 - Agent Main Location',
+      ),
+    ).toBeInTheDocument()
+    expect(agentControls.getByText(/00033344$/)).toBeInTheDocument()
+    const agentChoice = ownerControls.getByLabelText("I'm an agent")
+    expect(agentChoice).toBeEnabled()
+    expect(agentChoice).toBeChecked()
+  })
+
+  it('refuses an approver naming the owner as the agent', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      agentClientNumber: null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicantTypeCode: 'O',
+      agentClientNumber: '',
+      agentClientLocationCode: '',
+      agentContactName: '',
+    })
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    await userEvent.click(ownerControls.getByLabelText("I'm an agent"))
+    const agentControls = within(getAgentDetailsTile())
+    fireEvent.change(agentControls.getByLabelText('Agent client'), {
+      target: { value: '00011122' },
+    })
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await agentControls.findByText('The agent must be a different client from the owner'),
+    ).toBeVisible()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
+  it('keeps the applicant read-only after the details lock without the agent change', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'PMT',
+      statusDescription: 'Permitted',
+      canEditApplicationDetails: false,
+      canChangeAgent: false,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    expect(
+      within(getOwnerClientDetailsTile()).queryByRole('button', {
+        name: 'Edit applicant details',
+      }),
+    ).not.toBeInTheDocument()
+  })
+
   it('loads complete application context without enabling edits for read-only viewers', async () => {
     mockApplicationDetailAuth(
       (action) => ['/applicationDetails', '/applicationRemarks'].includes(action),
@@ -1231,6 +1529,27 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       within(remarksTable).queryByRole('columnheader', { name: 'Actions' }),
     ).not.toBeInTheDocument()
+    expect(within(remarksTable).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+  })
+
+  it('hides saved remark editing from users without the application create action', async () => {
+    mockApplicationDetailAuth(
+      (action) => action !== 'createApplication',
+      ['LEXIS_READ_ONLY', 'LEXIS_EXEMPTION_APPROVER'],
+    )
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      exemptionApprover: true,
+      canEditApplicationDetails: false,
+    })
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await selectApplicationDetailTab('Remarks')
+    const remarksTable = within(
+      screen.getByRole('region', { name: 'Application remarks' }),
+    ).getByRole('table')
+    expect(within(remarksTable).getByText('ok')).toBeInTheDocument()
     expect(within(remarksTable).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
   })
 
@@ -1348,7 +1667,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByRole('heading', { name: 'Permits' })).not.toBeInTheDocument()
     expect(mockedFetchProvincialExemptionDetail).not.toHaveBeenCalled()
     expect(within(summaryTile).getByText('Jan 1, 2026')).toBeInTheDocument()
-    expect(within(summaryTile).getByText('Jan 3, 2026')).toBeInTheDocument()
+    expect(within(summaryTile).getByText('Jan 3, 2099')).toBeInTheDocument()
 
     await selectApplicationDetailTab('Scale')
     const scaleTile = screen.getByRole('heading', { name: 'Scale details' }).closest('.cds--tile')
@@ -2058,6 +2377,40 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).not.toBeInTheDocument()
   })
 
+  it('saves an application already saved with its owner as the agent', async () => {
+    mockSubmitterApplication('00011122', '2099-01-11', true)
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicationStatusCode: 'NEW',
+      applicantTypeCode: 'A',
+      agentClientNumber: '00011122',
+    })
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Edit applicant details' }))
+    fireEvent.change(ownerControls.getAllByRole('textbox', { name: 'Contact name' })[0], {
+      target: { value: 'Updated Owner Contact' },
+    })
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+    const accuracyDialog = await screen.findByRole('dialog', {
+      name: 'Confirm application accuracy',
+    })
+    await userEvent.click(within(accuracyDialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(accuracyDialog).getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({
+          saveSource: 'owner-agent',
+          ownerContactName: 'Updated Owner Contact',
+          agentClientNumber: '00011122',
+        }),
+      ),
+    )
+  })
+
   it('keeps a provincial submitter who is the saved agent from removing the agent', async () => {
     mockSubmitterApplication('00033344', '2099-01-11', true)
     renderApplicationDetailPage()
@@ -2093,14 +2446,21 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       ownerControls.getByText("An agent can't be added or removed on or after the list date."),
     ).toBeVisible()
-    const agentControls = within(getAgentDetailsTile())
-    expect(agentControls.getByRole('textbox', { name: 'Contact name' })).toHaveValue(
-      'Agent Contact',
-    )
-    expect(agentControls.getByRole('textbox', { name: 'Contact name' })).toHaveAttribute('readonly')
-    expect(agentControls.getByRole('combobox', { name: 'Agent location' })).toHaveAttribute(
-      'readonly',
-    )
+    const agentTile = getAgentDetailsTile()
+    const agentControls = within(agentTile)
+    expect(agentControls.queryByRole('textbox', { name: 'Contact name' })).not.toBeInTheDocument()
+    expect(
+      agentControls.queryByRole('combobox', { name: 'Agent location' }),
+    ).not.toBeInTheDocument()
+    expect(
+      within(getReadOnlyField(agentTile, 'Contact name')).getByText('Agent Contact'),
+    ).toBeInTheDocument()
+    expect(
+      await within(getReadOnlyField(agentTile, 'Agent location')).findByText(
+        '01 - Agent Main Location',
+      ),
+    ).toBeInTheDocument()
+    expect(ownerControls.getAllByRole('textbox', { name: 'Contact name' })).toHaveLength(1)
     expect(ownerControls.getByRole('combobox', { name: 'Client location' })).not.toHaveAttribute(
       'readonly',
     )
@@ -2111,6 +2471,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       (action: string) => action === 'createApplication',
       ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
     )
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      listingDate: '2026-01-03',
+    })
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>

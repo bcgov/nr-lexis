@@ -6,7 +6,6 @@ import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import ca.bc.gov.mof.lexis.dto.SearchCountResponseDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
-import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationRemarkDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
@@ -222,21 +221,6 @@ public class FederalApplicationController {
         .orElseGet(() -> ResponseEntity.notFound().build());
   }
 
-  @GetMapping("/{applicationNumber}/permit")
-  public ResponseEntity<FederalApplicationPermitDto> getFederalPermit(
-      @PathVariable("applicationNumber") @Positive Long applicationNumber,
-      Authentication authentication) {
-    FederalApplicationService service = serviceProvider.getIfAvailable();
-    if (service == null) {
-      LOGGER.warn("Federal application service unavailable - returning no content for permit lookup");
-      return ResponseEntity.noContent().build();
-    }
-    authorization().requireFederalApplication(authentication, applicationNumber);
-    return service.findPermitByApplicationNumber(applicationNumber)
-        .map(ResponseEntity::ok)
-        .orElseGet(() -> ResponseEntity.notFound().build());
-  }
-
   @GetMapping("/{applicationNumber}/remarks")
   public ResponseEntity<List<FederalApplicationRemarkDto>> getRemarks(
       @PathVariable("applicationNumber") @Positive Long applicationNumber,
@@ -270,7 +254,6 @@ public class FederalApplicationController {
             applicationNumber,
             () -> {
               authorization().requireFederalApplication(authentication, applicationNumber);
-              requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
                   userId,
@@ -298,63 +281,12 @@ public class FederalApplicationController {
             applicationNumber,
             () -> {
               authorization().requireFederalApplication(authentication, applicationNumber);
-              requireApplicationEdit(service, applicationNumber, authentication);
               return withApplicationEditLock(
                   applicationNumber,
                   userId,
                   () ->
                       service.updateRemark(
                           applicationNumber, remarkId, request, userId));
-            }));
-  }
-
-  @PostMapping("/{applicationNumber}/permit")
-  public ResponseEntity<FederalApplicationService.FederalMutationResult> addFederalPermit(
-      @PathVariable("applicationNumber") @Positive Long applicationNumber,
-      @RequestBody FederalApplicationService.FederalPermitMutationRequest request,
-      Authentication authentication) {
-    if (!canManageFederalApplication(authentication)) {
-      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-    }
-    FederalApplicationService service = serviceProvider.getIfAvailable();
-    if (service == null) return ResponseEntity.noContent().build();
-    authorization().requireFederalApplication(authentication, applicationNumber);
-    String userId = principal(authentication);
-    return ResponseEntity.ok(
-        operationCoordinator.executeApplicationLocalMutation(
-            applicationNumber,
-            () -> {
-              authorization().requireFederalApplication(authentication, applicationNumber);
-              requireApplicationEdit(service, applicationNumber, authentication);
-              return withApplicationEditLock(
-                  applicationNumber,
-                  userId,
-                  () -> service.addPermit(applicationNumber, request, userId));
-            }));
-  }
-
-  @PutMapping("/{applicationNumber}/permit")
-  public ResponseEntity<FederalApplicationService.FederalMutationResult> updateFederalPermit(
-      @PathVariable("applicationNumber") @Positive Long applicationNumber,
-      @RequestBody FederalApplicationService.FederalPermitMutationRequest request,
-      Authentication authentication) {
-    if (!canManageFederalApplication(authentication)) {
-      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-    }
-    FederalApplicationService service = serviceProvider.getIfAvailable();
-    if (service == null) return ResponseEntity.noContent().build();
-    authorization().requireFederalApplication(authentication, applicationNumber);
-    String userId = principal(authentication);
-    return ResponseEntity.ok(
-        operationCoordinator.executeApplicationLocalMutation(
-            applicationNumber,
-            () -> {
-              authorization().requireFederalApplication(authentication, applicationNumber);
-              requireApplicationEdit(service, applicationNumber, authentication);
-              return withApplicationEditLock(
-                  applicationNumber,
-                  userId,
-                  () -> service.updatePermit(applicationNumber, request, userId));
             }));
   }
 
@@ -369,6 +301,12 @@ public class FederalApplicationController {
     FederalApplicationService service = serviceProvider.getIfAvailable();
     if (service == null) return ResponseEntity.noContent().build();
     authorization().requireFederalApplication(authentication, applicationNumber);
+    // Federal applications are approved from Application review, not from the detail page.
+    if (request != null && "APP".equalsIgnoreCase(String.valueOf(request.statusCode()).trim())) {
+      return ResponseEntity.ok(
+          new FederalApplicationService.FederalMutationResult(
+              false, null, List.of("Federal applications are approved from Application review.")));
+    }
     String userId = principal(authentication);
     return ResponseEntity.ok(
         operationCoordinator.executeApplicationLocalMutation(

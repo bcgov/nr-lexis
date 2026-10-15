@@ -16,12 +16,20 @@ public final class LexisRemarkQueries {
       FROM THE.EXPORT_EXEMPTION_APP_REMARKS R
       """;
 
-  // The legacy cursors have no defined row order; callers retain their existing selection.
-  public static final String REMARK_BY_NUMBER =
-      REMARKS + " WHERE R.EXPORT_EXMPTN_APPL_REMARK_NMBR = ?";
+  // A remark number is unique only within its application.
+  public static final String REMARK_BY_APPLICATION_AND_NUMBER =
+      REMARKS + " WHERE R.APPLICATION_NUMBER = ? AND R.EXPORT_EXMPTN_APPL_REMARK_NMBR = ?";
 
+  // The legacy cursor has no defined row order; callers retain their existing selection.
   public static final String REMARKS_BY_APPLICATION =
       REMARKS + " WHERE R.APPLICATION_NUMBER = ?";
+
+  public static final String REMARK_NUMBER_APPLICATION_COUNT =
+      """
+      SELECT COUNT(DISTINCT R.APPLICATION_NUMBER) AS APPLICATION_COUNT
+      FROM THE.EXPORT_EXEMPTION_APP_REMARKS R
+      WHERE R.EXPORT_EXMPTN_APPL_REMARK_NMBR = ?
+      """;
 
   private LexisRemarkQueries() {}
 }

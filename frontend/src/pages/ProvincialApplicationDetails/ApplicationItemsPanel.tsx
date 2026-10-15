@@ -229,7 +229,11 @@ type ProvincialApplicationItemsPanelProps = {
   detail: ProvincialApplicationDetail
   canEditPackages: boolean
   canAddPackages: boolean
+  /** Defaults to canAddPackages. */
+  canDeletePackages?: boolean
   canAddScales: boolean
+  /** Defaults to canAddScales. */
+  canDeleteScales?: boolean
   canUpdatePackageNumber: boolean
   hideMutationActions: boolean
   authoritativeOptionsAvailability: 'loading' | 'available' | 'unavailable'
@@ -464,7 +468,9 @@ function ProvincialApplicationItemsPanel({
   detail,
   canEditPackages,
   canAddPackages,
+  canDeletePackages = canAddPackages,
   canAddScales,
+  canDeleteScales = canAddScales,
   canUpdatePackageNumber,
   hideMutationActions,
   authoritativeOptionsAvailability,
@@ -1235,7 +1241,9 @@ function ProvincialApplicationItemsPanel({
     !baseReferenceOptionsLoading && !baseReferenceOptionsUnavailable
   const createPackageReferenceOptionsAvailable =
     baseReferenceOptionsAvailable && !createEndUseOptionsLoading && !createEndUseOptionsUnavailable
-  const canManageItems = !hideMutationActions && (canEditPackages || canAddPackages || canAddScales)
+  const canManageItems =
+    !hideMutationActions &&
+    (canEditPackages || canAddPackages || canDeletePackages || canAddScales || canDeleteScales)
   // A single package has no selector, so focus returns to its card.
   const packageFocusFallbackSelector =
     packageNumbers.length > 1 ? '#applicationItemsPackageSelect' : '#application-items-package'
@@ -1260,7 +1268,7 @@ function ProvincialApplicationItemsPanel({
     !canAddScalesWithReferenceOptions || !packageDataLoaded || !selectedPackageNumber
   const canDeleteSelectedPackage =
     !itemsBusy &&
-    canAddPackages &&
+    canDeletePackages &&
     packageDataLoaded &&
     !!selectedPackageNumber &&
     !isSavingPackage &&
@@ -1483,7 +1491,7 @@ function ProvincialApplicationItemsPanel({
 
   const onDeleteSelectedPackage = async (packageNumber: string) => {
     if (
-      !canAddPackages ||
+      !canDeletePackages ||
       !packageDataLoaded ||
       !packageNumber ||
       packageNumber !== selectedPackageNumber
@@ -1604,7 +1612,7 @@ function ProvincialApplicationItemsPanel({
   }
 
   const onDeleteScale = async (row: ApplicationPackageScaleRow) => {
-    if (!canAddScales || !packageDataLoaded || row.permitted) {
+    if (!canDeleteScales || !packageDataLoaded || row.permitted) {
       throw new Error('This scale is no longer available for deletion.')
     }
 
@@ -2118,7 +2126,7 @@ function ProvincialApplicationItemsPanel({
                               kind="danger--ghost"
                               size="md"
                               disabled={
-                                !canAddScales ||
+                                !canDeleteScales ||
                                 itemsBusy ||
                                 !packageDataLoaded ||
                                 deletingScaleId === row.id ||

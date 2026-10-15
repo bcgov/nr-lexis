@@ -134,6 +134,7 @@ const FederalPage = () => {
   const [loading, setLoading] = useState(false)
   // Results show as loading, not as zero results, until the first search returns.
   const resultsLoading = loading || !searched
+  const noResults = results.content.length === 0 && results.page.totalElements === 0
   const [errorMessage, setErrorMessage] = useState('')
   const totalCacheRef = useRef<SearchTotalCache>(new Map())
   const canFilterFederalByClient = canPerform('searchClients')
@@ -473,6 +474,7 @@ const FederalPage = () => {
                 ? undefined
                 : results.page.totalElements
             }
+            hideZeroCount
             totalItemsLabel={formatDeferredSearchTotalLabel(
               results.page.totalElements,
               totalStatus,
@@ -533,7 +535,7 @@ const FederalPage = () => {
                 description="No records match your search criteria. Try adjusting your filters and searching again."
               />
             ) : null}
-            {!errorMessage && (!resultsLoading || results.content.length > 0) && (
+            {!errorMessage && !noResults && (!resultsLoading || results.content.length > 0) && (
               <>
                 <div className="legacy-search-result-count legacy-search-result-count--footer">
                   {formatDeferredSearchTotalLabel(

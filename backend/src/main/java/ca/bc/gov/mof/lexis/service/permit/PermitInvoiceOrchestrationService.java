@@ -8,10 +8,14 @@ import java.util.List;
  * completed, moved to payment pending, cancelled, or reactivated.
  *
  * Implementations are selected by configuration. Permit status changes that require invoice
- * work fail closed when no implementation is available for the requested destination.
+ * work fail closed when no implementation is available, and invoice creation also fails closed
+ * when the implementation does not support the permit's destination. Cancelling or reactivating
+ * an invoiced permit follows the GBMS link recorded on its active invoice instead of the
+ * destination.
  */
 public interface PermitInvoiceOrchestrationService {
 
+  /** Whether this implementation can create an invoice for the given destination country. */
   default boolean supportsCountry(String countryCode) {
     return false;
   }

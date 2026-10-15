@@ -1,7 +1,8 @@
 package ca.bc.gov.mof.lexis.repository.application;
 
 import static ca.bc.gov.mof.lexis.repository.application.LexisRemarkQueries.REMARKS_BY_APPLICATION;
-import static ca.bc.gov.mof.lexis.repository.application.LexisRemarkQueries.REMARK_BY_NUMBER;
+import static ca.bc.gov.mof.lexis.repository.application.LexisRemarkQueries.REMARK_BY_APPLICATION_AND_NUMBER;
+import static ca.bc.gov.mof.lexis.repository.application.LexisRemarkQueries.REMARK_NUMBER_APPLICATION_COUNT;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_PACKAGE_STATUSES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ACTIVE_SPECIES;
 import static ca.bc.gov.mof.lexis.repository.reference.LexisCodeQueries.ORG_UNIT_BY_NUMBER;
@@ -26,6 +27,7 @@ import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Arrays;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -223,8 +225,8 @@ class ApplicationDetailsRpcRepositoryTest {
   }
 
   @Test
-  void remarkByNumberDirectQueryShouldKeepTheArchivedFullProjectionAndKeyPredicate() {
-    String normalized = REMARK_BY_NUMBER.replaceAll("\\s+", " ").trim();
+  void remarkLookupDirectQueryShouldKeepTheArchivedFullProjectionAndKeyPredicate() {
+    String normalized = REMARK_BY_APPLICATION_AND_NUMBER.replaceAll("\\s+", " ").trim();
 
     assertThat(normalized)
         .contains(
@@ -232,45 +234,146 @@ class ApplicationDetailsRpcRepositoryTest {
                 + "R.ENTRY_USERID, R.ENTRY_TIMESTAMP, R.UPDATE_USERID, R.UPDATE_TIMESTAMP, "
                 + "R.APPLICATION_NUMBER")
         .contains("FROM THE.EXPORT_EXEMPTION_APP_REMARKS R")
-        .endsWith("WHERE R.EXPORT_EXMPTN_APPL_REMARK_NMBR = ?");
+        .endsWith("WHERE R.APPLICATION_NUMBER = ? AND R.EXPORT_EXMPTN_APPL_REMARK_NMBR = ?");
   }
 
   @Test
   @SuppressWarnings("unchecked")
-  void remarkByNumberShouldRejectInvalidKeysWithoutQuerying() {
+  void remarkLookupShouldRejectInvalidKeysWithoutQuerying() {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
 
-    assertThat(repository.findRemarkByNumber(null)).isEmpty();
-    assertThat(repository.findRemarkByNumber(0L)).isEmpty();
-    assertThat(repository.findRemarkByNumber(-1L)).isEmpty();
-    assertThat(repository.findRemarkByNumberRequired(null)).isEmpty();
-    assertThat(repository.findRemarkByNumberRequired(0L)).isEmpty();
-    assertThat(repository.findRemarkByNumberRequired(-1L)).isEmpty();
+    assertThat(repository.findRemark(null, 1000456L)).isEmpty();
+    assertThat(repository.findRemark(0L, 1000456L)).isEmpty();
+    assertThat(repository.findRemark(-1L, 1000456L)).isEmpty();
+    assertThat(repository.findRemark(44L, null)).isEmpty();
+    assertThat(repository.findRemark(44L, 0L)).isEmpty();
+    assertThat(repository.findRemarkRequired(null, 1000456L)).isEmpty();
+    assertThat(repository.findRemarkRequired(0L, 1000456L)).isEmpty();
+    assertThat(repository.findRemarkRequired(-1L, 1000456L)).isEmpty();
+    assertThat(repository.findRemarkRequired(44L, null)).isEmpty();
+    assertThat(repository.findRemarkRequired(44L, -1L)).isEmpty();
+    assertThat(repository.updateRemark(44L, null, "text", "idir\\jsmith", Instant.EPOCH)).isFalse();
+    assertThat(repository.updateRemark(null, 1000456L, "text", "idir\\jsmith", Instant.EPOCH))
+        .isFalse();
     verifyNoInteractions(jdbcTemplate);
   }
 
   @Test
-  @SuppressWarnings("unchecked")
-  void remarkByNumberShouldPreserveLegitimateEmptyResultsInBothVariants() {
-    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
-        .thenReturn(List.of());
-    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+  void remarkLookupShouldReturnOnlyTheGivenApplicationsRowWhenItsNumberIsShared() {
+    try (SharedRemarkNumberTestDatabase database = new SharedRemarkNumberTestDatabase()) {
+      ApplicationDetailsRpcRepository repository = database.repository();
+      long remarkNumber = SharedRemarkNumberTestDatabase.REMARK_NUMBER;
 
-    assertThat(repository.findRemarkByNumber(44L)).isEmpty();
-    assertThat(repository.findRemarkByNumberRequired(44L)).isEmpty();
+      assertThat(
+              repository.findRemarkRequired(
+                  remarkNumber, SharedRemarkNumberTestDatabase.APPLICATION_NUMBER))
+          .get()
+          .extracting(
+              ApplicationDetailsRpcRepository.RemarkRow::applicationNumber,
+              ApplicationDetailsRpcRepository.RemarkRow::remark)
+          .containsExactly(
+              SharedRemarkNumberTestDatabase.APPLICATION_NUMBER,
+              SharedRemarkNumberTestDatabase.REMARK);
+      assertThat(
+              repository.findRemark(
+                  remarkNumber, SharedRemarkNumberTestDatabase.OTHER_APPLICATION_NUMBER))
+          .get()
+          .extracting(ApplicationDetailsRpcRepository.RemarkRow::remark)
+          .isEqualTo(SharedRemarkNumberTestDatabase.OTHER_REMARK);
+      assertThat(
+              repository.findRemark(
+                  remarkNumber, SharedRemarkNumberTestDatabase.APPLICATION_WITHOUT_REMARK))
+          .isEmpty();
+    }
+  }
+
+  @Test
+  void sharedRemarkNumberUpdateShouldBeRefusedWithoutCallingTheProcedure() {
+    try (SharedRemarkNumberTestDatabase database = new SharedRemarkNumberTestDatabase()) {
+      SharedRemarkNumberTestDatabase.RemarkProcedureRepository repository = database.repository();
+      List<Map<String, Object>> before = database.rows();
+
+      assertThat(repository.isRemarkNumberShared(SharedRemarkNumberTestDatabase.REMARK_NUMBER))
+          .isTrue();
+      assertThat(
+              repository.isRemarkNumberShared(SharedRemarkNumberTestDatabase.UNIQUE_REMARK_NUMBER))
+          .isFalse();
+      assertThat(
+              repository.updateRemark(
+                  SharedRemarkNumberTestDatabase.REMARK_NUMBER,
+                  SharedRemarkNumberTestDatabase.APPLICATION_NUMBER,
+                  "Corrected remark",
+                  "idir\\jsmith",
+                  Instant.now()))
+          .isFalse();
+
+      assertThat(repository.remarkUpdateCalls()).isEmpty();
+      assertThat(database.rows()).isEqualTo(before);
+    }
+  }
+
+  @Test
+  void uniqueRemarkNumberUpdateShouldCallTheProcedureWithItsBinds() {
+    try (SharedRemarkNumberTestDatabase database = new SharedRemarkNumberTestDatabase()) {
+      SharedRemarkNumberTestDatabase.RemarkProcedureRepository repository = database.repository();
+      Instant remarkDate = Instant.parse("2026-10-15T18:30:00Z");
+
+      assertThat(
+              repository.updateRemark(
+                  SharedRemarkNumberTestDatabase.UNIQUE_REMARK_NUMBER,
+                  SharedRemarkNumberTestDatabase.APPLICATION_NUMBER,
+                  "Corrected remark",
+                  "idir\\jsmith",
+                  remarkDate))
+          .isTrue();
+
+      assertThat(repository.remarkUpdateCalls())
+          .singleElement()
+          .satisfies(
+              binds -> {
+                assertThat(binds).containsOnlyKeys(1, 2, 3, 4, 5, 6);
+                assertThat(binds)
+                    .containsEntry(1, SharedRemarkNumberTestDatabase.UNIQUE_REMARK_NUMBER)
+                    .containsEntry(2, Timestamp.from(remarkDate))
+                    .containsEntry(3, "Corrected remark")
+                    .containsEntry(4, "idir\\jsmith")
+                    .containsEntry(6, SharedRemarkNumberTestDatabase.APPLICATION_NUMBER);
+                assertThat(binds.get(5)).isInstanceOf(Timestamp.class);
+              });
+      assertThat(
+              database.row(
+                  SharedRemarkNumberTestDatabase.APPLICATION_NUMBER,
+                  SharedRemarkNumberTestDatabase.UNIQUE_REMARK_NUMBER))
+          .containsEntry("REMARK", "Corrected remark")
+          .containsEntry("REMARK_DATE", Timestamp.from(remarkDate))
+          .containsEntry("UPDATE_USERID", "idir\\jsmith");
+    }
   }
 
   @Test
   @SuppressWarnings("unchecked")
-  void remarkByNumberShouldBindLongAndPreserveTheFirstMappedRow() throws Exception {
+  void remarkLookupShouldPreserveLegitimateEmptyResultsInBothVariants() {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    when(jdbcTemplate.query(
+            eq(REMARK_BY_APPLICATION_AND_NUMBER), any(RowMapper.class), eq(1000456L), eq(44L)))
+        .thenReturn(List.of());
+    ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
+
+    assertThat(repository.findRemark(44L, 1000456L)).isEmpty();
+    assertThat(repository.findRemarkRequired(44L, 1000456L)).isEmpty();
+  }
+
+  @Test
+  @SuppressWarnings("unchecked")
+  void remarkLookupShouldBindLongAndPreserveTheFirstMappedRow() throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     String expectedText = "first line &amp; literal\n" + "&lt;raw&gt; &#39;\n".repeat(80) + "last line";
     String storedLiteral = "  " + expectedText + "  ";
-    ResultSet first = remarkRow(44L, 9999L, storedLiteral, " idir\\jsmith ", Instant.EPOCH);
+    ResultSet first = remarkRow(44L, 1000456L, storedLiteral, " idir\\jsmith ", Instant.EPOCH);
     ResultSet second = remarkRow(45L, 1000456L, "later", "idir\\other", Instant.now());
-    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
+    when(jdbcTemplate.query(
+            eq(REMARK_BY_APPLICATION_AND_NUMBER), any(RowMapper.class), eq(1000456L), eq(44L)))
         .thenAnswer(
             invocation -> {
               RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
@@ -278,34 +381,35 @@ class ApplicationDetailsRpcRepositoryTest {
             });
     ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
 
-    assertThat(repository.findRemarkByNumber(44L))
+    assertThat(repository.findRemark(44L, 1000456L))
         .contains(
             new ApplicationDetailsRpcRepository.RemarkRow(
                 44L,
-                9999L,
+                1000456L,
                 expectedText,
                 "idir\\jsmith",
                 Instant.EPOCH));
-    assertThat(repository.findRemarkByNumberRequired(44L))
+    assertThat(repository.findRemarkRequired(44L, 1000456L))
         .contains(
             new ApplicationDetailsRpcRepository.RemarkRow(
                 44L,
-                9999L,
+                1000456L,
                 expectedText,
                 "idir\\jsmith",
                 Instant.EPOCH));
     verify(jdbcTemplate, org.mockito.Mockito.times(2))
-        .query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L));
+        .query(eq(REMARK_BY_APPLICATION_AND_NUMBER), any(RowMapper.class), eq(1000456L), eq(44L));
   }
 
   @Test
   @SuppressWarnings("unchecked")
-  void remarkByNumberShouldPropagateOracleFailureInBothVariants() throws Exception {
+  void remarkLookupShouldPropagateOracleFailureInBothVariants() throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     DataAccessResourceFailureException failure =
         new DataAccessResourceFailureException("Oracle unavailable after first row");
     ResultSet first = remarkRow(44L, 1000456L, "first", "idir\\jsmith", Instant.EPOCH);
-    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
+    when(jdbcTemplate.query(
+            eq(REMARK_BY_APPLICATION_AND_NUMBER), any(RowMapper.class), eq(1000456L), eq(44L)))
         .thenAnswer(
             invocation -> {
               RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
@@ -314,20 +418,21 @@ class ApplicationDetailsRpcRepositoryTest {
             });
     ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
 
-    assertThatThrownBy(() -> repository.findRemarkByNumber(44L)).isSameAs(failure);
-    assertThatThrownBy(() -> repository.findRemarkByNumberRequired(44L)).isSameAs(failure);
+    assertThatThrownBy(() -> repository.findRemark(44L, 1000456L)).isSameAs(failure);
+    assertThatThrownBy(() -> repository.findRemarkRequired(44L, 1000456L)).isSameAs(failure);
   }
 
   @Test
   @SuppressWarnings("unchecked")
-  void remarkByNumberShouldMaterializeLaterRowsBeforeRequiredFirstRowSelection()
+  void remarkLookupShouldMaterializeLaterRowsBeforeRequiredFirstRowSelection()
       throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    ResultSet first = remarkRow(44L, 9999L, "first", "idir\\jsmith", Instant.EPOCH);
+    ResultSet first = remarkRow(44L, 1000456L, "first", "idir\\jsmith", Instant.EPOCH);
     ResultSet later = remarkRow(45L, 1000456L, "later", "idir\\other", Instant.now());
     SQLException cause = new SQLException("Invalid column name");
     when(later.getString("REMARK")).thenThrow(cause);
-    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
+    when(jdbcTemplate.query(
+            eq(REMARK_BY_APPLICATION_AND_NUMBER), any(RowMapper.class), eq(1000456L), eq(44L)))
         .thenAnswer(
             invocation -> {
               RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
@@ -335,11 +440,11 @@ class ApplicationDetailsRpcRepositoryTest {
             });
     ApplicationDetailsRpcRepository repository = new ApplicationDetailsRpcRepository(jdbcTemplate);
 
-    assertThat(repository.findRemarkByNumber(44L))
+    assertThat(repository.findRemark(44L, 1000456L))
         .contains(
             new ApplicationDetailsRpcRepository.RemarkRow(
-                44L, 9999L, "first", "idir\\jsmith", Instant.EPOCH));
-    assertThatThrownBy(() -> repository.findRemarkByNumberRequired(44L))
+                44L, 1000456L, "first", "idir\\jsmith", Instant.EPOCH));
+    assertThatThrownBy(() -> repository.findRemarkRequired(44L, 1000456L))
         .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
         .hasMessageContaining("REMARK")
         .hasCause(cause);
@@ -348,7 +453,7 @@ class ApplicationDetailsRpcRepositoryTest {
   @ParameterizedTest
   @ValueSource(strings = {"REMARK", "EXPORT_EXMPTN_APPL_REMARK_NMBR"})
   @SuppressWarnings("unchecked")
-  void remarkByNumberShouldKeepOptionalAndRequiredColumnContracts(String unreadableColumn)
+  void remarkLookupShouldKeepOptionalAndRequiredColumnContracts(String unreadableColumn)
       throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     ResultSet resultSet = remarkRow(44L, 1000456L, null, "idir\\jsmith", Instant.EPOCH);
@@ -358,7 +463,8 @@ class ApplicationDetailsRpcRepositoryTest {
     } else {
       when(resultSet.getLong(unreadableColumn)).thenThrow(cause);
     }
-    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
+    when(jdbcTemplate.query(
+            eq(REMARK_BY_APPLICATION_AND_NUMBER), any(RowMapper.class), eq(1000456L), eq(44L)))
         .thenAnswer(
             invocation -> {
               RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
@@ -372,8 +478,8 @@ class ApplicationDetailsRpcRepositoryTest {
                 44L, 1000456L, "", "idir\\jsmith", Instant.EPOCH)
             : new ApplicationDetailsRpcRepository.RemarkRow(
                 0L, 1000456L, "", "idir\\jsmith", Instant.EPOCH);
-    assertThat(repository.findRemarkByNumber(44L)).contains(nullableExpected);
-    assertThatThrownBy(() -> repository.findRemarkByNumberRequired(44L))
+    assertThat(repository.findRemark(44L, 1000456L)).contains(nullableExpected);
+    assertThatThrownBy(() -> repository.findRemarkRequired(44L, 1000456L))
         .isInstanceOf(org.springframework.dao.DataRetrievalFailureException.class)
         .hasMessageContaining(unreadableColumn)
         .hasCause(cause);
@@ -381,12 +487,13 @@ class ApplicationDetailsRpcRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void remarkByNumberShouldKeepNullRemarkAndUnreadableTimestampNullableInBothVariants()
+  void remarkLookupShouldKeepNullRemarkAndUnreadableTimestampNullableInBothVariants()
       throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
     ResultSet resultSet = remarkRow(44L, 1000456L, null, " idir\\jsmith ", null);
     when(resultSet.getTimestamp("ENTRY_TIMESTAMP")).thenThrow(new SQLException("Invalid timestamp"));
-    when(jdbcTemplate.query(eq(REMARK_BY_NUMBER), any(RowMapper.class), eq(44L)))
+    when(jdbcTemplate.query(
+            eq(REMARK_BY_APPLICATION_AND_NUMBER), any(RowMapper.class), eq(1000456L), eq(44L)))
         .thenAnswer(
             invocation -> {
               RowMapper<ApplicationDetailsRpcRepository.RemarkRow> mapper = invocation.getArgument(1);
@@ -396,8 +503,8 @@ class ApplicationDetailsRpcRepositoryTest {
     ApplicationDetailsRpcRepository.RemarkRow expected =
         new ApplicationDetailsRpcRepository.RemarkRow(44L, 1000456L, "", "idir\\jsmith", null);
 
-    assertThat(repository.findRemarkByNumber(44L)).contains(expected);
-    assertThat(repository.findRemarkByNumberRequired(44L)).contains(expected);
+    assertThat(repository.findRemark(44L, 1000456L)).contains(expected);
+    assertThat(repository.findRemarkRequired(44L, 1000456L)).contains(expected);
   }
 
   @Test
@@ -561,7 +668,7 @@ class ApplicationDetailsRpcRepositoryTest {
     assertThat(repository.updateRemark(44L, 1000456L, text + " updated", "idir\\jsmith", Instant.EPOCH))
         .isTrue();
     assertThat(repository.storedRemark).isEqualTo(text + " updated");
-    assertThat(repository.findRemarkByNumberRequired(44L))
+    assertThat(repository.findRemarkRequired(44L, 1000456L))
         .get().extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).isEqualTo(text + " updated");
   }
 
@@ -579,7 +686,7 @@ class ApplicationDetailsRpcRepositoryTest {
     assertThat(repository.findRemarksByApplicationNumber(1000456L))
         .extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).containsExactly(storedText);
     for (int save = 0; save < 3; save++) {
-      String displayedText = repository.findRemarkByNumberRequired(44L).orElseThrow().remark();
+      String displayedText = repository.findRemarkRequired(44L, 1000456L).orElseThrow().remark();
       assertThat(displayedText).isEqualTo(storedText);
       assertThat(repository.updateRemark(44L, 1000456L, displayedText, "idir\\jsmith", Instant.EPOCH))
           .isTrue();
@@ -588,7 +695,7 @@ class ApplicationDetailsRpcRepositoryTest {
 
     assertThat(repository.updateRemark(44L, 1000456L, storedText + " updated", "idir\\jsmith", Instant.EPOCH))
         .isTrue();
-    assertThat(repository.findRemarkByNumberRequired(44L).orElseThrow().remark())
+    assertThat(repository.findRemarkRequired(44L, 1000456L).orElseThrow().remark())
         .isEqualTo(storedText + " updated");
     assertThat(repository.storedRemark).isEqualTo(storedText + " updated");
   }
@@ -934,7 +1041,7 @@ class ApplicationDetailsRpcRepositoryTest {
 
     assertOracleFailure(() -> repository.findScaleDetailsByApplicationNumber(1000456L));
     assertOracleFailure(() -> repository.findPermitsByApplicationNumber(1000456L));
-    assertOracleFailure(() -> repository.findRemarkByNumber(44L));
+    assertOracleFailure(() -> repository.findRemark(44L, 1000456L));
     assertOracleFailure(() -> repository.findApplicationClientSnapshot(1000456L));
     assertOracleFailure(() -> repository.findTimberMark("TM-1"));
     assertOracleFailure(() -> repository.findTimberMarkByOrgUnit("TM-1", 11L));
@@ -946,7 +1053,7 @@ class ApplicationDetailsRpcRepositoryTest {
 
     assertThat(repository.findScaleDetailsByApplicationNumber(1000456L)).isEmpty();
     assertThat(repository.findPermitsByApplicationNumber(1000456L)).isEmpty();
-    assertThat(repository.findRemarkByNumber(44L)).isEmpty();
+    assertThat(repository.findRemark(44L, 1000456L)).isEmpty();
     assertThat(repository.findApplicationClientSnapshot(1000456L)).isEmpty();
     assertThat(repository.findTimberMark("TM-1")).isEmpty();
     assertThat(repository.findTimberMarkByOrgUnit("TM-1", 11L)).isEmpty();
@@ -1154,6 +1261,19 @@ class ApplicationDetailsRpcRepositoryTest {
         String procedureSignature, SqlConsumer<CallableStatement> binder) {
       throw new DataAccessResourceFailureException("Oracle unavailable");
     }
+
+    @Override
+    protected <T> List<T> queryDirectRequired(
+        String sql, SqlRowMapper<T> rowMapper, Object... bindValues) {
+      assertThat(sql).isEqualTo(REMARK_NUMBER_APPLICATION_COUNT);
+      try {
+        ResultSet rs = mock(ResultSet.class);
+        when(rs.getLong("APPLICATION_COUNT")).thenReturn(1L);
+        return List.of(rowMapper.map(rs));
+      } catch (SQLException ex) {
+        throw new AssertionError(ex);
+      }
+    }
   }
 
   private static final class CapturingPackageLookupRepository
@@ -1269,6 +1389,7 @@ class ApplicationDetailsRpcRepositoryTest {
     private <T> List<T> queryStoredRemark(SqlRowMapper<T> rowMapper) {
       try {
         ResultSet rs = mock(ResultSet.class);
+        when(rs.getLong("APPLICATION_COUNT")).thenReturn(1L);
         when(rs.getLong("EXPORT_EXMPTN_APPL_REMARK_NMBR")).thenReturn(44L);
         when(rs.getLong("APPLICATION_NUMBER")).thenReturn(1000456L);
         when(rs.getString("REMARK")).thenReturn(storedRemark);

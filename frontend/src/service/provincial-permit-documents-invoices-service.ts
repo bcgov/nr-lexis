@@ -317,8 +317,9 @@ export const updatePermitDetail = async (
     '/lexis/rpc/permit-details/update-permit',
     normalizePermitDetailMutationPayload(request),
     {
-      // An explicit blank clears an active Blanket OIC draft date; omitted fields retain it.
-      preserveEmptyKeys: ['permitIssueDate', 'permitExpiryDate'],
+      // An explicit blank clears an active Blanket OIC draft date, or removes a Blanket OIC
+      // permit's agent; omitted fields retain them.
+      preserveEmptyKeys: ['permitIssueDate', 'permitExpiryDate', 'agentClientNumber'],
     },
   )
   return parsePermitDetailMutationResponse(payload, 'api')
@@ -372,6 +373,26 @@ const sendPermitEmail = async (
     success: asBoolean(source.success),
     message: asString(source.message),
     permitRequestDate: asString(source.permitRequestDate),
+  }
+}
+
+export type PermitReviewRequestEmailDefaults = {
+  regionalEmailAddress: string
+  copyToEmailAddress: string
+}
+
+export const fetchPermitReviewRequestEmailDefaults = async (
+  permitNumber: string,
+): Promise<PermitReviewRequestEmailDefaults> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .get<unknown>('/lexis/rpc/permit-details/request-email-default', {
+      params: { permitNumber: permitNumber.trim() },
+    })
+  const source = recordOrEmpty(response.data)
+  return {
+    regionalEmailAddress: asString(source.regionalEmailAddress),
+    copyToEmailAddress: asString(source.copyToEmailAddress),
   }
 }
 

@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyBoolean;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mock;
@@ -24,7 +25,6 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.application.OracleApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
-import ca.bc.gov.mof.lexis.service.federal.FederalApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.permit.OracleAggregateRowLockService;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
@@ -82,7 +82,6 @@ class ApplicationDetailsRpcControllerTest {
   @Mock private ApplicationEditLockService editLockService;
   @Mock private ProvincialAuthorizationService provincialAuthorizationService;
   @Mock private ApplicationEditPolicyService applicationEditPolicyService;
-  @Mock private FederalApplicationEditPolicyService federalApplicationEditPolicyService;
 
   private ApplicationDetailsRpcController controller;
   private ApplicationPermitOperationCoordinator operationCoordinator;
@@ -101,7 +100,6 @@ class ApplicationDetailsRpcControllerTest {
             editLockService,
             provincialAuthorizationService,
             applicationEditPolicyService,
-            federalApplicationEditPolicyService,
             operationCoordinator);
     lenient()
         .when(editLockService.requireEditable(any(), any(), any()))
@@ -125,8 +123,8 @@ class ApplicationDetailsRpcControllerTest {
         .when(service.findApplicationNumberForScale(any()))
         .thenReturn(Optional.of(1000456L));
     lenient()
-        .when(service.findApplicationNumberForRemark(any()))
-        .thenReturn(Optional.of(1000456L));
+        .when(service.remarkBelongsToApplication(any(), eq(1000456L)))
+        .thenReturn(true);
     lenient()
         .when(service.getApplicationEditContext(any()))
         .thenReturn(
@@ -334,6 +332,49 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void removeDocumentShouldRefuseFederalApplicationDocuments() {
+    TestingAuthenticationToken authentication = authorized();
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getDocumentDetails(1000456L))
+        .thenReturn(List.of(directApplicationDocument(55L, "test.pdf", "Not on file", "Uploaded")));
+    ApplicationDetailsRpcService.ApplicationSummarySnapshot provincial = summarySnapshot();
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcService.ApplicationSummarySnapshot(
+                    provincial.applicationNumber(),
+                    provincial.federalApplicationNumber(),
+                    provincial.applicationDate(),
+                    provincial.termDays(),
+                    provincial.receivedDate(),
+                    provincial.applicationVolume(),
+                    provincial.averageLogVolume(),
+                    provincial.productLocation(),
+                    provincial.exportScheduleId(),
+                    provincial.agentClientNumber(),
+                    provincial.agentClientLocationCode(),
+                    provincial.ownerClientNumber(),
+                    provincial.ownerClientLocationCode(),
+                    provincial.exemptionNumber(),
+                    provincial.exemptionReasonCode(),
+                    provincial.applicationStatusCode(),
+                    provincial.applicantTypeCode(),
+                    provincial.orgUnitNumber(),
+                    provincial.productTypeCode(),
+                    "F",
+                    provincial.growthTypeCode(),
+                    provincial.agentContactName(),
+                    provincial.ownerContactName(),
+                    provincial.oicIndicator())));
+
+    ResponseEntity<ApplicationDetailsRpcController.RemoveDocumentResponseDto> response =
+        controller.removeDocument("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).removeDocument(any());
+  }
+
+  @Test
   void removeDocumentShouldAllowApproverWithoutFileUploadAction() {
     TestingAuthenticationToken authentication = authorized();
     when(serviceProvider.getIfAvailable()).thenReturn(service);
@@ -502,15 +543,37 @@ class ApplicationDetailsRpcControllerTest {
   void getRemarkShouldReturnNotFoundWhenRemarkMissing() {
     TestingAuthenticationToken authentication = authorized("/applicationRemarks");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    when(service.getRemark(999L)).thenReturn(Optional.empty());
+    when(service.getRemark(999L, 1000456L)).thenReturn(Optional.empty());
 
     ResponseEntity<ApplicationDetailsRpcController.GetRemarkResponseDto> response =
-        controller.getRemark("999", authentication);
+        controller.getRemark("999", "1000456", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().notfound()).isTrue();
-    verify(service).getRemark(999L);
+    verify(service).remarkBelongsToApplication(999L, 1000456L);
+    verify(service).getRemark(999L, 1000456L);
+  }
+
+  @Test
+  void getRemarkShouldReadASharedRemarkNumberOnlyFromTheSuppliedApplication() {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.remarkBelongsToApplication(276L, 105450L)).thenReturn(true);
+    when(service.getRemark(276L, 105450L)).thenReturn(Optional.of("Remark on this application"));
+
+    ResponseEntity<ApplicationDetailsRpcController.GetRemarkResponseDto> response =
+        controller.getRemark("276", "105450", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().remark()).isEqualTo("Remark on this application");
+    verify(provincialAuthorizationService).requireApplication(authentication, 105450L);
+    assertThatThrownBy(() -> controller.getRemark("276", "28237", authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(() -> controller.getRemark("276", null, authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    verify(service, never()).getRemark(276L, 28237L);
   }
 
   @Test
@@ -518,7 +581,7 @@ class ApplicationDetailsRpcControllerTest {
     TestingAuthenticationToken authentication = unauthorized("/applicationRemarks");
 
     ResponseEntity<ApplicationDetailsRpcController.GetRemarkResponseDto> response =
-        controller.getRemark("999", authentication);
+        controller.getRemark("999", "1000456", authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
@@ -579,35 +642,42 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
-  void persistRemarkShouldApplyFederalCompletedApplicationPolicyBeforeLocking() {
-    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
-    LocalDate listingDate = LocalDate.of(2026, 2, 26);
+  void persistRemarkShouldLetAFederalApplicationManagerAddRemarksAtAnyStatus() {
+    TestingAuthenticationToken authentication =
+        authorized("/applicationRemarks", "manageFederalApplication");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(service.getApplicationEditContext(1000456L))
+        .thenReturn(Optional.of(federalEditContext("EXP", LocalDate.of(2025, 2, 26))));
+    when(service.persistRemark("new", 1000456L, "Long remark", "idir\\jsmith"))
         .thenReturn(
             Optional.of(
-                new ApplicationDetailsRpcService.ApplicationEditContext(
-                    1000456L,
-                    "APP",
-                    "F",
-                    "H",
-                    12L,
-                    listingDate,
-                    false,
-                    false,
-                    false,
-                    null,
-                    false)));
-    doThrow(new AccessDeniedException("completed application is read-only"))
-        .when(federalApplicationEditPolicyService)
-        .requireEdit(authentication, "APP", listingDate);
+                new ApplicationDetailsRpcService.PersistedRemark(
+                    44L,
+                    "Long remark",
+                    "Long remark",
+                    "idir\\jsmith",
+                    Instant.parse("2026-05-27T17:00:00Z"))));
+
+    ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
+        controller.persistRemark("new", "1000456", "Long remark", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().status()).isEqualTo("ok");
+    verify(applicationEditPolicyService, never()).requireSummaryEdit(any(), any(), any());
+  }
+
+  @Test
+  void persistRemarkShouldRequireTheFederalManageActionForFederalRemarks() {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationEditContext(1000456L))
+        .thenReturn(Optional.of(federalEditContext("NEW", LocalDate.of(2026, 2, 26))));
 
     assertThatThrownBy(
-            () ->
-                controller.persistRemark(
-                    "new", "1000456", "Long remark", authentication))
+            () -> controller.persistRemark("55", "1000456", "Long remark", authentication))
         .isInstanceOf(AccessDeniedException.class)
-        .hasMessageContaining("read-only");
+        .hasMessageContaining("manageFederalApplication");
 
     verify(editLockService, never()).requireEditable(any(), any(), any());
     verify(service, never()).persistRemark(any(), any(), any(), any());
@@ -642,6 +712,102 @@ class ApplicationDetailsRpcControllerTest {
                     "new", "1000456", "Long remark", authentication))
         .isInstanceOf(AccessDeniedException.class)
         .hasMessageContaining("read-only");
+
+    verify(editLockService, never()).requireEditable(any(), any(), any());
+    verify(service, never()).persistRemark(any(), any(), any(), any());
+  }
+
+  @Test
+  void persistRemarkShouldUpdateAnExistingRemarkAfterTheApplicationDetailsLock() {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    lenient()
+        .doThrow(new AccessDeniedException("permitted application is read-only"))
+        .when(applicationEditPolicyService)
+        .requireSummaryEdit(authentication, service, 1000456L);
+    when(service.persistRemark("55", 1000456L, "Corrected remark", "idir\\jsmith"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcService.PersistedRemark(
+                    55L,
+                    "Corrected remark",
+                    "Corrected remark",
+                    "idir\\jsmith",
+                    Instant.parse("2026-07-10T17:00:00Z"))));
+
+    ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
+        controller.persistRemark("55", "1000456", "Corrected remark", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().status()).isEqualTo("ok");
+    verify(applicationEditPolicyService, times(2))
+        .requireRemarkUpdate(authentication, service, 1000456L);
+    verify(applicationEditPolicyService, never())
+        .requireSummaryEdit(any(), any(), any());
+    verify(service).persistRemark("55", 1000456L, "Corrected remark", "idir\\jsmith");
+  }
+
+  @Test
+  void persistRemarkShouldCheckRemarkOwnershipByApplicationAndNumber() {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.remarkBelongsToApplication(31001L, 105450L)).thenReturn(true);
+    when(service.persistRemark("31001", 105450L, "Corrected remark", "idir\\jsmith"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcService.PersistedRemark(
+                    31001L,
+                    "Corrected remark",
+                    "Corrected remark",
+                    "idir\\jsmith",
+                    Instant.parse("2026-07-10T17:00:00Z"))));
+
+    ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
+        controller.persistRemark("31001", "105450", "Corrected remark", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().status()).isEqualTo("ok");
+    assertThat(response.getBody().remarkId()).isEqualTo(31001L);
+    assertThatThrownBy(
+            () -> controller.persistRemark("31001", "28237", "Corrected remark", authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("Remark does not belong to the supplied application.");
+    verify(service, never()).persistRemark(eq("31001"), eq(28237L), any(), any());
+  }
+
+  @Test
+  void persistRemarkShouldRefuseASharedRemarkNumberAndAskForANewRemark() {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.remarkBelongsToApplication(276L, 105450L)).thenReturn(true);
+    when(service.isRemarkNumberShared(276L)).thenReturn(true);
+
+    ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
+        controller.persistRemark("276", "105450", "Corrected remark", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().status()).isEqualTo("validation_error");
+    assertThat(response.getBody().message())
+        .isEqualTo(
+            "This older remark can't be edited because its number is shared with another"
+                + " application's remark. Add a new remark instead.");
+    verify(service, never()).persistRemark(any(), any(), any(), any());
+  }
+
+  @Test
+  void persistRemarkShouldApplyTheRemarkUpdatePolicyToExistingRemarks() {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new AccessDeniedException("expired application is read-only"))
+        .when(applicationEditPolicyService)
+        .requireRemarkUpdate(authentication, service, 1000456L);
+
+    assertThatThrownBy(
+            () -> controller.persistRemark("55", "1000456", "Corrected remark", authentication))
+        .isInstanceOf(AccessDeniedException.class);
 
     verify(editLockService, never()).requireEditable(any(), any(), any());
     verify(service, never()).persistRemark(any(), any(), any(), any());
@@ -844,7 +1010,6 @@ class ApplicationDetailsRpcControllerTest {
         editLockService,
         provincialAuthorizationService,
         applicationEditPolicyService,
-        federalApplicationEditPolicyService,
         coordinator);
   }
 
@@ -971,6 +1136,28 @@ class ApplicationDetailsRpcControllerTest {
         .addApplication(
             requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
     assertThat(requestCaptor.getValue().agentClientNumber()).isEqualTo("123");
+  }
+
+  @Test
+  void addApplicationShouldRejectAnApproverNamingTheOwnerAsAgent() {
+    TestingAuthenticationToken authentication =
+        authorized("createApplication", "/changeApplicantType");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicantType", "A");
+    params.add("agentClientNumber", "11111");
+    params.add("agentClientLocationCode", "01");
+    params.add("ownerClientNumber", "00011111");
+    params.add("ownerClientLocationCode", "02");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("The agent must be a different client from the owner.");
+    verify(service, never()).addApplication(any(), any());
   }
 
   @Test
@@ -1696,6 +1883,116 @@ class ApplicationDetailsRpcControllerTest {
         .updateApplicationSummary(
             requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
     assertThat(requestCaptor.getValue().validationEnabled()).isTrue();
+  }
+
+  @Test
+  void updateApplicationSummaryShouldSaveOnlyTheAgentWhenTheApproverKeepsTheAgentChange() {
+    TestingAuthenticationToken authentication =
+        authorized("createApplication", "/changeApplicantType");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(applicationEditPolicyService.allowsAgentChangeOnly(authentication, service, 1000456L))
+        .thenReturn(true);
+    when(service.updateApplicationAgent(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            ownerAgentSaveParams("00011111", "A", "00022222"), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().valid()).isTrue();
+    verify(service).updateApplicationAgent(any(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
+    verify(service, never()).updateApplicationSummary(any(), any());
+    verify(applicationEditPolicyService, never()).requireSummaryEdit(any(), any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRejectAnApproverAddingTheOwnerAsAgentAfterTheDetailsLock() {
+    TestingAuthenticationToken authentication =
+        authorized("createApplication", "/changeApplicantType");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithApplicantType("O")));
+    when(applicationEditPolicyService.allowsAgentChangeOnly(authentication, service, 1000456L))
+        .thenReturn(true);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            ownerAgentSaveParams("00011111", "A", "11111"), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("The agent must be a different client from the owner.");
+    verify(service, never()).updateApplicationAgent(any(), any());
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"O", "A"})
+  void updateApplicationSummaryShouldRejectAnApproverSettingTheOwnerAsAgent(
+      String savedApplicantType) {
+    TestingAuthenticationToken authentication =
+        authorized("createApplication", "/changeApplicantType");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithApplicantType(savedApplicantType)));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            ownerAgentSaveParams("00011111", "A", "00011111"), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("The agent must be a different client from the owner.");
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldSaveAnApplicationAlreadySavedWithItsOwnerAsAgent() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00011111");
+    matchScopedClient(authentication, "00011111");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithClients("00011111", "00011111")));
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("bceid\\submitter")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            ownerAgentSaveParams("00011111", "A", "00011111"), authentication);
+
+    assertThat(response.getBody().valid()).isTrue();
+    verify(service).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldKeepTheSummaryPolicyForOtherSectionsWhenOnlyTheAgentCanChange() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    doThrow(new AccessDeniedException("permitted application is read-only"))
+        .when(applicationEditPolicyService)
+        .requireSummaryEdit(authentication, service, 1000456L);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("saveSource", "summary");
+    params.add("ownerClientNumber", "00011111");
+    params.add("region", "76");
+
+    assertThatThrownBy(() -> controller.updateApplicationSummary(params, authentication))
+        .isInstanceOf(AccessDeniedException.class);
+
+    verify(applicationEditPolicyService, never()).allowsAgentChangeOnly(any(), any(), any());
+    verify(service, never()).updateApplicationAgent(any(), any());
+    verify(service, never()).updateApplicationSummary(any(), any());
   }
 
   @ParameterizedTest
@@ -2872,7 +3169,7 @@ class ApplicationDetailsRpcControllerTest {
         ArgumentCaptor.forClass(ApplicationDetailsRpcService.PackageMutationRequest.class);
     verify(service).addPackage(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
     verify(applicationEditPolicyService, times(2))
-        .requirePackageAddOrDelete(authentication, service, 1000456L);
+        .requirePackageAdd(authentication, service, 1000456L);
     ApplicationDetailsRpcService.PackageMutationRequest request = requestCaptor.getValue();
     assertThat(request.applicationNumber()).isEqualTo(1000456L);
     assertThat(request.volume()).isEqualTo(125.5d);
@@ -3045,7 +3342,7 @@ class ApplicationDetailsRpcControllerTest {
         ArgumentCaptor.forClass(ApplicationDetailsRpcService.ScaleMutationRequest.class);
     verify(service).addScaleToPackage(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
     verify(applicationEditPolicyService, times(2))
-        .requireScaleAddOrDelete(authentication, service, 1000456L);
+        .requireScaleAdd(authentication, service, 1000456L);
     ApplicationDetailsRpcService.ScaleMutationRequest request = requestCaptor.getValue();
     assertThat(request.packageNumber()).isEqualTo(packageNumber);
     assertThat(request.applicationNumber()).isEqualTo(1000456L);
@@ -3092,7 +3389,6 @@ class ApplicationDetailsRpcControllerTest {
             editLockService,
             provincialAuthorizationService,
             new ApplicationEditPolicyService(sessionService, authorizationService),
-            federalApplicationEditPolicyService,
             operationCoordinator);
     MultiValueMap<String, String> parameters = new LinkedMultiValueMap<>();
     parameters.add("timberMark", "TM001");
@@ -3126,7 +3422,7 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().success()).isTrue();
     verify(service).deleteScaleById("55", "idir\\jsmith");
     verify(applicationEditPolicyService, times(2))
-        .requireScaleAddOrDelete(authentication, service, 1000456L);
+        .requireScaleDelete(authentication, service, 1000456L);
   }
 
   @Test
@@ -3135,6 +3431,40 @@ class ApplicationDetailsRpcControllerTest {
 
     ResponseEntity<ApplicationDetailsRpcController.DeleteResponseDto> response =
         controller.deleteScaleByIdLegacy("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
+  void exemptionApproverShouldReachExistingItemChangesThroughTheEditPolicy() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions("idir\\approver", List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.deleteScaleById("55", "idir\\approver")).thenReturn(true);
+    when(service.deletePackageById("PKG-903", "idir\\approver")).thenReturn(true);
+
+    assertThat(controller.deleteScaleByIdLegacy("55", "1000456", authentication).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    assertThat(
+            controller
+                .deletePackageByIdLegacy("PKG-903", "1000456", authentication)
+                .getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+
+    verify(applicationEditPolicyService, times(2))
+        .requireScaleDelete(authentication, service, 1000456L);
+    verify(applicationEditPolicyService, times(2))
+        .requirePackageDelete(authentication, service, 1000456L);
+  }
+
+  @Test
+  void exemptionApproverShouldNotReachPackageCreation() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions("idir\\approver", List.of("LEXIS_EXEMPTION_APPROVER"));
+
+    ResponseEntity<ApplicationDetailsRpcController.PackagePersistenceResponseDto> response =
+        controller.addPackageToApplicationLegacy(new LinkedMultiValueMap<>(), authentication);
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verifyNoInteractions(service);
@@ -3154,7 +3484,7 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().success()).isTrue();
     verify(service).deletePackageById("PKG-903", "idir\\jsmith");
     verify(applicationEditPolicyService, times(2))
-        .requirePackageAddOrDelete(authentication, service, 1000456L);
+        .requirePackageDelete(authentication, service, 1000456L);
   }
 
   private TestingAuthenticationToken authorized(String... actions) {
@@ -3305,6 +3635,12 @@ class ApplicationDetailsRpcControllerTest {
     parameters.add("exemptionNumber", " ex-205 ");
     parameters.add("ownerClientNumber", "00011111");
     return parameters;
+  }
+
+  private ApplicationDetailsRpcService.ApplicationEditContext federalEditContext(
+      String status, LocalDate listingDate) {
+    return new ApplicationDetailsRpcService.ApplicationEditContext(
+        1000456L, status, "F", "H", 12L, listingDate, false, false, false, null, false);
   }
 
   private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshot() {

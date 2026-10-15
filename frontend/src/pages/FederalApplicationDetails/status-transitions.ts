@@ -1,11 +1,10 @@
 type FederalStatusTransition = {
-  code: 'APP' | 'REJ' | 'WDN'
+  code: 'REJ' | 'WDN'
   label: string
 }
 
-// INTENTIONAL_LEGACY_DIVERGENCE(FEDERAL_DETAIL_APPROVAL_TRANSITION): The detail page exposes
-// approval, with the backend enforcing the shared Application Review readiness validation.
-const APPROVE_TRANSITION: FederalStatusTransition = { code: 'APP', label: 'Approved' }
+// New and pending federal applications are approved from Application Review, so the record only
+// offers rejection or withdrawal of an approved application through its list date.
 const REVIEW_OUTCOME_TRANSITIONS: FederalStatusTransition[] = [
   { code: 'REJ', label: 'Rejected' },
   { code: 'WDN', label: 'Withdrawn' },
@@ -27,9 +26,6 @@ export const allowedFederalStatusTransitions = (
   businessToday: string,
 ): FederalStatusTransition[] => {
   const normalizedStatus = currentStatus?.trim().toUpperCase() ?? ''
-  if (normalizedStatus === 'NEW' || normalizedStatus === 'PND') {
-    return [APPROVE_TRANSITION]
-  }
   if (normalizedStatus !== 'APP') return []
 
   const normalizedListingDate = normalizedIsoDate(listingDate)

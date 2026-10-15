@@ -22,7 +22,6 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.dao.DataAccessResourceFailureException;
-import org.springframework.dao.IncorrectResultSizeDataAccessException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
@@ -239,12 +238,13 @@ class FederalApplicationRepositoryTest {
   }
 
   @Test
-  void findPermitByApplicationNumberShouldMapFederalPermitDetailFields() {
+  void findByApplicationNumberShouldMapFederalPermitDetailFields() {
     TestFederalApplicationRepository repository = new TestFederalApplicationRepository();
 
-    assertThat(repository.findPermitByApplicationNumber(900123L))
+    assertThat(repository.findByApplicationNumber(900123L))
         .isPresent()
         .get()
+        .extracting(FederalApplicationDetailDto::federalPermit)
         .extracting(
             FederalApplicationPermitDto::permitNumber,
             FederalApplicationPermitDto::permitIssueDate,
@@ -263,20 +263,6 @@ class FederalApplicationRepositoryTest {
             LocalDate.of(2026, 6, 7),
             "VAN",
             "ALT");
-
-    assertThat(repository.cursorProcedureSignatures())
-        .containsExactly("LEXIS_GROUP_3.FIND_F_PERM_DET_BY_APP(?,?)");
-  }
-
-  @Test
-  void requiredPermitLookupShouldRejectMultiplePermitsForOneApplication() {
-    FederalApplicationRepository repository =
-        new MultiplePermitFederalApplicationRepository();
-
-    assertThatThrownBy(() -> repository.findPermitByApplicationNumberRequired(900123L))
-        .isInstanceOf(IncorrectResultSizeDataAccessException.class)
-        .hasMessageContaining("expected 1")
-        .hasMessageContaining("actual 2");
   }
 
   @Test
@@ -559,28 +545,6 @@ class FederalApplicationRepositoryTest {
       } catch (Exception ex) {
         throw new IllegalStateException(ex);
       }
-    }
-  }
-
-  private static final class MultiplePermitFederalApplicationRepository
-      extends FederalApplicationRepository {
-    MultiplePermitFederalApplicationRepository() {
-      super(null);
-    }
-
-    @Override
-    @SuppressWarnings("unchecked")
-    protected <T> List<T> queryCursorProcedureRequired(
-        String procedureSignature,
-        SqlConsumer<CallableStatement> binder,
-        int cursorOutIndex,
-        SqlRowMapper<T> rowMapper) {
-      return (List<T>)
-          List.of(
-              new FederalApplicationPermitDto(
-                  7000123L, null, null, null, null, null, null, null),
-              new FederalApplicationPermitDto(
-                  7000124L, null, null, null, null, null, null, null));
     }
   }
 

@@ -179,6 +179,12 @@ import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import { displayVolume, formatVolumeInput } from '@/utils/volume'
 
+/** The ISO date the given number of days before an ISO date. */
+const isoDateDaysBefore = (isoDate: string, days: number): string => {
+  const [year, month, day] = isoDate.split('-').map(Number)
+  return new Date(Date.UTC(year, month - 1, day - days)).toISOString().slice(0, 10)
+}
+
 const APPLICATION_WRITE_ACTIONS = [
   'createApplication',
   '/editCompletedApplications',
@@ -1259,34 +1265,73 @@ const ProvincialApplicationDetailsPage = () => {
     !detail?.locked &&
     !detail?.readOnly &&
     !isApplicationExpired
-  const canEditPackages = canUseApplicationMutations && !!detail?.canEditPackages
-  const canAddPackages = canUseApplicationMutations && !!detail?.canAddPackages
-  const canAddScales = canUseApplicationMutations && !!detail?.canAddScales
+  // Exemption Approvers don't hold createApplication; the server's package and scale rights say
+  // what they can change.
+  const canUseApplicationItemMutations =
+    (canPerform('createApplication', applicationOrgUnit) || !!detail?.exemptionApprover) &&
+    !detail?.locked &&
+    !detail?.readOnly &&
+    !isApplicationExpired
+  const canEditPackages = canUseApplicationItemMutations && !!detail?.canEditPackages
+  const canAddPackages = canUseApplicationItemMutations && !!detail?.canAddPackages
+  const canDeletePackages =
+    canUseApplicationItemMutations && (detail?.canDeletePackages ?? !!detail?.canAddPackages)
+  const canAddScales = canUseApplicationItemMutations && !!detail?.canAddScales
+  const canDeleteScales =
+    canUseApplicationItemMutations && (detail?.canDeleteScales ?? !!detail?.canAddScales)
   const canEditSummary = canUseApplicationMutations && !!detail?.canEditApplicationDetails
   const needsApplicationOptions =
-    Boolean(summaryForm) || canEditSummary || canEditPackages || canAddPackages || canAddScales
+    Boolean(summaryForm) ||
+    canEditSummary ||
+    canEditPackages ||
+    canAddPackages ||
+    canDeletePackages ||
+    canAddScales ||
+    canDeleteScales
   const canUpdatePackageNumber = canEditPackages && !!detail?.canUpdatePackageNumber
   const canManageRemarks = canViewRemarks && canEditSummary
+  // Saved remarks stay editable after the application details lock.
+  const canEditSavedRemarks =
+    canViewRemarks &&
+    canPerform('createApplication', applicationOrgUnit) &&
+    !detail?.locked &&
+    !detail?.readOnly &&
+    !isApplicationExpired
+  const canOpenRemarkEditor = canManageRemarks || canEditSavedRemarks
   const remarkBaselineBody = editingRemarkId
     ? (detail?.remarks.find((remark) => String(remark.remarkId) === editingRemarkId)?.remark ?? '')
     : ''
-  const remarkDirty = canManageRemarks && isEditingRemarks && remarkBody !== remarkBaselineBody
+  const remarkDirty = canOpenRemarkEditor && isEditingRemarks && remarkBody !== remarkBaselineBody
   const isProvincialSubmitter = hasProvincialSubmitterRole(capabilities?.roles)
   const requiresApplicationAccuracyAcknowledgement =
     detail?.industryUser === true || isProvincialSubmitter
   const canChangeApplicantType = canPerform('/changeApplicantType', applicationOrgUnit)
+  // After the other details lock, an Application Approver can still add or remove the agent on
+  // a Ministerial or Blanket OIC application while every permit it is on is Active or Payment
+  // pending.
+  const canChangeAgentOnly =
+    canUseApplicationMutations &&
+    !canEditSummary &&
+    canChangeApplicantType &&
+    !!detail?.canChangeAgent
+  const canEditApplicant = canEditSummary || canChangeAgentOnly
   const canReviewApplication = canPerform('/applicationsReview', applicationOrgUnit)
   // Clients cannot change the list date once the application is approved.
   const listDateLocked =
     !canReviewApplication &&
     detail?.applicationStatusCode?.trim().toUpperCase() === APPLICATION_STATUS_APPROVED
   const reviewSourceStatusCode = normalizeReviewStatus(detail?.applicationStatusCode ?? '')
-  // An Approved application's status can change only while its details can still be edited.
+  // An Approved application's status can change only while its list date is less than six days
+  // ago.
+  const approvedReviewWindowOpen =
+    !detail?.listingDate?.trim() ||
+    detail.listingDate.trim() > isoDateDaysBefore(formatBusinessIsoDate(), 6)
   const canEditApplicationReview =
     canReviewApplication &&
+    !detail?.locked &&
     !isApplicationExpired &&
     REVIEWABLE_SOURCE_STATUS_CODES.has(reviewSourceStatusCode) &&
-    (reviewSourceStatusCode !== APPLICATION_STATUS_APPROVED || !!detail?.canEditApplicationDetails)
+    (reviewSourceStatusCode !== APPLICATION_STATUS_APPROVED || approvedReviewWindowOpen)
   const canApproveApplicationReview =
     canEditApplicationReview &&
     APPROVABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(detail?.applicationStatusCode ?? ''))
@@ -1328,6 +1373,24 @@ const ProvincialApplicationDetailsPage = () => {
       authoritativeClientNumber,
     )
   const submitterAgentLocked = submitterManagesAgent && agentListDateReached
+  // When only the agent can change, a saved agent can be removed but not edited.
+  const savedAgentLockedForApprover = canChangeAgentOnly && !!savedAgentClientNumber
+  const agentDetailsLocked = submitterAgentLocked || savedAgentLockedForApprover
+  // Applicant fields the user can't change show as read-only text, so a value they keep is not
+  // validated here.
+  const readOnlyApplicantFields = useMemo<ApplicationSummaryField[]>(
+    () => [
+      ...(canChangeAgentOnly
+        ? (['ownerClientNumber', 'ownerClientLocationCode', 'ownerContactName'] as const)
+        : []),
+      ...(agentDetailsLocked
+        ? (['agentClientNumber', 'agentClientLocationCode', 'agentContactName'] as const)
+        : []),
+    ],
+    [agentDetailsLocked, canChangeAgentOnly],
+  )
+  const resolvesAgentClientLocation =
+    canEditSummary || (canChangeAgentOnly && !savedAgentClientNumber)
   const canChooseAgent =
     canChangeApplicantType ||
     (submitterManagesAgent && !agentListDateReached && !submitterIsSavedAgent)
@@ -1421,14 +1484,14 @@ const ProvincialApplicationDetailsPage = () => {
     [isAgentClientLookupPending, isOwnerClientLookupPending],
   )
   const ownerClientLocationPlaceholder = !summaryOwnerClientNumber
-    ? 'Enter applicant client number first'
+    ? 'Select location'
     : isLoadingOwnerClientLocations
       ? 'Loading locations'
       : hasSelectableOwnerClientLocations
         ? 'Select location'
         : 'No locations on file'
   const agentClientLocationPlaceholder = !summaryAgentClientNumber
-    ? 'Enter agent client number first'
+    ? 'Select location'
     : isLoadingAgentClientLocations
       ? 'Loading locations'
       : hasSelectableAgentClientLocations
@@ -1596,6 +1659,15 @@ const ProvincialApplicationDetailsPage = () => {
     if (!summaryForm) {
       return {}
     }
+    // A saved application that already names its owner as the agent can still be saved.
+    const keepsSavedOwnerAsAgent =
+      !!summaryBaselineForm &&
+      isAgentApplicant(summaryBaselineForm.applicantTypeCode) &&
+      clientLookupNumbersMatch(
+        summaryForm.agentClientNumber,
+        summaryBaselineForm.agentClientNumber,
+      ) &&
+      clientLookupNumbersMatch(summaryForm.ownerClientNumber, summaryBaselineForm.ownerClientNumber)
 
     return {
       ownerClientNumber: applicationClientNumberFieldError(summaryForm.ownerClientNumber, 'Client'),
@@ -1610,7 +1682,7 @@ const ProvincialApplicationDetailsPage = () => {
       ),
       agentClientNumber: isAgentApplicant(summaryForm.applicantTypeCode)
         ? applicationClientNumberFieldError(summaryForm.agentClientNumber, 'Agent client') ||
-          (submitterManagesAgent &&
+          (!keepsSavedOwnerAsAgent &&
           clientLookupNumbersMatch(summaryForm.agentClientNumber, summaryForm.ownerClientNumber)
             ? 'The agent must be a different client from the owner.'
             : undefined)
@@ -1736,7 +1808,6 @@ const ProvincialApplicationDetailsPage = () => {
     summaryRegionOptions,
     summaryScheduleOptions,
     summaryBaselineForm,
-    submitterManagesAgent,
   ])
   /**
    * Checks a save from the card being edited. Field errors show on their fields and focus the
@@ -1749,7 +1820,10 @@ const ProvincialApplicationDetailsPage = () => {
         summaryOptionsAvailability === 'available'
           ? missingSummaryOptionLabelsForSource(source)
           : []
-      const blockedMessage = !canEditSummary
+      const blockedMessage = !(
+        canEditSummary ||
+        (canChangeAgentOnly && (source === 'owner' || source === 'agent'))
+      )
         ? 'Application details can only be edited while the application is New or Approved.'
         : summaryOptionsUnavailableForSource(source)
           ? missingOptionLabels.length > 0
@@ -1772,7 +1846,14 @@ const ProvincialApplicationDetailsPage = () => {
       }
 
       const fieldsWithErrors = summarySaveFields(source).filter(
-        (field) => summaryFieldErrors[field],
+        (field) =>
+          summaryFieldErrors[field] &&
+          !(
+            readOnlyApplicantFields.includes(field) &&
+            summaryForm &&
+            summaryBaselineForm &&
+            formValuesEqual(summaryForm[field], summaryBaselineForm[field])
+          ),
       )
       if (!summaryForm || fieldsWithErrors.length === 0) {
         setSummarySaveErrors(null)
@@ -1785,7 +1866,11 @@ const ProvincialApplicationDetailsPage = () => {
         values: summaryForm,
       })
       const errorWithoutField = fieldsWithErrors
-        .filter((field) => SUMMARY_FIELDS_WITHOUT_ERROR_DISPLAY[section]?.includes(field))
+        .filter(
+          (field) =>
+            SUMMARY_FIELDS_WITHOUT_ERROR_DISPLAY[section]?.includes(field) ||
+            readOnlyApplicantFields.includes(field),
+        )
         .map((field) => summaryFieldErrors[field])[0]
       setActionResult(
         errorWithoutField
@@ -1808,10 +1893,13 @@ const ProvincialApplicationDetailsPage = () => {
       applicationItemsBusy,
       applicationItemsDirty,
       applicationItemsEditing,
+      canChangeAgentOnly,
       canEditSummary,
       editingSection,
       isSummaryClientLookupPendingForSource,
       missingSummaryOptionLabelsForSource,
+      readOnlyApplicantFields,
+      summaryBaselineForm,
       summaryFieldErrors,
       summaryForm,
       summaryOptionsAvailability,
@@ -2241,7 +2329,7 @@ const ProvincialApplicationDetailsPage = () => {
         setSettledAgentLocationsNumber(summaryAgentClientNumberForLookup)
         setAgentClientLocations(locations)
         updateClientLookupFailure('agent-locations', false)
-        if (!canEditSummary) {
+        if (!resolvesAgentClientLocation) {
           return
         }
         setSummaryForm((current) => {
@@ -2286,8 +2374,8 @@ const ProvincialApplicationDetailsPage = () => {
   }, [
     agentLookupCounterparty,
     applicationNumber,
-    canEditSummary,
     hasSummaryForm,
+    resolvesAgentClientLocation,
     summaryAgentClientNumberForLookup,
     updateClientLookupFailure,
   ])
@@ -2587,7 +2675,7 @@ const ProvincialApplicationDetailsPage = () => {
         return false
       }
 
-      if (!canManageRemarks) return false
+      if (editingRemarkId === null ? !canManageRemarks : !canEditSavedRemarks) return false
       if (editingRemarkId !== null && !remarkDirty) {
         setRemarkValidationMessage('')
         setActionResult(null)
@@ -2681,6 +2769,7 @@ const ProvincialApplicationDetailsPage = () => {
       }
     },
     [
+      canEditSavedRemarks,
       canManageRemarks,
       remarkDirty,
       applicationNumber,
@@ -2747,23 +2836,29 @@ const ProvincialApplicationDetailsPage = () => {
           return current
         }
 
+        // Checking the box again brings back the saved agent with its saved details.
+        const restoresSavedAgent =
+          applicantTypeCode === 'A' && !current.agentClientNumber && !!savedAgentClientNumber
         const next = {
           ...current,
           applicantTypeCode,
-          // A submitter owner chooses the agent; their own client is never prefilled as one.
+          // A new agent is chosen with the client search; the owner is never prefilled as one.
           agentClientNumber:
             applicantTypeCode === 'A'
-              ? current.agentClientNumber ||
-                savedAgentClientNumber ||
-                (submitterManagesAgent ? '' : current.ownerClientNumber)
+              ? current.agentClientNumber || savedAgentClientNumber
               : current.agentClientNumber,
+          ...(restoresSavedAgent &&
+            summaryBaselineForm && {
+              agentClientLocationCode: summaryBaselineForm.agentClientLocationCode,
+              agentContactName: summaryBaselineForm.agentContactName,
+            }),
         }
         return normalizeSummaryAgentFields(next)
       })
       setSummaryVolumeWarningAccepted(false)
       setActionResult(withoutVolumeWarning)
     },
-    [savedAgentClientNumber, submitterManagesAgent],
+    [savedAgentClientNumber, summaryBaselineForm],
   )
 
   const discardOwnerDetailsDraft = useCallback(() => {
@@ -2861,6 +2956,10 @@ const ProvincialApplicationDetailsPage = () => {
     setEditingRemarkId(null)
     setRemarkValidationMessage('')
     setIsEditingRemarks(false)
+    // The editor showed its save failure; closing it shouldn't repeat it on the page.
+    setActionResult((current) =>
+      current && !current.source && current.kind === 'error' ? null : current,
+    )
   }, [])
   const { confirmDiscard: confirmRemarkDiscard, discardModal: remarkDiscardModal } =
     useDiscardPrompt(remarkDirty)
@@ -3460,8 +3559,8 @@ const ProvincialApplicationDetailsPage = () => {
   ])
 
   const summaryDirty =
-    canEditSummary &&
-    (isEditingSummary || isEditingOwnerDetails || isEditingApplicationItems) &&
+    ((canEditSummary && (isEditingSummary || isEditingOwnerDetails || isEditingApplicationItems)) ||
+      (canChangeAgentOnly && isEditingOwnerDetails)) &&
     !!summaryForm &&
     !!summaryBaselineForm &&
     !formValuesEqual(summaryForm, summaryBaselineForm)
@@ -3840,7 +3939,12 @@ const ProvincialApplicationDetailsPage = () => {
     launcher: HTMLButtonElement,
     remark?: { remarkId?: string | number | null; remark: string },
   ): void => {
-    if (!canManageRemarks || isSavingRemark || (remark && !remark.remarkId)) return
+    if (
+      (remark ? !canEditSavedRemarks : !canManageRemarks) ||
+      isSavingRemark ||
+      (remark && !remark.remarkId)
+    )
+      return
     confirmRemarkDiscard(() => {
       remarkLauncherRef.current = launcher
       setEditingRemarkId(remark?.remarkId ? String(remark.remarkId) : null)
@@ -4308,7 +4412,7 @@ const ProvincialApplicationDetailsPage = () => {
                       >
                         <div className="detail-section-card__header">
                           <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
-                          {canEditSummary &&
+                          {canEditApplicant &&
                             summaryForm &&
                             !isEditingSummary &&
                             !isEditingOwnerDetails &&
@@ -4340,21 +4444,30 @@ const ProvincialApplicationDetailsPage = () => {
                             <h3 className="detail-section-subtitle">{ownerSectionTitle}</h3>
                             <RecordFieldGrid editing>
                               <RecordFieldRow>
-                                <RecordFieldCell>
-                                  <TextInput
-                                    id="applicationOwnerContactNameEdit"
-                                    labelText={requiredLabel('Contact name')}
-                                    aria-required="true"
+                                {canChangeAgentOnly ? (
+                                  <RecordField
+                                    label="Contact name"
                                     value={summaryForm.ownerContactName}
-                                    invalid={Boolean(visibleSummaryFieldError('ownerContactName'))}
-                                    invalidText={visibleSummaryFieldError('ownerContactName')}
-                                    disabled={isSavingSummary}
-                                    placeholder="Enter contact name"
-                                    onChange={(event) =>
-                                      onSummaryFormChange('ownerContactName', event.target.value)
-                                    }
                                   />
-                                </RecordFieldCell>
+                                ) : (
+                                  <RecordFieldCell>
+                                    <TextInput
+                                      id="applicationOwnerContactNameEdit"
+                                      labelText={requiredLabel('Contact name')}
+                                      aria-required="true"
+                                      value={summaryForm.ownerContactName}
+                                      invalid={Boolean(
+                                        visibleSummaryFieldError('ownerContactName'),
+                                      )}
+                                      invalidText={visibleSummaryFieldError('ownerContactName')}
+                                      disabled={isSavingSummary}
+                                      placeholder="Enter contact name"
+                                      onChange={(event) =>
+                                        onSummaryFormChange('ownerContactName', event.target.value)
+                                      }
+                                    />
+                                  </RecordFieldCell>
+                                )}
                               </RecordFieldRow>
                               <RecordFieldRow>
                                 <RecordFieldCell span="wide">
@@ -4368,38 +4481,46 @@ const ProvincialApplicationDetailsPage = () => {
                                     errorId="applicationOwnerClientError"
                                   />
                                 </RecordFieldCell>
-                                <RecordFieldCell span="wide">
-                                  <SearchableSelect
-                                    id="applicationOwnerClientLocationEdit"
-                                    labelText={requiredLabel('Client location')}
-                                    required
-                                    value={summaryForm.ownerClientLocationCode}
-                                    invalid={Boolean(
-                                      visibleSummaryFieldError('ownerClientLocationCode'),
-                                    )}
-                                    invalidText={visibleSummaryFieldError(
-                                      'ownerClientLocationCode',
-                                    )}
-                                    disabled={
-                                      isSavingSummary ||
-                                      !summaryForm.ownerClientNumber.trim() ||
-                                      isLoadingOwnerClientLocations
-                                    }
-                                    placeholder={ownerClientLocationPlaceholder}
-                                    options={ownerClientLocations
-                                      .filter(isSelectableClientLocation)
-                                      .map((clientLocation) => ({
-                                        value: clientLocation.locationCode,
-                                        label: clientLocationLabel(
-                                          clientLocation.locationCode,
-                                          clientLocation.locationName,
-                                        ),
-                                      }))}
-                                    onChange={(value) =>
-                                      onSummaryFormChange('ownerClientLocationCode', value)
-                                    }
+                                {canChangeAgentOnly ? (
+                                  <RecordField
+                                    label="Client location"
+                                    value={ownerClientLocationDisplay}
+                                    span="wide"
                                   />
-                                </RecordFieldCell>
+                                ) : (
+                                  <RecordFieldCell span="wide">
+                                    <SearchableSelect
+                                      id="applicationOwnerClientLocationEdit"
+                                      labelText={requiredLabel('Client location')}
+                                      required
+                                      value={summaryForm.ownerClientLocationCode}
+                                      invalid={Boolean(
+                                        visibleSummaryFieldError('ownerClientLocationCode'),
+                                      )}
+                                      invalidText={visibleSummaryFieldError(
+                                        'ownerClientLocationCode',
+                                      )}
+                                      disabled={
+                                        isSavingSummary ||
+                                        !summaryForm.ownerClientNumber.trim() ||
+                                        isLoadingOwnerClientLocations
+                                      }
+                                      placeholder={ownerClientLocationPlaceholder}
+                                      options={ownerClientLocations
+                                        .filter(isSelectableClientLocation)
+                                        .map((clientLocation) => ({
+                                          value: clientLocation.locationCode,
+                                          label: clientLocationLabel(
+                                            clientLocation.locationCode,
+                                            clientLocation.locationName,
+                                          ),
+                                        }))}
+                                      onChange={(value) =>
+                                        onSummaryFormChange('ownerClientLocationCode', value)
+                                      }
+                                    />
+                                  </RecordFieldCell>
+                                )}
                               </RecordFieldRow>
                             </RecordFieldGrid>
                             <ClientDataSummary
@@ -4428,27 +4549,33 @@ const ProvincialApplicationDetailsPage = () => {
                                 <h3 className="detail-section-subtitle">Agent information</h3>
                                 <RecordFieldGrid editing>
                                   <RecordFieldRow>
-                                    <RecordFieldCell>
-                                      <TextInput
-                                        id="applicationAgentContactNameEdit"
-                                        labelText={requiredLabel('Contact name')}
-                                        aria-required="true"
+                                    {agentDetailsLocked ? (
+                                      <RecordField
+                                        label="Contact name"
                                         value={summaryForm.agentContactName}
-                                        invalid={Boolean(
-                                          visibleSummaryFieldError('agentContactName'),
-                                        )}
-                                        invalidText={visibleSummaryFieldError('agentContactName')}
-                                        disabled={isSavingSummary}
-                                        readOnly={submitterAgentLocked}
-                                        placeholder="Enter contact name"
-                                        onChange={(event) =>
-                                          onSummaryFormChange(
-                                            'agentContactName',
-                                            event.target.value,
-                                          )
-                                        }
                                       />
-                                    </RecordFieldCell>
+                                    ) : (
+                                      <RecordFieldCell>
+                                        <TextInput
+                                          id="applicationAgentContactNameEdit"
+                                          labelText={requiredLabel('Contact name')}
+                                          aria-required="true"
+                                          value={summaryForm.agentContactName}
+                                          invalid={Boolean(
+                                            visibleSummaryFieldError('agentContactName'),
+                                          )}
+                                          invalidText={visibleSummaryFieldError('agentContactName')}
+                                          disabled={isSavingSummary}
+                                          placeholder="Enter contact name"
+                                          onChange={(event) =>
+                                            onSummaryFormChange(
+                                              'agentContactName',
+                                              event.target.value,
+                                            )
+                                          }
+                                        />
+                                      </RecordFieldCell>
+                                    )}
                                   </RecordFieldRow>
                                   <RecordFieldRow>
                                     <RecordFieldCell span="wide">
@@ -4489,39 +4616,51 @@ const ProvincialApplicationDetailsPage = () => {
                                         />
                                       )}
                                     </RecordFieldCell>
-                                    <RecordFieldCell span="wide">
-                                      <SearchableSelect
-                                        id="applicationAgentClientLocationEdit"
-                                        labelText={requiredLabel('Agent location')}
-                                        required
-                                        value={summaryForm.agentClientLocationCode}
-                                        invalid={Boolean(
-                                          visibleSummaryFieldError('agentClientLocationCode'),
-                                        )}
-                                        invalidText={visibleSummaryFieldError(
-                                          'agentClientLocationCode',
-                                        )}
-                                        disabled={
-                                          isSavingSummary ||
-                                          !summaryForm.agentClientNumber.trim() ||
-                                          isLoadingAgentClientLocations
-                                        }
-                                        readOnly={submitterAgentLocked}
-                                        placeholder={agentClientLocationPlaceholder}
-                                        options={agentClientLocations
-                                          .filter(isSelectableClientLocation)
-                                          .map((clientLocation) => ({
-                                            value: clientLocation.locationCode,
-                                            label: clientLocationLabel(
-                                              clientLocation.locationCode,
-                                              clientLocation.locationName,
-                                            ),
-                                          }))}
-                                        onChange={(value) =>
-                                          onSummaryFormChange('agentClientLocationCode', value)
-                                        }
+                                    {agentDetailsLocked ? (
+                                      <RecordField
+                                        label="Agent location"
+                                        value={agentClientLocationDisplay}
+                                        span="wide"
                                       />
-                                    </RecordFieldCell>
+                                    ) : (
+                                      <RecordFieldCell span="wide">
+                                        <SearchableSelect
+                                          id="applicationAgentClientLocationEdit"
+                                          labelText={requiredLabel('Agent location')}
+                                          helperText={
+                                            summaryForm.agentClientNumber.trim()
+                                              ? undefined
+                                              : 'Available once a client is selected.'
+                                          }
+                                          required
+                                          value={summaryForm.agentClientLocationCode}
+                                          invalid={Boolean(
+                                            visibleSummaryFieldError('agentClientLocationCode'),
+                                          )}
+                                          invalidText={visibleSummaryFieldError(
+                                            'agentClientLocationCode',
+                                          )}
+                                          disabled={
+                                            isSavingSummary ||
+                                            !summaryForm.agentClientNumber.trim() ||
+                                            isLoadingAgentClientLocations
+                                          }
+                                          placeholder={agentClientLocationPlaceholder}
+                                          options={agentClientLocations
+                                            .filter(isSelectableClientLocation)
+                                            .map((clientLocation) => ({
+                                              value: clientLocation.locationCode,
+                                              label: clientLocationLabel(
+                                                clientLocation.locationCode,
+                                                clientLocation.locationName,
+                                              ),
+                                            }))}
+                                          onChange={(value) =>
+                                            onSummaryFormChange('agentClientLocationCode', value)
+                                          }
+                                        />
+                                      </RecordFieldCell>
+                                    )}
                                   </RecordFieldRow>
                                 </RecordFieldGrid>
                                 <ClientDataSummary
@@ -4931,7 +5070,9 @@ const ProvincialApplicationDetailsPage = () => {
                         detail={detail}
                         canEditPackages={canEditPackages}
                         canAddPackages={canAddPackages}
+                        canDeletePackages={canDeletePackages}
                         canAddScales={canAddScales}
+                        canDeleteScales={canDeleteScales}
                         canUpdatePackageNumber={canUpdatePackageNumber}
                         hideMutationActions={isApplicationExpired}
                         authoritativeOptionsAvailability={packageReferenceOptionsAvailability}
@@ -5078,7 +5219,7 @@ const ProvincialApplicationDetailsPage = () => {
                                       <TableHeader>Date and time</TableHeader>
                                       <TableHeader>User</TableHeader>
                                       <TableHeader>Remark</TableHeader>
-                                      {canManageRemarks && <TableHeader>Actions</TableHeader>}
+                                      {canEditSavedRemarks && <TableHeader>Actions</TableHeader>}
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>
@@ -5093,7 +5234,7 @@ const ProvincialApplicationDetailsPage = () => {
                                         </TableCell>
                                         <TableCell>{displayValue(item.user)}</TableCell>
                                         <TableCell>{item.remark}</TableCell>
-                                        {canManageRemarks && (
+                                        {canEditSavedRemarks && (
                                           <TableCell>
                                             <Button
                                               kind="ghost"
@@ -5115,7 +5256,7 @@ const ProvincialApplicationDetailsPage = () => {
                               </TableFrame>
                             </>
                           )}
-                          {canManageRemarks && (
+                          {canOpenRemarkEditor && (
                             <DetailSidePanel
                               open={isEditingRemarks}
                               title={editingRemarkId ? 'Edit remark' : 'Add remark'}

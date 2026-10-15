@@ -34,6 +34,7 @@ import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.TreeSet;
 import org.slf4j.Logger;
@@ -453,12 +454,15 @@ public class OfferDetailsRpcController {
       request =
           withOfferingClientIdentity(
               request, scopedClientNumber, bidder.get().companyName());
+    } else {
+      request = withoutOfferingClient(request);
     }
     if (!authorization().canCreateForClient(authentication, request.offeringClientNumber(), null)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
     if (!isOfferApprover(roles)) {
-      request = withLegacyNonApproverCreateDefaults(request);
+      request =
+          withLegacyNonApproverCreateDefaults(request, application.get().teacMeetingDate());
     }
     PurchaseOfferService.CreateOfferResult result =
         service.addOffer(request, userId);
@@ -524,6 +528,19 @@ public class OfferDetailsRpcController {
         || !expectedApplicationNumber.equals(currentOffer.get().applicationNumber())) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
+    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
+    boolean scopedOfferingClient =
+        isScopedOfferingClient(authentication, currentOffer.get());
+    if (scopedClientNumber != null) {
+      if (!canPerform(authentication, "/offerDetails") || !scopedOfferingClient) {
+        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+      }
+    } else if (canCreateOffer) {
+      requireApplicationAccess(currentOffer.get().applicationNumber(), authentication);
+    } else {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
     List<String> dateErrors = validateOfferDateParameters(parameters);
     if (!dateErrors.isEmpty()) {
       return invalidPersistence(
@@ -532,10 +549,16 @@ public class OfferDetailsRpcController {
           true,
           dateErrors);
     }
+    List<String> fixedFieldErrors = changedFixedOfferFields(parameters, currentOffer.get());
+    if (!fixedFieldErrors.isEmpty()) {
+      return invalidPersistence(
+          currentOffer.get().applicationNumber(),
+          currentOffer.get().offerNumber(),
+          true,
+          fixedFieldErrors);
+    }
     PurchaseOfferService.UpdateOfferRequest request =
         toUpdateOfferRequest(parameters, currentOffer.get());
-    boolean scopedOfferingClient =
-        isScopedOfferingClient(authentication, currentOffer.get());
     if (scopedOfferingClient
         && withdrawalDateChanged(request, currentOffer.get())
         && !LexisBusinessTime.today().equals(request.offerWithdrawalDate())) {
@@ -543,11 +566,7 @@ public class OfferDetailsRpcController {
           currentOffer.get(), "Offer withdrawn date must be the current date.");
     }
 
-    String scopedClientNumber = currentForestClientNumber(sessionService, authentication);
     if (scopedClientNumber != null) {
-      if (!canPerform(authentication, "/offerDetails") || !scopedOfferingClient) {
-        return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-      }
       boolean withdrawalChanged = withdrawalDateChanged(request, currentOffer.get());
       boolean canWithdraw =
           withdrawalChanged
@@ -558,13 +577,8 @@ public class OfferDetailsRpcController {
             currentOffer.get(), "The offer is no longer eligible for withdrawal.");
       }
       request = restrictOfferingClientUpdate(request, currentOffer.get(), canWithdraw);
-    } else if (canCreateOffer) {
-      requireApplicationAccess(currentOffer.get().applicationNumber(), authentication);
-      if (!offerApprover) {
-        request = preserveLegacyApproverFields(request, currentOffer.get());
-      }
-    } else {
-      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    } else if (!offerApprover) {
+      request = preserveLegacyApproverFields(request, currentOffer.get());
     }
 
     String userId = userId(authentication);
@@ -899,6 +913,32 @@ public class OfferDetailsRpcController {
         request.offerVolume());
   }
 
+  /** Staff create offers without an offering client; only a client-scoped bidder sets one. */
+  private PurchaseOfferService.CreateOfferRequest withoutOfferingClient(
+      PurchaseOfferService.CreateOfferRequest request) {
+    return new PurchaseOfferService.CreateOfferRequest(
+        request.applicationNumber(),
+        request.exportPurchaseOfferNumber(),
+        request.packageNumber(),
+        request.companyName(),
+        request.contactName(),
+        request.purchaseOfferAmount(),
+        request.purchaseOfferDate(),
+        request.offerWithdrawalDate(),
+        request.teacReviewDate(),
+        request.fairOfferIndicator(),
+        request.validOfferIndicator(),
+        request.offerRemark(),
+        request.approvalIndicator(),
+        request.withdrawReason(),
+        request.exportJurisdictionCode(),
+        request.manufacturingFacilityInfo(),
+        null,
+        request.pickupLocation(),
+        request.offerCondition(),
+        request.offerVolume());
+  }
+
   private PurchaseOfferService.UpdateOfferRequest restrictOfferingClientUpdate(
       PurchaseOfferService.UpdateOfferRequest requested,
       PurchaseOfferDetailDto currentOffer,
@@ -962,28 +1002,54 @@ public class OfferDetailsRpcController {
     }
   }
 
+  /**
+   * A saved offer's application, package, company, contact and received date are fixed. A value
+   * that is left out or matches the saved one is accepted; a different one is refused.
+   */
+  private List<String> changedFixedOfferFields(
+      MultiValueMap<String, String> parameters, PurchaseOfferDetailDto current) {
+    List<String> errors = new ArrayList<>();
+    if (parameters.containsKey("applicationNumber")
+        && !Objects.equals(
+            parsePositiveLong(first(parameters, "applicationNumber")),
+            current.applicationNumber())) {
+      errors.add("Application number cannot be changed after the offer is saved.");
+    }
+    if (suppliedTextDiffers(parameters, "packageNumber", current.packageNumber())) {
+      errors.add("Package number cannot be changed after the offer is saved.");
+    }
+    if (suppliedTextDiffers(parameters, "companyName", current.companyName())) {
+      errors.add("Company cannot be changed after the offer is saved.");
+    }
+    if (suppliedTextDiffers(parameters, "contactName", current.contactName())) {
+      errors.add("Contact name cannot be changed after the offer is saved.");
+    }
+    if (parameters.containsKey("purchaseOfferDate")
+        && !Objects.equals(
+            parseDate(first(parameters, "purchaseOfferDate")), current.purchaseOfferDate())) {
+      errors.add("Offer received date cannot be changed after the offer is saved.");
+    }
+    return List.copyOf(errors);
+  }
+
+  private static boolean suppliedTextDiffers(
+      MultiValueMap<String, String> parameters, String name, String savedValue) {
+    return parameters.containsKey(name)
+        && !Objects.equals(trimToNull(parameters.getFirst(name)), trimToNull(savedValue));
+  }
+
   private PurchaseOfferService.UpdateOfferRequest toUpdateOfferRequest(
       MultiValueMap<String, String> parameters, PurchaseOfferDetailDto current) {
     return new PurchaseOfferService.UpdateOfferRequest(
-        hasAnyParameter(parameters, "applicationNumber")
-            ? parsePositiveLong(firstPresent(parameters, "applicationNumber"))
-            : current.applicationNumber(),
+        current.applicationNumber(),
         current.offerNumber(),
-        hasAnyParameter(parameters, "packageNumber")
-            ? firstRaw(parameters, "packageNumber")
-            : current.packageNumber(),
-        hasAnyParameter(parameters, "companyName")
-            ? firstPresent(parameters, "companyName")
-            : current.companyName(),
-        hasAnyParameter(parameters, "contactName")
-            ? firstPresent(parameters, "contactName")
-            : current.contactName(),
+        current.packageNumber(),
+        current.companyName(),
+        current.contactName(),
         hasAnyParameter(parameters, "purchaseOfferAmount")
             ? parseOfferDecimal(firstPresent(parameters, "purchaseOfferAmount"))
             : Double.valueOf(current.purchaseOfferAmount()),
-        hasAnyParameter(parameters, "purchaseOfferDate")
-            ? parseDate(firstPresent(parameters, "purchaseOfferDate"))
-            : current.purchaseOfferDate(),
+        current.purchaseOfferDate(),
         hasAnyParameter(parameters, "offerWithdrawalDate", "offerEndDate")
             ? parseDate(firstPresent(parameters, "offerWithdrawalDate", "offerEndDate"))
             : current.offerWithdrawalDate(),
@@ -1083,8 +1149,9 @@ public class OfferDetailsRpcController {
     }
   }
 
+  /** Non-approvers can't set review fields; the TEAC review date comes from the schedule. */
   private PurchaseOfferService.CreateOfferRequest withLegacyNonApproverCreateDefaults(
-      PurchaseOfferService.CreateOfferRequest request) {
+      PurchaseOfferService.CreateOfferRequest request, LocalDate scheduleTeacReviewDate) {
     return new PurchaseOfferService.CreateOfferRequest(
         request.applicationNumber(),
         request.exportPurchaseOfferNumber(),
@@ -1094,7 +1161,7 @@ public class OfferDetailsRpcController {
         request.purchaseOfferAmount(),
         request.purchaseOfferDate(),
         request.offerWithdrawalDate(),
-        request.teacReviewDate(),
+        scheduleTeacReviewDate,
         FAIR_OFFER_DEFAULT,
         VALID_OFFER_DEFAULT,
         null,

@@ -25,6 +25,14 @@ export type ProvincialApplicationDetail = {
   canAddPackages: boolean
   canAddScales: boolean
   canUpdatePackageNumber: boolean
+  /** Package and scale deletion; when absent, they follow package creation and scale addition. */
+  canDeletePackages?: boolean
+  canDeleteScales?: boolean
+  /**
+   * An Application Approver can add or remove the agent on a Ministerial or Blanket OIC
+   * application after the details lock, while every permit it is on is Active or Payment pending.
+   */
+  canChangeAgent?: boolean
   locked: boolean
   lockedBy?: string | null
   lockMessage?: string | null

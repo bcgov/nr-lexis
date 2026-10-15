@@ -21,7 +21,6 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
-import ca.bc.gov.mof.lexis.service.federal.FederalApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
@@ -112,6 +111,8 @@ public class ApplicationDetailsRpcController {
   private static final String LEGACY_ACTION_APPLICATION_REMARKS = "/applicationRemarks";
   private static final String LEGACY_ACTION_APPLICATIONS_REVIEW = "/applicationsReview";
   private static final String LEGACY_ACTION_PERMIT_DETAILS = "/permitDetails";
+  private static final String LEGACY_ACTION_MANAGE_FEDERAL_APPLICATION = "manageFederalApplication";
+  private static final String ROLE_EXEMPTION_APPROVER = "LEXIS_EXEMPTION_APPROVER";
   private static final String LEGACY_APPLICATION_LOCK_SESSION_KEY = "exemptionApplication";
   private static final String LEGACY_APPLICATION_NUMBER_SESSION_KEY = "applicationNumber";
   private static final String APPLICATION_APPLICANT_TYPE_OWNER = "O";
@@ -141,7 +142,6 @@ public class ApplicationDetailsRpcController {
   private final ApplicationEditLockService editLockService;
   private final ProvincialAuthorizationService provincialAuthorizationService;
   private final ApplicationEditPolicyService applicationEditPolicyService;
-  private final FederalApplicationEditPolicyService federalApplicationEditPolicyService;
   private final ApplicationPermitOperationCoordinator operationCoordinator;
   private LexisPrincipalService principalService;
 
@@ -154,7 +154,6 @@ public class ApplicationDetailsRpcController {
       ApplicationEditLockService editLockService,
       ProvincialAuthorizationService provincialAuthorizationService,
       ApplicationEditPolicyService applicationEditPolicyService,
-      FederalApplicationEditPolicyService federalApplicationEditPolicyService,
       ApplicationPermitOperationCoordinator operationCoordinator) {
     this.serviceProvider = serviceProvider;
     this.clientLookupServiceProvider = clientLookupServiceProvider;
@@ -164,7 +163,6 @@ public class ApplicationDetailsRpcController {
     this.editLockService = editLockService;
     this.provincialAuthorizationService = provincialAuthorizationService;
     this.applicationEditPolicyService = applicationEditPolicyService;
-    this.federalApplicationEditPolicyService = federalApplicationEditPolicyService;
     this.operationCoordinator = operationCoordinator;
   }
 
@@ -330,6 +328,7 @@ public class ApplicationDetailsRpcController {
   @GetMapping("/rpc/application-details/remark")
   public ResponseEntity<GetRemarkResponseDto> getRemark(
       @RequestParam(name = "remarkId", required = false) String remarkId,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
     if (!canPerform(authentication, LEGACY_ACTION_APPLICATION_REMARKS)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
@@ -340,10 +339,12 @@ public class ApplicationDetailsRpcController {
       return ResponseEntity.noContent().build();
     }
 
-    requireRemarkAccess(service, parsePositiveLong(remarkId), null, authentication);
+    Long parsedRemarkId = parsePositiveLong(remarkId);
+    Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
+    requireRemarkAccess(service, parsedRemarkId, parsedApplicationNumber, authentication);
 
     return service
-        .getRemark(parsePositiveLong(remarkId))
+        .getRemark(parsedRemarkId, parsedApplicationNumber)
         .map(remark -> ResponseEntity.ok(new GetRemarkResponseDto(remark, false)))
         .orElseGet(() -> ResponseEntity.ok(new GetRemarkResponseDto(null, true)));
   }
@@ -351,8 +352,9 @@ public class ApplicationDetailsRpcController {
   @GetMapping(value = "/applicationDetailsRPC", params = "actionMapping=" + ACTION_GET_REMARK)
   public ResponseEntity<GetRemarkResponseDto> getRemarkLegacy(
       @RequestParam(name = "remarkId", required = false) String remarkId,
+      @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
-    return getRemark(remarkId, authentication);
+    return getRemark(remarkId, applicationNumber, authentication);
   }
 
   @PostMapping("/rpc/application-details/remark")
@@ -373,8 +375,9 @@ public class ApplicationDetailsRpcController {
 
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
     requireApplicationAccess(parsedApplicationNumber, authentication);
-    requireRemarkEditPolicy(service, parsedApplicationNumber, authentication);
     Long parsedRemarkId = parsePositiveLong(remarkId);
+    requireRemarkEditPolicy(
+        service, parsedApplicationNumber, parsedRemarkId != null, authentication);
     if (parsedRemarkId != null) {
       requireRemarkAccess(service, parsedRemarkId, parsedApplicationNumber, authentication);
     }
@@ -391,7 +394,8 @@ public class ApplicationDetailsRpcController {
         parsedApplicationNumber,
         () -> {
           requireApplicationAccess(parsedApplicationNumber, authentication);
-          requireRemarkEditPolicy(service, parsedApplicationNumber, authentication);
+          requireRemarkEditPolicy(
+              service, parsedApplicationNumber, parsedRemarkId != null, authentication);
           if (parsedRemarkId != null) {
             requireRemarkAccess(
                 service, parsedRemarkId, parsedApplicationNumber, authentication);
@@ -409,6 +413,21 @@ public class ApplicationDetailsRpcController {
                         currentLock.message(),
                         null,
                         currentLock.message()));
+          }
+          if (parsedRemarkId != null && service.isRemarkNumberShared(parsedRemarkId)) {
+            LOGGER.warn(
+                "event=lexis_application_remark operation=persist outcome=shared_number_rejected applicationNumber={} remarkId={}",
+                parsedApplicationNumber,
+                parsedRemarkId);
+            return ResponseEntity.ok(
+                new PersistRemarkResponseDto(
+                    "validation_error",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    ApplicationDetailsRpcService.SHARED_REMARK_NUMBER_MESSAGE));
           }
           RemarkValidationFailure validationFailure = validateApplicationRemark(remarkBody);
           if (validationFailure != null) {
@@ -602,6 +621,9 @@ public class ApplicationDetailsRpcController {
         authentication, createRequest.ownerClientNumber(), createRequest.agentClientNumber())) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
+    if (namesOwnerAsAgent(createRequest)) {
+      return ownerNamedAsAgent(null);
+    }
     if (createRequest.exportScheduleId() == null && requiresListDate(authentication)) {
       return listDateRequired(null);
     }
@@ -765,8 +787,7 @@ public class ApplicationDetailsRpcController {
         updateAuthorization.get().agentClientNumber())) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
-    applicationEditPolicyService.requireSummaryEdit(
-        authentication, service, request.applicationNumber());
+    requireApplicationSummaryEdit(service, request, authentication);
     ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
     if (lock.locked()) {
       return applicationPersistenceLockConflict(lock, request.applicationNumber());
@@ -791,8 +812,8 @@ public class ApplicationDetailsRpcController {
               currentUpdateAuthorization.get().agentClientNumber())) {
             return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
           }
-          applicationEditPolicyService.requireSummaryEdit(
-              authentication, service, request.applicationNumber());
+          boolean agentChangeOnly =
+              requireApplicationSummaryEdit(service, request, authentication);
           ApplicationEditLockDto currentLock =
               requireEditable(request.applicationNumber(), authentication);
           if (currentLock.locked()) {
@@ -808,11 +829,13 @@ public class ApplicationDetailsRpcController {
           if (removesSavedSubmitterAgent(service, request, authentication)) {
             return savedSubmitterAgentLocked(request.applicationNumber());
           }
-          if (submitterNamesOwnerAsAgent(service, request, authentication)) {
+          if (namesOwnerAsAgent(service, request)) {
             return ownerNamedAsAgent(request.applicationNumber());
           }
           ApplicationDetailsRpcService.CreateApplicationResult result =
-              service.updateApplicationSummary(request, userId);
+              agentChangeOnly
+                  ? service.updateApplicationAgent(request, userId)
+                  : service.updateApplicationSummary(request, userId);
           return ResponseEntity.ok(
               new ApplicationPersistenceResponseDto(
                   result.valid(),
@@ -1324,7 +1347,7 @@ public class ApplicationDetailsRpcController {
 
     ApplicationDetailsRpcService.PackageMutationRequest request = toPackageMutationRequest(parameters);
     requireApplicationAccess(request.applicationNumber(), authentication);
-    applicationEditPolicyService.requirePackageAddOrDelete(
+    applicationEditPolicyService.requirePackageAdd(
         authentication, service, request.applicationNumber());
     ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
     if (lock.locked()) {
@@ -1336,7 +1359,7 @@ public class ApplicationDetailsRpcController {
         () -> service.getPermitNumbersForApplicationMutation(request.applicationNumber()),
         () -> {
           requireApplicationAccess(request.applicationNumber(), authentication);
-          applicationEditPolicyService.requirePackageAddOrDelete(
+          applicationEditPolicyService.requirePackageAdd(
               authentication, service, request.applicationNumber());
           ApplicationEditLockDto currentLock =
               requireEditable(request.applicationNumber(), authentication);
@@ -1360,7 +1383,7 @@ public class ApplicationDetailsRpcController {
   public ResponseEntity<PackagePersistenceResponseDto> updatePackage(
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+    if (!canChangeExistingItems(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -1419,7 +1442,7 @@ public class ApplicationDetailsRpcController {
   public ResponseEntity<ScalePersistenceResponseDto> addScaleToPackage(
       @RequestParam MultiValueMap<String, String> parameters,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+    if (!canChangeExistingItems(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -1432,7 +1455,7 @@ public class ApplicationDetailsRpcController {
     ApplicationDetailsRpcService.ScaleMutationRequest request = toScaleMutationRequest(parameters);
     requireApplicationAccess(request.applicationNumber(), authentication);
     requirePackageAccess(service, request.packageNumber(), request.applicationNumber());
-    applicationEditPolicyService.requireScaleAddOrDelete(
+    applicationEditPolicyService.requireScaleAdd(
         authentication, service, request.applicationNumber());
     ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
     if (lock.locked()) {
@@ -1446,7 +1469,7 @@ public class ApplicationDetailsRpcController {
           requireApplicationAccess(request.applicationNumber(), authentication);
           requirePackageAccess(
               service, request.packageNumber(), request.applicationNumber());
-          applicationEditPolicyService.requireScaleAddOrDelete(
+          applicationEditPolicyService.requireScaleAdd(
               authentication, service, request.applicationNumber());
           ApplicationEditLockDto currentLock =
               requireEditable(request.applicationNumber(), authentication);
@@ -1471,7 +1494,7 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "scaleId", required = false) String scaleId,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+    if (!canChangeExistingItems(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -1484,7 +1507,7 @@ public class ApplicationDetailsRpcController {
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
     requireApplicationAccess(parsedApplicationNumber, authentication);
     requireScaleAccess(service, scaleId, parsedApplicationNumber);
-    applicationEditPolicyService.requireScaleAddOrDelete(
+    applicationEditPolicyService.requireScaleDelete(
         authentication, service, parsedApplicationNumber);
     ApplicationEditLockDto lock = requireEditable(parsedApplicationNumber, authentication);
     if (lock.locked()) {
@@ -1497,7 +1520,7 @@ public class ApplicationDetailsRpcController {
         () -> {
           requireApplicationAccess(parsedApplicationNumber, authentication);
           requireScaleAccess(service, scaleId, parsedApplicationNumber);
-          applicationEditPolicyService.requireScaleAddOrDelete(
+          applicationEditPolicyService.requireScaleDelete(
               authentication, service, parsedApplicationNumber);
           ApplicationEditLockDto currentLock =
               requireEditable(parsedApplicationNumber, authentication);
@@ -1524,7 +1547,7 @@ public class ApplicationDetailsRpcController {
       @RequestParam(name = "packageNumber", required = false) String packageNumber,
       @RequestParam(name = "applicationNumber", required = false) String applicationNumber,
       Authentication authentication) {
-    if (!canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)) {
+    if (!canChangeExistingItems(authentication)) {
       return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
     }
 
@@ -1537,7 +1560,7 @@ public class ApplicationDetailsRpcController {
     Long parsedApplicationNumber = parsePositiveLong(applicationNumber);
     requireApplicationAccess(parsedApplicationNumber, authentication);
     requirePackageAccess(service, packageNumber, parsedApplicationNumber);
-    applicationEditPolicyService.requirePackageAddOrDelete(
+    applicationEditPolicyService.requirePackageDelete(
         authentication, service, parsedApplicationNumber);
     ApplicationEditLockDto lock = requireEditable(parsedApplicationNumber, authentication);
     if (lock.locked()) {
@@ -1550,7 +1573,7 @@ public class ApplicationDetailsRpcController {
         () -> {
           requireApplicationAccess(parsedApplicationNumber, authentication);
           requirePackageAccess(service, packageNumber, parsedApplicationNumber);
-          applicationEditPolicyService.requirePackageAddOrDelete(
+          applicationEditPolicyService.requirePackageDelete(
               authentication, service, parsedApplicationNumber);
           ApplicationEditLockDto currentLock =
               requireEditable(parsedApplicationNumber, authentication);
@@ -1575,6 +1598,16 @@ public class ApplicationDetailsRpcController {
   private boolean canPerform(Authentication authentication, String action) {
     return authorizationService.canPerformAction(
         sessionService.parseRolesFromPrincipal(authentication), action);
+  }
+
+  /**
+   * Exemption Approvers don't hold createApplication, but the edit policy lets them change the
+   * packages and scales of a Ministerial application with volume remaining.
+   */
+  private boolean canChangeExistingItems(Authentication authentication) {
+    return canPerform(authentication, LEGACY_ACTION_CREATE_APPLICATION)
+        || normalizedRoles(sessionService.parseRolesFromPrincipal(authentication))
+            .contains(ROLE_EXEMPTION_APPROVER);
   }
 
   private boolean requiresListDate(Authentication authentication) {
@@ -1720,17 +1753,17 @@ public class ApplicationDetailsRpcController {
     return removesAgent || replacesAgent;
   }
 
-  /** A Provincial Submitter's agent must be a different client from the owner. */
-  private boolean submitterNamesOwnerAsAgent(
+  /**
+   * The agent must be a different client from the owner. An application already saved with its
+   * owner as the agent can still be saved while that agent and owner stay.
+   */
+  private boolean namesOwnerAsAgent(
       ApplicationDetailsRpcService service,
-      ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request,
-      Authentication authentication) {
-    if (canPerform(authentication, LEGACY_ACTION_CHANGE_APPLICANT_TYPE)
-        || !request.saveSource().updatesAgentFields()) {
-      return false;
-    }
-    String requestedAgentClientNumber = normalizeClientNumber(request.agentClientNumber());
-    if (requestedAgentClientNumber == null) {
+      ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request) {
+    ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource = request.saveSource();
+    if (!saveSource.updatesAgentFields()
+        && !saveSource.updatesOwnerFields()
+        && !saveSource.updatesApplicantType()) {
       return false;
     }
     return service
@@ -1739,17 +1772,41 @@ public class ApplicationDetailsRpcController {
             snapshot -> {
               String requestedApplicantType = trimToNull(request.applicantTypeCode());
               String applicantType =
-                  request.saveSource().updatesApplicantType() && requestedApplicantType != null
+                  saveSource.updatesApplicantType() && requestedApplicantType != null
                       ? requestedApplicantType
                       : trimToNull(snapshot.applicantTypeCode());
+              String agentClientNumber =
+                  normalizeClientNumber(
+                      saveSource.updatesAgentFields() && request.agentClientNumber() != null
+                          ? request.agentClientNumber()
+                          : snapshot.agentClientNumber());
               String ownerClientNumber =
-                  request.saveSource().updatesOwnerFields() && request.ownerClientNumber() != null
-                      ? request.ownerClientNumber()
-                      : snapshot.ownerClientNumber();
+                  normalizeClientNumber(
+                      saveSource.updatesOwnerFields() && request.ownerClientNumber() != null
+                          ? request.ownerClientNumber()
+                          : snapshot.ownerClientNumber());
+              boolean savedWithOwnerAsAgent =
+                  APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(
+                          trimToNull(snapshot.applicantTypeCode()))
+                      && java.util.Objects.equals(
+                          agentClientNumber, normalizeClientNumber(snapshot.agentClientNumber()))
+                      && java.util.Objects.equals(
+                          ownerClientNumber, normalizeClientNumber(snapshot.ownerClientNumber()));
               return APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(applicantType)
-                  && requestedAgentClientNumber.equals(normalizeClientNumber(ownerClientNumber));
+                  && agentClientNumber != null
+                  && agentClientNumber.equals(ownerClientNumber)
+                  && !savedWithOwnerAsAgent;
             })
         .orElse(false);
+  }
+
+  private boolean namesOwnerAsAgent(
+      ApplicationDetailsRpcService.CreateApplicationRequest request) {
+    String agentClientNumber = normalizeClientNumber(request.agentClientNumber());
+    String applicantType = trimToNull(request.applicantTypeCode());
+    return APPLICATION_APPLICANT_TYPE_AGENT.equalsIgnoreCase(applicantType)
+        && agentClientNumber != null
+        && agentClientNumber.equals(normalizeClientNumber(request.ownerClientNumber()));
   }
 
   private ResponseEntity<ApplicationPersistenceResponseDto> ownerNamedAsAgent(
@@ -1884,9 +1941,33 @@ public class ApplicationDetailsRpcController {
     provincialAuthorizationService.requireApplication(authentication, actualApplicationNumber);
   }
 
+  /**
+   * Requires the summary edit policy, or the Application Approver's agent change on an application
+   * while every permit it is on is Active or Payment pending. Returns true when only the agent
+   * change is allowed.
+   */
+  private boolean requireApplicationSummaryEdit(
+      ApplicationDetailsRpcService service,
+      ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request,
+      Authentication authentication) {
+    ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource = request.saveSource();
+    boolean applicantSave =
+        saveSource == ApplicationDetailsRpcService.ApplicationSummarySaveSource.OWNER
+            || saveSource == ApplicationDetailsRpcService.ApplicationSummarySaveSource.OWNER_AGENT;
+    if (applicantSave
+        && applicationEditPolicyService.allowsAgentChangeOnly(
+            authentication, service, request.applicationNumber())) {
+      return true;
+    }
+    applicationEditPolicyService.requireSummaryEdit(
+        authentication, service, request.applicationNumber());
+    return false;
+  }
+
   private void requireRemarkEditPolicy(
       ApplicationDetailsRpcService service,
       Long applicationNumber,
+      boolean existingRemark,
       Authentication authentication) {
     ApplicationDetailsRpcService.ApplicationEditContext context =
         service
@@ -1895,10 +1976,15 @@ public class ApplicationDetailsRpcController {
                 () ->
                     new AccessDeniedException("Application edit state is unavailable."));
     if ("F".equalsIgnoreCase(context.jurisdictionCode())) {
-      federalApplicationEditPolicyService.requireEdit(
-          authentication,
-          context.applicationStatusCode(),
-          context.advertisingDate());
+      // Federal remarks can be added and changed at any status.
+      if (!canPerform(authentication, LEGACY_ACTION_MANAGE_FEDERAL_APPLICATION)) {
+        throw new AccessDeniedException(
+            "Federal remark editing needs the manageFederalApplication action.");
+      }
+      return;
+    }
+    if (existingRemark) {
+      applicationEditPolicyService.requireRemarkUpdate(authentication, service, applicationNumber);
       return;
     }
     applicationEditPolicyService.requireSummaryEdit(authentication, service, applicationNumber);
@@ -1907,13 +1993,9 @@ public class ApplicationDetailsRpcController {
   private void requireRemarkAccess(
       ApplicationDetailsRpcService service,
       Long remarkId,
-      Long expectedApplicationNumber,
+      Long applicationNumber,
       Authentication authentication) {
-    Long applicationNumber =
-        service
-            .findApplicationNumberForRemark(remarkId)
-            .orElseThrow(() -> new AccessDeniedException("Remark parent application is unavailable."));
-    if (expectedApplicationNumber != null && !expectedApplicationNumber.equals(applicationNumber)) {
+    if (!service.remarkBelongsToApplication(remarkId, applicationNumber)) {
       throw new AccessDeniedException("Remark does not belong to the supplied application.");
     }
     provincialAuthorizationService.requireApplication(authentication, applicationNumber);
@@ -1995,6 +2077,8 @@ public class ApplicationDetailsRpcController {
       ApplicationDetailsRpcService service, Long applicationNumber, List<String> roles) {
     return service
         .getApplicationSummarySnapshot(applicationNumber)
+        // Federal application records have no documents to maintain.
+        .filter(snapshot -> !"F".equalsIgnoreCase(trimToNull(snapshot.jurisdictionCode())))
         .map(snapshot -> canRemoveApplicationDocumentWithStatus(snapshot.applicationStatusCode(), roles))
         .orElse(false);
   }

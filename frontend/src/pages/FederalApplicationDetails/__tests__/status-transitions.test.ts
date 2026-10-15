@@ -2,10 +2,9 @@ import { describe, expect, it } from 'vitest'
 import { allowedFederalStatusTransitions } from '../status-transitions'
 
 describe('federal application status transitions', () => {
-  it.each(['NEW', 'PND'])('offers only approval from %s', (currentStatus) => {
-    expect(allowedFederalStatusTransitions(currentStatus, '2026-07-11', '2026-07-11')).toEqual([
-      { code: 'APP', label: 'Approved' },
-    ])
+  it.each(['NEW', 'PND', ' new '])('offers no status change from %s', (currentStatus) => {
+    expect(allowedFederalStatusTransitions(currentStatus, '2026-07-11', '2026-07-11')).toEqual([])
+    expect(allowedFederalStatusTransitions(currentStatus, '2026-07-11', '2026-07-12')).toEqual([])
   })
 
   it('offers rejection and withdrawal through the listing day', () => {

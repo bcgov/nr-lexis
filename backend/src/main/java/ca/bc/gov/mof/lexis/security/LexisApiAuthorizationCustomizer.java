@@ -102,9 +102,8 @@ public class LexisApiAuthorizationCustomizer
                     decideActions(
                         authentication.get(),
                         context.getRequest(),
-                        actionList(
-                            rule.requiredAction(
-                                context.getRequest().getParameter("actionMapping"))))));
+                        rule.requiredActions(
+                            context.getRequest().getParameter("actionMapping")))));
   }
 
   private void authorizeAnyAction(
@@ -133,10 +132,6 @@ public class LexisApiAuthorizationCustomizer
             .toList();
     LexisRequestActions.record(request, granted);
     return !granted.isEmpty();
-  }
-
-  private static List<String> actionList(String action) {
-    return action == null ? List.of() : List.of(action);
   }
 
   private List<String> getAuthorities(Authentication authentication) {

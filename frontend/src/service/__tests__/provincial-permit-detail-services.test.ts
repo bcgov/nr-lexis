@@ -21,6 +21,7 @@ import {
   createPermitFromExemption,
   fetchPermitApprovalEmailDefault,
   fetchPermitFeeOverrideContext,
+  fetchPermitReviewRequestEmailDefaults,
   releasePermitEditLock,
   sendPermitApprovalEmail,
   sendPermitReviewRequestEmail,
@@ -504,6 +505,20 @@ describe('provincial permit detail services', () => {
     expect(result.totalFeeVolume).toBe(2.1)
     expect(result.fees.map((row) => row.volume)).toEqual([1, 1])
     expect(result.fees.map((row) => row.amount)).toEqual([1.04, 1.04])
+  })
+
+  it.each([
+    [true, true],
+    [false, false],
+    [undefined, false],
+  ])('reads the exemption override rate flag %s as %s', async (flag, expected) => {
+    getCachedResponseMock.mockResolvedValue(
+      response({ totalVolume: '0.0', packageList: [], exemptionRateOverride: flag }),
+    )
+
+    const result = await fetchProvincialPermitFees({ permitNumber: '777' })
+
+    expect(result.exemptionRateOverride).toBe(expected)
   })
 
   it('retains authoritative package fee summaries including empty packages within the permit scope', async () => {
@@ -1177,6 +1192,8 @@ describe('provincial permit detail services', () => {
     expect(body.get('permitExpiryDate')).toBe('')
     expect(body.get('permitReceiptNo')).toBeNull()
     expect(body.get('permitRemarks')).toBeNull()
+    expect(body.get('agentClientNumber')).toBe('')
+    expect(body.get('agentClientLocation')).toBeNull()
   })
 
   it('creates a permit from only the normalized exemption number', async () => {
@@ -1264,6 +1281,23 @@ describe('provincial permit detail services', () => {
       success: true,
       permitNumber: '9020948',
       source: 'api',
+    })
+  })
+
+  it('loads the regional office and copy recipient for a permit review request', async () => {
+    getMock.mockResolvedValue(
+      response({
+        regionalEmailAddress: 'region@example.test',
+        copyToEmailAddress: 'agent@example.test',
+      }),
+    )
+
+    await expect(fetchPermitReviewRequestEmailDefaults(' 777 ')).resolves.toEqual({
+      regionalEmailAddress: 'region@example.test',
+      copyToEmailAddress: 'agent@example.test',
+    })
+    expect(getMock).toHaveBeenCalledWith('/lexis/rpc/permit-details/request-email-default', {
+      params: { permitNumber: '777' },
     })
   })
 

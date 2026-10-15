@@ -28,7 +28,6 @@ import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository.ReviewR
 import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalMutationResult;
-import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalStatusMutationRequest;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.Arrays;
@@ -158,11 +157,9 @@ class ApplicationReviewOracleServiceTest {
   void approveShouldDelegateFederalApplicationsToFederalPolicy() {
     when(repository.findAuthoritativeJurisdictionCode(1000456L))
         .thenReturn(Optional.of(" f "));
-    when(federalApplicationService.updateStatus(
-            1000456L, new FederalStatusMutationRequest("APP", null), "reviewer"))
+    when(federalApplicationService.approve(1000456L, "reviewer"))
         .thenReturn(
-            new FederalMutationResult(
-                true, "Federal application status updated.", null, List.of()));
+            new FederalMutationResult(true, "Federal application status updated.", List.of()));
 
     ApplicationReviewStatusUpdateResultDto result = service.approve(1000456L, "reviewer");
 
@@ -170,8 +167,7 @@ class ApplicationReviewOracleServiceTest {
     assertThat(result.updated()).isTrue();
     assertThat(result.statusCode()).isEqualTo("APP");
     assertThat(result.message()).isEqualTo("Federal application status updated.");
-    verify(federalApplicationService)
-        .updateStatus(1000456L, new FederalStatusMutationRequest("APP", null), "reviewer");
+    verify(federalApplicationService).approve(1000456L, "reviewer");
     verifyNoInteractions(approvalEligibilityService);
     verify(repository, org.mockito.Mockito.never())
         .updateStatusWithRemarkFromAllowedSources(any(), any(), any(), any(), any());
@@ -180,22 +176,17 @@ class ApplicationReviewOracleServiceTest {
   @Test
   void approveShouldSurfaceFederalReadinessFailure() {
     when(repository.findAuthoritativeJurisdictionCode(1000456L)).thenReturn(Optional.of("F"));
-    when(federalApplicationService.updateStatus(
-            1000456L, new FederalStatusMutationRequest("APP", null), "reviewer"))
+    when(federalApplicationService.approve(1000456L, "reviewer"))
         .thenReturn(
             new FederalMutationResult(
-                false,
-                null,
-                null,
-                List.of("Applications linked to a permit cannot be approved.")));
+                false, null, List.of("Applications linked to a permit cannot be approved.")));
 
     ApplicationReviewStatusUpdateResultDto result = service.approve(1000456L, "reviewer");
 
     assertThat(result.valid()).isFalse();
     assertThat(result.updated()).isFalse();
     assertThat(result.message()).contains("linked to a permit");
-    verify(federalApplicationService)
-        .updateStatus(1000456L, new FederalStatusMutationRequest("APP", null), "reviewer");
+    verify(federalApplicationService).approve(1000456L, "reviewer");
     verify(repository, org.mockito.Mockito.never())
         .updateStatusWithRemarkFromAllowedSources(any(), any(), any(), any(), any());
   }

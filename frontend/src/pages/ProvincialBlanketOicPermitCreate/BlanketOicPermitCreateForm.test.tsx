@@ -161,7 +161,7 @@ describe('BlanketOicPermitCreateForm', () => {
   })
 
   it.each([false, true])(
-    'restricts issue and expiry dates by permit review permission (%s)',
+    'restricts submit, issue and expiry dates by permit review permission (%s)',
     async (canReview) => {
       vi.mocked(useAuth).mockReturnValue(
         createTestAuthContext({ canPerform: (action) => action === '/permitsReview' && canReview }),
@@ -169,10 +169,10 @@ describe('BlanketOicPermitCreateForm', () => {
       renderForm()
 
       await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
-      expect(screen.getByLabelText('Submit date')).toBeEnabled()
-      for (const label of ['Issued date', 'Expiry date']) {
+      for (const label of ['Submit date', 'Issued date', 'Expiry date']) {
         expect(screen.getByLabelText(label)).toHaveProperty('disabled', !canReview)
       }
+      expect(screen.getByLabelText('Submit date')).not.toHaveValue('')
     },
   )
 

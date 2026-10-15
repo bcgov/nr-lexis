@@ -185,6 +185,48 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void requestEmailDefaultShouldReturnRegionalOfficeAndCopyRecipientForSubmitter() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "bceid\\submitter",
+            "n/a",
+            List.of(new SimpleGrantedAuthority("LEXIS_PROVINCIAL_SUBMITTER_00077881")));
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(service.getRequestPermitEmailDefaults(7000123L))
+        .thenReturn(
+            new PermitDetailsRpcService.PermitRequestEmailDefaults(
+                "region@example.test", "agent@example.test"));
+
+    ResponseEntity<PermitDetailsRpcController.PermitRequestEmailDefaultResponseDto> response =
+        controller.getRequestPermitEmailDefault(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().regionalEmailAddress()).isEqualTo("region@example.test");
+    assertThat(response.getBody().copyToEmailAddress()).isEqualTo("agent@example.test");
+    verify(provincialAuthorizationService).requirePermit(authentication, 7000123L);
+  }
+
+  @Test
+  void requestEmailDefaultShouldRejectMinistryUsers() {
+    TestingAuthenticationToken authentication =
+        new TestingAuthenticationToken(
+            "idir\\approver",
+            "n/a",
+            List.of(new SimpleGrantedAuthority("LEXIS_APPLICATION_APPROVER")));
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+
+    ResponseEntity<PermitDetailsRpcController.PermitRequestEmailDefaultResponseDto> response =
+        controller.getRequestPermitEmailDefault(7000123L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @Test
   void requestEmailShouldAllowProvincialSubmitterWithoutSavePermitGrant() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     TestingAuthenticationToken authentication =
@@ -406,7 +448,8 @@ class PermitDetailsRpcControllerTest {
   @Test
   void allScaleFeesShouldAuthorizePermitAndForwardRequestOnce() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
-    PermitAllScaleFeesRpcResponseDto dto = new PermitAllScaleFeesRpcResponseDto(List.of(), "0.0");
+    PermitAllScaleFeesRpcResponseDto dto =
+        new PermitAllScaleFeesRpcResponseDto(List.of(), "0.0", false);
     when(service.getAllScaleFees(7000123L, true)).thenReturn(dto);
     TestingAuthenticationToken authentication = authorizedSavePermit();
 
@@ -1195,13 +1238,15 @@ class PermitDetailsRpcControllerTest {
   @ValueSource(booleans = {false, true})
   void addPermitShouldAllowBlankSubmitterDatesAndReviewerDates(boolean reviewer) {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
+    String submitDate =
+        reviewer ? "2026-04-10" : ca.bc.gov.mof.lexis.util.LexisBusinessTime.today().toString();
     String issueDate = reviewer ? "2026-04-11" : "";
     String expiryDate = reviewer ? "2027-01-01" : "";
     when(request.getParameterMap())
         .thenReturn(
             Map.of(
                 "exemptionNumber", new String[] {"EX-700"},
-                "permitSubmitDate", new String[] {"2026-04-10"},
+                "permitSubmitDate", new String[] {submitDate},
                 "permitIssueDate", new String[] {issueDate},
                 "permitExpiryDate", new String[] {expiryDate}));
     TestingAuthenticationToken authentication =
@@ -1214,9 +1259,33 @@ class PermitDetailsRpcControllerTest {
     ArgumentCaptor<PermitMutationRequestDto> mutation =
         ArgumentCaptor.forClass(PermitMutationRequestDto.class);
     verify(service).addPermit(mutation.capture(), eq(authentication.getName()));
-    assertThat(mutation.getValue().permitSubmitDate()).isEqualTo("2026-04-10");
+    assertThat(mutation.getValue().permitSubmitDate()).isEqualTo(submitDate);
     assertThat(mutation.getValue().permitIssueDate()).isEqualTo(issueDate);
     assertThat(mutation.getValue().permitExpiryDate()).isEqualTo(expiryDate);
+  }
+
+  @ParameterizedTest
+  @ValueSource(booleans = {false, true})
+  void addPermitShouldSubmitScopedSubmitterPermitsToday(boolean blankSubmitDate) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    java.time.LocalDate today = ca.bc.gov.mof.lexis.util.LexisBusinessTime.today();
+    String submittedDate = blankSubmitDate ? "" : today.minusDays(1).toString();
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "exemptionNumber", new String[] {"EX-700"},
+                "permitSubmitDate", new String[] {submittedDate}));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.addPermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<PermitMutationRequestDto> mutation =
+        ArgumentCaptor.forClass(PermitMutationRequestDto.class);
+    verify(service).addPermit(mutation.capture(), eq(authentication.getName()));
+    assertThat(mutation.getValue().permitSubmitDate()).isEqualTo(today.toString());
+    assertThat(mutation.getValue().exemptionNumber()).isEqualTo("EX-700");
   }
 
   @Test
@@ -1389,6 +1458,59 @@ class PermitDetailsRpcControllerTest {
         .requireApplication(authentication, 1000456L);
     verify(editLockService).acquire(1000456L, "idir\\jsmith", "idir\\jsmith", false);
     verify(editLockService).release(1000456L, "idir\\jsmith");
+  }
+
+  @Test
+  void updatePermitShouldLetApplicantTypeChangersAddOrRemoveThePermitAgent() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "agentClientNumber", new String[] {""}));
+    when(service.updatePermitWithAgentChange(any(PermitMutationRequestDto.class), eq("idir\\jsmith")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocks();
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "/changeApplicantType"))
+        .thenReturn(true);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    org.mockito.ArgumentCaptor<PermitMutationRequestDto> requestCaptor =
+        org.mockito.ArgumentCaptor.forClass(PermitMutationRequestDto.class);
+    verify(service).updatePermitWithAgentChange(requestCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().agentClientNumber()).isEmpty();
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldNotLetProvincialSubmittersAddOrRemoveThePermitAgent() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "agentClientNumber", new String[] {""}));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    lenient()
+        .when(
+            authorizationService.canPerformAction(
+                List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/changeApplicantType"))
+        .thenReturn(true);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter"));
+    verify(service, never()).updatePermitWithAgentChange(any(), any());
   }
 
   @Test
@@ -2249,6 +2371,129 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void updateShippingShouldAllowUnchangedPortsOnACompletedPermitForScopedSubmitter() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "portOfExport", new String[] {"ot"},
+            "otherPortOfExport", new String[] {" Generic TEST port "},
+            "transportName", new String[] {"test-2026-10-14"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetailWithPorts("COM", "OT", "Generic TEST port")));
+    when(service.updateShipping(any(), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThat(controller.updateShipping(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    verify(service).updateShipping(any(), eq("bceid\\submitter"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"COM", "PPD"})
+  void updateShippingShouldIgnoreLeftoverOtherPortTextWhenThePortIsNotOther(String status) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "portOfExport", new String[] {"VAN"},
+            "otherPortOfExport", new String[] {""},
+            "transportName", new String[] {"test-2026-10-14"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetailWithPorts(status, "VAN", "Leftover port")));
+    when(service.updateShipping(any(), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThat(controller.updateShipping(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    verify(service).updateShipping(any(), eq("bceid\\submitter"));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"OT", ""})
+  void updateShippingShouldRejectAnOtherPortNameChangeOnAPaymentPendingPermitForScopedSubmitter(
+      String submittedPort) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    java.util.Map<String, String[]> parameters = new java.util.HashMap<>();
+    parameters.put("permitNumber", new String[] {"7000123"});
+    parameters.put("otherPortOfExport", new String[] {"Renamed port"});
+    if (!submittedPort.isEmpty()) {
+      parameters.put("portOfExport", new String[] {submittedPort});
+    }
+    when(request.getParameterMap()).thenReturn(parameters);
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetailWithPorts("PPD", "OT", "Generic TEST port")));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThatThrownBy(() -> controller.updateShipping(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage(
+            "Provincial Submitters can't change the other port of export name on a payment"
+                + " pending permit.");
+    verify(service, never()).updateShipping(any(), any());
+  }
+
+  @Test
+  void updateShippingShouldLetScopedSubmitterChangeTheCustomsPortOnAPaymentPendingPermit() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "portOfExport", new String[] {"VAN"},
+            "otherPortOfExport", new String[] {""}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetailWithPorts("PPD", "OT", "Generic TEST port")));
+    when(service.updateShipping(any(), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThat(controller.updateShipping(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    verify(service).updateShipping(any(), eq("bceid\\submitter"));
+  }
+
+  @Test
+  void updatePermitShouldRejectAnOtherPortNameChangeOnAPaymentPendingPermitForScopedSubmitter() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "portOfExport", new String[] {"OT"},
+            "otherPortOfExport", new String[] {"Renamed port"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetailWithPorts("PPD", "OT", "Generic TEST port")));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThatThrownBy(() -> controller.updatePermit(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage(
+            "Provincial Submitters can't change the other port of export name on a payment"
+                + " pending permit.");
+    verifyNoInteractions(editLockService);
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldKeepAPaymentPendingPermitOtherPortEditableForAuthorizedStaff() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "portOfExport", new String[] {"OT"},
+            "otherPortOfExport", new String[] {"Renamed port"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetailWithPorts("PPD", "OT", "Generic TEST port")));
+    when(service.updatePermit(any(), eq("idir\\jsmith"))).thenReturn(successfulPermitUpdate());
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    assertThat(controller.updatePermit(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    verify(service).updatePermit(any(), eq("idir\\jsmith"));
+  }
+
+  @Test
   void updatePermitShouldRejectAReceiptChangeWithoutPermitReviewAuthority() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
@@ -2260,6 +2505,151 @@ class PermitDetailsRpcControllerTest {
     assertThat(controller.updatePermit(request, authentication).getStatusCode())
         .isEqualTo(HttpStatus.FORBIDDEN);
     verify(service, never()).updatePermit(any(), any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"CAN", "ACT", "COM", "EXP"})
+  void updatePermitShouldLetScopedSubmitterChangeAPaymentPendingPermitStatus(String targetStatus) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "permitStatus", new String[] {targetStatus},
+            "permitReceiptNo", new String[] {"R-1"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("PPD")));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThat(controller.updatePermit(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.OK);
+    ArgumentCaptor<PermitMutationRequestDto> requestCaptor =
+        ArgumentCaptor.forClass(PermitMutationRequestDto.class);
+    verify(service).updatePermit(requestCaptor.capture(), eq("bceid\\submitter"));
+    assertThat(requestCaptor.getValue().permitStatus()).isEqualTo(targetStatus);
+    verify(service, never()).updatePermitWithAgentChange(any(), any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"ACT, CAN", "ACT, COM", "COM, ACT", "COM, CAN"})
+  void updatePermitShouldRejectAScopedSubmitterStatusChangeOutsidePaymentPending(
+      String currentStatus, String targetStatus) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "permitStatus", new String[] {targetStatus}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail(currentStatus)));
+    lenient()
+        .when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThat(controller.updatePermit(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "permitReceiptNo, R-2",
+    "permitSubmitDate, 2026-04-09",
+    "permitIssueDate, 2026-05-02",
+    "permitExpiryDate, 2027-01-01"
+  })
+  void updatePermitShouldKeepPaymentPendingReceiptAndDatesLockedForScopedSubmitter(
+      String fieldName, String fieldValue) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "permitStatus", new String[] {"COM"},
+            fieldName, new String[] {fieldValue}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("PPD")));
+    lenient()
+        .when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThat(controller.updatePermit(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void waitingPermitUpdateShouldRecheckASubmitterStatusChangeAgainstCanonicalStatus()
+      throws Exception {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "permitStatus", new String[] {"CAN"}));
+    java.util.concurrent.atomic.AtomicReference<PermitDetailDto> canonicalPermit =
+        new java.util.concurrent.atomic.AtomicReference<>(permitDetail("PPD"));
+    CountDownLatch outerCanonicalStatusRead = new CountDownLatch(1);
+    java.util.concurrent.atomic.AtomicInteger permitLookups =
+        new java.util.concurrent.atomic.AtomicInteger();
+    when(permitService.findByPermitNumber(7000123L))
+        .thenAnswer(
+            ignored -> {
+              PermitDetailDto snapshot = canonicalPermit.get();
+              if (permitLookups.incrementAndGet() == 2) {
+                outerCanonicalStatusRead.countDown();
+              }
+              return Optional.of(snapshot);
+            });
+    lenient()
+        .when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    CountDownLatch holderEntered = new CountDownLatch(1);
+    CountDownLatch releaseHolder = new CountDownLatch(1);
+    ExecutorService executor = Executors.newFixedThreadPool(2);
+
+    try {
+      Future<String> holder =
+          executor.submit(
+              () ->
+                  operationMutex.execute(
+                      7000123L,
+                      () -> {
+                        holderEntered.countDown();
+                        try {
+                          if (!releaseHolder.await(2, SECONDS)) {
+                            throw new IllegalStateException(
+                                "Timed out waiting to release permit lock.");
+                          }
+                        } catch (InterruptedException exception) {
+                          Thread.currentThread().interrupt();
+                          throw new IllegalStateException(exception);
+                        }
+                        return "released";
+                      }));
+      assertThat(holderEntered.await(2, SECONDS)).isTrue();
+
+      Future<ResponseEntity<PermitMutationRpcResponseDto>> waitingMutation =
+          executor.submit(() -> controller.updatePermit(request, authentication));
+      assertThat(outerCanonicalStatusRead.await(2, SECONDS)).isTrue();
+      canonicalPermit.set(permitDetail("ACT"));
+
+      releaseHolder.countDown();
+      assertThat(holder.get(2, SECONDS)).isEqualTo("released");
+      assertThatThrownBy(() -> waitingMutation.get(2, SECONDS))
+          .hasCauseInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+          .hasRootCauseMessage(
+              "Permit status, date and receipt changes require permit review authority.");
+      verify(service, never()).updatePermit(any(), any());
+    } finally {
+      releaseHolder.countDown();
+      executor.shutdownNow();
+    }
   }
 
   @Test
@@ -3247,6 +3637,21 @@ class PermitDetailsRpcControllerTest {
       String exemptionNumber,
       java.time.LocalDate issueDate,
       java.time.LocalDate expiryDate) {
+    return permitDetail(status, exemptionNumber, issueDate, expiryDate, "VAN", null);
+  }
+
+  private PermitDetailDto permitDetailWithPorts(
+      String status, String portOfExportCode, String otherPortOfExport) {
+    return permitDetail(status, "EX-205", null, null, portOfExportCode, otherPortOfExport);
+  }
+
+  private PermitDetailDto permitDetail(
+      String status,
+      String exemptionNumber,
+      java.time.LocalDate issueDate,
+      java.time.LocalDate expiryDate,
+      String portOfExportCode,
+      String otherPortOfExport) {
     return new PermitDetailDto(
         7000123L,
         1000456L,
@@ -3262,8 +3667,8 @@ class PermitDetailsRpcControllerTest {
         "US",
         "TRK",
         "Truck",
-        "VAN",
-        null,
+        portOfExportCode,
+        otherPortOfExport,
         java.time.LocalDate.of(2026, 4, 10),
         issueDate,
         expiryDate,

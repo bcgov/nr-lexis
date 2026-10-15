@@ -12,14 +12,13 @@ import static org.mockito.Mockito.when;
 import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationOfferDto;
-import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
+import ca.bc.gov.mof.lexis.repository.application.SharedRemarkNumberTestDatabase;
 import ca.bc.gov.mof.lexis.repository.federal.FederalApplicationRepository;
-import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository;
 import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
@@ -29,6 +28,7 @@ import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -39,24 +39,17 @@ import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
-import org.springframework.aop.framework.ProxyFactory;
 import org.springframework.dao.DataAccessResourceFailureException;
 import org.springframework.dao.DataRetrievalFailureException;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageImpl;
 import org.springframework.data.domain.PageRequest;
-import org.springframework.transaction.TransactionDefinition;
-import org.springframework.transaction.annotation.AnnotationTransactionAttributeSource;
-import org.springframework.transaction.interceptor.TransactionInterceptor;
-import org.springframework.transaction.support.AbstractPlatformTransactionManager;
-import org.springframework.transaction.support.DefaultTransactionStatus;
 
 @ExtendWith(MockitoExtension.class)
 @DisplayName("Unit Test | FederalApplicationOracleService")
 class FederalApplicationOracleServiceTest {
 
   @Mock private FederalApplicationRepository repository;
-  @Mock private FederalPermitDetailRepository permitRepository;
   @Mock private ApplicationDetailsRpcRepository applicationDetailsRepository;
   @Mock private ApplicationDetailsRpcService applicationDetailsService;
   @Mock private ApplicationReviewRepository applicationReviewRepository;
@@ -419,81 +412,6 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
-  void permitShouldPassThroughRepository() {
-    FederalApplicationPermitDto dto =
-        new FederalApplicationPermitDto(
-            99123L,
-            LocalDate.of(2026, 3, 12),
-            "US",
-            "S",
-            "MV Federal",
-            LocalDate.of(2026, 3, 15),
-            "VA",
-            null);
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(
-            Optional.of(
-                new FederalApplicationRepository.FederalMutationContextRow(
-                    1000456L, LocalDate.of(2026, 3, 1), 76L, "00077881", "00")));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.of(dto));
-
-    Optional<FederalApplicationPermitDto> result = service.findPermitByApplicationNumber(1000456L);
-
-    assertThat(result).contains(dto);
-    verify(repository).findPermitByApplicationNumberRequired(1000456L);
-  }
-
-  @Test
-  void permitShouldReturnEmptyForInvalidApplicationNumber() {
-    assertThat(service.findPermitByApplicationNumber(0L)).isEmpty();
-    verifyNoInteractions(repository);
-  }
-
-  @Test
-  void permitShouldReturnEmptyWhenFederalApplicationIsMissing() {
-    when(repository.findMutationContextRequired(1000456L)).thenReturn(Optional.empty());
-
-    assertThat(service.findPermitByApplicationNumber(1000456L)).isEmpty();
-    verify(repository, never()).findPermitByApplicationNumberRequired(any());
-  }
-
-  @Test
-  void permitShouldReturnEmptyWhenApplicationExistsWithoutPermit() {
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(
-            Optional.of(
-                new FederalApplicationRepository.FederalMutationContextRow(
-                    1000456L, LocalDate.of(2026, 3, 1), 76L, "00077881", "00")));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.empty());
-
-    assertThat(service.findPermitByApplicationNumber(1000456L)).isEmpty();
-  }
-
-  @Test
-  void permitShouldPropagateApplicationLookupFailure() {
-    DataAccessResourceFailureException failure =
-        new DataAccessResourceFailureException("Oracle application lookup failed");
-    when(repository.findMutationContextRequired(1000456L)).thenThrow(failure);
-
-    assertThatThrownBy(() -> service.findPermitByApplicationNumber(1000456L)).isSameAs(failure);
-    verify(repository, never()).findPermitByApplicationNumberRequired(any());
-  }
-
-  @Test
-  void permitShouldPropagatePermitLookupFailure() {
-    DataAccessResourceFailureException failure =
-        new DataAccessResourceFailureException("Oracle permit lookup failed");
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(
-            Optional.of(
-                new FederalApplicationRepository.FederalMutationContextRow(
-                    1000456L, LocalDate.of(2026, 3, 1), 76L, "00077881", "00")));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenThrow(failure);
-
-    assertThatThrownBy(() -> service.findPermitByApplicationNumber(1000456L)).isSameAs(failure);
-  }
-
-  @Test
   void remarksShouldReturnStructuredRowsAfterFederalParentVerification() {
     when(repository.findMutationContextRequired(1000456L))
         .thenReturn(
@@ -539,786 +457,6 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
-  void addPermitShouldPersistAndReturnFederalPermit() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.empty());
-    when(permitRepository.insertFederalPermitDetail(any()))
-        .thenReturn(Optional.of(insertedFederalPermit()));
-    when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
-        .thenReturn(List.of("PKG-901"), List.of("PKG-901"));
-    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
-        .thenReturn(List.of(packageMutationRow(null)), List.of(packageMutationRow(9001L)));
-    when(applicationDetailsRepository.updatePackagePreservingEndUses(any())).thenReturn(true);
-
-    FederalApplicationService.FederalMutationResult result =
-        service.addPermit(
-            1000456L,
-            new FederalApplicationService.FederalPermitMutationRequest(
-                null,
-                LocalDate.of(2026, 7, 10),
-                " us ",
-                " s ",
-                " Carrier ",
-                LocalDate.of(2026, 7, 15),
-                " va ",
-                "Stale other port"),
-            "idir\\approver");
-
-    assertThat(result.success()).isTrue();
-    assertThat(result.permit().permitNumber()).isEqualTo(9001L);
-    verify(permitRepository).insertFederalPermitDetail(
-        org.mockito.ArgumentMatchers.argThat(
-            row ->
-                "idir\\approver".equals(row.entryUserId())
-                    && Long.valueOf(1909L).equals(row.orgUnitNumber())
-                    && "00077881".equals(row.clientNumber())
-                    && "US".equals(row.countryCode())
-                    && "S".equals(row.transportTypeCode())
-                    && "VA".equals(row.portOfExportCode())
-                    && "Carrier".equals(row.transportName())
-                    && row.otherPortOfExport() == null));
-    verify(applicationDetailsRepository, org.mockito.Mockito.times(2))
-        .findPackageMutationsByApplicationNumber(1000456L);
-    verify(applicationDetailsRepository, never()).findPackageMutationByPackageNumber(any());
-    verify(applicationDetailsRepository, never()).findEndUsesByPackageNumberRequired(any());
-  }
-
-  @Test
-  void addPermitShouldRollBackWhenApplicationHasNoPackagesToLink() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.empty());
-    when(permitRepository.insertFederalPermitDetail(any()))
-        .thenReturn(Optional.of(insertedFederalPermit()));
-    when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
-        .thenReturn(List.of());
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    FederalApplicationService.FederalMutationResult result =
-        transactionalService(transactionManager)
-            .addPermit(1000456L, validPermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors())
-        .containsExactly(
-            "Federal permit was created, but its application packages could not be linked.");
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-    verifyNoInteractions(applicationDetailsRepository);
-  }
-
-  @Test
-  void addPermitShouldRollBackWhenPackageLinkDoesNotPersist() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.empty());
-    when(permitRepository.insertFederalPermitDetail(any()))
-        .thenReturn(Optional.of(insertedFederalPermit()));
-    when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
-        .thenReturn(List.of("PKG-901"), List.of("PKG-901"));
-    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
-        .thenReturn(List.of(packageMutationRow(null)), List.of(packageMutationRow(null)));
-    when(applicationDetailsRepository.updatePackagePreservingEndUses(any())).thenReturn(true);
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    FederalApplicationService.FederalMutationResult result =
-        transactionalService(transactionManager)
-            .addPermit(1000456L, validPermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors())
-        .containsExactly(
-            "Federal permit was created, but its application packages could not be linked.");
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-  }
-
-  @Test
-  void addPermitShouldRollBackWhenPackageSetChangesDuringLinking() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.empty());
-    when(permitRepository.insertFederalPermitDetail(any()))
-        .thenReturn(Optional.of(insertedFederalPermit()));
-    when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
-        .thenReturn(List.of("PKG-901"), List.of("PKG-901", "PKG-902"));
-    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
-        .thenReturn(List.of(packageMutationRow("PKG-901", 1000456L, null)));
-    when(applicationDetailsRepository.updatePackagePreservingEndUses(any())).thenReturn(true);
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    FederalApplicationService.FederalMutationResult result =
-        transactionalService(transactionManager)
-            .addPermit(1000456L, validPermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-  }
-
-  @Test
-  void addPermitShouldRollBackWhenLaterPackageUpdateFails() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.empty());
-    when(permitRepository.insertFederalPermitDetail(any()))
-        .thenReturn(Optional.of(insertedFederalPermit()));
-    when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
-        .thenReturn(List.of("PKG-901", "PKG-902"));
-    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(
-                packageMutationRow("PKG-901", 1000456L, null),
-                packageMutationRow("PKG-902", 1000456L, null)));
-    when(applicationDetailsRepository.updatePackagePreservingEndUses(any()))
-        .thenReturn(true, false);
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    FederalApplicationService.FederalMutationResult result =
-        transactionalService(transactionManager)
-            .addPermit(1000456L, validPermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-    verify(applicationDetailsRepository, org.mockito.Mockito.times(2))
-        .updatePackagePreservingEndUses(any());
-  }
-
-  @Test
-  void addPermitShouldRollBackWhenPackageDoesNotBelongToApplication() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.empty());
-    when(permitRepository.insertFederalPermitDetail(any()))
-        .thenReturn(Optional.of(insertedFederalPermit()));
-    when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
-        .thenReturn(List.of("PKG-901"));
-    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
-        .thenReturn(List.of(packageMutationRow(1000999L, null)));
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    FederalApplicationService.FederalMutationResult result =
-        transactionalService(transactionManager)
-            .addPermit(1000456L, validPermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-    verify(applicationDetailsRepository, never()).updatePackagePreservingEndUses(any());
-  }
-
-  @Test
-  void addPermitShouldRollBackWhenInsertReturnsMalformedRow() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.empty());
-    when(permitRepository.insertFederalPermitDetail(any()))
-        .thenReturn(
-            Optional.of(
-                new FederalPermitDetailRepository.FederalPermitDetailRow(
-                    null,
-                    LocalDate.of(2026, 7, 10),
-                    LocalDate.of(2026, 7, 15),
-                    "US",
-                    "S",
-                    "Carrier",
-                    "VA",
-                    null,
-                    LocalDate.of(2026, 2, 20),
-                    1909L,
-                    "00",
-                    "00077881")));
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    FederalApplicationService.FederalMutationResult result =
-        transactionalService(transactionManager)
-            .addPermit(1000456L, validPermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors()).containsExactly("Federal permit could not be saved.");
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-    verify(repository, never()).findPackageNumbersByApplicationNumberRequired(any());
-  }
-
-  @Test
-  void addPermitShouldRollBackWhenInsertReturnsZeroIdOrWrongBusinessValue() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.empty());
-    when(permitRepository.insertFederalPermitDetail(any()))
-        .thenReturn(
-            Optional.of(
-                new FederalPermitDetailRepository.FederalPermitDetailRow(
-                    0L,
-                    LocalDate.of(2026, 7, 10),
-                    LocalDate.of(2026, 7, 15),
-                    "CA",
-                    "S",
-                    "Carrier",
-                    "VA",
-                    null,
-                    LocalDate.of(2026, 2, 20),
-                    1909L,
-                    "00",
-                    "00077881")));
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    FederalApplicationService.FederalMutationResult result =
-        transactionalService(transactionManager)
-            .addPermit(1000456L, validPermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors()).containsExactly("Federal permit could not be saved.");
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-    verify(repository, never()).findPackageNumbersByApplicationNumberRequired(any());
-  }
-
-  @Test
-  void addPermitShouldFailClosedWhenExistingPermitLookupFails() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L))
-        .thenThrow(new DataRetrievalFailureException("Oracle lookup failed"));
-
-    FederalApplicationService.FederalMutationResult result =
-        service.addPermit(
-            1000456L,
-            new FederalApplicationService.FederalPermitMutationRequest(
-                null,
-                LocalDate.of(2026, 7, 10),
-                "US",
-                "S",
-                "Carrier",
-                LocalDate.of(2026, 7, 15),
-                "VA",
-                null),
-            "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors()).containsExactly(
-        "Federal permit availability could not be verified.");
-    verify(permitRepository, never()).insertFederalPermitDetail(any());
-  }
-
-  @Test
-  void addPermitShouldFailClosedWhenPackageListLookupFails() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.empty());
-    when(permitRepository.insertFederalPermitDetail(any()))
-        .thenReturn(
-            Optional.of(
-                new FederalPermitDetailRepository.FederalPermitDetailRow(
-                    9001L,
-                    LocalDate.of(2026, 7, 10),
-                    LocalDate.of(2026, 7, 15),
-                    "US",
-                    "S",
-                    "Carrier",
-                    "VA",
-                    null,
-                    LocalDate.of(2026, 2, 20),
-                    1909L,
-                    "00",
-                    "00077881")));
-    when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
-        .thenThrow(new DataRetrievalFailureException("Oracle lookup failed"));
-
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    FederalApplicationService.FederalMutationResult result =
-        transactionalService(transactionManager)
-            .addPermit(
-                1000456L,
-                new FederalApplicationService.FederalPermitMutationRequest(
-                    null,
-                    LocalDate.of(2026, 7, 10),
-                    "US",
-                    "S",
-                    "Carrier",
-                    LocalDate.of(2026, 7, 15),
-                    "VA",
-                    null),
-                "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors()).containsExactly(
-        "Federal permit was created, but its application packages could not be linked.");
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-    verifyNoInteractions(applicationDetailsRepository);
-  }
-
-  @Test
-  void addPermitShouldFailClosedWhenBulkPackageLookupFails() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenReturn(Optional.empty());
-    when(permitRepository.insertFederalPermitDetail(any()))
-        .thenReturn(
-            Optional.of(
-                new FederalPermitDetailRepository.FederalPermitDetailRow(
-                    9001L,
-                    LocalDate.of(2026, 7, 10),
-                    LocalDate.of(2026, 7, 15),
-                    "US",
-                    "S",
-                    "Carrier",
-                    "VA",
-                    null,
-                    LocalDate.of(2026, 2, 20),
-                    1909L,
-                    "00",
-                    "00077881")));
-    when(repository.findPackageNumbersByApplicationNumberRequired(1000456L))
-        .thenReturn(List.of("PKG-901"));
-    when(applicationDetailsRepository.findPackageMutationsByApplicationNumber(1000456L))
-        .thenThrow(new DataRetrievalFailureException("Oracle lookup failed"));
-
-    FederalApplicationService.FederalMutationResult result =
-        service.addPermit(
-            1000456L,
-            new FederalApplicationService.FederalPermitMutationRequest(
-                null,
-                LocalDate.of(2026, 7, 10),
-                "US",
-                "S",
-                "Carrier",
-                LocalDate.of(2026, 7, 15),
-                "VA",
-                null),
-            "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors()).containsExactly(
-        "Federal permit was created, but its application packages could not be linked.");
-    verify(applicationDetailsRepository, never()).updatePackagePreservingEndUses(any());
-  }
-
-  @Test
-  void addPermitShouldRequireTransportNameBeforeOracleAccess() {
-    FederalApplicationService.FederalMutationResult result =
-        service.addPermit(
-            1000456L,
-            new FederalApplicationService.FederalPermitMutationRequest(
-                null,
-                LocalDate.of(2026, 7, 10),
-                "US",
-                "S",
-                " ",
-                LocalDate.of(2026, 7, 15),
-                "VA",
-                null),
-            "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors()).containsExactly("Transport name is required.");
-    verifyNoInteractions(
-        repository, permitRepository, applicationDetailsRepository, applicationReviewRepository);
-  }
-
-  @Test
-  void addPermitShouldRejectNonexistentReferenceCodes() {
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(permitRepository.countryCodeExistsRequired("XX")).thenReturn(false);
-    when(permitRepository.portOfExportCodeExistsRequired("ZZ")).thenReturn(false);
-    when(permitRepository.transportTypeCodeExistsRequired("Z")).thenReturn(false);
-
-    FederalApplicationService.FederalMutationResult result =
-        service.addPermit(
-            1000456L,
-            new FederalApplicationService.FederalPermitMutationRequest(
-                null,
-                LocalDate.of(2026, 7, 10),
-                "XX",
-                "Z",
-                "Carrier",
-                LocalDate.of(2026, 7, 15),
-                "ZZ",
-                null),
-            "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors())
-        .containsExactly(
-            "Destination country is invalid.",
-            "Port of export is invalid.",
-            "Transport type is invalid.");
-    verify(repository, never()).findPermitByApplicationNumberRequired(any());
-    verify(permitRepository, never()).insertFederalPermitDetail(any());
-  }
-
-  @Test
-  void addPermitShouldFailClosedWhenCodeLookupFails() {
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(permitRepository.countryCodeExistsRequired("US"))
-        .thenThrow(new DataRetrievalFailureException("Oracle lookup failed"));
-
-    FederalApplicationService.FederalMutationResult result =
-        service.addPermit(
-            1000456L,
-            new FederalApplicationService.FederalPermitMutationRequest(
-                null,
-                LocalDate.of(2026, 7, 10),
-                "US",
-                "S",
-                "Carrier",
-                LocalDate.of(2026, 7, 15),
-                "VA",
-                null),
-            "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors())
-        .containsExactly("Federal permit reference codes could not be verified.");
-    verify(permitRepository, never()).insertFederalPermitDetail(any());
-    verify(repository, never()).findPermitByApplicationNumberRequired(any());
-  }
-
-  @Test
-  void addPermitShouldRejectSchemaWidthsBeforeOracleAccess() {
-    FederalApplicationService.FederalMutationResult result =
-        service.addPermit(
-            1000456L,
-            new FederalApplicationService.FederalPermitMutationRequest(
-                null,
-                LocalDate.of(2026, 7, 10),
-                "USA",
-                "SEA",
-                "C".repeat(27),
-                LocalDate.of(2026, 7, 15),
-                "VAN",
-                null),
-            "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors())
-        .containsExactlyInAnyOrder(
-            "Destination country must be exactly 2 characters.",
-            "Transport type must be exactly 1 character.",
-            "Transport name must not exceed 26 bytes.",
-            "Port of export must be exactly 2 characters.");
-    verifyNoInteractions(
-        repository, permitRepository, applicationDetailsRepository, applicationReviewRepository);
-  }
-
-  @Test
-  void addPermitShouldRejectTextThatOracleCannotRepresentBeforeOracleAccess() {
-    FederalApplicationService.FederalMutationResult result =
-        service.addPermit(
-            1000456L,
-            new FederalApplicationService.FederalPermitMutationRequest(
-                null,
-                LocalDate.of(2026, 7, 10),
-                "US",
-                "S",
-                "Navire Étoile",
-                LocalDate.of(2026, 7, 15),
-                "OT",
-                "Québec"),
-            "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors())
-        .containsExactlyInAnyOrder(
-            "Transport name contains characters the current LEXIS database cannot store.",
-            "Other port of export contains characters the current LEXIS database cannot store.");
-    verifyNoInteractions(
-        repository, permitRepository, applicationDetailsRepository, applicationReviewRepository);
-  }
-
-  @Test
-  void addPermitShouldVerifyTheFederalParentBeforeCodeLookups() {
-    when(repository.findMutationContextRequired(1000456L)).thenReturn(Optional.empty());
-
-    FederalApplicationService.FederalMutationResult result =
-        service.addPermit(
-            1000456L,
-            new FederalApplicationService.FederalPermitMutationRequest(
-                null,
-                LocalDate.of(2026, 7, 10),
-                "US",
-                "S",
-                "Carrier",
-                LocalDate.of(2026, 7, 15),
-                "VA",
-                null),
-            "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors()).containsExactly("Federal application was not found.");
-    verifyNoInteractions(permitRepository);
-  }
-
-  @Test
-  void addPermitShouldRejectAnUnapprovedFederalApplicationBeforeCodeLookups() {
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("PND", null)));
-
-    FederalApplicationService.FederalMutationResult result =
-        service.addPermit(1000456L, validPermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors())
-        .containsExactly("Federal permits can only be added to approved applications.");
-    verifyNoInteractions(
-        permitRepository, applicationDetailsRepository, applicationReviewRepository);
-  }
-
-  @Test
-  void addPermitShouldFailClosedWhenTheFederalApplicationStatusIsMissing() {
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext(null, null)));
-
-    FederalApplicationService.FederalMutationResult result =
-        service.addPermit(1000456L, validPermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors())
-        .containsExactly("Federal application status could not be verified.");
-    verifyNoInteractions(
-        permitRepository, applicationDetailsRepository, applicationReviewRepository);
-  }
-
-  @Test
-  void addPermitShouldPropagateFederalParentLookupFailure() {
-    DataRetrievalFailureException failure =
-        new DataRetrievalFailureException("Oracle lookup failed");
-    when(repository.findMutationContextRequired(1000456L)).thenThrow(failure);
-
-    assertThatThrownBy(
-            () -> service.addPermit(1000456L, validPermitRequest(), "idir\\approver"))
-        .isSameAs(failure);
-
-    verifyNoInteractions(
-        permitRepository, applicationDetailsRepository, applicationReviewRepository);
-  }
-
-  @Test
-  void updatePermitShouldReportNotFoundWhenFederalParentIsMissing() {
-    when(repository.findMutationContextRequired(1000456L)).thenReturn(Optional.empty());
-
-    FederalApplicationService.FederalMutationResult result =
-        service.updatePermit(1000456L, validUpdatePermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors()).containsExactly("Federal permit was not found.");
-    verify(repository, never()).findPermitByApplicationNumberRequired(any());
-    verifyNoInteractions(permitRepository);
-  }
-
-  @Test
-  void updatePermitShouldPropagateFederalParentLookupFailure() {
-    DataRetrievalFailureException failure =
-        new DataRetrievalFailureException("Oracle parent lookup failed");
-    when(repository.findMutationContextRequired(1000456L)).thenThrow(failure);
-
-    assertThatThrownBy(
-            () ->
-                service.updatePermit(
-                    1000456L, validUpdatePermitRequest(), "idir\\approver"))
-        .isSameAs(failure);
-
-    verify(repository, never()).findPermitByApplicationNumberRequired(any());
-    verifyNoInteractions(permitRepository);
-  }
-
-  @Test
-  void updatePermitShouldReportNotFoundWhenFederalPermitIsMissing() {
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L))
-        .thenReturn(Optional.empty());
-
-    FederalApplicationService.FederalMutationResult result =
-        service.updatePermit(1000456L, validUpdatePermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors()).containsExactly("Federal permit was not found.");
-    verifyNoInteractions(permitRepository);
-  }
-
-  @Test
-  void updatePermitShouldPropagateFederalPermitLookupFailure() {
-    DataRetrievalFailureException failure =
-        new DataRetrievalFailureException("Oracle permit lookup failed");
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L)).thenThrow(failure);
-
-    assertThatThrownBy(
-            () ->
-                service.updatePermit(
-                    1000456L, validUpdatePermitRequest(), "idir\\approver"))
-        .isSameAs(failure);
-
-    verifyNoInteractions(permitRepository);
-  }
-
-  @Test
-  void updatePermitShouldReturnAuthoritativePersistedPermit() {
-    stubValidPermitCodes();
-    FederalPermitDetailRepository.FederalPermitDetailRow persisted = insertedFederalPermit();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L))
-        .thenReturn(Optional.of(validFederalPermit()));
-    when(permitRepository.updateFederalPermitDetail(eq(9001L), any(), eq("idir\\approver")))
-        .thenReturn(true);
-    when(permitRepository.findFederalPermitDetailByIdRequired(9001L))
-        .thenReturn(Optional.of(persisted));
-
-    FederalApplicationService.FederalMutationResult result =
-        service.updatePermit(1000456L, validUpdatePermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isTrue();
-    assertThat(result.permit()).isEqualTo(validFederalPermit());
-    verify(repository).findPermitByApplicationNumberRequired(1000456L);
-    verify(permitRepository).findFederalPermitDetailByIdRequired(9001L);
-  }
-
-  @Test
-  void updatePermitShouldRollBackWhenOracleUpdateDoesNotPersistExpectedValues() {
-    stubValidPermitCodes();
-    FederalPermitDetailRepository.FederalPermitDetailRow stale =
-        new FederalPermitDetailRepository.FederalPermitDetailRow(
-            9001L,
-            LocalDate.of(2026, 7, 10),
-            LocalDate.of(2026, 7, 15),
-            "US",
-            "S",
-            "Stale carrier",
-            "VA",
-            null,
-            LocalDate.of(2026, 2, 20),
-            1909L,
-            "00",
-            "00077881");
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L))
-        .thenReturn(Optional.of(validFederalPermit()));
-    when(permitRepository.updateFederalPermitDetail(eq(9001L), any(), eq("idir\\approver")))
-        .thenReturn(true);
-    when(permitRepository.findFederalPermitDetailByIdRequired(9001L))
-        .thenReturn(Optional.of(stale));
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    FederalApplicationService.FederalMutationResult result =
-        transactionalService(transactionManager)
-            .updatePermit(1000456L, validUpdatePermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors())
-        .containsExactly("Federal permit update could not be verified.");
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-  }
-
-  @Test
-  void updatePermitShouldRollBackWhenAuthoritativeContextDoesNotPersist() {
-    stubValidPermitCodes();
-    FederalPermitDetailRepository.FederalPermitDetailRow staleContext =
-        new FederalPermitDetailRepository.FederalPermitDetailRow(
-            9001L,
-            LocalDate.of(2026, 7, 10),
-            LocalDate.of(2026, 7, 15),
-            "US",
-            "S",
-            "Carrier",
-            "VA",
-            null,
-            LocalDate.of(2026, 2, 20),
-            9999L,
-            "00",
-            "00077881");
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L))
-        .thenReturn(Optional.of(validFederalPermit()));
-    when(permitRepository.updateFederalPermitDetail(eq(9001L), any(), eq("idir\\approver")))
-        .thenReturn(true);
-    when(permitRepository.findFederalPermitDetailByIdRequired(9001L))
-        .thenReturn(Optional.of(staleContext));
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    FederalApplicationService.FederalMutationResult result =
-        transactionalService(transactionManager)
-            .updatePermit(1000456L, validUpdatePermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors())
-        .containsExactly("Federal permit update could not be verified.");
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-  }
-
-  @Test
-  void updatePermitShouldRollBackWhenOracleUpdateReturnsButPermitDisappears() {
-    stubValidPermitCodes();
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L))
-        .thenReturn(Optional.of(validFederalPermit()));
-    when(permitRepository.updateFederalPermitDetail(eq(9001L), any(), eq("idir\\approver")))
-        .thenReturn(true);
-    when(permitRepository.findFederalPermitDetailByIdRequired(9001L))
-        .thenReturn(Optional.empty());
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    FederalApplicationService.FederalMutationResult result =
-        transactionalService(transactionManager)
-            .updatePermit(1000456L, validUpdatePermitRequest(), "idir\\approver");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors())
-        .containsExactly("Federal permit update could not be verified.");
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-  }
-
-  @Test
-  void updatePermitShouldRollBackAndPropagatePostWriteVerificationFailure() {
-    stubValidPermitCodes();
-    DataRetrievalFailureException failure =
-        new DataRetrievalFailureException("Oracle verification failed");
-    when(repository.findMutationContextRequired(1000456L))
-        .thenReturn(Optional.of(federalContext("APP", null)));
-    when(repository.findPermitByApplicationNumberRequired(1000456L))
-        .thenReturn(Optional.of(validFederalPermit()));
-    when(permitRepository.updateFederalPermitDetail(eq(9001L), any(), eq("idir\\approver")))
-        .thenReturn(true);
-    when(permitRepository.findFederalPermitDetailByIdRequired(9001L)).thenThrow(failure);
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    assertThatThrownBy(
-            () ->
-                transactionalService(transactionManager)
-                    .updatePermit(
-                        1000456L, validUpdatePermitRequest(), "idir\\approver"))
-        .isSameAs(failure);
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-  }
-
-  @Test
   void updateStatusShouldPersistRequiredRemark() {
     when(repository.findMutationContextRequired(1000456L))
         .thenReturn(
@@ -1358,7 +496,7 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
-  void updateStatusShouldPreserveModernApprovalExtensionFromPending() {
+  void approveShouldPreserveModernApprovalExtensionFromPending() {
     when(repository.findMutationContextRequired(1000456L))
         .thenReturn(Optional.of(federalContext("PND", LocalDate.of(2026, 7, 11))));
     when(approvalEligibilityService.evaluate(1000456L))
@@ -1374,18 +512,14 @@ class FederalApplicationOracleServiceTest {
                 true, true, true, "PND", null));
 
     FederalApplicationService.FederalMutationResult result =
-        serviceAt("2026-07-11T19:00:00Z")
-            .updateStatus(
-                1000456L,
-                new FederalApplicationService.FederalStatusMutationRequest("APP", null),
-                "idir\\approver");
+        serviceAt("2026-07-11T19:00:00Z").approve(1000456L, "idir\\approver");
 
     assertThat(result.success()).isTrue();
     verify(approvalEligibilityService).evaluate(1000456L);
   }
 
   @Test
-  void updateStatusShouldRejectApprovalWhenLegacyReadinessGateFails() {
+  void approveShouldRejectApprovalWhenLegacyReadinessGateFails() {
     when(repository.findMutationContextRequired(1000456L))
         .thenReturn(Optional.of(federalContext("NEW", LocalDate.of(2026, 7, 11))));
     when(approvalEligibilityService.evaluate(1000456L))
@@ -1397,11 +531,7 @@ class FederalApplicationOracleServiceTest {
                     "Applications linked to a permit cannot be approved.")));
 
     FederalApplicationService.FederalMutationResult result =
-        serviceAt("2026-07-11T19:00:00Z")
-            .updateStatus(
-                1000456L,
-                new FederalApplicationService.FederalStatusMutationRequest("APP", null),
-                "idir\\approver");
+        serviceAt("2026-07-11T19:00:00Z").approve(1000456L, "idir\\approver");
 
     assertThat(result.success()).isFalse();
     assertThat(result.errors())
@@ -1413,19 +543,42 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
-  void updateStatusShouldRejectSameTerminalAndForgedSourceTransitions() {
+  void approveShouldOnlyApproveNewOrPendingApplications() {
+    when(repository.findMutationContextRequired(1000456L))
+        .thenReturn(Optional.of(federalContext("APP", LocalDate.of(2026, 7, 11))));
+
+    FederalApplicationService.FederalMutationResult result =
+        serviceAt("2026-07-11T19:00:00Z").approve(1000456L, "idir\\approver");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors())
+        .containsExactly("Federal applications can only be approved from NEW or PND.");
+    verifyNoInteractions(approvalEligibilityService, applicationReviewRepository);
+  }
+
+  @ParameterizedTest
+  @CsvSource({"APP", "' app '", "EXP", "NEW"})
+  void updateStatusShouldOnlyRejectOrWithdrawBeforeOracleAccess(String statusCode) {
+    FederalApplicationService.FederalMutationResult result =
+        serviceAt("2026-07-11T19:00:00Z")
+            .updateStatus(
+                1000456L,
+                new FederalApplicationService.FederalStatusMutationRequest(statusCode, "Note"),
+                "idir\\approver");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.errors()).containsExactly("Federal status must be REJ or WDN.");
+    verifyNoInteractions(repository, approvalEligibilityService, applicationReviewRepository);
+  }
+
+  @Test
+  void updateStatusShouldRejectForgedSourceTransitions() {
     when(repository.findMutationContextRequired(1000456L))
         .thenReturn(
-            Optional.of(federalContext("APP", LocalDate.of(2026, 7, 11))),
             Optional.of(federalContext("NEW", LocalDate.of(2026, 7, 11))),
             Optional.of(federalContext("REJ", LocalDate.of(2026, 7, 11))));
     FederalApplicationOracleService fixedService = serviceAt("2026-07-11T19:00:00Z");
 
-    FederalApplicationService.FederalMutationResult sameStatus =
-        fixedService.updateStatus(
-            1000456L,
-            new FederalApplicationService.FederalStatusMutationRequest("APP", null),
-            "idir\\approver");
     FederalApplicationService.FederalMutationResult forgedReject =
         fixedService.updateStatus(
             1000456L,
@@ -1437,9 +590,6 @@ class FederalApplicationOracleServiceTest {
             new FederalApplicationService.FederalStatusMutationRequest("WDN", "Forged"),
             "idir\\approver");
 
-    assertThat(sameStatus.success()).isFalse();
-    assertThat(sameStatus.errors()).containsExactly(
-        "Federal applications can only be approved from NEW or PND.");
     assertThat(forgedReject.success()).isFalse();
     assertThat(forgedReject.errors()).containsExactly(
         "Federal applications can only be rejected or withdrawn from APP.");
@@ -1539,7 +689,7 @@ class FederalApplicationOracleServiceTest {
 
     assertThat(result.success()).isFalse();
     assertThat(result.errors()).containsExactly("Remark must not exceed 250 characters.");
-    verifyNoInteractions(repository, permitRepository, applicationDetailsRepository, applicationReviewRepository);
+    verifyNoInteractions(repository, applicationDetailsRepository, applicationReviewRepository);
   }
 
   @Test
@@ -1559,7 +709,7 @@ class FederalApplicationOracleServiceTest {
         new FederalApplicationService.FederalStatusMutationRequest("REJ", request.remark()),
         "idir\\approver").errors())
         .containsExactly("Remark is too long to save. Shorten it and try again.");
-    verifyNoInteractions(repository, permitRepository, applicationDetailsRepository, applicationReviewRepository);
+    verifyNoInteractions(repository, applicationDetailsRepository, applicationReviewRepository);
   }
 
   @Test
@@ -1588,11 +738,8 @@ class FederalApplicationOracleServiceTest {
             Optional.of(
                 new FederalApplicationRepository.FederalMutationContextRow(
                     1000456L, LocalDate.of(2026, 3, 1), 76L, "00077881", "00")));
-    when(applicationDetailsRepository.findRemarkByNumberRequired(44L))
-        .thenReturn(
-            Optional.of(
-                new ApplicationDetailsRpcRepository.RemarkRow(
-                    44L, 1000999L, "Other note", "idir\\reviewer", Instant.EPOCH)));
+    when(applicationDetailsRepository.findRemarkRequired(44L, 1000456L))
+        .thenReturn(Optional.empty());
 
     FederalApplicationService.FederalRemarkMutationResult result =
         service.updateRemark(
@@ -1614,7 +761,7 @@ class FederalApplicationOracleServiceTest {
             Optional.of(
                 new FederalApplicationRepository.FederalMutationContextRow(
                     1000456L, LocalDate.of(2026, 3, 1), 76L, "00077881", "00")));
-    when(applicationDetailsRepository.findRemarkByNumberRequired(44L))
+    when(applicationDetailsRepository.findRemarkRequired(44L, 1000456L))
         .thenReturn(
             Optional.of(
                 new ApplicationDetailsRpcRepository.RemarkRow(
@@ -1643,13 +790,60 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
+  void updateRemarkShouldRefuseASharedRemarkNumberWithoutCallingTheProcedure() {
+    try (SharedRemarkNumberTestDatabase database = new SharedRemarkNumberTestDatabase()) {
+      long applicationNumber = SharedRemarkNumberTestDatabase.APPLICATION_NUMBER;
+      when(repository.findMutationContextRequired(applicationNumber))
+          .thenReturn(
+              Optional.of(
+                  new FederalApplicationRepository.FederalMutationContextRow(
+                      applicationNumber, LocalDate.of(2026, 3, 1), 76L, "00077881", "00")));
+      SharedRemarkNumberTestDatabase.RemarkProcedureRepository remarkRepository =
+          database.repository();
+      FederalApplicationOracleService sharedNumberService =
+          new FederalApplicationOracleService(
+              repository,
+              remarkRepository,
+              applicationDetailsService,
+              applicationReviewRepository,
+              approvalEligibilityService,
+              clientLookupService);
+      List<Map<String, Object>> before = database.rows();
+
+      FederalApplicationService.FederalRemarkMutationResult refused =
+          sharedNumberService.updateRemark(
+              applicationNumber,
+              SharedRemarkNumberTestDatabase.REMARK_NUMBER,
+              new FederalApplicationService.FederalRemarkMutationRequest("Corrected remark"),
+              "idir\\approver");
+
+      assertThat(refused.success()).isFalse();
+      assertThat(refused.errors())
+          .containsExactly(ApplicationDetailsRpcService.SHARED_REMARK_NUMBER_MESSAGE);
+      assertThat(remarkRepository.remarkUpdateCalls()).isEmpty();
+      assertThat(database.rows()).isEqualTo(before);
+
+      FederalApplicationService.FederalRemarkMutationResult updated =
+          sharedNumberService.updateRemark(
+              applicationNumber,
+              SharedRemarkNumberTestDatabase.UNIQUE_REMARK_NUMBER,
+              new FederalApplicationService.FederalRemarkMutationRequest("Corrected remark"),
+              "idir\\approver");
+
+      assertThat(updated.success()).isTrue();
+      assertThat(updated.remark().remark()).isEqualTo("Corrected remark");
+      assertThat(remarkRepository.remarkUpdateCalls()).hasSize(1);
+    }
+  }
+
+  @Test
   void updateRemarkShouldFailClosedWhenRemarkLookupFails() {
     when(repository.findMutationContextRequired(1000456L))
         .thenReturn(
             Optional.of(
                 new FederalApplicationRepository.FederalMutationContextRow(
                     1000456L, LocalDate.of(2026, 3, 1), 76L, "00077881", "00")));
-    when(applicationDetailsRepository.findRemarkByNumberRequired(44L))
+    when(applicationDetailsRepository.findRemarkRequired(44L, 1000456L))
         .thenThrow(new DataRetrievalFailureException("Oracle lookup failed"));
 
     FederalApplicationService.FederalRemarkMutationResult result =
@@ -1681,114 +875,15 @@ class FederalApplicationOracleServiceTest {
     return new PageImpl<>(content, PageRequest.of(0, Math.max(1, content.size())), total);
   }
 
-  private void stubValidPermitCodes() {
-    when(permitRepository.countryCodeExistsRequired("US")).thenReturn(true);
-    when(permitRepository.portOfExportCodeExistsRequired("VA")).thenReturn(true);
-    when(permitRepository.transportTypeCodeExistsRequired("S")).thenReturn(true);
-  }
-
-  private FederalApplicationService.FederalPermitMutationRequest validPermitRequest() {
-    return new FederalApplicationService.FederalPermitMutationRequest(
-        null,
-        LocalDate.of(2026, 7, 10),
-        "US",
-        "S",
-        "Carrier",
-        LocalDate.of(2026, 7, 15),
-        "VA",
-        null);
-  }
-
-  private FederalApplicationService.FederalPermitMutationRequest validUpdatePermitRequest() {
-    return new FederalApplicationService.FederalPermitMutationRequest(
-        9001L,
-        LocalDate.of(2026, 7, 10),
-        "US",
-        "S",
-        "Carrier",
-        LocalDate.of(2026, 7, 15),
-        "VA",
-        null);
-  }
-
-  private FederalApplicationPermitDto validFederalPermit() {
-    return new FederalApplicationPermitDto(
-        9001L,
-        LocalDate.of(2026, 7, 10),
-        "US",
-        "S",
-        "Carrier",
-        LocalDate.of(2026, 7, 15),
-        "VA",
-        null);
-  }
-
-  private FederalPermitDetailRepository.FederalPermitDetailRow insertedFederalPermit() {
-    return new FederalPermitDetailRepository.FederalPermitDetailRow(
-        9001L,
-        LocalDate.of(2026, 7, 10),
-        LocalDate.of(2026, 7, 15),
-        "US",
-        "S",
-        "Carrier",
-        "VA",
-        null,
-        LocalDate.of(2026, 2, 20),
-        1909L,
-        "00",
-        "00077881");
-  }
-
-  private ApplicationDetailsRpcRepository.PackageMutationRow packageMutationRow(
-      Long federalPermitNumber) {
-    return packageMutationRow("PKG-901", 1000456L, federalPermitNumber);
-  }
-
-  private ApplicationDetailsRpcRepository.PackageMutationRow packageMutationRow(
-      Long applicationNumber, Long federalPermitNumber) {
-    return packageMutationRow("PKG-901", applicationNumber, federalPermitNumber);
-  }
-
-  private ApplicationDetailsRpcRepository.PackageMutationRow packageMutationRow(
-      String packageNumber, Long applicationNumber, Long federalPermitNumber) {
-    return new ApplicationDetailsRpcRepository.PackageMutationRow(
-        packageNumber,
-        applicationNumber,
-        null,
-        10.0,
-        null,
-        null,
-        null,
-        null,
-        federalPermitNumber,
-        null,
-        "ACT",
-        null,
-        null,
-        "idir\\creator",
-        Instant.EPOCH);
-  }
-
   private FederalApplicationOracleService serviceAt(String instant) {
     return new FederalApplicationOracleService(
         repository,
-        permitRepository,
         applicationDetailsRepository,
         applicationDetailsService,
         applicationReviewRepository,
         approvalEligibilityService,
         clientLookupService,
         Clock.fixed(Instant.parse(instant), LexisBusinessTime.ZONE));
-  }
-
-  private FederalApplicationService transactionalService(
-      RecordingTransactionManager transactionManager) {
-    TransactionInterceptor transactionInterceptor =
-        new TransactionInterceptor(
-            transactionManager, new AnnotationTransactionAttributeSource());
-    ProxyFactory proxyFactory = new ProxyFactory(service);
-    proxyFactory.addAdvice(transactionInterceptor);
-    return (FederalApplicationService) proxyFactory.getProxy();
   }
 
   private FederalApplicationRepository.FederalMutationContextRow federalContext(
@@ -1801,32 +896,5 @@ class FederalApplicationOracleServiceTest {
         "00",
         statusCode,
         listingDate);
-  }
-
-  private static final class RecordingTransactionManager
-      extends AbstractPlatformTransactionManager {
-
-    private int commits;
-    private int rollbacks;
-
-    @Override
-    protected Object doGetTransaction() {
-      return new Object();
-    }
-
-    @Override
-    protected void doBegin(Object transaction, TransactionDefinition definition) {
-      // Nothing to enlist for this transaction-boundary test.
-    }
-
-    @Override
-    protected void doCommit(DefaultTransactionStatus status) {
-      commits++;
-    }
-
-    @Override
-    protected void doRollback(DefaultTransactionStatus status) {
-      rollbacks++;
-    }
   }
 }
