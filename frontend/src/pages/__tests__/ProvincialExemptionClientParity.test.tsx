@@ -178,6 +178,31 @@ describe('Provincial exemption client parity', () => {
     expect(await screen.findByText(/^Author: /)).toBeInTheDocument()
   })
 
+  it('shows the applicant card as loading before its client lookup starts', async () => {
+    const lookupData = vi.mocked(fetchExemptionClientData).getMockImplementation()
+    const cardTextWhenLookupStarted: string[] = []
+    vi.mocked(fetchExemptionClientData).mockImplementation(async (...args) => {
+      const heading = screen.queryByRole('heading', { name: 'Applicant details', level: 2 })
+      cardTextWhenLookupStarted.push(heading?.closest('.cds--tile')?.textContent ?? '')
+      return lookupData ? lookupData(...args) : null
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/26-8758']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Applicant details', level: 2 })
+    await waitFor(() => expect(cardTextWhenLookupStarted.length).toBeGreaterThan(0))
+    // The card rendered before the lookup started, and it showed the loading state then.
+    expect(cardTextWhenLookupStarted[0]).toContain('Loading…')
+  })
+
   it('opens on Applicant without first showing tabs that lack it', async () => {
     const applications = await vi.mocked(fetchExemptionApplications)('26-8758')
     let resolveApplications: (value: typeof applications) => void = () => undefined

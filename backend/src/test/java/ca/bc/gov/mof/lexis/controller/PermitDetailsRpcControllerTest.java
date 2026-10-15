@@ -2231,6 +2231,38 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void updateShippingShouldRejectAPortChangeOnACompletedPermitForScopedSubmitter() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "portOfExport", new String[] {"PR"}));
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("COM")));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThatThrownBy(() -> controller.updateShipping(request, authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage(
+            "Provincial Submitters can't change the port of export on a completed permit.");
+    verify(service, never()).updateShipping(any(), any());
+  }
+
+  @Test
+  void updatePermitShouldRejectAReceiptChangeWithoutPermitReviewAuthority() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(Map.of(
+            "permitNumber", new String[] {"7000123"},
+            "permitReceiptNo", new String[] {"R-2"}));
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+
+    assertThat(controller.updatePermit(request, authentication).getStatusCode())
+        .isEqualTo(HttpStatus.FORBIDDEN);
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
   void updatePermitShouldLockTheRequestedHiddenOicApplication() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())

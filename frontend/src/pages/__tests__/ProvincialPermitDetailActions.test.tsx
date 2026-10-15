@@ -6925,11 +6925,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(
       document.querySelector('label[for="permit-permitIssueDate"] .required-label__marker'),
     ).not.toBeInTheDocument()
-    expect(expiryDate).toBeEnabled()
-    expect(expiryDate).toHaveAttribute('aria-required', 'true')
+    expect(expiryDate).toBeDisabled()
+    expect(expiryDate).not.toHaveAttribute('aria-required')
     expect(
       document.querySelector('label[for="permit-permitExpiryDate"] .required-label__marker'),
-    ).toBeInTheDocument()
+    ).not.toBeInTheDocument()
     const permitStatusSelect = screen.getByLabelText('Status')
     expect(permitStatusSelect).toHaveValue('COM')
     expect(within(permitStatusSelect).getByRole('option', { name: /Active/ })).toBeInTheDocument()
@@ -7054,9 +7054,17 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
-    await userEvent.click(screen.getByRole('button', { name: /Edit permit(?: details)?/ }))
-    expect(screen.getByLabelText('Issued date')).toHaveValue(permitDetail.issueDate ?? '')
-    expect(screen.getByLabelText('Expiry date')).toHaveValue(permitDetail.expiryDate ?? '')
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(
+      screen.getByText('Issued date').parentElement?.querySelector('dd'),
+    ).not.toHaveTextContent('Not provided')
+    expect(
+      screen.getByText('Expiry date').parentElement?.querySelector('dd'),
+    ).not.toHaveTextContent('Not provided')
   })
 
   it('clears blank dates when an active Blanket OIC permit remains active', async () => {
@@ -8515,7 +8523,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByText('Another user is editing this permit.')).toBeInTheDocument()
   })
 
-  it('allows a cancelled permit to be reactivated before other edits', async () => {
+  it('keeps a cancelled permit read-only', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'CAN',
@@ -8523,30 +8531,22 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
-    await userEvent.selectOptions(screen.getByLabelText('Status'), 'ACT')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
-
-    await waitFor(() => {
-      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          permitNumber: '777',
-          permitStatus: 'ACT',
-          permitReceiptNo: 'R-1',
-        }),
-      )
-    })
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).not.toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
-  it('shows the saved issued date and exemption balance after a cancelled permit is reactivated', async () => {
-    const cancelledPermit = {
+  it('shows the saved issued date and exemption balance after a completed permit is made active', async () => {
+    const completedPermit = {
       ...permitDetail,
-      permitStatusCode: 'CAN',
-      permitStatusDescription: 'Cancelled',
+      permitStatusCode: 'COM',
+      permitStatusDescription: 'Completed',
       exemptionVolumeRemaining: 2,
     }
-    mockedFetchProvincialPermitDetail.mockResolvedValueOnce(cancelledPermit).mockResolvedValue({
-      ...cancelledPermit,
+    mockedFetchProvincialPermitDetail.mockResolvedValueOnce(completedPermit).mockResolvedValue({
+      ...completedPermit,
       permitStatusCode: 'ACT',
       permitStatusDescription: 'Active',
       issueDate: null,
@@ -8867,7 +8867,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   )
 
-  it('requires a cancelled permit to be reactivated before editing shipping', async () => {
+  it('locks the customs port of export on a cancelled permit', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'CAN',
@@ -8876,8 +8876,84 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Shipping')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
 
-    expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Customs port of export')).toBeDisabled()
+    expect(screen.getByLabelText('Transport name')).toBeEnabled()
+  })
+
+  it('locks the customs port of export on a completed permit for Provincial Submitters', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_PROVINCIAL_SUBMITTER'] }),
+        canPerform: (action: string) => action !== '/permitsReview',
+      }),
+    )
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'COM',
+      permitStatusDescription: 'Completed',
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Shipping')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
+
+    expect(screen.getByLabelText('Customs port of export')).toBeDisabled()
+    expect(screen.getByLabelText('Transport name')).toBeEnabled()
+  })
+
+  it.each([
+    ['COM', 'Completed'],
+    ['PPD', 'Payment pending'],
+  ])('keeps the expiry date read-only on a %s permit', async (permitStatusCode, description) => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode,
+      permitStatusDescription: description,
+    })
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+
+    expect(screen.getByLabelText('Expiry date')).toBeDisabled()
+  })
+
+  it('keeps the receipt number read-only for Provincial Submitters', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_PROVINCIAL_SUBMITTER'] }),
+        canPerform: (action: string) => action !== '/permitsReview',
+      }),
+    )
+    configureActivePermit()
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Fees')
+    expect(await screen.findByLabelText('Receipt number')).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Edit receipt number' })).not.toBeInTheDocument()
+    await userEvent.click(screen.getByRole('button', { name: /Edit permit(?: details)?/ }))
+    expect(screen.getByLabelText('Receipt number')).toBeDisabled()
+  })
+
+  it('saves shipping changes on a cancelled permit', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'CAN',
+      permitStatusDescription: 'Cancelled',
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Shipping')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
+    await userEvent.type(screen.getByLabelText('Transport name'), ' Updated')
+    await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitShipping).toHaveBeenCalledWith(
+        expect.objectContaining({ permitNumber: '777' }),
+      )
+    })
   })
 
   it('hides permit edit controls without savePermit access', async () => {

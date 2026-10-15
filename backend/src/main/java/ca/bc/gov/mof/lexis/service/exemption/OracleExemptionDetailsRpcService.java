@@ -440,6 +440,16 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     String currentStatus = normalizeCode(current.exemptionStatusCode());
     String requestedStatus = normalizeCode(normalized.exemptionStatusCode());
     if (EXEMPTION_STATUS_CANCELLED.equalsIgnoreCase(current.exemptionStatusCode())) {
+      String currentType = normalizeCode(current.exemptionTypeCode());
+      if ("O".equals(currentType) || "B".equals(currentType)) {
+        return new CreateExemptionResult(
+            false,
+            null,
+            current.exemptionNumber(),
+            false,
+            List.of("Cancelled Order in Council exemptions are read-only."),
+            List.of());
+      }
       if (!EXEMPTION_STATUS_NEW.equalsIgnoreCase(requestedStatus)) {
         return new CreateExemptionResult(
             false,

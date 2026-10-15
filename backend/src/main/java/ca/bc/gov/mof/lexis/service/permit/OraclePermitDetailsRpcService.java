@@ -1765,6 +1765,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failureMutationResponse(
           List.of("Expired permits are read-only."), permitNumber);
     }
+    // A cancelled permit stays cancelled; only its shipping details and documents can change.
+    if (EXPORT_PERMIT_STATUS_CANCELLED.equalsIgnoreCase(current.permitStatusCode())) {
+      return failureMutationResponse(
+          List.of("Cancelled permits are read-only."), permitNumber);
+    }
     List<String> dateErrors = validateSubmittedPermitDates(request);
     if (!dateErrors.isEmpty()) {
       return failureMutationResponse(dateErrors, permitNumber);
@@ -1977,24 +1982,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         return failureMutationResponse(numericErrors, permitNumber);
       }
     }
-    // Cancelling releases a permit's scale volume, so reactivating takes it back and is refused
-    // when the exemption's balance remaining can't cover it.
-    if (targetExemption != null
-        && EXPORT_PERMIT_STATUS_CANCELLED.equalsIgnoreCase(current.permitStatusCode())
-        && EFFECTIVE_EXPORT_PERMIT_STATUSES.contains(submittedPermitStatusCode)) {
-      BigDecimal permitScaleVolume = BigDecimal.valueOf(authoritativePermitVolume);
-      BigDecimal balanceRemaining = BigDecimal.valueOf(targetExemption.detail().remainingVolume());
-      if (permitScaleVolume.signum() > 0 && permitScaleVolume.compareTo(balanceRemaining) > 0) {
-        return failureMutationResponse(
-            List.of(
-                "This permit can't be reactivated. Its scales total "
-                    + formatVolume(permitScaleVolume)
-                    + " m³, but the exemption has "
-                    + formatVolume(balanceRemaining.max(BigDecimal.ZERO))
-                    + " m³ remaining."),
-            permitNumber);
-      }
-    }
     if (EXPORT_PERMIT_STATUS_COMPLETE.equals(submittedPermitStatusCode)
         && isEnteringInvoiceStatus(
             current.permitStatusCode(), submittedPermitStatusCode)) {
@@ -2136,11 +2123,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return failureMutationResponse(
           List.of("Expired permits are read-only."), permitNumber);
     }
-    if (EXPORT_PERMIT_STATUS_CANCELLED.equalsIgnoreCase(current.permitStatusCode())) {
-      return failureMutationResponse(
-          List.of("Cancelled permits must be reactivated before shipping details can be changed."),
-          permitNumber);
-    }
     List<String> exemptionErrors = new ArrayList<>();
     ValidatedExemptionBinding exemption =
         validateExemptionBinding(current.exemptionNumber(), exemptionErrors);
@@ -2196,6 +2178,12 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         && hasStringChanged(current.countryCode(), updated.countryCode())) {
       return failureMutationResponse(
           List.of("Destination country cannot be changed after permit invoicing."),
+          permitNumber);
+    }
+    if (EXPORT_PERMIT_STATUS_CANCELLED.equalsIgnoreCase(current.permitStatusCode())
+        && hasStringChanged(current.portOfExportCode(), updated.portOfExportCode())) {
+      return failureMutationResponse(
+          List.of("Customs port of export cannot be changed on a cancelled permit."),
           permitNumber);
     }
 
@@ -4518,6 +4506,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         || !java.util.Objects.equals(current.orgUnitNo(), target.orgUnitNo())
         || !java.util.Objects.equals(current.applicationDate(), target.applicationDate())
         || !java.util.Objects.equals(current.permitIssueDate(), target.permitIssueDate())
+        || !java.util.Objects.equals(current.expiryDate(), target.expiryDate())
         || (!paymentPendingCompletion
             && hasStringChanged(current.receiptNumber(), target.receiptNumber()))
         || !java.util.Objects.equals(current.permitVolume(), target.permitVolume())

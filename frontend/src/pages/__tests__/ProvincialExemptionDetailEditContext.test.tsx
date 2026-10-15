@@ -2496,10 +2496,42 @@ describe('Provincial exemption edit context', () => {
     consoleError.mockRestore()
   })
 
+  it.each(['B', 'O'])('keeps a cancelled %s exemption read-only', async (type) => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: type,
+      blanketOic: type === 'B',
+      exemptionStatusCode: 'CAN',
+      exemptionStatusDescription: 'Cancelled',
+    })
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: true,
+      fixedFeeRate: '25.00',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(vi.mocked(fetchExemptionEditContext)).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(screen.getAllByText('Cancelled', { exact: false }).length).toBeGreaterThan(0),
+    )
+    expect(screen.queryByRole('button', { name: 'Edit exemption details' })).not.toBeInTheDocument()
+  })
+
   it.each([
-    { type: 'B', missingDates: false },
-    { type: 'B', missingDates: true },
-    { type: 'O', missingDates: true },
+    { type: 'M', missingDates: false },
     { type: 'M', missingDates: true },
   ])(
     'allows a cancelled $type exemption to reopen without changing locked fields (missing dates: $missingDates)',

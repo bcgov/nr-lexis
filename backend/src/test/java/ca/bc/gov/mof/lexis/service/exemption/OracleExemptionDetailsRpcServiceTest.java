@@ -2386,6 +2386,26 @@ class OracleExemptionDetailsRpcServiceTest {
     verify(repository, never()).deleteExemptionRate(any());
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"O", "B"})
+  void updateExemptionShouldKeepCancelledOrderInCouncilExemptionsReadOnly(String type) {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("CAN", type)));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205", "EX-205", null, null, null, null, type, "NEW",
+                null, null, List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Cancelled Order in Council exemptions are read-only.");
+    verify(repository, never()).updateExemption(any());
+  }
+
   @Test
   void updateExemptionShouldRejectAnyCancelledTransitionOtherThanNew() {
     when(repository.findExemptionRecord("EX-205"))

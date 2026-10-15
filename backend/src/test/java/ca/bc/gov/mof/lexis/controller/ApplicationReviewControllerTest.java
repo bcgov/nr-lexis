@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static org.mockito.ArgumentMatchers.eq;
+import java.util.Optional;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
@@ -270,6 +273,53 @@ class ApplicationReviewControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isEqualTo(dto);
     verify(service).updateStatus(1000456L, body, "idir\\jsmith");
+  }
+
+  @Test
+  void updateStatusShouldRejectAnApprovedApplicationOutsideItsEditWindow() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    ApplicationEditPolicyService editPolicyService = mock(ApplicationEditPolicyService.class);
+    controller.setApplicationEditPolicyService(editPolicyService);
+    when(applicationDetailsService.getApplicationEditContext(1000456L))
+        .thenReturn(Optional.of(approvedEditContext()));
+    when(editPolicyService.resolve(any(), eq(applicationDetailsService), eq(1000456L)))
+        .thenReturn(ApplicationEditPolicyService.ApplicationEditPolicy.denied(false, false, false));
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.setUserPrincipal(() -> "idir\\jsmith");
+    ApplicationReviewStatusUpdateRequestDto body =
+        new ApplicationReviewStatusUpdateRequestDto("WDN", "Client request", null);
+
+    assertThatThrownBy(() -> controller.updateStatus(1000456L, body, request))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage(
+            "An approved application's status can only change within six days of its list date.");
+    verify(service, never()).updateStatus(any(), any(), any());
+  }
+
+  @Test
+  void updateStatusShouldForwardAnApprovedApplicationInsideItsEditWindow() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    ApplicationEditPolicyService editPolicyService = mock(ApplicationEditPolicyService.class);
+    controller.setApplicationEditPolicyService(editPolicyService);
+    when(applicationDetailsService.getApplicationEditContext(1000456L))
+        .thenReturn(Optional.of(approvedEditContext()));
+    when(editPolicyService.resolve(any(), eq(applicationDetailsService), eq(1000456L)))
+        .thenReturn(
+            new ApplicationEditPolicyService.ApplicationEditPolicy(
+                true, true, true, true, false, false, false, false));
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.setUserPrincipal(() -> "idir\\jsmith");
+    ApplicationReviewStatusUpdateRequestDto body =
+        new ApplicationReviewStatusUpdateRequestDto("WDN", "Client request", null);
+
+    controller.updateStatus(1000456L, body, request);
+
+    verify(service).updateStatus(1000456L, body, "idir\\jsmith");
+  }
+
+  private ApplicationDetailsRpcService.ApplicationEditContext approvedEditContext() {
+    return new ApplicationDetailsRpcService.ApplicationEditContext(
+        1000456L, "APP", "P", "H", 1L, null, false, false, false, null, false);
   }
 
   @Test
