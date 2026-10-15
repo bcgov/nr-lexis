@@ -20,20 +20,24 @@ KSV104
 KSV0013
 KSV-0013
 
-# CVE-2025-10492: JasperReports Java deserialization issue.
+# CVE-2025-10492, CVE-2026-6009: JasperReports Java deserialization issues.
 #
-# Severity: HIGH. Fixed upstream in JR 7.0.4, but JR 7.x currently breaks this
-# codebase's legacy JRXML compilation path ("Unable to load report"), including
-# OracleLegacyJasperTableReportServiceTest.
+# Severity: HIGH. Fixed upstream in JR 7.0.4 and 7.0.7 respectively, with no
+# 6.x fix, but JR 7.x currently breaks this codebase's legacy JRXML compilation
+# path ("Unable to load report"), including OracleLegacyJasperTableReportServiceTest.
 #
 # Scope/risk in this service:
 #   - We compile JRXML files bundled in src/main/resources only.
+#   - Subreport .jasper files are compiled by the service itself into its
+#     pod-local temp directory; SUBREPORT_DIR is set server-side.
+#   - Report parameters use fixed keys; request values are bound as SQL values.
 #   - We do not load attacker-controlled .jasper binaries.
 #   - No user upload path feeds Jasper binary deserialization.
 #
 # Re-evaluate when Jasper 7.x supports our legacy templates without breaking
 # report parity.
 CVE-2025-10492
+CVE-2026-6009
 
 # CVE-2026-3260: OSV currently reports this against Undertow.
 #
