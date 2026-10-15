@@ -564,9 +564,9 @@ const ProvincialExemptionDetailsPage = () => {
   const [agentClientData, setAgentClientData] = useState<ApplicationClientData | null>(null)
   const [ownerClientLocations, setOwnerClientLocations] = useState<ApplicationClientLocation[]>([])
   const [agentClientLocations, setAgentClientLocations] = useState<ApplicationClientLocation[]>([])
-  // Client details count as loading until the first lookup settles, so the Applicant card
-  // doesn't show its values and then swap them for a loading state.
-  const [clientContextLoading, setClientContextLoading] = useState(true)
+  const [clientContextLoading, setClientContextLoading] = useState(false)
+  // The client lookup that last finished, so a card counts as loading until its own lookup settles.
+  const [settledClientContextKey, setSettledClientContextKey] = useState('')
   const [clientContextErrorMessage, setClientContextErrorMessage] = useState('')
   const [documentRows, setDocumentRows] = useState<ProvincialExemptionDocumentRow[]>([])
   const [applications, setApplications] = useState<ExemptionApplicationRow[]>([])
@@ -685,6 +685,18 @@ const ProvincialExemptionDetailsPage = () => {
   const exemptionAgentClientNumber = clientContextApplication?.agentClientNumber.trim() ?? ''
   const ownerClientLocationCode = clientContextApplication?.ownerClientLocationCode.trim() ?? ''
   const agentClientLocationCode = clientContextApplication?.agentClientLocationCode.trim() ?? ''
+  const clientContextKey = [
+    linkedApplicationNumber,
+    exemptionOwnerClientNumber,
+    ownerClientLocationCode,
+    clientContextHasAgent ? exemptionAgentClientNumber : '',
+    clientContextHasAgent ? agentClientLocationCode : '',
+  ].join('|')
+  // A linked application shows its client details as loading until the lookup for those clients
+  // settles, so the Applicant card never shows partial values and then a loading state.
+  const clientDetailsLoading =
+    clientContextLoading ||
+    (!!clientContextApplication && settledClientContextKey !== clientContextKey)
   const isRefreshingDetail = loading && !!currentDetail
   const withCurrentSearch = useCallback(
     (path: string): string => appendSearchParamsToPath(path, searchParams),
@@ -819,6 +831,7 @@ const ProvincialExemptionDetailsPage = () => {
       } finally {
         if (isActive) {
           setClientContextLoading(false)
+          setSettledClientContextKey(clientContextKey)
         }
       }
     }
@@ -832,6 +845,7 @@ const ProvincialExemptionDetailsPage = () => {
     agentClientLocationCode,
     clientContextApplication,
     clientContextHasAgent,
+    clientContextKey,
     exemptionAgentClientNumber,
     exemptionOwnerClientNumber,
     linkedApplicationNumber,
@@ -1255,7 +1269,7 @@ const ProvincialExemptionDetailsPage = () => {
     companyName: clientContextApplication?.ownerCompanyName ?? '',
     locations: ownerClientLocations,
     clientData: ownerClientData,
-    isLoading: clientContextLoading,
+    isLoading: clientDetailsLoading,
   }
   const agentClient: ExemptionClient | undefined = showAgent
     ? {
@@ -1267,7 +1281,7 @@ const ProvincialExemptionDetailsPage = () => {
         companyName: clientContextApplication?.agentCompanyName ?? '',
         locations: agentClientLocations,
         clientData: agentClientData,
-        isLoading: clientContextLoading,
+        isLoading: clientDetailsLoading,
       }
     : undefined
   const feeManagementAvailable =
