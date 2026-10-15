@@ -266,16 +266,12 @@ test("creates a package with the application's species and end use once they loa
 
   const createPackageSection = page.locator('.application-items-drawer')
   const save = createPackageSection.getByRole('button', { name: 'Save package', exact: true })
+  const optionsLoading = page
+    .locator('.application-items-overview')
+    .getByText('Loading authoritative item options…', { exact: true })
   await expect(createPackageSection.getByLabel('Package number', { exact: true })).toBeVisible()
   await fixture.endUseRequest
-  await expect(save).toBeDisabled()
-
-  // The application's own end use isn't valid for its species, so the first valid one is saved.
-  fixture.resolveEndUses([
-    { code: 'PL', description: 'Pulp' },
-    { code: 'SL', description: 'Sawn logs' },
-  ])
-  await expect(save).toBeEnabled()
+  await expect(optionsLoading).toBeVisible()
 
   await createPackageSection.getByLabel('Package number', { exact: true }).fill('PKG-DELAYED')
   await createPackageSection.getByLabel('Volume (m³)', { exact: true }).fill('25.0')
@@ -296,10 +292,31 @@ test("creates a package with the application's species and end use once they loa
     })
   }
   await page.setViewportSize({ width: 1440, height: 1000 })
+
+  // Save stays enabled while the end uses load, but sends nothing until they arrive.
+  await expect(save).toBeEnabled()
+  await save.click()
+  await expect(
+    createPackageSection.getByText('Loading authoritative item options…', { exact: true }),
+  ).toBeVisible()
+  expect(fixture.writes).toEqual([])
+
+  // The application's own end use isn't valid for its species, so the first valid one is saved.
+  fixture.resolveEndUses([
+    { code: 'PL', description: 'Pulp' },
+    { code: 'SL', description: 'Sawn logs' },
+  ])
+  await expect(optionsLoading).toBeHidden()
   await save.click()
 
-  await expect(page.getByText('Package saved.', { exact: true })).toBeVisible()
-  await expect(page.getByRole('combobox', { name: 'Selected package', exact: true })).toBeFocused()
+  // A single package has no selector, so focus moves to its card.
+  const packageCard = page.locator('#application-items-package')
+  await expect(
+    packageCard.getByRole('heading', { name: 'Package PKG-DELAYED', exact: true }),
+  ).toBeVisible()
+  await expect(packageCard.getByText('Package saved.', { exact: true })).toBeVisible()
+  await expect(packageCard).toBeFocused()
+  await expect(page.getByRole('combobox', { name: 'Selected package', exact: true })).toHaveCount(0)
   const addScale = page.getByRole('button', { name: 'Add scale', exact: true })
   await addScale.click()
   await expect(page.getByRole('textbox', { name: 'Timber mark', exact: true })).toBeFocused()

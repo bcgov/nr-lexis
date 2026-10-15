@@ -266,7 +266,7 @@ test.describe('Frontend parity with mocked API responses', () => {
     })
   }
 
-  test('saving federal shipping preserves an unsaved status draft', async ({ page }) => {
+  test('asks before a tab switch drops an unsaved federal status draft', async ({ page }) => {
     const fixture = await installParityFixtures(page)
     await gotoSyntheticRoute(page, '/federal/application/888', {
       ready: page.getByRole('heading', {
@@ -279,7 +279,27 @@ test.describe('Frontend parity with mocked API responses', () => {
     await page.getByRole('button', { name: 'Edit federal status' }).click()
     await page.getByLabel('Status', { exact: true }).selectOption('WDN')
     await page.getByLabel('Remark', { exact: true }).fill('Pending withdrawal confirmation')
+
+    // Only one section edits at a time, so leaving the tab asks before dropping the draft.
+    const discard = page.getByRole('dialog', { name: 'Discard changes?', exact: true })
     await selectTab(page, 'Shipping details')
+    await discard.getByRole('button', { name: 'Keep editing', exact: true }).click()
+    await expect(discard).toHaveCount(0)
+    await expect(page.getByRole('tab', { name: 'Application', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    await expect(page.getByLabel('Status', { exact: true })).toHaveValue('WDN')
+    await expect(page.getByLabel('Remark', { exact: true })).toHaveValue(
+      'Pending withdrawal confirmation',
+    )
+
+    await selectTab(page, 'Shipping details')
+    await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()
+    await expect(page.getByRole('tab', { name: 'Shipping details', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     await page.getByRole('button', { name: 'Edit shipping details' }).click()
     await page.getByLabel('Transport name', { exact: true }).fill('Saved truck')
     await page.getByRole('button', { name: 'Save federal permit' }).click()
@@ -287,10 +307,8 @@ test.describe('Frontend parity with mocked API responses', () => {
     await expect(page.getByText('Saved truck', { exact: true })).toBeVisible()
 
     await selectTab(page, 'Application')
-    await expect(page.getByLabel('Status', { exact: true })).toHaveValue('WDN')
-    await expect(page.getByLabel('Remark', { exact: true })).toHaveValue(
-      'Pending withdrawal confirmation',
-    )
+    await expect(page.getByRole('button', { name: 'Edit federal status' })).toBeVisible()
+    await expect(page.getByLabel('Status', { exact: true })).toHaveCount(0)
     expect(fixture.writes).toEqual([
       {
         method: 'PUT',
@@ -301,7 +319,7 @@ test.describe('Frontend parity with mocked API responses', () => {
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
-  test('saving federal status preserves an unsaved shipping draft', async ({ page }) => {
+  test('asks before a tab switch drops an unsaved federal shipping draft', async ({ page }) => {
     const fixture = await installParityFixtures(page)
     await gotoSyntheticRoute(page, '/federal/application/888', {
       ready: page.getByRole('heading', {
@@ -313,7 +331,25 @@ test.describe('Frontend parity with mocked API responses', () => {
     await selectTab(page, 'Shipping details')
     await page.getByRole('button', { name: 'Edit shipping details' }).click()
     await page.getByLabel('Transport name', { exact: true }).fill('Unsaved truck')
+
+    // Only one section edits at a time, so leaving the tab asks before dropping the draft.
+    const discard = page.getByRole('dialog', { name: 'Discard changes?', exact: true })
     await selectTab(page, 'Application')
+    await discard.getByRole('button', { name: 'Keep editing', exact: true }).click()
+    await expect(discard).toHaveCount(0)
+    await expect(page.getByRole('tab', { name: 'Shipping details', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
+    await expect(page.getByLabel('Transport name', { exact: true })).toHaveValue('Unsaved truck')
+    await expect(page.getByRole('button', { name: 'Save federal permit' })).toBeEnabled()
+
+    await selectTab(page, 'Application')
+    await discard.getByRole('button', { name: 'Discard changes', exact: true }).click()
+    await expect(page.getByRole('tab', { name: 'Application', exact: true })).toHaveAttribute(
+      'aria-selected',
+      'true',
+    )
     await page.getByRole('button', { name: 'Edit federal status' }).click()
     await page.getByLabel('Status', { exact: true }).selectOption('WDN')
     await page.getByLabel('Remark', { exact: true }).fill('Withdraw this application')
@@ -323,8 +359,8 @@ test.describe('Frontend parity with mocked API responses', () => {
     ).toBeVisible()
 
     await selectTab(page, 'Shipping details')
-    await expect(page.getByLabel('Transport name', { exact: true })).toHaveValue('Unsaved truck')
-    await expect(page.getByRole('button', { name: 'Save federal permit' })).toBeEnabled()
+    await expect(page.getByText('Original truck', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Transport name', { exact: true })).toHaveCount(0)
     expect(fixture.writes).toEqual([
       {
         method: 'POST',
@@ -340,7 +376,9 @@ test.describe('Frontend parity with mocked API responses', () => {
     await gotoSyntheticRoute(page, '/provincial/exemption/PARITY-BOIC', {
       ready: page.getByRole('heading', { level: 1, name: 'Exemption PARITY-BOIC', exact: true }),
     })
-    await page.getByRole('button', { name: 'Edit exemption details', exact: true }).click()
+    const editDetails = page.getByRole('button', { name: 'Edit exemption details', exact: true })
+    const saveChanges = page.getByRole('button', { name: 'Save changes', exact: true })
+    await editDetails.click()
     await expect(page.getByLabel('Approval date', { exact: true })).toHaveCount(0)
     await expect(
       page.locator('dt', { hasText: /^Approval date$/ }).locator('xpath=following-sibling::dd'),
@@ -349,14 +387,20 @@ test.describe('Frontend parity with mocked API responses', () => {
     await expect(expiryDate).toBeDisabled()
     await expect(expiryDate).toHaveValue('')
     await expect(expiryDate).not.toHaveAttribute('aria-invalid', 'true')
-    await expect(page.getByLabel('Approved volume (m³)', { exact: true })).toBeDisabled()
+    await expect(page.getByLabel('Approval volume (m³)', { exact: true })).toBeDisabled()
     await expect(page.getByLabel('Conditions', { exact: true })).toBeDisabled()
-    await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeDisabled()
+    // Save stays available; without a change it closes the edit and sends nothing.
+    await expect(saveChanges).toBeEnabled()
+    await saveChanges.click()
+    await expect(editDetails).toBeVisible()
+    await expect(saveChanges).toHaveCount(0)
+    expect(fixture.writes).toEqual([])
+
+    await editDetails.click()
     await page.getByRole('combobox', { name: 'Status', exact: true }).click()
     await page.getByRole('option', { name: 'New', exact: true }).click()
-    await expect(page.getByRole('button', { name: 'Save changes', exact: true })).toBeEnabled()
-    await page.getByRole('button', { name: 'Save changes', exact: true }).click()
-    await expect(page.getByText('Exemption updated.', { exact: true })).toBeVisible()
+    await saveChanges.click()
+    await expect(page.getByText('Exemption details saved.', { exact: true })).toBeVisible()
 
     expect(fixture.writes).toEqual([
       {
@@ -368,7 +412,7 @@ test.describe('Frontend parity with mocked API responses', () => {
           exemptionTypeCode: 'B',
           approvalDate: '',
           exemptionExpiryDate: '',
-          approvedVolume: '500',
+          approvedVolume: '500.0',
           otherConditions: 'Keep existing conditions',
         }),
       },
