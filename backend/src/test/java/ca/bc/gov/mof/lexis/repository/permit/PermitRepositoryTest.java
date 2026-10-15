@@ -211,16 +211,14 @@ class PermitRepositoryTest {
             "ACT",
             "INV-1",
             "00055667",
-            "00055667",
             "00077881",
             1904L);
   }
 
   @Test
-  void searchShouldFilterApplicantAsAgentWithOwnerFallbackAndOwnerAsClient() {
+  void searchShouldFilterAgentClientOnTheAgentOnlyAndOwnerClientOnTheOwner() {
     TestPermitRepository repository = new TestPermitRepository();
-
-    repository.search(
+    PermitSearchCriteria criteria =
         new PermitSearchCriteria(
             null,
             null,
@@ -234,14 +232,62 @@ class PermitRepositoryTest {
             List.of(),
             null,
             0,
-            10));
+            10);
 
-    assertThat(repository.whereSql())
-        .contains("EPD.AGENT_NUMBER LIKE '%' || ? || '%'")
-        .contains("EPD.CLIENT_NUMBER LIKE '%' || ? || '%' AND EPD.AGENT_NUMBER IS NULL")
-        .contains("AND EPD.CLIENT_NUMBER LIKE '%' || ? || '%'");
-    assertThat(repository.bindValues())
-        .containsExactly("00055667", "00055667", "00077881");
+    repository.search(criteria);
+    String searchSql = repository.whereSql();
+    List<Object> searchBinds = repository.bindValues();
+    repository.count(criteria);
+
+    assertThat(searchSql)
+        .contains(
+            " AND EPD.AGENT_NUMBER LIKE '%' || ? || '%'"
+                + " AND EPD.CLIENT_NUMBER LIKE '%' || ? || '%'")
+        .doesNotContain("AGENT_NUMBER IS NULL")
+        .doesNotContain(" OR ");
+    assertThat(searchBinds).containsExactly("00055667", "00077881");
+    assertThat(repository.countWhereSql())
+        .isEqualTo(searchSql.substring(0, searchSql.indexOf(" ORDER BY")));
+    assertThat(repository.countBindValues()).isEqualTo(searchBinds);
+  }
+
+  @Test
+  void searchShouldMapTheAgentColumnWithoutFallingBackToTheOwner() throws SQLException {
+    TestPermitRepository repository = new TestPermitRepository(List.of(permitResult(700001L)));
+    repository.search(
+        new PermitSearchCriteria(
+            null, null, null, null, null, null, null, null, null, List.of(), null, 0, 10));
+    ResultSet withoutAgent = mock(ResultSet.class);
+    when(withoutAgent.getString("CLIENT_NUMBER")).thenReturn("00077881");
+    ResultSet withAgent = mock(ResultSet.class);
+    when(withAgent.getString("AGENT_NUMBER")).thenReturn("00055667");
+    when(withAgent.getString("CLIENT_NUMBER")).thenReturn("00077881");
+
+    PermitSearchResultDto ownerOnly = repository.mapSearchRow(withoutAgent);
+    PermitSearchResultDto agentAndOwner = repository.mapSearchRow(withAgent);
+
+    assertThat(repository.pageSelectSql())
+        .contains("EPD.AGENT_NUMBER,")
+        .contains("EPD.CLIENT_NUMBER,")
+        .doesNotContain("NVL(")
+        .doesNotContain("COALESCE(");
+    assertThat(ownerOnly.applicantClientNumber()).isNull();
+    assertThat(ownerOnly.ownerClientNumber()).isEqualTo("00077881");
+    assertThat(agentAndOwner.applicantClientNumber()).isEqualTo("00055667");
+    assertThat(agentAndOwner.ownerClientNumber()).isEqualTo("00077881");
+  }
+
+  @Test
+  void searchShouldSortTheAgentColumnByEitherAgentSortKey() {
+    TestPermitRepository repository = new TestPermitRepository();
+
+    repository.search(sortedCriteria("agentClientNumber DESC"));
+    String agentSort = repository.whereSql();
+    repository.search(sortedCriteria("applicantClientNumber DESC"));
+
+    assertThat(agentSort)
+        .endsWith("ORDER BY EPD.AGENT_NUMBER DESC, EPD.EXPORT_PERMIT_DETAIL_NUMBER DESC");
+    assertThat(repository.whereSql()).isEqualTo(agentSort);
   }
 
   @Test
@@ -314,7 +360,6 @@ class PermitRepositoryTest {
             "00012345",
             "00012345",
             "00012345",
-            "00099999",
             "00099999",
             "00088888");
     assertThat(repository.countWhereSql()).isEqualTo(searchSql.substring(0, searchSql.indexOf(" ORDER BY")));
@@ -443,6 +488,11 @@ class PermitRepositoryTest {
     assertThat(repository.pageCalls()).isEqualTo(1);
   }
 
+  private static PermitSearchCriteria sortedCriteria(String sortField) {
+    return new PermitSearchCriteria(
+        null, null, null, null, null, null, null, null, null, List.of(), sortField, 0, 10);
+  }
+
   private static PermitSearchResultDto permitResult(long permitNumber) {
     return new PermitSearchResultDto(permitNumber, "Active", "00000001", "00000002", 100d, null, "Region");
   }
@@ -457,6 +507,7 @@ class PermitRepositoryTest {
     private List<Object> countBindValues;
     private int countCalls;
     private int pageCalls;
+    private SqlRowMapper<?> rowMapper;
 
     TestPermitRepository() {
       this(List.of());
@@ -499,6 +550,10 @@ class PermitRepositoryTest {
       return countCalls;
     }
 
+    PermitSearchResultDto mapSearchRow(ResultSet rs) throws SQLException {
+      return (PermitSearchResultDto) rowMapper.map(rs);
+    }
+
     @Override
     protected int queryDirectCount(String selectSql, DirectSql where) {
       countSelectSql = selectSql;
@@ -520,6 +575,7 @@ class PermitRepositoryTest {
       pageSelectSql = selectSql;
       whereSql = whereAndOrder.sql();
       bindValues = whereAndOrder.bindValues();
+      this.rowMapper = rowMapper;
       pageCalls++;
       int fromIndex = Math.min(rows.size(), Math.max(0, page) * Math.max(1, size));
       int toIndex = Math.min(rows.size(), fromIndex + Math.max(1, size));

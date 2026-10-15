@@ -406,8 +406,9 @@ public class PurchaseOfferController {
         null,
         accessClientNumber,
         false,
-        false,
+        accessClientNumber != null,
         regionNumbers == null ? List.of() : regionNumbers,
+        true,
         sortField,
         page,
         size);

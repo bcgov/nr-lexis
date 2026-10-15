@@ -70,7 +70,6 @@ import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPrefe
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   formatDeferredSearchTotalLabel,
-  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchAdjacentSearchPages,
   type DeferredSearchTotalStatus,
@@ -121,6 +120,7 @@ const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialOfferSearchSortField[]
+const COLUMN_HEADERS = SORT_COLUMNS.map((column) => column.label)
 
 const buildSearchParams = (
   filters: ProvincialOfferSearchFilters,
@@ -597,8 +597,8 @@ const ProvincialOffersPage = () => {
                 <IsoDateRangePicker
                   fromId="withdrawalFromDate"
                   toId="withdrawalToDate"
-                  fromLabel="Offer withdrawn date from"
-                  toLabel="Offer withdrawn date to"
+                  fromLabel="Withdrawn date from"
+                  toLabel="Withdrawn date to"
                   fromValue={filters.withdrawalFromDate}
                   toValue={filters.withdrawalToDate}
                   onChange={([withdrawalFromDate, withdrawalToDate]) =>
@@ -608,7 +608,7 @@ const ProvincialOffersPage = () => {
                 {canFilterByClient && (
                   <ForestClientComboBox
                     id="clientNumber"
-                    labelText="Client number"
+                    labelText="Client"
                     value={filters.clientNumber}
                     resetKey={clientSearchResetKey}
                     onChange={(value) => updateFilter('clientNumber', value)}
@@ -625,7 +625,7 @@ const ProvincialOffersPage = () => {
                 >
                   Clear all
                 </Button>
-                <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
+                <SearchSubmitButton loading={loading} invalid={hasDateValidationError} />
               </div>
             </form>
           </Tile>
@@ -647,7 +647,7 @@ const ProvincialOffersPage = () => {
             resultName="offer"
             loading={resultsLoading}
             loadingDescription="Searching"
-            columnCount={SORT_COLUMNS.length}
+            columnHeaders={COLUMN_HEADERS}
             totalItems={
               errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
@@ -704,7 +704,7 @@ const ProvincialOffersPage = () => {
                         </Link>
                       </TableCell>
                       <TableCell>{displayTableValue(row.applicationNumber)}</TableCell>
-                      <TableCell>{row.packageNumber || 'No Packages'}</TableCell>
+                      <TableCell>{displayTableValue(row.packageNumber)}</TableCell>
                       <TableCell className="legacy-search-table-date">
                         {displayTableValue(row.listingDate)}
                       </TableCell>
@@ -723,36 +723,20 @@ const ProvincialOffersPage = () => {
               />
             ) : null}
             {!errorMessage && !noResults && (!resultsLoading || results.content.length > 0) && (
-              <>
-                <div className="legacy-search-result-count legacy-search-result-count--footer">
-                  {formatDeferredSearchTotalLabel(
-                    results.page.totalElements,
-                    totalStatus,
-                    results.page.number * results.page.size + results.content.length,
-                    'offer',
-                  ) ?? formatSearchResultCount(results.page.totalElements, 'offer')}
-                </div>
-                <Pagination
-                  page={results.page.number + 1}
-                  pageSize={results.page.size}
-                  pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-                  totalItems={results.page.totalElements}
-                  totalPending={totalStatus === 'pending'}
-                  pagesUnknown={totalStatus !== 'exact'}
-                  isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
-                  onChange={({ page, pageSize: nextPageSize }) => {
-                    setSearchParams(
-                      buildSearchParams(
-                        appliedFilters,
-                        sortField,
-                        sortDirection,
-                        page,
-                        nextPageSize,
-                      ),
-                    )
-                  }}
-                />
-              </>
+              <Pagination
+                page={results.page.number + 1}
+                pageSize={results.page.size}
+                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                totalItems={results.page.totalElements}
+                totalPending={totalStatus === 'pending'}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
+                onChange={({ page, pageSize: nextPageSize }) => {
+                  setSearchParams(
+                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
+                  )
+                }}
+              />
             )}
           </SearchResultsTableFrame>
         </section>

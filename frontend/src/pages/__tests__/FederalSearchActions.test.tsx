@@ -229,7 +229,7 @@ describe('Federal Search Actions', () => {
     await screen.findByText('FED-1001')
 
     for (const header of [
-      'Application',
+      'Application number',
       'Status',
       'Client',
       'Reason',
@@ -277,7 +277,7 @@ describe('Federal Search Actions', () => {
     await screen.findByText('FED-1001')
 
     expect(screen.getAllByRole('columnheader').map((header) => header.textContent)).toEqual([
-      'Application',
+      'Application number',
       'Status',
       'Client',
       'Reason',
@@ -351,18 +351,20 @@ describe('Federal Search Actions', () => {
     ])
   })
 
-  it('disables search button for invalid ISO date filters', async () => {
+  it('keeps search enabled for an invalid date and focuses it instead of searching', async () => {
     renderPage()
     await screen.findByText('FED-1001')
+    const callsBeforeEdit = mockedSearchFederalApplications.mock.calls.length
 
     const searchButton = screen.getByRole('button', { name: 'Search' })
+    const receivedDateFrom = screen.getByLabelText('Received date from')
+    await userEvent.type(receivedDateFrom, '2026-13-99')
+    await userEvent.click(searchButton)
+
     expect(searchButton).toBeEnabled()
-
-    await userEvent.type(screen.getByLabelText('Received date from'), '2026-13-99')
-
-    await waitFor(() => {
-      expect(searchButton).toBeDisabled()
-    })
+    expect(receivedDateFrom).toHaveAttribute('aria-invalid', 'true')
+    expect(receivedDateFrom).toHaveFocus()
+    expect(mockedSearchFederalApplications).toHaveBeenCalledTimes(callsBeforeEdit)
   })
 
   it('does not use date format text in visible date labels', async () => {
@@ -402,7 +404,7 @@ describe('Federal Search Actions', () => {
     expect(await screen.findByText('FED-8100')).toBeInTheDocument()
     expect(
       await screen.findAllByText('At least 10 applications found — exact count unavailable'),
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(
       screen.queryByRole('heading', { name: 'Federal application search unavailable' }),
     ).not.toBeInTheDocument()
@@ -445,13 +447,13 @@ describe('Federal Search Actions', () => {
     expect(to).toHaveValue('2026-10-01')
     expect(to).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
-    expect(search).toBeDisabled()
+    await userEvent.click(search)
+    expect(to).toHaveFocus()
     fireEvent.submit(to.closest('form') as HTMLFormElement)
     expect(mockedSearchFederalApplications).toHaveBeenCalledTimes(callsBeforeEdit)
 
     fireEvent.change(to, { target: { value: '2026-10-12' } })
-    await waitFor(() => expect(search).toBeEnabled())
-    expect(to).not.toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(to).not.toHaveAttribute('aria-invalid', 'true'))
     await userEvent.click(search)
     await waitFor(() =>
       expect(mockedSearchFederalApplications.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
@@ -463,7 +465,7 @@ describe('Federal Search Actions', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('List date to')).toHaveAttribute('aria-invalid', 'true'),
     )
-    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled()
     expect(mockedSearchFederalApplications).not.toHaveBeenCalled()
     expect(screen.queryByRole('region', { name: 'Search results' })).not.toBeInTheDocument()
   })

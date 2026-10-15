@@ -60,7 +60,7 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
           Map.entry("offerNumber", "PO.EXPORT_PURCHASE_OFFER_NUMBER"),
           Map.entry("listingDate", "ES.ADVERTISING_DATE"),
           Map.entry("offerWithdrawalDate", "PO.OFFER_WITHDRAWAL_DATE"),
-          Map.entry("region", "OU.ORG_UNIT_NAME"),
+          Map.entry("region", "OU.ORG_UNIT_CODE"),
           Map.entry("offeringClientNumber", "PO.OFFERING_CLIENT_NUMBER"));
   private static final String FIND_PURCHASE_OFFER_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_PURCHASE_OFFERS_BY_NUM(?,?)";
@@ -125,6 +125,8 @@ public class PurchaseOfferRepository extends OracleRepositorySupport {
     where.addDateLte("PO.OFFER_WITHDRAWAL_DATE", criteria.withdrawalToDate());
     if (criteria.regionNumbers() != null && !criteria.regionNumbers().isEmpty()) {
       where.addInEqualsNumberOrNoResults("EEA.ORG_UNIT_NO", criteria.regionNumbers());
+    } else if (criteria.defaultToNaturalResourceRegions()) {
+      where.addInEqualsNumberOrNoResults("EEA.ORG_UNIT_NO", naturalResourceRegionNumbers());
     }
 
     String clientNumber = trim(criteria.clientNumber());

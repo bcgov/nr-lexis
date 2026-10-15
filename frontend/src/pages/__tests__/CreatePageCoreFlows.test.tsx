@@ -2241,6 +2241,7 @@ describe('Create Page Core Flows', () => {
       'Applications',
       'Documents',
       'Permits',
+      'Fees',
     ])
     await selectExemptionCreateTab('Documents')
     expect(screen.getByRole('tabpanel', { name: 'Documents' })).toHaveTextContent(
@@ -2270,9 +2271,12 @@ describe('Create Page Core Flows', () => {
       within(exemptionFormActions).getByRole('button', { name: 'Save exemption' }),
     ).toHaveAttribute('type', 'button')
     expect(screen.queryByRole('group', { name: 'New exemption state' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('textbox', { name: /exemption number/i })).not.toBeInTheDocument()
-    await waitFor(() => expect(screen.getByRole('radio', { name: 'Ministerial' })).toBeChecked())
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('New'))
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: 'Order in Council' })).toBeChecked(),
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('Active'),
+    )
     expect(screen.getByText('Status', { selector: 'label, .required-label' })).not.toHaveClass(
       'required-label',
     )
@@ -2280,8 +2284,9 @@ describe('Create Page Core Flows', () => {
       'aria-required',
       'true',
     )
-    expect(screen.queryByText('Exemption holder')).not.toBeInTheDocument()
     await chooseExemptionType('Section 1')
+    expect(screen.queryByRole('textbox', { name: /exemption number/i })).not.toBeInTheDocument()
+    expect(screen.queryByText('Exemption holder')).not.toBeInTheDocument()
     expect(screen.getByText('Status', { selector: 'label, .required-label' })).toHaveClass(
       'required-label',
     )
@@ -2341,9 +2346,10 @@ describe('Create Page Core Flows', () => {
         'true',
       ),
     )
+    expect(screen.getByText('Exemption number is required')).toBeInTheDocument()
     expect(screen.getByText('Approval volume is required')).toBeInTheDocument()
     expect(screen.queryByText('Validation error')).not.toBeInTheDocument()
-    await waitFor(() => expect(screen.getByLabelText('Approval volume (m³)')).toHaveFocus())
+    await waitFor(() => expect(screen.getByLabelText('Exemption number')).toHaveFocus())
   })
 
   it('ignores applications passed in the create link or navigation state', async () => {
@@ -2366,7 +2372,9 @@ describe('Create Page Core Flows', () => {
     )
 
     await screen.findByRole('heading', { level: 1, name: 'Create new exemption' })
-    await waitFor(() => expect(screen.getByRole('radio', { name: 'Ministerial' })).toBeChecked())
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: 'Order in Council' })).toBeChecked(),
+    )
     expect(screen.getByLabelText('Approval volume (m³)')).toHaveValue('')
     expect(screen.getByLabelText('Expiry date')).toHaveValue('')
     expect(screen.queryByText('Prefilled from selected applications')).not.toBeInTheDocument()
@@ -2377,6 +2385,9 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByRole('list', { name: 'Selected applications' })).not.toBeInTheDocument()
 
     await selectExemptionCreateTab('Exemption details')
+    await userEvent.type(screen.getByLabelText('Exemption number'), 'EX-778')
+    await userEvent.type(screen.getByLabelText('Approval date'), '2026-07-01')
+    await userEvent.type(screen.getByLabelText('Expiry date'), '2027-07-01')
     await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '250.5')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
@@ -2384,48 +2395,39 @@ describe('Create Page Core Flows', () => {
       expect.objectContaining({
         applicationNumber: '',
         linkedApplicationNumbers: [],
-        exemptionTypeCode: 'M',
+        exemptionTypeCode: 'O',
         approvedVolume: '250.5',
-        expiryDate: '',
       }),
     )
     expect(mockedFetchProvincialExemptionCreatePreview).not.toHaveBeenCalled()
   })
 
-  it.each(['Ministerial', 'Order in Council'])(
-    'offers no application selection before a %s exemption is saved',
-    async (typeName) => {
-      render(
-        <MemoryRouter initialEntries={['/provincial/exemption/create']}>
-          <Routes>
-            <Route
-              path="/provincial/exemption/create"
-              element={<ProvincialExemptionCreatePage />}
-            />
-          </Routes>
-        </MemoryRouter>,
-      )
+  it('offers no application selection before an Order in Council exemption is saved', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/create']}>
+        <Routes>
+          <Route path="/provincial/exemption/create" element={<ProvincialExemptionCreatePage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
 
-      await selectExemptionCreateTab('Exemption details')
-      await chooseExemptionType(typeName)
-      await waitFor(() => expect(screen.getByRole('radio', { name: typeName })).toBeChecked())
-      await selectExemptionCreateTab('Applications')
+    await selectExemptionCreateTab('Exemption details')
+    await chooseExemptionType('Order in Council')
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: 'Order in Council' })).toBeChecked(),
+    )
+    await selectExemptionCreateTab('Applications')
 
-      const applications = screen.getByRole('tabpanel', { name: 'Applications' })
-      expect(applications).toHaveTextContent(/^Available after the exemption is saved\.$/)
-      expect(within(applications).queryByRole('combobox')).not.toBeInTheDocument()
-      expect(within(applications).queryByRole('button')).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()
-    },
-  )
+    const applications = screen.getByRole('tabpanel', { name: 'Applications' })
+    expect(applications).toHaveTextContent(/^Available after the exemption is saved\.$/)
+    expect(within(applications).queryByRole('combobox')).not.toBeInTheDocument()
+    expect(within(applications).queryByRole('button')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Add application' })).not.toBeInTheDocument()
+  })
 
   it.each([
     [
       'Order in Council',
-      'Applications, documents and permits can be added after you save the exemption.',
-    ],
-    [
-      'Ministerial',
       'Applications, documents and permits can be added after you save the exemption.',
     ],
     ['Blanket OIC', 'Documents and Permits can be added after you save the exemption.'],
@@ -2449,8 +2451,8 @@ describe('Create Page Core Flows', () => {
     expect(notice?.querySelector('.cds--inline-notification__title')).toBeNull()
   })
 
-  it('submits a standalone Ministerial exemption without an application', async () => {
-    mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('EX-900'))
+  it('offers no Ministerial type and submits the default Order in Council exemption', async () => {
+    mockedSubmitProvincialExemptionCreate.mockResolvedValue(successfulCreate('OIC-900'))
 
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/create']}>
@@ -2461,34 +2463,41 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectExemptionCreateTab('Exemption details')
-    await waitFor(() => expect(screen.getByRole('radio', { name: 'Ministerial' })).toBeChecked())
-    const statusSelect = screen.getByRole('combobox', { name: 'Status' })
-    expect(statusSelect).toHaveValue('New')
-    expect(statusSelect).toBeDisabled()
-    expect(statusSelect).not.toHaveAttribute('aria-required', 'true')
-    expect(screen.getByText('Status', { selector: 'label, .required-label' })).not.toHaveClass(
-      'required-label',
+    await waitFor(() =>
+      expect(screen.getByRole('radio', { name: 'Order in Council' })).toBeChecked(),
     )
-    expect(screen.getByLabelText('Approval date')).toBeDisabled()
+    const exemptionType = screen.getByRole('group', { name: 'Exemption type' })
+    expect(
+      within(exemptionType)
+        .getAllByRole('radio')
+        .map((radio) => radio.getAttribute('value')),
+    ).toEqual(['O', 'B', 'SECTION_1'])
+    expect(within(exemptionType).queryByRole('radio', { name: 'Ministerial' })).toBeNull()
+    const statusSelect = screen.getByRole('combobox', { name: 'Status' })
+    expect(statusSelect).toHaveValue('Active')
+    expect(statusSelect).toBeDisabled()
+    await userEvent.type(screen.getByLabelText('Exemption number'), 'OIC-900')
+    await userEvent.type(screen.getByLabelText('Approval date'), '2026-07-01')
+    await userEvent.type(screen.getByLabelText('Expiry date'), '2027-07-01')
     await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '250.5')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     expect(mockedSubmitProvincialExemptionCreate).toHaveBeenCalledWith({
       applicationNumber: '',
       linkedApplicationNumbers: [],
-      exemptionNumber: '',
-      exemptionTypeCode: 'M',
-      exemptionStatusCode: 'NEW',
-      approvalDate: '',
-      expiryDate: '',
+      exemptionNumber: 'OIC-900',
+      exemptionTypeCode: 'O',
+      exemptionStatusCode: 'ACT',
+      approvalDate: '2026-07-01',
+      expiryDate: '2027-07-01',
       approvedVolume: '250.5',
       enableRateOverride: false,
       feeRate: '',
       regionNumbers: [],
       otherConditions: '',
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/EX-900', {
-      state: { exemptionCreationNotice: { exemptionNumber: 'EX-900' } },
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/exemption/OIC-900', {
+      state: { exemptionCreationNotice: { exemptionNumber: 'OIC-900' } },
     })
   })
 
@@ -2665,11 +2674,8 @@ describe('Create Page Core Flows', () => {
     await userEvent.type(volumeInput, '125.5')
     await chooseExemptionType('Blanket OIC')
     expect(volumeInput).toHaveValue('125.5')
-    await userEvent.type(screen.getByLabelText('Approval date'), '2026-10-02')
-    await chooseExemptionType('Ministerial')
+    await chooseExemptionType('Order in Council')
     expect(volumeInput).toHaveValue('125.5')
-    expect(screen.getByLabelText('Approval date')).toHaveValue('')
-    expect(screen.getByLabelText('Approval date')).toBeDisabled()
 
     await userEvent.clear(volumeInput)
     await chooseExemptionType('Blanket OIC')
@@ -2947,7 +2953,10 @@ describe('Create Page Core Flows', () => {
     )
 
     await selectExemptionCreateTab('Exemption details')
-    await userEvent.type(await screen.findByLabelText('Approval volume (m³)'), '9999999.99')
+    await userEvent.type(await screen.findByLabelText('Exemption number'), 'EX-901')
+    await userEvent.type(screen.getByLabelText('Approval date'), '2026-07-01')
+    await userEvent.type(screen.getByLabelText('Expiry date'), '2027-07-01')
+    await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '9999999.99')
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
 
     await waitFor(() => {

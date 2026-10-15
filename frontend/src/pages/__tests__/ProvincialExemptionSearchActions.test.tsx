@@ -1827,7 +1827,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(await screen.findByText('EX-8100')).toBeInTheDocument()
     expect(
       await screen.findAllByText('At least 10 exemptions found — exact count unavailable'),
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(
       screen.queryByRole('heading', { name: 'Exemption search unavailable' }),
     ).not.toBeInTheDocument()
@@ -1926,7 +1926,8 @@ describe('Provincial Exemption Search Actions', () => {
     await screen.findByText('EX-1001')
     await waitFor(() => expect(screen.getByLabelText('List date from')).toHaveValue(''))
     expect(screen.getByLabelText('List date to')).toHaveValue('2026-01-31')
-    expect(screen.getAllByText('2 exemptions found')).toHaveLength(2)
+    expect(screen.getAllByText('2 exemptions found')).toHaveLength(1)
+    expect(screen.getByText('1–2 of 2 items')).toBeInTheDocument()
     fireEvent.change(screen.getByLabelText('List date from'), {
       target: { value: '2026-01-01' },
     })
@@ -2002,22 +2003,23 @@ describe('Provincial Exemption Search Actions', () => {
     expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
-  it('disables search button for invalid date filters', async () => {
+  it('keeps search enabled for an invalid date and focuses it instead of searching', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage()
     await screen.findByText('EX-1001')
+    const callsBeforeEdit = mockedSearchProvincialExemptions.mock.calls.length
 
     const searchButton = screen.getByRole('button', { name: 'Search' })
-    expect(searchButton).toBeEnabled()
-
     const listDateFrom = screen.getByLabelText('List date from')
     fireEvent.change(listDateFrom, { target: { value: '2026-02-30' } })
     fireEvent.blur(listDateFrom)
+    await userEvent.click(searchButton)
 
-    await waitFor(() => {
-      expect(searchButton).toBeDisabled()
-    })
+    expect(searchButton).toBeEnabled()
+    expect(listDateFrom).toHaveAttribute('aria-invalid', 'true')
+    expect(listDateFrom).toHaveFocus()
+    expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(callsBeforeEdit)
   })
 
   it('shows a request failure instead of a no-results state', async () => {
@@ -2050,13 +2052,13 @@ describe('Provincial Exemption Search Actions', () => {
       expect(to).toHaveValue('2026-10-01')
       expect(to).toHaveAttribute('aria-invalid', 'true')
       expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
-      expect(search).toBeDisabled()
+      await userEvent.click(search)
+      expect(to).toHaveFocus()
       fireEvent.submit(to.closest('form') as HTMLFormElement)
       expect(mockedSearchProvincialExemptions).toHaveBeenCalledTimes(callsBeforeEdit)
 
       fireEvent.change(to, { target: { value: '2026-10-12' } })
-      await waitFor(() => expect(search).toBeEnabled())
-      expect(to).not.toHaveAttribute('aria-invalid', 'true')
+      await waitFor(() => expect(to).not.toHaveAttribute('aria-invalid', 'true'))
       await userEvent.click(search)
       await waitFor(() =>
         expect(mockedSearchProvincialExemptions.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
@@ -2069,7 +2071,7 @@ describe('Provincial Exemption Search Actions', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('List date to')).toHaveAttribute('aria-invalid', 'true'),
     )
-    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled()
     expect(mockedSearchProvincialExemptions).not.toHaveBeenCalled()
     expect(screen.queryByRole('region', { name: 'Search results' })).not.toBeInTheDocument()
   })

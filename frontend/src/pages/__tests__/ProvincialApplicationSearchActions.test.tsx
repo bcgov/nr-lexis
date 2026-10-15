@@ -280,6 +280,27 @@ describe('Provincial Application Search Actions', () => {
     expect(await screen.findByText('Exempted - New')).toBeVisible()
   })
 
+  it('shows the result columns on the loading skeleton', async () => {
+    mockedSearchProvincialApplications.mockReturnValue(new Promise(() => {}))
+
+    renderPage()
+
+    const skeleton = await screen.findByRole('table', { name: 'Searching' })
+    expect(
+      Array.from(skeleton.querySelectorAll('thead th'), (header) => header.textContent),
+    ).toEqual([
+      '',
+      'Application number',
+      'Status',
+      'Owner client number',
+      'Agent client number',
+      'Application volume (m³)',
+      'Exemption number',
+      'List date',
+      'Region',
+    ])
+  })
+
   it('shows the Figma result columns with the recorded agent', async () => {
     mockedSearchProvincialApplications.mockResolvedValue({
       content: [
@@ -303,7 +324,7 @@ describe('Provincial Application Search Actions', () => {
         ),
     ).toEqual([
       'Select all eligible rows on this page',
-      'Application',
+      'Application number',
       'Status',
       'Owner client number',
       'Agent client number',
@@ -405,58 +426,70 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it('asks the user to check before retrying when the create outcome is unknown', async () => {
-    mockedFetchExemptionCreatePreview.mockResolvedValueOnce(exemptionPreview(['321']))
-    mockedSubmitExemptionCreate.mockResolvedValueOnce({
-      success: false,
-      message: 'Exemption submission failed.',
-      createdId: undefined,
-      errors: [],
-      warnings: [],
-      outcomeUnknown: true,
-    })
-    renderPage()
-    await screen.findByText('321')
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Create exemption' }))
-    const confirmation = screen.getByRole('dialog', { name: 'Create new exemption' })
-    await userEvent.click(within(confirmation).getByRole('button', { name: 'Create exemption' }))
+  it.each([
+    {
+      failure: 'a rejected preview',
+      arrange: () =>
+        mockedFetchExemptionCreatePreview.mockRejectedValueOnce(
+          new Error('Application 321 is not eligible for an exemption.'),
+        ),
+      serverText: 'Application 321 is not eligible for an exemption.',
+    },
+    {
+      failure: 'an unknown create outcome',
+      arrange: () => {
+        mockedFetchExemptionCreatePreview.mockResolvedValueOnce(exemptionPreview(['321']))
+        mockedSubmitExemptionCreate.mockResolvedValueOnce({
+          success: false,
+          message: 'Exemption submission failed.',
+          createdId: undefined,
+          errors: ['ORA-20001: unexpected'],
+          warnings: [],
+          outcomeUnknown: true,
+        })
+      },
+      serverText: 'ORA-20001: unexpected',
+    },
+  ])(
+    'closes the confirmation and shows the generic error above the results after $failure',
+    async ({ arrange, serverText }) => {
+      arrange()
+      renderPage()
+      await screen.findByText('321')
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
+      const createExemption = screen.getByRole('button', { name: 'Create exemption' })
+      await userEvent.click(createExemption)
+      const searchCalls = mockedSearchProvincialApplications.mock.calls.length
+      const confirmation = screen.getByRole('dialog', { name: 'Create new exemption' })
+      await userEvent.click(within(confirmation).getByRole('button', { name: 'Create exemption' }))
 
-    expect(
-      await within(confirmation).findByText(
-        'LEXIS could not confirm whether the exemption was created. Search for application 321 to check before trying again.',
-      ),
-    ).toBeInTheDocument()
-    expect(mockNavigate).not.toHaveBeenCalled()
-  })
-
-  it('keeps the confirmation open with the reason when the exemption cannot be created', async () => {
-    mockedFetchExemptionCreatePreview.mockRejectedValueOnce(
-      new Error('Application 321 is not eligible for an exemption.'),
-    )
-    renderPage()
-    await screen.findByText('321')
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Create exemption' }))
-    const confirmation = screen.getByRole('dialog', { name: 'Create new exemption' })
-    await userEvent.click(within(confirmation).getByRole('button', { name: 'Create exemption' }))
-
-    expect(
-      await within(confirmation).findByText('Application 321 is not eligible for an exemption.'),
-    ).toBeInTheDocument()
-    expect(mockedSubmitExemptionCreate).not.toHaveBeenCalled()
-    expect(mockNavigate).not.toHaveBeenCalled()
-
-    await userEvent.click(within(confirmation).getByRole('button', { name: 'Cancel' }))
-    await waitFor(() =>
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('dialog', { name: 'Create new exemption' }),
+        ).not.toBeInTheDocument(),
+      )
+      const alert = exemptionError()
+      expect(alert).toHaveAttribute('role', 'alert')
+      expect(alert).toHaveTextContent(
+        'The exemption could not be created. Please try again. If the problem persists, contact support.',
+      )
+      expect(screen.queryByText(serverText)).not.toBeInTheDocument()
+      expect(alert.closest('form')).toBeNull()
       expect(
-        screen.queryByRole('dialog', { name: 'Create new exemption' }),
-      ).not.toBeInTheDocument(),
-    )
-    // Cancel returns to the selection so it can be changed or confirmed again.
-    expect(screen.getByRole('checkbox', { name: 'Select application 321' })).toBeChecked()
-    expect(batchSummary()).toHaveTextContent('1 application selected')
-  })
+        alert.compareDocumentPosition(screen.getByRole('region', { name: 'Search results' })) &
+          Node.DOCUMENT_POSITION_FOLLOWING,
+      ).toBeTruthy()
+      expect(screen.getByRole('checkbox', { name: 'Select application 321' })).toBeChecked()
+      expect(batchSummary()).toHaveTextContent('1 application selected')
+      await waitFor(() => expect(createExemption).toHaveFocus())
+      expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(searchCalls)
+      expect(mockNavigate).not.toHaveBeenCalled()
+
+      // The error closes when the selection changes.
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
+      expect(screen.queryByText('Exemption not created')).not.toBeInTheDocument()
+    },
+  )
 
   it.each([
     {
@@ -532,7 +565,7 @@ describe('Provincial Application Search Actions', () => {
 
     await waitFor(() => expect(mockedCountProvincialApplications).toHaveBeenCalledOnce())
     expect(await screen.findByText('8000')).toBeInTheDocument()
-    expect(screen.getAllByRole('status', { name: 'Counting search results' })).toHaveLength(2)
+    expect(screen.getAllByRole('status', { name: 'Counting search results' })).toHaveLength(1)
     expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Searching')).not.toBeInTheDocument()
 
@@ -540,7 +573,8 @@ describe('Provincial Application Search Actions', () => {
       resolveCount(125)
     })
 
-    expect(await screen.findAllByText('125 applications found')).toHaveLength(2)
+    expect(await screen.findAllByText('125 applications found')).toHaveLength(1)
+    expect(screen.getByText('1–10 of 125 items')).toBeInTheDocument()
     expect(screen.getByText('8000')).toBeInTheDocument()
   })
 
@@ -561,7 +595,7 @@ describe('Provincial Application Search Actions', () => {
     expect(await screen.findByText('8100')).toBeInTheDocument()
     expect(
       await screen.findAllByText('At least 10 applications found — exact count unavailable'),
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(screen.getByText('8100')).toBeInTheDocument()
   })
 
@@ -733,20 +767,25 @@ describe('Provincial Application Search Actions', () => {
     expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(searchCallsBeforeClear)
   })
 
-  it('disables search for an invalid list date', async () => {
+  it('keeps search enabled for an invalid list date and focuses it instead of searching', async () => {
     renderPage()
     await screen.findByText('321')
+    const callsBeforeEdit = mockedSearchProvincialApplications.mock.calls.length
 
     const searchButton = screen.getByRole('button', { name: 'Search' })
-    expect(searchButton).toBeEnabled()
-
     const listDateFrom = screen.getByLabelText('List date from')
     fireEvent.change(listDateFrom, { target: { value: '2026-02-30' } })
     fireEvent.blur(listDateFrom)
+    expect(screen.getByText('Date must be YYYY-MM-DD')).toBeVisible()
 
-    await waitFor(() => {
-      expect(searchButton).toBeDisabled()
-    })
+    await userEvent.click(searchButton)
+    expect(searchButton).toBeEnabled()
+    expect(listDateFrom).toHaveAttribute('aria-invalid', 'true')
+    expect(listDateFrom).toHaveFocus()
+
+    await userEvent.type(screen.getByLabelText('Application number'), '{Enter}')
+    expect(listDateFrom).toHaveFocus()
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(callsBeforeEdit)
   })
 
   it('hides staff client filters and exemption actions but shows the agent for an industry session', async () => {
@@ -879,7 +918,7 @@ describe('Provincial Application Search Actions', () => {
     },
   )
 
-  it('renders readable results and counts at both ends without changing application terminology', async () => {
+  it('renders readable results with the count in the toolbar and the pagination', async () => {
     renderPage()
     const link = await screen.findByRole('link', { name: '321' })
     const row = within(link.closest('tr')!)
@@ -889,7 +928,10 @@ describe('Provincial Application Search Actions', () => {
     expect(row.getByText('100.0')).toBeVisible()
     expect(row.getByText('Jan 10, 2026')).toBeVisible()
     expect(screen.getByText('Application volume (m³)')).toBeVisible()
-    expect(screen.getAllByText('2 applications found')).toHaveLength(2)
+    // The count shows once in the toolbar and once in the pagination below the table.
+    expect(screen.getAllByText('2 applications found')).toHaveLength(1)
+    expect(screen.getByText('1–2 of 2 items')).toBeVisible()
+    expect(document.querySelector('.legacy-search-result-count--footer')).toBeNull()
   })
 
   it('restores and submits independently optional list-date bounds from a range control', async () => {
@@ -949,7 +991,7 @@ describe('Provincial Application Search Actions', () => {
     await screen.findByText('321')
     mockedSearchProvincialApplications.mockClear()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Application' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Application number' }))
 
     await waitFor(() => {
       expect(
@@ -1018,30 +1060,35 @@ describe('Provincial Application Search Actions', () => {
       serverMessage: 'Application 321 is already assigned to exemption 26-8849.',
       expected:
         'Application 321 is already in exemption 26-8849. Remove it from your selection and try again.',
+      refreshes: true,
     },
     {
       serverMessage: 'Application 321 has valid offers and cannot be added to an exemption.',
       expected:
         "Application 321 has a valid offer, so it can't be exempted. Remove it from your selection and try again.",
+      refreshes: true,
     },
     {
       serverMessage: 'Application 321 listing date has not passed.',
       expected:
         "Application 321 can't be exempted until its list date has passed. Remove it from your selection and try again.",
+      refreshes: false,
     },
     {
       serverMessage: 'Insufficient privileges to add application 321.',
       expected: "You don't have permission to create this exemption.",
+      refreshes: false,
     },
   ])(
     'closes the confirmation and explains "$serverMessage" above the results',
-    async ({ serverMessage, expected }) => {
+    async ({ serverMessage, expected, refreshes }) => {
       mockedFetchExemptionCreatePreview.mockRejectedValueOnce(new Error(serverMessage))
       renderPage()
       await screen.findByText('321')
       await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
       const createExemption = screen.getByRole('button', { name: 'Create exemption' })
       await userEvent.click(createExemption)
+      const searchCalls = mockedSearchProvincialApplications.mock.calls.length
       const confirmation = screen.getByRole('dialog', { name: 'Create new exemption' })
       await userEvent.click(within(confirmation).getByRole('button', { name: 'Create exemption' }))
 
@@ -1057,6 +1104,14 @@ describe('Provincial Application Search Actions', () => {
       expect(screen.getByRole('checkbox', { name: 'Select application 321' })).toBeChecked()
       expect(batchSummary()).toHaveTextContent('1 application selected')
       await waitFor(() => expect(createExemption).toHaveFocus())
+      // A record that changed after the search is refreshed so its row shows its current state.
+      await waitFor(() =>
+        expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(
+          searchCalls + (refreshes ? 1 : 0),
+        ),
+      )
+      expect(exemptionError()).toHaveTextContent(expected)
+      expect(batchSummary()).toHaveTextContent('1 application selected')
       expect(mockedSubmitExemptionCreate).not.toHaveBeenCalled()
       expect(mockNavigate).not.toHaveBeenCalled()
     },
@@ -1467,13 +1522,13 @@ describe('Provincial Application Search Actions', () => {
       expect(to).toHaveValue('2026-10-01')
       expect(to).toHaveAttribute('aria-invalid', 'true')
       expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
-      expect(search).toBeDisabled()
+      await userEvent.click(search)
+      expect(to).toHaveFocus()
       fireEvent.submit(to.closest('form') as HTMLFormElement)
       expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(callsBeforeEdit)
 
       fireEvent.change(to, { target: { value: '2026-10-12' } })
-      await waitFor(() => expect(search).toBeEnabled())
-      expect(to).not.toHaveAttribute('aria-invalid', 'true')
+      await waitFor(() => expect(to).not.toHaveAttribute('aria-invalid', 'true'))
       await userEvent.click(search)
       await waitFor(() =>
         expect(mockedSearchProvincialApplications.mock.calls.length).toBeGreaterThan(
@@ -1488,7 +1543,7 @@ describe('Provincial Application Search Actions', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('List date to')).toHaveAttribute('aria-invalid', 'true'),
     )
-    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled()
     expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
     expect(screen.queryByRole('region', { name: 'Search results' })).not.toBeInTheDocument()
   })

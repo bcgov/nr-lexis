@@ -71,7 +71,6 @@ import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPrefe
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   formatDeferredSearchTotalLabel,
-  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchNextSearchPage,
   type DeferredSearchTotalStatus,
@@ -98,7 +97,7 @@ const INITIAL_FILTERS: ProvincialPermitSearchFilters = {
   permitStatus: '',
   permitNumber: '',
   ownerClientNumber: '',
-  applicantClientNumber: '',
+  agentClientNumber: '',
 }
 
 const EMPTY_RESULTS = createEmptyPagedSearchResponse<ProvincialPermitSearchResponse>()
@@ -107,10 +106,10 @@ const SORT_COLUMNS: {
   id: ProvincialPermitSearchSortField
   label: string
 }[] = [
-  { id: 'permitNumber', label: 'Permit' },
+  { id: 'permitNumber', label: 'Permit number' },
   { id: 'permitStatus', label: 'Status' },
-  { id: 'applicantClientNumber', label: 'Applicant client number' },
   { id: 'ownerClientNumber', label: 'Owner client number' },
+  { id: 'agentClientNumber', label: 'Agent client number' },
   { id: 'permitVolume', label: 'Total volume (m³)' },
   { id: 'dateIssued', label: 'Issued date' },
   { id: 'region', label: 'Region' },
@@ -121,6 +120,7 @@ const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc'
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialPermitSearchSortField[]
+const COLUMN_HEADERS = SORT_COLUMNS.map((column) => column.label)
 
 const buildSearchParams = (
   filters: ProvincialPermitSearchFilters,
@@ -138,7 +138,7 @@ const buildSearchParams = (
     ['permitStatus', filters.permitStatus],
     ['permitNumber', filters.permitNumber],
     ['ownerClientNumber', filters.ownerClientNumber],
-    ['applicantClientNumber', filters.applicantClientNumber],
+    ['agentClientNumber', filters.agentClientNumber],
     ['sortField', sortField],
     ['sortDirection', sortDirection],
     ['page', page],
@@ -185,13 +185,17 @@ const ProvincialPermitPage = () => {
       permitStatus: searchParams.get('permitStatus') ?? '',
       permitNumber: searchParams.get('permitNumber') ?? '',
       ownerClientNumber: searchParams.get('ownerClientNumber') ?? '',
-      applicantClientNumber: searchParams.get('applicantClientNumber') ?? '',
+      // Older saved searches and links name the agent filter and sort applicantClientNumber.
+      agentClientNumber:
+        searchParams.get('agentClientNumber') ?? searchParams.get('applicantClientNumber') ?? '',
     }
 
     return {
       filters: urlFilters,
       sortField: parseEnumParam(
-        searchParams.get('sortField'),
+        searchParams.get('sortField') === 'applicantClientNumber'
+          ? 'agentClientNumber'
+          : searchParams.get('sortField'),
         SORT_FIELD_OPTIONS,
         DEFAULT_SORT_FIELD,
       ),
@@ -568,18 +572,18 @@ const ProvincialPermitPage = () => {
                 {canFilterByClient && (
                   <>
                     <ForestClientComboBox
-                      id="applicantClientNumber"
-                      labelText="Applicant client number"
-                      value={filters.applicantClientNumber}
-                      resetKey={clientSearchResetKey}
-                      onChange={(value) => updateFilter('applicantClientNumber', value)}
-                    />
-                    <ForestClientComboBox
                       id="ownerClientNumber"
-                      labelText="Owner client number"
+                      labelText="Owner client"
                       value={filters.ownerClientNumber}
                       resetKey={clientSearchResetKey}
                       onChange={(value) => updateFilter('ownerClientNumber', value)}
+                    />
+                    <ForestClientComboBox
+                      id="agentClientNumber"
+                      labelText="Agent client"
+                      value={filters.agentClientNumber}
+                      resetKey={clientSearchResetKey}
+                      onChange={(value) => updateFilter('agentClientNumber', value)}
                     />
                   </>
                 )}
@@ -594,7 +598,7 @@ const ProvincialPermitPage = () => {
                 >
                   Clear all
                 </Button>
-                <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
+                <SearchSubmitButton loading={loading} invalid={hasDateValidationError} />
               </div>
             </form>
           </Tile>
@@ -616,7 +620,7 @@ const ProvincialPermitPage = () => {
             resultName="permit"
             loading={resultsLoading}
             loadingDescription="Searching"
-            columnCount={SORT_COLUMNS.length}
+            columnHeaders={COLUMN_HEADERS}
             totalItems={
               errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
@@ -675,8 +679,8 @@ const ProvincialPermitPage = () => {
                       <TableCell>
                         <StatusTag status={row.status} />
                       </TableCell>
-                      <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
                       <TableCell>{displayTableValue(row.ownerClientNumber)}</TableCell>
+                      <TableCell>{displayTableValue(row.applicantClientNumber)}</TableCell>
                       <TableCell>{displayVolume(row.totalVolume)}</TableCell>
                       <TableCell className="legacy-search-table-date">
                         {displayTableValue(row.issueDate)}
@@ -693,36 +697,20 @@ const ProvincialPermitPage = () => {
               />
             ) : null}
             {!errorMessage && !noResults && (!resultsLoading || results.content.length > 0) && (
-              <>
-                <div className="legacy-search-result-count legacy-search-result-count--footer">
-                  {formatDeferredSearchTotalLabel(
-                    results.page.totalElements,
-                    totalStatus,
-                    results.page.number * results.page.size + results.content.length,
-                    'permit',
-                  ) ?? formatSearchResultCount(results.page.totalElements, 'permit')}
-                </div>
-                <Pagination
-                  page={results.page.number + 1}
-                  pageSize={results.page.size}
-                  pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-                  totalItems={results.page.totalElements}
-                  totalPending={totalStatus === 'pending'}
-                  pagesUnknown={totalStatus !== 'exact'}
-                  isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
-                  onChange={({ page, pageSize: nextPageSize }) => {
-                    setSearchParams(
-                      buildSearchParams(
-                        appliedFilters,
-                        sortField,
-                        sortDirection,
-                        page,
-                        nextPageSize,
-                      ),
-                    )
-                  }}
-                />
-              </>
+              <Pagination
+                page={results.page.number + 1}
+                pageSize={results.page.size}
+                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                totalItems={results.page.totalElements}
+                totalPending={totalStatus === 'pending'}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
+                onChange={({ page, pageSize: nextPageSize }) => {
+                  setSearchParams(
+                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
+                  )
+                }}
+              />
             )}
           </SearchResultsTableFrame>
         </section>

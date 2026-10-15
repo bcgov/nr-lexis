@@ -55,7 +55,30 @@ describe('SearchSubmitButton', () => {
     expect(onSubmit).toHaveBeenCalledTimes(2)
   })
 
-  it('stays disabled while the filters are invalid', () => {
+  it('stays enabled with an invalid filter, runs no search and focuses the first invalid field', async () => {
+    const onSubmit = vi.fn((event: { preventDefault: () => void }) => event.preventDefault())
+    render(
+      <form onSubmit={onSubmit}>
+        <input aria-label="Application number" />
+        <input aria-label="List date from" aria-invalid="true" />
+        <input aria-label="List date to" aria-invalid="true" />
+        <SearchSubmitButton loading={false} invalid />
+      </form>,
+    )
+    const search = screen.getByRole('button', { name: 'Search' })
+
+    expect(search).toBeEnabled()
+    expect(search).not.toHaveAttribute('aria-disabled')
+    await userEvent.click(search)
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('List date from')).toHaveFocus()
+
+    await userEvent.type(screen.getByLabelText('Application number'), '{Enter}')
+    expect(onSubmit).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('List date from')).toHaveFocus()
+  })
+
+  it('can still be disabled by a page that requires it', () => {
     renderInForm({ loading: false, disabled: true })
 
     expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()

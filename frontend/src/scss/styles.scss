@@ -1903,7 +1903,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   grid-column: span 2;
 }
 
-.provincial-permit-search-grid > .forest-client-combobox:has(#applicantClientNumber),
+.provincial-permit-search-grid > .forest-client-combobox:has(#ownerClientNumber),
 .provincial-offer-search-grid > .forest-client-combobox {
   grid-column: 1 / span 2;
 }
@@ -6011,7 +6011,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
   .provincial-application-search-grid > .forest-client-combobox,
   .provincial-application-search-grid > .forest-client-combobox:has(#ownerClientNumber),
   .provincial-permit-search-grid > .forest-client-combobox,
-  .provincial-permit-search-grid > .forest-client-combobox:has(#applicantClientNumber),
+  .provincial-permit-search-grid > .forest-client-combobox:has(#ownerClientNumber),
   .provincial-offer-search-grid > .forest-client-combobox,
   .federal-application-search-grid > .forest-client-combobox,
   .legacy-search-grid > .search-date-range {

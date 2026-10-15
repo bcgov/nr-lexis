@@ -1042,12 +1042,12 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Permits')
+    const permitsTable = await screen.findByRole('region', { name: 'Related exemption permits' })
     expect(
-      await screen.findByRole('region', { name: 'Related exemption permits' }),
-    ).toBeInTheDocument()
-    expect(await screen.findByRole('columnheader', { name: 'Volume (m³)' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Status' })).toBeInTheDocument()
-    expect(screen.getByRole('columnheader', { name: 'Issue date' })).toBeInTheDocument()
+      (await within(permitsTable).findAllByRole('columnheader')).map(
+        (header) => header.textContent,
+      ),
+    ).toEqual(['Permit number', 'Total volume (m³)', 'Status', 'Issued date'])
     expect(screen.getByText('900101 (Pending)')).toBeInTheDocument()
     expect(screen.getByText('25.5')).toBeInTheDocument()
     expect(screen.getByText('12-Jul-2026')).toBeInTheDocument()

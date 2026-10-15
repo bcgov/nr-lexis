@@ -68,7 +68,7 @@ const svgPathData = (svg: Locator): Promise<string[]> =>
   )
 
 // A search with no results shows only its empty state. The count stays in a visually hidden
-// toolbar for screen readers, and there is no footer count or pagination.
+// toolbar for screen readers, and there is no pagination.
 const expectOnlyEmptySearchState = async (page: Page, resultName: string): Promise<void> => {
   const results = page.getByRole('region', { name: 'Search results', exact: true })
   await expect(results.getByRole('heading', { name: 'No results found', exact: true })).toBeVisible(
@@ -85,7 +85,6 @@ const expectOnlyEmptySearchState = async (page: Page, resultName: string): Promi
     }),
     `the ${resultName} count toolbar should not take visible space`,
   ).toBe(true)
-  await expect(results.locator('.legacy-search-result-count--footer')).toHaveCount(0)
   await expect(results.locator('.cds--pagination, .cds--pagination-skeleton')).toHaveCount(0)
 }
 
@@ -2906,13 +2905,15 @@ test.describe('TEST IDIR admin regression', () => {
       await expect(panel).toHaveText('Available after the exemption is saved.')
       await expect(panel.locator('input, textarea, button')).toHaveCount(0)
     }
-    await expect(page.getByRole('tab', { name: 'Fees', exact: true })).toHaveCount(0)
+    await expect(page.getByRole('tab', { name: 'Fees', exact: true })).toBeVisible()
 
     await page.getByRole('tab', { name: 'Exemption details', exact: true }).click()
     const detailsPanel = page.getByRole('tabpanel', { name: 'Exemption details', exact: true })
     const exemptionType = detailsPanel.getByRole('group', { name: 'Exemption type' })
     const blanketOic = exemptionType.getByRole('radio', { name: blanketOicLabel, exact: true })
     await expect(blanketOic).toBeEnabled({ timeout: 30_000 })
+    await expect(exemptionType.locator('#exemptionTypeCode-O')).toBeChecked()
+    await expect(exemptionType.locator('#exemptionTypeCode-M')).toHaveCount(0)
     await detailsPanel.locator('label[for="exemptionTypeCode-B"]').click()
     await expect(blanketOic).toBeChecked()
 
@@ -3362,11 +3363,16 @@ test.describe('TEST IDIR admin regression', () => {
 
     const rangeError = page.getByText('Must be on or after List date from.', { exact: true })
     await expect(rangeError).toBeVisible()
-    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeDisabled()
+    // Search stays enabled; it runs no search and moves focus to the field with the error.
+    const search = page.getByRole('button', { name: 'Search', exact: true })
+    await expect(search).toBeEnabled()
+    await search.click()
+    await expect(listDateTo).toBeFocused()
+    await expect(page.getByRole('region', { name: 'Search results', exact: true })).toHaveCount(0)
 
     await page.getByRole('button', { name: 'Clear all', exact: true }).click()
     await expect(rangeError).toHaveCount(0)
-    await expect(page.getByRole('button', { name: 'Search', exact: true })).toBeEnabled()
+    await expect(search).toBeEnabled()
   })
 
   test('keeps the Search button named and focused while a search runs', async () => {

@@ -12,6 +12,8 @@ type SearchResultsTableFrameProps = {
   resultName?: string
   actions?: ReactNode
   columnCount?: number
+  /** The result column headers, shown on the loading skeleton; '' for an unlabelled column. */
+  columnHeaders?: string[]
   /** With no results, the toolbar is hidden from view but still announces the count. */
   hideZeroCount?: boolean
 }
@@ -25,6 +27,7 @@ function SearchResultsTableFrame({
   resultName = 'result',
   actions,
   columnCount = 6,
+  columnHeaders,
   hideZeroCount = false,
 }: SearchResultsTableFrameProps) {
   const toolbarHidden = hideZeroCount && !loading && totalItems === 0 && !actions
@@ -62,7 +65,8 @@ function SearchResultsTableFrame({
         {loading ? (
           <DataTableSkeleton
             aria-label={loadingDescription}
-            columnCount={columnCount}
+            columnCount={columnHeaders?.length ?? columnCount}
+            headers={columnHeaders?.map((header) => ({ header }))}
             rowCount={5}
             showHeader={false}
             showToolbar={false}

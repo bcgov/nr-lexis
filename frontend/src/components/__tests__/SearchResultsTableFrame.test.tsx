@@ -57,6 +57,24 @@ describe('SearchResultsTableFrame', () => {
     expect(firstSkeletonRow?.querySelectorAll('td')).toHaveLength(9)
   })
 
+  it('shows the result column headers on the loading skeleton', () => {
+    render(
+      <SearchResultsTableFrame
+        loading
+        loadingDescription="Searching"
+        columnHeaders={['', 'Permit number', 'Status']}
+      >
+        <table />
+      </SearchResultsTableFrame>,
+    )
+
+    const skeleton = screen.getByRole('table', { name: 'Searching' })
+    expect(
+      Array.from(skeleton.querySelectorAll('thead th'), (header) => header.textContent),
+    ).toEqual(['', 'Permit number', 'Status'])
+    expect(skeleton.querySelector('tbody tr')?.querySelectorAll('td')).toHaveLength(3)
+  })
+
   it('omits the loading indicator when the table frame is not loading', () => {
     const { container } = render(
       <SearchResultsTableFrame loading={false} loadingDescription="Loading search results…">

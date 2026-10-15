@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
@@ -407,10 +407,34 @@ describe('Provincial Offer Search Actions', () => {
       'Region',
       'List date from',
       'List date to',
-      'Offer withdrawn date from',
-      'Offer withdrawn date to',
-      'Client number',
+      'Withdrawn date from',
+      'Withdrawn date to',
+      'Client',
     ])
+  })
+
+  it('shows a dash in Package for an offer saved without a package', async () => {
+    mockedSearchProvincialOffers.mockResolvedValue(
+      offerSearchResponse([
+        {
+          offerNumber: 'OFF-1002',
+          applicationNumber: '3002',
+          packageNumber: '',
+          listingDate: '2026-01-10',
+          region: '11',
+          offerWithdrawalDate: '',
+          clientNumber: '11111111',
+        },
+      ]),
+    )
+
+    renderPage()
+    const offer = await screen.findByText('OFF-1002')
+
+    const packageCell = within(offer.closest('tr') as HTMLElement).getAllByRole('cell')[2]
+    expect(packageCell).toHaveAccessibleName('Not provided')
+    expect(packageCell).toHaveTextContent('—')
+    expect(screen.queryByText('No Packages')).not.toBeInTheDocument()
   })
 
   it('hides the client filter from Provincial Submitters', async () => {
@@ -426,7 +450,7 @@ describe('Provincial Offer Search Actions', () => {
 
     expect(screen.getByRole('heading', { name: 'Offer search' })).toBeVisible()
     expect(screen.getByText('Find offers and check their status')).toBeVisible()
-    expect(screen.queryByLabelText('Client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Client')).not.toBeInTheDocument()
   })
 
   it('shows only the empty state when a search finds no offers', async () => {
@@ -449,7 +473,7 @@ describe('Provincial Offer Search Actions', () => {
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled())
 
-    await userEvent.click(screen.getByRole('button', { name: 'Select Client number' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Select Client' }))
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
 
     await waitFor(() => {
@@ -461,25 +485,33 @@ describe('Provincial Offer Search Actions', () => {
     })
   })
 
-  it('disables search for invalid dates and updates search sort direction from header click', async () => {
+  it('focuses the first invalid date instead of searching and updates the sort from a header', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage()
     await screen.findByText('OFF-1001')
+    const callsBeforeEdit = mockedSearchProvincialOffers.mock.calls.length
 
     const searchButton = screen.getByRole('button', { name: 'Search' })
-    expect(searchButton).toBeEnabled()
-
     const listDateFrom = screen.getByLabelText('List date from')
+    const withdrawnDateFrom = screen.getByLabelText('Withdrawn date from')
+    fireEvent.change(withdrawnDateFrom, { target: { value: '2026-02-30' } })
     fireEvent.change(listDateFrom, { target: { value: '2026-50-99' } })
-    await waitFor(() => {
-      expect(searchButton).toBeDisabled()
-    })
+
+    await userEvent.click(searchButton)
+    expect(searchButton).toBeEnabled()
+    expect(listDateFrom).toHaveFocus()
 
     fireEvent.change(listDateFrom, { target: { value: '' } })
     fireEvent.change(listDateFrom, { target: { value: '2026-02-01' } })
+    await userEvent.click(searchButton)
+    expect(withdrawnDateFrom).toHaveAttribute('aria-invalid', 'true')
+    expect(withdrawnDateFrom).toHaveFocus()
+    expect(mockedSearchProvincialOffers).toHaveBeenCalledTimes(callsBeforeEdit)
+
+    fireEvent.change(withdrawnDateFrom, { target: { value: '' } })
     await waitFor(() => {
-      expect(searchButton).toBeEnabled()
+      expect(withdrawnDateFrom).not.toHaveAttribute('aria-invalid', 'true')
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'List date' }))
@@ -539,7 +571,7 @@ describe('Provincial Offer Search Actions', () => {
     expect(await screen.findByText('OFF-8100')).toBeInTheDocument()
     expect(
       await screen.findAllByText('At least 10 offers found — exact count unavailable'),
-    ).toHaveLength(2)
+    ).toHaveLength(1)
     expect(
       screen.queryByRole('heading', { name: 'Offer search unavailable' }),
     ).not.toBeInTheDocument()
@@ -553,7 +585,7 @@ describe('Provincial Offer Search Actions', () => {
   })
   it.each([
     ['List date from', 'List date to'],
-    ['Offer withdrawn date from', 'Offer withdrawn date to'],
+    ['Withdrawn date from', 'Withdrawn date to'],
   ])('blocks a reversed %s range until To is corrected', async (fromLabel, toLabel) => {
     renderPage()
     await waitFor(() => expect(mockedSearchProvincialOffers).toHaveBeenCalled())
@@ -568,13 +600,13 @@ describe('Provincial Offer Search Actions', () => {
     expect(to).toHaveValue('2026-10-01')
     expect(to).toHaveAttribute('aria-invalid', 'true')
     expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
-    expect(search).toBeDisabled()
+    await userEvent.click(search)
+    expect(to).toHaveFocus()
     fireEvent.submit(to.closest('form') as HTMLFormElement)
     expect(mockedSearchProvincialOffers).toHaveBeenCalledTimes(callsBeforeEdit)
 
     fireEvent.change(to, { target: { value: '2026-10-12' } })
-    await waitFor(() => expect(search).toBeEnabled())
-    expect(to).not.toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(to).not.toHaveAttribute('aria-invalid', 'true'))
     await userEvent.click(search)
     await waitFor(() =>
       expect(mockedSearchProvincialOffers.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
@@ -586,7 +618,7 @@ describe('Provincial Offer Search Actions', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('List date to')).toHaveAttribute('aria-invalid', 'true'),
     )
-    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled()
     expect(mockedSearchProvincialOffers).not.toHaveBeenCalled()
     expect(screen.queryByRole('region', { name: 'Search results' })).not.toBeInTheDocument()
   })

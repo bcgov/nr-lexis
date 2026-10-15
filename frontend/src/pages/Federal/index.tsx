@@ -57,7 +57,6 @@ import { usePersistedSearchParams } from '@/pages/shared/usePersistedSearchParam
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   formatDeferredSearchTotalLabel,
-  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchAdjacentSearchPages,
   type DeferredSearchTotalStatus,
@@ -93,13 +92,14 @@ const RESULT_COLUMNS: {
   id: string
   label: string
 }[] = [
-  { id: 'federalApplicationNumber', label: 'Application' },
+  { id: 'federalApplicationNumber', label: 'Application number' },
   { id: 'status', label: 'Status' },
   { id: 'clientNumber', label: 'Client' },
   { id: 'reason', label: 'Reason' },
   { id: 'receivedDate', label: 'Received date' },
   { id: 'listingDate', label: 'List date' },
 ]
+const COLUMN_HEADERS = RESULT_COLUMNS.map((column) => column.label)
 
 const buildSearchParams = (
   filters: FederalApplicationSearchFilters,
@@ -446,7 +446,7 @@ const FederalPage = () => {
                 >
                   Clear all
                 </Button>
-                <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
+                <SearchSubmitButton loading={loading} invalid={hasDateValidationError} />
               </div>
             </form>
           </Tile>
@@ -468,7 +468,7 @@ const FederalPage = () => {
             resultName="application"
             loading={resultsLoading}
             loadingDescription="Searching"
-            columnCount={RESULT_COLUMNS.length}
+            columnHeaders={COLUMN_HEADERS}
             totalItems={
               errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
@@ -536,28 +536,18 @@ const FederalPage = () => {
               />
             ) : null}
             {!errorMessage && !noResults && (!resultsLoading || results.content.length > 0) && (
-              <>
-                <div className="legacy-search-result-count legacy-search-result-count--footer">
-                  {formatDeferredSearchTotalLabel(
-                    results.page.totalElements,
-                    totalStatus,
-                    results.page.number * results.page.size + results.content.length,
-                    'application',
-                  ) ?? formatSearchResultCount(results.page.totalElements, 'application')}
-                </div>
-                <Pagination
-                  page={results.page.number + 1}
-                  pageSize={results.page.size}
-                  pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-                  totalItems={results.page.totalElements}
-                  totalPending={totalStatus === 'pending'}
-                  pagesUnknown={totalStatus !== 'exact'}
-                  isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
-                  onChange={({ page, pageSize: nextPageSize }) => {
-                    setSearchParams(buildSearchParams(appliedFilters, page, nextPageSize))
-                  }}
-                />
-              </>
+              <Pagination
+                page={results.page.number + 1}
+                pageSize={results.page.size}
+                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                totalItems={results.page.totalElements}
+                totalPending={totalStatus === 'pending'}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
+                onChange={({ page, pageSize: nextPageSize }) => {
+                  setSearchParams(buildSearchParams(appliedFilters, page, nextPageSize))
+                }}
+              />
             )}
           </SearchResultsTableFrame>
         </section>

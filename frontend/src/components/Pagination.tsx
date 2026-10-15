@@ -9,6 +9,9 @@ const formatCount = (value: number): string => value.toLocaleString('en-CA')
 const pagesLabel = (total: number): string =>
   `${formatCount(total)} ${total === 1 ? 'page' : 'pages'}`
 
+const itemsLabel = (total: number): string =>
+  `${formatCount(total)} ${total === 1 ? 'item' : 'items'}`
+
 type LexisPaginationProps = PaginationProps & {
   /** While the result total is still being counted, a skeleton holds the pager's place. */
   totalPending?: boolean
@@ -23,7 +26,7 @@ function Pagination({ totalPending = false, ...props }: LexisPaginationProps) {
     <CarbonPagination
       itemText={(min, max) => `${formatCount(min)}–${formatCount(max)} items`}
       itemRangeText={(min, max, total) =>
-        `${formatCount(min)}–${formatCount(max)} of ${formatCount(total)} items`
+        `${formatCount(min)}–${formatCount(max)} of ${itemsLabel(total)}`
       }
       pageRangeText={(_current, total) => `of ${pagesLabel(total)}`}
       pageSelectLabelText={(total) => `Page of ${pagesLabel(total)}`}

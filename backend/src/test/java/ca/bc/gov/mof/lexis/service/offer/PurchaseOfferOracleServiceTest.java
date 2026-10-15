@@ -252,6 +252,43 @@ class PurchaseOfferOracleServiceTest {
   }
 
   @Test
+  void searchAndCountShouldPreserveTheNaturalResourceRegionDefault() {
+    PurchaseOfferSearchCriteria criteria =
+        new PurchaseOfferSearchCriteria(
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            null,
+            false,
+            true,
+            List.of(),
+            true,
+            null,
+            0,
+            25);
+    when(repository.search(any(PurchaseOfferSearchCriteria.class))).thenReturn(page(List.of(), 0));
+
+    service.search(criteria);
+    service.count(criteria);
+
+    ArgumentCaptor<PurchaseOfferSearchCriteria> searchCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    ArgumentCaptor<PurchaseOfferSearchCriteria> countCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(repository).search(searchCaptor.capture());
+    verify(repository).count(countCaptor.capture());
+    assertThat(searchCaptor.getValue().defaultToNaturalResourceRegions()).isTrue();
+    assertThat(searchCaptor.getValue().restrictToProvincialOrNullJurisdiction()).isTrue();
+    assertThat(countCaptor.getValue().defaultToNaturalResourceRegions()).isTrue();
+    assertThat(countCaptor.getValue().restrictToProvincialOrNullJurisdiction()).isTrue();
+  }
+
+  @Test
   void detailShouldPassThroughRepository() {
     PurchaseOfferDetailDto dto =
         new PurchaseOfferDetailDto(

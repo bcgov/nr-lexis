@@ -103,6 +103,7 @@ class PermitControllerTest {
             null,
             null,
             null,
+            null,
             List.of(),
             null,
             0,
@@ -144,6 +145,7 @@ class PermitControllerTest {
             "ISS",
             "SI-99881",
             "00055667",
+            null,
             "00077881",
             List.of(12L),
             "permitNumber DESC",
@@ -192,6 +194,7 @@ class PermitControllerTest {
         null,
         null,
         null,
+        null,
         List.of(),
         null,
         0,
@@ -226,6 +229,7 @@ class PermitControllerTest {
         null,
         null,
         "00099999",
+        null,
         "00088888",
         List.of(),
         null,
@@ -262,6 +266,7 @@ class PermitControllerTest {
             null,
             null,
             "00099999",
+            null,
             "00088888",
             List.of(),
             authentication);
@@ -277,6 +282,43 @@ class PermitControllerTest {
   }
 
   @Test
+  void searchAndCountShouldAcceptAgentClientNumberAndPreferItOverApplicantClientNumber() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.search(any(PermitSearchCriteria.class)))
+        .thenReturn(new PermitSearchResponseDto(List.of(), 0, 0, 25));
+    when(service.count(any(PermitSearchCriteria.class))).thenReturn(0);
+
+    controller.search(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        "00099999",
+        "00055667",
+        null,
+        List.of(),
+        null,
+        0,
+        25,
+        null,
+        null);
+    controller.count(
+        null, null, null, null, null, null, null, null, "00055667", null, List.of(), null);
+
+    ArgumentCaptor<PermitSearchCriteria> searchCaptor =
+        ArgumentCaptor.forClass(PermitSearchCriteria.class);
+    ArgumentCaptor<PermitSearchCriteria> countCaptor =
+        ArgumentCaptor.forClass(PermitSearchCriteria.class);
+    verify(service).search(searchCaptor.capture());
+    verify(service).count(countCaptor.capture());
+    assertThat(searchCaptor.getValue().applicantClientNumber()).isEqualTo("00055667");
+    assertThat(countCaptor.getValue().applicantClientNumber()).isEqualTo("00055667");
+  }
+
+  @Test
   void searchShouldPassKnownTotalWhenProvided() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitSearchResponseDto dto = new PermitSearchResponseDto(List.of(), 91, 2, 30);
@@ -284,6 +326,7 @@ class PermitControllerTest {
 
     ResponseEntity<PermitSearchResponseDto> response =
         controller.search(
+            null,
             null,
             null,
             null,

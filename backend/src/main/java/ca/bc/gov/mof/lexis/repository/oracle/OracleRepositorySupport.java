@@ -50,6 +50,8 @@ public abstract class OracleRepositorySupport {
   private static final Pattern SAFE_IDENTIFIER = Pattern.compile("[A-Za-z0-9_]+(?:\\.[A-Za-z0-9_]+)*");
   private static final List<String> NATURAL_RESOURCE_REGION_CODES =
       List.of("1903", "1904", "1905", "1906", "1907", "1908", "1909", "1910");
+  private static final List<Long> NATURAL_RESOURCE_REGION_NUMBERS =
+      NATURAL_RESOURCE_REGION_CODES.stream().map(Long::valueOf).toList();
 
   protected final Logger logger = LoggerFactory.getLogger(getClass());
   protected final JdbcTemplate jdbcTemplate;
@@ -146,6 +148,11 @@ public abstract class OracleRepositorySupport {
    */
   protected List<CodeNameDto> loadOrgUnitOptionsRequired(boolean displayName) {
     return loadNaturalResourceRegions(displayName);
+  }
+
+  /** Organization-unit numbers of the configured natural-resource regions. */
+  protected static List<Long> naturalResourceRegionNumbers() {
+    return NATURAL_RESOURCE_REGION_NUMBERS;
   }
 
   private List<CodeNameDto> loadNaturalResourceRegions(boolean displayName) {

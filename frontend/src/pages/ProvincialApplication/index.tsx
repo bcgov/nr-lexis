@@ -80,7 +80,6 @@ import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPrefe
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   formatDeferredSearchTotalLabel,
-  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchNextSearchPage,
   type DeferredSearchTotalStatus,
@@ -109,29 +108,33 @@ type ExemptionStatus = {
 }
 
 const EXEMPTION_PERMISSION_MESSAGE = "You don't have permission to create this exemption."
+const EXEMPTION_CREATE_FAILED_MESSAGE =
+  'The exemption could not be created. Please try again. If the problem persists, contact support.'
 
 // The exemption create checks report these server messages; the search explains them in its own
-// words. A status change also refreshes the results so the new status shows.
+// words. When an application changed after the search, the results refresh to show its state.
 const EXEMPTION_CREATE_ERRORS: {
   pattern: RegExp
   message: (match: RegExpExecArray) => string
-  statusChanged?: boolean
+  refreshResults?: boolean
 }[] = [
   {
     pattern: /^Application (\S+) must have a status of approved\.$/,
     message: ([, application]) =>
       `Application ${application} is no longer Approved. Its current status now shows in the results.`,
-    statusChanged: true,
+    refreshResults: true,
   },
   {
     pattern: /^Application (\S+) is already assigned to exemption (\S+?)\.$/,
     message: ([, application, exemption]) =>
       `Application ${application} is already in exemption ${exemption}. Remove it from your selection and try again.`,
+    refreshResults: true,
   },
   {
     pattern: /^Application (\S+) has valid offers and cannot be added to an exemption\.$/,
     message: ([, application]) =>
       `Application ${application} has a valid offer, so it can't be exempted. Remove it from your selection and try again.`,
+    refreshResults: true,
   },
   {
     pattern: /^Application (\S+) listing date has not passed\.$/,
@@ -144,15 +147,14 @@ const EXEMPTION_CREATE_ERRORS: {
   },
 ]
 
-const exemptionCreateError = (
-  error: unknown,
-): { message: string; statusChanged: boolean } | null => {
+// Any other failure gets the generic message, never the server's own text.
+const exemptionCreateError = (error: unknown): { message: string; refreshResults: boolean } => {
   const serverMessage = error instanceof Error ? error.message.trim() : ''
-  for (const { pattern, message, statusChanged = false } of EXEMPTION_CREATE_ERRORS) {
+  for (const { pattern, message, refreshResults = false } of EXEMPTION_CREATE_ERRORS) {
     const match = pattern.exec(serverMessage)
-    if (match) return { message: message(match), statusChanged }
+    if (match) return { message: message(match), refreshResults }
   }
-  return null
+  return { message: EXEMPTION_CREATE_FAILED_MESSAGE, refreshResults: false }
 }
 
 const hasInvalidSearchDates = (filters: ProvincialApplicationSearchFilters): boolean =>
@@ -184,7 +186,7 @@ const RESULT_COLUMNS: {
   label: string
   sortField?: ProvincialApplicationSearchSortField
 }[] = [
-  { id: 'applicationNumber', label: 'Application', sortField: 'applicationNumber' },
+  { id: 'applicationNumber', label: 'Application number', sortField: 'applicationNumber' },
   { id: 'status', label: 'Status' },
   {
     id: 'ownerClientNumber',
@@ -732,19 +734,8 @@ const ProvincialApplicationPage = () => {
       regionNumbers: [],
       otherConditions: '',
     })
-    if (!result.success) {
-      throw new Error(
-        result.outcomeUnknown
-          ? `LEXIS could not confirm whether the exemption was created. Search for application ${preview.applicationNumbers[0]} to check before trying again.`
-          : result.errors[0] ||
-              result.message ||
-              'The exemption could not be created. Please try again. If the problem persists, contact support.',
-      )
-    }
-    if (!result.createdId) {
-      throw new Error(
-        `The exemption was created, but LEXIS did not return its number. Search for application ${preview.applicationNumbers[0]} to open it.`,
-      )
+    if (!result.success || !result.createdId) {
+      throw new Error(result.errors[0] || result.message)
     }
     navigate(`/provincial/exemption/${encodeURIComponent(result.createdId)}`, {
       state: {
@@ -757,16 +748,15 @@ const ProvincialApplicationPage = () => {
     })
   }
 
-  // A rejected application closes the confirmation and shows the reason above the results, with
-  // the selection kept. Other failures stay in the confirmation so it can be retried.
+  // A failure closes the confirmation and shows the reason above the results, with the selection
+  // kept and focus back on the batch action.
   const confirmExemptionCreate = async (applicationNumbers: string[]) => {
     try {
       await createExemptionFromApplications(applicationNumbers)
     } catch (error) {
       const createError = exemptionCreateError(error)
-      if (!createError) throw error
       setExemptionStatus({ kind: 'error', message: createError.message })
-      if (createError.statusChanged) refreshResults()
+      if (createError.refreshResults) refreshResults()
     }
   }
 
@@ -925,7 +915,7 @@ const ProvincialApplicationPage = () => {
                 >
                   Clear all
                 </Button>
-                <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
+                <SearchSubmitButton loading={loading} invalid={hasDateValidationError} />
               </div>
             </form>
           </Tile>
@@ -967,7 +957,10 @@ const ProvincialApplicationPage = () => {
             resultName="application"
             loading={resultsLoading}
             loadingDescription="Searching"
-            columnCount={RESULT_COLUMNS.length + (canCreateExemption ? 1 : 0)}
+            columnHeaders={[
+              ...(canCreateExemption ? [''] : []),
+              ...RESULT_COLUMNS.map((column) => column.label),
+            ]}
             totalItems={
               errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
@@ -1132,37 +1125,21 @@ const ProvincialApplicationPage = () => {
               />
             ) : null}
             {!errorMessage && !noResults && (!resultsLoading || results.content.length > 0) && (
-              <>
-                <div className="legacy-search-result-count legacy-search-result-count--footer">
-                  {formatDeferredSearchTotalLabel(
-                    results.page.totalElements,
-                    totalStatus,
-                    results.page.number * results.page.size + results.content.length,
-                    'application',
-                  ) ?? formatSearchResultCount(results.page.totalElements, 'application')}
-                </div>
-                <Pagination
-                  page={results.page.number + 1}
-                  pageSize={results.page.size}
-                  pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-                  totalItems={results.page.totalElements}
-                  totalPending={totalStatus === 'pending'}
-                  pagesUnknown={totalStatus !== 'exact'}
-                  isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
-                  onChange={({ page, pageSize: nextPageSize }) => {
-                    clearSelection()
-                    setSearchParams(
-                      buildSearchParams(
-                        appliedFilters,
-                        sortField,
-                        sortDirection,
-                        page,
-                        nextPageSize,
-                      ),
-                    )
-                  }}
-                />
-              </>
+              <Pagination
+                page={results.page.number + 1}
+                pageSize={results.page.size}
+                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                totalItems={results.page.totalElements}
+                totalPending={totalStatus === 'pending'}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
+                onChange={({ page, pageSize: nextPageSize }) => {
+                  clearSelection()
+                  setSearchParams(
+                    buildSearchParams(appliedFilters, sortField, sortDirection, page, nextPageSize),
+                  )
+                }}
+              />
             )}
           </SearchResultsTableFrame>
         </section>
@@ -1175,7 +1152,6 @@ const ProvincialApplicationPage = () => {
           description="You are about to create a new exemption with the following applications:"
           confirmLabel="Create exemption"
           pendingLabel="Creating exemption…"
-          errorTitle="Exemption not created"
           launcherButtonRef={createExemptionActionRef}
           onConfirm={() => confirmExemptionCreate(exemptionConfirmationNumbers)}
           onClose={() => setExemptionConfirmationNumbers(null)}

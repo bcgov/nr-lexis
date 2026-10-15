@@ -246,7 +246,7 @@ describe('Provincial Permit Search Actions', () => {
 
     await waitFor(() => expect(mockedCountProvincialPermits).toHaveBeenCalledOnce())
     expect(await screen.findByText('7001')).toBeInTheDocument()
-    expect(screen.getAllByRole('status', { name: 'Counting search results' })).toHaveLength(2)
+    expect(screen.getAllByRole('status', { name: 'Counting search results' })).toHaveLength(1)
     expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
     expect(screen.queryByText('Searching')).not.toBeInTheDocument()
 
@@ -254,7 +254,8 @@ describe('Provincial Permit Search Actions', () => {
       resolveCount(125)
     })
 
-    expect(await screen.findAllByText('125 permits found')).toHaveLength(2)
+    expect(await screen.findAllByText('125 permits found')).toHaveLength(1)
+    expect(screen.getByText('1–10 of 125 items')).toBeInTheDocument()
     expect(screen.getByText('7001')).toBeInTheDocument()
   })
 
@@ -532,8 +533,8 @@ describe('Provincial Permit Search Actions', () => {
       'Issued date from',
       'Issued date to',
       'Permit status',
-      'Applicant client number',
-      'Owner client number',
+      'Owner client',
+      'Agent client',
     ])
   })
 
@@ -550,8 +551,8 @@ describe('Provincial Permit Search Actions', () => {
 
     expect(screen.getByRole('heading', { name: 'Permit search' })).toBeVisible()
     expect(screen.getByText('Find permits and check their status')).toBeVisible()
-    expect(screen.queryByLabelText('Applicant client number')).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Owner client number')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Owner client')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Agent client')).not.toBeInTheDocument()
     expect(screen.getByLabelText('Permit number')).toBeVisible()
   })
 
@@ -592,50 +593,151 @@ describe('Provincial Permit Search Actions', () => {
     expect(container.querySelector('.cds--pagination')).toBeNull()
   })
 
-  it('uses canonical applicant and owner client selections in the search request', async () => {
+  it('uses the owner and agent client selections in the search request', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
 
     renderPage('/provincial/permit')
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled())
 
-    await userEvent.click(screen.getByRole('button', { name: 'Select Applicant client number' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Select Owner client number' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Select Owner client' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Select Agent client' }))
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
 
     await waitFor(() => {
       expect(
         mockedSearchProvincialPermits.mock.calls.some(
           ([request]) =>
-            request.filters.applicantClientNumber === '00012345' &&
+            request.filters.agentClientNumber === '00012345' &&
             request.filters.ownerClientNumber === '00054321',
         ),
       ).toBe(true)
     })
+    const params = new URLSearchParams(
+      screen.getByTestId('permit-search-location').textContent ?? '',
+    )
+    expect(params.get('agentClientNumber')).toBe('00012345')
+    expect(params.has('applicantClientNumber')).toBe(false)
   })
 
-  it('disables search for invalid dates and requests descending sort when permit header is clicked', async () => {
+  it('applies the agent filter and sort from an older saved link', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage(
+      '/provincial/permit?applicantClientNumber=00012345&sortField=applicantClientNumber&sortDirection=asc',
+    )
+    await screen.findByText('7001')
+
+    expect(screen.getByLabelText('Agent client')).toHaveValue('00012345')
+    expect(mockedSearchProvincialPermits).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({ agentClientNumber: '00012345' }),
+        sortField: 'agentClientNumber',
+        sortDirection: 'asc',
+      }),
+      expect.any(Object),
+    )
+  })
+
+  it('shows the result columns on the loading skeleton', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedSearchProvincialPermits.mockReturnValue(new Promise(() => {}))
+
+    renderPage()
+
+    const skeleton = await screen.findByRole('table', { name: 'Searching' })
+    expect(
+      Array.from(skeleton.querySelectorAll('thead th'), (header) => header.textContent),
+    ).toEqual([
+      'Permit number',
+      'Status',
+      'Owner client number',
+      'Agent client number',
+      'Total volume (m³)',
+      'Issued date',
+      'Region',
+    ])
+  })
+
+  it('shows owner then agent client columns, with a dash when there is no agent', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    mockedSearchProvincialPermits.mockResolvedValue(
+      permitSearchResponse([
+        {
+          permitNumber: '7001',
+          status: 'Issued',
+          applicantClientNumber: '',
+          ownerClientNumber: '22222222',
+          totalVolume: 120,
+          issueDate: '2026-01-10',
+          region: '11',
+          packageNumber: 'PKG-1',
+          applicationNumber: '3001',
+        },
+        {
+          permitNumber: '7002',
+          status: 'Issued',
+          applicantClientNumber: '11111111',
+          ownerClientNumber: '33333333',
+          totalVolume: 120,
+          issueDate: '2026-01-10',
+          region: '11',
+          packageNumber: 'PKG-2',
+          applicationNumber: '3002',
+        },
+      ]),
+    )
 
     renderPage()
     await screen.findByText('7001')
 
-    const searchButton = screen.getByRole('button', { name: 'Search' })
-    expect(searchButton).toBeEnabled()
+    expect(
+      screen
+        .getAllByRole('columnheader')
+        .map((header) => header.querySelector('.cds--table-header-label')?.textContent?.trim()),
+    ).toEqual([
+      'Permit number',
+      'Status',
+      'Owner client number',
+      'Agent client number',
+      'Total volume (m³)',
+      'Issued date',
+      'Region',
+    ])
+    const clientCellsOf = (permitNumber: string) =>
+      within(screen.getByText(permitNumber).closest('tr') as HTMLElement)
+        .getAllByRole('cell')
+        .slice(2, 4)
+    const [owner, agent] = clientCellsOf('7001')
+    expect(owner).toHaveTextContent('22222222')
+    expect(agent).toHaveAccessibleName('Not provided')
+    expect(agent).toHaveTextContent('—')
+    expect(clientCellsOf('7002').map((cell) => cell.textContent)).toEqual(['33333333', '11111111'])
+  })
 
+  it('focuses an invalid date instead of searching and toggles the permit number sort', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage()
+    await screen.findByText('7001')
+    const callsBeforeEdit = mockedSearchProvincialPermits.mock.calls.length
+
+    const searchButton = screen.getByRole('button', { name: 'Search' })
     const issuedFromDate = screen.getByLabelText('Issued date from')
     fireEvent.change(issuedFromDate, { target: { value: '2026-99-99' } })
-    await waitFor(() => {
-      expect(searchButton).toBeDisabled()
-    })
+    await userEvent.click(searchButton)
+    expect(searchButton).toBeEnabled()
+    expect(issuedFromDate).toHaveAttribute('aria-invalid', 'true')
+    expect(issuedFromDate).toHaveFocus()
+    expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(callsBeforeEdit)
 
     fireEvent.change(issuedFromDate, { target: { value: '' } })
     fireEvent.change(issuedFromDate, { target: { value: '2026-02-01' } })
     await waitFor(() => {
-      expect(searchButton).toBeEnabled()
+      expect(issuedFromDate).not.toHaveAttribute('aria-invalid', 'true')
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Permit' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Permit number' }))
 
     await waitFor(() => {
       expect(
@@ -648,6 +750,8 @@ describe('Provincial Permit Search Actions', () => {
 
   it.each([
     ['Status', 'permitStatus'],
+    ['Owner client number', 'ownerClientNumber'],
+    ['Agent client number', 'agentClientNumber'],
     ['Total volume (m³)', 'permitVolume'],
     ['Issued date', 'dateIssued'],
   ] as const)(
@@ -701,13 +805,13 @@ describe('Provincial Permit Search Actions', () => {
       expect(to).toHaveValue('2026-10-01')
       expect(to).toHaveAttribute('aria-invalid', 'true')
       expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
-      expect(search).toBeDisabled()
+      await userEvent.click(search)
+      expect(to).toHaveFocus()
       fireEvent.submit(to.closest('form') as HTMLFormElement)
       expect(mockedSearchProvincialPermits).toHaveBeenCalledTimes(callsBeforeEdit)
 
       fireEvent.change(to, { target: { value: '2026-10-12' } })
-      await waitFor(() => expect(search).toBeEnabled())
-      expect(to).not.toHaveAttribute('aria-invalid', 'true')
+      await waitFor(() => expect(to).not.toHaveAttribute('aria-invalid', 'true'))
       await userEvent.click(search)
       await waitFor(() =>
         expect(mockedSearchProvincialPermits.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
@@ -720,7 +824,7 @@ describe('Provincial Permit Search Actions', () => {
     await waitFor(() =>
       expect(screen.getByLabelText('Issued date to')).toHaveAttribute('aria-invalid', 'true'),
     )
-    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled()
     expect(mockedSearchProvincialPermits).not.toHaveBeenCalled()
     expect(screen.queryByRole('region', { name: 'Search results' })).not.toBeInTheDocument()
   })
