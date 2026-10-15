@@ -2496,7 +2496,7 @@ describe('Provincial exemption edit context', () => {
     consoleError.mockRestore()
   })
 
-  it.each(['B', 'O'])('keeps a cancelled %s exemption read-only', async (type) => {
+  it.each(['B'])('keeps a cancelled %s exemption read-only', async (type) => {
     vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
       ...exemptionDetail,
       exemptionTypeCode: type,
@@ -2528,6 +2528,73 @@ describe('Provincial exemption edit context', () => {
       expect(screen.getAllByText('Cancelled', { exact: false }).length).toBeGreaterThan(0),
     )
     expect(screen.queryByRole('button', { name: 'Edit exemption details' })).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { type: 'O', options: ['Active', 'Cancelled'] },
+    { type: 'M', options: ['New', 'Active', 'Cancelled'] },
+  ])('reactivates a cancelled $type exemption with its status only', async ({ type, options }) => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: type,
+      blanketOic: false,
+      exemptionStatusCode: 'CAN',
+      exemptionStatusDescription: 'Cancelled',
+    })
+    vi.mocked(fetchProvincialExemptionOptions).mockResolvedValue({
+      exemptionTypes: [{ value: type, label: type }],
+      exemptionStatuses: [
+        { value: 'NEW', label: 'New' },
+        { value: 'ACT', label: 'Active' },
+        { value: 'CAN', label: 'Cancelled' },
+      ],
+      regions: [],
+    })
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: true,
+      fixedFeeRate: '25.00',
+      regionNumbers: [],
+      locked: false,
+      lockMessage: '',
+    })
+    vi.mocked(updateExemption).mockResolvedValue({
+      success: true,
+      message: 'The exemption was updated successfully.',
+      exemptionNumber: 'BOIC-205',
+      errors: [],
+      warnings: [],
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    expect(screen.getByLabelText('Expiry date')).toBeDisabled()
+    const status = screen.getByRole('combobox', { name: 'Status' })
+    await userEvent.click(status)
+    const listboxId = status.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+    expect(
+      within(listbox as HTMLElement)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(options)
+    await userEvent.click(within(listbox as HTMLElement).getByRole('option', { name: 'Active' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(vi.mocked(updateExemption)).toHaveBeenCalledWith(
+        expect.objectContaining({ exemptionStatusCode: 'ACT', exemptionTypeCode: type }),
+      ),
+    )
   })
 
   it.each([
@@ -2613,7 +2680,7 @@ describe('Provincial exemption edit context', () => {
       expect(listbox).not.toBeNull()
       await userEvent.click(within(listbox as HTMLElement).getByRole('option', { name: 'New' }))
       expect(
-        screen.queryByText('Select New to reopen this cancelled exemption'),
+        screen.queryByText('Select New or Active to reopen this cancelled exemption'),
       ).not.toBeInTheDocument()
       await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
@@ -2808,5 +2875,212 @@ describe('regional exemption controls', () => {
         }),
       ),
     )
+  })
+})
+
+describe('exemption edit choices', () => {
+  const activeMinisterial: ProvincialExemptionDetail = {
+    ...exemptionDetail,
+    exemptionNumber: 'EX-205',
+    exemptionTypeCode: 'M',
+    exemptionTypeDescription: 'Ministerial',
+    exemptionStatusCode: 'ACT',
+    exemptionStatusDescription: 'Active',
+    expiryDate: '2099-12-31',
+    blanketOic: false,
+  }
+
+  const applicationRow = (applicationNumber: string, removable: boolean) => ({
+    applicationNumber,
+    requestedVolume: '100.0',
+    scaleVolume: '',
+    locked: false,
+    jurisdiction: 'P',
+    ownerClientNumber: '',
+    agentClientNumber: '',
+    ownerClientLocationCode: '',
+    agentClientLocationCode: '',
+    applicantTypeCode: 'O',
+    ownerContactName: '',
+    agentContactName: '',
+    ownerCompanyName: '',
+    agentCompanyName: '',
+    removable,
+  })
+
+  const renderExemption = () =>
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+  const openOptions = async (name: string) => {
+    const combobox = screen.getByRole('combobox', { name })
+    await userEvent.click(combobox)
+    const listboxId = combobox.getAttribute('aria-controls')
+    const listbox = listboxId ? document.getElementById(listboxId) : null
+    expect(listbox).not.toBeNull()
+    return listbox as HTMLElement
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(useAuth).mockReturnValue(createTestAuthContext())
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue(activeMinisterial)
+    vi.mocked(fetchProvincialExemptionOptions).mockResolvedValue({
+      exemptionTypes: [
+        { value: 'M', label: 'Ministerial' },
+        { value: 'O', label: 'Order in Council' },
+      ],
+      exemptionStatuses: [
+        { value: 'NEW', label: 'New' },
+        { value: 'ACT', label: 'Active' },
+        { value: 'CAN', label: 'Cancelled' },
+      ],
+      regions: [],
+    })
+    vi.mocked(fetchExemptionApplications).mockResolvedValue({
+      applications: [applicationRow('1000456', true)],
+      containsUnmanu: false,
+      ownerNumber: '',
+    })
+    vi.mocked(fetchExemptionPermits).mockResolvedValue([])
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: [],
+      locked: false,
+      lockMessage: '',
+    })
+    vi.mocked(updateExemption).mockResolvedValue({
+      success: true,
+      message: 'The exemption was updated successfully.',
+      exemptionNumber: 'EX-205',
+      errors: [],
+      warnings: [],
+    })
+  })
+
+  it('edits the Approval volume of an Active exemption', async () => {
+    renderExemption()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    const approvedVolume = screen.getByLabelText('Approval volume (m³)')
+    expect(approvedVolume).toBeEnabled()
+    await userEvent.clear(approvedVolume)
+    await userEvent.type(approvedVolume, '650')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(vi.mocked(updateExemption)).toHaveBeenCalledWith(
+        expect.objectContaining({ approvedVolume: '650', exemptionStatusCode: 'ACT' }),
+      ),
+    )
+  })
+
+  it('saves a New Ministerial exemption switched to OIC as Active, never New', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...activeMinisterial,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+      approvalDate: null,
+    })
+    renderExemption()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    await userEvent.click(
+      within(await openOptions('Exemption type')).getByRole('option', {
+        name: 'Order in Council',
+      }),
+    )
+
+    expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('Active')
+    const statuses = await openOptions('Status')
+    expect(
+      within(statuses)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['Active', 'Cancelled'])
+    await userEvent.keyboard('{Escape}')
+
+    fireEvent.change(screen.getByLabelText('Approval date'), { target: { value: '2026-10-01' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(vi.mocked(updateExemption)).toHaveBeenCalledWith(
+        expect.objectContaining({
+          exemptionTypeCode: 'O',
+          exemptionStatusCode: 'ACT',
+          approvalDate: '2026-10-01',
+        }),
+      ),
+    )
+  })
+
+  it('returns the status to New when the type is switched back to Ministerial', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...activeMinisterial,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+      approvalDate: null,
+    })
+    renderExemption()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    await userEvent.click(
+      within(await openOptions('Exemption type')).getByRole('option', {
+        name: 'Order in Council',
+      }),
+    )
+    expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('Active')
+    await userEvent.click(
+      within(await openOptions('Exemption type')).getByRole('option', { name: 'Ministerial' }),
+    )
+
+    expect(screen.getByRole('combobox', { name: 'Status' })).toHaveValue('New')
+  })
+
+  it('shows the type of a cancelled Ministerial exemption as read-only text', async () => {
+    vi.mocked(fetchProvincialExemptionDetail).mockResolvedValue({
+      ...activeMinisterial,
+      exemptionStatusCode: 'CAN',
+      exemptionStatusDescription: 'Cancelled',
+    })
+    renderExemption()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+
+    expect(screen.queryByRole('combobox', { name: 'Exemption type' })).not.toBeInTheDocument()
+    expect(
+      screen.getByText('Exemption type', { selector: 'dt' }).nextElementSibling,
+    ).toHaveTextContent('Ministerial')
+  })
+
+  it('offers Remove only for applications the server allows removing', async () => {
+    vi.mocked(fetchExemptionApplications).mockResolvedValue({
+      applications: [applicationRow('1000456', true), applicationRow('1000457', false)],
+      containsUnmanu: false,
+      ownerNumber: '',
+    })
+    renderExemption()
+
+    await screen.findByRole('heading', { name: 'Exemption EX-205', level: 1 })
+    await userEvent.click(screen.getByRole('tab', { name: 'Applications' }))
+    const table = await screen.findByRole('table')
+    const removableRow = within(table)
+      .getByRole('link', { name: '1000456' })
+      .closest('tr') as HTMLElement
+    const lockedRow = within(table)
+      .getByRole('link', { name: '1000457' })
+      .closest('tr') as HTMLElement
+
+    expect(within(removableRow).getByRole('button', { name: 'Remove' })).toBeEnabled()
+    expect(within(lockedRow).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
   })
 })

@@ -1146,7 +1146,8 @@ public class ExemptionDetailsRpcController {
                         row.ownerContactName(),
                         row.agentContactName(),
                         row.ownerCompanyName(),
-                        row.agentCompanyName()))
+                        row.agentCompanyName(),
+                        row.removable()))
             .toList();
 
     return new ExemptionApplicationsResponseDto(
@@ -1665,6 +1666,7 @@ public class ExemptionDetailsRpcController {
   public record ExemptionApplicationsResponseDto(
       List<ApplicationItemDto> applications, boolean containsUnmanu, String ownerNumber) {}
 
+  /** removable says whether the application can be removed from the exemption. */
   public record ApplicationItemDto(
       long applicationNumber,
       String requestedVolume,
@@ -1679,7 +1681,8 @@ public class ExemptionDetailsRpcController {
       String ownerContactName,
       String agentContactName,
       String ownerCompanyName,
-      String agentCompanyName) {}
+      String agentCompanyName,
+      boolean removable) {}
 
   public record PermitItemDto(
       long permitNumber,

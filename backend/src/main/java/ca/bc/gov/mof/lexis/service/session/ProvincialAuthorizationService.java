@@ -666,7 +666,8 @@ public class ProvincialAuthorizationService {
         service == null || applicationNumber == null || applicationNumber < 1
             ? null
             : service.findByApplicationNumber(applicationNumber).orElse(null);
-    if (application == null) {
+    // Federal application records have no documents to maintain.
+    if (application == null || "F".equalsIgnoreCase(application.jurisdictionCode())) {
       throw attachmentMutationDenied("application");
     }
 

@@ -90,14 +90,18 @@ final class OracleInternalPermitInvoiceService {
     return findInvoices(permitNumber);
   }
 
-  PermitInvoiceRow requireSingleActive(
-      List<PermitInvoiceRow> rows, boolean gbmsRequired) {
+  PermitInvoiceRow requireSingleActive(List<PermitInvoiceRow> rows) {
     List<PermitInvoiceRow> active = activeRows(rows);
     if (active.size() != 1) {
       throw new DataRetrievalFailureException(
           "Exactly one active permit invoice is required for cancellation.");
     }
-    PermitInvoiceRow invoice = active.get(0);
+    return active.get(0);
+  }
+
+  PermitInvoiceRow requireSingleActive(
+      List<PermitInvoiceRow> rows, boolean gbmsRequired) {
+    PermitInvoiceRow invoice = requireSingleActive(rows);
     if (gbmsRequired != (trimToNull(invoice.gbmsInvoiceNumber()) != null)) {
       throw new DataRetrievalFailureException(
           "The active permit invoice GBMS relationship is invalid.");

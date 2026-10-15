@@ -326,7 +326,10 @@ public class LexisApplicationController {
         canViewRemarks ? detail.remarks() : List.of(),
         detail.offers(),
         detail.jurisdictionCode(),
-        detail.author());
+        detail.author(),
+        effectivePolicy.canDeletePackages(),
+        effectivePolicy.canDeleteScales(),
+        effectivePolicy.canChangeAgent());
   }
 
   private LexisApplicationSearchResponseDto withSearchLocks(

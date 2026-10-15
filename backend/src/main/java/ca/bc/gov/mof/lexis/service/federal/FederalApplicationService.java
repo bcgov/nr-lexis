@@ -1,7 +1,6 @@
 package ca.bc.gov.mof.lexis.service.federal;
 
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationDetailDto;
-import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationPermitDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationRemarkDto;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchOptionsDto;
@@ -27,17 +26,13 @@ public interface FederalApplicationService {
 
   Optional<FederalApplicationEditContext> findEditContext(Long applicationNumber);
 
-  Optional<FederalApplicationPermitDto> findPermitByApplicationNumber(Long applicationNumber);
-
   Optional<List<FederalApplicationRemarkDto>> findRemarksByApplicationNumber(
       Long applicationNumber);
 
-  FederalMutationResult addPermit(
-      Long applicationNumber, FederalPermitMutationRequest request, String userId);
+  /** Approves a NEW or PND federal application. Only Application Review approves. */
+  FederalMutationResult approve(Long applicationNumber, String userId);
 
-  FederalMutationResult updatePermit(
-      Long applicationNumber, FederalPermitMutationRequest request, String userId);
-
+  /** Rejects or withdraws an APP federal application through its listing day. */
   FederalMutationResult updateStatus(
       Long applicationNumber, FederalStatusMutationRequest request, String userId);
 
@@ -49,16 +44,6 @@ public interface FederalApplicationService {
       Long remarkId,
       FederalRemarkMutationRequest request,
       String userId);
-
-  record FederalPermitMutationRequest(
-      Long permitNumber,
-      LocalDate permitIssueDate,
-      String destinationCountry,
-      String transportType,
-      String transportName,
-      LocalDate shippingDate,
-      String portOfExport,
-      String otherPortOfExport) {}
 
   record FederalStatusMutationRequest(String statusCode, String remark) {}
 
@@ -72,9 +57,5 @@ public interface FederalApplicationService {
       FederalApplicationRemarkDto remark,
       List<String> errors) {}
 
-  record FederalMutationResult(
-      boolean success,
-      String message,
-      FederalApplicationPermitDto permit,
-      List<String> errors) {}
+  record FederalMutationResult(boolean success, String message, List<String> errors) {}
 }

@@ -75,8 +75,18 @@ final class LexisApiAuthorizationRules {
           ACTION_TENURE_REPORT,
           ACTION_TRANSPORT_REPORT);
 
-  private static final Map<String, String> APPLICATION_DETAILS_RPC_ACTIONS =
+  // Exemption Approvers change existing packages and scales of a Ministerial application with
+  // volume remaining. The controller and the application edit policy decide per application.
+  private static final List<String> EXISTING_APPLICATION_ITEM_ACTIONS =
+      List.of(ACTION_CREATE_APPLICATION, ACTION_APPROVE_EXEMPTION);
+
+  private static final Map<String, List<String>> APPLICATION_DETAILS_RPC_ACTIONS =
       actionMap(
+          Map.of(
+              "updatePackage", EXISTING_APPLICATION_ITEM_ACTIONS,
+              "addScaleToPackage", EXISTING_APPLICATION_ITEM_ACTIONS,
+              "deleteScaleById", EXISTING_APPLICATION_ITEM_ACTIONS,
+              "deletePackageById", EXISTING_APPLICATION_ITEM_ACTIONS),
           Map.entry("getDocumentDetails", ACTION_APPLICATION_DETAILS),
           Map.entry("getDocument", ACTION_APPLICATION_DETAILS),
           Map.entry("removeDocument", ACTION_FILE_APPLICATION_UPLOAD),
@@ -106,13 +116,9 @@ final class LexisApiAuthorizationRules {
           Map.entry("getScalesForPackage", ACTION_APPLICATION_DETAILS),
           Map.entry("getPackageDetails", ACTION_APPLICATION_DETAILS),
           Map.entry("getScaleById", ACTION_APPLICATION_DETAILS),
-          Map.entry("addPackageToApplication", ACTION_CREATE_APPLICATION),
-          Map.entry("updatePackage", ACTION_CREATE_APPLICATION),
-          Map.entry("addScaleToPackage", ACTION_CREATE_APPLICATION),
-          Map.entry("deleteScaleById", ACTION_CREATE_APPLICATION),
-          Map.entry("deletePackageById", ACTION_CREATE_APPLICATION));
+          Map.entry("addPackageToApplication", ACTION_CREATE_APPLICATION));
 
-  private static final Map<String, String> EXEMPTION_DETAILS_RPC_ACTIONS =
+  private static final Map<String, List<String>> EXEMPTION_DETAILS_RPC_ACTIONS =
       actionMap(
           Map.entry("getApplications", ACTION_EXEMPTION_DETAILS),
           Map.entry("getPermits", ACTION_EXEMPTION_DETAILS),
@@ -131,7 +137,7 @@ final class LexisApiAuthorizationRules {
           Map.entry("getClientLocations", ACTION_EXEMPTION_DETAILS),
           Map.entry("getContactsForLocation", ACTION_EXEMPTION_DETAILS));
 
-  private static final Map<String, String> OFFER_DETAILS_RPC_ACTIONS =
+  private static final Map<String, List<String>> OFFER_DETAILS_RPC_ACTIONS =
       actionMap(
           Map.entry("validateApplicationNumber", ACTION_OFFER_DETAILS),
           Map.entry("getApplicationDetails", ACTION_OFFER_DETAILS),
@@ -142,7 +148,7 @@ final class LexisApiAuthorizationRules {
           Map.entry("addOffer", ACTION_CREATE_OFFER),
           Map.entry("updateOffer", ACTION_CREATE_OFFER));
 
-  private static final Map<String, String> PERMIT_DETAILS_RPC_ACTIONS =
+  private static final Map<String, List<String>> PERMIT_DETAILS_RPC_ACTIONS =
       actionMap(
           Map.entry("getPermitSummary", ACTION_PERMIT_DETAILS),
           Map.entry("getTotalFeesForPermit", ACTION_PERMIT_DETAILS),
@@ -263,12 +269,8 @@ final class LexisApiAuthorizationRules {
           action(
               HttpMethod.GET,
               ACTION_FEDERAL_APPLICATION_DETAILS,
-              "/api/lexis/federal/applications/*",
-              "/api/lexis/federal/applications/*/permit"),
-          anyAction(
-              HttpMethod.GET,
-              List.of(ACTION_PERMIT_DETAILS, ACTION_FEDERAL_APPLICATION_DETAILS),
-              "/api/lexis/shipping-reference-options"),
+              "/api/lexis/federal/applications/*"),
+          action(HttpMethod.GET, ACTION_PERMIT_DETAILS, "/api/lexis/shipping-reference-options"),
           action(
               HttpMethod.GET,
               ACTION_APPLICATION_REMARKS,
@@ -276,13 +278,11 @@ final class LexisApiAuthorizationRules {
           action(
               HttpMethod.POST,
               ACTION_MANAGE_FEDERAL_APPLICATION,
-              "/api/lexis/federal/applications/*/permit",
               "/api/lexis/federal/applications/*/status",
               "/api/lexis/federal/applications/*/remarks"),
           action(
               HttpMethod.PUT,
               ACTION_MANAGE_FEDERAL_APPLICATION,
-              "/api/lexis/federal/applications/*/permit",
               "/api/lexis/federal/applications/*/remarks/*"),
           action(
               HttpMethod.GET,
@@ -478,13 +478,11 @@ final class LexisApiAuthorizationRules {
               APPLICATION_DETAILS_RPC_ACTIONS,
               "/api/lexis/applicationDetailsRPC",
               "/api/lexis/applicationDetailsRPC.do"),
-          // Federal details reuse only these reads. Controllers verify the application
-          // jurisdiction and the package/document relationship before returning data.
+          // Federal details reuse only the package scale read. The controller verifies the
+          // package's parent application before returning data.
           anyAction(
               HttpMethod.GET,
               List.of(ACTION_APPLICATION_DETAILS, ACTION_FEDERAL_APPLICATION_DETAILS),
-              "/api/lexis/rpc/application-details/document-details",
-              "/api/lexis/rpc/application-details/document",
               "/api/lexis/rpc/application-details/package-scales"),
           action(
               HttpMethod.GET,
@@ -499,7 +497,10 @@ final class LexisApiAuthorizationRules {
               ACTION_CREATE_APPLICATION,
               "/api/lexis/rpc/application-details/application",
               "/api/lexis/rpc/application-details/application-summary",
-              "/api/lexis/rpc/application-details/package",
+              "/api/lexis/rpc/application-details/package"),
+          anyAction(
+              HttpMethod.POST,
+              EXISTING_APPLICATION_ITEM_ACTIONS,
               "/api/lexis/rpc/application-details/package-update",
               "/api/lexis/rpc/application-details/package-scale"),
           action(
@@ -516,9 +517,9 @@ final class LexisApiAuthorizationRules {
               HttpMethod.DELETE,
               ACTION_FILE_APPLICATION_UPLOAD,
               "/api/lexis/rpc/application-details/document"),
-          action(
+          anyAction(
               HttpMethod.DELETE,
-              ACTION_CREATE_APPLICATION,
+              EXISTING_APPLICATION_ITEM_ACTIONS,
               "/api/lexis/rpc/application-details/scale",
               "/api/lexis/rpc/application-details/package"),
           action(
@@ -830,16 +831,29 @@ final class LexisApiAuthorizationRules {
   }
 
   private static Rule legacyAction(
-      HttpMethod method, String defaultAction, Map<String, String> actionMappings, String... paths) {
+      HttpMethod method,
+      String defaultAction,
+      Map<String, List<String>> actionMappings,
+      String... paths) {
     return new Rule(
         RuleType.ACTION, method, List.of(paths), defaultAction, actionMappings, List.of());
   }
 
   @SafeVarargs
-  private static Map<String, String> actionMap(Map.Entry<String, String>... entries) {
-    Map<String, String> normalized = new TreeMap<>();
+  private static Map<String, List<String>> actionMap(Map.Entry<String, String>... entries) {
+    return actionMap(Map.of(), entries);
+  }
+
+  /** Maps each legacy action mapping to the actions that grant it; any one of them is enough. */
+  @SafeVarargs
+  private static Map<String, List<String>> actionMap(
+      Map<String, List<String>> anyActionEntries, Map.Entry<String, String>... entries) {
+    Map<String, List<String>> normalized = new TreeMap<>();
+    anyActionEntries.forEach(
+        (actionMapping, actions) ->
+            normalized.put(normalizeActionMapping(actionMapping), List.copyOf(actions)));
     for (Map.Entry<String, String> entry : entries) {
-      normalized.put(normalizeActionMapping(entry.getKey()), entry.getValue());
+      normalized.put(normalizeActionMapping(entry.getKey()), List.of(entry.getValue()));
     }
     return Map.copyOf(normalized);
   }
@@ -849,11 +863,15 @@ final class LexisApiAuthorizationRules {
       HttpMethod method,
       List<String> patterns,
       String defaultAction,
-      Map<String, String> actionMappings,
+      Map<String, List<String>> actionMappings,
       List<String> alternativeActions) {
 
-    String requiredAction(String actionMapping) {
-      return actionMappings.getOrDefault(normalizeActionMapping(actionMapping), defaultAction);
+    List<String> requiredActions(String actionMapping) {
+      List<String> mapped = actionMappings.get(normalizeActionMapping(actionMapping));
+      if (mapped != null) {
+        return mapped;
+      }
+      return defaultAction == null ? List.of() : List.of(defaultAction);
     }
 
     boolean matches(HttpMethod requestMethod, String path) {

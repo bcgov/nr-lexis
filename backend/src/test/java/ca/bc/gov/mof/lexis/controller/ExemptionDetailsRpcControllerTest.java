@@ -291,7 +291,8 @@ class ExemptionDetailsRpcControllerTest {
                         "BOB TURMEL",
                         "EXPORT PERSON",
                         "NORSKE SKOG CANADA LIMITED",
-                        "INTERNATIONAL FOREST PRODUCTS")),
+                        "INTERNATIONAL FOREST PRODUCTS",
+                        true)),
                 false,
                 "00077881"));
 
@@ -316,6 +317,7 @@ class ExemptionDetailsRpcControllerTest {
                   .isEqualTo("NORSKE SKOG CANADA LIMITED");
               assertThat(application.agentCompanyName())
                   .isEqualTo("INTERNATIONAL FOREST PRODUCTS");
+              assertThat(application.removable()).isTrue();
             });
     @SuppressWarnings("unchecked")
     ArgumentCaptor<Predicate<Long>> accessCaptor =

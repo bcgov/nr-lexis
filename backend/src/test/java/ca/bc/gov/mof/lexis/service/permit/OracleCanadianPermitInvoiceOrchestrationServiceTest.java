@@ -28,6 +28,8 @@ import java.util.List;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
@@ -243,6 +245,37 @@ class OracleCanadianPermitInvoiceOrchestrationServiceTest {
         service.orchestrate(transition("PPD", "CAN", "CA", null), "idir\\jsmith");
 
     assertThat(result.success()).isFalse();
+    verify(repository, never()).updatePermitInvoiceRequired(any());
+    assertNoGbmsWrites();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"ACT", "CAN"})
+  void shouldCancelAnInvoiceWithoutAGbmsLinkForANonCanadianPermit(String targetStatus) {
+    PermitInvoiceRow active = activeInvoice(null);
+    when(repository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
+        .thenReturn(List.of(active), List.of(cancelledBy(active, "idir\\jsmith")));
+
+    TransitionResult result =
+        service.orchestrate(transition("COM", targetStatus, "US", null), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    verify(repository)
+        .updatePermitInvoiceRequired(
+            new PermitInvoiceUpdate(INVOICE_NUMBER, null, "idir\\jsmith"));
+    assertNoGbmsWrites();
+  }
+
+  @Test
+  void shouldRejectGbmsLinkedInvoiceWhenCancellingANonCanadianPermit() {
+    when(repository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
+        .thenReturn(List.of(activeInvoice("GBMS-100")));
+
+    TransitionResult result =
+        service.orchestrate(transition("COM", "CAN", "US", null), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("Canadian internal permit invoicing failed.");
     verify(repository, never()).updatePermitInvoiceRequired(any());
     assertNoGbmsWrites();
   }
@@ -496,6 +529,25 @@ class OracleCanadianPermitInvoiceOrchestrationServiceTest {
         LocalDate.of(2026, 7, 9),
         LocalDate.of(2026, 7, 9),
         LocalDate.of(2026, 7, 9));
+  }
+
+  private PermitInvoiceRow cancelledBy(PermitInvoiceRow row, String cancelUserId) {
+    return new PermitInvoiceRow(
+        row.permitInvoiceNumber(),
+        row.permitDetailNumber(),
+        row.gbmsInvoiceNumber(),
+        row.invoiceTotal(),
+        row.clientNumber(),
+        row.clientLocationCode(),
+        row.exemptionOverrideRate(),
+        row.permitOverrideAmount(),
+        row.originOrgNumber(),
+        row.adminOrgNumber(),
+        row.ackMaskAcode(),
+        row.submitTimestamp(),
+        LocalDateTime.of(2026, 7, 11, 10, 0),
+        row.submitUserId(),
+        cancelUserId);
   }
 
   private PermitInvoiceRow withInvoiceTotal(PermitInvoiceRow row, BigDecimal invoiceTotal) {

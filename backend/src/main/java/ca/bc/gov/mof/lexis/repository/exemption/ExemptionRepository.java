@@ -50,6 +50,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
           CANON_EEA.OIC_INDICATOR,
           CANON_EEA.AGENT_CLIENT_NUMBER,
           CANON_EEA.OWNER_CLIENT_NUMBER,
+          CANON_EEA.EXPORT_APPLICANT_TYPE_CODE,
           ROW_NUMBER() OVER (
             PARTITION BY CANON_EEA.EXEMPTION_NUMBER
             ORDER BY CANON_ES.ADVERTISING_DATE DESC NULLS LAST,
@@ -112,6 +113,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
         EO.ORG_UNIT_NAME,
         CASE
           WHEN EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')
+              AND EEA.EXPORT_APPLICANT_TYPE_CODE = 'A'
             THEN COALESCE(EEA.AGENT_CLIENT_NUMBER, '')
           ELSE ''
         END AS AGENT_CLIENT_NUMBER,
@@ -175,6 +177,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
           CANON_EEA.EXPORT_SCHEDULE_ID,
           CANON_EEA.AGENT_CLIENT_NUMBER,
           CANON_EEA.OWNER_CLIENT_NUMBER,
+          CANON_EEA.EXPORT_APPLICANT_TYPE_CODE,
           ROW_NUMBER() OVER (
             PARTITION BY CANON_EEA.EXEMPTION_NUMBER
             ORDER BY CANON_ES.ADVERTISING_DATE DESC NULLS LAST,
@@ -240,6 +243,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
         EO.ORG_UNIT_NAME,
         CASE
           WHEN EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')
+              AND EEA.EXPORT_APPLICANT_TYPE_CODE = 'A'
             THEN COALESCE(EEA.AGENT_CLIENT_NUMBER, '')
           ELSE ''
         END AS AGENT_CLIENT_NUMBER,
@@ -293,6 +297,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
           CANON_EEA.OIC_INDICATOR,
           CANON_EEA.AGENT_CLIENT_NUMBER,
           CANON_EEA.OWNER_CLIENT_NUMBER,
+          CANON_EEA.EXPORT_APPLICANT_TYPE_CODE,
           ROW_NUMBER() OVER (
             PARTITION BY CANON_EEA.EXEMPTION_NUMBER
             ORDER BY CANON_ES.ADVERTISING_DATE DESC NULLS LAST,
@@ -361,6 +366,7 @@ public class ExemptionRepository extends OracleRepositorySupport {
         EO.ORG_UNIT_NAME,
         CASE
           WHEN EE.EXPORT_EXEMPTION_TYPE_CODE NOT IN ('B', 'O')
+              AND EEA.EXPORT_APPLICANT_TYPE_CODE = 'A'
             THEN COALESCE(EEA.AGENT_CLIENT_NUMBER, '')
           ELSE ''
         END AS AGENT_CLIENT_NUMBER,
@@ -601,7 +607,11 @@ public class ExemptionRepository extends OracleRepositorySupport {
     }
     where.addEquals("EE.EXPORT_EXEMPTION_STATUS_CODE", criteria.exemptionStatus());
     where.addLike("EEA.OWNER_CLIENT_NUMBER", criteria.ownerClientNumber());
-    where.addLike("EEA.AGENT_CLIENT_NUMBER", criteria.agentClientNumber());
+    // Legacy also stores the owner in AGENT_CLIENT_NUMBER on owner applications, so only an agent
+    // application names an agent.
+    where.addLike(
+        "CASE WHEN EEA.EXPORT_APPLICANT_TYPE_CODE = 'A' THEN EEA.AGENT_CLIENT_NUMBER END",
+        criteria.agentClientNumber());
 
     String applicantClientNumber = trim(criteria.applicantClientNumber());
     if (applicantClientNumber != null && !criteria.broadClientMatch()) {

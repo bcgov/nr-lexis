@@ -20,6 +20,8 @@ import org.springframework.stereotype.Service;
 public class ApplicationEditPolicyService {
 
   private static final String ACTION_CREATE_APPLICATION = "createApplication";
+  private static final String ACTION_CHANGE_APPLICANT_TYPE = "/changeApplicantType";
+  private static final String APPLICATION_STATUS_EXPIRED = "EXP";
   private static final String ROLE_ADMIN = "LEXIS_ADMIN";
   private static final String ROLE_READ_ONLY = "LEXIS_READ_ONLY";
   private static final String ROLE_APPLICATION_APPROVER = "LEXIS_APPLICATION_APPROVER";
@@ -44,6 +46,25 @@ public class ApplicationEditPolicyService {
     this.sessionService = sessionService;
     this.authorizationService = authorizationService;
     this.clock = clock == null ? LexisBusinessTime.systemClock() : clock;
+  }
+
+  /**
+   * An Approved application's review stays open while its list date is less than six days ago, or
+   * while it has no list date.
+   */
+  public boolean approvedReviewWindowOpen(
+      ApplicationDetailsRpcService applicationService, Long applicationNumber) {
+    if (applicationService == null || applicationNumber == null) {
+      return false;
+    }
+    LocalDate today = LocalDate.now(clock);
+    return applicationService
+        .getApplicationEditContext(applicationNumber)
+        .map(
+            context ->
+                context.advertisingDate() == null
+                    || context.advertisingDate().isAfter(today.minusDays(6)))
+        .orElse(false);
   }
 
   public ApplicationEditPolicy resolve(
@@ -77,13 +98,16 @@ public class ApplicationEditPolicyService {
 
     boolean actionAllowed =
         authorizationService.canPerformAction(parsedRoles, ACTION_CREATE_APPLICATION);
-    if (!actionAllowed) {
+    if (!actionAllowed && !exemptionApprover) {
       return denied;
     }
 
     boolean applicationApprover =
         administrator || roles.contains(ROLE_APPLICATION_APPROVER);
     String status = normalizeCode(context.applicationStatusCode());
+    if (APPLICATION_STATUS_EXPIRED.equals(status)) {
+      return denied;
+    }
     LocalDate today = LocalDate.now(clock);
     LocalDate advertisingDate = context.advertisingDate();
 
@@ -135,6 +159,33 @@ public class ApplicationEditPolicyService {
       canAddScales = true;
     }
 
+    boolean canDeletePackages = canAddPackages;
+    boolean canDeleteScales = canAddScales;
+    // An Exemption Approver on a Ministerial application with volume remaining can edit and delete
+    // packages and add and delete scales, but not create packages.
+    if (!readOnly && exemptionApprover && context.ministerialItemOverrideEligible()) {
+      canEditPackages = true;
+      canDeletePackages = true;
+      canAddScales = true;
+      canDeleteScales = true;
+    }
+    // While the application details are editable, packages can be created, edited and deleted and
+    // scales added whatever the package and scale rules say. Scale deletion still follows them.
+    if (canEditApplicationDetails) {
+      canEditPackages = true;
+      canAddPackages = true;
+      canDeletePackages = true;
+      canAddScales = true;
+    }
+
+    boolean canChangeAgent =
+        !readOnly
+            && !exemptionApprover
+            && !industryUser
+            && actionAllowed
+            && context.agentChangeablePermit()
+            && authorizationService.canPerformAction(parsedRoles, ACTION_CHANGE_APPLICANT_TYPE);
+
     boolean canUpdatePackageNumber =
         !readOnly
             && ((industryUser && "NEW".equals(status))
@@ -151,7 +202,33 @@ public class ApplicationEditPolicyService {
         canUpdatePackageNumber,
         industryUser,
         readOnly,
-        exemptionApprover);
+        exemptionApprover,
+        canDeletePackages,
+        canDeleteScales,
+        canChangeAgent);
+  }
+
+  /**
+   * Existing remarks stay editable after the application details lock, except on an Expired
+   * application or for Read Only.
+   */
+  public void requireRemarkUpdate(
+      Authentication authentication,
+      ApplicationDetailsRpcService applicationService,
+      Long applicationNumber) {
+    Set<String> roles = normalizeRoles(sessionService.parseRolesFromPrincipal(authentication));
+    boolean readOnly = !roles.contains(ROLE_ADMIN) && isPureReadOnlyRole(roles);
+    ApplicationDetailsRpcService.ApplicationEditContext context =
+        applicationService == null || applicationNumber == null || applicationNumber < 1
+            ? null
+            : applicationService.getApplicationEditContext(applicationNumber).orElse(null);
+    require(
+        !readOnly
+            && context != null
+            && applicationNumber.equals(context.applicationNumber())
+            && "P".equals(normalizeCode(context.jurisdictionCode()))
+            && !APPLICATION_STATUS_EXPIRED.equals(normalizeCode(context.applicationStatusCode())),
+        "Remark editing is not allowed by the application edit policy.");
   }
 
   /** True once the application's list date has arrived in business time. */
@@ -179,6 +256,15 @@ public class ApplicationEditPolicyService {
         "Application summary editing is not allowed by the application edit policy.");
   }
 
+  /** True when the agent can be added or removed although the application details are locked. */
+  public boolean allowsAgentChangeOnly(
+      Authentication authentication,
+      ApplicationDetailsRpcService applicationService,
+      Long applicationNumber) {
+    ApplicationEditPolicy policy = resolve(authentication, applicationService, applicationNumber);
+    return policy.canChangeAgent() && !policy.canEditApplicationDetails();
+  }
+
   public void requirePackageEdit(
       Authentication authentication,
       ApplicationDetailsRpcService applicationService,
@@ -188,22 +274,40 @@ public class ApplicationEditPolicyService {
         "Package editing is not allowed by the application edit policy.");
   }
 
-  public void requirePackageAddOrDelete(
+  public void requirePackageAdd(
       Authentication authentication,
       ApplicationDetailsRpcService applicationService,
       Long applicationNumber) {
     require(
         resolve(authentication, applicationService, applicationNumber).canAddPackages(),
-        "Package creation or deletion is not allowed by the application edit policy.");
+        "Package creation is not allowed by the application edit policy.");
   }
 
-  public void requireScaleAddOrDelete(
+  public void requirePackageDelete(
+      Authentication authentication,
+      ApplicationDetailsRpcService applicationService,
+      Long applicationNumber) {
+    require(
+        resolve(authentication, applicationService, applicationNumber).canDeletePackages(),
+        "Package deletion is not allowed by the application edit policy.");
+  }
+
+  public void requireScaleAdd(
       Authentication authentication,
       ApplicationDetailsRpcService applicationService,
       Long applicationNumber) {
     require(
         resolve(authentication, applicationService, applicationNumber).canAddScales(),
-        "Scale creation or deletion is not allowed by the application edit policy.");
+        "Scale creation is not allowed by the application edit policy.");
+  }
+
+  public void requireScaleDelete(
+      Authentication authentication,
+      ApplicationDetailsRpcService applicationService,
+      Long applicationNumber) {
+    require(
+        resolve(authentication, applicationService, applicationNumber).canDeleteScales(),
+        "Scale deletion is not allowed by the application edit policy.");
   }
 
   public void requirePackageNumberUpdate(
@@ -257,6 +361,11 @@ public class ApplicationEditPolicyService {
     return value == null ? "" : value.trim().toUpperCase(Locale.ROOT);
   }
 
+  /**
+   * {@code canChangeAgent} lets an Application Approver add or remove the agent on a Ministerial or
+   * Blanket OIC application after the details lock, while every permit it is on is Active or
+   * Payment pending.
+   */
   public record ApplicationEditPolicy(
       boolean canEditApplicationDetails,
       boolean canEditPackages,
@@ -265,7 +374,33 @@ public class ApplicationEditPolicyService {
       boolean canUpdatePackageNumber,
       boolean industryUser,
       boolean readOnly,
-      boolean exemptionApprover) {
+      boolean exemptionApprover,
+      boolean canDeletePackages,
+      boolean canDeleteScales,
+      boolean canChangeAgent) {
+
+    public ApplicationEditPolicy(
+        boolean canEditApplicationDetails,
+        boolean canEditPackages,
+        boolean canAddPackages,
+        boolean canAddScales,
+        boolean canUpdatePackageNumber,
+        boolean industryUser,
+        boolean readOnly,
+        boolean exemptionApprover) {
+      this(
+          canEditApplicationDetails,
+          canEditPackages,
+          canAddPackages,
+          canAddScales,
+          canUpdatePackageNumber,
+          industryUser,
+          readOnly,
+          exemptionApprover,
+          canAddPackages,
+          canAddScales,
+          false);
+    }
 
     public static ApplicationEditPolicy denied(
         boolean industryUser, boolean readOnly, boolean exemptionApprover) {
@@ -277,11 +412,20 @@ public class ApplicationEditPolicyService {
           false,
           industryUser,
           readOnly,
-          exemptionApprover);
+          exemptionApprover,
+          false,
+          false,
+          false);
     }
 
     public boolean anyEditable() {
-      return canEditApplicationDetails || canEditPackages || canAddPackages || canAddScales;
+      return canEditApplicationDetails
+          || canEditPackages
+          || canAddPackages
+          || canAddScales
+          || canDeletePackages
+          || canDeleteScales
+          || canChangeAgent;
     }
 
     public ApplicationEditPolicy withoutEdits() {

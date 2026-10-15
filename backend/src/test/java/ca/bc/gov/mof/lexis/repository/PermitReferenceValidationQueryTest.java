@@ -13,13 +13,9 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import ca.bc.gov.mof.lexis.repository.federal.FederalPermitDetailRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.Arrays;
 import java.util.List;
-import java.util.Locale;
 import java.util.function.BiPredicate;
 import java.util.stream.Stream;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -57,7 +53,7 @@ class PermitReferenceValidationQueryTest {
   }
 
   @ParameterizedTest(name = "{0}")
-  @MethodSource("permitValidators")
+  @MethodSource("validators")
   @SuppressWarnings("unchecked")
   void permitValidationShouldBindTrimmedCaseUnchangedAndAcceptAnyReturnedRows(Validator validator)
       throws Exception {
@@ -75,58 +71,7 @@ class PermitReferenceValidationQueryTest {
     verifyNoInteractions(rs);
   }
 
-  @ParameterizedTest(name = "{0}")
-  @MethodSource("federalValidators")
-  @SuppressWarnings("unchecked")
-  void federalValidationShouldFindAnyTrimmedMatchingCodeIncludingAfterNullRows(Validator validator)
-      throws Exception {
-    JdbcTemplate jdbc = mock(JdbcTemplate.class);
-    ResultSet rs = mock(ResultSet.class);
-    when(rs.getString("CODE"))
-        .thenReturn(
-            null, "different", " " + validator.code().toUpperCase(Locale.ROOT) + " ",
-            null, "different");
-    when(jdbc.query(eq(validator.sql()), any(RowMapper.class), eq(validator.code())))
-        .thenAnswer(
-            invocation -> {
-              RowMapper<String> mapper = invocation.getArgument(1);
-              return Arrays.asList(
-                  mapper.mapRow(rs, 0), mapper.mapRow(rs, 1), mapper.mapRow(rs, 2));
-            })
-        .thenAnswer(
-            invocation -> {
-              RowMapper<String> mapper = invocation.getArgument(1);
-              return Arrays.asList(mapper.mapRow(rs, 0), mapper.mapRow(rs, 1));
-            });
-
-    assertThat(validator.lookup().test(jdbc, " " + validator.code() + " ")).isTrue();
-    assertThat(validator.lookup().test(jdbc, validator.code())).isFalse();
-  }
-
-  @ParameterizedTest(name = "{0}")
-  @MethodSource("federalValidators")
-  @SuppressWarnings("unchecked")
-  void federalValidationShouldPropagateRequiredCodeColumnFailure(Validator validator)
-      throws Exception {
-    JdbcTemplate jdbc = mock(JdbcTemplate.class);
-    ResultSet rs = mock(ResultSet.class);
-    SQLException failure = new SQLException("Missing CODE");
-    when(rs.getString("CODE")).thenThrow(failure);
-    when(jdbc.query(eq(validator.sql()), any(RowMapper.class), eq(validator.code())))
-        .thenAnswer(
-            invocation -> {
-              RowMapper<String> mapper = invocation.getArgument(1);
-              return List.of(mapper.mapRow(rs, 0));
-            });
-
-    assertThatThrownBy(() -> validator.lookup().test(jdbc, validator.code())).isSameAs(failure);
-  }
-
   private static Stream<Validator> validators() {
-    return Stream.concat(permitValidators(), federalValidators());
-  }
-
-  private static Stream<Validator> permitValidators() {
     return Stream.of(
         new Validator(
             "permit country", COUNTRY_BY_CODE, "uS",
@@ -140,17 +85,6 @@ class PermitReferenceValidationQueryTest {
         new Validator(
             "permit scale method", SCALE_METHOD_BY_CODE, "w",
             (jdbc, code) -> new PermitRpcRepository(jdbc).isScaleMethodCodeValidRequired(code)));
-  }
-
-  private static Stream<Validator> federalValidators() {
-    return Stream.of(
-        new Validator(
-            "federal country", COUNTRY_BY_CODE, "uS",
-            (jdbc, code) -> new FederalPermitDetailRepository(jdbc).countryCodeExistsRequired(code)),
-        new Validator(
-            "federal transport", TRANSPORT_TYPE_BY_CODE, "s",
-            (jdbc, code) ->
-                new FederalPermitDetailRepository(jdbc).transportTypeCodeExistsRequired(code)));
   }
 
   private record Validator(

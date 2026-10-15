@@ -18,7 +18,6 @@ import ca.bc.gov.mof.lexis.repository.review.ApplicationReviewRepository;
 import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientResolver;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalMutationResult;
-import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalStatusMutationRequest;
 import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
 import java.util.List;
 import java.util.Locale;
@@ -137,7 +136,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Application jurisdiction could not be verified.");
     }
     if (FEDERAL_JURISDICTION.equals(jurisdiction.get())) {
-      return updateFederalStatus(applicationNumber, "APP", null, null, updateUserId);
+      return approveFederal(applicationNumber, updateUserId);
     }
     if (!PROVINCIAL_JURISDICTION.equals(jurisdiction.get())) {
       return statusUpdateResult(
@@ -371,17 +370,10 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
         .map(value -> value.toUpperCase(Locale.ROOT));
   }
 
-  private ApplicationReviewStatusUpdateResultDto updateFederalStatus(
-      Long applicationNumber,
-      String statusCode,
-      String remark,
-      String clientEmail,
-      String updateUserId) {
+  private ApplicationReviewStatusUpdateResultDto approveFederal(
+      Long applicationNumber, String updateUserId) {
     FederalMutationResult result =
-        federalApplicationService.updateStatus(
-            applicationNumber,
-            new FederalStatusMutationRequest(statusCode, remark),
-            defaultMutationUser(updateUserId));
+        federalApplicationService.approve(applicationNumber, defaultMutationUser(updateUserId));
     String message = result.message();
     if (!result.success() && (message == null || message.isBlank())) {
       message = String.join(" ", safeList(result.errors()));
@@ -393,13 +385,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
               : "Federal application status could not be updated.";
     }
     return statusUpdateResult(
-        result.success(),
-        result.success(),
-        statusCode,
-        clientEmail,
-        remark,
-        null,
-        message);
+        result.success(), result.success(), "APP", null, null, null, message);
   }
 
   private ApplicationReviewStatusUpdateResultDto statusUpdateResult(

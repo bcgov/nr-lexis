@@ -388,6 +388,8 @@ const addApplicationFailureMessage = (
       return `Adding application ${applicationNumber} could not be confirmed. Check the Applications list before trying again.`
     case 'other': {
       const reason = sanitizeNotificationText(normalizeServerMessage(serverMessage), '')
+      // A server message that already names the application is shown as it is.
+      if (/^Application \S+ can't be added\./.test(reason)) return reason
       if (reason) return `Application ${applicationNumber} can't be added. ${reason}`
     }
   }
@@ -1224,9 +1226,9 @@ const ProvincialExemptionDetailsPage = () => {
       : ''
   const cancelledBlanketOic = persistedTypeCode === 'B' && persistedStatusCode === 'CAN'
   const cancelledExemption = persistedStatusCode === 'CAN'
-  // Only a cancelled Ministerial exemption can be reopened; OIC and Blanket OIC stay cancelled.
-  const cancelledOrderInCouncil =
-    cancelledExemption && (persistedTypeCode === 'O' || persistedTypeCode === 'B')
+  // A cancelled Ministerial exemption can be reopened to New or set back to Active, and a
+  // cancelled OIC exemption set back to Active; a cancelled Blanket OIC exemption stays read-only.
+  const reactivatesCancelledOic = cancelledExemption && persistedTypeCode === 'O'
   const approvalDateRequired =
     !cancelledExemption && (currentTypeCode === 'O' || currentTypeCode === 'B')
   const expiryDateRequired = !cancelledExemption
@@ -1236,12 +1238,14 @@ const ProvincialExemptionDetailsPage = () => {
     canEditSummaryFields &&
     currentTypeCode === 'O' &&
     editForm?.exemptionNumber.trim() !== currentDetail?.exemptionNumber
-  const canEditStatus = editingSection === 'summary' && canSaveExemption && !cancelledOrderInCouncil
+  const canEditStatus = editingSection === 'summary' && canSaveExemption && !cancelledBlanketOic
   const canEditExemptionType =
     optionsAvailability === 'available' &&
     exemptionTypeOptions.length > 0 &&
     persistedTypeCode !== 'B' &&
-    persistedTypeCode !== 'O'
+    persistedTypeCode !== 'O' &&
+    // Saving a cancelled exemption changes only its status.
+    !cancelledExemption
   const canEditApprovalDate =
     canEditSummaryFields &&
     (currentTypeCode === 'O' ||
@@ -1251,7 +1255,7 @@ const ProvincialExemptionDetailsPage = () => {
     (currentTypeCode === 'B'
       ? ['NEW', 'ACT'].includes(persistedStatusCode)
       : persistedStatusCode === 'NEW')
-  const canEditApprovedVolume = canEditSummaryFields && persistedStatusCode !== 'ACT'
+  const canEditApprovedVolume = canEditSummaryFields
   const showApplications = currentTypeCode !== 'B'
   // Legacy exemption details omit client tabs for OIC and Blanket OIC records.
   const showClientTabs = currentTypeCode !== 'O' && currentTypeCode !== 'B'
@@ -1328,8 +1332,9 @@ const ProvincialExemptionDetailsPage = () => {
   const editableStatusOptions = useMemo(
     () =>
       exemptionStatusOptions.filter((option) => {
-        if (persistedStatusCode === 'CAN' && option.value !== 'CAN' && option.value !== 'NEW') {
-          return false
+        if (reactivatesCancelledOic) return option.value === 'CAN' || option.value === 'ACT'
+        if (persistedStatusCode === 'CAN') {
+          return option.value === 'CAN' || option.value === 'NEW' || option.value === 'ACT'
         }
         if (option.value === 'EXP' && persistedStatusCode !== 'EXP') return false
         if (option.value === 'ACT' && persistedStatusCode !== 'ACT') return false
@@ -1338,13 +1343,34 @@ const ProvincialExemptionDetailsPage = () => {
         }
         return true
       }),
-    [currentTypeCode, exemptionStatusOptions, persistedStatusCode],
+    [currentTypeCode, exemptionStatusOptions, persistedStatusCode, reactivatesCancelledOic],
   )
   const requiredExemptionOptionsMissing =
     optionsAvailability === 'available' &&
     (exemptionTypeOptions.length === 0 ||
       exemptionStatusOptions.length === 0 ||
       (currentTypeCode === 'B' && regionOptions.length === 0))
+  // OIC exemptions are never New, so a saved New Ministerial exemption switched to OIC is saved
+  // Active or Cancelled. Switching it back to Ministerial returns it to New.
+  const newMinisterialSwitchedToOic =
+    persistedTypeCode === 'M' && persistedStatusCode === 'NEW' && currentTypeCode === 'O'
+  const statusSelectOptions = useMemo(
+    () =>
+      newMinisterialSwitchedToOic
+        ? exemptionStatusOptions.filter(
+            (option) => option.value === 'ACT' || option.value === 'CAN',
+          )
+        : editableStatusOptions,
+    [editableStatusOptions, exemptionStatusOptions, newMinisterialSwitchedToOic],
+  )
+  const statusAfterTypeChange = (typeCode: string, statusCode: string) => {
+    if (persistedTypeCode !== 'M' || persistedStatusCode !== 'NEW') return statusCode
+    const switchedToOic = typeCode.trim().toUpperCase() === 'O'
+    const status = statusCode.trim().toUpperCase()
+    if (switchedToOic && status === 'NEW') return 'ACT'
+    if (!switchedToOic && status === 'ACT') return 'NEW'
+    return statusCode
+  }
 
   // Each section saves only its own fields, so only those fields can block its Save.
   const sectionFieldErrors = useMemo((): FieldErrors<ExemptionEditField> => {
@@ -1359,10 +1385,16 @@ const ProvincialExemptionDetailsPage = () => {
     if (!exemptionStatusOptions.some((option) => option.value === editForm.exemptionStatusCode)) {
       errors.exemptionStatusCode = 'Select a valid exemption status.'
     } else if (
-      persistedStatusCode === 'CAN' &&
-      editForm.exemptionStatusCode.trim().toUpperCase() !== 'NEW'
+      reactivatesCancelledOic &&
+      editForm.exemptionStatusCode.trim().toUpperCase() !== 'ACT'
     ) {
-      errors.exemptionStatusCode = 'Select New to reopen this cancelled exemption.'
+      errors.exemptionStatusCode = 'Select Active to reactivate this cancelled exemption.'
+    } else if (
+      persistedStatusCode === 'CAN' &&
+      !reactivatesCancelledOic &&
+      !['NEW', 'ACT'].includes(editForm.exemptionStatusCode.trim().toUpperCase())
+    ) {
+      errors.exemptionStatusCode = 'Select New or Active to reopen this cancelled exemption.'
     }
     // Legacy reopening changes only status; the backend preserves the locked summary fields.
     if (persistedStatusCode === 'CAN') return errors
@@ -1427,6 +1459,7 @@ const ProvincialExemptionDetailsPage = () => {
     exemptionStatusOptions,
     exemptionTypeOptions,
     persistedStatusCode,
+    reactivatesCancelledOic,
     regionOptions,
   ])
   // Problems no field can fix stop a Save before its fields are checked.
@@ -2369,7 +2402,7 @@ const ProvincialExemptionDetailsPage = () => {
                                     labelText={requiredLabel('Status')}
                                     required
                                     value={editForm.exemptionStatusCode}
-                                    options={editableStatusOptions}
+                                    options={statusSelectOptions}
                                     disabled={
                                       optionsAvailability !== 'available' ||
                                       exemptionStatusOptions.length === 0 ||
@@ -2401,7 +2434,14 @@ const ProvincialExemptionDetailsPage = () => {
                                       onChange={(value) =>
                                         setEditForm((current) =>
                                           current
-                                            ? { ...current, exemptionTypeCode: value }
+                                            ? {
+                                                ...current,
+                                                exemptionTypeCode: value,
+                                                exemptionStatusCode: statusAfterTypeChange(
+                                                  value,
+                                                  current.exemptionStatusCode,
+                                                ),
+                                              }
                                             : current,
                                         )
                                       }
@@ -2591,7 +2631,7 @@ const ProvincialExemptionDetailsPage = () => {
                         <Tile className="detail-section-card exemption-summary-card">
                           <div className="detail-section-card__header">
                             <DetailCardTitle icon={Rule}>Exemption details</DetailCardTitle>
-                            {canSaveExemption && !editing && !cancelledOrderInCouncil && (
+                            {canSaveExemption && !editing && !cancelledBlanketOic && (
                               <Button
                                 ref={sections.editButtonRef('summary')}
                                 kind="tertiary"
@@ -2874,7 +2914,7 @@ const ProvincialExemptionDetailsPage = () => {
                                         {canManageApplicationLinks && (
                                           <TableCell>
                                             <div className="legacy-search-actions">
-                                              {canLinkApplications && (
+                                              {canLinkApplications && application.removable && (
                                                 <DisabledButtonTooltip
                                                   disabled={
                                                     application.locked ||

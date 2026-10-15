@@ -282,8 +282,8 @@ class ApplicationReviewControllerTest {
     controller.setApplicationEditPolicyService(editPolicyService);
     when(applicationDetailsService.getApplicationEditContext(1000456L))
         .thenReturn(Optional.of(approvedEditContext()));
-    when(editPolicyService.resolve(any(), eq(applicationDetailsService), eq(1000456L)))
-        .thenReturn(ApplicationEditPolicyService.ApplicationEditPolicy.denied(false, false, false));
+    when(editPolicyService.approvedReviewWindowOpen(applicationDetailsService, 1000456L))
+        .thenReturn(false);
     MockHttpServletRequest request = new MockHttpServletRequest();
     request.setUserPrincipal(() -> "idir\\jsmith");
     ApplicationReviewStatusUpdateRequestDto body =
@@ -303,10 +303,8 @@ class ApplicationReviewControllerTest {
     controller.setApplicationEditPolicyService(editPolicyService);
     when(applicationDetailsService.getApplicationEditContext(1000456L))
         .thenReturn(Optional.of(approvedEditContext()));
-    when(editPolicyService.resolve(any(), eq(applicationDetailsService), eq(1000456L)))
-        .thenReturn(
-            new ApplicationEditPolicyService.ApplicationEditPolicy(
-                true, true, true, true, false, false, false, false));
+    when(editPolicyService.approvedReviewWindowOpen(applicationDetailsService, 1000456L))
+        .thenReturn(true);
     MockHttpServletRequest request = new MockHttpServletRequest();
     request.setUserPrincipal(() -> "idir\\jsmith");
     ApplicationReviewStatusUpdateRequestDto body =
@@ -315,6 +313,30 @@ class ApplicationReviewControllerTest {
     controller.updateStatus(1000456L, body, request);
 
     verify(service).updateStatus(1000456L, body, "idir\\jsmith");
+  }
+
+  @Test
+  void legacyDisapproveShouldRejectAnApprovedApplicationOutsideItsReviewWindow() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    ApplicationEditPolicyService editPolicyService = mock(ApplicationEditPolicyService.class);
+    controller.setApplicationEditPolicyService(editPolicyService);
+    when(applicationDetailsService.getApplicationEditContext(1000456L))
+        .thenReturn(Optional.of(approvedEditContext()));
+    when(editPolicyService.approvedReviewWindowOpen(applicationDetailsService, 1000456L))
+        .thenReturn(false);
+    MockHttpServletRequest request = new MockHttpServletRequest();
+    request.setUserPrincipal(() -> "idir\\jsmith");
+    org.springframework.util.LinkedMultiValueMap<String, String> parameters =
+        new org.springframework.util.LinkedMultiValueMap<>();
+    parameters.add("applicationNumber", "1000456");
+    parameters.add("applicationReviewStatus", "WDN");
+    parameters.add("remarkBody", "Client request");
+
+    assertThatThrownBy(() -> controller.disapproveLegacy(parameters, request))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage(
+            "An approved application's status can only change within six days of its list date.");
+    verify(service, never()).updateStatus(any(), any(), any());
   }
 
   private ApplicationDetailsRpcService.ApplicationEditContext approvedEditContext() {

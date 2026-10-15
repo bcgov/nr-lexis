@@ -301,9 +301,7 @@ public class ExemptionActivationEligibilityValidator {
       if (state.requestedVolume() == null || state.requestedVolume() <= 0.0d) {
         errors.add("Application " + applicationNumber + " must have a valid requested volume.");
       } else {
-        totalRequestedVolume =
-            totalRequestedVolume.add(
-                BigDecimal.valueOf(state.requestedVolume()).setScale(1, RoundingMode.HALF_UP));
+        totalRequestedVolume = totalRequestedVolume.add(oneDecimalVolume(state.requestedVolume()));
       }
 
       validateApplicationPermits(
@@ -315,9 +313,7 @@ public class ExemptionActivationEligibilityValidator {
 
     if (!oicLike
         && approvedVolume != null
-        && totalRequestedVolume.compareTo(
-                BigDecimal.valueOf(approvedVolume).setScale(1, RoundingMode.HALF_UP))
-            > 0) {
+        && totalRequestedVolume.compareTo(oneDecimalVolume(approvedVolume)) > 0) {
       errors.add(
           "The approved volume must be greater than or equal to the total requested volume ("
               + totalRequestedVolume.toPlainString()
@@ -358,6 +354,14 @@ public class ExemptionActivationEligibilityValidator {
     if (BigDecimal.valueOf(approvedVolume).stripTrailingZeros().scale() > 2) {
       errors.add("The approved volume must have no more than two decimal places.");
     }
+  }
+
+  /**
+   * A requested or approved volume rounded to one decimal place. The total requested volume is the
+   * sum of each application's rounded volume, compared with the rounded approved volume.
+   */
+  static BigDecimal oneDecimalVolume(double volume) {
+    return BigDecimal.valueOf(volume).setScale(1, RoundingMode.HALF_UP);
   }
 
   private boolean isOicLike(String exemptionTypeCode) {

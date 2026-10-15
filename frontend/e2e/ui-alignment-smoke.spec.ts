@@ -177,21 +177,15 @@ const federalApplicationDetail = {
   federalPermit: null,
 }
 
-const federalApplicationDocumentRows = [
+const applicationDocumentRows = [
   {
-    id: 'federal-document-1',
+    id: 'application-document-1',
     name: 'inspection-file.pdf',
     description: 'Synthetic document',
     type: 'Inspection Files',
     deletable: true,
   },
 ]
-
-const shippingReferenceOptions = {
-  countries: [{ code: 'US', name: 'United States' }],
-  transportTypes: [{ code: 'T', name: 'Truck' }],
-  ports: [{ code: 'VA', name: 'Vancouver' }],
-}
 
 const reportOptions = {
   currentSchedules: [{ code: '2026-07-01', name: 'July 1, 2026' }],
@@ -288,10 +282,7 @@ const installSyntheticLexisApi = async (page: Page) => {
         body = []
         break
       case '/api/lexis/rpc/application-details/document-details':
-        body = federalApplicationDocumentRows
-        break
-      case '/api/lexis/shipping-reference-options':
-        body = shippingReferenceOptions
+        body = applicationDocumentRows
         break
       case '/api/lexis/reports/options':
         body = reportOptions
@@ -1366,10 +1357,10 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(applicationNumber).toHaveValue('9999999999')
     await expect(to).toHaveValue('2026-10-12')
     await search.click()
-    const noResultCounts = page.getByText('0 applications found', { exact: true })
-    await expect(noResultCounts).toHaveCount(2)
-    await expect(noResultCounts.first()).toBeVisible()
+    // No results show only the empty state, without counts or pagination.
     await expect(page.getByRole('heading', { name: 'No results found', exact: true })).toBeVisible()
+    await expect(page.locator('.legacy-search-result-count--footer')).toHaveCount(0)
+    await expect(page.locator('.cds--pagination')).toHaveCount(0)
     await expect(
       page.getByText(
         'No records match your search criteria. Try adjusting your filters and searching again.',
@@ -2565,15 +2556,56 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
 
   test('left-aligns table row actions with their actions heading', async ({ page }) => {
     await page.setViewportSize({ width: 1440, height: 900 })
-    await gotoSyntheticRoute(page, '/federal/application/888', {
-      waitUntil: 'domcontentloaded',
-      ready: page.getByRole('heading', {
-        level: 1,
-        name: 'Federal application FED-888',
-        exact: true,
-      }),
+    const application = {
+      applicationNumber: 321,
+      applicationStatusCode: 'APP',
+      statusDescription: 'Approved',
+      ownerClientNumber: null,
+      agentClientNumber: null,
+      orgUnitNumber: 1903,
+      orgUnitName: 'Coast',
+      productTypeCode: 'H',
+      applicationDate: '2026-09-09',
+      receivedDate: '2026-09-09',
+      listingDate: '2999-12-31',
+      termDays: 30,
+      applicationVolume: 0,
+      averageLogVolume: 0,
+      canCreateOffers: false,
+      industryUser: false,
+      readOnly: false,
+      canEditApplicationDetails: true,
+      locked: false,
+      packages: [],
+      remarks: [],
+      offers: [],
+    }
+    // The application record reads its other lookups as empty lists.
+    await page.route('**/api/lexis/**', async (route) => {
+      const pathname = new URL(route.request().url()).pathname
+      if (
+        pathname.startsWith('/api/lexis/session/') ||
+        pathname === '/api/lexis/applications/search/options' ||
+        pathname === '/api/lexis/rpc/application-details/document-details'
+      ) {
+        await route.fallback()
+        return
+      }
+      await route.fulfill({
+        headers: { 'X-Lexis-Record-Version': 'v1' },
+        json:
+          pathname === '/api/lexis/applications/321'
+            ? application
+            : pathname === '/api/lexis/rpc/application-details/application-summary'
+              ? { ...application, applicationNumber: '321', jurisdictionCode: 'P' }
+              : [],
+      })
     })
-    await page.getByRole('tab', { name: 'Documents' }).click()
+    await gotoSyntheticRoute(page, '/provincial/application/321', {
+      waitUntil: 'domcontentloaded',
+      ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
+    })
+    await page.getByRole('tab', { name: 'Documents', exact: true }).click()
 
     const documentsTable = page.getByRole('region', { name: 'Application document rows' })
     const rowActions = documentsTable.locator('.legacy-search-actions')

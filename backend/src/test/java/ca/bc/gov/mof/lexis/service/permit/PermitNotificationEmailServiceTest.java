@@ -35,6 +35,22 @@ class PermitNotificationEmailServiceTest {
   }
 
   @Test
+  void shouldListTheRegionalReviewMailboxWithoutSending() {
+    EmailNotificationService notificationService =
+        org.mockito.Mockito.mock(EmailNotificationService.class);
+    PermitNotificationEmailService service =
+        new PermitNotificationEmailService(
+            notificationService,
+            new RegionalMailRecipientResolver("review.office@gov.bc.ca", "", ""),
+            false,
+            "");
+
+    assertThat(service.requestRecipients(1835L)).containsExactly("review.office@gov.bc.ca");
+    assertThat(service.requestRecipients(null)).isEmpty();
+    org.mockito.Mockito.verifyNoInteractions(notificationService);
+  }
+
+  @Test
   void shouldPlaceTheOptionalPermitReviewRecipientSecondInToRatherThanCc() {
     EmailNotificationService notificationService =
         org.mockito.Mockito.mock(EmailNotificationService.class);

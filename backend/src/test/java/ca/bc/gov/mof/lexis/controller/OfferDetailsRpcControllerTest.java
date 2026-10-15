@@ -42,6 +42,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
@@ -374,7 +375,7 @@ class OfferDetailsRpcControllerTest {
     assertThat(request.packageNumber()).isEqualTo(" PKG-903 ");
     assertThat(request.purchaseOfferDate()).isEqualTo(LocalDate.of(2026, 3, 2));
     assertThat(request.offerWithdrawalDate()).isEqualTo(LocalDate.of(2026, 3, 18));
-    assertThat(request.offeringClientNumber()).isEqualTo("00077881");
+    assertThat(request.offeringClientNumber()).isNull();
     assertThat(request.offerVolume()).isEqualTo(99.99d);
     assertThat(request.fairOfferIndicator()).isEqualTo("N");
     assertThat(request.validOfferIndicator()).isEqualTo("Y");
@@ -441,7 +442,7 @@ class OfferDetailsRpcControllerTest {
   }
 
   @Test
-  void addOfferLegacyShouldAuthorizeParentApplicationAndOfferingClient() {
+  void addOfferLegacyShouldAuthorizeParentApplicationAndIgnoreAStaffOfferingClient() {
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
     when(authentication.getName()).thenReturn("idir\\approver");
@@ -450,8 +451,7 @@ class OfferDetailsRpcControllerTest {
     when(authorizationService.canPerformAction(
             List.of("LEXIS_APPLICATION_APPROVER"), "createOffer"))
         .thenReturn(true);
-    when(provincialAuthorizationService.canCreateForClient(
-            authentication, "00077881", null))
+    when(provincialAuthorizationService.canCreateForClient(authentication, null, null))
         .thenReturn(true);
     when(purchaseOfferService.addOffer(
             org.mockito.ArgumentMatchers.any(),
@@ -462,7 +462,9 @@ class OfferDetailsRpcControllerTest {
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("applicationNumber", "1000456");
     params.add("clientNumber", "00077881");
+    params.add("offeringClientNumber", "00077881");
     params.add("offerRemark", "Approver review note");
+    params.add("teacReviewDate", "2026-04-02");
 
     ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
         controller.addOfferLegacy(params, authentication);
@@ -470,17 +472,18 @@ class OfferDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     verify(provincialAuthorizationService)
         .requireApplication(authentication, 1000456L);
-    verify(provincialAuthorizationService)
-        .canCreateForClient(authentication, "00077881", null);
+    verify(provincialAuthorizationService).canCreateForClient(authentication, null, null);
     ArgumentCaptor<PurchaseOfferService.CreateOfferRequest> requestCaptor =
         ArgumentCaptor.forClass(PurchaseOfferService.CreateOfferRequest.class);
     verify(purchaseOfferService)
         .addOffer(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\approver"));
+    assertThat(requestCaptor.getValue().offeringClientNumber()).isNull();
     assertThat(requestCaptor.getValue().offerRemark()).isEqualTo("Approver review note");
+    assertThat(requestCaptor.getValue().teacReviewDate()).isEqualTo(LocalDate.of(2026, 4, 2));
   }
 
   @Test
-  void addOfferLegacyShouldRejectOfferingClientOutsideCallerScope() {
+  void addOfferLegacyShouldFailClosedWhenTheOfferingClientCheckRefuses() {
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
     when(sessionService.parseRolesFromPrincipal(authentication))
@@ -488,8 +491,7 @@ class OfferDetailsRpcControllerTest {
     when(authorizationService.canPerformAction(
             List.of("LEXIS_APPLICATION_APPROVER"), "createOffer"))
         .thenReturn(true);
-    when(provincialAuthorizationService.canCreateForClient(
-            authentication, "00077881", null))
+    when(provincialAuthorizationService.canCreateForClient(authentication, null, null))
         .thenReturn(false);
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("applicationNumber", "1000456");
@@ -506,7 +508,7 @@ class OfferDetailsRpcControllerTest {
   }
 
   @Test
-  void addOfferLegacyShouldDeriveScopedBidderAndAllowAnOpenUnownedApplication() {
+  void addOfferLegacyShouldDeriveScopedBidderAndScheduleTeacDateOnAnOpenUnownedApplication() {
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
     when(authentication.getName()).thenReturn("bceid\\buyer");
@@ -544,6 +546,7 @@ class OfferDetailsRpcControllerTest {
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("applicationNumber", "1000456");
     params.add("clientNumber", "00099999");
+    params.add("teacReviewDate", "2027-01-15");
 
     ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
         controller.addOfferLegacy(params, authentication);
@@ -555,6 +558,7 @@ class OfferDetailsRpcControllerTest {
         .addOffer(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("bceid\\buyer"));
     assertThat(requestCaptor.getValue().offeringClientNumber()).isEqualTo("00077881");
     assertThat(requestCaptor.getValue().companyName()).isEqualTo("Authoritative Buyer Ltd.");
+    assertThat(requestCaptor.getValue().teacReviewDate()).isEqualTo(LocalDate.of(2026, 3, 5));
     verify(provincialAuthorizationService, never())
         .requireApplication(authentication, 1000456L);
   }
@@ -616,7 +620,7 @@ class OfferDetailsRpcControllerTest {
     params.add("applicationNumber", "1000456");
     params.add("offerNumber", "81001");
     params.add("purchaseOfferAmount", "13000.00");
-    params.add("purchaseOfferDate", "2026-03-03");
+    params.add("purchaseOfferDate", "03/02/2026");
     params.add("offerWithdrawalDate", "03/19/2026");
     params.add("withdrawReason", "Withdrawn by buyer");
     params.add("pickupLocation", "Port Moody");
@@ -752,7 +756,7 @@ class OfferDetailsRpcControllerTest {
   }
 
   @Test
-  void updateOfferLegacyShouldAllowAdminToManageApproverFields() {
+  void updateOfferLegacyShouldLetAdminManageApproverFieldsWhenSavedOfferFieldsAreUnchanged() {
     when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
     when(authentication.getName()).thenReturn("idir\\admin");
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_ADMIN"));
@@ -777,8 +781,11 @@ class OfferDetailsRpcControllerTest {
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("applicationNumber", "1000456");
     params.add("exportPurchaseOfferNumber", "81001");
+    params.add("packageNumber", "PKG-903");
+    params.add("companyName", "Original Buyer");
+    params.add("contactName", " Buyer Contact ");
     params.add("purchaseOfferAmount", "13000.00");
-    params.add("purchaseOfferDate", "2026-03-03");
+    params.add("purchaseOfferDate", "2026-03-02");
     params.add("teacReviewDate", "2026-04-02");
     params.add("fairOfferIndicator", "Y");
     params.add("validOfferIndicator", "N");
@@ -797,7 +804,12 @@ class OfferDetailsRpcControllerTest {
         .updateOfferSnapshot(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\admin"));
     PurchaseOfferService.UpdateOfferRequest request = requestCaptor.getValue();
     assertThat(request.purchaseOfferAmount()).isEqualTo(13000.00d);
-    assertThat(request.purchaseOfferDate()).isEqualTo(LocalDate.of(2026, 3, 3));
+    PurchaseOfferDetailDto saved = offerDetailForRestrictedUpdate();
+    assertThat(request.applicationNumber()).isEqualTo(saved.applicationNumber());
+    assertThat(request.packageNumber()).isEqualTo(saved.packageNumber());
+    assertThat(request.companyName()).isEqualTo(saved.companyName());
+    assertThat(request.contactName()).isEqualTo(saved.contactName());
+    assertThat(request.purchaseOfferDate()).isEqualTo(saved.purchaseOfferDate());
     assertThat(request.teacReviewDate()).isEqualTo(LocalDate.of(2026, 4, 2));
     assertThat(request.fairOfferIndicator()).isEqualTo("Y");
     assertThat(request.validOfferIndicator()).isEqualTo("N");
@@ -888,6 +900,90 @@ class OfferDetailsRpcControllerTest {
   }
 
   @Test
+  void updateOfferLegacyShouldRefuseChangedSavedOfferFields() {
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(List.of("LEXIS_ADMIN"));
+    when(authorizationService.canPerformAction(List.of("LEXIS_ADMIN"), "createOffer"))
+        .thenReturn(true);
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000999");
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("packageNumber", "PKG-999");
+    params.add("companyName", "Changed Buyer");
+    params.add("contactName", "");
+    params.add("purchaseOfferAmount", "13000.00");
+    params.add("purchaseOfferDate", "2026-03-03");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+    assertThat(response.getBody().isUpdate()).isTrue();
+    assertThat(response.getBody().errors())
+        .containsExactly(
+            "Application number cannot be changed after the offer is saved.",
+            "Package number cannot be changed after the offer is saved.",
+            "Company cannot be changed after the offer is saved.",
+            "Contact name cannot be changed after the offer is saved.",
+            "Offer received date cannot be changed after the offer is saved.");
+    verify(purchaseOfferService, never())
+        .updateOfferSnapshot(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void updateOfferLegacyShouldDenyAnOutOfScopeCallerBeforeReportingDateErrors() {
+    controller.setProvincialAuthorizationService(provincialAuthorizationService);
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_APPLICATION_APPROVER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_APPLICATION_APPROVER"), "createOffer"))
+        .thenReturn(true);
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
+    org.mockito.Mockito.doThrow(new AccessDeniedException("outside scope"))
+        .when(provincialAuthorizationService)
+        .requireApplication(authentication, 1000456L);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("purchaseOfferDate", "2026-02-31");
+
+    assertThatThrownBy(() -> controller.updateOfferLegacy(params, authentication))
+        .isInstanceOf(AccessDeniedException.class);
+    verify(purchaseOfferService, never())
+        .updateOfferSnapshot(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void updateOfferLegacyShouldForbidAnotherClientsOfferBeforeReportingDateErrors() {
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(true);
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/offerDetails"))
+        .thenReturn(true);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00099999");
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("purchaseOfferDate", "2026-02-31");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    assertThat(response.getBody()).isNull();
+  }
+
+  @Test
   void releaseLockShouldAuthorizeTheOfferAndReleaseOnlyForTheCurrentPrincipal() {
     controller.setProvincialAuthorizationService(provincialAuthorizationService);
     when(authentication.getName()).thenReturn("idir\\reviewer1");
@@ -933,7 +1029,7 @@ class OfferDetailsRpcControllerTest {
     MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
     params.add("exportPurchaseOfferNumber", "81001");
     params.add("purchaseOfferAmount", "13000.00");
-    params.add("purchaseOfferDate", "2026-04-01");
+    params.add("purchaseOfferDate", "2026-03-02");
     params.add("teacReviewDate", "2026-04-02");
     params.add("approvalIndicator", "Y");
     params.add("offerRemark", "Approver-only change");
@@ -1006,6 +1102,9 @@ class OfferDetailsRpcControllerTest {
     when(authorizationService.canPerformAction(
             List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
         .thenReturn(false);
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/offerDetails"))
+        .thenReturn(true);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
     when(purchaseOfferService.findByOfferNumber(81001L))
         .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));
@@ -1033,6 +1132,7 @@ class OfferDetailsRpcControllerTest {
     when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
     when(sessionService.parseRolesFromPrincipal(authentication)).thenReturn(roles);
     when(authorizationService.canPerformAction(roles, "createOffer")).thenReturn(true);
+    when(authorizationService.canPerformAction(roles, "/offerDetails")).thenReturn(true);
     when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
     when(purchaseOfferService.findByOfferNumber(81001L))
         .thenReturn(Optional.of(offerDetailForRestrictedUpdate()));

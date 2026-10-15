@@ -29,6 +29,10 @@ public class PermitNotificationEmailService {
     this.routeOnlyDeliveryAvailable = nonProduction && trimToNull(overrideRecipients) != null;
   }
 
+  public List<String> requestRecipients(Long orgUnitNumber) {
+    return regionalRecipientResolver.resolveGroup(orgUnitNumber).recipients();
+  }
+
   public boolean sendRequest(Long permitNumber, Long orgUnitNumber, String additionalRecipient) {
     RecipientGroup recipientGroup = regionalRecipientResolver.resolveGroup(orgUnitNumber);
     if (permitNumber == null

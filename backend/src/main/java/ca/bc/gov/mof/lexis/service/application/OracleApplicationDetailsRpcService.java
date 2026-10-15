@@ -5,6 +5,7 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.firstNonBlank;
 import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import static ca.bc.gov.mof.lexis.util.ValueUtils.parsePositiveLong;
 
+import ca.bc.gov.mof.lexis.dto.exemption.ExemptionDetailDto;
 import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.repository.application.DuplicatePackageNumberException;
 import ca.bc.gov.mof.lexis.repository.client.ClientLookupRepository;
@@ -44,6 +45,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String APPLICATION_STATUS_EXPIRED = "EXP";
   private static final String APPLICATION_DETAILS_LOCKED_MESSAGE =
       "Application details can only be edited while the application is new or approved.";
+  private static final String AGENT_CHANGE_ONLY_MESSAGE =
+      "Only the agent can be added or removed on this application.";
   private static final String APPLICANT_TYPE_OWNER = "O";
   private static final String APPLICANT_TYPE_MINISTERIAL = "M";
   private static final String APPLICANT_TYPE_AGENT = "A";
@@ -64,8 +67,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private static final String SPECIES_TYPE_CEDAR = "CE";
   private static final String EXPORT_SPECIES_ENDUSE_OTHER = "OT";
   private static final String SAVE_SUCCESS_MESSAGE = "The application was saved successfully.";
-  private static final Set<String> MUTATION_LOCKED_EXPORT_PERMIT_STATUSES =
-      Set.of("COM", "PPD", "EXP", "CAN");
+  private static final String EXPORT_PERMIT_STATUS_ACTIVE = "ACT";
+  private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
+  private static final String EXPORT_PERMIT_STATUS_PAYMENT_PENDING = "PPD";
   private static final String PACKAGE_EXISTS_MESSAGE_TEMPLATE = "Package %s already exists.";
   private static final String PACKAGE_PERMITTED_SCALE_MESSAGE =
       "Package changes are not allowed after a scale has been permitted.";
@@ -171,22 +175,20 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   @Override
-  public Optional<String> getRemark(Long remarkId) {
-    if (remarkId == null || remarkId < 1) {
-      return Optional.empty();
-    }
-    return repository.findRemarkByNumber(remarkId).map(ApplicationDetailsRpcRepository.RemarkRow::remark);
+  public Optional<String> getRemark(Long remarkId, Long applicationNumber) {
+    return repository
+        .findRemark(remarkId, applicationNumber)
+        .map(ApplicationDetailsRpcRepository.RemarkRow::remark);
   }
 
   @Override
-  public Optional<Long> findApplicationNumberForRemark(Long remarkId) {
-    if (remarkId == null || remarkId < 1) {
-      return Optional.empty();
-    }
-    return repository
-        .findRemarkByNumber(remarkId)
-        .map(ApplicationDetailsRpcRepository.RemarkRow::applicationNumber)
-        .filter(value -> value != null && value > 0);
+  public boolean remarkBelongsToApplication(Long remarkId, Long applicationNumber) {
+    return repository.findRemark(remarkId, applicationNumber).isPresent();
+  }
+
+  @Override
+  public boolean isRemarkNumberShared(Long remarkId) {
+    return repository.isRemarkNumberShared(remarkId);
   }
 
   @Override
@@ -246,7 +248,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       return Optional.empty();
     }
     Optional<PersistedRemark> persisted =
-        repository.findRemarkByNumberRequired(parsedRemarkId).map(this::toPersistedRemark);
+        repository
+            .findRemarkRequired(parsedRemarkId, applicationNumber)
+            .map(this::toPersistedRemark);
     if (persisted.isEmpty()) {
       markRollbackOnly();
     }
@@ -402,6 +406,24 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   @Transactional
   public CreateApplicationResult updateApplicationSummary(
       ApplicationSummaryUpdateRequest request, String userId) {
+    return updateApplicationSummary(request, userId, false);
+  }
+
+  @Override
+  @Transactional
+  public CreateApplicationResult updateApplicationAgent(
+      ApplicationSummaryUpdateRequest request, String userId) {
+    return updateApplicationSummary(request, userId, true);
+  }
+
+  private CreateApplicationResult updateApplicationSummary(
+      ApplicationSummaryUpdateRequest request, String userId, boolean agentChangeOnly) {
+    if (agentChangeOnly
+        && (request == null
+            || (request.saveSource() != ApplicationSummarySaveSource.OWNER
+                && request.saveSource() != ApplicationSummarySaveSource.OWNER_AGENT))) {
+      return agentChangeOnlyRefused(request == null ? null : request.applicationNumber());
+    }
     ApplicationSummaryUpdateRequest normalized = normalizeApplicationSummaryUpdateRequest(request);
     ApplicationSummaryUpdateRequest scoped = restrictToSaveSource(normalized);
     if (scoped.applicationNumber() == null || scoped.applicationNumber() < 1) {
@@ -427,7 +449,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
           List.of(SYSTEM_OIC_APPLICATION_MESSAGE),
           List.of());
     }
-    if (!isEditableApplicationDetailStatus(existing.get().applicationStatusCode())) {
+    if (!agentChangeOnly
+        && !isEditableApplicationDetailStatus(existing.get().applicationStatusCode())) {
       return new CreateApplicationResult(
           false,
           null,
@@ -446,7 +469,11 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
     ApplicationDetailsRpcRepository.ApplicationUpdateRecord updateRecord =
         toApplicationUpdateRecord(existing.get(), scoped, defaultMutationUser(userId));
-    List<String> errors = validateApplicationUpdate(existing.get(), updateRecord, scoped);
+    if (agentChangeOnly && !changesOnlyTheAgent(existing.get(), updateRecord)) {
+      return agentChangeOnlyRefused(scoped.applicationNumber());
+    }
+    List<String> errors =
+        validateApplicationUpdate(existing.get(), updateRecord, scoped, agentChangeOnly);
     if (!errors.isEmpty()) {
       return new CreateApplicationResult(
           false, null, scoped.applicationNumber(), errors, List.of());
@@ -568,8 +595,22 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         .map(ApplicationDetailsRpcRepository.ScaleMutationRow::exportPermitDetailNumber)
         .filter(value -> value != null)
         .forEach(referencedPermitNumbers::add);
+    Map<Long, Optional<String>> permitStatusByNumber = new LinkedHashMap<>();
+    referencedPermitNumbers.forEach(
+        permitNumber ->
+            permitStatusByNumber.put(
+                permitNumber,
+                permitNumber < 1
+                    ? Optional.empty()
+                    : repository.findPermitStatusCodeByPermitNumber(permitNumber)));
     boolean hasCompletePermit =
-        referencedPermitNumbers.stream().anyMatch(this::isMutationLockedOrUnknownPermit);
+        permitStatusByNumber.values().stream()
+            .anyMatch(status -> status.map(this::isMutationLockedPermitStatus).orElse(true));
+    boolean permitsAllowAgentChange =
+        !permitStatusByNumber.isEmpty()
+            && permitStatusByNumber.values().stream()
+                .allMatch(status -> status.map(this::allowsAgentChange).orElse(false));
+    Optional<ExemptionDetailDto> exemption = findApplicationExemption(application);
 
     return Optional.of(
         new ApplicationEditContext(
@@ -583,26 +624,43 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
             hasScaleBeforeApproval,
             hasCompletePermit,
             trimToNull(application.oicIndicator()),
-            isMinisterialItemOverrideEligible(application)));
+            isMinisterialItemOverrideEligible(exemption),
+            permitsAllowAgentChange && isMinisterialOrBlanketOicExemption(exemption)));
+  }
+
+  private Optional<ExemptionDetailDto> findApplicationExemption(
+      ApplicationDetailsRpcRepository.ApplicationEditContextRow application) {
+    String exemptionNumber = trimToNull(application.exemptionNumber());
+    if (exemptionNumber == null) {
+      return Optional.empty();
+    }
+    return exemptionService
+        .findByExemptionNumber(exemptionNumber)
+        .filter(exemption -> exemptionNumber.equals(trimToNull(exemption.exemptionNumber())));
+  }
+
+  // The agent changes only while every permit on the application is Active or Payment pending.
+  private boolean allowsAgentChange(String permitStatus) {
+    String normalized = trimToNull(permitStatus);
+    return EXPORT_PERMIT_STATUS_ACTIVE.equalsIgnoreCase(normalized)
+        || EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equalsIgnoreCase(normalized);
+  }
+
+  private boolean isMinisterialOrBlanketOicExemption(Optional<ExemptionDetailDto> exemption) {
+    return exemption
+        .map(ExemptionDetailDto::exemptionTypeCode)
+        .map(TextUtils::trimToNull)
+        .filter(type -> "M".equalsIgnoreCase(type) || "B".equalsIgnoreCase(type))
+        .isPresent();
   }
 
   // Legacy meant to exclude Coast and Skeena coastal-grade applications, but that check never
   // matched, so every region qualifies.
-  private boolean isMinisterialItemOverrideEligible(
-      ApplicationDetailsRpcRepository.ApplicationEditContextRow application) {
-    String exemptionNumber = trimToNull(application.exemptionNumber());
-    if (exemptionNumber == null) {
-      return false;
-    }
-
-    return exemptionService
-        .findByExemptionNumber(exemptionNumber)
-        .filter(exemption -> exemptionNumber.equals(trimToNull(exemption.exemptionNumber())))
-        .filter(exemption -> "M".equalsIgnoreCase(trimToNull(exemption.exemptionTypeCode())))
+  private boolean isMinisterialItemOverrideEligible(Optional<ExemptionDetailDto> exemption) {
+    return exemption
+        .filter(found -> "M".equalsIgnoreCase(trimToNull(found.exemptionTypeCode())))
         .filter(
-            exemption ->
-                Double.isFinite(exemption.remainingVolume())
-                    && exemption.remainingVolume() > 0.0d)
+            found -> Double.isFinite(found.remainingVolume()) && found.remainingVolume() > 0.0d)
         .isPresent();
   }
 
@@ -2438,20 +2496,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     return mutationLocked;
   }
 
-  private boolean isMutationLockedOrUnknownPermit(Long permitNumber) {
-    if (permitNumber < 1) {
-      return true;
-    }
-    return repository
-        .findPermitStatusCodeByPermitNumber(permitNumber)
-        .map(this::isMutationLockedPermitStatus)
-        .orElse(true);
-  }
-
   private boolean isMutationLockedPermitStatus(String status) {
     String normalized = trimToNull(status);
-    return normalized != null
-        && MUTATION_LOCKED_EXPORT_PERMIT_STATUSES.contains(normalized.toUpperCase(Locale.ROOT));
+    return EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(normalized);
   }
 
   private ApplicationScaleDetailItem missingScaleDetail() {
@@ -2823,7 +2870,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private List<String> validateApplicationUpdate(
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
-      ApplicationSummaryUpdateRequest request) {
+      ApplicationSummaryUpdateRequest request,
+      boolean agentChangeOnly) {
     return switch (request.saveSource()) {
       case FULL -> validateFullApplicationUpdate(record, request);
       case SUMMARY -> validateSummaryApplicationUpdate(existing, record, request);
@@ -2834,9 +2882,9 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         }
         yield errors;
       }
-      case OWNER -> validateOwnerApplicationUpdate(existing, record, request);
+      case OWNER -> validateOwnerApplicationUpdate(existing, record, request, agentChangeOnly);
       case AGENT -> validateAgentApplicationUpdate(record);
-      case OWNER_AGENT -> validateOwnerAgentApplicationUpdate(record);
+      case OWNER_AGENT -> validateOwnerAgentApplicationUpdate(record, agentChangeOnly);
       case ITEMS -> validateItemsApplicationUpdate(record, request);
     };
   }
@@ -2968,12 +3016,16 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   private List<String> validateOwnerApplicationUpdate(
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record,
-      ApplicationSummaryUpdateRequest request) {
-    List<String> errors = validateScopedApplicationFixedFields(record);
+      ApplicationSummaryUpdateRequest request,
+      boolean agentChangeOnly) {
+    List<String> errors = validateScopedApplicationFixedFields(record, agentChangeOnly);
     if (!errors.isEmpty()) {
       return errors;
     }
-    validateOwnerFields(record, errors);
+    // An agent-only change keeps the stored owner, so the owner isn't checked again.
+    if (!agentChangeOnly) {
+      validateOwnerFields(record, errors);
+    }
     if (request.applicantTypeCode() != null) {
       validateApplicantType(record.applicantTypeCode(), errors);
       if (APPLICANT_TYPE_AGENT.equals(record.applicantTypeCode())
@@ -2982,8 +3034,10 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       }
     }
     if (errors.isEmpty()) {
-      validateApplicationClientLocation(
-          "owner", record.ownerClientNumber(), record.ownerClientLocationCode(), errors);
+      if (!agentChangeOnly) {
+        validateApplicationClientLocation(
+            "owner", record.ownerClientNumber(), record.ownerClientLocationCode(), errors);
+      }
       if (request.applicantTypeCode() != null
           && !repository.isApplicantTypeCodeValidRequired(record.applicantTypeCode())) {
         errors.add("Application applicant type code does not exist.");
@@ -3011,8 +3065,8 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private List<String> validateOwnerAgentApplicationUpdate(
-      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
-    List<String> errors = validateScopedApplicationFixedFields(record);
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, boolean agentChangeOnly) {
+    List<String> errors = validateScopedApplicationFixedFields(record, agentChangeOnly);
     if (!errors.isEmpty()) {
       return errors;
     }
@@ -3020,12 +3074,17 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add("Combined owner and agent details can only be saved for an agent applicant.");
       return errors;
     }
-    validateOwnerFields(record, errors);
+    // An agent-only change keeps the stored owner, so the owner isn't checked again.
+    if (!agentChangeOnly) {
+      validateOwnerFields(record, errors);
+    }
     validateApplicantType(record.applicantTypeCode(), errors);
     validateAgentFields(record, errors);
     if (errors.isEmpty()) {
-      validateApplicationClientLocation(
-          "owner", record.ownerClientNumber(), record.ownerClientLocationCode(), errors);
+      if (!agentChangeOnly) {
+        validateApplicationClientLocation(
+            "owner", record.ownerClientNumber(), record.ownerClientLocationCode(), errors);
+      }
       if (!repository.isApplicantTypeCodeValidRequired(record.applicantTypeCode())) {
         errors.add("Application applicant type code does not exist.");
       }
@@ -3054,8 +3113,13 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
 
   private List<String> validateScopedApplicationFixedFields(
       ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
+    return validateScopedApplicationFixedFields(record, false);
+  }
+
+  private List<String> validateScopedApplicationFixedFields(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record, boolean agentChangeOnly) {
     List<String> errors = new ArrayList<>();
-    if (!isEditableApplicationDetailStatus(record.applicationStatusCode())) {
+    if (!agentChangeOnly && !isEditableApplicationDetailStatus(record.applicationStatusCode())) {
       errors.add(APPLICATION_DETAILS_LOCKED_MESSAGE);
     }
     if (!JURISDICTION_PROVINCIAL.equalsIgnoreCase(trimToNull(record.jurisdictionCode()))) {
@@ -3420,6 +3484,29 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (!matchesCandidate) {
       errors.add("The application species/enduse sort is not valid for the selected region.");
     }
+  }
+
+  private CreateApplicationResult agentChangeOnlyRefused(Long applicationNumber) {
+    return new CreateApplicationResult(
+        false, null, applicationNumber, List.of(AGENT_CHANGE_ONLY_MESSAGE), List.of());
+  }
+
+  /** The save adds or removes the agent and leaves the owner as stored. */
+  private boolean changesOnlyTheAgent(
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord existing,
+      ApplicationDetailsRpcRepository.ApplicationUpdateRecord record) {
+    boolean storedAgent =
+        APPLICANT_TYPE_AGENT.equalsIgnoreCase(trimToNull(existing.applicantTypeCode()));
+    boolean savedAgent =
+        APPLICANT_TYPE_AGENT.equalsIgnoreCase(trimToNull(record.applicantTypeCode()));
+    return storedAgent != savedAgent
+        && equalsNullable(
+            trimToNull(existing.ownerClientNumber()), trimToNull(record.ownerClientNumber()))
+        && equalsNullable(
+            trimToNull(existing.ownerClientLocationCode()),
+            trimToNull(record.ownerClientLocationCode()))
+        && equalsNullable(
+            trimToNull(existing.ownerContactName()), trimToNull(record.ownerContactName()));
   }
 
   private boolean isEditableApplicationDetailStatus(String applicationStatusCode) {

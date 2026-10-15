@@ -70,7 +70,6 @@ public class OracleLegacyPermitInvoiceOrchestrationService
     if (transition == null
         || transition.permitNumber() == null
         || transition.permitNumber() < 1
-        || !supportsCountry(transition.countryCode())
         || trimToNull(userId) == null) {
       return TransitionResult.failed("A valid permit transition and user are required.");
     }
@@ -84,59 +83,28 @@ public class OracleLegacyPermitInvoiceOrchestrationService
     if (!entering && !leaving) {
       return TransitionResult.failed("The permit transition does not require invoice processing.");
     }
+    if (entering && !supportsCountry(transition.countryCode())) {
+      return TransitionResult.failed("A valid permit transition and user are required.");
+    }
 
     String stage = "preflight";
     String gbmsInvoiceNumber = null;
     boolean gbmsWriteStarted = false;
     try {
       String oracleUserId = encode(userId);
-      if (CANADA.equalsIgnoreCase(trimToNull(transition.countryCode()))) {
-        List<PermitInvoiceRow> internalHistory =
-            entering
-                ? internalInvoices.prepareCreate(transition, false)
-                : internalInvoices.findHistory(transition.permitNumber());
-        gbmsHistory.validateActiveAlignment(
-            internalHistory, gbmsHistory.findRequired(transition));
-        if (entering) {
-          internalInvoices.create(transition, oracleUserId, null, false);
-        } else {
-          PermitInvoiceRow active =
-              internalInvoices.requireSingleActive(internalHistory, false);
-          internalInvoices.cancel(transition.permitNumber(), active, oracleUserId);
-        }
-        return TransitionResult.succeeded();
-      }
-
-      if (entering) {
-        List<PermitInvoiceRow> internalHistory = internalInvoices.prepareCreate(transition, true);
-        GbmsInvoiceSnapshot snapshot = validateGbmsSnapshot(transition);
-        List<GbmsInvoiceHistoryRow> history = gbmsHistory.findRequired(transition);
-        gbmsHistory.validateActiveAlignment(internalHistory, history);
-        GbmsInvoiceHistoryRow replacement = replacementCandidate(internalHistory, history);
-
-        stage = "gbms_create";
-        gbmsWriteStarted = true;
-        gbmsInvoiceNumber =
-            gbmsInvoices.createInvoice(transition.permitNumber(), snapshot, oracleUserId);
-        requireCreatedHistory(transition, gbmsInvoiceNumber);
-
-        stage = "internal_create";
-        internalInvoices.create(transition, oracleUserId, gbmsInvoiceNumber, true);
-
-        if (replacement != null) {
-          stage = "gbms_replacement";
-          gbmsInvoices.replaceInvoice(
-              gbmsInvoiceNumber, replacement.invoiceNumber(), oracleUserId);
-          requireReplacementHistory(transition, replacement.invoiceNumber(), gbmsInvoiceNumber);
-        }
-      } else {
+      if (leaving) {
+        // Reversal follows the active invoice's GBMS link, whatever the permit's current country.
         List<PermitInvoiceRow> internalHistory =
             internalInvoices.findHistory(transition.permitNumber());
-        PermitInvoiceRow active =
-            internalInvoices.requireSingleActive(internalHistory, true);
-        gbmsInvoiceNumber = active.gbmsInvoiceNumber();
+        PermitInvoiceRow active = internalInvoices.requireSingleActive(internalHistory);
+        gbmsInvoiceNumber = trimToNull(active.gbmsInvoiceNumber());
         List<GbmsInvoiceHistoryRow> history = gbmsHistory.findRequired(transition);
         gbmsHistory.validateActiveAlignment(internalHistory, history);
+        if (gbmsInvoiceNumber == null) {
+          stage = "internal_cancel";
+          internalInvoices.cancel(transition.permitNumber(), active, oracleUserId);
+          return TransitionResult.succeeded();
+        }
         GbmsInvoiceHistoryRow source = requireCancellableHistory(history, active);
 
         stage = "internal_cancel";
@@ -146,6 +114,37 @@ public class OracleLegacyPermitInvoiceOrchestrationService
         gbmsWriteStarted = true;
         gbmsInvoices.cancelInvoice(gbmsInvoiceNumber, oracleUserId);
         requireCancelledHistory(transition, source);
+        return TransitionResult.succeeded();
+      }
+
+      if (CANADA.equalsIgnoreCase(trimToNull(transition.countryCode()))) {
+        List<PermitInvoiceRow> internalHistory = internalInvoices.prepareCreate(transition, false);
+        gbmsHistory.validateActiveAlignment(
+            internalHistory, gbmsHistory.findRequired(transition));
+        internalInvoices.create(transition, oracleUserId, null, false);
+        return TransitionResult.succeeded();
+      }
+
+      List<PermitInvoiceRow> internalHistory = internalInvoices.prepareCreate(transition, true);
+      GbmsInvoiceSnapshot snapshot = validateGbmsSnapshot(transition);
+      List<GbmsInvoiceHistoryRow> history = gbmsHistory.findRequired(transition);
+      gbmsHistory.validateActiveAlignment(internalHistory, history);
+      GbmsInvoiceHistoryRow replacement = replacementCandidate(internalHistory, history);
+
+      stage = "gbms_create";
+      gbmsWriteStarted = true;
+      gbmsInvoiceNumber =
+          gbmsInvoices.createInvoice(transition.permitNumber(), snapshot, oracleUserId);
+      requireCreatedHistory(transition, gbmsInvoiceNumber);
+
+      stage = "internal_create";
+      internalInvoices.create(transition, oracleUserId, gbmsInvoiceNumber, true);
+
+      if (replacement != null) {
+        stage = "gbms_replacement";
+        gbmsInvoices.replaceInvoice(
+            gbmsInvoiceNumber, replacement.invoiceNumber(), oracleUserId);
+        requireReplacementHistory(transition, replacement.invoiceNumber(), gbmsInvoiceNumber);
       }
       return TransitionResult.succeeded();
     } catch (RuntimeException ex) {

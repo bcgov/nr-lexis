@@ -20,7 +20,10 @@ import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.interceptor.TransactionAspectSupport;
 
-/** Processes Canadian permit invoicing and rejects non-Canadian transitions. */
+/**
+ * Creates Canadian internal permit invoices only, and reverses only active invoices without a GBMS
+ * link.
+ */
 @Service
 @Profile("oracle")
 @ConditionalOnProperty(
@@ -59,10 +62,6 @@ public class OracleCanadianPermitInvoiceOrchestrationService
         || trimToNull(userId) == null) {
       return TransitionResult.failed("A valid permit transition and user are required.");
     }
-    if (!supportsCountry(transition.countryCode())) {
-      return TransitionResult.failed(
-          "Canadian internal invoicing cannot process a non-Canadian permit.");
-    }
 
     boolean entering =
         isOneOf(transition.previousStatusCode(), ACTIVE, CANCELLED)
@@ -72,6 +71,10 @@ public class OracleCanadianPermitInvoiceOrchestrationService
             && isOneOf(transition.targetStatusCode(), ACTIVE, CANCELLED);
     if (!entering && !leaving) {
       return TransitionResult.failed("The permit transition does not require invoice processing.");
+    }
+    if (entering && !supportsCountry(transition.countryCode())) {
+      return TransitionResult.failed(
+          "Canadian internal invoicing cannot process a non-Canadian permit.");
     }
 
     try {

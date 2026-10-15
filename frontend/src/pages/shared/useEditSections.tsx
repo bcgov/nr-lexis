@@ -75,6 +75,20 @@ const visibleEditButton = (buttons: ReadonlySet<HTMLElement> | undefined) =>
       !button.closest('[hidden], [inert], [aria-hidden="true"]'),
   )
 
+// When the section's Edit buttons are all on tabs the user has left, for example after Cancel on
+// another tab of the same section, the open tab takes focus instead.
+const openTabBesideHiddenEditButton = (buttons: ReadonlySet<HTMLElement> | undefined) => {
+  for (const button of buttons ?? []) {
+    const panel = button.isConnected ? button.closest('[role="tabpanel"][hidden]') : null
+    const tabId = panel?.getAttribute('aria-labelledby')
+    const openTab = (tabId ? document.getElementById(tabId) : null)
+      ?.closest('[role="tablist"]')
+      ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+    if (openTab && !openTab.closest('[hidden], [inert], [aria-hidden="true"]')) return openTab
+  }
+  return undefined
+}
+
 const registerElement = <S,>(
   elements: Map<S, Set<HTMLElement>>,
   section: S,
@@ -91,7 +105,8 @@ const registerElement = <S,>(
 
 /**
  * Page-level edit mode where only one section edits at a time. Entering edit mode focuses the
- * section's first field; Save or Cancel returns focus to its Edit button.
+ * section's first field; Save or Cancel returns focus to its Edit button, or to the open tab when
+ * that button is on another tab.
  */
 export const useEditSections = <S extends string>({
   isDirty,
@@ -136,7 +151,8 @@ export const useEditSections = <S extends string>({
       const containers = Array.from(sectionElementsRef.current.get(intent.section) ?? [])
       if (!containers.some((container) => focusFirstEditableField(container))) return false
     } else {
-      const editButton = visibleEditButton(editButtons)
+      const editButton =
+        visibleEditButton(editButtons) ?? openTabBesideHiddenEditButton(editButtons)
       if (!editButton) return false
       if (focusWasLost(undefined)) editButton.focus()
     }

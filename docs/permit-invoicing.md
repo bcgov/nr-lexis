@@ -28,7 +28,7 @@ the final GBMS invoice tables. LEXIS uses these procedures:
 | Mode | Behaviour |
 |---|---|
 | `legacy-best-effort` | Default mode. Processes Canadian internal invoices and preserves the successful legacy non-Canadian GBMS sequence with additional failure checks. |
-| `canadian-internal` | Rollback mode. Processes Canadian internal invoices and rejects non-Canadian invoice transitions before changing the permit. |
+| `canadian-internal` | Rollback mode. Creates Canadian internal invoices only. Cancelling or reactivating reverses an internal invoice without a GBMS link for any destination and refuses one linked to GBMS. |
 | `disabled` | Operational stop. Rejects every permit transition that requires invoice work. |
 
 Both active modes read GBMS history before Canadian invoice mutations so a prior non-Canadian
@@ -47,8 +47,10 @@ application changes in the surrounding transaction. It then performs the legacy 
 4. Link one eligible prior invoice as replaced when applicable.
 5. Commit the staged permit, invoice, and linked-application changes.
 
-Cancellation marks the internal invoice cancelled, asks GBMS to cancel or discard its invoice,
-and verifies that the original GBMS invoice is no longer active. `PPD` to `COM` receipt completion
+Cancellation and reactivation follow the active invoice's GBMS link, not the permit's current
+country. An invoice without a link is cancelled internally only. For a linked invoice, LEXIS marks
+the internal invoice cancelled, asks GBMS to cancel or discard its invoice, and verifies that the
+original GBMS invoice is no longer active. `PPD` to `COM` receipt completion
 does not create a second invoice.
 
 GBMS calls use a separate transaction and connection so commits performed inside its Oracle

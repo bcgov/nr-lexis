@@ -41,6 +41,7 @@ import {
   mockedFetchProvincialApplicationOptions,
   mockedUpdateApplicationPackage,
   mockedUpdateApplicationSummary,
+  mockApplicationDetailAuth,
   selectApplicationDetailTab,
   selectApplicationItemDetailsTile,
   selectApplicationItemsForEditing,
@@ -1096,6 +1097,53 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
     expect(mockedAddApplicationPackage).not.toHaveBeenCalled()
     expect(mockedAddApplicationScaleToPackage).not.toHaveBeenCalled()
+  })
+
+  it('lets an exemption approver change existing packages and scales the server allows', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action === '/applicationDetails',
+      ['LEXIS_EXEMPTION_APPROVER'],
+    )
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'PMT',
+      statusDescription: 'Permitted',
+      packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 0 }],
+      exemptionApprover: true,
+      canEditApplicationDetails: false,
+      canEditPackages: true,
+      canAddPackages: false,
+      canDeletePackages: true,
+      canAddScales: true,
+      canDeleteScales: true,
+      canUpdatePackageNumber: false,
+    })
+
+    renderApplicationItems()
+
+    await selectApplicationDetailTab('Scale')
+    expect(await screen.findByText('TM001')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit package' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add scale' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Create package' })).not.toBeInTheDocument()
+    const scaleRow = screen.getByText('TM001').closest('tr') as HTMLElement
+    expect(within(scaleRow).getByRole('button', { name: 'Delete' })).toBeEnabled()
+  })
+
+  it('adds scales without deleting them when the server allows only scale additions', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [{ packageNumber: 'PKG-1', volume: 100, pieceCount: 0 }],
+      canDeleteScales: false,
+    })
+
+    renderApplicationItems()
+
+    await selectApplicationDetailTab('Scale')
+    expect(await screen.findByText('TM001')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Add scale' })).toBeInTheDocument()
+    const scaleRow = screen.getByText('TM001').closest('tr') as HTMLElement
+    expect(within(scaleRow).getByRole('button', { name: 'Delete' })).toBeDisabled()
   })
 
   it.each([

@@ -19,11 +19,13 @@ import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.Set;
 import java.util.SortedSet;
 import java.util.TreeSet;
 import java.util.function.Predicate;
@@ -102,6 +104,13 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       Predicate<Long> applicationAccess) {
     List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> rows =
         repository.findApplicationSummariesByExemptionNumber(exemptionNumber);
+    String exemptionStatus =
+        rows.isEmpty()
+            ? null
+            : repository
+                .findExemptionRecord(trimToNull(exemptionNumber))
+                .map(ExemptionDetailsRpcRepository.ExemptionRecord::exemptionStatusCode)
+                .orElse(null);
 
     List<ApplicationItem> applications = new ArrayList<>();
     String previousOwnerClientNumber = null;
@@ -148,7 +157,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
               row.ownerContactName(),
               row.agentContactName(),
               row.ownerCompanyName(),
-              row.agentCompanyName()));
+              row.agentCompanyName(),
+              isRemovableFromExemption(exemptionStatus, row)));
     }
 
     String ownerNumber = blanketOic ? "Blanket OIC" : Optional.ofNullable(previousOwnerClientNumber).orElse("");
@@ -439,24 +449,39 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
 
     String currentStatus = normalizeCode(current.exemptionStatusCode());
     String requestedStatus = normalizeCode(normalized.exemptionStatusCode());
+    String currentType = normalizeCode(current.exemptionTypeCode());
+    // A cancelled Blanket OIC exemption is read-only, a cancelled OIC exemption can only be
+    // reactivated, and a cancelled Ministerial exemption can be reopened to New or reactivated.
     if (EXEMPTION_STATUS_CANCELLED.equalsIgnoreCase(current.exemptionStatusCode())) {
-      String currentType = normalizeCode(current.exemptionTypeCode());
-      if ("O".equals(currentType) || "B".equals(currentType)) {
+      if ("B".equals(currentType)) {
         return new CreateExemptionResult(
             false,
             null,
             current.exemptionNumber(),
             false,
-            List.of("Cancelled Order in Council exemptions are read-only."),
+            List.of("Cancelled Blanket OIC exemptions are read-only."),
             List.of());
       }
-      if (!EXEMPTION_STATUS_NEW.equalsIgnoreCase(requestedStatus)) {
+      if ("O".equals(currentType)) {
+        if (!EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(requestedStatus)) {
+          return new CreateExemptionResult(
+              false,
+              null,
+              current.exemptionNumber(),
+              false,
+              List.of(
+                  "Cancelled Order in Council exemptions can only be reactivated with a status"
+                      + " of ACT."),
+              List.of());
+        }
+      } else if (!EXEMPTION_STATUS_NEW.equalsIgnoreCase(requestedStatus)
+          && !EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(requestedStatus)) {
         return new CreateExemptionResult(
             false,
             null,
             current.exemptionNumber(),
             false,
-            List.of("Cancelled exemptions can only be reopened with a status of NEW."),
+            List.of("Cancelled exemptions can only be reopened with a status of NEW or ACT."),
             List.of());
       }
     }
@@ -499,13 +524,16 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     }
     if (!reopeningCancelled) {
       errors.addAll(validateUpdateExemption(updateRecord, current));
+      errors.addAll(validateSavedExemptionChanges(normalized, updateRecord, current));
     }
     boolean activationTransition =
         statusChangedTo(
             current.exemptionStatusCode(),
             updateRecord.exemptionStatusCode(),
             EXEMPTION_STATUS_ACTIVE);
-    if (EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(updateRecord.exemptionStatusCode())) {
+    // Legacy saves only the status of a cancelled exemption, without activation checks.
+    if (EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(updateRecord.exemptionStatusCode())
+        && !reopeningCancelled) {
       errors.addAll(
           activationEligibilityValidator.validate(
               activationCandidate(
@@ -588,6 +616,12 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
           false, List.of("Cancelled exemptions are read-only."));
     }
 
+    if (EXEMPTION_TYPE_BOIC.equalsIgnoreCase(
+        trimToNull(targetExemption.get().exemptionTypeCode()))) {
+      return new ApplicationExemptionLinkResult(
+          false, List.of("Blanket OIC exemptions cannot be linked to regular applications."));
+    }
+
     Optional<ExemptionDetailsRpcRepository.ApplicationLinkRecord> candidate =
         repository.findApplicationLinkRecord(applicationNumber);
     if (candidate.isEmpty()) {
@@ -625,6 +659,18 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       return new ApplicationExemptionLinkResult(false, errors);
     }
 
+    // INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_ADD_APPLICATION_VOLUME_LIMIT): an Active Ministerial
+    // exemption refuses an application that would take it over its approved volume.
+    if (EXEMPTION_STATUS_ACTIVE.equalsIgnoreCase(targetExemption.get().exemptionStatusCode())
+        && EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(trimToNull(exemptionTypeCode))) {
+      Optional<String> volumeError =
+          approvedVolumeExceededError(
+              targetExemption.get().approvedVolume(), assignedApplications, application);
+      if (volumeError.isPresent()) {
+        return new ApplicationExemptionLinkResult(false, List.of(volumeError.get()));
+      }
+    }
+
     boolean updated =
         repository.updateApplicationExemption(
             new ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord(
@@ -633,6 +679,45 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                 APPLICATION_STATUS_EXEMPTED,
                 defaultUpdateUser(userId, application.entryUserId())));
     return new ApplicationExemptionLinkResult(updated, updated ? List.of() : List.of("Unable to add application to exemption."));
+  }
+
+  /**
+   * Refuses an application that would take the exemption's total requested volume, the linked
+   * applications' plus the candidate's, over its approved volume.
+   */
+  private Optional<String> approvedVolumeExceededError(
+      Double approvedVolume,
+      List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> assignedApplications,
+      ExemptionDetailsRpcRepository.ApplicationLinkRecord candidate) {
+    if (approvedVolume == null) {
+      return Optional.empty();
+    }
+    BigDecimal totalRequestedVolume =
+        ExemptionActivationEligibilityValidator.oneDecimalVolume(
+            Objects.requireNonNullElse(candidate.exemptionApplicationVolume(), 0.0d));
+    Set<Long> counted = new HashSet<>();
+    counted.add(candidate.applicationNumber());
+    for (ExemptionDetailsRpcRepository.ApplicationSummaryRow assigned : assignedApplications) {
+      if (counted.add(assigned.applicationNumber())) {
+        totalRequestedVolume =
+            totalRequestedVolume.add(
+                ExemptionActivationEligibilityValidator.oneDecimalVolume(
+                    assigned.requestedVolume()));
+      }
+    }
+    BigDecimal roundedApprovedVolume =
+        ExemptionActivationEligibilityValidator.oneDecimalVolume(approvedVolume);
+    if (totalRequestedVolume.compareTo(roundedApprovedVolume) <= 0) {
+      return Optional.empty();
+    }
+    return Optional.of(
+        "Application "
+            + displayApplicationNumber(candidate.applicationNumber())
+            + " can't be added. The exemption's requested volume would be "
+            + totalRequestedVolume.toPlainString()
+            + " m³, more than its approved volume of "
+            + roundedApprovedVolume.toPlainString()
+            + " m³.");
   }
 
   @Override
@@ -670,8 +755,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       return new ApplicationExemptionLinkResult(
           false, List.of("Application does not belong to the supplied exemption."));
     }
-    if (!isAllowedRemovalSourceStatus(
-        targetExemption.get().exemptionStatusCode(), application.applicationStatusCode())) {
+    if (!isAllowedRemovalSourceStatus(application.applicationStatusCode())) {
       return new ApplicationExemptionLinkResult(
           false, List.of("Application status does not allow removal from this exemption."));
     }
@@ -695,9 +779,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
         repository.findApplicationLinkRecord(applicationNumber);
     if (refreshed.isEmpty()
         || !expectedExemptionNumber.equals(trimToNull(refreshed.get().exemptionNumber()))
-        || !isAllowedRemovalSourceStatus(
-            targetExemption.get().exemptionStatusCode(),
-            refreshed.get().applicationStatusCode())) {
+        || !isAllowedRemovalSourceStatus(refreshed.get().applicationStatusCode())) {
       return new ApplicationExemptionLinkResult(
           false,
           List.of("Application changed while it was being removed from the exemption."));
@@ -1567,6 +1649,58 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return errors;
   }
 
+  /**
+   * Rules for saving an existing exemption: its type can change only from Ministerial to OIC, OIC
+   * and Blanket OIC exemptions are never set to New unless already stored that way, and a
+   * Ministerial exemption's fee override cannot change once it has left New.
+   */
+  private List<String> validateSavedExemptionChanges(
+      UpdateExemptionRequest request,
+      ExemptionDetailsRpcRepository.ExemptionUpdateRecord record,
+      ExemptionDetailsRpcRepository.ExemptionRecord previous) {
+    List<String> errors = new ArrayList<>();
+    String previousType = normalizeCode(previous.exemptionTypeCode());
+    String requestedType = normalizeCode(record.exemptionTypeCode());
+    if (!Objects.equals(previousType, requestedType)
+        && !(EXEMPTION_TYPE_MINISTERIAL.equals(previousType)
+            && EXEMPTION_TYPE_OIC.equals(requestedType))) {
+      errors.add("A saved exemption can only change type from Ministerial to OIC.");
+    }
+    boolean orderInCouncil =
+        EXEMPTION_TYPE_OIC.equals(requestedType) || EXEMPTION_TYPE_BOIC.equals(requestedType);
+    if (orderInCouncil
+        && EXEMPTION_STATUS_NEW.equals(normalizeCode(record.exemptionStatusCode()))
+        && !(Objects.equals(previousType, requestedType)
+            && EXEMPTION_STATUS_NEW.equals(normalizeCode(previous.exemptionStatusCode())))) {
+      errors.add("OIC and Blanket OIC exemptions cannot have a status of NEW.");
+    }
+    if (EXEMPTION_TYPE_MINISTERIAL.equals(previousType)
+        && !EXEMPTION_STATUS_NEW.equals(normalizeCode(previous.exemptionStatusCode()))
+        && changesFeeRateOverride(previous.exemptionNumber(), request)) {
+      errors.add(
+          "The fee rate override of a Ministerial exemption can only change while it is NEW.");
+    }
+    return errors;
+  }
+
+  private boolean changesFeeRateOverride(String exemptionNumber, UpdateExemptionRequest request) {
+    if (request.enableRateOverride() == null) {
+      return false;
+    }
+    Optional<ExemptionDetailsRpcRepository.ExemptionRateRecord> existing =
+        repository.findExemptionRate(exemptionNumber);
+    if (!request.enableRateOverride()) {
+      return existing.isPresent();
+    }
+    if (request.feeRate() == null) {
+      return false;
+    }
+    Double existingRate =
+        existing.map(ExemptionDetailsRpcRepository.ExemptionRateRecord::fixedExemptionRate)
+            .orElse(null);
+    return existingRate == null || Double.compare(existingRate, request.feeRate()) != 0;
+  }
+
   private List<String> validateCommonExemption(
       String exemptionNumber,
       Double approvedVolume,
@@ -1857,18 +1991,32 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     }
     if (EXEMPTION_STATUS_ACTIVE.equals(currentStatus)) {
       return EXEMPTION_STATUS_ACTIVE.equals(targetStatus)
+          || EXEMPTION_STATUS_NEW.equals(targetStatus)
           || EXEMPTION_STATUS_CANCELLED.equals(targetStatus);
     }
     return EXEMPTION_STATUS_CANCELLED.equals(currentStatus)
-        && EXEMPTION_STATUS_NEW.equals(targetStatus);
+        && (EXEMPTION_STATUS_NEW.equals(targetStatus)
+            || EXEMPTION_STATUS_ACTIVE.equals(targetStatus));
   }
 
-  private boolean isAllowedRemovalSourceStatus(
-      String exemptionStatus, String applicationStatus) {
+  // An Exempted or Approved application can leave the exemption; a Permitted one can't.
+  private boolean isAllowedRemovalSourceStatus(String applicationStatus) {
     String normalizedApplicationStatus = normalizeCode(applicationStatus);
     return APPLICATION_STATUS_EXEMPTED.equals(normalizedApplicationStatus)
-        || (EXEMPTION_STATUS_NEW.equals(normalizeCode(exemptionStatus))
-            && APPLICATION_STATUS_APPROVED.equals(normalizedApplicationStatus));
+        || APPLICATION_STATUS_APPROVED.equals(normalizedApplicationStatus);
+  }
+
+  /** Applies the rules of {@link #removeApplicationFromExemption} to a listed application. */
+  private boolean isRemovableFromExemption(
+      String exemptionStatus, ExemptionDetailsRpcRepository.ApplicationSummaryRow row) {
+    String normalizedExemptionStatus = normalizeCode(exemptionStatus);
+    if (normalizedExemptionStatus == null
+        || EXEMPTION_STATUS_EXPIRED.equals(normalizedExemptionStatus)
+        || EXEMPTION_STATUS_CANCELLED.equals(normalizedExemptionStatus)
+        || !isAllowedRemovalSourceStatus(row.applicationStatusCode())) {
+      return false;
+    }
+    return repository.findPermitsByApplicationNumberRequired(row.applicationNumber()).isEmpty();
   }
 
   private String initialExemptionStatus(String exemptionTypeCode) {

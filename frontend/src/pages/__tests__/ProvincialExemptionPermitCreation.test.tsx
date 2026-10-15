@@ -531,6 +531,7 @@ describe('permit creation from an exemption', () => {
           agentContactName: '',
           ownerCompanyName: '',
           agentCompanyName: '',
+          removable: true,
         },
       ],
       containsUnmanu: false,

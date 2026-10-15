@@ -1618,6 +1618,40 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
+  it('refuses staff naming the owner as the agent', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&applicationVolume=125.5&speciesCodes=HE&endUseCode=SA',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+    await waitForApplicationCreateLoads('Applicant client details')
+    await userEvent.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+    const agentInformation = screen.getByRole('region', { name: 'Agent information' })
+    fireEvent.change(within(agentInformation).getByRole('textbox', { name: 'Agent client' }), {
+      target: { value: '00011111' },
+    })
+    fireEvent.change(within(agentInformation).getByRole('textbox', { name: 'Contact name' }), {
+      target: { value: 'Agent Contact' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+
+    expect(
+      await within(agentInformation).findByText(
+        'The agent must be a different client from the owner',
+      ),
+    ).toBeVisible()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
   it('restores the submitter as the owner when the agent choice is cleared', async () => {
     renderSubmitterApplicationCreate()
 

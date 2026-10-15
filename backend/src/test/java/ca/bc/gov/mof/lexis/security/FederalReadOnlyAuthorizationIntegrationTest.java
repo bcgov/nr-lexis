@@ -9,8 +9,6 @@ import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.jwt;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
-import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
-import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -127,6 +125,9 @@ class FederalReadOnlyAuthorizationIntegrationTest {
       "/api/lexis/session/preferences", "/api/lexis/rpc/application-details/application-summary",
       "/api/lexis/rpc/application-details/client-details",
       "/api/lexis/applicationDetailsRPC?actionMapping=getDocumentDetails&applicationNumber=9001",
+      "/api/lexis/rpc/application-details/document-details?applicationNumber=9001",
+      "/api/lexis/rpc/application-details/document?applicationNumber=9001&fileId=11",
+      "/api/lexis/shipping-reference-options", "/api/lexis/federal/applications/9001/permit",
       "/api/lexis/federal/applications/9001/remarks"})
   void shouldDenyOtherBusinessAndLegacyEndpoints(String path) throws Exception {
     mvc.perform(get(URI.create(path)).with(federalReader())).andExpect(status().isForbidden());
@@ -148,36 +149,16 @@ class FederalReadOnlyAuthorizationIntegrationTest {
   }
 
   @Test
-  void sharedDocumentReadsShouldRequireFederalOwnershipAndHideProvincialPermitDocuments() throws Exception {
-    var direct = new ApplicationDetailsRpcService.DocumentItem(
-        11L, "federal.pdf", "Federal application", "PDF", "application", 9001L, null, true);
-    var permit = new ApplicationDetailsRpcService.DocumentItem(
-        12L, "provincial.pdf", "Provincial permit", "PDF", "permit", null, 7001L, false);
-    when(applicationDetails.getDocumentDetails(9001L)).thenReturn(List.of(direct, permit));
-    mvc.perform(get("/api/lexis/rpc/application-details/document-details")
-            .param("applicationNumber", "9001").with(federalReader()))
-        .andExpect(status().isOk())
-        .andExpect(jsonPath("$.length()").value(1))
-        .andExpect(jsonPath("$[0].name").value("federal.pdf"));
-    mvc.perform(get("/api/lexis/rpc/application-details/document-details")
-            .param("applicationNumber", "1001").with(federalReader()))
-        .andExpect(status().isForbidden());
-    verify(applicationDetails, never()).getDocumentDetails(1001L);
-    when(applicationDetails.findDocumentForApplication(11L, 9001L)).thenReturn(Optional.of(direct));
-    when(applicationDetails.streamDocument(11L)).thenReturn(Optional.of(output -> output.write(new byte[] {1, 2, 3})));
-    var download = mvc.perform(get("/api/lexis/rpc/application-details/document")
-        .param("applicationNumber", "9001").param("fileId", "11").with(federalReader()))
-        .andExpect(status().isOk()).andReturn();
-    mvc.perform(asyncDispatch(download)).andExpect(status().isOk())
-        .andExpect(content().bytes(new byte[] {1, 2, 3}));
-    when(applicationDetails.findDocumentForApplication(12L, 9001L)).thenReturn(Optional.of(permit));
-    for (long fileId : List.of(12L, 99L)) {
-      mvc.perform(get("/api/lexis/rpc/application-details/document")
-              .param("applicationNumber", "9001").param("fileId", Long.toString(fileId))
+  void documentReadsShouldBeDeniedBeforeAnyDocumentLookup() throws Exception {
+    for (String path : List.of("/api/lexis/rpc/application-details/document-details",
+        "/api/lexis/rpc/application-details/document")) {
+      mvc.perform(get(path).param("applicationNumber", "9001").param("fileId", "11")
               .with(federalReader()))
           .andExpect(status().isForbidden());
-      verify(applicationDetails, never()).streamDocument(fileId);
     }
+    verify(applicationDetails, never()).getDocumentDetails(any());
+    verify(applicationDetails, never()).findDocumentForApplication(any(), any());
+    verify(applicationDetails, never()).streamDocument(any());
   }
 
   @Test

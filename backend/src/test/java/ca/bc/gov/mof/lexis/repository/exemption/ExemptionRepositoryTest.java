@@ -51,10 +51,28 @@ class ExemptionRepositoryTest {
 
     repository.search(criteria);
 
-    assertThat(repository.whereSql()).contains("EEA.AGENT_CLIENT_NUMBER LIKE");
+    String agentOnly =
+        "CASE WHEN EEA.EXPORT_APPLICANT_TYPE_CODE = 'A' THEN EEA.AGENT_CLIENT_NUMBER END LIKE";
+    assertThat(repository.whereSql()).contains(agentOnly);
     assertThat(repository.whereSql()).doesNotContain("EEA.OWNER_CLIENT_NUMBER LIKE");
-    assertThat(repository.countWhereSql).contains("EEA.AGENT_CLIENT_NUMBER LIKE");
+    assertThat(repository.countWhereSql).contains(agentOnly);
     assertThat(repository.bindValues()).containsExactly("00012345");
+  }
+
+  @Test
+  void agentColumnShouldNameAnAgentOnlyOnAgentApplications() {
+    TestExemptionRepository repository = new TestExemptionRepository();
+    ExemptionSearchCriteria criteria = new ExemptionSearchCriteria(
+        null, null, null, null, null, null, null,
+        null, null, List.of(), false, false, false,
+        null, 0, 25, null, null);
+
+    repository.search(criteria);
+
+    assertThat(repository.pageSelectSql())
+        .contains("CANON_EEA.EXPORT_APPLICANT_TYPE_CODE")
+        .containsIgnoringWhitespaces(
+            "AND EEA.EXPORT_APPLICANT_TYPE_CODE = 'A' THEN COALESCE(EEA.AGENT_CLIENT_NUMBER, '')");
   }
 
   @Test

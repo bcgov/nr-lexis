@@ -10,6 +10,11 @@ import java.util.Optional;
 
 public interface ApplicationDetailsRpcService {
 
+  /** Shown when an existing remark's number is also used by another application's remark. */
+  String SHARED_REMARK_NUMBER_MESSAGE =
+      "This older remark can't be edited because its number is shared with another application's"
+          + " remark. Add a new remark instead.";
+
   /** Identifies the application-details section a modern client is saving. */
   enum ApplicationSummarySaveSource {
     FULL,
@@ -62,11 +67,13 @@ public interface ApplicationDetailsRpcService {
 
   boolean removeDocument(Long documentId);
 
-  Optional<String> getRemark(Long remarkId);
+  Optional<String> getRemark(Long remarkId, Long applicationNumber);
 
-  default Optional<Long> findApplicationNumberForRemark(Long remarkId) {
-    return Optional.empty();
+  default boolean remarkBelongsToApplication(Long remarkId, Long applicationNumber) {
+    return false;
   }
+
+  boolean isRemarkNumberShared(Long remarkId);
 
   default Optional<Long> findApplicationNumberForPackage(String packageNumber) {
     return Optional.empty();
@@ -111,6 +118,20 @@ public interface ApplicationDetailsRpcService {
       CreateApplicationRequest request, String userId);
 
   CreateApplicationResult updateApplicationSummary(ApplicationSummaryUpdateRequest request, String userId);
+
+  /**
+   * Adds or removes the agent on an application whose details are otherwise locked. The request
+   * must change only the applicant type between agent and owner, and the new agent's details.
+   */
+  default CreateApplicationResult updateApplicationAgent(
+      ApplicationSummaryUpdateRequest request, String userId) {
+    return new CreateApplicationResult(
+        false,
+        null,
+        request == null ? null : request.applicationNumber(),
+        List.of("Only the agent can be added or removed on this application."),
+        List.of());
+  }
 
   /** Keeps the hidden Blanket OIC application owner aligned with its permit. */
   boolean synchronizeApplicationOwner(
@@ -409,6 +430,10 @@ public interface ApplicationDetailsRpcService {
       String ownerContactName,
       String oicIndicator) {}
 
+  /**
+   * {@code agentChangeablePermit} is true when the application is on a Ministerial or Blanket OIC
+   * permit and every permit it is on is Active or Payment pending.
+   */
   record ApplicationEditContext(
       Long applicationNumber,
       String applicationStatusCode,
@@ -420,7 +445,36 @@ public interface ApplicationDetailsRpcService {
       boolean hasScaleBeforeApproval,
       boolean hasCompletePermit,
       String oicIndicator,
-      boolean ministerialItemOverrideEligible) {}
+      boolean ministerialItemOverrideEligible,
+      boolean agentChangeablePermit) {
+
+    public ApplicationEditContext(
+        Long applicationNumber,
+        String applicationStatusCode,
+        String jurisdictionCode,
+        String productTypeCode,
+        Long exportScheduleId,
+        LocalDate advertisingDate,
+        boolean hasPackageBeforeApproval,
+        boolean hasScaleBeforeApproval,
+        boolean hasCompletePermit,
+        String oicIndicator,
+        boolean ministerialItemOverrideEligible) {
+      this(
+          applicationNumber,
+          applicationStatusCode,
+          jurisdictionCode,
+          productTypeCode,
+          exportScheduleId,
+          advertisingDate,
+          hasPackageBeforeApproval,
+          hasScaleBeforeApproval,
+          hasCompletePermit,
+          oicIndicator,
+          ministerialItemOverrideEligible,
+          false);
+    }
+  }
 
   record CreateApplicationRequest(
       Long federalApplicationNumber,

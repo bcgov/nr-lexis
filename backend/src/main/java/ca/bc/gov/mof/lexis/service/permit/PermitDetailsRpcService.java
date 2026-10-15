@@ -94,6 +94,13 @@ public interface PermitDetailsRpcService {
 
   PermitMutationRpcResponseDto updatePermit(PermitMutationRequestDto request, String userId);
 
+  /**
+   * Updates the permit as {@link #updatePermit} does, and also adds an agent to a Blanket OIC
+   * permit that has none or removes its saved agent when the request submits a blank agent.
+   */
+  PermitMutationRpcResponseDto updatePermitWithAgentChange(
+      PermitMutationRequestDto request, String userId);
+
   PermitMutationRpcResponseDto updateShipping(PermitMutationRequestDto request, String userId);
 
   String getExemptionNumberForPermitMutation(Long permitNumber);
@@ -105,6 +112,8 @@ public interface PermitDetailsRpcService {
   List<Long> getApplicationNumbersForExemptionMutation(String exemptionNumber);
 
   Optional<Long> getApplicationNumberForScaleMutation(String scaleDetailId);
+
+  PermitRequestEmailDefaults getRequestPermitEmailDefaults(Long permitNumber);
 
   PermitEmailResult sendRequestPermitEmail(
       Long permitNumber, String copyToAddress, String userId);
@@ -194,6 +203,9 @@ public interface PermitDetailsRpcService {
       boolean overrideEnabled, String overrideFee, String overrideComment, boolean interior) {}
 
   record PermitMutationClientScope(String ownerClientNumber, String agentClientNumber) {}
+
+  /** The regional office the review request goes to, and the suggested copy recipient. */
+  record PermitRequestEmailDefaults(String regionalEmailAddress, String copyToEmailAddress) {}
 
   @FunctionalInterface
   interface DocumentStreamer {

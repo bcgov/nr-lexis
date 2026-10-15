@@ -27,7 +27,7 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 public class OracleBlanketOicPackageService implements BlanketOicPackageService {
 
   private static final String EXEMPTION_TYPE_BLANKET_OIC = "B";
-  private static final Set<String> LOCKED_PERMIT_STATUSES = Set.of("COM", "PPD", "EXP", "CAN");
+  private static final Set<String> LOCKED_PERMIT_STATUSES = Set.of("COM", "EXP", "CAN");
   private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
   private static final String APPLICANT_TYPE_OWNER = "O";
   private static final String EXEMPTION_REASON_SCHEDULE = "S";

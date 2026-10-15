@@ -233,7 +233,7 @@ const applicationDetail: ProvincialApplicationDetail = {
   exemptionReasonCode: 'U',
   applicationDate: '2026-01-01',
   receivedDate: '2026-01-02',
-  listingDate: '2026-01-03',
+  listingDate: '2099-01-03',
   termDays: 30,
   applicationVolume: 100,
   averageLogVolume: 2,

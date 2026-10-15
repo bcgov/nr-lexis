@@ -32,6 +32,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
+import org.junit.jupiter.params.provider.CsvSource;
 import org.junit.jupiter.params.provider.MethodSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
@@ -599,7 +600,8 @@ class OracleExemptionDetailsRpcServiceTest {
                     "NORSKE SKOG CANADA LIMITED",
                     "INTERNATIONAL FOREST PRODUCTS",
                     "P",
-                    "T"),
+                    "T",
+                    "EXE"),
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000457L, 11.0d, 11.0d, "00077881", "P", "S")));
 
@@ -678,6 +680,94 @@ class OracleExemptionDetailsRpcServiceTest {
         .containsExactly(1000457L);
     assertThat(response.containsUnmanu()).isFalse();
     assertThat(response.ownerNumber()).isEqualTo("00077881");
+  }
+
+  @Test
+  void getApplicationsShouldMarkOnlyApplicationsTheRemovalRulesAllow() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S", "EXE"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000457L, 11.0d, 11.0d, "00077881", "P", "S", "EXE"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000458L, 12.0d, 12.0d, "00077881", "P", "S", "APP"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000459L, 13.0d, 13.0d, "00077881", "P", "S", "PMT"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000460L, 14.0d, 14.0d, "00077881", "P", "S", "APP")));
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
+    when(repository.findPermitsByApplicationNumberRequired(1000457L))
+        .thenReturn(
+            List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000123L, "EX-205")));
+    when(repository.findPermitsByApplicationNumberRequired(1000458L)).thenReturn(List.of());
+    when(repository.findPermitsByApplicationNumberRequired(1000460L))
+        .thenReturn(
+            List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000124L, "EX-205")));
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> true);
+
+    assertThat(response.applications())
+        .extracting(
+            ExemptionDetailsRpcService.ApplicationItem::applicationNumber,
+            ExemptionDetailsRpcService.ApplicationItem::removable)
+        .containsExactly(
+            tuple(1000456L, true),
+            tuple(1000457L, false),
+            tuple(1000458L, true),
+            tuple(1000459L, false),
+            tuple(1000460L, false));
+    verify(repository, never()).findPermitsByApplicationNumberRequired(1000459L);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"NEW", "ACT"})
+  void getApplicationsShouldAllowRemovingApprovedApplicationsFromAnEditableExemption(
+      String status) {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000458L, 12.0d, 12.0d, "00077881", "P", "S", "APP")));
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption(status)));
+    when(repository.findPermitsByApplicationNumberRequired(1000458L)).thenReturn(List.of());
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> true);
+
+    assertThat(response.applications())
+        .singleElement()
+        .extracting(ExemptionDetailsRpcService.ApplicationItem::removable)
+        .isEqualTo(true);
+  }
+
+  @ParameterizedTest
+  @CsvSource({"NEW,true", "ACT,true", "CAN,false", "EXP,false"})
+  void getApplicationsShouldMarkExemptedApplicationsRemovableOnlyOnEditableExemptions(
+      String status, boolean removable) {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000456L, 95.0d, 95.0d, "00077881", "P", "S", "EXE")));
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption(status)));
+    if (removable) {
+      when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
+    }
+
+    ExemptionDetailsRpcService.ExemptionApplicationsResponse response =
+        service.getApplications("EX-205", true, ignored -> true);
+
+    assertThat(response.applications())
+        .singleElement()
+        .extracting(ExemptionDetailsRpcService.ApplicationItem::removable)
+        .isEqualTo(removable);
+    if (!removable) {
+      verify(repository, never()).findPermitsByApplicationNumberRequired(any());
+    }
   }
 
   @Test
@@ -1709,6 +1799,22 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
+  void addApplicationToExemptionShouldRejectBlanketOicExemptionsWithoutWriting() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT", "B")));
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("Blanket OIC exemptions cannot be linked to regular applications.");
+    verify(repository, never()).findApplicationLinkRecord(any());
+    verify(repository, never())
+        .updateApplicationExemption(any(ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class));
+  }
+
+  @Test
   void addApplicationToExemptionShouldSetApplicationExemptionAndExemptedStatus() {
     ExemptionDetailsRpcRepository.ApplicationLinkRecord application = application("APP", null, "P");
     when(repository.findExemptionRecord("EX-205"))
@@ -1812,6 +1918,75 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.success()).isTrue();
     verify(repository).updateApplicationExemption(any());
     verify(repository, never()).findApplicationLinkRecord(1000457L);
+  }
+
+  @Test
+  void addApplicationToExemptionShouldRefuseAnApplicationOverAnActiveMinisterialApprovedVolume() {
+    stubAddApplicationVolumes("ACT", "M", 2.0d, 1.5d, 1.0d);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Application 1000456 can't be added. The exemption's requested volume would be 2.5 m³, more than its approved volume of 2.0 m³.");
+    verify(repository, never()).updateApplicationExemption(any());
+  }
+
+  @Test
+  void addApplicationToExemptionShouldAllowAnApplicationThatReachesTheApprovedVolumeExactly() {
+    stubAddApplicationVolumes("ACT", "M", 2.5d, 1.5d, 1.0d);
+    when(repository.updateApplicationExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isTrue();
+    verify(repository).updateApplicationExemption(any());
+  }
+
+  @Test
+  void addApplicationToExemptionShouldRefuseWhenRoundedRequestedVolumeExceedsRoundedApproved() {
+    // 1.95 and 0.05 round to 2.0 and 0.1; the approved 2.04 rounds to 2.0.
+    stubAddApplicationVolumes("ACT", "M", 2.04d, 1.95d, 0.05d);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Application 1000456 can't be added. The exemption's requested volume would be 2.1 m³, more than its approved volume of 2.0 m³.");
+    verify(repository, never()).updateApplicationExemption(any());
+  }
+
+  @Test
+  void addApplicationToExemptionShouldAllowWhenRoundedRequestedVolumeMatchesRoundedApproved() {
+    // 1.06 rounds to 1.1 and the approved 2.05 rounds to 2.1.
+    stubAddApplicationVolumes("ACT", "M", 2.05d, 1.0d, 1.06d);
+    when(repository.updateApplicationExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isTrue();
+    verify(repository).updateApplicationExemption(any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"NEW, M", "ACT, O"})
+  void addApplicationToExemptionShouldNotLimitNewMinisterialOrOicRequestedVolume(
+      String statusCode, String exemptionTypeCode) {
+    stubAddApplicationVolumes(statusCode, exemptionTypeCode, 2.0d, 1.5d, 1.0d);
+    when(repository.updateApplicationExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.errors()).isEmpty();
+    verify(repository).updateApplicationExemption(any());
   }
 
   @Test
@@ -1956,6 +2131,48 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(captor.getValue().application()).isEqualTo(approved);
     assertThat(captor.getValue().exemptionNumber()).isNull();
     assertThat(captor.getValue().applicationStatusCode()).isEqualTo("APP");
+  }
+
+  @Test
+  void removeApplicationFromExemptionShouldRemoveAnApprovedApplicationFromAnActiveExemption() {
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord approved =
+        application("APP", "EX-205", "P");
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(approved));
+    when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
+    when(repository.updateApplicationExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.removeApplicationFromExemption(1000456L, "EX-205", "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord> captor =
+        ArgumentCaptor.forClass(
+            ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class);
+    verify(repository).updateApplicationExemption(captor.capture());
+    assertThat(captor.getValue().exemptionNumber()).isNull();
+    assertThat(captor.getValue().applicationStatusCode()).isEqualTo("APP");
+  }
+
+  @Test
+  void removeApplicationFromExemptionShouldKeepAnApprovedApplicationOnAPermit() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(application("APP", "EX-205", "P")));
+    when(repository.findPermitsByApplicationNumberRequired(1000456L))
+        .thenReturn(
+            List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000123L, "EX-205")));
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.removeApplicationFromExemption(1000456L, "EX-205", "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Application cannot be removed from the exemption while it is linked to a permit.");
+    verify(repository, never()).updateApplicationExemption(any());
   }
 
   @ParameterizedTest
@@ -2169,7 +2386,9 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly("Insufficient privileges to change the expiry date of this exemption.");
+        .containsExactly(
+            "Insufficient privileges to change the expiry date of this exemption.",
+            "A saved exemption can only change type from Ministerial to OIC.");
     verify(repository, never()).updateExemption(any());
   }
 
@@ -2315,9 +2534,11 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
-  void updateExemptionShouldRejectInvalidActiveToNewTransition() {
+  void updateExemptionShouldReturnAnActiveMinisterialExemptionToNew() {
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
 
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.updateExemption(
@@ -2334,12 +2555,129 @@ class OracleExemptionDetailsRpcServiceTest {
                 null,
                 List.of()),
             "idir\\jsmith",
+            false);
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionUpdateRecord> updateCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class);
+    verify(repository).updateExemption(updateCaptor.capture());
+    assertThat(updateCaptor.getValue().exemptionStatusCode()).isEqualTo("NEW");
+    verify(repository, never()).updateApplicationExemption(any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"O", "B"})
+  void updateExemptionShouldKeepActiveOrderInCouncilExemptionsOutOfNew(String type) {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT", type)));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                "Conditions",
+                type,
+                "NEW",
+                null,
+                null,
+                null),
+            "idir\\jsmith",
             true);
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly("Exemption status cannot change from ACT to NEW.");
+        .containsExactly("OIC and Blanket OIC exemptions cannot have a status of NEW.");
     verify(repository, never()).updateExemption(any());
+  }
+
+  @Test
+  void updateExemptionShouldActivateANewMinisterialSwitchedToOicInsteadOfKeepingItNew() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("NEW")));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult keptNew =
+        service.updateExemption(oicSwitchRequest("NEW"), "idir\\jsmith", false);
+
+    assertThat(keptNew.success()).isFalse();
+    assertThat(keptNew.errors())
+        .containsExactly("OIC and Blanket OIC exemptions cannot have a status of NEW.");
+    verify(repository, never()).updateExemption(any());
+
+    ExemptionDetailsRpcService.CreateExemptionResult activated =
+        service.updateExemption(oicSwitchRequest("ACT"), "idir\\jsmith", false);
+
+    assertThat(activated.success()).isTrue();
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionUpdateRecord> updateCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class);
+    verify(repository).updateExemption(updateCaptor.capture());
+    assertThat(updateCaptor.getValue().exemptionTypeCode()).isEqualTo("O");
+    assertThat(updateCaptor.getValue().exemptionStatusCode()).isEqualTo("ACT");
+  }
+
+  @ParameterizedTest
+  @CsvSource({"O,M", "B,M", "B,O", "O,B", "M,B"})
+  void updateExemptionShouldRejectTypeChangesTheScreenNeverOffered(
+      String storedType, String requestedType) {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT", storedType)));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                LocalDate.of(2026, 12, 31),
+                "Conditions",
+                requestedType,
+                "ACT",
+                null,
+                null,
+                null),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .contains("A saved exemption can only change type from Ministerial to OIC.");
+    verify(repository, never()).updateExemption(any());
+  }
+
+  @ParameterizedTest
+  @CsvSource(value = {"22.5,true", "NULL,false"}, nullValues = "NULL")
+  void updateExemptionShouldRefuseOnlyChangedFeeOverridesOnAnActiveMinisterialExemption(
+      Double changedFeeRate, Boolean changedRateOverride) {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findExemptionRate("EX-205")).thenReturn(Optional.of(exemptionRate(18.25d)));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
+    when(repository.updateExemptionRate(any(ExemptionDetailsRpcRepository.ExemptionRateMutationRecord.class)))
+        .thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult unchanged =
+        service.updateExemption(ministerialFeeRequest(18.25d, true), "idir\\jsmith", true);
+
+    assertThat(unchanged.success()).isTrue();
+    verify(repository).updateExemption(any());
+
+    ExemptionDetailsRpcService.CreateExemptionResult changed =
+        service.updateExemption(
+            ministerialFeeRequest(changedFeeRate, changedRateOverride), "idir\\jsmith", true);
+
+    assertThat(changed.success()).isFalse();
+    assertThat(changed.errors())
+        .containsExactly(
+            "The fee rate override of a Ministerial exemption can only change while it is NEW.");
+    verify(repository).updateExemption(any());
+    verify(repository, never()).deleteExemptionRate(any());
   }
 
   @Test
@@ -2387,41 +2725,101 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"O", "B"})
-  void updateExemptionShouldKeepCancelledOrderInCouncilExemptionsReadOnly(String type) {
+  @ValueSource(strings = {"NEW", "ACT"})
+  void updateExemptionShouldKeepCancelledBlanketOicExemptionsReadOnly(String status) {
     when(repository.findExemptionRecord("EX-205"))
-        .thenReturn(Optional.of(exemption("CAN", type)));
+        .thenReturn(Optional.of(exemption("CAN", "B")));
 
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.updateExemption(
             new ExemptionDetailsRpcService.UpdateExemptionRequest(
-                "EX-205", "EX-205", null, null, null, null, type, "NEW",
+                "EX-205", "EX-205", null, null, null, null, "B", status,
+                null, null, List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Cancelled Blanket OIC exemptions are read-only.");
+    verify(repository, never()).updateExemption(any());
+  }
+
+  @Test
+  void updateExemptionShouldOnlyReactivateACancelledOicExemption() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("CAN", "O")));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205", "EX-205", null, null, null, null, "O", "NEW",
                 null, null, List.of()),
             "idir\\jsmith",
             true);
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly("Cancelled Order in Council exemptions are read-only.");
+        .containsExactly(
+            "Cancelled Order in Council exemptions can only be reactivated with a status of ACT.");
     verify(repository, never()).updateExemption(any());
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"O", "M"})
+  void updateExemptionShouldReactivateACancelledExemptionWithItsStatusOnly(String type) {
+    ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("CAN", type);
+    when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
+    when(repository.updateExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-ATTACK",
+                "EX-205",
+                999d,
+                LocalDate.of(2027, 1, 1),
+                LocalDate.of(2027, 12, 31),
+                "forged",
+                type,
+                "ACT",
+                25d,
+                true,
+                List.of()),
+            "idir\\jsmith",
+            false);
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionUpdateRecord> captor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class);
+    verify(repository).updateExemption(captor.capture());
+    ExemptionDetailsRpcRepository.ExemptionUpdateRecord update = captor.getValue();
+    assertThat(update.exemptionNumber()).isEqualTo(existing.exemptionNumber());
+    assertThat(update.approvedVolume()).isEqualTo(existing.approvedVolume());
+    assertThat(update.approvalDate()).isEqualTo(existing.approvalDate());
+    assertThat(update.expiryDate()).isEqualTo(existing.expiryDate());
+    assertThat(update.otherConditions()).isEqualTo(existing.otherConditions());
+    assertThat(update.exemptionTypeCode()).isEqualTo(type);
+    assertThat(update.exemptionStatusCode()).isEqualTo("ACT");
+    verify(repository, never()).findExemptionRate(any());
+    verify(repository, never()).updateExemptionRate(any());
+    verify(repository, never()).insertExemptionRate(any());
+  }
+
   @Test
-  void updateExemptionShouldRejectAnyCancelledTransitionOtherThanNew() {
+  void updateExemptionShouldRejectAnyCancelledTransitionOtherThanNewOrActive() {
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption("CAN")));
 
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.updateExemption(
             new ExemptionDetailsRpcService.UpdateExemptionRequest(
-                "EX-205", "EX-205", null, null, null, null, null, "ACT",
+                "EX-205", "EX-205", null, null, null, null, null, "EXP",
                 null, null, List.of()),
             "idir\\jsmith",
             true);
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly("Cancelled exemptions can only be reopened with a status of NEW.");
+        .containsExactly("Cancelled exemptions can only be reopened with a status of NEW or ACT.");
     verify(repository, never()).updateExemption(any());
   }
 
@@ -2579,7 +2977,7 @@ class OracleExemptionDetailsRpcServiceTest {
 
   @Test
   void updateExemptionShouldUpdateExistingFeeRateWhenOverrideEnabled() {
-    ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("ACT");
+    ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("ACT", "O");
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
     when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
         .thenReturn(true);
@@ -2596,7 +2994,7 @@ class OracleExemptionDetailsRpcServiceTest {
                 LocalDate.of(2026, 3, 1),
                 LocalDate.of(2026, 12, 31),
                 " Updated conditions ",
-                "M",
+                "O",
                 "ACT",
                 22.5d,
                 true,
@@ -2649,7 +3047,7 @@ class OracleExemptionDetailsRpcServiceTest {
 
   @Test
   void updateExemptionShouldDeleteExistingFeeRateWhenOverrideDisabled() {
-    ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("ACT");
+    ExemptionDetailsRpcRepository.ExemptionRecord existing = exemption("ACT", "O");
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(existing));
     when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
         .thenReturn(true);
@@ -2665,7 +3063,7 @@ class OracleExemptionDetailsRpcServiceTest {
                 LocalDate.of(2026, 3, 1),
                 LocalDate.of(2026, 12, 31),
                 " Updated conditions ",
-                "M",
+                "O",
                 "ACT",
                 null,
                 false,
@@ -3239,6 +3637,37 @@ class OracleExemptionDetailsRpcServiceTest {
         Arguments.of(Double.NEGATIVE_INFINITY));
   }
 
+  private ExemptionDetailsRpcService.UpdateExemptionRequest oicSwitchRequest(String status) {
+    return new ExemptionDetailsRpcService.UpdateExemptionRequest(
+        "EX-205",
+        "EX-205",
+        250.5d,
+        LocalDate.of(2026, 3, 1),
+        LocalDate.of(2026, 12, 31),
+        "Conditions",
+        "O",
+        status,
+        null,
+        null,
+        List.of());
+  }
+
+  private ExemptionDetailsRpcService.UpdateExemptionRequest ministerialFeeRequest(
+      Double feeRate, Boolean enableRateOverride) {
+    return new ExemptionDetailsRpcService.UpdateExemptionRequest(
+        "EX-205",
+        "EX-205",
+        300.0d,
+        LocalDate.of(2026, 3, 1),
+        LocalDate.of(2026, 12, 31),
+        "Conditions",
+        "M",
+        "ACT",
+        feeRate,
+        enableRateOverride,
+        List.of());
+  }
+
   private ExemptionDetailsRpcService.CreateExemptionRequest createExemptionRequest(
       String exemptionTypeCode, List<Long> applicationNumbers) {
     return new ExemptionDetailsRpcService.CreateExemptionRequest(
@@ -3254,6 +3683,47 @@ class OracleExemptionDetailsRpcServiceTest {
         applicationNumbers,
         true,
         List.of());
+  }
+
+  /** Exemption EX-205 with application 1000457 linked and application 1000456 to add. */
+  private void stubAddApplicationVolumes(
+      String statusCode,
+      String exemptionTypeCode,
+      double approvedVolume,
+      double assignedVolume,
+      double candidateVolume) {
+    ExemptionDetailsRpcRepository.ExemptionRecord exemption =
+        exemption(statusCode, exemptionTypeCode);
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(
+            Optional.of(
+                new ExemptionDetailsRpcRepository.ExemptionRecord(
+                    exemption.exemptionNumber(),
+                    approvedVolume,
+                    exemption.approvalDate(),
+                    exemption.expiryDate(),
+                    exemption.otherConditions(),
+                    exemption.exemptionTypeCode(),
+                    exemption.exemptionStatusCode(),
+                    exemption.entryUserId(),
+                    exemption.entryTimestamp(),
+                    exemption.updateUserId(),
+                    exemption.updateTimestamp())));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(
+            Optional.of(applicationForPreview(1000456L, 120L, candidateVolume, "APP", null)));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000457L, assignedVolume, 0.0d, "00077881", "P", "S")));
+    // Only non-OIC exemptions compare the linked applications' owner and agent.
+    if (!"O".equals(exemptionTypeCode)) {
+      when(repository.findApplicationLinkRecord(1000457L))
+          .thenReturn(
+              Optional.of(
+                  applicationForPreview(1000457L, 120L, assignedVolume, "EXE", "EX-205")));
+    }
   }
 
   private ExemptionDetailsRpcRepository.ApplicationSummaryRow applicationSummary(

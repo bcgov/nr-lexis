@@ -143,6 +143,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           EXPORT_PERMIT_STATUS_PAYMENT_PENDING,
           EXPORT_PERMIT_STATUS_EXPIRED,
           EXPORT_PERMIT_STATUS_CANCELLED);
+  private static final String APPLICATION_ADDITION_LOCKED_MESSAGE =
+      "Applications cannot be added to a completed, payment-pending, expired, or cancelled permit.";
   private static final String APPLICATION_STATUS_PERMITTED = "PMT";
   private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
   private static final String EXEMPTION_STATUS_ACTIVE = "ACT";
@@ -207,6 +209,33 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         permitInvoiceOrchestrationServiceProvider;
     this.permitMutationValidator =
         new ProvincialPermitMutationValidator(repository, clientLookupService);
+  }
+
+  @Override
+  public PermitRequestEmailDefaults getRequestPermitEmailDefaults(Long permitNumber) {
+    return repository
+        .findPermitMutationByPermitNumber(permitNumber)
+        .map(
+            permit ->
+                new PermitRequestEmailDefaults(
+                    String.join(", ", permitEmailService.requestRecipients(permit.orgUnitNo())),
+                    resolveClientLocationEmail(permit.agentNumber(), permit.agentLocationCode())
+                        .or(
+                            () ->
+                                resolveClientLocationEmail(
+                                    permit.clientNumber(), permit.clientLocationCode()))
+                        .orElse("")))
+        .orElseGet(() -> new PermitRequestEmailDefaults("", ""));
+  }
+
+  private Optional<String> resolveClientLocationEmail(String clientNumber, String locationCode) {
+    String normalizedClientNumber = trimToNull(clientNumber);
+    String normalizedLocationCode = trimToNull(locationCode);
+    if (normalizedClientNumber == null || normalizedLocationCode == null) {
+      return Optional.empty();
+    }
+    return notificationRecipientResolver.resolveClientLocation(
+        normalizedClientNumber, normalizedLocationCode);
   }
 
   @Override
@@ -326,7 +355,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   public Optional<String> getApprovalPermitEmailDefault(Long permitNumber) {
     return repository
         .findPermitMutationByPermitNumber(permitNumber)
-        .flatMap(this::resolvePermitClientEmail);
+        .flatMap(this::resolvePermitOwnerEmail);
   }
 
   @Override
@@ -337,16 +366,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return new PermitEmailResult(false, "Permit not found.");
     }
     String permitStatus = trimToNull(permit.get().permitStatusCode());
-    if (!EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(permitStatus)
-        && !EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equalsIgnoreCase(permitStatus)) {
+    if (!EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(permitStatus)) {
       return new PermitEmailResult(
-          false,
-          "Permit approval email is only available for completed or payment-pending permits.");
+          false, "Permit approval email is only available for completed permits.");
     }
     String requestedRecipient = trimToNull(clientEmailAddress);
     String recipient =
         requestedRecipient == null
-            ? resolvePermitClientEmail(permit.get()).orElse(null)
+            ? resolvePermitOwnerEmail(permit.get()).orElse(null)
             : MailRecipientValidator.normalize(requestedRecipient).orElse(null);
     if (recipient == null) {
       return new PermitEmailResult(
@@ -384,21 +411,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         sent ? "Permit approval email sent." : "Permit approval email could not be sent.");
   }
 
-  private Optional<String> resolvePermitClientEmail(PermitMutationRow permit) {
-    String clientNumber = null;
-    String locationCode = null;
-    if (!isBlanketOicPermit(permit)) {
-      clientNumber = trimToNull(permit.agentNumber());
-      locationCode = trimToNull(permit.agentLocationCode());
-    }
-    if (clientNumber == null || locationCode == null) {
-      clientNumber = trimToNull(permit.clientNumber());
-      locationCode = trimToNull(permit.clientLocationCode());
-    }
-    if (clientNumber == null || locationCode == null) {
-      return Optional.empty();
-    }
-    return notificationRecipientResolver.resolveClientLocation(clientNumber, locationCode);
+  private Optional<String> resolvePermitOwnerEmail(PermitMutationRow permit) {
+    return resolveClientLocationEmail(permit.clientNumber(), permit.clientLocationCode());
   }
 
   @Override
@@ -556,7 +570,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   public PermitAllScaleFeesRpcResponseDto getAllScaleFees(
       Long permitNumber, boolean ministryUser) {
     if (permitNumber == null || permitNumber < 1) {
-      return new PermitAllScaleFeesRpcResponseDto(List.of(), "0.0");
+      return new PermitAllScaleFeesRpcResponseDto(List.of(), "0.0", false);
     }
 
     List<PermitFeeScaleRow> feeRows = repository.findPermitFeeScaleRows(permitNumber);
@@ -658,7 +672,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
               nonNull(growthTypeByPackage.get(packageNumber))));
     }
     return new PermitAllScaleFeesRpcResponseDto(
-        List.copyOf(packages), formatVolume(totalVolume));
+        List.copyOf(packages),
+        formatVolume(totalVolume),
+        feeContext.fixedExemptionRate() != null);
   }
 
   @Override
@@ -1743,6 +1759,18 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   @Override
   @Transactional
   public PermitMutationRpcResponseDto updatePermit(PermitMutationRequestDto request, String userId) {
+    return updatePermit(request, userId, false);
+  }
+
+  @Override
+  @Transactional
+  public PermitMutationRpcResponseDto updatePermitWithAgentChange(
+      PermitMutationRequestDto request, String userId) {
+    return updatePermit(request, userId, true);
+  }
+
+  private PermitMutationRpcResponseDto updatePermit(
+      PermitMutationRequestDto request, String userId, boolean agentChangeAllowed) {
     if (request == null) {
       return failureMutationResponse(List.of("Permit details are required."), null);
     }
@@ -1811,7 +1839,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     boolean targetBlanketOic = targetExemption != null && targetExemption.blanketOic();
     Optional<PermitClientBinding> targetClientsResult =
-        resolvePermitUpdateClientBinding(targetExemption, request, current);
+        resolvePermitUpdateClientBinding(targetExemption, request, current, agentChangeAllowed);
     if (targetClientsResult.isEmpty()) {
       return failureMutationResponse(
           List.of("The first linked package application could not be loaded."), permitNumber);
@@ -1834,8 +1862,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             request.oicPermitTotalVolume(), submittedOicRequestVolume)) {
       numericErrors.add("A valid permit request volume is required.");
     }
-    if (targetBlanketOic && !isInvoicedPermitStatus(current.permitStatusCode())) {
-      validateExplicitBlanketOicRequestLimitClears(request, numericErrors);
+    if (targetBlanketOic) {
+      // An invoiced permit saved without request totals may keep them blank.
+      boolean invoiced = isInvoicedPermitStatus(current.permitStatusCode());
+      validateExplicitBlanketOicRequestLimitClears(
+          request,
+          !invoiced || current.oicRequestPieces() != null,
+          !invoiced || current.oicRequestVolume() != null,
+          numericErrors);
     }
     validateSubmittedOicRequestLimits(request, targetBlanketOic, numericErrors);
     if (!numericErrors.isEmpty()) {
@@ -2035,8 +2069,9 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
               ? null
               : permitInvoiceOrchestrationServiceProvider.getIfAvailable();
       if (invoiceOrchestrationService == null
-          || !supportsInvoiceDestination(
-              invoiceOrchestrationService, updated.countryCode())) {
+          || (isEnteringInvoiceStatus(current.permitStatusCode(), updated.permitStatusCode())
+              && !supportsInvoiceDestination(
+                  invoiceOrchestrationService, updated.countryCode()))) {
         return failureMutationResponse(
             List.of(
                 "Invoice processing is unavailable for this destination; the permit was not changed."),
@@ -2174,12 +2209,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             current.oicRequestVolume(),
             current.productTypeCode());
 
-    if (isInvoicedPermitStatus(current.permitStatusCode())
-        && hasStringChanged(current.countryCode(), updated.countryCode())) {
-      return failureMutationResponse(
-          List.of("Destination country cannot be changed after permit invoicing."),
-          permitNumber);
-    }
     if (EXPORT_PERMIT_STATUS_CANCELLED.equalsIgnoreCase(current.permitStatusCode())
         && hasStringChanged(current.portOfExportCode(), updated.portOfExportCode())) {
       return failureMutationResponse(
@@ -2367,15 +2396,24 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (isScaleAttachmentLockedStatus(permit.get().permitStatusCode())) {
       return failurePersistenceResponse(
           List.of(
-              "Scale rows cannot be changed for a completed, payment-pending, expired, or cancelled permit."),
+              "Scale rows cannot be changed for a completed, expired, or cancelled permit."),
           permitNumber);
     }
 
+    // Read before any removal below so a replacement row keeps its application on the permit.
+    Set<Long> linkedApplicationNumbers =
+        !blanketOic
+                && !included.isEmpty()
+                && isApplicationAdditionLockedStatus(permit.get().permitStatusCode())
+            ? new HashSet<>(repository.findApplicationNumbersByPermitNumberRequired(permitNumber))
+            : null;
     Map<Long, String> includedApplicationStatuses = new LinkedHashMap<>();
     Set<Long> removedApplicationNumbers = new LinkedHashSet<>();
     Set<PackageCandidateRow> eligiblePackages = null;
     Optional<BigDecimal> balanceRemaining =
-        included.isEmpty() ? Optional.empty() : balanceRemainingForAddedScales(permit.get());
+        included.isEmpty() || blanketOic
+            ? Optional.empty()
+            : balanceRemainingForAddedScales(permit.get());
     BigDecimal addedVolume = BigDecimal.ZERO;
     for (boolean attach : List.of(false, true)) {
       for (String scaleId : attach ? included : excluded) {
@@ -2410,6 +2448,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
           if (!eligiblePackages.contains(new PackageCandidateRow(applicationNumber, packageNumber))) {
             return failurePersistenceResponse(
                 List.of("Scale detail is not eligible for this permit."), permitNumber);
+          }
+          if (linkedApplicationNumbers != null
+              && !linkedApplicationNumbers.contains(applicationNumber)) {
+            return failurePersistenceResponse(
+                List.of(APPLICATION_ADDITION_LOCKED_MESSAGE), permitNumber);
           }
           String attachSourceStatus = includedApplicationStatuses.get(applicationNumber);
           if (attachSourceStatus == null) {
@@ -2635,8 +2678,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     if (isScaleAttachmentLockedStatus(permit.permitStatusCode())) {
       return failurePersistenceResponse(
-          List.of(
-              "Applications cannot be changed for a completed, payment-pending, expired, or cancelled permit."),
+          List.of("Applications cannot be removed from a completed, expired, or cancelled permit."),
           permitNumber);
     }
 
@@ -2841,7 +2883,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (isScaleAttachmentLockedStatus(current.permitStatusCode())) {
       return failurePersistenceResponse(
           List.of(
-              "Scale rows cannot be changed for a completed, payment-pending, expired, or cancelled permit."),
+              "Scale rows cannot be changed for a completed, expired, or cancelled permit."),
           permitNumber);
     }
     if (current.oicApplicationNumber() == null || current.oicApplicationNumber() < 1) {
@@ -2911,13 +2953,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     } else if (ScaleDomainValidator.exceedsVolume(
         permitScales, normalizedVolume, current.oicRequestVolume())) {
       errors.add("The total scale volume exceeds the permit request volume.");
-    }
-    if (normalizedVolume != null) {
-      balanceRemainingForAddedScales(current)
-          .flatMap(
-              remaining ->
-                  addedScalesBalanceError(remaining, BigDecimal.valueOf(normalizedVolume)))
-          .ifPresent(errors::add);
     }
     if (!errors.isEmpty()) {
       return failurePersistenceResponse(errors, permitNumber);
@@ -3011,7 +3046,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (isScaleAttachmentLockedStatus(currentPermit.permitStatusCode())) {
       return failurePersistenceResponse(
           List.of(
-              "Scale rows cannot be changed for a completed, payment-pending, expired, or cancelled permit."),
+              "Scale rows cannot be changed for a completed, expired, or cancelled permit."),
           permitNumber);
     }
 
@@ -3918,13 +3953,24 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private Optional<PermitClientBinding> resolvePermitUpdateClientBinding(
       ValidatedExemptionBinding exemption,
       PermitMutationRequestDto request,
-      PermitMutationRow current) {
+      PermitMutationRow current,
+      boolean agentChangeAllowed) {
     if (exemption.blanketOic()) {
+      String ownerLocation =
+          mergeSubmittedLocationUpdate(request.ownerClientLocation(), current.clientLocationCode());
+      if (agentChangeAllowed && addsOrRemovesAgent(request, current)) {
+        return Optional.of(
+            new PermitClientBinding(
+                current.clientNumber(),
+                ownerLocation,
+                trimToNull(request.agentClientNumber()),
+                trimToNull(request.agentClientLocation())));
+      }
       // Saved Blanket OIC client identities are authoritative; locations remain editable.
       return Optional.of(
           new PermitClientBinding(
               current.clientNumber(),
-              mergeSubmittedLocationUpdate(request.ownerClientLocation(), current.clientLocationCode()),
+              ownerLocation,
               current.agentNumber(),
               mergeSubmittedLocationUpdate(request.agentClientLocation(), current.agentLocationCode())));
     }
@@ -3972,20 +4018,32 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         sameText(authoritativeClients.ownerClientNumber(), current.clientNumber())
             ? current.clientLocationCode()
             : authoritativeClients.ownerClientLocation();
+    // A submitted agent location belongs to the saved agent, so it is dropped once the
+    // application's agent differs.
     String agentLocation =
         sameText(authoritativeClients.agentClientNumber(), current.agentNumber())
-            ? current.agentLocationCode()
+            ? mergeSubmittedLocationUpdate(
+                request.agentClientLocation(), current.agentLocationCode())
             : authoritativeClients.agentClientLocation();
     return new PermitClientBinding(
         authoritativeClients.ownerClientNumber(),
         mergeSubmittedLocationUpdate(request.ownerClientLocation(), ownerLocation),
         authoritativeClients.agentClientNumber(),
-        mergeSubmittedLocationUpdate(request.agentClientLocation(), agentLocation));
+        agentLocation);
   }
 
   private String mergeSubmittedLocationUpdate(String submitted, String current) {
     String submittedLocation = trimToNull(submitted);
     return submittedLocation == null ? current : submittedLocation;
+  }
+
+  // An agent is added to a permit without one, or the saved agent is removed by a submitted
+  // blank. A different agent replacing the saved one is neither.
+  private boolean addsOrRemovesAgent(PermitMutationRequestDto request, PermitMutationRow current) {
+    String submittedAgent = trimToNull(request.agentClientNumber());
+    return trimToNull(current.agentNumber()) == null
+        ? submittedAgent != null
+        : request.agentClientNumber() != null && submittedAgent == null;
   }
 
   private void validateClientBinding(
@@ -4129,12 +4187,18 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     return new PermitPersistenceRpcResponseDto(false, "", errors, List.of(), permitNumber);
   }
 
+  // Scale rows and existing applications stay changeable while a permit is Payment pending.
   private boolean isScaleAttachmentLockedStatus(String permitStatusCode) {
     String normalized = trimToNull(permitStatusCode);
     return EXPORT_PERMIT_STATUS_COMPLETE.equalsIgnoreCase(normalized)
-        || EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equalsIgnoreCase(normalized)
         || EXPORT_PERMIT_STATUS_EXPIRED.equalsIgnoreCase(normalized)
         || EXPORT_PERMIT_STATUS_CANCELLED.equalsIgnoreCase(normalized);
+  }
+
+  // New applications are added only while a permit is Active.
+  private boolean isApplicationAdditionLockedStatus(String permitStatusCode) {
+    return isScaleAttachmentLockedStatus(permitStatusCode)
+        || EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equalsIgnoreCase(trimToNull(permitStatusCode));
   }
 
   private List<String> validateApplicationAssociationRequest(
@@ -4161,9 +4225,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (isBlanketOicPermit(permit)) {
       return List.of("Application associations are not changed this way for Blanket OIC permits.");
     }
-    if (isScaleAttachmentLockedStatus(permit.permitStatusCode())) {
-      return List.of(
-          "Applications cannot be changed for a completed, payment-pending, expired, or cancelled permit.");
+    if (isApplicationAdditionLockedStatus(permit.permitStatusCode())) {
+      return List.of(APPLICATION_ADDITION_LOCKED_MESSAGE);
     }
 
     String exemptionNumber = trimToNull(permit.exemptionNumber());
@@ -4498,11 +4561,16 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         || !java.util.Objects.equals(current.overrideComment(), target.overrideComment());
   }
 
+  // The destination country and Blanket OIC request totals stay editable after invoicing. While
+  // the permit is Payment pending the agent can be added, removed or replaced, but a kept agent's
+  // location stays fixed.
   private boolean hasInvoiceMaterialDelta(
       PermitMutationRow current, PermitMutationRow target) {
     boolean paymentPendingCompletion = isPaymentPendingCompletion(current, target);
-    return hasStringChanged(current.countryCode(), target.countryCode())
-        || hasStringChanged(current.exemptionNumber(), target.exemptionNumber())
+    boolean paymentPending =
+        EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(normalizeCode(current.permitStatusCode()));
+    boolean agentChanged = hasStringChanged(current.agentNumber(), target.agentNumber());
+    return hasStringChanged(current.exemptionNumber(), target.exemptionNumber())
         || !java.util.Objects.equals(current.orgUnitNo(), target.orgUnitNo())
         || !java.util.Objects.equals(current.applicationDate(), target.applicationDate())
         || !java.util.Objects.equals(current.permitIssueDate(), target.permitIssueDate())
@@ -4513,14 +4581,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         || !java.util.Objects.equals(current.numberOfPieces(), target.numberOfPieces())
         || hasStringChanged(current.clientNumber(), target.clientNumber())
         || hasStringChanged(current.clientLocationCode(), target.clientLocationCode())
-        || hasStringChanged(current.agentNumber(), target.agentNumber())
-        || hasStringChanged(current.agentLocationCode(), target.agentLocationCode())
+        || (agentChanged
+            ? !paymentPending
+            : hasStringChanged(current.agentLocationCode(), target.agentLocationCode()))
         || hasStringChanged(current.growthTypeCode(), target.growthTypeCode())
         || hasStringChanged(current.productTypeCode(), target.productTypeCode())
         || !java.util.Objects.equals(
-            current.oicApplicationNumber(), target.oicApplicationNumber())
-        || !java.util.Objects.equals(current.oicRequestPieces(), target.oicRequestPieces())
-        || !java.util.Objects.equals(current.oicRequestVolume(), target.oicRequestVolume());
+            current.oicApplicationNumber(), target.oicApplicationNumber());
   }
 
   private boolean hasInvoicePolicyContextDelta(
@@ -5037,15 +5104,20 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   }
 
   private void validateExplicitBlanketOicRequestLimitClears(
-      PermitMutationRequestDto request, List<String> errors) {
+      PermitMutationRequestDto request,
+      boolean piecesRequired,
+      boolean volumeRequired,
+      List<String> errors) {
     if (request == null) {
       return;
     }
-    if (request.oicPermitTotalPieces() != null
+    if (piecesRequired
+        && request.oicPermitTotalPieces() != null
         && trimToNull(request.oicPermitTotalPieces()) == null) {
       errors.add("Permit request pieces is required.");
     }
-    if (request.oicPermitTotalVolume() != null
+    if (volumeRequired
+        && request.oicPermitTotalVolume() != null
         && trimToNull(request.oicPermitTotalVolume()) == null) {
       errors.add("Permit request volume is required.");
     }
@@ -5093,7 +5165,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
 
   /**
    * The exemption balance that scales added to this permit draw on. A cancelled permit reserves
-   * nothing, so it has none.
+   * nothing, so it has none. Blanket OIC permits don't draw on it, so their scale changes skip it.
    */
   private Optional<BigDecimal> balanceRemainingForAddedScales(PermitMutationRow permit) {
     String exemptionNumber = trimToNull(permit.exemptionNumber());
