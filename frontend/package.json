@@ -37,7 +37,7 @@
     "@tiptap/starter-kit": "3.30.5",
     "@types/node": "^24.0.0",
     "@vitejs/plugin-react": "^6.0.0",
-    "axios": "^1.18.0",
+    "axios": "^1.20.0",
     "oidc-client-ts": "^3.5.0",
     "react": "^19.2.4",
     "react-dom": "^19.2.4",
@@ -56,8 +56,8 @@
     "@testing-library/user-event": "^14.4.3",
     "@types/react": "^19.0.10",
     "@types/react-dom": "^19.0.4",
-    "@vitest/coverage-v8": "^4.0.0",
-    "@vitest/ui": "^4.0.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "@vitest/ui": "^4.1.11",
     "eslint": "^10.2.0",
     "eslint-config-prettier": "^10.1.8",
     "eslint-plugin-prettier": "^5.2.3",
@@ -67,7 +67,7 @@
     "sass": "^1.85.1",
     "typescript": "^6.0.0",
     "typescript-eslint": "^8.58.2",
-    "vitest": "^4.0.0"
+    "vitest": "^4.1.11"
   },
   "overrides": {
     "@carbon/ibm-products": {
