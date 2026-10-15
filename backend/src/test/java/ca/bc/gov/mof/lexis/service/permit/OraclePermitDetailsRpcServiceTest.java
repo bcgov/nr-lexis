@@ -3413,7 +3413,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"COM", "PPD", "CAN"})
+  @ValueSource(strings = {"COM", "PPD"})
   void updatePermitShouldPreserveBlankSubmittedDatesOutsideActiveDrafts(String status) {
     PermitMutationRow current = permitMutationRow(status);
     when(repository.findPermitMutationByPermitNumber(7000123L))
@@ -4035,105 +4035,22 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(permitCaptor.getValue().permitStatusCode()).isEqualTo("EXP");
   }
 
-  @Test
-  void updatePermitShouldAllowCancelledPermitReactivationWithoutMaterialChanges() {
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow("CAN")));
-    stubTargetMinisterialExemption("EX-700");
-    when(repository.updatePermitDetail(
-            any(PermitMutationRow.class),
-            eq("idir\\jsmith"),
-            eq(FEE_MASK_EFFECTIVE_DATE)))
-        .thenReturn(true);
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("EXE"));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, true, true, "EXE", null));
-
-    PermitMutationRpcResponseDto response =
-        service.updatePermit(
-            formCheckRequest("ACT", "42", "Legacy notes"), "idir\\jsmith");
-
-    assertThat(response.success()).isTrue();
-    verify(repository)
-        .updatePermitDetail(
-            any(PermitMutationRow.class),
-            eq("idir\\jsmith"),
-            eq(FEE_MASK_EFFECTIVE_DATE));
-    verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(
-            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE"));
-    verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
-  }
-
   @ParameterizedTest
-  @ValueSource(strings = {"ACT", "COM", "PPD"})
-  void updatePermitShouldRejectReactivationBeyondTheExemptionBalance(String targetStatus) {
+  @ValueSource(strings = {"ACT", "COM", "PPD", "CAN"})
+  void updatePermitShouldRejectEveryChangeToACancelledPermit(String targetStatus) {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("CAN")));
-    stubTargetMinisterialExemption("EX-700");
-    when(repository.findScaleDetailsByPermitNumber(7000123L))
-        .thenReturn(
-            List.of(
-                scale("101", "TM1", "FI", "D", 60.0d, 4L, "7000123", "PKG-1"),
-                scale("102", "TM1", "FI", "D", 40.5d, 3L, "7000123", "PKG-1")));
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
             formCheckRequest(targetStatus, "42", "Legacy notes"), "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "This permit can't be reactivated. Its scales total 100.5 m³, but the exemption has 100.0 m³ remaining.");
+    assertThat(response.errors()).containsExactly("Cancelled permits are read-only.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
-  }
-
-  @Test
-  void updatePermitShouldAllowReactivationThatUsesTheWholeExemptionBalance() {
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow("CAN")));
-    stubTargetMinisterialExemption("EX-700");
-    when(repository.findScaleDetailsByPermitNumber(7000123L))
-        .thenReturn(List.of(scale("101", "TM1", "FI", "D", 100.0d, 4L, "7000123", "PKG-1")));
-    when(repository.updatePermitDetail(
-            any(PermitMutationRow.class),
-            eq("idir\\jsmith"),
-            eq(FEE_MASK_EFFECTIVE_DATE)))
-        .thenReturn(true);
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("EXE"));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, true, true, "EXE", null));
-
-    PermitMutationRpcResponseDto response =
-        service.updatePermit(
-            formCheckRequest("ACT", "42", "Legacy notes"), "idir\\jsmith");
-
-    assertThat(response.success()).isTrue();
-    verify(repository)
-        .updatePermitDetail(
-            any(PermitMutationRow.class),
-            eq("idir\\jsmith"),
-            eq(FEE_MASK_EFFECTIVE_DATE));
+    verify(applicationReviewRepository, never())
+        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
+    verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -4732,7 +4649,7 @@ class OraclePermitDetailsRpcServiceTest {
   void updatePermitShouldRejectSubmitDateCorrectionUnlessTheCurrentPermitIsActive() {
     PermitMutationRow current =
         withInvoiceContext(
-            permitMutationRow("CAN"),
+            permitMutationRow("COM"),
             LocalDate.of(2025, 3, 15),
             "US",
             "00077880",
@@ -4743,7 +4660,7 @@ class OraclePermitDetailsRpcServiceTest {
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
-            formCheckRequest("CAN", "42", "Legacy notes"), "idir\\jsmith");
+            formCheckRequest("COM", "42", "Legacy notes"), "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
@@ -5918,21 +5835,30 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updateShippingShouldRejectCancelledCanonicalPermitWithoutWriting() {
+  void updateShippingShouldSaveShippingDetailsOnACancelledPermit() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("CAN")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class),
+            eq("idir\\jsmith"),
+            eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
         service.updateShipping(
-            updateShippingRequest("2026-06-10", "Forged destination"),
+            updateShippingRequest("2026-06-10", "Updated destination"),
             "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Cancelled permits must be reactivated before shipping details can be changed.");
-    verify(repository, never()).findExemptionTypeCode(any());
-    verify(repository, never()).updatePermitDetail(any(), any(), any());
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().permitStatusCode()).isEqualTo("CAN");
+    assertThat(permitCaptor.getValue().destinationCompanyName())
+        .isEqualTo("Updated destination");
   }
 
   @ParameterizedTest

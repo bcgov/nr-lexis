@@ -7054,9 +7054,17 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }),
       )
     })
-    await userEvent.click(screen.getByRole('button', { name: /Edit permit(?: details)?/ }))
-    expect(screen.getByLabelText('Issued date')).toHaveValue(permitDetail.issueDate ?? '')
-    expect(screen.getByLabelText('Expiry date')).toHaveValue(permitDetail.expiryDate ?? '')
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+      ).not.toBeInTheDocument(),
+    )
+    expect(
+      screen.getByText('Issued date').parentElement?.querySelector('dd'),
+    ).not.toHaveTextContent('Not provided')
+    expect(
+      screen.getByText('Expiry date').parentElement?.querySelector('dd'),
+    ).not.toHaveTextContent('Not provided')
   })
 
   it('clears blank dates when an active Blanket OIC permit remains active', async () => {
@@ -8515,7 +8523,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.getByText('Another user is editing this permit.')).toBeInTheDocument()
   })
 
-  it('allows a cancelled permit to be reactivated before other edits', async () => {
+  it('keeps a cancelled permit read-only', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'CAN',
@@ -8523,30 +8531,22 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
     renderPermitDetails()
 
-    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
-    await userEvent.selectOptions(screen.getByLabelText('Status'), 'ACT')
-    await userEvent.click(screen.getByRole('button', { name: 'Save permit' }))
-
-    await waitFor(() => {
-      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
-        expect.objectContaining({
-          permitNumber: '777',
-          permitStatus: 'ACT',
-          permitReceiptNo: 'R-1',
-        }),
-      )
-    })
+    expect(await screen.findByRole('heading', { name: 'Permit summary' })).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Edit permit(?: details)?/ }),
+    ).not.toBeInTheDocument()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
-  it('shows the saved issued date and exemption balance after a cancelled permit is reactivated', async () => {
-    const cancelledPermit = {
+  it('shows the saved issued date and exemption balance after a completed permit is made active', async () => {
+    const completedPermit = {
       ...permitDetail,
-      permitStatusCode: 'CAN',
-      permitStatusDescription: 'Cancelled',
+      permitStatusCode: 'COM',
+      permitStatusDescription: 'Completed',
       exemptionVolumeRemaining: 2,
     }
-    mockedFetchProvincialPermitDetail.mockResolvedValueOnce(cancelledPermit).mockResolvedValue({
-      ...cancelledPermit,
+    mockedFetchProvincialPermitDetail.mockResolvedValueOnce(completedPermit).mockResolvedValue({
+      ...completedPermit,
       permitStatusCode: 'ACT',
       permitStatusDescription: 'Active',
       issueDate: null,
@@ -8867,7 +8867,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   )
 
-  it('requires a cancelled permit to be reactivated before editing shipping', async () => {
+  it('saves shipping changes on a cancelled permit', async () => {
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'CAN',
@@ -8876,8 +8876,15 @@ describe('Provincial Permit Detail Action Smoke', () => {
     renderPermitDetails()
 
     await selectPermitDetailTab('Shipping')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
+    await userEvent.type(screen.getByLabelText('Transport name'), ' Updated')
+    await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
 
-    expect(screen.queryByRole('button', { name: 'Edit shipping' })).not.toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockedUpdatePermitShipping).toHaveBeenCalledWith(
+        expect.objectContaining({ permitNumber: '777' }),
+      )
+    })
   })
 
   it('hides permit edit controls without savePermit access', async () => {

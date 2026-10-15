@@ -2155,12 +2155,15 @@ const ProvincialPermitDetailsPage = () => {
     editContextLoaded &&
     !permitEditLocked &&
     !permitExpired
+  const permitCancelled = permitStatusCode === 'CAN'
+  // A cancelled permit is read-only apart from its shipping details and documents.
   const canSavePermit =
     canMutatePermit &&
+    !permitCancelled &&
     !(permitStatusCode === 'COM' && hasProvincialSubmitterRole(capabilities.roles))
   const canReviewPermits = canPerform('/permitsReview', permitOrgUnit)
   const canCorrectPermitSubmitDate = canSavePermit && canReviewPermits && permitStatusCode === 'ACT'
-  const canEditShipping = canMutatePermit && permitStatusCode !== 'CAN'
+  const canEditShipping = canMutatePermit
   const canEditPermitClients =
     canSavePermit && !invoiceMaterialLocked && (detail?.blanketOic === true || ministerialPermit)
   const ownerEditMode = canEditPermitClients && isEditingPermitClients
@@ -2195,7 +2198,8 @@ const ProvincialPermitDetailsPage = () => {
     permitExemptionContextReady &&
     editContextLoaded &&
     !permitEditLocked &&
-    !permitExpired
+    !permitExpired &&
+    !permitCancelled
   const readOnlyUser = isPureReadOnlyRole(capabilities.roles)
   const adminUser = hasRole(capabilities.roles, 'ADMIN')
   const hasDocumentActorRole =
