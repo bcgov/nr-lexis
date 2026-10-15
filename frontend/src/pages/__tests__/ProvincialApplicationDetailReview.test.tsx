@@ -384,6 +384,30 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(review.queryByRole('button', { name: 'Approve application' })).not.toBeInTheDocument()
   })
 
+  it('keeps an approved application review read-only once its edit window has passed', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...reviewableApplicationDetail,
+      applicationStatusCode: 'APP',
+      statusDescription: 'Approved',
+      canEditApplicationDetails: false,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const review = within(await selectApplicationReviewTile(false))
+    expect(review.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+    expect(review.queryByRole('group', { name: /Application status/ })).not.toBeInTheDocument()
+  })
+
   it('keeps remarks read-only when application detail editing is not allowed', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...reviewableApplicationDetail,

@@ -17,6 +17,7 @@ import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusUpdateResultDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
+import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
@@ -39,6 +40,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.AccessDeniedException;
 import org.springframework.security.core.Authentication;
 import org.springframework.util.MultiValueMap;
 import org.springframework.validation.annotation.Validated;
@@ -63,6 +65,7 @@ public class ApplicationReviewController {
   private final ApplicationPermitOperationCoordinator operationCoordinator;
   private LexisPrincipalService principalService;
   private ApplicationEditLockService editLockService;
+  private ApplicationEditPolicyService applicationEditPolicyService;
 
   public ApplicationReviewController(
       ObjectProvider<ApplicationReviewService> serviceProvider,
@@ -83,6 +86,11 @@ public class ApplicationReviewController {
   @Autowired
   void setApplicationEditLockService(ApplicationEditLockService editLockService) {
     this.editLockService = editLockService;
+  }
+
+  @Autowired
+  void setApplicationEditPolicyService(ApplicationEditPolicyService applicationEditPolicyService) {
+    this.applicationEditPolicyService = applicationEditPolicyService;
   }
 
   @GetMapping("/search/options")
@@ -295,7 +303,35 @@ public class ApplicationReviewController {
                 withApplicationEditLock(
                     applicationNumber,
                     userId,
-                    () -> service.updateStatus(applicationNumber, requestBody, userId))));
+                    () -> {
+                      requireApprovedApplicationEditable(applicationNumber, authentication);
+                      return service.updateStatus(applicationNumber, requestBody, userId);
+                    })));
+  }
+
+  // An Approved application's status can change only while its details can still be edited,
+  // which for approvers ends six days after its list date.
+  private void requireApprovedApplicationEditable(
+      Long applicationNumber, Authentication authentication) {
+    ApplicationDetailsRpcService applicationService =
+        applicationDetailsServiceProvider.getIfAvailable();
+    if (applicationEditPolicyService == null || applicationService == null) {
+      return;
+    }
+    boolean approved =
+        applicationService
+            .getApplicationEditContext(applicationNumber)
+            .map(
+                context ->
+                    "APP".equalsIgnoreCase(String.valueOf(context.applicationStatusCode()).trim()))
+            .orElse(false);
+    if (approved
+        && !applicationEditPolicyService
+            .resolve(authentication, applicationService, applicationNumber)
+            .canEditApplicationDetails()) {
+      throw new AccessDeniedException(
+          "An approved application's status can only change within six days of its list date.");
+    }
   }
 
   ResponseEntity<ApplicationReviewStatusUpdateResultDto> updateStatus(

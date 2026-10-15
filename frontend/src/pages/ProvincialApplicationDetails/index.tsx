@@ -1280,10 +1280,13 @@ const ProvincialApplicationDetailsPage = () => {
   const listDateLocked =
     !canReviewApplication &&
     detail?.applicationStatusCode?.trim().toUpperCase() === APPLICATION_STATUS_APPROVED
+  const reviewSourceStatusCode = normalizeReviewStatus(detail?.applicationStatusCode ?? '')
+  // An Approved application's status can change only while its details can still be edited.
   const canEditApplicationReview =
     canReviewApplication &&
     !isApplicationExpired &&
-    REVIEWABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(detail?.applicationStatusCode ?? ''))
+    REVIEWABLE_SOURCE_STATUS_CODES.has(reviewSourceStatusCode) &&
+    (reviewSourceStatusCode !== APPLICATION_STATUS_APPROVED || !!detail?.canEditApplicationDetails)
   const canApproveApplicationReview =
     canEditApplicationReview &&
     APPROVABLE_SOURCE_STATUS_CODES.has(normalizeReviewStatus(detail?.applicationStatusCode ?? ''))
