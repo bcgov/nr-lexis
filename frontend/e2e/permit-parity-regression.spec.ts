@@ -603,8 +603,9 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(
       page.getByRole('tab', { name: 'Permit', exact: true }).locator('svg'),
     ).toBeVisible()
+    // Client location waits on a client, so only the empty Client is outstanding.
     await page
-      .getByRole('tab', { name: 'Applicant, 2 required fields outstanding', exact: true })
+      .getByRole('tab', { name: 'Applicant, 1 required field outstanding', exact: true })
       .click()
     await page.getByRole('combobox', { name: 'Client', exact: true }).fill('Owner')
     await page
@@ -662,7 +663,9 @@ test.describe('Provincial permit parity regressions', () => {
       page.getByRole('heading', { name: 'Volume and remarks', exact: true }),
     ).toHaveCount(0)
     await selectTab(page, 'Scale')
-    await expect(page.getByRole('heading', { name: 'No packages yet', exact: true })).toBeVisible()
+    await expect(
+      page.getByRole('heading', { name: 'No packages for this permit', exact: true }),
+    ).toBeVisible()
     await expect(page.getByRole('button', { name: 'Create package', exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: 'Summary of scale', exact: true })).toHaveCount(0)
     await selectTab(page, 'Fees')

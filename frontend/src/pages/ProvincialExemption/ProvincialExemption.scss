@@ -22,6 +22,8 @@
     th,
     .cds--table-header-label {
       white-space: normal;
+      // Headers break between words, never inside one.
+      overflow-wrap: normal;
     }
     th.cds--table-sort__header {
       padding-inline: 0;

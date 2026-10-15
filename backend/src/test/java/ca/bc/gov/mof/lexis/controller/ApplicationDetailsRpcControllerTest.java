@@ -1233,6 +1233,24 @@ class ApplicationDetailsRpcControllerTest {
   }
 
   @Test
+  void addApplicationShouldRejectAScopedSubmitterAsBothOwnerAndAgent() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00077881");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicantType", "A");
+    params.add("ownerClientNumber", "00077881");
+    params.add("ownerClientLocationCode", "01");
+    params.add("agentClientNumber", "77881");
+    params.add("agentClientLocationCode", "02");
+    params.add("exportScheduleId", "987");
+
+    assertThatThrownBy(() -> controller.addApplicationLegacy(params, authentication))
+        .isInstanceOf(ResponseStatusException.class)
+        .hasMessageContaining("The agent must be a different client from the owner.");
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @Test
   void addApplicationShouldRejectAnAgentLocationOutsideTheScopedSubmitterClient() {
     TestingAuthenticationToken authentication = scopedSubmitter("00077881");
     when(serviceProvider.getIfAvailable()).thenReturn(service);
@@ -1860,6 +1878,49 @@ class ApplicationDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
     verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldRejectAScopedSubmitterOwnerNamingThemselvesAgent() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00011111");
+    matchScopedClient(authentication, "00011111");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithApplicantType("O")));
+    when(applicationEditPolicyService.listDateReached(service, 1000456L)).thenReturn(false);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(
+            ownerAgentSaveParams("00011111", "A", "00011111"), authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("The agent must be a different client from the owner.");
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void updateApplicationSummaryShouldLetAScopedSubmitterWhoIsAlsoTheOwnerRemoveTheAgent() {
+    TestingAuthenticationToken authentication = scopedSubmitter("00011111");
+    matchScopedClient(authentication, "00011111");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshotWithClients("00011111", "00011111")));
+    when(applicationEditPolicyService.listDateReached(service, 1000456L)).thenReturn(false);
+    when(service.updateApplicationSummary(any(), org.mockito.ArgumentMatchers.eq("bceid\\submitter")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = ownerAgentSaveParams("00011111", "O", "00011111");
+    params.set("saveSource", "owner");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isTrue();
+    verify(service).updateApplicationSummary(any(), any());
   }
 
   @ParameterizedTest
@@ -3179,6 +3240,36 @@ class ApplicationDetailsRpcControllerTest {
         snapshot.jurisdictionCode(),
         snapshot.growthTypeCode(),
         agentApplicant ? snapshot.agentContactName() : null,
+        snapshot.ownerContactName(),
+        snapshot.oicIndicator());
+  }
+
+  private ApplicationDetailsRpcService.ApplicationSummarySnapshot summarySnapshotWithClients(
+      String ownerClientNumber, String agentClientNumber) {
+    ApplicationDetailsRpcService.ApplicationSummarySnapshot snapshot = summarySnapshot();
+    return new ApplicationDetailsRpcService.ApplicationSummarySnapshot(
+        snapshot.applicationNumber(),
+        snapshot.federalApplicationNumber(),
+        snapshot.applicationDate(),
+        snapshot.termDays(),
+        snapshot.receivedDate(),
+        snapshot.applicationVolume(),
+        snapshot.averageLogVolume(),
+        snapshot.productLocation(),
+        snapshot.exportScheduleId(),
+        agentClientNumber,
+        snapshot.agentClientLocationCode(),
+        ownerClientNumber,
+        snapshot.ownerClientLocationCode(),
+        snapshot.exemptionNumber(),
+        snapshot.exemptionReasonCode(),
+        snapshot.applicationStatusCode(),
+        "A",
+        snapshot.orgUnitNumber(),
+        snapshot.productTypeCode(),
+        snapshot.jurisdictionCode(),
+        snapshot.growthTypeCode(),
+        snapshot.agentContactName(),
         snapshot.ownerContactName(),
         snapshot.oicIndicator());
   }

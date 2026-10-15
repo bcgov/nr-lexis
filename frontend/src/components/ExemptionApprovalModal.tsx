@@ -363,8 +363,9 @@ const ExemptionApprovalModal = ({
   const showEmailErrorUnderCheckbox =
     submitAttempted && sendEmail && !plural && !retrying && rowsNeedingInput.some(missingAddress)
 
+  // The first attempt keeps one busy label while it approves and then sends the email.
   const primaryLabel = pending
-    ? approved
+    ? retrying
       ? 'Sending…'
       : sendEmail
         ? plural
