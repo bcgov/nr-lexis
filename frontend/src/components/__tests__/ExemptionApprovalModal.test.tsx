@@ -717,7 +717,7 @@ describe('ExemptionApprovalModal', () => {
     await user.click(screen.getByRole('button', { name: 'Approve and send email' }))
     await waitFor(() => expect(sendExemptionApprovalNotifications).toHaveBeenCalledTimes(1))
     expect(screen.getByRole('dialog', { name: 'Approve exemption EX-205' })).toBeVisible()
-    expect(screen.getByRole('button', { name: /Sending…$/ })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Approving and sending emails?$/ })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
     expect(
       screen.queryByText(

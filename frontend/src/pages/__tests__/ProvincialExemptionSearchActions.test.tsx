@@ -968,7 +968,9 @@ describe('Provincial Exemption Search Actions', () => {
     await within(dialog).findByText('client@example.test')
     await userEvent.click(within(dialog).getByRole('button', { name: 'Approve and send email' }))
     await waitFor(() => expect(mockedSendExemptionApprovalNotifications).toHaveBeenCalledTimes(1))
-    expect(within(dialog).getByRole('button', { name: /Sending…$/ })).toBeDisabled()
+    expect(
+      within(dialog).getByRole('button', { name: /^Approving and sending emails?$/ }),
+    ).toBeDisabled()
 
     await act(async () => {
       await router.navigate('/elsewhere')

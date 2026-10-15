@@ -153,6 +153,31 @@ describe('Provincial exemption client parity', () => {
     )
   })
 
+  it('shows the author only once the exemption has loaded', async () => {
+    const detail = await vi.mocked(fetchProvincialExemptionDetail)('26-8758')
+    let resolveDetail: (value: typeof detail) => void = () => undefined
+    vi.mocked(fetchProvincialExemptionDetail).mockReturnValueOnce(
+      new Promise((resolve) => {
+        resolveDetail = resolve
+      }),
+    )
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/26-8758']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(fetchProvincialExemptionDetail).toHaveBeenCalledTimes(2))
+    expect(screen.queryByText(/^Author:/)).not.toBeInTheDocument()
+    resolveDetail(detail)
+    expect(await screen.findByText(/^Author: /)).toBeInTheDocument()
+  })
+
   it('opens on Applicant without first showing tabs that lack it', async () => {
     const applications = await vi.mocked(fetchExemptionApplications)('26-8758')
     let resolveApplications: (value: typeof applications) => void = () => undefined
