@@ -10,6 +10,15 @@ describe('Pagination', () => {
     expect(screen.getByText('of 1,235 pages')).toBeInTheDocument()
   })
 
+  it.each([
+    [1, '1–1 of 1 item'],
+    [7, '1–7 of 7 items'],
+  ])('names %s result as singular or plural', (totalItems, expected) => {
+    render(<Pagination page={1} pageSize={10} pageSizes={[10, 25]} totalItems={totalItems} />)
+
+    expect(screen.getByText(expected)).toBeInTheDocument()
+  })
+
   it('groups the item range when the total is not known yet', () => {
     render(
       <Pagination page={101} pageSize={10} pageSizes={[10, 25]} totalItems={1_011} pagesUnknown />,

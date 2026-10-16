@@ -94,7 +94,7 @@ class PurchaseOfferRepositoryTest {
   }
 
   @Test
-  void searchShouldNotConstrainRegionWhenNoRegionSelected() {
+  void searchWithoutTheRegionDefaultShouldNotConstrainAnEmptyRegion() {
     TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
 
     repository.search(
@@ -105,6 +105,34 @@ class PurchaseOfferRepositoryTest {
         .doesNotContain("EEA.ORG_UNIT_NO")
         .doesNotContain("TO_NUMBER(0)");
     assertThat(repository.bindValues()).isEmpty();
+  }
+
+  @Test
+  void searchShouldLimitAnEmptyRegionToTheNaturalResourceRegionsInPageAndCount() {
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+    PurchaseOfferSearchCriteria criteria = regionDefaultCriteria(List.of());
+
+    repository.search(criteria);
+    String searchSql = repository.whereSql();
+    List<Object> searchBinds = repository.bindValues();
+    repository.count(criteria);
+
+    assertThat(searchSql).contains(" AND EEA.ORG_UNIT_NO IN (?, ?, ?, ?, ?, ?, ?, ?)");
+    assertThat(searchBinds)
+        .containsExactly(1903L, 1904L, 1905L, 1906L, 1907L, 1908L, 1909L, 1910L);
+    assertThat(repository.countWhereSql())
+        .isEqualTo(searchSql.substring(0, searchSql.indexOf(" ORDER BY")));
+    assertThat(repository.countBindValues()).isEqualTo(searchBinds);
+  }
+
+  @Test
+  void selectedRegionsShouldReplaceTheNaturalResourceRegionDefault() {
+    TestPurchaseOfferRepository repository = new TestPurchaseOfferRepository();
+
+    repository.search(regionDefaultCriteria(List.of(1835L)));
+
+    assertThat(repository.whereSql()).contains(" AND EEA.ORG_UNIT_NO IN (?)");
+    assertThat(repository.bindValues()).containsExactly(1835L);
   }
 
   @Test
@@ -217,7 +245,7 @@ class PurchaseOfferRepositoryTest {
           offerNumber ASC|ORDER BY PO.EXPORT_PURCHASE_OFFER_NUMBER ASC
           listingDate DESC|ORDER BY ES.ADVERTISING_DATE DESC, PO.EXPORT_PURCHASE_OFFER_NUMBER DESC
           offerWithdrawalDate ASC|ORDER BY PO.OFFER_WITHDRAWAL_DATE ASC, PO.EXPORT_PURCHASE_OFFER_NUMBER ASC
-          region DESC|ORDER BY OU.ORG_UNIT_NAME DESC, PO.EXPORT_PURCHASE_OFFER_NUMBER DESC
+          region DESC|ORDER BY OU.ORG_UNIT_CODE DESC, PO.EXPORT_PURCHASE_OFFER_NUMBER DESC
           offeringClientNumber ASC|ORDER BY PO.OFFERING_CLIENT_NUMBER ASC, PO.EXPORT_PURCHASE_OFFER_NUMBER ASC
           """)
   void searchShouldWhitelistEverySupportedSort(String sortField, String expectedOrder) {
@@ -297,6 +325,26 @@ class PurchaseOfferRepositoryTest {
       String sortField, int page, int size) {
     return new PurchaseOfferSearchCriteria(
         null, null, null, null, null, null, null, List.of(), sortField, page, size);
+  }
+
+  private static PurchaseOfferSearchCriteria regionDefaultCriteria(List<Long> regionNumbers) {
+    return new PurchaseOfferSearchCriteria(
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        null,
+        false,
+        false,
+        regionNumbers,
+        true,
+        null,
+        0,
+        10);
   }
 
   private static PurchaseOfferSearchResultDto offerResult(long offerNumber) {

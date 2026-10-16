@@ -1,5 +1,6 @@
 package ca.bc.gov.mof.lexis.controller;
 
+import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.firstPresent;
 import static ca.bc.gov.mof.lexis.controller.SearchRequestUtils.parseSearchDate;
 import static ca.bc.gov.mof.lexis.controller.ScopedClientRequestSupport.currentForestClientNumber;
 import static ca.bc.gov.mof.lexis.util.SafeLogFormatter.exceptionType;
@@ -71,6 +72,7 @@ public class PermitController {
       @RequestParam(name = "permitStatus", required = false) String permitStatus,
       @RequestParam(name = "invoiceNumber", required = false) String invoiceNumber,
       @RequestParam(name = "applicantClientNumber", required = false) String applicantClientNumber,
+      @RequestParam(name = "agentClientNumber", required = false) String agentClientNumber,
       @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       @RequestParam(name = "sortField", required = false) String sortField,
@@ -102,7 +104,7 @@ public class PermitController {
             issuedToDate,
             permitStatus,
             invoiceNumber,
-            applicantClientNumber,
+            firstPresent(agentClientNumber, applicantClientNumber),
             ownerClientNumber,
             scopedClientNumber,
             regionNumbers,
@@ -126,6 +128,7 @@ public class PermitController {
       @RequestParam(name = "permitStatus", required = false) String permitStatus,
       @RequestParam(name = "invoiceNumber", required = false) String invoiceNumber,
       @RequestParam(name = "applicantClientNumber", required = false) String applicantClientNumber,
+      @RequestParam(name = "agentClientNumber", required = false) String agentClientNumber,
       @RequestParam(name = "ownerClientNumber", required = false) String ownerClientNumber,
       @RequestParam(name = "region", required = false) List<Long> regionNumbers,
       Authentication authentication) {
@@ -153,7 +156,7 @@ public class PermitController {
             issuedToDate,
             permitStatus,
             invoiceNumber,
-            applicantClientNumber,
+            firstPresent(agentClientNumber, applicantClientNumber),
             ownerClientNumber,
             scopedClientNumber,
             regionNumbers,
@@ -221,7 +224,7 @@ public class PermitController {
       String issuedToDate,
       String permitStatus,
       String invoiceNumber,
-      String applicantClientNumber,
+      String agentClientNumber,
       String ownerClientNumber,
       String accessClientNumber,
       List<Long> regionNumbers,
@@ -236,7 +239,7 @@ public class PermitController {
         parseSearchDate(issuedToDate),
         permitStatus,
         invoiceNumber,
-        applicantClientNumber,
+        agentClientNumber,
         ownerClientNumber,
         accessClientNumber,
         accessClientNumber != null,

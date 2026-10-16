@@ -124,7 +124,7 @@ const permitRequest = {
     permitStatus: '',
     permitNumber: '',
     ownerClientNumber: '',
-    applicantClientNumber: '',
+    agentClientNumber: '',
   },
   page: 0,
   pageSize: 10,
@@ -468,7 +468,13 @@ describe('search-service contracts', () => {
     })
   })
 
-  it.each(['permitStatus', 'permitVolume', 'dateIssued'] as const)(
+  it.each([
+    'permitStatus',
+    'ownerClientNumber',
+    'agentClientNumber',
+    'permitVolume',
+    'dateIssued',
+  ] as const)(
     'sends the supported provincial permit %s sort key and direction',
     async (sortField) => {
       getCachedResponseMock.mockResolvedValue({
@@ -536,6 +542,8 @@ describe('search-service contracts', () => {
       filters: {
         ...permitRequest.filters,
         permitNumber: ' 7001 ',
+        ownerClientNumber: '00022222',
+        agentClientNumber: '00011111',
       },
     }
 
@@ -550,6 +558,9 @@ describe('search-service contracts', () => {
     )
     const searchParams = readParams(0)
     expect(searchParams.get('permitNumber')).toBe('7001')
+    expect(searchParams.get('ownerClientNumber')).toBe('00022222')
+    expect(searchParams.get('agentClientNumber')).toBe('00011111')
+    expect(searchParams.has('applicantClientNumber')).toBe(false)
     expect(searchParams.has('invoiceNumber')).toBe(false)
     expect(getCachedResponseMock).toHaveBeenNthCalledWith(
       2,
@@ -559,6 +570,7 @@ describe('search-service contracts', () => {
     )
     const countParams = readParams(1)
     expect(countParams.get('permitNumber')).toBe('7001')
+    expect(countParams.get('agentClientNumber')).toBe('00011111')
     expect(countParams.has('invoiceNumber')).toBe(false)
     expect(countParams.has('sortField')).toBe(false)
     expect(countParams.has('page')).toBe(false)

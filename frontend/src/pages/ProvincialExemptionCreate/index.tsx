@@ -102,8 +102,8 @@ const EXEMPTION_CREATE_TAB_ICONS = {
 
 const INITIAL_FORM: ProvincialExemptionCreateForm = {
   exemptionNumber: '',
-  exemptionTypeCode: 'M',
-  exemptionStatusCode: 'NEW',
+  exemptionTypeCode: 'O',
+  exemptionStatusCode: 'ACT',
   approvalDate: '',
   expiryDate: '',
   approvedVolume: '',
@@ -187,13 +187,18 @@ const ProvincialExemptionCreatePage = () => {
     ? selectedExemptionTab
     : 'summary'
   const selectedExemptionTabIndex = Math.max(0, visibleExemptionTabs.indexOf(activeExemptionTab))
-  // M, O, and B creation uses a system-selected initial status, so it is a payload invariant,
-  // not a required user input.
+  // OIC and Blanket OIC creation uses a system-selected initial status, so it is a payload
+  // invariant, not a required user input.
   const canEditInitialExemptionStatus =
-    optionsLoaded && !optionsUnavailable && !['M', 'O', 'B'].includes(normalizedTypeCode)
+    optionsLoaded && !optionsUnavailable && !OIC_TYPES.has(normalizedTypeCode)
+  // INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_CREATE_OIC_TYPES): Ministerial exemptions are created
+  // from selected applications in Application search, so this page doesn't offer the type.
   const availableExemptionTypes = useMemo(
     () =>
-      exemptionTypes.filter((option) => option.value.toUpperCase() !== 'B' || canCreateBlanketOic),
+      exemptionTypes.filter((option) => {
+        const typeCode = option.value.toUpperCase()
+        return typeCode !== 'M' && (typeCode !== 'B' || canCreateBlanketOic)
+      }),
     [canCreateBlanketOic, exemptionTypes],
   )
   const selectedRegions = useMemo(
@@ -336,7 +341,7 @@ const ProvincialExemptionCreatePage = () => {
     markFormEdited()
     const typeCode = value.trim().toUpperCase()
     // Legacy creates OIC/BOIC as Active without the separate Ministerial approval permission.
-    const nextStatus = typeCode === 'M' ? 'NEW' : OIC_TYPES.has(typeCode) ? 'ACT' : ''
+    const nextStatus = OIC_TYPES.has(typeCode) ? 'ACT' : ''
     setForm((current) => {
       const currentTypeCode = current.exemptionTypeCode.trim().toUpperCase()
       const currentVolume = current.approvedVolume.trim()
@@ -353,7 +358,6 @@ const ProvincialExemptionCreatePage = () => {
         exemptionNumber: OIC_TYPES.has(typeCode) ? current.exemptionNumber : '',
         exemptionTypeCode: value,
         exemptionStatusCode: nextStatus || current.exemptionStatusCode,
-        approvalDate: typeCode === 'M' ? '' : current.approvalDate,
         approvedVolume,
         enableRateOverride: OIC_TYPES.has(typeCode) ? current.enableRateOverride : false,
         feeRate: OIC_TYPES.has(typeCode) ? current.feeRate : '',
@@ -644,7 +648,6 @@ const ProvincialExemptionCreatePage = () => {
                             labelText={requiredLabel('Approval date', oicLike)}
                             required={oicLike}
                             value={form.approvalDate}
-                            disabled={normalizedTypeCode === 'M'}
                             invalid={!!fieldError('approvalDate')}
                             invalidText={fieldError('approvalDate')}
                             onChange={(value) => {

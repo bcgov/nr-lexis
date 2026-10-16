@@ -90,7 +90,6 @@ import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPrefe
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
 import {
   formatDeferredSearchTotalLabel,
-  formatSearchResultCount,
   loadSearchWithDeferredTotal,
   prefetchNextSearchPage,
   type DeferredSearchTotalStatus,
@@ -1030,7 +1029,7 @@ const ProvincialExemptionPage = () => {
                 >
                   Clear all
                 </Button>
-                <SearchSubmitButton loading={loading} disabled={hasDateValidationError} />
+                <SearchSubmitButton loading={loading} invalid={hasDateValidationError} />
               </div>
               <div
                 ref={approvalResultsRef}
@@ -1079,7 +1078,10 @@ const ProvincialExemptionPage = () => {
             resultName="exemption"
             loading={resultsLoading}
             loadingDescription="Searching"
-            columnCount={SORT_COLUMNS.length + (canApproveExemption ? 1 : 0)}
+            columnHeaders={[
+              ...(canApproveExemption ? [''] : []),
+              ...SORT_COLUMNS.map((column) => column.label),
+            ]}
             totalItems={
               errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
@@ -1247,38 +1249,28 @@ const ProvincialExemptionPage = () => {
               />
             ) : null}
             {!errorMessage && !noResults && (!resultsLoading || results.content.length > 0) && (
-              <>
-                <div className="legacy-search-result-count legacy-search-result-count--footer">
-                  {formatDeferredSearchTotalLabel(
-                    results.page.totalElements,
-                    totalStatus,
-                    results.page.number * results.page.size + results.content.length,
-                    'exemption',
-                  ) ?? formatSearchResultCount(results.page.totalElements, 'exemption')}
-                </div>
-                <Pagination
-                  page={results.page.number + 1}
-                  pageSize={results.page.size}
-                  pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
-                  totalItems={results.page.totalElements}
-                  totalPending={totalStatus === 'pending'}
-                  pagesUnknown={totalStatus !== 'exact'}
-                  isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
-                  onChange={({ page, pageSize: nextPageSize }) => {
-                    clearSelection()
-                    setSearchParams(
-                      buildSearchParams(
-                        appliedFilters,
-                        sortField,
-                        sortDirection,
-                        page,
-                        nextPageSize,
-                        defaultStatusCode,
-                      ),
-                    )
-                  }}
-                />
-              </>
+              <Pagination
+                page={results.page.number + 1}
+                pageSize={results.page.size}
+                pageSizes={[...SEARCH_PAGE_SIZE_OPTIONS]}
+                totalItems={results.page.totalElements}
+                totalPending={totalStatus === 'pending'}
+                pagesUnknown={totalStatus !== 'exact'}
+                isLastPage={totalStatus !== 'exact' && results.content.length < results.page.size}
+                onChange={({ page, pageSize: nextPageSize }) => {
+                  clearSelection()
+                  setSearchParams(
+                    buildSearchParams(
+                      appliedFilters,
+                      sortField,
+                      sortDirection,
+                      page,
+                      nextPageSize,
+                      defaultStatusCode,
+                    ),
+                  )
+                }}
+              />
             )}
           </SearchResultsTableFrame>
         </section>

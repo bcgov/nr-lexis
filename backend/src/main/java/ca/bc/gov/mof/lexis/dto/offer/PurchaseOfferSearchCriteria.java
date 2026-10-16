@@ -3,6 +3,10 @@ package ca.bc.gov.mof.lexis.dto.offer;
 import java.time.LocalDate;
 import java.util.List;
 
+/**
+ * Offer search filters. With no region numbers, {@code defaultToNaturalResourceRegions} limits the
+ * search to the natural-resource regions; otherwise every region is searched.
+ */
 public record PurchaseOfferSearchCriteria(
     String applicationNumber,
     String packageNumber,
@@ -16,9 +20,45 @@ public record PurchaseOfferSearchCriteria(
     boolean excludeWithdrawn,
     boolean restrictToProvincialOrNullJurisdiction,
     List<Long> regionNumbers,
+    boolean defaultToNaturalResourceRegions,
     String sortField,
     int page,
     int size) {
+
+  public PurchaseOfferSearchCriteria(
+      String applicationNumber,
+      String packageNumber,
+      LocalDate listingFromDate,
+      LocalDate listingToDate,
+      LocalDate withdrawalFromDate,
+      LocalDate withdrawalToDate,
+      String clientNumber,
+      String offeringClientNumber,
+      String accessClientNumber,
+      boolean excludeWithdrawn,
+      boolean restrictToProvincialOrNullJurisdiction,
+      List<Long> regionNumbers,
+      String sortField,
+      int page,
+      int size) {
+    this(
+        applicationNumber,
+        packageNumber,
+        listingFromDate,
+        listingToDate,
+        withdrawalFromDate,
+        withdrawalToDate,
+        clientNumber,
+        offeringClientNumber,
+        accessClientNumber,
+        excludeWithdrawn,
+        restrictToProvincialOrNullJurisdiction,
+        regionNumbers,
+        false,
+        sortField,
+        page,
+        size);
+  }
 
   public PurchaseOfferSearchCriteria(
       String applicationNumber,

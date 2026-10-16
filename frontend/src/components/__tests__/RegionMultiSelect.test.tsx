@@ -61,6 +61,40 @@ describe('RegionMultiSelect', () => {
     expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
   })
 
+  it('shows the placeholder only while no region is selected', async () => {
+    const user = userEvent.setup()
+    render(
+      <>
+        <RegionMultiSelect
+          id="empty-regions"
+          titleText="Empty region"
+          items={regions}
+          selectedItems={[]}
+          placeholder="All"
+          onChange={vi.fn()}
+        />
+        <RegionMultiSelect
+          id="selected-regions"
+          titleText="Selected region"
+          items={regions}
+          selectedItems={regions.slice(0, 2)}
+          placeholder="All"
+          onChange={vi.fn()}
+        />
+      </>,
+    )
+
+    expect(screen.getByRole('combobox', { name: /^Empty region/ })).toHaveAttribute(
+      'placeholder',
+      'All',
+    )
+    const selected = screen.getByRole('combobox', { name: /^Selected region/ })
+    expect(selected).not.toHaveAttribute('placeholder')
+    await user.click(selected)
+    await user.keyboard('{Escape}')
+    expect(selected).not.toHaveAttribute('placeholder')
+  })
+
   it('updates consecutive selections through the Carbon options', async () => {
     const user = userEvent.setup()
     render(<RegionHarness />)

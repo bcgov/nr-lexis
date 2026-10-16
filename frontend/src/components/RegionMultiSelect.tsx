@@ -41,7 +41,8 @@ export default function RegionMultiSelect({
         titleText={titleText}
         items={items}
         itemToString={itemToString}
-        placeholder={placeholder}
+        // With regions selected, the count tag stands alone.
+        placeholder={selectedItems.length === 0 ? placeholder : undefined}
         selectedItems={selectedItems}
         inputProps={{ 'aria-required': required || undefined }}
         disabled={disabled}

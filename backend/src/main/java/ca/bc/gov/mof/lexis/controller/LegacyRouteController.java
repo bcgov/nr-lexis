@@ -411,6 +411,7 @@ public class LegacyRouteController {
         permitStatus,
         invoiceNumber,
         applicantClientNumber,
+        null,
         ownerClientNumber,
         regionNumbers,
         sortField,

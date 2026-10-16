@@ -214,8 +214,12 @@ describe('create page unsaved changes', () => {
       exemptionTypes: [
         { value: 'M', label: 'Ministerial' },
         { value: 'O', label: 'Order in Council' },
+        { value: 'B', label: 'Blanket OIC' },
       ],
-      exemptionStatuses: [{ value: 'NEW', label: 'New' }],
+      exemptionStatuses: [
+        { value: 'NEW', label: 'New' },
+        { value: 'ACT', label: 'Active' },
+      ],
       regions: [{ value: '1903', label: 'Cariboo Natural Resource Region' }],
     })
     mockedFetchApplicationClientLocations.mockResolvedValue([])
@@ -426,7 +430,7 @@ describe('create page unsaved changes', () => {
     const router = renderCreatePage(testCase.createPath, testCase.targetPath, testCase.element)
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
-    await userEvent.click(await screen.findByRole('radio', { name: 'Order in Council' }))
+    await userEvent.click(await screen.findByRole('radio', { name: 'Blanket OIC' }))
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
 
@@ -468,6 +472,9 @@ describe('create page unsaved changes', () => {
     await screen.findByRole('heading', { level: 1, name: testCase.heading })
     await settleLoads()
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
+    await userEvent.type(screen.getByLabelText('Exemption number'), 'EX-123')
+    await userEvent.type(screen.getByLabelText('Approval date'), '2026-07-01')
+    await userEvent.type(screen.getByLabelText('Expiry date'), '2027-07-01')
     await userEvent.type(screen.getByLabelText('Approval volume (m³)'), '10')
 
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))

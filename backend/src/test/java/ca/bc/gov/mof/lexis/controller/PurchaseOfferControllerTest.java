@@ -311,6 +311,43 @@ class PurchaseOfferControllerTest {
   }
 
   @Test
+  void searchAndCountShouldRestrictIndustryUsersToProvincialOrBlankJurisdiction() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+
+    PurchaseOfferSearchCriteria search = captureSearchCriteria(authentication);
+    PurchaseOfferSearchCriteria count = captureCountCriteria(authentication);
+
+    assertThat(search.restrictToProvincialOrNullJurisdiction()).isTrue();
+    assertThat(count.restrictToProvincialOrNullJurisdiction()).isTrue();
+  }
+
+  @Test
+  void searchAndCountShouldNotRestrictStaffJurisdiction() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+
+    PurchaseOfferSearchCriteria search = captureSearchCriteria(authentication);
+    PurchaseOfferSearchCriteria count = captureCountCriteria(authentication);
+
+    assertThat(search.accessClientNumber()).isNull();
+    assertThat(search.restrictToProvincialOrNullJurisdiction()).isFalse();
+    assertThat(count.restrictToProvincialOrNullJurisdiction()).isFalse();
+  }
+
+  @Test
+  void searchAndCountShouldDefaultAnEmptyRegionToTheNaturalResourceRegions() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+
+    PurchaseOfferSearchCriteria search = captureSearchCriteria(authentication);
+    PurchaseOfferSearchCriteria count = captureCountCriteria(authentication);
+
+    assertThat(search.regionNumbers()).isEmpty();
+    assertThat(search.defaultToNaturalResourceRegions()).isTrue();
+    assertThat(count.regionNumbers()).isEmpty();
+    assertThat(count.defaultToNaturalResourceRegions()).isTrue();
+  }
+
+  @Test
   void searchShouldUseReadOnlyIdentityOrganizationUnits() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(
@@ -726,5 +763,25 @@ class PurchaseOfferControllerTest {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.getApplicationSpeciesEndUseSort(1000456L))
         .thenReturn("FI/HE/LUM");
+  }
+
+  private PurchaseOfferSearchCriteria captureSearchCriteria(Authentication user) {
+    when(service.search(any(PurchaseOfferSearchCriteria.class)))
+        .thenReturn(new PurchaseOfferSearchResponseDto(List.of(), 0, 0, 25));
+    controller.search(
+        null, null, null, null, null, null, null, null, null, List.of(), null, 0, 25, null, user);
+    ArgumentCaptor<PurchaseOfferSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(service).search(criteriaCaptor.capture());
+    return criteriaCaptor.getValue();
+  }
+
+  private PurchaseOfferSearchCriteria captureCountCriteria(Authentication user) {
+    when(service.count(any(PurchaseOfferSearchCriteria.class))).thenReturn(0);
+    controller.count(null, null, null, null, null, null, null, null, null, List.of(), user);
+    ArgumentCaptor<PurchaseOfferSearchCriteria> criteriaCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferSearchCriteria.class);
+    verify(service).count(criteriaCaptor.capture());
+    return criteriaCaptor.getValue();
   }
 }

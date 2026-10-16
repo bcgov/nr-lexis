@@ -15,14 +15,14 @@ export type ProvincialPermitSearchFilters = {
   permitStatus: string
   permitNumber: string
   ownerClientNumber: string
-  applicantClientNumber: string
+  agentClientNumber: string
 }
 
 export type ProvincialPermitSearchSortField =
   | 'permitNumber'
   | 'permitStatus'
-  | 'applicantClientNumber'
   | 'ownerClientNumber'
+  | 'agentClientNumber'
   | 'permitVolume'
   | 'dateIssued'
   | 'region'

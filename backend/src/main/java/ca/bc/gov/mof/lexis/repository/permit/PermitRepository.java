@@ -117,6 +117,7 @@ public class PermitRepository extends OracleRepositorySupport {
           Map.entry("dateIssued", "EPD.EXPORT_PERMIT_ISSUE_DATE"),
           Map.entry("permitStatus", "EPD.EXPORT_PERMIT_STATUS_CODE"),
           Map.entry("applicantClientNumber", "EPD.AGENT_NUMBER"),
+          Map.entry("agentClientNumber", "EPD.AGENT_NUMBER"),
           Map.entry("ownerClientNumber", "EPD.CLIENT_NUMBER"),
           Map.entry("region", "OU.ORG_UNIT_CODE"),
           Map.entry("permitVolume", "EPD.PERMIT_VOLUME"),
@@ -212,15 +213,9 @@ public class PermitRepository extends OracleRepositorySupport {
               + "AND ESI.EXPORT_SALES_INVOICE_NUMBER LIKE '%' || ? || '%')",
           invoiceNumber);
     }
-    String applicantClientNumber = trim(criteria.applicantClientNumber());
-    if (applicantClientNumber != null) {
-      where.addRawWithBinds(
-          " AND (EPD.AGENT_NUMBER LIKE '%' || ? || '%' "
-              + "OR (EPD.CLIENT_NUMBER LIKE '%' || ? || '%' "
-              + "AND EPD.AGENT_NUMBER IS NULL))",
-          applicantClientNumber,
-          applicantClientNumber);
-    }
+    // INTENTIONAL_LEGACY_DIVERGENCE(PERMIT_SEARCH_AGENT_CLIENT_ONLY): the agent filter never
+    // matches the owner of a permit without an agent.
+    where.addLike("EPD.AGENT_NUMBER", criteria.applicantClientNumber());
     where.addLike("EPD.CLIENT_NUMBER", criteria.ownerClientNumber());
 
     String accessClientNumber = trim(criteria.accessClientNumber());

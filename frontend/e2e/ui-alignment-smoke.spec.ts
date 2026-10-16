@@ -349,10 +349,13 @@ const submitApplicationSearch = async (page: Page) => {
   const searchButton = page.getByRole('button', { name: 'Search', exact: true })
   await expect(searchButton).toBeVisible()
   await searchButton.click()
-  const counts = page.getByText('2 applications found', { exact: true })
-  await expect(counts).toHaveCount(2)
-  await expect(counts.nth(0)).toBeVisible()
-  await expect(counts.nth(1)).toBeVisible()
+  // The count shows in the toolbar and, as an item range, in the pagination below the table.
+  const count = page.getByText('2 applications found', { exact: true })
+  await expect(count).toHaveCount(1)
+  await expect(count).toBeVisible()
+  await expect(
+    page.locator('.cds--pagination').getByText('1–2 of 2 items', { exact: true }),
+  ).toHaveCount(1)
 }
 
 test.describe('FSPTS-aligned LEXIS shell', () => {
@@ -737,10 +740,13 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(initialShellLayout.criteriaActionGap).toBe(12)
     expect(initialShellLayout.sideNavTransitionMs).toBe(320)
     expect(initialShellLayout.mainTransitionMs).toBe(320)
-    await expect(
-      page.getByRole('combobox', { name: /^Region\s*Total items selected:\s*3/ }),
-    ).toBeVisible()
+    const selectedRegions = page.getByRole('combobox', {
+      name: /^Region\s*Total items selected:\s*3/,
+    })
+    await expect(selectedRegions).toBeVisible()
     await expect(page.locator('.region-multi-select .cds--tag--filter')).toHaveText('3')
+    // With regions selected, the count tag stands alone, without "All" beside it.
+    await expect(selectedRegions).not.toHaveAttribute('placeholder')
     await expect(page.getByRole('list', { name: 'Selected regions' })).toHaveCount(0)
     const applicationSearchRequest = page.waitForRequest(
       (request) => new URL(request.url()).pathname === '/api/lexis/applications/search',
@@ -750,7 +756,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(submittedRegionParams.getAll('region')).toEqual(['1903', '1904', '1907'])
     await expect(page.locator('.lexis-status-tag')).toHaveCount(2)
     const applicationSortHeader = page.getByRole('columnheader', {
-      name: 'Application',
+      name: 'Application number',
       exact: true,
     })
     await expect(applicationSortHeader).toHaveAttribute('aria-sort', 'descending')
@@ -1318,8 +1324,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(
       page.getByText('Must be on or after List date from.', { exact: true }),
     ).toBeVisible()
-    await expect(search).toBeDisabled()
+    // Search stays enabled; it runs no search and moves focus to the field with the error.
+    await expect(search).toBeEnabled()
+    await search.click()
+    await expect(to).toBeFocused()
     await to.press('Enter')
+    await expect(to).toBeFocused()
     expect(searchRequests).toHaveLength(0)
     await page.getByRole('heading', { name: 'Federal application search', exact: true }).click()
     await expect(from).toHaveValue('2026-10-12')
@@ -1333,9 +1343,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await to.press('Tab')
     await expect(search).toBeEnabled()
     await search.click()
-    const oneResultCounts = page.getByText('1 application found', { exact: true })
-    await expect(oneResultCounts).toHaveCount(2)
-    await expect(oneResultCounts.first()).toBeVisible()
+    // The count shows in the toolbar and, singular, in the pagination below the table.
+    const oneResultCount = page.getByText('1 application found', { exact: true })
+    await expect(oneResultCount).toHaveCount(1)
+    await expect(oneResultCount).toBeVisible()
+    await expect(page.getByText('1–1 of 1 item', { exact: true })).toBeVisible()
     expect(searchRequests[0].searchParams.get('size')).toBe('10')
     expect(searchRequests[0].searchParams.get('listingFromDate')).toBe('2026-10-12')
     expect(searchRequests[0].searchParams.get('listingToDate')).toBe('2026-10-12')
@@ -1359,7 +1371,6 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await search.click()
     // No results show only the empty state, without counts or pagination.
     await expect(page.getByRole('heading', { name: 'No results found', exact: true })).toBeVisible()
-    await expect(page.locator('.legacy-search-result-count--footer')).toHaveCount(0)
     await expect(page.locator('.cds--pagination')).toHaveCount(0)
     await expect(
       page.getByText(
@@ -1514,7 +1525,6 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     )
     // No results show only the empty state, without counts or pagination.
     await expect(page.getByRole('heading', { name: 'No results found', exact: true })).toBeVisible()
-    await expect(page.locator('.legacy-search-result-count--footer')).toHaveCount(0)
     await expect(page.locator('.cds--pagination')).toHaveCount(0)
   })
 
@@ -1657,18 +1667,18 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         'issuedFromDate',
         'issuedToDate',
         'permitStatus',
-        'applicantClientNumber',
         'ownerClientNumber',
+        'agentClientNumber',
       ])
       const permitColumnWidth = permitLayout.applicationNumber.width
-      for (const clientField of ['applicantClientNumber', 'ownerClientNumber']) {
+      for (const clientField of ['ownerClientNumber', 'agentClientNumber']) {
         expect(
           Math.abs(permitLayout[clientField].width - (permitColumnWidth * 2 + columnGap)),
         ).toBeLessThanOrEqual(1)
         expect(permitLayout[clientField].top).toBeGreaterThan(permitLayout.permitStatus.bottom)
       }
       expect(
-        Math.abs(permitLayout.applicantClientNumber.left - permitLayout.applicationNumber.left),
+        Math.abs(permitLayout.ownerClientNumber.left - permitLayout.applicationNumber.left),
       ).toBeLessThanOrEqual(1)
 
       if (viewport.columns === 4) {
@@ -1682,13 +1692,13 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
           Math.abs(permitLayout.region.left - applicationLayout.region.left),
         ).toBeLessThanOrEqual(1)
         expectSameRow(permitLayout, ['issuedFromDate', 'issuedToDate', 'permitStatus'])
-        expectSameRow(permitLayout, ['applicantClientNumber', 'ownerClientNumber'])
+        expectSameRow(permitLayout, ['ownerClientNumber', 'agentClientNumber'])
       } else {
         expectSameRow(permitLayout, ['applicationNumber', 'packageNumber'])
         expectSameRow(permitLayout, ['permitNumber', 'region'])
         expectSameRow(permitLayout, ['issuedFromDate', 'issuedToDate'])
-        expect(permitLayout.ownerClientNumber.top).toBeGreaterThan(
-          permitLayout.applicantClientNumber.bottom,
+        expect(permitLayout.agentClientNumber.top).toBeGreaterThan(
+          permitLayout.ownerClientNumber.bottom,
         )
       }
 
@@ -1794,10 +1804,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const firstRowHeight = await rows.first().evaluate((row) => row.getBoundingClientRect().height)
     expect(firstRowHeight).toBeGreaterThanOrEqual(40)
     expect(firstRowHeight).toBeLessThanOrEqual(64)
-    await expect(table.getByRole('columnheader', { name: 'Application', exact: true })).toHaveCSS(
-      'white-space',
-      'normal',
-    )
+    await expect(
+      table.getByRole('columnheader', { name: 'Application number', exact: true }),
+    ).toHaveCSS('white-space', 'normal')
     await expect(table.locator('.legacy-search-table-date').first()).toHaveCSS(
       'white-space',
       'normal',
@@ -1828,11 +1837,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     expect(rowDividerStyles[0]?.borderBlockEndColor).toBe(rowDividerStyles[0]?.backgroundColor)
     expect(rowDividerStyles[1]?.borderBlockStartColor).toBe(rowDividerStyles[1]?.backgroundColor)
     expect(rowDividerStyles[1]?.borderBlockEndColor).toBe(rowDividerStyles[1]?.backgroundColor)
-    const resultCounts = page.getByText('2 applications found', { exact: true })
-    await expect(resultCounts).toHaveCount(2)
-    for (const count of await resultCounts.all()) {
-      await expect(count).toHaveCSS('font-weight', '400')
-    }
+    const resultCount = page.getByText('2 applications found', { exact: true })
+    await expect(resultCount).toHaveCount(1)
+    await expect(resultCount).toHaveCSS('font-weight', '400')
 
     const pagination = page.locator('.legacy-search-table-frame .cds--pagination')
     await expect(pagination).toHaveCSS('border-top-width', '1px')
@@ -1869,27 +1876,21 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     const listDateFrom = page.getByRole('textbox', { name: 'List date from', exact: true })
     await listDateFrom.fill('2026-02-30')
     await page.getByRole('heading', { name: 'Application search', exact: true }).click()
-    const disabledSearchAction = page.getByRole('button', { name: 'Search', exact: true })
-    await expect(disabledSearchAction).toBeDisabled()
-    await expect(disabledSearchAction).toHaveCSS('background-color', 'rgba(141, 141, 141, 0.3)')
-    await expect(disabledSearchAction).toHaveCSS('color', 'rgba(255, 255, 255, 0.25)')
-    const disabledStylesBeforeHover = await disabledSearchAction.evaluate((element) => {
-      const style = getComputedStyle(element)
-      return { backgroundColor: style.backgroundColor, color: style.color }
-    })
-    await disabledSearchAction.hover({ force: true })
-    const disabledStylesAfterHover = await disabledSearchAction.evaluate((element) => {
-      const style = getComputedStyle(element)
-      return { backgroundColor: style.backgroundColor, color: style.color }
-    })
-    expect(disabledStylesAfterHover).toEqual(disabledStylesBeforeHover)
+    // Search stays enabled with an invalid date; it focuses the date instead of searching.
+    const searchAction = page.getByRole('button', { name: 'Search', exact: true })
+    await expect(searchAction).toBeEnabled()
+    await expect(searchAction).toHaveCSS('background-color', 'rgb(0, 115, 230)')
+    await searchAction.click()
+    await expect(listDateFrom).toBeFocused()
+    await expect(listDateFrom).toHaveAttribute('aria-invalid', 'true')
+    await expect(page.getByText('Date must be YYYY-MM-DD', { exact: true })).toBeVisible()
     // Clear the range input as a person does. fill('') selects before focus, and the date
     // picker's focus handler restores the draft, so its Delete would remove nothing.
     await listDateFrom.click()
     await listDateFrom.press('ControlOrMeta+a')
     await listDateFrom.press('Delete')
     await page.getByRole('heading', { name: 'Application search', exact: true }).click()
-    await expect(disabledSearchAction).toBeEnabled()
+    await expect(listDateFrom).not.toHaveAttribute('aria-invalid', 'true')
     await expect(page.getByRole('button', { name: 'Search', exact: true })).toHaveCSS(
       'background-color',
       'rgb(0, 115, 230)',
@@ -2768,8 +2769,8 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         status: 200,
         contentType: 'application/json',
         body: JSON.stringify({
-          exemptionTypes: [{ code: 'M', name: 'Ministerial' }],
-          exemptionStatuses: [{ code: 'NEW', name: 'New' }],
+          exemptionTypes: [{ code: 'O', name: 'Order in Council' }],
+          exemptionStatuses: [{ code: 'ACT', name: 'Active' }],
           regions: [{ code: '1903', name: 'Cariboo' }],
         }),
       })

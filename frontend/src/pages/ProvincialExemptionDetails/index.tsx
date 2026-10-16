@@ -3029,10 +3029,10 @@ const ProvincialExemptionDetailsPage = () => {
                             <Table size="md" useZebraStyles>
                               <TableHead>
                                 <TableRow>
-                                  <TableHeader>Permit</TableHeader>
-                                  <TableHeader>Volume (m³)</TableHeader>
+                                  <TableHeader>Permit number</TableHeader>
+                                  <TableHeader>Total volume (m³)</TableHeader>
                                   <TableHeader>Status</TableHeader>
-                                  <TableHeader>Issue date</TableHeader>
+                                  <TableHeader>Issued date</TableHeader>
                                 </TableRow>
                               </TableHead>
                               <TableBody>

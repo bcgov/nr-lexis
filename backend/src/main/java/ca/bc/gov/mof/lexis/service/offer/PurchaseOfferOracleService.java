@@ -437,6 +437,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         input.excludeWithdrawn(),
         input.restrictToProvincialOrNullJurisdiction(),
         positiveDistinctLongs(input.regionNumbers()),
+        input.defaultToNaturalResourceRegions(),
         trimToNull(input.sortField()),
         Math.max(0, input.page()),
         Math.max(1, input.size()));

@@ -1,10 +1,6 @@
 import { DatePicker, DatePickerInput } from '@carbon/react'
 import { useCallback, useEffect, useMemo, useRef } from 'react'
-import {
-  hasInvalidIsoDateRange,
-  isValidIsoDate,
-  isoDateRangeEndError,
-} from '@/pages/shared/create-form-utils'
+import { isValidIsoDate, isoDateRangeEndError } from '@/pages/shared/create-form-utils'
 import { parseIsoDate } from './IsoDatePicker'
 
 type IsoDateRangePickerProps = {
@@ -69,9 +65,6 @@ export default function IsoDateRangePicker({
       const input = event.target
       if (!(input instanceof HTMLInputElement)) return
       event.stopPropagation()
-      if (event.type === 'keydown' && hasInvalidIsoDateRange(...latestValuesRef.current)) {
-        event.preventDefault()
-      }
     }
     const rememberCalendarIntent = (event: Event) => {
       const input = event.target

@@ -150,6 +150,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(criteria.excludeWithdrawn()).isTrue();
     assertThat(criteria.restrictToProvincialOrNullJurisdiction()).isTrue();
     assertThat(criteria.regionNumbers()).isEmpty();
+    assertThat(criteria.defaultToNaturalResourceRegions()).isFalse();
     assertThat(criteria.sortField()).isEqualTo("offerNumber DESC");
 
     assertThat(response.total()).isEqualTo(1);
@@ -425,6 +426,7 @@ class OracleLexisSummaryServiceTest {
     assertThat(criteria.excludeWithdrawn()).isTrue();
     assertThat(criteria.restrictToProvincialOrNullJurisdiction()).isFalse();
     assertThat(criteria.regionNumbers()).isEmpty();
+    assertThat(criteria.defaultToNaturalResourceRegions()).isFalse();
     assertThat(criteria.page()).isEqualTo(1);
     assertThat(criteria.size()).isEqualTo(1);
 

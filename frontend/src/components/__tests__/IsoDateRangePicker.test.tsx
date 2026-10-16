@@ -97,6 +97,14 @@ describe('IsoDateRangePicker', () => {
     })
   })
 
+  it('leaves Enter on an invalid range to the form, so its search can report the error', async () => {
+    render(<Range initial={['2026-10-12', '2026-10-01']} />)
+    const to = screen.getByLabelText('List date to')
+    await waitFor(() => expect(to).toHaveAttribute('aria-invalid', 'true'))
+
+    expect(fireEvent.keyDown(to, { key: 'Enter' })).toBe(true)
+  })
+
   it('preserves an open-ended filter after clearing one bound and pressing Enter', async () => {
     render(<Range initial={['2026-01-10', '2026-01-20']} />)
     const from = screen.getByLabelText('List date from')
