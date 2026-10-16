@@ -1987,7 +1987,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.applicationNumber()).isEqualTo(9001L);
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
-    assertThat(result.warnings()).contains("Loaded payload/6-652-7.xml from ZIP archive submission.zip.");
+    assertThat(result.warnings()).isEmpty();
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
   }
 
@@ -2009,6 +2009,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.applicationNumber()).isEqualTo(9001L);
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
+    assertThat(result.warnings()).isEmpty();
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
   }
 
@@ -2091,7 +2092,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.applicationNumber()).isEqualTo(9001L);
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
-    assertThat(result.warnings()).contains("Loaded payload/submission.dat from ZIP archive submission.zip.");
+    assertThat(result.warnings()).isEmpty();
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
   }
 
