@@ -31,7 +31,7 @@ class AnalysisWorkflowSecurityTest {
 
     assertThat(resultsJob)
         .contains("needs: [backend-tests, frontend-tests, trivy]")
-        .contains("contains(needs.*.result, 'cancelled')")
+        .contains("uses: bcgov/actions/workflow-results@")
         .doesNotContain("contains(needs.*.result, 'canceled')");
   }
 
