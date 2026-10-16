@@ -64,63 +64,37 @@ const mockedFetchApplicationSummarySnapshot = vi.mocked(fetchApplicationSummaryS
 const mockedFetchCurrentApplicationRecordVersion = vi.mocked(fetchCurrentApplicationRecordVersion)
 const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOptions)
 
-const reviewResponse = {
-  content: [
-    {
-      applicationNumber: '1000123',
-      volume: 1,
-      speciesEndUse: 'LOG',
-      listingDate: '2026-02-01',
-      status: 'NEW',
-      region: '11',
-      showInfoIcon: false,
-    },
-    {
-      applicationNumber: '1000456',
-      volume: 1212,
-      speciesEndUse: 'LUM',
-      listingDate: '2026-02-26',
-      status: 'PND',
-      region: '12',
-      showInfoIcon: false,
-    },
-  ],
-  page: {
-    number: 0,
-    size: 100,
-    totalElements: 2,
-    totalPages: 1,
-  },
-}
+const reviewRow = (applicationNumber: string, overrides = {}) => ({
+  applicationNumber,
+  volume: 1,
+  speciesEndUse: 'LOG',
+  listingDate: '2026-02-01',
+  status: 'New',
+  region: 'RSC',
+  showInfoIcon: false,
+  ...overrides,
+})
 
-const twoNewReviewResponse = {
-  content: [
-    {
-      applicationNumber: '2000001',
-      volume: 210.5,
-      speciesEndUse: 'LOG',
-      listingDate: '2026-02-01',
-      status: 'NEW',
-      region: '11',
-      showInfoIcon: false,
-    },
-    {
-      applicationNumber: '2000002',
-      volume: 95,
-      speciesEndUse: 'LUM',
-      listingDate: '2026-02-26',
-      status: 'NEW',
-      region: '12',
-      showInfoIcon: false,
-    },
-  ],
-  page: {
-    number: 0,
-    size: 100,
-    totalElements: 2,
-    totalPages: 1,
-  },
-}
+const pageOf = (
+  content: ReturnType<typeof reviewRow>[],
+  totalElements = content.length,
+): ApplicationReviewSearchResponse => ({
+  content,
+  page: { number: 0, size: 100, totalElements, totalPages: 1 },
+})
+
+const reviewResponse = pageOf([
+  reviewRow('1000123'),
+  reviewRow('1000456', {
+    volume: 1212,
+    speciesEndUse: 'LUM',
+    listingDate: '2026-02-26',
+    status: 'Pending',
+    region: 'RWC',
+  }),
+])
+
+const threeRowResponse = pageOf([reviewRow('2000001'), reviewRow('2000002'), reviewRow('2000003')])
 
 const applicationSummary = {
   applicationNumber: '1000123',
@@ -151,43 +125,48 @@ const applicationSummary = {
   speciesCodes: [],
 }
 
-const renderPage = (
-  initialEntry = '/provincial/review?region=11,12&page=1&pageSize=100&sortField=applicationNumber&sortDirection=desc',
-) => {
-  return render(
+const agentSummary = {
+  ...applicationSummary,
+  applicantTypeCode: 'A',
+  agentClientNumber: '00054321',
+  agentClientLocationCode: '02',
+}
+
+const clientData = (clientNumber: string, email: string) => ({
+  clientNumber,
+  companyName: 'Client Ltd.',
+  clientAcronym: '',
+  address: '',
+  city: '',
+  province: '',
+  postalCode: '',
+  country: '',
+  phone: '',
+  fax: '',
+  email,
+  notfound: '',
+})
+
+const statusSaved = {
+  updated: true,
+  valid: true,
+  statusCode: 'REJ',
+  clientEmail: '',
+  remark: 'Reason',
+  message: 'Application status updated.',
+}
+
+const QUEUE_URL =
+  '/provincial/review?region=&page=1&pageSize=100&sortField=applicationNumber&sortDirection=desc'
+
+const renderPage = (initialEntry = QUEUE_URL) =>
+  render(
     <MemoryRouter initialEntries={[initialEntry]}>
       <Routes>
         <Route path="/provincial/review" element={<ProvincialReviewPage />} />
       </Routes>
     </MemoryRouter>,
   )
-}
-
-const confirmSelectedApplicationApproval = async () => {
-  await userEvent.click(screen.getByRole('button', { name: 'Approve selected applications' }))
-  const dialog = await screen.findByRole('dialog', { name: 'Approve applications' })
-  expect(within(dialog).getByText('2 applications selected')).toBeInTheDocument()
-  const applicationList = within(dialog).getByRole('list', { name: 'Applications to approve' })
-  expect(within(applicationList).getAllByRole('listitem')).toHaveLength(2)
-  expect(applicationList).toHaveClass('provincial-review-approval-modal__application-list')
-  await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
-}
-
-const waitForSendStatusEmailCheckbox = async () => {
-  const checkbox = screen.getByRole('checkbox', { name: 'Send status email' })
-  await waitFor(() => expect(checkbox).toBeEnabled())
-  return checkbox
-}
-
-const revealSendToField = async () => {
-  const checkbox = await waitForSendStatusEmailCheckbox()
-  expect(checkbox).not.toBeChecked()
-  expect(screen.queryByLabelText('Send to')).not.toBeInTheDocument()
-  await userEvent.click(checkbox)
-  const sendToInput = screen.getByLabelText('Send to')
-  await waitFor(() => expect(sendToInput).toBeEnabled())
-  return sendToInput
-}
 
 Element.prototype.scrollIntoView = vi.fn()
 
@@ -197,12 +176,32 @@ const mockLaidOutElements = () =>
     .spyOn(HTMLElement.prototype, 'getClientRects')
     .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
 
-const notice = (text: string) =>
-  screen.getByText(text).closest('.app-inline-notification') as HTMLElement
+// A title with a record link is split around the link, so match the notification's whole text.
+const notice = (text: string) => {
+  const match = Array.from(document.querySelectorAll<HTMLElement>('.app-inline-notification')).find(
+    (notification) => notification.textContent?.includes(text),
+  )
+  if (!match) throw new Error(`No notification shows "${text}"`)
+  return match
+}
 
-describe('Provincial Review Action State Smoke', () => {
+const recordList = (notification: HTMLElement) =>
+  notification.querySelector('.action-result-notification__records')?.textContent
+
+const rowOf = (applicationNumber: string) =>
+  screen.getByText(applicationNumber).closest('tr') as HTMLTableRowElement
+
+const openDisapprove = async (applicationNumber: string) => {
+  await userEvent.click(
+    screen.getByRole('button', { name: `Disapprove application ${applicationNumber}` }),
+  )
+  return screen.findByRole('dialog', { name: `Disapprove application ${applicationNumber}` })
+}
+
+describe('Application review', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    window.sessionStorage.clear()
     mockedUseDefaultRegionPreference.mockReturnValue({
       defaultRegion: null,
       preferenceLoading: false,
@@ -231,1393 +230,1079 @@ describe('Provincial Review Action State Smoke', () => {
       statusCode: 'APP',
       clientEmail: '',
       remark: '',
-      message: 'Approved',
+      message: 'Application approved.',
     })
-    mockedUpdateApplicationReviewStatus.mockResolvedValue({
-      updated: true,
-      valid: true,
-      statusCode: 'REJ',
-      clientEmail: 'client@example.com',
-      remark: 'Reason',
-      message: 'Updated',
-    })
+    mockedUpdateApplicationReviewStatus.mockResolvedValue(statusSaved)
     mockedSendApplicationReviewStatusEmail.mockResolvedValue({
       success: true,
-      message: 'Sent',
+      message: 'Application status email sent.',
     })
     mockedFetchApplicationSummarySnapshot.mockResolvedValue(applicationSummary)
     mockedFetchCurrentApplicationRecordVersion.mockImplementation((applicationNumber) =>
       Promise.resolve(`application-${applicationNumber}-version`),
     )
-    mockedFetchApplicationClientData.mockResolvedValue({
-      clientNumber: '00012345',
-      companyName: 'Client Ltd.',
-      clientAcronym: '',
-      address: '',
-      city: '',
-      province: '',
-      postalCode: '',
-      country: '',
-      phone: '',
-      fax: '',
-      email: 'client@example.com',
-      notfound: '',
-    })
-  })
-
-  it('renders the latest review response when the cache is invalidated in flight', async () => {
-    let resolveSearch: (response: ApplicationReviewSearchResponse) => void = () => {}
-    mockedSearchApplicationReviews.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveSearch = resolve
-      }),
+    mockedFetchApplicationClientData.mockImplementation(async (clientNumber) =>
+      clientData(
+        clientNumber,
+        clientNumber === '00054321' ? 'agent@example.com' : 'owner@example.com',
+      ),
     )
-
-    renderPage()
-    await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1))
-
-    clearAllPageDataCache()
-    await act(async () => {
-      resolveSearch(reviewResponse)
-    })
-
-    expect(await screen.findByText('1000123')).toBeInTheDocument()
-    expect(screen.queryByText('No results found')).not.toBeInTheDocument()
   })
 
-  it('uses one shared loading toolbar for the review results', async () => {
-    mockedSearchApplicationReviews.mockReturnValueOnce(new Promise(() => {}))
+  describe('queue and filters', () => {
+    it('opens with the queue of every New and Pending application, with no Search needed', async () => {
+      renderPage('/provincial/review')
 
-    const { container } = renderPage()
-    await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1))
-
-    expect(screen.getByText('Searching')).toBeInTheDocument()
-    expect(screen.getByRole('table', { name: 'Searching' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeDisabled()
-    expect(container.querySelectorAll('.legacy-search-table-toolbar')).toHaveLength(1)
-    expect(container.querySelector('.provincial-review-table-toolbar')).not.toBeInTheDocument()
-  })
-
-  it('paints review rows before the exact result count is available', async () => {
-    const rows = Array.from({ length: 10 }, (_, index) => ({
-      ...reviewResponse.content[0],
-      applicationNumber: String(3000000 + index),
-    }))
-    mockedSearchApplicationReviews.mockResolvedValueOnce({
-      content: rows,
-      page: {
-        number: 0,
-        size: 10,
-        totalElements: 11,
-        totalPages: 2,
-      },
-    })
-    let resolveCount!: (total: number) => void
-    mockedCountApplicationReviews.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveCount = resolve
-      }),
-    )
-
-    renderPage(
-      '/provincial/review?region=11,12&page=1&pageSize=10&sortField=applicationNumber&sortDirection=desc',
-    )
-
-    await waitFor(() => expect(mockedCountApplicationReviews).toHaveBeenCalledOnce())
-    expect(await screen.findByText('3000000')).toBeInTheDocument()
-    expect(screen.getAllByRole('status', { name: 'Counting search results' })).toHaveLength(2)
-    expect(screen.queryByText(/counting/i)).not.toBeInTheDocument()
-    expect(screen.queryByText('Searching')).not.toBeInTheDocument()
-
-    await act(async () => {
-      resolveCount(125)
-    })
-
-    expect(await screen.findAllByText('125 applications found')).toHaveLength(2)
-    expect(screen.getByText('3000000')).toBeInTheDocument()
-  })
-
-  it('uses the singular result label for one matching application', async () => {
-    mockedSearchApplicationReviews.mockResolvedValueOnce({
-      content: [reviewResponse.content[0]],
-      page: { ...reviewResponse.page, totalElements: 1 },
-    })
-
-    renderPage()
-
-    expect(await screen.findAllByText('1 application found')).toHaveLength(2)
-  })
-
-  it('uses the legacy provincial application review page title', async () => {
-    renderPage()
-
-    expect(await screen.findByRole('heading', { name: 'Application review' })).toBeInTheDocument()
-  })
-
-  it('places the search action last and includes the search icon', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-
-    const searchActions = screen.getByRole('group', { name: 'Review search actions' })
-    expect(
-      within(searchActions)
-        .getAllByRole('button')
-        .map((button) => button.textContent?.trim()),
-    ).toEqual(['Clear all', 'Search'])
-    expect(
-      within(searchActions).getByRole('button', { name: 'Search' }).querySelector('svg'),
-    ).not.toBeNull()
-  })
-
-  it('clears filters and removes results without searching again', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-
-    await userEvent.type(screen.getByLabelText('Application number'), '46053')
-    const resultsTable = screen.getByRole('region', { name: 'Search results table' })
-    const searchCallsBeforeClear = mockedSearchApplicationReviews.mock.calls.length
-
-    await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
-
-    expect(screen.getByLabelText('Application number')).toHaveValue('')
-    await waitFor(() => {
-      expect(resultsTable).not.toBeVisible()
-    })
-    expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(searchCallsBeforeClear)
-  })
-
-  it('enables review actions and select-all for mixed NEW and PND rows', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-
-    const approveButton = screen.getByRole('button', { name: 'Approve selected applications' })
-    expect(approveButton).toBeDisabled()
-    expect(screen.queryByRole('button', { name: 'Update Selected Status' })).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Update Status and Send Email' }),
-    ).not.toBeInTheDocument()
-
-    const newRowCheckbox = screen.getByRole('checkbox', { name: 'Select application 1000123' })
-    const pendingRowCheckbox = screen.getByRole('checkbox', { name: 'Select application 1000456' })
-    expect(newRowCheckbox).toBeEnabled()
-    expect(pendingRowCheckbox).toBeEnabled()
-    expect(newRowCheckbox).not.toHaveAttribute('aria-disabled')
-    expect(pendingRowCheckbox).not.toHaveAttribute('aria-disabled')
-
-    const approveButtons = screen.getAllByRole('button', { name: 'Approve' })
-    const disapproveButtons = screen.getAllByRole('button', { name: 'Disapprove' })
-    expect(approveButtons[0]).toBeEnabled()
-    expect(approveButtons[1]).toBeEnabled()
-    expect(disapproveButtons[0]).toBeEnabled()
-    expect(disapproveButtons[1]).toBeEnabled()
-
-    await userEvent.click(
-      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
-    )
-
-    expect(newRowCheckbox).toBeChecked()
-    expect(pendingRowCheckbox).toBeChecked()
-    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeEnabled()
-    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
-  })
-
-  it('renders legacy non-sortable review result headers as plain text', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-
-    expect(screen.queryByRole('button', { name: 'Status' })).not.toBeInTheDocument()
-    expect(
-      screen.queryByRole('button', { name: 'Application volume (m³)' }),
-    ).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Species end use sort' })).not.toBeInTheDocument()
-  })
-
-  it('renders review data columns in legacy order', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-
-    const headers = screen
-      .getAllByRole('columnheader')
-      .slice(1)
-      .map((header) =>
-        (header.querySelector('.cds--table-header-label') ?? header).textContent
-          ?.replace(/\s+/g, ' ')
-          .trim(),
-      )
-
-    expect(headers).toEqual([
-      'Application',
-      'Status',
-      'Application volume (m³)',
-      'Species end use sort',
-      'List date',
-      'Region',
-      'Actions',
-    ])
-  })
-
-  it('renders application volume with legacy one-decimal precision', async () => {
-    renderPage()
-    await screen.findByText('1000456')
-
-    expect(screen.getByText('1.0')).toBeInTheDocument()
-    expect(screen.getByText('1,212.0')).toBeInTheDocument()
-  })
-
-  it('waits for explicit submission while the application number is typed', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-    mockedSearchApplicationReviews.mockClear()
-
-    const applicationNumberInput = screen.getByLabelText('Application number')
-    for (const value of ['4', '46', '460', '4605', '46053']) {
-      fireEvent.change(applicationNumberInput, { target: { value } })
-    }
-
-    expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
-
-    await waitFor(() => {
+      expect(await screen.findByText('1000123')).toBeInTheDocument()
       expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1)
       expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
         expect.objectContaining({
-          filters: expect.objectContaining({ applicationNumber: '46053' }),
+          filters: {
+            applicationNumber: '',
+            productTypeCode: '',
+            region: [],
+            receivedFromDate: '',
+            receivedToDate: '',
+            listingFromDate: '',
+            listingToDate: '',
+          },
+          page: 0,
+          pageSize: 100,
+          sortField: 'applicationNumber',
+          sortDirection: 'desc',
         }),
         expect.any(Object),
       )
-    })
-  })
-
-  it.each([
-    ['List date', 'listingDate'],
-    ['Region', 'regionCode'],
-  ] as const)('dispatches the legacy review %s sort key', async (header, expectedSortField) => {
-    renderPage()
-    await screen.findByText('1000123')
-    mockedSearchApplicationReviews.mockClear()
-
-    await userEvent.click(screen.getByRole('button', { name: header }))
-
-    await waitFor(() => {
       expect(
-        mockedSearchApplicationReviews.mock.calls.some(
-          ([request]) => request.sortField === expectedSortField && request.sortDirection === 'asc',
-        ),
-      ).toBe(true)
+        screen.getByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
+      ).toBeVisible()
     })
-  })
 
-  it('toggles the default review application sort to ascending', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-    mockedSearchApplicationReviews.mockClear()
+    it('opens the queue on the default zone regions when one is set', async () => {
+      mockedUseDefaultRegionPreference.mockReturnValue({
+        defaultRegion: 'RNI',
+        preferenceLoading: false,
+      })
+      mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
+        productTypes: [],
+        regions: [
+          { value: '1903', label: 'Cariboo' },
+          { value: '1905', label: 'Northeast' },
+          { value: '1906', label: 'Omineca' },
+          { value: '1908', label: 'Skeena' },
+        ],
+        reviewStatuses: [],
+      })
 
-    const applicationSortButton = screen.getByRole('button', { name: 'Application' })
-    expect(applicationSortButton.closest('th')).toHaveAttribute('aria-sort', 'descending')
+      renderPage('/provincial/review')
 
-    await userEvent.click(applicationSortButton)
-
-    await waitFor(() => {
+      await waitFor(() =>
+        expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+          expect.objectContaining({
+            filters: expect.objectContaining({ region: ['1905', '1906', '1908'] }),
+          }),
+          expect.any(Object),
+        ),
+      )
+      expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1)
       expect(
-        mockedSearchApplicationReviews.mock.calls.some(
-          ([request]) =>
-            request.sortField === 'applicationNumber' && request.sortDirection === 'asc',
-        ),
-      ).toBe(true)
-      expect(screen.getByRole('button', { name: 'Application' }).closest('th')).toHaveAttribute(
-        'aria-sort',
-        'ascending',
+        await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*3/ }),
+      ).toBeVisible()
+    })
+
+    it('shows the page title and its subtitle paragraph without a header action', async () => {
+      renderPage()
+
+      const heading = await screen.findByRole('heading', { name: 'Application review' })
+      const subtitle = screen.getByText(
+        'Approve or disapprove applications for the Advertising List',
       )
-    })
-  })
-
-  it('approves a selected PND application', async () => {
-    const layout = mockLaidOutElements()
-    renderPage()
-    await screen.findByText('1000456')
-
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected applications' }))
-
-    const dialog = await screen.findByRole('dialog', { name: 'Approve application' })
-    expect(within(dialog).getByText('1 application selected')).toBeInTheDocument()
-    expect(within(dialog).getByRole('list', { name: 'Applications to approve' })).toHaveTextContent(
-      '1000456',
-    )
-    expect(mockedApproveApplicationReview).not.toHaveBeenCalled()
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
-
-    await waitFor(() => {
-      expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
-      expect(mockedApproveApplicationReview).toHaveBeenCalledWith(
-        '1000456',
-        'application-1000456-version',
-      )
-    })
-    expect(await screen.findByText('Approved 1 application.')).toBeInTheDocument()
-    expect(screen.getByText('Application approved')).toBeInTheDocument()
-    await waitFor(() => expect(notice('Approved 1 application.')).toHaveFocus())
-    layout.mockRestore()
-  })
-
-  it('approves a single reviewable application from the row action', async () => {
-    const layout = mockLaidOutElements()
-    renderPage()
-    await screen.findByText('1000456')
-
-    const pendingRow = screen.getByText('1000456').closest('tr')
-    expect(pendingRow).not.toBeNull()
-    await userEvent.click(
-      within(pendingRow as HTMLTableRowElement).getByRole('button', { name: 'Approve' }),
-    )
-
-    await waitFor(() => {
-      expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
-      expect(mockedApproveApplicationReview).toHaveBeenCalledWith(
-        '1000456',
-        'application-1000456-version',
-      )
-    })
-    expect(await screen.findByText('Approved 1 application.')).toBeInTheDocument()
-    expect(screen.getByText('Application approved')).toBeInTheDocument()
-    await waitFor(() => expect(notice('Approved 1 application.')).toHaveFocus())
-    layout.mockRestore()
-  })
-
-  it('returns focus from the application editor without changing a review decision', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
-    const launcher = screen.getAllByRole('button', { name: 'Disapprove' })[0]
-    await userEvent.click(launcher)
-
-    const panel = screen.getByRole('complementary', { name: 'Update application 1000123' })
-    await waitFor(() =>
-      expect(within(panel).getByRole('combobox', { name: 'Application status' })).toHaveFocus(),
-    )
-    expect(
-      screen.queryByRole('dialog', { name: 'Update application 1000123' }),
-    ).not.toBeInTheDocument()
-    expect(panel).not.toHaveAttribute('aria-modal')
-    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeDisabled()
-    const table = within(launcher.closest('table') as HTMLTableElement)
-    table.getAllByRole('button', { name: 'Approve' }).forEach((button) => {
-      expect(button).toBeDisabled()
-    })
-    table.getAllByRole('button', { name: 'Disapprove' }).forEach((button) => {
-      expect(button).toBeDisabled()
-    })
-    const remarks = within(panel).getByLabelText('Remarks')
-    await userEvent.type(remarks, 'Unsaved reason')
-    fireEvent.keyDown(remarks, { key: 'Escape', code: 'Escape', keyCode: 27, which: 27 })
-
-    await userEvent.click(
-      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
-        name: 'Keep editing',
-      }),
-    )
-    await waitFor(() => expect(remarks).toHaveFocus())
-    expect(remarks).toHaveValue('Unsaved reason')
-
-    await userEvent.click(within(panel).getByRole('button', { name: 'Close' }))
-    await userEvent.click(
-      within(await screen.findByRole('dialog', { name: 'Discard changes?' })).getByRole('button', {
-        name: 'Discard changes',
-      }),
-    )
-
-    await waitFor(() => expect(launcher).toHaveFocus())
-    expect(
-      screen.queryByRole('complementary', { name: 'Update application 1000123' }),
-    ).not.toBeInTheDocument()
-    await userEvent.click(launcher)
-    expect(
-      within(
-        screen.getByRole('complementary', { name: 'Update application 1000123' }),
-      ).getByLabelText('Remarks'),
-    ).toHaveValue('')
-    await userEvent.click(
-      within(screen.getByRole('complementary', { name: 'Update application 1000123' })).getByRole(
-        'button',
-        { name: 'Cancel' },
-      ),
-    )
-    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
-    await waitFor(() => expect(launcher).toHaveFocus())
-    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
-    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeEnabled()
-  })
-
-  it('keeps the application editor locked during save and retains a failed draft', async () => {
-    let resolveUpdate!: (
-      response: Awaited<ReturnType<typeof updateApplicationReviewStatus>>,
-    ) => void
-    mockedUpdateApplicationReviewStatus.mockReturnValueOnce(
-      new Promise((resolve) => {
-        resolveUpdate = resolve
-      }),
-    )
-    renderPage()
-    await screen.findByText('1000123')
-    const launcher = screen.getAllByRole('button', { name: 'Disapprove' })[0]
-    await userEvent.click(launcher)
-    const panel = screen.getByRole('complementary', { name: 'Update application 1000123' })
-    const remarks = within(panel).getByLabelText('Remarks')
-    await userEvent.type(remarks, 'Draft reason')
-    await userEvent.click(within(panel).getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(1))
-    expect(within(panel).getByRole('button', { name: 'Saving…' })).toBeDisabled()
-    expect(within(panel).getByRole('button', { name: 'Cancel' })).toBeDisabled()
-    await userEvent.click(within(panel).getByRole('button', { name: 'Close' }))
-    fireEvent.keyDown(remarks, { key: 'Escape', code: 'Escape', keyCode: 27, which: 27 })
-    expect(panel).toBeVisible()
-    await act(async () =>
-      resolveUpdate({
-        updated: false,
-        valid: false,
-        statusCode: 'REJ',
-        clientEmail: '',
-        remark: '',
-        message: 'Review update unavailable',
-      }),
-    )
-
-    expect(await within(panel).findByText('Review update unavailable')).toBeVisible()
-    expect(within(panel).getByRole('button', { name: 'Save' })).toBeEnabled()
-    expect(remarks).toHaveValue('Draft reason')
-    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-    await userEvent.click(within(panel).getByRole('button', { name: 'Cancel' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
-    await waitFor(() => expect(launcher).toHaveFocus())
-  })
-
-  it('disapproves a single NEW row and sends email only when opted in', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-
-    expect(screen.getByRole('combobox', { name: 'Application status' })).toHaveValue('Rejected')
-    // The page title is the only Application review text; the form has no review heading.
-    expect(screen.getAllByText('Application review')).toEqual([
-      screen.getByRole('heading', { name: 'Application review' }),
-    ])
-    expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
-    const sendToInput = await revealSendToField()
-    expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000123')
-    expect(sendToInput).toHaveValue('client@example.com')
-    expect(sendToInput).not.toHaveAttribute('readonly')
-    expect(screen.queryByLabelText('Send to:')).not.toBeInTheDocument()
-    expect(
-      screen.queryByText(
-        "Defaults from the applicant's Oracle client-location email. Changes apply only to this notification.",
-      ),
-    ).not.toBeInTheDocument()
-
-    fireEvent.change(sendToInput, {
-      target: { value: 'edited.client@example.com' },
-    })
-    await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
-    expect(screen.getByLabelText('Remarks')).toHaveAttribute('rows', '6')
-    expect(sendToInput).toHaveValue('edited.client@example.com')
-    const saveButton = screen.getByRole('button', { name: 'Save' })
-    expect(saveButton).toHaveClass('cds--btn--primary')
-    expect(saveButton).not.toHaveClass('cds--btn--danger')
-    await userEvent.click(saveButton)
-
-    await waitFor(() => {
-      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
-        '1000123',
-        expect.objectContaining({
-          statusCode: 'REJ',
-          remark: 'Rejected from review queue',
-          clientEmailAddress: 'edited.client@example.com',
-        }),
-        'application-1000123-version',
-      )
-      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
-        '1000123',
-        expect.objectContaining({
-          statusCode: 'REJ',
-          remark: 'Rejected from review queue',
-          clientEmailAddress: 'edited.client@example.com',
-        }),
-      )
-    })
-    expect(
-      await screen.findByText('Updated application 1000123 and email sent.'),
-    ).toBeInTheDocument()
-  }, 15000)
-
-  it('prefills an owner disapproval with the owner client-location email', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-
-    expect(await revealSendToField()).toHaveValue('client@example.com')
-  })
-
-  it('does not apply a late disapproval email lookup to another application', async () => {
-    let resolveFirstSummary: (
-      summary: Awaited<ReturnType<typeof fetchApplicationSummarySnapshot>>,
-    ) => void = () => undefined
-    const firstSummary = new Promise<Awaited<ReturnType<typeof fetchApplicationSummarySnapshot>>>(
-      (resolve) => {
-        resolveFirstSummary = resolve
-      },
-    )
-    mockedFetchApplicationSummarySnapshot.mockReturnValueOnce(firstSummary).mockResolvedValueOnce({
-      ...applicationSummary,
-      applicationNumber: '1000456',
-      ownerClientNumber: '00099999',
-    })
-    mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
-      clientNumber,
-      companyName: clientNumber === '00099999' ? 'Second Client Ltd.' : 'First Client Ltd.',
-      clientAcronym: '',
-      address: '',
-      city: '',
-      province: '',
-      postalCode: '',
-      country: '',
-      phone: '',
-      fax: '',
-      email: clientNumber === '00099999' ? 'second.client@example.com' : 'first.client@example.com',
-      notfound: '',
-    }))
-
-    renderPage()
-    await screen.findByText('1000123')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-    expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
-    await userEvent.click(await waitForSendStatusEmailCheckbox())
-    await waitFor(() =>
-      expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000123'),
-    )
-    await userEvent.click(
-      within(screen.getByRole('complementary', { name: 'Update application 1000123' })).getByRole(
-        'button',
-        { name: 'Cancel' },
-      ),
-    )
-    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[1])
-
-    expect(
-      await screen.findByRole('complementary', { name: 'Update application 1000456' }),
-    ).toBeInTheDocument()
-    const sendToInput = await revealSendToField()
-    expect(sendToInput).toHaveValue('second.client@example.com')
-
-    await act(async () => {
-      resolveFirstSummary(applicationSummary)
-      await firstSummary
+      expect(subtitle.tagName).toBe('P')
+      expect(heading.closest('header')?.querySelector('button, a')).toBeNull()
     })
 
-    expect(sendToInput).toHaveValue('second.client@example.com')
-    expect(mockedFetchApplicationClientData).toHaveBeenCalledTimes(1)
-    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00099999', '00')
-  })
-
-  it('disapproves a single PND row through the same review workflow', async () => {
-    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
-      ...applicationSummary,
-      applicationNumber: '1000456',
-      applicationStatusCode: 'PND',
-    })
-
-    renderPage()
-    await screen.findByText('1000456')
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[1])
-    expect(await revealSendToField()).toHaveValue('client@example.com')
-    expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalledWith('1000456')
-    await userEvent.type(screen.getByLabelText('Remarks'), 'Pending application rejected')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => {
-      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
-        '1000456',
-        expect.objectContaining({
-          statusCode: 'REJ',
-          remark: 'Pending application rejected',
-          clientEmailAddress: 'client@example.com',
-        }),
-        'application-1000456-version',
-      )
-      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
-        '1000456',
-        expect.objectContaining({
-          statusCode: 'REJ',
-          remark: 'Pending application rejected',
-          clientEmailAddress: 'client@example.com',
-        }),
-      )
-    })
-    expect(
-      await screen.findByText('Updated application 1000456 and email sent.'),
-    ).toBeInTheDocument()
-  }, 15000)
-
-  it('expires a federal review row without attempting a status email', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-    await waitForSendStatusEmailCheckbox()
-    expect(screen.queryByLabelText('Send to')).not.toBeInTheDocument()
-
-    const statusSelect = screen.getByRole('combobox', { name: 'Application status' })
-    await userEvent.click(statusSelect)
-    const listboxId = statusSelect.getAttribute('aria-controls')
-    const listbox = listboxId ? document.getElementById(listboxId) : null
-    expect(listbox).not.toBeNull()
-    await userEvent.click(within(listbox as HTMLElement).getByRole('option', { name: 'Expired' }))
-
-    expect(screen.getByRole('checkbox', { name: 'Send status email' })).not.toBeChecked()
-    expect(screen.getByRole('checkbox', { name: 'Send status email' })).toBeDisabled()
-    expect(screen.queryByLabelText('Send to')).not.toBeInTheDocument()
-    expect(
-      screen.queryByText('Status emails are sent only for rejected or withdrawn applications.'),
-    ).not.toBeInTheDocument()
-
-    await userEvent.type(screen.getByLabelText('Remarks'), 'Expired after manual review')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => {
-      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
-        '1000123',
-        {
-          statusCode: 'EXP',
-          remark: 'Expired after manual review',
-          clientEmailAddress: '',
-        },
-        'application-1000123-version',
-      )
-    })
-    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-    expect(await screen.findByText('Updated application 1000123.')).toBeInTheDocument()
-    expect(
-      within(notice('Updated application 1000123.')).getByText('Application expired'),
-    ).toBeVisible()
-  }, 15000)
-
-  it('prefills the agent client email when rejecting an agent application', async () => {
-    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
-      ...applicationSummary,
-      applicantTypeCode: 'A',
-      agentClientNumber: '00054321',
-      agentClientLocationCode: '02',
-    })
-    mockedFetchApplicationClientData
-      .mockResolvedValueOnce({
-        clientNumber: '00012345',
-        companyName: 'Owner Ltd.',
-        clientAcronym: '',
-        address: '',
-        city: '',
-        province: '',
-        postalCode: '',
-        country: '',
-        phone: '',
-        fax: '',
-        email: 'owner@example.com',
-        notfound: '',
-      })
-      .mockResolvedValueOnce({
-        clientNumber: '00054321',
-        companyName: 'Agent Ltd.',
-        clientAcronym: '',
-        address: '',
-        city: '',
-        province: '',
-        postalCode: '',
-        country: '',
-        phone: '',
-        fax: '',
-        email: 'agent@example.com',
-        notfound: '',
-      })
-
-    renderPage()
-    await screen.findByText('1000123')
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-    expect(await revealSendToField()).toHaveValue('agent@example.com')
-    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00012345', '00')
-    expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00054321', '02')
-    await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => {
-      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
-        '1000123',
-        expect.objectContaining({
-          statusCode: 'REJ',
-          remark: 'Rejected from review queue',
-          clientEmailAddress: 'agent@example.com',
-        }),
-        'application-1000123-version',
-      )
-      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
-        '1000123',
-        expect.objectContaining({
-          statusCode: 'REJ',
-          remark: 'Rejected from review queue',
-          clientEmailAddress: 'agent@example.com',
-        }),
-      )
-    })
-  }, 15000)
-
-  it('falls back to the owner email when an agent applicant has no email', async () => {
-    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce({
-      ...applicationSummary,
-      applicantTypeCode: 'A',
-      agentClientNumber: '00054321',
-      agentClientLocationCode: '02',
-    })
-    mockedFetchApplicationClientData
-      .mockResolvedValueOnce({
-        clientNumber: '00012345',
-        companyName: 'Owner Ltd.',
-        clientAcronym: '',
-        address: '',
-        city: '',
-        province: '',
-        postalCode: '',
-        country: '',
-        phone: '',
-        fax: '',
-        email: 'owner@example.com',
-        notfound: '',
-      })
-      .mockResolvedValueOnce({
-        clientNumber: '00054321',
-        companyName: 'Agent without email',
-        clientAcronym: '',
-        address: '',
-        city: '',
-        province: '',
-        postalCode: '',
-        country: '',
-        phone: '',
-        fax: '',
-        email: '',
-        notfound: '',
-      })
-
-    renderPage()
-    await screen.findByText('1000123')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-
-    expect(await revealSendToField()).toHaveValue('owner@example.com')
-  })
-
-  it('validates single-row disapproval before status update', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-    await waitForSendStatusEmailCheckbox()
-    expect(screen.queryByLabelText('Send to')).not.toBeInTheDocument()
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    expect(screen.getByText('Remarks are required')).toBeInTheDocument()
-    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
-    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
-    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-  })
-
-  it('replaces a rejection error with a later email lookup error', async () => {
-    mockedUpdateApplicationReviewStatus.mockResolvedValueOnce({
-      updated: false,
-      valid: false,
-      statusCode: 'REJ',
-      clientEmail: '',
-      remark: '',
-      message: 'Unable to reject application.',
-    })
-    mockedFetchApplicationSummarySnapshot.mockRejectedValueOnce(new Error('Lookup failed'))
-
-    renderPage()
-    await screen.findByText('1000123')
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-    await waitForSendStatusEmailCheckbox()
-    await userEvent.type(screen.getByLabelText('Remarks'), 'Rejection reason')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-    expect(await screen.findByText('Unable to reject application.')).toBeInTheDocument()
-    expect(screen.getByText('Application not updated')).toBeVisible()
-    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Send status email' }))
-    expect(
-      await screen.findByText('Unable to load client email for this application.'),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('Unable to reject application.')).not.toBeInTheDocument()
-    const dialog = screen.getByRole('complementary', { name: 'Update application 1000123' })
-    expect(dialog.querySelectorAll('.cds--inline-notification')).toHaveLength(1)
-    await userEvent.click(within(dialog).getByRole('button', { name: 'close notification' }))
-    expect(screen.queryByText('Unable to reject application.')).not.toBeInTheDocument()
-  })
-
-  it('requires a valid client email before rejecting when the client account has no email', async () => {
-    mockedFetchApplicationClientData.mockResolvedValueOnce({
-      clientNumber: '00012345',
-      companyName: 'Client Ltd.',
-      clientAcronym: '',
-      address: '',
-      city: '',
-      province: '',
-      postalCode: '',
-      country: '',
-      phone: '',
-      fax: '',
-      email: '',
-      notfound: '',
-    })
-
-    renderPage()
-    await screen.findByText('1000123')
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-
-    const sendToInput = await revealSendToField()
-    expect(sendToInput).toHaveValue('')
-    expect(
-      screen.queryByText('Enter one valid client email address or deselect Send status email'),
-    ).not.toBeInTheDocument()
-    expect(
-      screen.queryByText(
-        'No client email was found. Enter an email address or deselect Send status email.',
-      ),
-    ).not.toBeInTheDocument()
-
-    await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected from review queue')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    expect(
-      await screen.findByText('Enter one valid client email address or deselect Send status email'),
-    ).toBeInTheDocument()
-    expect(
-      screen.getAllByText('Enter one valid client email address or deselect Send status email'),
-    ).toHaveLength(1)
-    expect(screen.queryByText('Review validation')).not.toBeInTheDocument()
-    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
-    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-  }, 15000)
-
-  it('updates a rejected application without sending email by default', async () => {
-    renderPage()
-    await screen.findByText('1000123')
-
-    await userEvent.click(screen.getAllByRole('button', { name: 'Disapprove' })[0])
-    await waitForSendStatusEmailCheckbox()
-
-    expect(screen.getByRole('checkbox', { name: 'Send status email' })).not.toBeChecked()
-    expect(screen.queryByLabelText('Send to')).not.toBeInTheDocument()
-    expect(mockedFetchApplicationSummarySnapshot).not.toHaveBeenCalled()
-    expect(mockedFetchApplicationClientData).not.toHaveBeenCalled()
-    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
-
-    await userEvent.type(screen.getByLabelText('Remarks'), 'Rejected without notification')
-    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-    await waitFor(() => {
-      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
-        '1000123',
-        expect.objectContaining({
-          statusCode: 'REJ',
-          remark: 'Rejected without notification',
-          clientEmailAddress: '',
-        }),
-        'application-1000123-version',
-      )
-    })
-    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-    expect(await screen.findByText('Updated application 1000123.')).toBeInTheDocument()
-    expect(
-      within(notice('Updated application 1000123.')).getByText('Application rejected'),
-    ).toBeVisible()
-    expect(screen.queryByText('Action complete')).not.toBeInTheDocument()
-  }, 15000)
-
-  it('leaves regions unfiltered and waits for an explicit search', async () => {
-    renderPage('/provincial/review')
-
-    expect(
-      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*0/ }),
-    ).toBeVisible()
-    expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
-    const reviewQueue = screen.getByRole('region', { name: 'Review queue', hidden: true })
-    expect(reviewQueue.closest('[hidden]')).toHaveStyle({ display: 'none' })
-    expect(reviewQueue).not.toBeVisible()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
-    await screen.findByText('1000123')
-    expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
-      expect.objectContaining({
-        filters: expect.objectContaining({
-          region: [],
-        }),
-        pageSize: 100,
-      }),
-      expect.objectContaining({ knownTotal: expect.any(Number) }),
-    )
-    expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1)
-  })
-
-  it('uses the saved region to preselect review search areas', async () => {
-    mockedUseDefaultRegionPreference.mockReturnValue({
-      defaultRegion: 'RNI',
-      preferenceLoading: false,
-    })
-    mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
-      productTypes: [],
-      regions: [
-        { value: '1903', label: 'Cariboo' },
-        { value: '1905', label: 'Northeast' },
-        { value: '1906', label: 'Omineca' },
-        { value: '1908', label: 'Skeena' },
-      ],
-      reviewStatuses: [],
-    })
-
-    renderPage('/provincial/review')
-
-    expect(
-      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*3/ }),
-    ).toBeVisible()
-    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
-
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
-    await waitFor(() => {
-      expect(mockedSearchApplicationReviews).toHaveBeenLastCalledWith(
-        expect.objectContaining({
-          filters: expect.objectContaining({ region: ['1905', '1906', '1908'] }),
-        }),
-        expect.objectContaining({ knownTotal: expect.any(Number) }),
-      )
-    })
-  })
-
-  it.each([true, false])(
-    'identifies MU44 timber marks with detail access %s',
-    async (canOpenDetails) => {
-      mockedUseAuth.mockReturnValue(
-        createTestAuthContext({
-          canPerform: (action) => action !== '/applicationDetails' || canOpenDetails,
-        }),
-      )
-      mockedSearchApplicationReviews.mockResolvedValue({
-        ...reviewResponse,
-        content: reviewResponse.content.map((row, index) => ({
-          ...row,
-          showInfoIcon: index === 0,
-        })),
-      })
+    it('places the search action last and includes the search icon', async () => {
       renderPage()
       await screen.findByText('1000123')
 
-      const note = 'Application contains timber mark(s) from MU44'
-      const flaggedRow = screen.getByText('1000123').closest('tr')!
-      const unflaggedRow = screen.getByText('1000456').closest('tr')!
-      expect(within(flaggedRow).getByRole('button', { name: note })).toBeVisible()
-      expect(within(unflaggedRow).queryByRole('button', { name: note })).not.toBeInTheDocument()
-      if (canOpenDetails) {
-        expect(within(flaggedRow).getByRole('link', { name: '1000123' })).toHaveAttribute(
-          'href',
-          expect.stringContaining('/provincial/application/1000123'),
-        )
-      } else {
-        expect(within(flaggedRow).queryByRole('link')).not.toBeInTheDocument()
+      const searchActions = screen.getByRole('group', { name: 'Review search actions' })
+      expect(
+        within(searchActions)
+          .getAllByRole('button')
+          .map((button) => button.textContent?.trim()),
+      ).toEqual(['Clear all', 'Search'])
+      expect(
+        within(searchActions).getByRole('button', { name: 'Search' }).querySelector('svg'),
+      ).not.toBeNull()
+    })
+
+    it('gives Region one grid column like the other filters', async () => {
+      const { container } = renderPage()
+      await screen.findByText('1000123')
+
+      const grid = container.querySelector('.provincial-review-search-grid') as HTMLElement
+      const region = screen.getByRole('combobox', { name: /^Region/ })
+      const regionCell = Array.from(grid.children).find((child) => child.contains(region))
+      expect(regionCell).toBeDefined()
+      expect(getComputedStyle(regionCell as Element).gridColumn).not.toContain('span 2')
+    })
+
+    it('resets the filters with Clear all and reloads the queue', async () => {
+      mockedUseDefaultRegionPreference.mockReturnValue({
+        defaultRegion: 'RNI',
+        preferenceLoading: false,
+      })
+      mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
+        productTypes: [],
+        regions: [
+          { value: '1903', label: 'Cariboo' },
+          { value: '1905', label: 'Northeast' },
+        ],
+        reviewStatuses: [],
+      })
+      renderPage('/provincial/review?applicationNumber=46053&region=1903&pageSize=100')
+      await screen.findByText('1000123')
+      mockedSearchApplicationReviews.mockClear()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+      await waitFor(() =>
+        expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+          expect.objectContaining({
+            filters: expect.objectContaining({ applicationNumber: '', region: ['1905'] }),
+          }),
+          expect.any(Object),
+        ),
+      )
+      expect(screen.getByLabelText('Application number')).toHaveValue('')
+      expect(await screen.findByText('1000123')).toBeVisible()
+      expect(screen.getByRole('region', { name: 'Search results table' })).toBeVisible()
+    })
+
+    it('reloads the queue with Clear all when the filters are already the defaults', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+      mockedSearchApplicationReviews.mockClear()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
+
+      await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1))
+      expect(await screen.findByText('1000123')).toBeVisible()
+    })
+
+    it('waits for explicit submission while the application number is typed', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+      mockedSearchApplicationReviews.mockClear()
+
+      const applicationNumberInput = screen.getByLabelText('Application number')
+      for (const value of ['4', '46', '460', '4605', '46053']) {
+        fireEvent.change(applicationNumberInput, { target: { value } })
       }
-    },
-  )
 
-  it('opens review with 100 rows and the shared page size options', async () => {
-    renderPage()
-    await screen.findByText('1000123')
+      expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
 
-    expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
-      expect.objectContaining({
-        page: 0,
-        pageSize: 100,
-      }),
-      expect.objectContaining({ knownTotal: expect.any(Number) }),
-    )
+      await userEvent.click(screen.getByRole('button', { name: 'Search' }))
 
-    const rowsPerPage = screen.getByLabelText('Items per page:')
-    expect(rowsPerPage).toHaveValue('100')
-    expect(
-      Array.from(rowsPerPage.querySelectorAll('option')).map((option) => option.value),
-    ).toEqual(['10', '25', '50', '100', '200'])
-  })
-
-  it.each([10, 200])('accepts the supported review page size %i from the URL', async (pageSize) => {
-    renderPage(`/provincial/review?pageSize=${pageSize}`)
-    await screen.findByText('1000123')
-
-    expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
-      expect.objectContaining({
-        page: 0,
-        pageSize,
-      }),
-      expect.objectContaining({ knownTotal: expect.any(Number) }),
-    )
-  })
-
-  it('approves selected applications sequentially', async () => {
-    mockedSearchApplicationReviews.mockResolvedValue(twoNewReviewResponse)
-    let resolveFirstApproval:
-      | ((value: Awaited<ReturnType<typeof approveApplicationReview>>) => void)
-      | undefined
-    let resolveSecondApproval:
-      | ((value: Awaited<ReturnType<typeof approveApplicationReview>>) => void)
-      | undefined
-    mockedApproveApplicationReview
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveFirstApproval = resolve
+      await waitFor(() => {
+        expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1)
+        expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+          expect.objectContaining({
+            filters: expect.objectContaining({ applicationNumber: '46053' }),
           }),
-      )
-      .mockImplementationOnce(
-        () =>
-          new Promise((resolve) => {
-            resolveSecondApproval = resolve
+          expect.any(Object),
+        )
+      })
+    })
+
+    it('sends selected region org unit numbers to the review search request', async () => {
+      mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
+        productTypes: [{ value: 'LOG', label: 'Logs' }],
+        regions: [
+          { value: '1818', label: 'TST' },
+          { value: '1919', label: 'OTHER' },
+        ],
+        reviewStatuses: [{ value: 'REJ', label: 'Rejected' }],
+      })
+
+      renderPage('/provincial/review?applicationNumber=1000123&region=')
+      await screen.findByText('1000123')
+      mockedSearchApplicationReviews.mockClear()
+
+      const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
+      await userEvent.click(regionComboBox)
+      fireEvent.change(regionComboBox, { target: { value: 'TST' } })
+      await userEvent.click(await screen.findByRole('option', { name: 'TST' }))
+
+      expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
+      await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+
+      await waitFor(() => {
+        expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+          expect.objectContaining({
+            filters: expect.objectContaining({ applicationNumber: '1000123', region: ['1818'] }),
           }),
-      )
-
-    renderPage()
-    await screen.findByText('2000001')
-
-    await userEvent.click(
-      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
-    )
-    await confirmSelectedApplicationApproval()
-
-    await waitFor(() => {
-      expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
-    })
-    expect(mockedFetchCurrentApplicationRecordVersion).toHaveBeenNthCalledWith(1, '2000001')
-    expect(mockedApproveApplicationReview).toHaveBeenNthCalledWith(
-      1,
-      '2000001',
-      'application-2000001-version',
-    )
-
-    await act(async () => {
-      resolveFirstApproval?.({
-        updated: true,
-        valid: true,
-        statusCode: 'APP',
-        clientEmail: '',
-        remark: '',
-        message: 'Approved first',
+          expect.any(Object),
+        )
       })
     })
 
-    await waitFor(() => {
-      expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(2)
-    })
-    expect(mockedFetchCurrentApplicationRecordVersion).toHaveBeenNthCalledWith(2, '2000002')
-    expect(mockedApproveApplicationReview).toHaveBeenNthCalledWith(
-      2,
-      '2000002',
-      'application-2000002-version',
-    )
+    it.each([
+      ['Received date from', 'Received date to'],
+      ['List date from', 'List date to'],
+    ])(
+      'keeps Search enabled with a reversed %s range and focuses the error instead of searching',
+      async (fromLabel, toLabel) => {
+        renderPage()
+        await screen.findByText('1000123')
+        const search = screen.getByRole('button', { name: 'Search' })
+        const callsBeforeEdit = mockedSearchApplicationReviews.mock.calls.length
+        const from = screen.getByLabelText(fromLabel)
+        const to = screen.getByLabelText(toLabel)
+        fireEvent.change(from, { target: { value: '2026-10-12' } })
+        fireEvent.change(to, { target: { value: '2026-10-01' } })
+        expect(to).toHaveAttribute('aria-invalid', 'true')
+        expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
+        expect(search).toBeEnabled()
 
-    await act(async () => {
-      resolveSecondApproval?.({
-        updated: true,
-        valid: true,
-        statusCode: 'APP',
-        clientEmail: '',
-        remark: '',
-        message: 'Approved second',
-      })
-    })
+        await userEvent.click(search)
 
-    expect(await screen.findByText('Approved 2 applications.')).toBeInTheDocument()
-    expect(screen.getByText('Applications approved')).toBeInTheDocument()
-  })
+        await waitFor(() => expect(to).toHaveFocus())
+        expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(callsBeforeEdit)
+        expect(screen.getByText('1000123')).toBeVisible()
 
-  it('reports bulk approval failures by application and keeps failed rows selected', async () => {
-    mockedSearchApplicationReviews.mockResolvedValue(twoNewReviewResponse)
-    mockedApproveApplicationReview
-      .mockResolvedValueOnce({
-        updated: true,
-        valid: true,
-        statusCode: 'APP',
-        clientEmail: '',
-        remark: '',
-        message: 'Application approved.',
-      })
-      .mockResolvedValueOnce({
-        updated: false,
-        valid: false,
-        statusCode: 'APP',
-        clientEmail: '',
-        remark: '',
-        message: 'Application owner location does not exist.',
-      })
-
-    renderPage()
-    await screen.findByText('2000001')
-
-    await userEvent.click(
-      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
-    )
-    await confirmSelectedApplicationApproval()
-
-    // Approvals and failures each get their own notification.
-    expect(await screen.findByText('Application approved')).toBeInTheDocument()
-    expect(screen.getByText('Approved 1 application.')).toBeInTheDocument()
-    const failed = screen
-      .getByText('1 application was not approved')
-      .closest('.app-inline-notification') as HTMLElement
-    expect(
-      within(failed)
-        .getAllByRole('listitem')
-        .map((item) => item.textContent),
-    ).toEqual(['2000002: Application owner location does not exist.'])
-    expect(screen.getByRole('checkbox', { name: 'Select application 2000001' })).not.toBeChecked()
-    expect(screen.getByRole('checkbox', { name: 'Select application 2000002' })).toBeChecked()
-    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-  })
-
-  it('closes approval confirmation and lists the failures on the page when every approval fails', async () => {
-    mockedApproveApplicationReview.mockResolvedValueOnce({
-      updated: false,
-      valid: false,
-      statusCode: 'APP',
-      clientEmail: '',
-      remark: '',
-      message: 'Application owner location does not exist.',
-    })
-
-    renderPage()
-    await screen.findByText('1000456')
-    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected applications' }))
-    const dialog = await screen.findByRole('dialog', { name: 'Approve application' })
-    await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
-
-    await waitFor(() =>
-      expect(screen.queryByRole('dialog', { name: 'Approve application' })).not.toBeInTheDocument(),
-    )
-    const failed = screen
-      .getByText('1 application was not approved')
-      .closest('.app-inline-notification') as HTMLElement
-    expect(
-      within(failed).getByText(
-        'It keeps its current status. Correct the details below, then approve again.',
-      ),
-    ).toBeVisible()
-    expect(
-      within(failed)
-        .getAllByRole('listitem')
-        .map((item) => item.textContent),
-    ).toEqual(['1000456: Application owner location does not exist.'])
-    expect(screen.getByRole('checkbox', { name: 'Select application 1000456' })).toBeChecked()
-    await userEvent.click(screen.getByRole('button', { name: 'Approve selected applications' }))
-    const reopened = await screen.findByRole('dialog', { name: 'Approve application' })
-    expect(mockedApproveApplicationReview).toHaveBeenCalledTimes(1)
-    expect(within(reopened).queryByText('1 application was not approved')).not.toBeInTheDocument()
-  })
-
-  it('sends selected region org unit numbers to the review search request', async () => {
-    mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
-      productTypes: [{ value: 'LOG', label: 'Logs' }],
-      regions: [
-        { value: '1818', label: 'TST' },
-        { value: '1919', label: 'OTHER' },
-      ],
-      reviewStatuses: [{ value: 'REJ', label: 'Rejected' }],
-    })
-
-    renderPage('/provincial/review?applicationNumber=1000123&region=')
-    await screen.findByText('1000123')
-    await waitFor(() => {
-      expect(mockedFetchApplicationReviewOptions).toHaveBeenCalledTimes(1)
-    })
-    mockedSearchApplicationReviews.mockClear()
-
-    const regionComboBox = screen.getByRole('combobox', { name: /^Region/ })
-    await userEvent.click(regionComboBox)
-    fireEvent.change(regionComboBox, { target: { value: 'TST' } })
-    await userEvent.click(await screen.findByRole('option', { name: 'TST' }))
-
-    expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
-    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
-
-    await waitFor(() => {
-      expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
-        expect.objectContaining({
-          filters: expect.objectContaining({
-            applicationNumber: '1000123',
-            region: ['1818'],
-          }),
-        }),
-        expect.objectContaining({ knownTotal: expect.any(Number) }),
-      )
-    })
-  })
-
-  it('shows selected review search regions in the default Carbon multi-select', async () => {
-    mockedFetchApplicationReviewOptions.mockResolvedValueOnce({
-      productTypes: [{ value: 'LOG', label: 'Logs' }],
-      regions: [
-        { value: '1903', label: 'Cariboo Natural Resource Region' },
-        { value: '1908', label: 'Skeena Natural Resource Region' },
-      ],
-      reviewStatuses: [{ value: 'REJ', label: 'Rejected' }],
-    })
-
-    renderPage('/provincial/review?region=1903,1908')
-    await screen.findByText('1000123')
-
-    expect(
-      await screen.findByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
-    ).toBeVisible()
-    expect(screen.queryByRole('list', { name: 'Selected regions' })).not.toBeInTheDocument()
-  })
-
-  it('disables selection and action buttons when user lacks review permission', async () => {
-    mockedUseAuth.mockReturnValue(
-      createTestAuthContext({
-        canPerform: (action: string) =>
-          action === '/applicationSearch' || action === '/applicationDetails',
-      }),
-    )
-
-    renderPage()
-    await screen.findByText('1000123')
-
-    const rowCheckbox = screen.getByRole('checkbox', { name: 'Select application 1000123' })
-    const reviewRow = screen.getByText('1000123').closest('tr') as HTMLTableRowElement
-    expect(rowCheckbox).toHaveAttribute('aria-disabled', 'true')
-    expect(rowCheckbox).toHaveAccessibleDescription(
-      expect.stringContaining('You do not have permission to approve applications.'),
-    )
-    expect(
-      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
-    ).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeDisabled()
-    expect(within(reviewRow).getByRole('button', { name: 'Approve' })).toBeDisabled()
-    expect(within(reviewRow).getByRole('button', { name: 'Disapprove' })).toBeDisabled()
-    // jsdom flips a cancelled checkbox click instead of restoring it, so assert the
-    // cancelled click and the unchanged selection rather than the DOM checked state.
-    expect(fireEvent.click(rowCheckbox)).toBe(false)
-    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeDisabled()
-
-    const tooltipTrigger = rowCheckbox.closest('.ineligible-row-checkbox') as HTMLElement
-    expect(tooltipTrigger).toBeTruthy()
-
-    await userEvent.hover(tooltipTrigger)
-
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'You do not have permission to approve applications.',
-    )
-  })
-
-  it('explains when no reviewable applications are available to select', async () => {
-    mockedSearchApplicationReviews.mockResolvedValue({
-      content: [
-        {
-          ...reviewResponse.content[0],
-          status: 'APP',
-        },
-      ],
-      page: {
-        number: 0,
-        size: 100,
-        totalElements: 1,
-        totalPages: 1,
+        fireEvent.change(to, { target: { value: '2026-10-12' } })
+        expect(to).not.toHaveAttribute('aria-invalid', 'true')
+        await userEvent.click(search)
+        await waitFor(() =>
+          expect(mockedSearchApplicationReviews.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
+        )
       },
+    )
+
+    it('does not request a reversed date range restored from a saved link', async () => {
+      renderPage('/provincial/review?listingFromDate=2026-10-12&listingToDate=2026-10-01')
+      await waitFor(() =>
+        expect(screen.getByLabelText('List date to')).toHaveAttribute('aria-invalid', 'true'),
+      )
+      expect(screen.getByRole('button', { name: 'Search' })).toBeEnabled()
+      expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
+      expect(screen.queryByRole('region', { name: 'Applications to review' })).toBeNull()
+    })
+  })
+
+  describe('results', () => {
+    it('renders the latest review response when the cache is invalidated in flight', async () => {
+      let resolveSearch: (response: ApplicationReviewSearchResponse) => void = () => {}
+      mockedSearchApplicationReviews.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveSearch = resolve
+        }),
+      )
+
+      renderPage()
+      await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1))
+
+      clearAllPageDataCache()
+      await act(async () => {
+        resolveSearch(reviewResponse)
+      })
+
+      expect(await screen.findByText('1000123')).toBeInTheDocument()
+      expect(screen.queryByText('No results found')).not.toBeInTheDocument()
     })
 
-    renderPage()
-    await screen.findByText('1000123')
+    it('shows Searching above a skeleton with one column per result column', async () => {
+      mockedSearchApplicationReviews.mockReturnValueOnce(new Promise(() => {}))
 
-    const rowCheckbox = screen.getByRole('checkbox', { name: 'Select application 1000123' })
-    expect(rowCheckbox).toHaveAttribute('aria-disabled', 'true')
-    expect(rowCheckbox).toHaveAccessibleDescription(
-      expect.stringContaining('Only New and Pending applications can be approved.'),
-    )
-    // jsdom flips a cancelled checkbox click instead of restoring it, so assert the
-    // cancelled click and the unchanged selection rather than the DOM checked state.
-    expect(fireEvent.click(rowCheckbox)).toBe(false)
-    expect(screen.getByRole('button', { name: 'Approve selected applications' })).toBeDisabled()
+      const { container } = renderPage()
+      await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1))
 
-    const selectAllCheckbox = screen.getByRole('checkbox', {
-      name: 'Select all eligible rows on this page',
+      expect(screen.getByText('Searching')).toBeInTheDocument()
+      const skeleton = screen.getByRole('table', { name: 'Searching' })
+      // Application, Status, volume, species, List date and Region; no selection or actions.
+      expect(within(skeleton).getAllByRole('columnheader')).toHaveLength(6)
+      expect(container.querySelectorAll('.legacy-search-table-toolbar')).toHaveLength(1)
     })
-    expect(selectAllCheckbox).toBeDisabled()
 
-    const tooltipTrigger = selectAllCheckbox.closest('.disabled-button-tooltip') as HTMLElement
-    expect(tooltipTrigger).toBeTruthy()
+    it('shows the count in the toolbar and the pagination only', async () => {
+      const rows = Array.from({ length: 10 }, (_, index) => reviewRow(String(3000000 + index)))
+      mockedSearchApplicationReviews.mockResolvedValueOnce({
+        content: rows,
+        page: { number: 0, size: 10, totalElements: 11, totalPages: 2 },
+      })
+      let resolveCount!: (total: number) => void
+      mockedCountApplicationReviews.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveCount = resolve
+        }),
+      )
 
-    await userEvent.hover(tooltipTrigger)
+      const { container } = renderPage(
+        '/provincial/review?region=&page=1&pageSize=10&sortField=applicationNumber&sortDirection=desc',
+      )
 
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      'No New or Pending applications are available on this page.',
+      await waitFor(() => expect(mockedCountApplicationReviews).toHaveBeenCalledOnce())
+      expect(await screen.findByText('3000000')).toBeInTheDocument()
+      await act(async () => {
+        resolveCount(125)
+      })
+
+      expect(await screen.findAllByText('125 applications found')).toHaveLength(1)
+      expect(screen.getByText(/of 125 items/)).toBeInTheDocument()
+      expect(container.querySelector('.legacy-search-result-count--footer')).toBeNull()
+    })
+
+    it('uses the singular result label once for one matching application', async () => {
+      mockedSearchApplicationReviews.mockResolvedValueOnce(pageOf([reviewRow('1000123')]))
+
+      renderPage()
+
+      expect(await screen.findAllByText('1 application found')).toHaveLength(1)
+      expect(
+        screen.getByText('1 application found').closest('[aria-live="polite"]'),
+      ).toBeInTheDocument()
+    })
+
+    it('keeps the rows out of the live region so only the count is announced', async () => {
+      const { container } = renderPage()
+      await screen.findByText('1000123')
+
+      expect(container.querySelector('tbody')).toHaveAttribute('aria-live', 'off')
+    })
+
+    it('renders the columns in order with sentence case statuses, words for dates and region codes', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+
+      const headers = screen
+        .getAllByRole('columnheader')
+        .slice(1)
+        .map((header) =>
+          (header.querySelector('.cds--table-header-label') ?? header).textContent
+            ?.replace(/\s+/g, ' ')
+            .trim(),
+        )
+      expect(headers).toEqual([
+        'Application',
+        'Status',
+        'Application volume (m³)',
+        'Species end use sort',
+        'List date',
+        'Region',
+        'Actions',
+      ])
+      expect(screen.queryByRole('button', { name: 'Status' })).not.toBeInTheDocument()
+      expect(within(rowOf('1000456')).getByText('Pending')).toBeVisible()
+      expect(within(rowOf('1000456')).getByText('RWC')).toBeVisible()
+      expect(screen.getByText('1.0')).toBeInTheDocument()
+      expect(screen.getByText('1,212.0')).toBeInTheDocument()
+    })
+
+    it.each([
+      ['List date', 'listingDate'],
+      ['Region', 'regionCode'],
+    ] as const)('dispatches the legacy review %s sort key', async (header, expectedSortField) => {
+      renderPage()
+      await screen.findByText('1000123')
+      mockedSearchApplicationReviews.mockClear()
+
+      await userEvent.click(screen.getByRole('button', { name: header }))
+
+      await waitFor(() => {
+        expect(
+          mockedSearchApplicationReviews.mock.calls.some(
+            ([request]) =>
+              request.sortField === expectedSortField && request.sortDirection === 'asc',
+          ),
+        ).toBe(true)
+      })
+    })
+
+    it('toggles the default review application sort to ascending', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+
+      const applicationSortButton = screen.getByRole('button', { name: 'Application' })
+      expect(applicationSortButton.closest('th')).toHaveAttribute('aria-sort', 'descending')
+
+      await userEvent.click(applicationSortButton)
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Application' }).closest('th')).toHaveAttribute(
+          'aria-sort',
+          'ascending',
+        ),
+      )
+    })
+
+    it.each([true, false])(
+      'identifies MU44 timber marks with detail access %s',
+      async (canOpenDetails) => {
+        mockedUseAuth.mockReturnValue(
+          createTestAuthContext({
+            canPerform: (action) => action !== '/applicationDetails' || canOpenDetails,
+          }),
+        )
+        mockedSearchApplicationReviews.mockResolvedValue(
+          pageOf([reviewRow('1000123', { showInfoIcon: true }), reviewRow('1000456')]),
+        )
+        renderPage()
+        await screen.findByText('1000123')
+
+        const note = 'Application contains timber mark(s) from MU44'
+        expect(within(rowOf('1000123')).getByRole('button', { name: note })).toBeVisible()
+        expect(within(rowOf('1000456')).queryByRole('button', { name: note })).toBeNull()
+        if (canOpenDetails) {
+          expect(within(rowOf('1000123')).getByRole('link', { name: '1000123' })).toHaveAttribute(
+            'href',
+            expect.stringContaining('/provincial/application/1000123'),
+          )
+        } else {
+          expect(within(rowOf('1000123')).queryByRole('link')).not.toBeInTheDocument()
+        }
+      },
     )
+
+    it('opens review with 100 rows and the shared page size options', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+
+      const rowsPerPage = screen.getByLabelText('Items per page:')
+      expect(rowsPerPage).toHaveValue('100')
+      expect(
+        Array.from(rowsPerPage.querySelectorAll('option')).map((option) => option.value),
+      ).toEqual(['10', '25', '50', '100', '200'])
+    })
+
+    it.each([10, 200])(
+      'accepts the supported review page size %i from the URL',
+      async (pageSize) => {
+        renderPage(`/provincial/review?pageSize=${pageSize}`)
+        await screen.findByText('1000123')
+
+        expect(mockedSearchApplicationReviews).toHaveBeenCalledWith(
+          expect.objectContaining({ page: 0, pageSize }),
+          expect.any(Object),
+        )
+      },
+    )
+
+    it('replaces the table and toolbar with the shared empty state when filters match nothing', async () => {
+      mockedSearchApplicationReviews.mockResolvedValue(pageOf([]))
+      renderPage('/provincial/review?applicationNumber=9999999&region=')
+
+      expect(await screen.findByRole('heading', { name: 'No results found' })).toBeVisible()
+      expect(
+        screen.getByText(
+          'No records match your search criteria. Try adjusting your filters and searching again.',
+        ),
+      ).toBeVisible()
+      expect(
+        screen.getByText('0 applications found').closest('.cds--visually-hidden'),
+      ).not.toBeNull()
+      expect(screen.queryByLabelText('Items per page:')).not.toBeInTheDocument()
+      expect(screen.queryByRole('table', { name: /./ })).toBeNull()
+    })
+
+    it('says the queue is empty when the default queue has no applications', async () => {
+      mockedSearchApplicationReviews.mockResolvedValue(pageOf([]))
+      renderPage('/provincial/review')
+
+      expect(
+        await screen.findByRole('heading', { name: 'No applications to review' }),
+      ).toBeVisible()
+      expect(
+        screen.getByText('New and pending applications show here when clients submit them.'),
+      ).toBeVisible()
+      expect(screen.queryByRole('heading', { name: 'No results found' })).toBeNull()
+    })
+
+    it('shows the review error as an alert in place of the table and toolbar', async () => {
+      mockedSearchApplicationReviews.mockRejectedValue(new Error('Oracle unavailable'))
+
+      const { container } = renderPage()
+
+      const heading = await screen.findByRole('heading', { name: 'Application review unavailable' })
+      const alert = heading.closest('[role="alert"]') as HTMLElement
+      expect(alert).not.toBeNull()
+      expect(
+        within(alert).getByText('Unable to retrieve applications for review. Try again.'),
+      ).toBeVisible()
+      expect(container.querySelector('.legacy-search-table-toolbar')).toBeNull()
+      expect(screen.queryByText('Results unavailable')).toBeNull()
+    })
+
+    it('leaves out the checkbox column and row actions for a user who cannot approve', async () => {
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          canPerform: (action: string) =>
+            action === '/applicationSearch' || action === '/applicationDetails',
+        }),
+      )
+
+      renderPage()
+      await screen.findByText('1000123')
+
+      expect(screen.queryByRole('checkbox')).toBeNull()
+      expect(screen.queryByRole('button', { name: /^Approve/ })).toBeNull()
+      expect(screen.queryByRole('button', { name: /^Disapprove/ })).toBeNull()
+    })
   })
 
-  it('shows a request failure instead of a no-results state', async () => {
-    mockedSearchApplicationReviews.mockRejectedValue(new Error('Oracle unavailable'))
+  describe('selection and batch approval', () => {
+    it('makes every row selectable and announces the selected count', async () => {
+      renderPage()
+      await screen.findByText('1000123')
 
-    renderPage()
+      const selectAll = screen.getByRole('checkbox', { name: 'Select all rows on this page' })
+      const first = screen.getByRole('checkbox', { name: 'Select application 1000123' })
+      const second = screen.getByRole('checkbox', { name: 'Select application 1000456' })
+      expect(first).toBeEnabled()
+      expect(second).toBeEnabled()
+      expect(first).not.toHaveAttribute('aria-disabled')
 
-    expect(
-      await screen.findByRole('heading', { name: 'Review queue unavailable' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText('Unable to retrieve application review search results. Try again.'),
-    ).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'No results found' })).not.toBeInTheDocument()
+      await userEvent.click(first)
+
+      expect(selectAll).toHaveProperty('indeterminate', true)
+      expect(selectAll).not.toBeChecked()
+      const announced = screen
+        .getAllByText('1 application selected')
+        .find((element) => element.getAttribute('aria-live') === 'polite')
+      expect(announced).toBeDefined()
+
+      await userEvent.click(selectAll)
+      expect(first).toBeChecked()
+      expect(second).toBeChecked()
+      expect(selectAll).toHaveProperty('indeterminate', false)
+      expect(screen.getAllByText('2 applications selected').length).toBeGreaterThan(0)
+    })
+
+    it('replaces the toolbar with the batch actions bar and disables row actions while it is open', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+      const approveRow = screen.getByRole('button', { name: 'Approve application 1000123' })
+      const disapproveRow = screen.getByRole('button', { name: 'Disapprove application 1000123' })
+      expect(approveRow).toBeEnabled()
+      expect(screen.queryByRole('button', { name: 'Approve selected applications' })).toBeNull()
+
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
+
+      const batchApprove = screen.getByRole('button', { name: 'Approve' })
+      expect(batchApprove.querySelector('svg')).not.toBeNull()
+      expect(approveRow).toBeDisabled()
+      expect(disapproveRow).toBeDisabled()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.getByRole('checkbox', { name: 'Select application 1000456' })).not.toBeChecked()
+      expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+      expect(approveRow).toBeEnabled()
+      expect(disapproveRow).toBeEnabled()
+    })
+
+    it('names each row action and shows its icon after the label', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+
+      const approve = screen.getByRole('button', { name: 'Approve application 1000123' })
+      const disapprove = screen.getByRole('button', { name: 'Disapprove application 1000123' })
+      for (const button of [approve, disapprove]) {
+        expect(button).toHaveClass('cds--btn--ghost')
+        expect(button.lastElementChild?.tagName.toLowerCase()).toBe('svg')
+      }
+      expect(approve).toHaveTextContent('Approve')
+      expect(disapprove).toHaveTextContent('Disapprove')
+    })
+
+    it('confirms a batch approval with the numbers as a bold list', async () => {
+      mockedSearchApplicationReviews.mockResolvedValue(threeRowResponse)
+      renderPage()
+      await screen.findByText('2000001')
+
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 2000001' }))
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 2000003' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
+
+      const dialog = await screen.findByRole('dialog', { name: 'Approve applications' })
+      expect(
+        within(dialog).getByText('You are about to approve the following applications:'),
+      ).toBeVisible()
+      const list = within(dialog).getByRole('list', { name: 'Applications to approve' })
+      expect(
+        within(list)
+          .getAllByRole('listitem')
+          .map((item) => item.querySelector('strong')?.textContent),
+      ).toEqual(['2000001', '2000003'])
+      expect(within(dialog).queryByText(/selected/)).toBeNull()
+
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+      expect(screen.getByRole('checkbox', { name: 'Select application 2000001' })).toBeChecked()
+      expect(mockedApproveApplicationReview).not.toHaveBeenCalled()
+    })
+
+    it('approves selected applications one at a time and lists them as links', async () => {
+      const layout = mockLaidOutElements()
+      mockedSearchApplicationReviews.mockResolvedValue(threeRowResponse)
+      renderPage()
+      await screen.findByText('2000001')
+
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select all rows on this page' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
+      const dialog = await screen.findByRole('dialog', { name: 'Approve applications' })
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
+
+      const banner = await waitFor(() => notice('3 applications approved.'))
+      expect(mockedApproveApplicationReview.mock.calls.map(([number]) => number)).toEqual([
+        '2000001',
+        '2000002',
+        '2000003',
+      ])
+      expect(mockedApproveApplicationReview).toHaveBeenNthCalledWith(
+        2,
+        '2000002',
+        'application-2000002-version',
+      )
+      expect(within(banner).queryByRole('list')).toBeNull()
+      expect(recordList(banner)).toBe('2000001, 2000002, 2000003')
+      expect(within(banner).getByRole('link', { name: '2000002' })).toHaveAttribute(
+        'href',
+        expect.stringContaining('/provincial/application/2000002'),
+      )
+      await waitFor(() =>
+        expect(document.activeElement).toHaveClass('provincial-review-results-notifications'),
+      )
+      expect(document.activeElement).toContainElement(banner)
+      expect(
+        screen.getByRole('checkbox', { name: 'Select all rows on this page' }),
+      ).not.toBeChecked()
+      layout.mockRestore()
+    })
+
+    it('clears the selection after a partial approval and lists each failure with its reason', async () => {
+      mockedSearchApplicationReviews.mockResolvedValue(threeRowResponse)
+      mockedApproveApplicationReview
+        .mockResolvedValueOnce({
+          updated: true,
+          valid: true,
+          statusCode: 'APP',
+          clientEmail: '',
+          remark: '',
+          message: 'Application approved.',
+        })
+        .mockResolvedValueOnce({
+          updated: false,
+          valid: false,
+          statusCode: 'APP',
+          clientEmail: '',
+          remark: '',
+          message: 'Application owner location does not exist',
+        })
+      renderPage()
+      await screen.findByText('2000001')
+
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 2000001' }))
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 2000002' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Approve' }))
+      const dialog = await screen.findByRole('dialog', { name: 'Approve applications' })
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Approve' }))
+
+      const failed = await waitFor(() => notice('1 application was not approved'))
+      expect(
+        within(failed).getByText(
+          'It stays in its current status. Correct the details below, then approve again.',
+        ),
+      ).toBeVisible()
+      expect(
+        within(failed)
+          .getAllByRole('listitem')
+          .map((item) => item.textContent),
+      ).toEqual(['2000002: Application owner location does not exist.'])
+      expect(within(failed).getByRole('link', { name: '2000002' })).toBeVisible()
+      expect(notice('1 application approved.')).toBeVisible()
+      expect(screen.getByRole('checkbox', { name: 'Select application 2000002' })).not.toBeChecked()
+      expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+      expect(screen.getByRole('button', { name: 'Approve application 2000002' })).toBeEnabled()
+    })
+
+    it('keeps approval results through selection, paging and searching until they are closed', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+      await userEvent.click(screen.getByRole('button', { name: 'Approve application 1000123' }))
+      const banner = await waitFor(() => notice('Application 1000123 approved.'))
+
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+      await waitFor(() =>
+        expect(mockedSearchApplicationReviews.mock.calls.length).toBeGreaterThan(2),
+      )
+      expect(banner).toBeInTheDocument()
+
+      await userEvent.click(within(banner).getByRole('button', { name: /close/i }))
+      expect(() => notice('Application 1000123 approved.')).toThrow()
+    })
   })
-  it.each([
-    ['Received date from', 'Received date to'],
-    ['List date from', 'List date to'],
-  ])('blocks a reversed %s range until To is corrected', async (fromLabel, toLabel) => {
-    renderPage()
-    await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalled())
-    const search = screen.getByRole('button', { name: 'Search' })
-    await waitFor(() => expect(search).toBeEnabled())
-    const callsBeforeEdit = mockedSearchApplicationReviews.mock.calls.length
-    const from = screen.getByLabelText(fromLabel)
-    const to = screen.getByLabelText(toLabel)
-    fireEvent.change(from, { target: { value: '2026-10-12' } })
-    fireEvent.change(to, { target: { value: '2026-10-01' } })
-    expect(from).toHaveValue('2026-10-12')
-    expect(to).toHaveValue('2026-10-01')
-    expect(to).toHaveAttribute('aria-invalid', 'true')
-    expect(screen.getByText(`Must be on or after ${fromLabel}.`)).toBeVisible()
-    expect(search).toBeDisabled()
-    await userEvent.click(search)
-    expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(callsBeforeEdit)
 
-    fireEvent.change(to, { target: { value: '2026-10-12' } })
-    await waitFor(() => expect(search).toBeEnabled())
-    expect(to).not.toHaveAttribute('aria-invalid', 'true')
-    await userEvent.click(search)
-    await waitFor(() =>
-      expect(mockedSearchApplicationReviews.mock.calls.length).toBeGreaterThan(callsBeforeEdit),
-    )
+  describe('approve on a row', () => {
+    it('approves straight away and moves focus to Approve on the next row', async () => {
+      mockedSearchApplicationReviews
+        .mockResolvedValueOnce(threeRowResponse)
+        .mockResolvedValue(pageOf([reviewRow('2000001'), reviewRow('2000003')]))
+      renderPage()
+      await screen.findByText('2000002')
+
+      await userEvent.click(screen.getByRole('button', { name: 'Approve application 2000002' }))
+
+      expect(screen.queryByRole('dialog')).toBeNull()
+      const banner = await waitFor(() => notice('Application 2000002 approved.'))
+      expect(mockedApproveApplicationReview).toHaveBeenCalledWith(
+        '2000002',
+        'application-2000002-version',
+      )
+      expect(within(banner).getByRole('link', { name: '2000002' })).toHaveAttribute(
+        'href',
+        expect.stringContaining('/provincial/application/2000002'),
+      )
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Approve application 2000003' })).toHaveFocus(),
+      )
+      expect(
+        screen
+          .getAllByText('Application 2000002 approved.')
+          .some((element) => element.getAttribute('aria-live') === 'polite'),
+      ).toBe(true)
+    })
   })
 
-  it('does not request a reversed date range restored from a saved link', async () => {
-    renderPage('/provincial/review?listingFromDate=2026-10-12&listingToDate=2026-10-01')
-    await waitFor(() =>
-      expect(screen.getByLabelText('List date to')).toHaveAttribute('aria-invalid', 'true'),
-    )
-    expect(screen.getByRole('button', { name: 'Search' })).toBeDisabled()
-    expect(mockedSearchApplicationReviews).not.toHaveBeenCalled()
-    expect(screen.queryByRole('region', { name: 'Review queue' })).not.toBeInTheDocument()
+  describe('disapprove', () => {
+    it('opens a Disapprove modal with Rejected or Withdrawn, a remark and the owner email', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+
+      const dialog = await openDisapprove('1000123')
+
+      const status = within(dialog).getByRole('combobox', { name: 'Application status' })
+      expect(status).toHaveValue('Rejected')
+      expect(status).toHaveAttribute('aria-required', 'true')
+      await userEvent.click(status)
+      const listbox = document.getElementById(status.getAttribute('aria-controls') as string)
+      expect(
+        within(listbox as HTMLElement)
+          .getAllByRole('option')
+          .map((option) => option.textContent),
+      ).toEqual(['Rejected', 'Withdrawn'])
+      await userEvent.keyboard('{Escape}')
+
+      const remark = within(dialog).getByRole('textbox', { name: 'Remark' })
+      expect(remark).toHaveAttribute('maxlength', '250')
+      expect(within(dialog).getByText('Included in the email to the applicant.')).toBeVisible()
+      expect(within(dialog).getByText('0/250')).toBeInTheDocument()
+
+      const send = within(dialog).getByRole('checkbox', { name: 'Send disapproval email' })
+      expect(send).toBeChecked()
+      expect(
+        within(dialog).getByText(
+          'Disapproval emails go to the recipients below. At least one email address is needed.',
+        ),
+      ).toBeVisible()
+      expect(await within(dialog).findByText('owner@example.com')).toBeVisible()
+      expect(within(dialog).getByText('Owner email')).toBeVisible()
+      expect(within(dialog).queryByText('Agent email')).toBeNull()
+      expect(
+        within(dialog).getByRole('button', { name: 'Disapprove and send email' }),
+      ).toBeEnabled()
+
+      await userEvent.click(send)
+      expect(within(dialog).queryByText(/Disapproval emails go to/)).toBeNull()
+      expect(within(dialog).queryByText('owner@example.com')).toBeNull()
+      expect(within(dialog).getByRole('button', { name: 'Disapprove application' })).toBeEnabled()
+    })
+
+    it('validates on the primary button and focuses the first error', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+      const dialog = await openDisapprove('1000123')
+      await within(dialog).findByText('owner@example.com')
+
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Disapprove and send email' }),
+      )
+
+      const remark = within(dialog).getByRole('textbox', { name: 'Remark' })
+      expect(within(dialog).getByText('Remark is required')).toBeVisible()
+      await waitFor(() => expect(remark).toHaveFocus())
+      expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+    })
+
+    it('rejects with the email to the owner and the agent, then moves focus to the next row', async () => {
+      mockedFetchApplicationSummarySnapshot.mockResolvedValue(agentSummary)
+      mockedSearchApplicationReviews
+        .mockResolvedValueOnce(reviewResponse)
+        .mockResolvedValue(pageOf([reviewRow('1000456', { status: 'Pending' })]))
+      renderPage()
+      await screen.findByText('1000123')
+      const dialog = await openDisapprove('1000123')
+
+      expect(await within(dialog).findByText('agent@example.com')).toBeVisible()
+      expect(within(dialog).getByText('owner@example.com')).toBeVisible()
+      await userEvent.type(within(dialog).getByRole('textbox', { name: 'Remark' }), 'Missing docs')
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Disapprove and send email' }),
+      )
+
+      await waitFor(() =>
+        expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith('1000123', {
+          statusCode: 'REJ',
+          remark: 'Missing docs',
+          clientEmailAddress: '',
+          ownerEmail: 'owner@example.com',
+          agentEmail: 'agent@example.com',
+        }),
+      )
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
+        '1000123',
+        { statusCode: 'REJ', remark: 'Missing docs', clientEmailAddress: '' },
+        'application-1000123-version',
+      )
+      const banner = await waitFor(() => notice('Application 1000123 rejected.'))
+      expect(
+        within(banner).getByText(
+          'Disapproval email sent to the owner (owner@example.com) and the agent (agent@example.com).',
+        ),
+      ).toBeVisible()
+      expect(within(banner).getByRole('link', { name: '1000123' })).toBeVisible()
+      expect(screen.queryByRole('dialog', { name: /Disapprove application/ })).toBeNull()
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Approve application 1000456' })).toHaveFocus(),
+      )
+    })
+
+    it('edits recipients for this email only and sends to the address that is left', async () => {
+      mockedFetchApplicationSummarySnapshot.mockResolvedValue(agentSummary)
+      renderPage()
+      await screen.findByText('1000123')
+      const dialog = await openDisapprove('1000123')
+      await within(dialog).findByText('agent@example.com')
+
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Edit recipients' }))
+
+      const owner = within(dialog).getByRole('textbox', { name: 'Owner email' })
+      const agent = within(dialog).getByRole('textbox', { name: 'Agent email' })
+      await waitFor(() => expect(owner).toHaveFocus())
+      expect(within(dialog).getAllByText('Changes apply to this email only.')).toHaveLength(2)
+      await userEvent.clear(agent)
+      await userEvent.type(within(dialog).getByRole('textbox', { name: 'Remark' }), 'Missing docs')
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Disapprove and send email' }),
+      )
+
+      await waitFor(() =>
+        expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
+          '1000123',
+          expect.objectContaining({ ownerEmail: 'owner@example.com', agentEmail: '' }),
+        ),
+      )
+      expect(
+        await screen.findByText('Disapproval email sent to the owner (owner@example.com).'),
+      ).toBeVisible()
+    })
+
+    it('needs at least one address and a correct format before saving', async () => {
+      mockedFetchApplicationSummarySnapshot.mockResolvedValue(agentSummary)
+      renderPage()
+      await screen.findByText('1000123')
+      const dialog = await openDisapprove('1000123')
+      await within(dialog).findByText('agent@example.com')
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Edit recipients' }))
+      await userEvent.type(within(dialog).getByRole('textbox', { name: 'Remark' }), 'Missing docs')
+      const owner = within(dialog).getByRole('textbox', { name: 'Owner email' })
+      const agent = within(dialog).getByRole('textbox', { name: 'Agent email' })
+
+      await userEvent.clear(owner)
+      await userEvent.clear(agent)
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Disapprove and send email' }),
+      )
+
+      expect(
+        within(dialog).getByText(
+          'Enter at least one email address, or clear Send disapproval email to notify the applicant another way.',
+        ),
+      ).toBeVisible()
+      await waitFor(() => expect(owner).toHaveFocus())
+
+      await userEvent.type(owner, 'owner@example')
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Disapprove and send email' }),
+      )
+      expect(
+        within(dialog).getByText(
+          'Enter an email address in the correct format, like name@example.com.',
+        ),
+      ).toBeVisible()
+      expect(owner).toHaveAttribute('aria-invalid', 'true')
+      expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+    })
+
+    it('opens a contact with no email on file as an input', async () => {
+      mockedFetchApplicationClientData.mockResolvedValue(clientData('00012345', 'Not on file'))
+      renderPage()
+      await screen.findByText('1000123')
+      const dialog = await openDisapprove('1000123')
+
+      const owner = await within(dialog).findByRole('textbox', { name: 'Owner email' })
+      expect(owner).toHaveValue('')
+      expect(
+        within(dialog).getByText(
+          'No email on file. The email you enter applies to this email only.',
+        ),
+      ).toBeVisible()
+      expect(within(dialog).queryByRole('button', { name: 'Edit recipients' })).toBeNull()
+    })
+
+    it('withdraws without an email when Send disapproval email is cleared', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+      const dialog = await openDisapprove('1000123')
+
+      const status = within(dialog).getByRole('combobox', { name: 'Application status' })
+      await userEvent.click(status)
+      const listbox = document.getElementById(status.getAttribute('aria-controls') as string)
+      await userEvent.click(
+        within(listbox as HTMLElement).getByRole('option', { name: 'Withdrawn' }),
+      )
+      await userEvent.type(
+        within(dialog).getByRole('textbox', { name: 'Remark' }),
+        'Withdrawn by client',
+      )
+      await userEvent.click(
+        within(dialog).getByRole('checkbox', { name: 'Send disapproval email' }),
+      )
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Disapprove application' }))
+
+      const banner = await waitFor(() => notice('Application 1000123 withdrawn.'))
+      expect(within(banner).getByText('No disapproval email was sent.')).toBeVisible()
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
+        '1000123',
+        { statusCode: 'WDN', remark: 'Withdrawn by client', clientEmailAddress: '' },
+        'application-1000123-version',
+      )
+      expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+    })
+
+    it('keeps the status saved and warns when the email could not be sent', async () => {
+      mockedSendApplicationReviewStatusEmail.mockResolvedValueOnce({
+        success: false,
+        message: 'Application status email could not be prepared.',
+      })
+      renderPage()
+      await screen.findByText('1000123')
+      const dialog = await openDisapprove('1000123')
+      await within(dialog).findByText('owner@example.com')
+      await userEvent.type(within(dialog).getByRole('textbox', { name: 'Remark' }), 'Missing docs')
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Disapprove and send email' }),
+      )
+
+      const banner = await waitFor(() => notice('Application 1000123 rejected.'))
+      expect(banner).toHaveClass('cds--actionable-notification--warning')
+      expect(within(banner).getByText('The disapproval email could not be sent.')).toBeVisible()
+    })
+
+    it('warns that the email is unconfirmed when the send gets no answer', async () => {
+      mockedSendApplicationReviewStatusEmail.mockRejectedValueOnce(new Error('Network Error'))
+      renderPage()
+      await screen.findByText('1000123')
+      const dialog = await openDisapprove('1000123')
+      await within(dialog).findByText('owner@example.com')
+      await userEvent.type(within(dialog).getByRole('textbox', { name: 'Remark' }), 'Missing docs')
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Disapprove and send email' }),
+      )
+
+      const banner = await waitFor(() => notice('Application 1000123 rejected.'))
+      expect(
+        within(banner).getByText(
+          'The disapproval email status could not be confirmed. Check whether it was sent before sending it again.',
+        ),
+      ).toBeVisible()
+    })
+
+    it('keeps the modal open when Escape closes the status list', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+      const dialog = await openDisapprove('1000123')
+      const status = within(dialog).getByRole('combobox', { name: 'Application status' })
+
+      await userEvent.click(status)
+      expect(status).toHaveAttribute('aria-expanded', 'true')
+      await userEvent.keyboard('{Escape}')
+
+      expect(status).toHaveAttribute('aria-expanded', 'false')
+      expect(screen.getByRole('dialog', { name: 'Disapprove application 1000123' })).toBeVisible()
+      await act(async () => {
+        await new Promise((resolve) => setTimeout(resolve))
+      })
+      await userEvent.keyboard('{Escape}')
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Disapprove application 1000123' })).toBeNull(),
+      )
+    })
+
+    it('shows a failed save inside the modal and keeps the entries', async () => {
+      let resolveUpdate!: (value: typeof statusSaved) => void
+      mockedUpdateApplicationReviewStatus.mockReturnValueOnce(
+        new Promise((resolve) => {
+          resolveUpdate = resolve
+        }),
+      )
+      renderPage()
+      await screen.findByText('1000123')
+      const dialog = await openDisapprove('1000123')
+      await within(dialog).findByText('owner@example.com')
+      const remark = within(dialog).getByRole('textbox', { name: 'Remark' })
+      await userEvent.type(remark, 'Draft reason')
+      await userEvent.click(
+        within(dialog).getByRole('button', { name: 'Disapprove and send email' }),
+      )
+
+      expect(await within(dialog).findByRole('button', { name: 'Saving…' })).toBeDisabled()
+      expect(within(dialog).getByRole('button', { name: 'Cancel' })).toBeDisabled()
+      expect(within(dialog).getByRole('button', { name: 'Close' })).toBeDisabled()
+
+      await act(async () =>
+        resolveUpdate({
+          ...statusSaved,
+          updated: false,
+          valid: false,
+          message: 'Application is in use by another user.',
+        }),
+      )
+
+      expect(
+        await within(dialog).findByText('Application is in use by another user.'),
+      ).toBeVisible()
+      expect(within(dialog).getByText('Disapproval failed')).toBeVisible()
+      expect(remark).toHaveValue('Draft reason')
+      expect(
+        within(dialog).getByRole('button', { name: 'Disapprove and send email' }),
+      ).toBeEnabled()
+      expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+    })
+
+    it('returns focus to Disapprove when the modal is cancelled', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+      const launcher = screen.getByRole('button', { name: 'Disapprove application 1000123' })
+      const dialog = await openDisapprove('1000123')
+      await userEvent.type(within(dialog).getByRole('textbox', { name: 'Remark' }), 'Not sent')
+
+      await userEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+
+      expect(screen.queryByRole('dialog', { name: 'Disapprove application 1000123' })).toBeNull()
+      await waitFor(() => expect(launcher).toHaveFocus())
+      expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+    })
   })
 })

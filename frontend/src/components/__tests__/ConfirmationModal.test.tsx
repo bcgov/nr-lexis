@@ -73,6 +73,7 @@ describe('ConfirmationModal', () => {
     expect(screen.getByRole('button', { name: 'Deleting…' })).toBeDisabled()
     const cancelButton = screen.getByRole('button', { name: 'Cancel' })
     expect(cancelButton).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Close' })).toBeDisabled()
     await user.click(cancelButton)
     expect(onClose).not.toHaveBeenCalled()
 

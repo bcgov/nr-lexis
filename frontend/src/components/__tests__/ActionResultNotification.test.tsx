@@ -43,6 +43,56 @@ describe('ActionResultNotification', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('links the record named in the title', () => {
+    render(
+      <MemoryRouter>
+        <ActionResultNotification
+          result={{
+            kind: 'success',
+            title: 'Application 46805 approved.',
+            titleRecord: { id: '46805', to: '/provincial/application/46805' },
+            message: '',
+          }}
+          onClose={() => undefined}
+        />
+      </MemoryRouter>,
+    )
+
+    const status = screen.getByRole('status')
+    const link = within(status).getByRole('link', { name: '46805' })
+    expect(link).toHaveAttribute('href', '/provincial/application/46805')
+    expect(link.parentElement).toHaveTextContent(/^Application 46805 approved\.$/)
+  })
+
+  it('lists records without details on one line, separated by commas', () => {
+    render(
+      <MemoryRouter>
+        <ActionResultNotification
+          result={{
+            kind: 'success',
+            title: '3 applications approved.',
+            message: '',
+            records: [
+              { id: '46801', to: '/provincial/application/46801' },
+              { id: '46802', to: '/provincial/application/46802' },
+              { id: '46803' },
+            ],
+          }}
+          onClose={() => undefined}
+        />
+      </MemoryRouter>,
+    )
+
+    const status = screen.getByRole('status')
+    expect(within(status).queryByRole('list')).not.toBeInTheDocument()
+    expect(within(status).getByText(/46803$/)).toHaveTextContent('46801, 46802, 46803')
+    expect(
+      within(status)
+        .getAllByRole('link')
+        .map((link) => link.textContent),
+    ).toEqual(['46801', '46802'])
+  })
+
   it('lists a repeated detail once under its record', () => {
     render(
       <MemoryRouter>

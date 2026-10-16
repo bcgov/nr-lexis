@@ -25,7 +25,8 @@ The shared Application Review queue includes both provincial and federal `NEW` a
 applications. For federal applications it supports:
 
 - `NEW` or `PND` to `APP` through the approval action, after the same approval readiness checks as provincial applications.
-- `NEW` or `PND` to `REJ`, `WDN`, or `EXP` through the status action.
+- `NEW` or `PND` to `REJ`, `WDN`, or `EXP` through the status action. The Application review page's
+  Disapprove action offers Rejected and Withdrawn.
 - A required remark for rejection, withdrawal, and expiry.
 - Applicant status email only for rejection and withdrawal.
 

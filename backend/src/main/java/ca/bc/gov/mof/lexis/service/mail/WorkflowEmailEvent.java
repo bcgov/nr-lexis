@@ -34,12 +34,22 @@ public sealed interface WorkflowEmailEvent {
       long applicationNumber,
       String statusDescription,
       String remark,
-      String recipient,
+      List<String> recipients,
       RegionalMailRoute senderRoute)
       implements WorkflowEmailEvent {
 
     public ApplicationStatus {
+      recipients = List.copyOf(recipients);
       senderRoute = senderRoute == null ? RegionalMailRoute.GENERAL : senderRoute;
+    }
+
+    public ApplicationStatus(
+        long applicationNumber,
+        String statusDescription,
+        String remark,
+        String recipient,
+        RegionalMailRoute senderRoute) {
+      this(applicationNumber, statusDescription, remark, List.of(recipient), senderRoute);
     }
 
     public ApplicationStatus(
@@ -55,11 +65,6 @@ public sealed interface WorkflowEmailEvent {
     @Override
     public String templateName() {
       return "application_status";
-    }
-
-    @Override
-    public List<String> recipients() {
-      return List.of(recipient);
     }
 
     @Override
