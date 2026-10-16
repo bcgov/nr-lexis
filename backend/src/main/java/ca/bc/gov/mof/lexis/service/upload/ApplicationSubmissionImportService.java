@@ -316,7 +316,7 @@ public class ApplicationSubmissionImportService {
     }
 
     ParsedSubmission submission = parsedUpload.submission();
-    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission);
+    List<String> warnings = buildImportWarnings(submission);
     ApplicationSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
     ApplicationSubmissionImportResultDto federalOnlyRejection =
         federalOnlyRejection(
@@ -587,7 +587,7 @@ public class ApplicationSubmissionImportService {
     }
 
     ParsedSubmission submission = parsedUpload.submission();
-    List<String> warnings = buildImportWarnings(parsedUpload.uploadedSubmission(), submission);
+    List<String> warnings = buildImportWarnings(submission);
     ApplicationSubmissionSummaryDto submissionSummary = toSubmissionSummary(submission);
     ApplicationSubmissionImportResultDto federalOnlyRejection =
         federalOnlyRejection(
@@ -835,7 +835,7 @@ public class ApplicationSubmissionImportService {
           uploadedSubmission.format() == UploadFormat.GEOJSON
               ? parseGeoJson(uploadedSubmission.bytes())
               : parse(uploadedSubmission.bytes());
-      return ParsedUpload.valid(uploadedSubmission, submission);
+      return ParsedUpload.valid(submission);
     } catch (ApplicationSubmissionImportException ex) {
       return ParsedUpload.rejected(rejected(fileName, fileSize, ex.errors(), List.of()));
     } catch (Exception ex) {
@@ -851,43 +851,35 @@ public class ApplicationSubmissionImportService {
     }
   }
 
-  private List<String> buildImportWarnings(
-      UploadedLexisSubmission uploadedSubmission, ParsedSubmission submission) {
-    List<String> warnings = new ArrayList<>(uploadedSubmission.warnings());
-    if (submission.applicationStatusCode() != null) {
-      if (FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())) {
-        warnings.add(
-            "Source application status "
-                + submission.applicationStatusCode()
-                + " will be applied to the imported federal application.");
-      } else {
-        warnings.add(
-            "Source application status "
-                + submission.applicationStatusCode()
-                + " was ignored; application submissions create new applications.");
-      }
+  private List<String> buildImportWarnings(ParsedSubmission submission) {
+    if (!FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())
+        || submission.applicationStatusCode() == null) {
+      return List.of();
     }
-    return warnings;
+    return List.of(
+        "Source application status "
+            + submission.applicationStatusCode()
+            + " will be applied to the imported federal application.");
   }
 
   private UploadedLexisSubmission readUploadedLexisSubmission(MultipartFile file) throws Exception {
     String fileName = resolveFileName(file);
     String lowerFileName = fileName.toLowerCase(Locale.ROOT);
     if (lowerFileName.endsWith(ZIP_EXTENSION)) {
-      return readZippedLexisSubmission(file, fileName);
+      return readZippedLexisSubmission(file);
     }
     try (InputStream inputStream = file.getInputStream()) {
       byte[] bytes = readBounded(inputStream);
       UploadFormat format = resolveUploadFormat(fileName, bytes);
       if (format != null) {
-        return new UploadedLexisSubmission(bytes, format, List.of());
+        return new UploadedLexisSubmission(bytes, format);
       }
     }
     throw new ApplicationSubmissionImportException(
         List.of("The LEXIS application submission file must be an XML, GeoJSON, JSON, or ZIP file."));
   }
 
-  private UploadedLexisSubmission readZippedLexisSubmission(MultipartFile file, String fileName) throws Exception {
+  private UploadedLexisSubmission readZippedLexisSubmission(MultipartFile file) throws Exception {
     if (!hasZipHeader(file)) {
       throw new ApplicationSubmissionImportException(List.of("The uploaded Zip file is corrupt, and cannot be read."));
     }
@@ -954,10 +946,7 @@ public class ApplicationSubmissionImportService {
           List.of("The ZIP file must contain exactly one LEXIS XML or GeoJSON application submission file."));
     }
 
-    return new UploadedLexisSubmission(
-        importBytes,
-        importFormat,
-        List.of("Loaded " + importEntryNames.get(0) + " from ZIP archive " + fileName + "."));
+    return new UploadedLexisSubmission(importBytes, importFormat);
   }
 
   private UploadFormat resolveUploadFormat(String fileName, byte[] bytes) {
@@ -3108,15 +3097,13 @@ public class ApplicationSubmissionImportService {
   }
 
   private record ParsedUpload(
-      UploadedLexisSubmission uploadedSubmission,
-      ParsedSubmission submission,
-      ApplicationSubmissionImportResultDto rejection) {
-    static ParsedUpload valid(UploadedLexisSubmission uploadedSubmission, ParsedSubmission submission) {
-      return new ParsedUpload(uploadedSubmission, submission, null);
+      ParsedSubmission submission, ApplicationSubmissionImportResultDto rejection) {
+    static ParsedUpload valid(ParsedSubmission submission) {
+      return new ParsedUpload(submission, null);
     }
 
     static ParsedUpload rejected(ApplicationSubmissionImportResultDto rejection) {
-      return new ParsedUpload(null, null, rejection);
+      return new ParsedUpload(null, rejection);
     }
   }
 
@@ -3185,7 +3172,7 @@ public class ApplicationSubmissionImportService {
     GEOJSON
   }
 
-  private record UploadedLexisSubmission(byte[] bytes, UploadFormat format, List<String> warnings) {}
+  private record UploadedLexisSubmission(byte[] bytes, UploadFormat format) {}
 
   private record ParsedSpeciesEndUseSort(List<String> speciesCodes, String endUseCode) {}
 

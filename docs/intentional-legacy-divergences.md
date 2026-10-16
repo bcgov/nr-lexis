@@ -5,6 +5,14 @@ controls, and approved retirements use the searchable code marker
 `INTENTIONAL_LEGACY_DIVERGENCE(<ID>)` and are recorded here so they are not mistaken for parity
 defects.
 
+Parity follows what legacy users could see and do, not everything the legacy code could do.
+Anything legacy hid or never showed users stays hidden in modern unless the Enhancements Decisions
+Log or Figma approves it. This covers features, controls, and edits that legacy locked by status,
+role, or type, as well as messages and warnings that legacy handled without telling the user. For
+example, a provincial application submission's required status code is ignored without a warning,
+as it was in legacy. A server path that the legacy screens never reached is not a legacy workflow.
+Approved exceptions are recorded here.
+
 Only observable differences in supported inputs, user workflow, authorization, persistence, or
 integration behaviour belong in the divergence table. Refactors, duplicated service-boundary
 enforcement, and early validation of existing legacy or database constraints are parity work.
