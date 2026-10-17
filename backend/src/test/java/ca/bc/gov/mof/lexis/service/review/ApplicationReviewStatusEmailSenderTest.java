@@ -6,6 +6,7 @@ import static org.mockito.Mockito.verify;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 
@@ -54,6 +55,29 @@ class ApplicationReviewStatusEmailSenderTest {
                 "Withdrawn by client",
                 "client@example.test",
                 RegionalMailRoute.RSI));
+  }
+
+  @Test
+  void sendStatusEmailShouldPublishOneEmailToEveryRecipient() {
+    EmailNotificationService notificationService =
+        org.mockito.Mockito.mock(EmailNotificationService.class);
+    ApplicationReviewStatusEmailSender sender =
+        new ApplicationReviewStatusEmailSender(notificationService);
+
+    assertThat(
+            sender.sendStatusEmail(
+                999000004L,
+                "REJ",
+                List.of("owner@example.test", "agent@example.test"),
+                "test",
+                1835L))
+        .isTrue();
+
+    ArgumentCaptor<WorkflowEmailEvent> eventCaptor =
+        ArgumentCaptor.forClass(WorkflowEmailEvent.class);
+    verify(notificationService).publish(eventCaptor.capture());
+    assertThat(eventCaptor.getValue().recipients())
+        .containsExactly("owner@example.test", "agent@example.test");
   }
 
   @Test

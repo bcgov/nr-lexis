@@ -19,6 +19,8 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationNotificationRecipientR
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService;
 import ca.bc.gov.mof.lexis.service.federal.FederalApplicationService.FederalMutationResult;
 import ca.bc.gov.mof.lexis.service.mail.MailRecipientValidator;
+import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import java.util.Optional;
@@ -447,9 +449,19 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           "Application status no longer matches the requested email status.");
     }
 
+    List<String> contactRecipients = null;
+    if (request != null && request.hasContactRecipients()) {
+      ContactRecipients contacts = contactRecipients(request);
+      if (contacts.problem() != null) {
+        return new ApplicationReviewStatusEmailResultDto(false, contacts.problem());
+      }
+      contactRecipients = contacts.addresses();
+    }
     String requestedRecipient = request == null ? null : trimToNull(request.clientEmailAddress());
     String clientEmail;
-    if (requestedRecipient == null) {
+    if (contactRecipients != null) {
+      clientEmail = contactRecipients.getFirst();
+    } else if (requestedRecipient == null) {
       clientEmail =
           notificationRecipientResolver
               .resolve(
@@ -527,12 +539,19 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     }
 
     boolean queued =
-        emailSender.sendStatusEmail(
-            applicationNumber,
-            statusCode,
-            clientEmail,
-            persistedRemark,
-            confirmedContext.orgUnitNumber());
+        contactRecipients == null
+            ? emailSender.sendStatusEmail(
+                applicationNumber,
+                statusCode,
+                clientEmail,
+                persistedRemark,
+                confirmedContext.orgUnitNumber())
+            : emailSender.sendStatusEmail(
+                applicationNumber,
+                statusCode,
+                contactRecipients,
+                persistedRemark,
+                confirmedContext.orgUnitNumber());
     if (!queued) {
       return new ApplicationReviewStatusEmailResultDto(
           false, "Application status email could not be prepared.");
@@ -541,6 +560,32 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
         true,
         "Application status email sent.");
   }
+
+  // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_DISAPPROVAL_CONTACTS): the owner and agent
+  // addresses each receive the status email; an address both share is sent to once.
+  private static ContactRecipients contactRecipients(ApplicationReviewStatusEmailRequestDto request) {
+    List<String> addresses = new ArrayList<>();
+    for (String address : Arrays.asList(request.ownerEmail(), request.agentEmail())) {
+      String trimmed = trimToNull(address);
+      if (trimmed == null) {
+        continue;
+      }
+      Optional<String> validated = MailRecipientValidator.normalize(trimmed);
+      if (validated.isEmpty()
+          || !trimmed.equals(validated.get())
+          || trimmed.chars().anyMatch(Character::isWhitespace)) {
+        return new ContactRecipients(List.of(), "A recipient email address is invalid.");
+      }
+      if (addresses.stream().noneMatch(existing -> existing.equalsIgnoreCase(validated.get()))) {
+        addresses.add(validated.get());
+      }
+    }
+    return addresses.isEmpty()
+        ? new ContactRecipients(List.of(), "At least one recipient email address is required.")
+        : new ContactRecipients(List.copyOf(addresses), null);
+  }
+
+  private record ContactRecipients(List<String> addresses, String problem) {}
 
   private ApplicationReviewSearchCriteria normalizeCriteria(ApplicationReviewSearchCriteria input) {
     if (input == null) {

@@ -12,11 +12,18 @@ export type ActionResultItem = {
   details?: string[]
 }
 
+/** A record named in a result, linked when the result says where it opens. */
+export type ActionResultRecord = Pick<ActionResultItem, 'id' | 'to' | 'state'>
+
 /** The latest action outcome owned by one page, form, or dialog. */
 export type ActionResult = {
   kind: ActionResultKind
   message: string
   title?: string
+  /** The record the title names; its identifier in the title links to it. */
+  titleRecord?: ActionResultRecord
+  /** Records with no detail of their own, listed after the message and separated by commas. */
+  records?: ActionResultRecord[]
   items?: ActionResultItem[]
 }
 
@@ -28,12 +35,6 @@ const DEFAULT_ACTION_RESULT_TITLES: Record<ActionResultKind, string> = {
 
 export const actionResultTitle = (result: ActionResult): string =>
   result.title ?? DEFAULT_ACTION_RESULT_TITLES[result.kind]
-
-/** A result as one line of text, for a place that can't list its records. */
-export const actionResultText = ({ message, items = [] }: ActionResult): string =>
-  [message, ...items.map(({ id, text, details = [] }) => [`${id}${text}`, ...details].join(' '))]
-    .filter(Boolean)
-    .join(' ')
 
 /**
  * State updater for leaving an edit or draft: the failed attempt no longer applies, but a

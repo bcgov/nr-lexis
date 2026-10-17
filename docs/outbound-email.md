@@ -21,7 +21,7 @@ regional recipient.
 
 | Workflow | From | To | Cc |
 | --- | --- | --- | --- |
-| Application Review — rejected or withdrawn | Regional positional mailbox | Editable applicant recipient | — |
+| Application Review — rejected or withdrawn | Regional positional mailbox | Editable owner recipient, plus the agent when the applicant is an agent (one message) | — |
 | Exemption approval | Regional positional mailbox for the first linked application | Editable owner recipient, plus the agent when the applicant is an agent (one message) | — |
 | Permit approval and payment pending | Regional positional mailbox | Editable applicant recipient | — |
 | Permit review | Provincial/system mailbox | Regional positional mailbox, then the optional validated permit-review address as a second `To` recipient | — |
@@ -29,7 +29,9 @@ regional recipient.
 
 Applicant defaults come from the workflow record's owner or agent client/location. They do not
 come from the logged-in WebADE or Keycloak (FAM) identity, and `CLIENT_CONTACT` is not an automatic
-fallback. Application Review follows the legacy agent-email-when-present, otherwise-owner rule.
+fallback. The Application review page sends to the owner, and to the agent when the applicant is an
+agent, as one message to the distinct addresses. A rejection or withdrawal from an application's
+Review tab follows the legacy agent-email-when-present, otherwise-owner rule.
 Authorized staff may replace an applicant recipient for that send only; the edited address is not
 persisted.
 

@@ -2,6 +2,7 @@ import { Button, FeatureFlags, Loading } from '@carbon/react'
 import { useId, useLayoutEffect, useRef, useState, type ReactNode, type RefObject } from 'react'
 import { AppNotification } from '@/components/AppNotification'
 import Modal from '@/components/Modal'
+import { useModalCloseDisabled } from '@/components/Modal/useModalCloseDisabled'
 import { focusedElement } from '@/utils/focus'
 import { genericActionFailureMessage } from '@/utils/notification-messages'
 
@@ -65,6 +66,7 @@ const ConfirmationModal = ({
   const descriptionId = `lexis-confirmation-description-${generatedId}`
   // The control that had focus as the dialog opened, before the dialog moves focus inside.
   const openerRef = useRef<HTMLElement | null>(null)
+  useModalCloseDisabled(modalRef, pending)
 
   useLayoutEffect(() => {
     if (open) openerRef.current = focusedElement()

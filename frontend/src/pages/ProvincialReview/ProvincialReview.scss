@@ -14,21 +14,19 @@
   }
 }
 
-.provincial-review-approval-modal__count {
-  margin: 0;
-  color: var(--cds-text-primary, #161616);
-  font-weight: 600;
-}
-
 .provincial-review-approval-modal__application-list {
-  max-block-size: 10rem;
+  max-block-size: 15rem;
   margin: 0;
-  padding: 0.75rem 1rem 0.75rem 2rem;
+  padding-inline-start: 1.25rem;
   overflow-y: auto;
-  border: 1px solid var(--cds-border-subtle, #c6c6c6);
-  background: var(--cds-layer, #fff);
+  list-style: disc;
 }
 
 .provincial-review-approval-modal__application-list li + li {
-  margin-block-start: 0.5rem;
+  margin-block-start: 0.25rem;
+}
+
+.provincial-review-results-notifications:focus {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: 2px;
 }
