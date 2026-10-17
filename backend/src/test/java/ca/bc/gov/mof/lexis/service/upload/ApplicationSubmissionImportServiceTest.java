@@ -139,8 +139,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(application.federalApplicationNumber()).isNull();
     assertThat(application.endUseCode()).isEqualTo("PL");
     assertThat(application.speciesCodes()).containsExactly("HE");
-    assertThat(application.remarkBody())
-        .isEqualTo("Created from LEXIS application submission.\nUser reference: CLIENT-REF-1");
+    assertThat(application.remarkBody()).isNull();
 
     ArgumentCaptor<PackageMutationRequest> packageCaptor =
         ArgumentCaptor.forClass(PackageMutationRequest.class);
@@ -152,8 +151,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(packageRequest.averageLength()).isEqualTo(6.7d);
     assertThat(packageRequest.averageDiameter()).isEqualTo(12.8d);
     assertThat(packageRequest.status()).isEqualTo("ACT");
-    assertThat(packageRequest.comments())
-        .isEqualTo("Created from LEXIS application submission.\nUser reference: CLIENT-REF-1");
+    assertThat(packageRequest.comments()).isNull();
     assertThat(packageRequest.endUseCode()).isEqualTo("PL");
     assertThat(packageRequest.speciesCodes()).containsExactly("HE");
 
@@ -1112,8 +1110,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(application.exportScheduleId()).isEqualTo(1016L);
     assertThat(application.applicationVolume()).isEqualTo(525.0d);
     assertThat(application.averageLogVolume()).isEqualTo(0.3d);
-    assertThat(application.remarkBody())
-        .isEqualTo("Created from LEXIS application submission.\nUser reference: FED-REF-1");
+    assertThat(application.remarkBody()).isNull();
     verify(scheduleRepository)
         .findExportScheduleByAdvertisingDate(LocalDate.of(2026, 1, 16));
 
@@ -1129,8 +1126,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(packageRequest.status()).isEqualTo("ACT");
     assertThat(packageRequest.endUseCode()).isEqualTo("PL");
     assertThat(packageRequest.speciesCodes()).containsExactly("HE");
-    assertThat(packageRequest.comments())
-        .isEqualTo("Created from LEXIS application submission.\nUser reference: FED-REF-1");
+    assertThat(packageRequest.comments()).isNull();
 
     ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
@@ -2181,6 +2177,27 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
     verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+  }
+
+  @Test
+  void shouldRejectGeoJsonAgentSubmissionBecauseItCannotNameAnOwner() {
+    String geoJson =
+        SAMPLE_GEOJSON.replace("\"applicantTypeCode\": \"O\"", "\"applicantTypeCode\": \"A\"");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                new MockMultipartFile(
+                    "formFile",
+                    "agent.geojson",
+                    "application/geo+json",
+                    geoJson.getBytes(StandardCharsets.UTF_8)));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "GeoJSON application submissions can't name an owner, so applicant type A isn't supported.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
   @Test

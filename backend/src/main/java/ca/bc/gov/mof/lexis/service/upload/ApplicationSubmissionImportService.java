@@ -138,7 +138,6 @@ public class ApplicationSubmissionImportService {
   private static final String AGE_CLASS_OLD_GROWTH = "O";
   private static final String AGE_CLASS_SECOND_GROWTH = "S";
   private static final int MAX_USER_REFERENCE_LENGTH = 50;
-  private static final String DEFAULT_IMPORT_REMARK = "Created from LEXIS application submission.";
   private static final String FEDERAL_ESF_ONLY_ERROR =
       "ESF legacy LEXIS submissions must be federal. Provincial applications must be uploaded in modern LEXIS.";
   private static final String FEDERAL_ENDPOINT_ONLY_ERROR =
@@ -409,8 +408,7 @@ public class ApplicationSubmissionImportService {
         toCreateApplicationRequest(
             submission,
             LocalDate.now(clock),
-            scheduleResolution.exportScheduleId(),
-            normalizedUserReference);
+            scheduleResolution.exportScheduleId());
     CreateApplicationResult applicationValidation =
         applicationDetailsService.validateApplication(applicationRequest);
     if (!applicationValidation.valid()) {
@@ -426,7 +424,7 @@ public class ApplicationSubmissionImportService {
     SubmissionImportValidationResult importValidation =
         applicationDetailsService.validateApplicationSubmissionImport(
             applicationRequest,
-            toPackageMutationRequest(submission, null, normalizedUserReference),
+            toPackageMutationRequest(submission, null),
             toScaleMutationRequests(submission, null));
     if (importValidation != null) {
       warnings = mergeWarnings(warnings, importValidation.warnings());
@@ -681,13 +679,12 @@ public class ApplicationSubmissionImportService {
         toCreateApplicationRequest(
             submission,
             importDate,
-            scheduleResolution.exportScheduleId(),
-            normalizedUserReference);
+            scheduleResolution.exportScheduleId());
     if (federalOnly) {
       SubmissionImportValidationResult importValidation =
           applicationDetailsService.validateApplicationSubmissionImport(
               createRequest,
-              toPackageMutationRequest(submission, null, normalizedUserReference),
+              toPackageMutationRequest(submission, null),
               toScaleMutationRequests(submission, null));
       if (importValidation != null) {
         warnings = mergeWarnings(warnings, importValidation.warnings());
@@ -723,7 +720,7 @@ public class ApplicationSubmissionImportService {
     if (submission.packageNumber() != null) {
       PackagePersistenceResult packageResult =
           applicationDetailsService.addPackage(
-              toPackageMutationRequest(submission, applicationNumber, normalizedUserReference),
+              toPackageMutationRequest(submission, applicationNumber),
               userId);
       if (!packageResult.valid()) {
         markRollbackOnly();
@@ -1599,6 +1596,10 @@ public class ApplicationSubmissionImportService {
             "applStatusCode",
             "exemptionRsnCde",
             "applicantTypeCode"));
+    // GeoJSON has no owner section, so it can't describe an agent application.
+    if (APPLICANT_TYPE_AGENT.equals(upper(jsonScalarText(applicationDetail.get("applicantTypeCode"))))) {
+      errors.add("GeoJSON application submissions can't name an owner, so applicant type A isn't supported.");
+    }
 
     Element productDetailElement =
         appendObjectSection(
@@ -2543,10 +2544,7 @@ public class ApplicationSubmissionImportService {
   }
 
   private CreateApplicationRequest toCreateApplicationRequest(
-      ParsedSubmission submission,
-      LocalDate importDate,
-      Long exportScheduleId,
-      String userReference) {
+      ParsedSubmission submission, LocalDate importDate, Long exportScheduleId) {
     String applicationStatusCode =
         FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())
             ? toFederalCreateApplicationStatusCode(submission.applicationStatusCode())
@@ -2577,12 +2575,12 @@ public class ApplicationSubmissionImportService {
         DEFAULT_OIC_INDICATOR,
         submission.endUseCode(),
         submission.speciesCodes(),
-        importRemark(userReference),
+        null,
         true);
   }
 
   private PackageMutationRequest toPackageMutationRequest(
-      ParsedSubmission submission, Long applicationNumber, String userReference) {
+      ParsedSubmission submission, Long applicationNumber) {
     if (submission.packageNumber() == null) {
       return null;
     }
@@ -2594,7 +2592,7 @@ public class ApplicationSubmissionImportService {
         submission.averageLength(),
         submission.averageDiameter(),
         DEFAULT_PACKAGE_STATUS,
-        importRemark(userReference),
+        null,
         null,
         null,
         DEFAULT_REPROCESSED_INDICATOR,
@@ -2912,14 +2910,6 @@ public class ApplicationSubmissionImportService {
       return List.of("User reference must be " + MAX_USER_REFERENCE_LENGTH + " characters or fewer.");
     }
     return List.of();
-  }
-
-  private String importRemark(String userReference) {
-    String normalizedUserReference = normalizeUserReference(userReference);
-    if (normalizedUserReference == null) {
-      return DEFAULT_IMPORT_REMARK;
-    }
-    return DEFAULT_IMPORT_REMARK + "\nUser reference: " + normalizedUserReference;
   }
 
   private ApplicationSubmissionImportResultDto withUserReference(
