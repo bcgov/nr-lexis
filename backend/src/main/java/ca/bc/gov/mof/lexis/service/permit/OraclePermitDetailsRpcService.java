@@ -124,7 +124,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
   private static final String EXEMPTION_TYPE_MINISTERIAL = "M";
   private static final String EXEMPTION_TYPE_ORDER_IN_COUNCIL = "O";
   private static final String EXEMPTION_TYPE_BLANKET_OIC = "B";
-  private static final String EXPORT_GROWTH_TYPE_OLD = "O";
   private static final String EXPORT_SCALE_METHOD_WEIGHT = "W";
   private static final String EXPORT_PERMIT_STATUS_ACTIVE = "ACT";
   private static final String EXPORT_PERMIT_STATUS_COMPLETE = "COM";
@@ -1627,13 +1626,14 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     validateSubmittedOicRequestLimits(request, blanketOic, errors);
     validateRequiredBlanketOicRequestLimitsOnCreate(request, blanketOic, errors);
 
-    String submittedGrowthTypeCode =
-        firstNonNull(trimToNull(request.packageAgeClass()), trimToNull(request.permitGrowthType()));
+    // A new Blanket OIC permit has no package yet, so its age class and product type stay blank
+    // until it is saved with one.
     String growthTypeCode =
         blanketOic
-            ? firstNonNull(submittedGrowthTypeCode, EXPORT_GROWTH_TYPE_OLD)
-            : submittedGrowthTypeCode;
-    String productTypeCode = trimToNull(request.packageProductType());
+            ? null
+            : firstNonNull(
+                trimToNull(request.packageAgeClass()), trimToNull(request.permitGrowthType()));
+    String productTypeCode = blanketOic ? null : trimToNull(request.packageProductType());
 
     String clientNumber = trimToNull(request.ownerClientNumber());
     String clientLocationCode = trimToNull(request.ownerClientLocation());
@@ -1933,6 +1933,19 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         linkedScales.stream().mapToDouble(PermitScaleDetailRow::speciesGradeVolume).sum();
     long authoritativePermitPieces =
         linkedScales.stream().mapToLong(PermitScaleDetailRow::piecesCount).sum();
+    String targetGrowthTypeCode =
+        mergeSubmittedText(
+            firstNonNull(request.packageAgeClass(), request.permitGrowthType()),
+            current.growthTypeCode());
+    String targetProductTypeCode =
+        mergeSubmittedText(request.packageProductType(), current.productTypeCode());
+    // An invoiced permit keeps the classification it was invoiced with.
+    if (targetBlanketOic && !isInvoicedPermitStatus(current.permitStatusCode())) {
+      PackageClassification packageClassification =
+          blanketOicPackageClassification(permitNumber);
+      targetGrowthTypeCode = packageClassification.growthTypeCode();
+      targetProductTypeCode = packageClassification.productTypeCode();
+    }
 
     PermitMutationRow updated =
         new PermitMutationRow(
@@ -1958,7 +1971,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             current.entryUserId(),
             current.entryTimestamp(),
             mergeSubmittedText(request.transportType(), current.transportTypeCode()),
-            firstNonNull(trimToNull(current.scaleMethodCode()), EXPORT_SCALE_METHOD_WEIGHT),
+            EXPORT_SCALE_METHOD_WEIGHT,
             targetOwnerClientNumber,
             targetOwnerClientLocation,
             targetAgentClientNumber,
@@ -1968,9 +1981,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             mergeSubmittedText(request.portOfExport(), current.portOfExportCode()),
             normalizeCode(
                 mergeSubmittedText(request.permitStatus(), current.permitStatusCode())),
-            mergeSubmittedText(
-                firstNonNull(request.packageAgeClass(), request.permitGrowthType()),
-                current.growthTypeCode()),
+            targetGrowthTypeCode,
             mergeSubmittedText(request.destinationCountry(), current.countryCode()),
             overrideFee,
             overrideComment,
@@ -1978,7 +1989,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             firstNonNull(
                 parseNonNegativeLong(request.oicPermitTotalPieces()), current.oicRequestPieces()),
             firstNonNull(submittedOicRequestVolume, current.oicRequestVolume()),
-            mergeSubmittedText(request.packageProductType(), current.productTypeCode()));
+            targetProductTypeCode);
 
     List<String> oicBindingErrors = new ArrayList<>();
     validateOicApplicationBinding(
@@ -2223,8 +2234,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     updated = validation.permit();
 
-    boolean saved =
-        repository.updatePermitDetail(updated, normalizedUserId, FEE_MASK_EFFECTIVE_DATE);
+    // Without the 2.11 date, a shipping save leaves the stored fee-in-lieu values alone.
+    boolean saved = repository.updatePermitDetail(updated, normalizedUserId, null);
     if (!saved) {
       return failureMutationResponse(List.of("Unable to save permit."), permitNumber);
     }
@@ -4300,6 +4311,24 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
             .orElse(false);
   }
 
+  /**
+   * A Blanket OIC permit takes its age class and product type from its first package by number,
+   * the one legacy selected by default. Both are blank while the permit has no package.
+   */
+  private PackageClassification blanketOicPackageClassification(Long permitNumber) {
+    return repository.findPackageNumbersByOicPermitNumber(permitNumber).stream()
+        .findFirst()
+        .flatMap(repository::findPackageInfoByPackageNumber)
+        .map(
+            packageInfo ->
+                new PackageClassification(
+                    trimToNull(packageInfo.growthTypeCode()),
+                    trimToNull(packageInfo.productTypeCode())))
+        .orElse(new PackageClassification(null, null));
+  }
+
+  private record PackageClassification(String growthTypeCode, String productTypeCode) {}
+
   private boolean updatePermitTotals(Long permitNumber, String userId) {
     Optional<PermitMutationRow> existing = repository.findPermitMutationByPermitNumber(permitNumber);
     if (existing.isEmpty()) {
@@ -4483,10 +4512,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       if (trimToNull(exemptionType) == null) {
         return false;
       }
-      boolean applicationBacked = isApplicationBackedExemptionType(exemptionType);
+      // OIC packages keep their volume and classification on permit saves, as legacy did.
+      boolean ministerial = EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemptionType);
       boolean blanketOic = EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(exemptionType);
       boolean synchronizePackage =
-          applicationBacked
+          ministerial
               || (blanketOic && EXPORT_PERMIT_STATUS_COMPLETE.equals(targetStatus));
       if (!synchronizePackage) {
         continue;
@@ -4497,7 +4527,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       }
 
       Double derivedPackageVolume = null;
-      if (!applicationBacked || volumeMayChange) {
+      if (!ministerial || volumeMayChange) {
         derivedPackageVolume =
             repository.findScaleDetailsByPackageNumber(packageNumber).stream()
                 .filter(
@@ -4508,7 +4538,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
                 .sum();
       }
       boolean synchronizedPackage =
-          applicationBacked
+          ministerial
               ? applicationDetailsRpcService.synchronizePackageForPermitTransition(
                   packageNumber,
                   derivedPackageVolume,
@@ -4741,15 +4771,15 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     for (PermitScaleDetailRow scale : scales) {
       String scaleId = scale == null ? null : trimToNull(scale.exportScaleDetailId());
       String packageNumber = scale == null ? null : preservePackageNumber(scale.packageNumber());
+      // Unmanufactured scales have no timber mark, and a 0.0 volume is invoiced as is.
       if (scale == null
           || !expectedPermitNumber.equals(trimToNull(scale.exportPermitDetailNumber()))
           || scaleId == null
           || !scaleIds.add(scaleId)
-          || trimToNull(scale.timberMark()) == null
           || trimToNull(scale.exportSpeciesCode()) == null
           || trimToNull(scale.exportGradeCode()) == null
           || !Double.isFinite(scale.speciesGradeVolume())
-          || scale.speciesGradeVolume() <= 0.0d
+          || scale.speciesGradeVolume() < 0.0d
           || (!canadian && packageNumber == null)) {
         throw new DataRetrievalFailureException(
             "Oracle returned an invalid scale for permit invoicing.");

@@ -155,13 +155,13 @@ final class OracleInternalPermitInvoiceService {
     }
 
     BigDecimal detailTotal = BigDecimal.ZERO;
+    // The timber mark is blank for unmanufactured scales, and a 0.0 volume is valid.
     for (InternalInvoiceDetail detail : snapshot.details()) {
       if (detail == null
-          || trimToNull(detail.timberMark()) == null
           || trimToNull(detail.speciesCode()) == null
           || trimToNull(detail.gradeCode()) == null
           || detail.volume() == null
-          || detail.volume().compareTo(BigDecimal.ZERO) <= 0
+          || detail.volume().compareTo(BigDecimal.ZERO) < 0
           || detail.amount() == null
           || detail.amount().compareTo(BigDecimal.ZERO) < 0
           || detail.amvRate() == null
