@@ -104,7 +104,7 @@ describe('ExemptionApprovalModal', () => {
     expect(submit).toBeEnabled()
     await user.click(submit)
     expect(
-      screen.getByText('Confirm that you certify this exemption has been approved'),
+      screen.getByText('Confirm that you certify this exemption has been approved.'),
     ).toBeVisible()
     await waitFor(() => expect(screen.getByRole('checkbox', { name: /I certify/ })).toHaveFocus())
     expect(
@@ -115,7 +115,7 @@ describe('ExemptionApprovalModal', () => {
 
     await user.click(screen.getByRole('checkbox', { name: /I certify/ }))
     expect(
-      screen.queryByText('Confirm that you certify this exemption has been approved'),
+      screen.queryByText('Confirm that you certify this exemption has been approved.'),
     ).not.toBeInTheDocument()
     await user.type(screen.getByRole('textbox', { name: 'Owner email' }), 'invalid address')
     await user.click(submit)
@@ -127,6 +127,34 @@ describe('ExemptionApprovalModal', () => {
     expect(onApprove).not.toHaveBeenCalled()
     await user.click(submit)
     await waitFor(() => expect(onApprove).toHaveBeenCalledTimes(1))
+  })
+
+  it('names the certification group and links its error to the checkbox', async () => {
+    const user = userEvent.setup()
+    render(
+      <ExemptionApprovalModal
+        exemptionNumbers={['EX-205']}
+        onApprove={vi.fn().mockResolvedValue(approval())}
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    await screen.findByText('owner@example.com')
+    const checkbox = screen.getByRole('checkbox', { name: /I certify/ })
+    expect(screen.getByRole('group', { name: 'Certification' })).toContainElement(checkbox)
+    expect(checkbox).not.toHaveAttribute('aria-invalid')
+    expect(checkbox).not.toHaveAttribute('aria-describedby')
+
+    await user.click(screen.getByRole('button', { name: 'Approve and send email' }))
+    expect(checkbox).toHaveAttribute('aria-invalid', 'true')
+    expect(checkbox).toHaveAccessibleDescription(
+      'Confirm that you certify this exemption has been approved.',
+    )
+
+    await user.click(checkbox)
+    expect(checkbox).not.toHaveAttribute('aria-invalid')
+    expect(checkbox).not.toHaveAttribute('aria-describedby')
   })
 
   it('shows only the owner contact when the applicant is not an agent', async () => {

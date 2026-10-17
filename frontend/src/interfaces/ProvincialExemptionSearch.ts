@@ -40,6 +40,8 @@ export type ProvincialExemptionSearchItem = {
   canApprove: boolean
   canViewExemption: boolean
   isLocked: boolean
+  /** The user's approval regions don't cover every region this exemption reaches. */
+  outsideApprovalRegions: boolean
 }
 
 export type ProvincialExemptionSearchRequest = {

@@ -14,11 +14,19 @@
 }
 
 .lexis-page-header__top {
+  align-items: flex-start;
   gap: 0.75rem 1rem;
 }
 
-.lexis-page-header__title-group {
+.lexis-page-header__heading {
+  display: flex;
   flex: 1 1 auto;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-inline-size: 0;
+}
+
+.lexis-page-header__title-group {
   min-inline-size: 0;
   gap: 0.75rem;
 }
@@ -46,6 +54,8 @@
   justify-content: flex-end;
   gap: 1rem;
   margin-inline-start: auto;
+  /* Centred on the title's first line, whatever the subtitle below it. */
+  min-block-size: 2.5rem;
 }
 
 .lexis-page-header__actions > .legacy-search-actions {

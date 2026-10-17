@@ -6,4 +6,37 @@
     outline: 2px solid var(--cds-focus);
     outline-offset: 2px;
   }
+
+  // Totals sit 24px above the table they total.
+  .exemption-table-totals ~ .lexis-table-frame {
+    margin-block-start: 1.5rem;
+  }
+}
+
+@media (max-width: 671px) {
+  // A narrow card wraps its action's label instead of cutting the button off.
+  .provincial-exemption-detail
+    :is(.detail-section-card__header, .lexis-empty-state__action)
+    > .cds--btn {
+    block-size: auto;
+    max-inline-size: 100%;
+    min-block-size: 2.5rem;
+    padding-block: 0.625rem;
+    white-space: normal;
+  }
+}
+
+// The dialog's paragraphs are a blank line (one 24px line) apart.
+.permit-creation-confirmation-modal__description {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+
+  > p {
+    margin: 0;
+  }
+
+  + p {
+    margin-block-start: 1.5rem;
+  }
 }

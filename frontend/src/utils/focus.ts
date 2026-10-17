@@ -59,6 +59,18 @@ export const focusFirstEditableFieldAfterPanelChange = (
   })
 }
 
+type DateInput = HTMLInputElement & { _flatpickr?: { isOpen: boolean; close: () => void } }
+
+// Focusing a date field opens its calendar, which would cover the error under the field.
+const closeDateCalendar = (control: HTMLElement): void => {
+  control
+    .closest('.cds--date-picker')
+    ?.querySelectorAll<DateInput>('input')
+    .forEach((input) => {
+      if (input._flatpickr?.isOpen) input._flatpickr.close()
+    })
+}
+
 /**
  * Focuses the first field marked invalid inside the container. Carbon marks some controls on a
  * wrapper (dropdowns on their list box), so the control inside the wrapper takes focus.
@@ -73,6 +85,7 @@ export const focusFirstInvalidField = (container: ParentNode | null | undefined)
     : invalid.querySelector<HTMLElement>(FOCUSABLE_CONTROL_SELECTOR)
   if (!control) return false
   control.focus()
+  closeDateCalendar(control)
   control.scrollIntoView?.({ block: 'nearest' })
   return true
 }

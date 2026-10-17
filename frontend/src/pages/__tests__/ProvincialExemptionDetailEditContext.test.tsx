@@ -2099,13 +2099,13 @@ describe('Provincial exemption edit context', () => {
     expect(firstConfirm.parentElement).toHaveClass('cds--modal-footer')
     await userEvent.click(firstConfirm)
     expect(
-      within(firstDialog).getByText('Confirm that you certify this exemption has been approved'),
+      within(firstDialog).getByText('Confirm that you certify this exemption has been approved.'),
     ).toBeVisible()
     expect(vi.mocked(approveExemptions)).not.toHaveBeenCalled()
 
     await userEvent.click(firstCertification)
     expect(
-      within(firstDialog).queryByText('Confirm that you certify this exemption has been approved'),
+      within(firstDialog).queryByText('Confirm that you certify this exemption has been approved.'),
     ).not.toBeInTheDocument()
     await userEvent.click(within(firstDialog).getByRole('button', { name: 'Cancel' }))
     await userEvent.click(screen.getByRole('button', { name: 'Approve exemption' }))
@@ -2123,7 +2123,7 @@ describe('Provincial exemption edit context', () => {
     expect(reopenedCertification).not.toBeChecked()
     expect(
       within(reopenedDialog).queryByText(
-        'Confirm that you certify this exemption has been approved',
+        'Confirm that you certify this exemption has been approved.',
       ),
     ).not.toBeInTheDocument()
     await userEvent.click(reopenedCertification)
@@ -2494,6 +2494,76 @@ describe('Provincial exemption edit context', () => {
     ).toBeInTheDocument()
     expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
     consoleError.mockRestore()
+  })
+
+  it('keeps focus on Print approved exemption while the report generates', async () => {
+    vi.mocked(useAuth).mockReturnValue(
+      createTestAuthContext({
+        canPerform: (action: string) => action === '/approvedExemptionReport',
+      }),
+    )
+    let finishReport: (value: Awaited<ReturnType<typeof runReport>>) => void = () => undefined
+    mockedRunReport.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishReport = resolve
+      }),
+    )
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Print approved exemption' }))
+    const generating = screen.getByRole('button', { name: 'Generating…' })
+    // A disabled button would drop focus to the page, so it only ignores clicks while busy.
+    expect(generating).toBeEnabled()
+    expect(generating).toHaveAttribute('aria-disabled', 'true')
+    expect(generating).toHaveFocus()
+    await userEvent.click(generating)
+    expect(mockedRunReport).toHaveBeenCalledTimes(1)
+
+    finishReport({
+      source: 'api',
+      blob: new Blob(['approved exemption report']),
+      filename: 'approved-exemption.pdf',
+      contentType: 'application/pdf',
+    })
+    const printButton = await screen.findByRole('button', { name: 'Print approved exemption' })
+    expect(printButton).not.toHaveAttribute('aria-disabled')
+    expect(printButton).toHaveFocus()
+  })
+
+  it('names the chosen regions in the Blanket OIC Region field while editing', async () => {
+    vi.mocked(fetchExemptionEditContext).mockResolvedValue({
+      rateOverrideEnabled: false,
+      fixedFeeRate: '',
+      regionNumbers: ['1903', '1904'],
+      locked: false,
+      lockMessage: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/BOIC-205']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    expect(
+      screen.getByRole('combobox', { name: /^Region\s*Total items selected:\s*2/ }),
+    ).toHaveAttribute('placeholder', 'Region 1903, Region 1904')
   })
 
   it.each(['B'])('keeps a cancelled %s exemption read-only', async (type) => {
@@ -3082,5 +3152,31 @@ describe('exemption edit choices', () => {
 
     expect(within(removableRow).getByRole('button', { name: 'Remove' })).toBeEnabled()
     expect(within(lockedRow).queryByRole('button', { name: 'Remove' })).not.toBeInTheDocument()
+  })
+
+  it('shows Status without a required marker and requires an empty Approval volume', async () => {
+    renderExemption()
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit exemption details' }))
+    const status = screen.getByRole('combobox', { name: 'Status' })
+    // Status always has a value, so it's neither marked nor announced as required.
+    expect(status).not.toHaveAttribute('aria-required')
+    expect(
+      document.querySelector('label[for="exemptionDetailStatus"] .required-label__marker'),
+    ).toBeNull()
+
+    const rangeMessage =
+      'Approval volume must be greater than 0, at most 9,999,999.99, and have at most two decimal places'
+    const approvedVolume = screen.getByLabelText('Approval volume (m³)')
+    await userEvent.clear(approvedVolume)
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByText('Approval volume is required')).toBeInTheDocument()
+    expect(screen.queryByText(rangeMessage)).not.toBeInTheDocument()
+
+    await userEvent.type(approvedVolume, '0')
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(screen.getByText(rangeMessage)).toBeInTheDocument()
+    expect(screen.queryByText('Approval volume is required')).not.toBeInTheDocument()
+    expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })
 })

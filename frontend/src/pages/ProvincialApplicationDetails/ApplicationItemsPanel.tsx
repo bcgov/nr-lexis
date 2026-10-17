@@ -307,7 +307,6 @@ const SCALE_DELETED_TITLE = 'Scale deleted.'
 const NO_SPECIES_CODES: string[] = []
 
 // Validation messages name each field by its label.
-const PACKAGE_VOLUME_LABEL = 'Package volume (m³)'
 const VOLUME_LABEL = 'Volume (m³)'
 const AVERAGE_LENGTH_LABEL = 'Average length (m)'
 const AVERAGE_DIAMETER_LABEL = 'Average top diameter (rads)'
@@ -353,6 +352,16 @@ const uniqueCodes = (rows: ApplicationPackageSpeciesRow[]): string[] =>
 
 // Rounds half up from hundredths, as the server does with volumes stored to two decimals.
 const roundOneDecimal = (value: number): number => Math.round(Math.round(value * 100) / 10) / 10
+
+// Carbon's Dropdown links its error text to its button but marks the button neither required nor
+// invalid.
+const requiredDropdownRef =
+  (invalid: boolean) =>
+  (button: HTMLButtonElement | null): void => {
+    markRequired(button)
+    if (invalid) button?.setAttribute('aria-invalid', 'true')
+    else button?.removeAttribute('aria-invalid')
+  }
 
 const optionName = (option: ApplicationCodeOption | null): string =>
   option ? option.description || option.code : ''
@@ -592,9 +601,9 @@ function ProvincialApplicationItemsPanel({
   const [packagePendingDeletion, setPackagePendingDeletion] = useState('')
   const [scalePendingDeletion, setScalePendingDeletion] =
     useState<ApplicationPackageScaleRow | null>(null)
-  const [pendingItemFocus, setPendingItemFocus] = useState<'package' | 'scales' | 'items' | null>(
-    null,
-  )
+  const [pendingItemFocus, setPendingItemFocus] = useState<
+    'saved-package' | 'package' | 'scales' | 'items' | null
+  >(null)
   const scalesSectionRef = useRef<HTMLElement>(null)
   const lastScrolledToScalesRequestIdRef = useRef(0)
   const lastHandledFocusedPackageRequestRef = useRef('')
@@ -669,26 +678,41 @@ function ProvincialApplicationItemsPanel({
       itemsLoading ||
       activeDrawer ||
       packagePendingDeletion ||
-      scalePendingDeletion
+      scalePendingDeletion ||
+      // A new package's Edit button turns on once its details, species and scales load.
+      (pendingItemFocus === 'saved-package' && !packageDataLoaded)
     ) {
       return
     }
     const timer = window.setTimeout(() => {
       setPendingItemFocus(null)
       const active = document.activeElement
-      if (active instanceof HTMLElement && active !== document.body && active.isConnected) {
+      const packageCard = document.getElementById('application-items-package')
+      // A package panel that closes while the card reloads falls back to the card. Focus then
+      // moves on to the saved card's Edit package button.
+      const savedPackageCardFocused = pendingItemFocus === 'saved-package' && active === packageCard
+      if (
+        active instanceof HTMLElement &&
+        active !== document.body &&
+        active.isConnected &&
+        !savedPackageCardFocused
+      ) {
         return
       }
       const target =
         pendingItemFocus === 'scales'
           ? scalesSectionRef.current
-          : pendingItemFocus === 'package' && !packageFirstEmptyState
-            ? document.getElementById('application-items-package')
-            : pendingItemFocus === 'package'
-              ? (document.querySelector<HTMLElement>(
-                  '.application-items-empty-package button:not(:disabled)',
-                ) ?? document.getElementById('application-items'))
-              : document.getElementById('application-items')
+          : pendingItemFocus === 'saved-package'
+            ? (document.querySelector<HTMLElement>(
+                '#application-items-edit-package:not(:disabled)',
+              ) ?? packageCard)
+            : pendingItemFocus === 'package' && !packageFirstEmptyState
+              ? packageCard
+              : pendingItemFocus === 'package'
+                ? (document.querySelector<HTMLElement>(
+                    '.application-items-empty-package button:not(:disabled)',
+                  ) ?? document.getElementById('application-items'))
+                : document.getElementById('application-items')
       target?.focus()
     })
     return () => window.clearTimeout(timer)
@@ -696,6 +720,7 @@ function ProvincialApplicationItemsPanel({
     activeDrawer,
     itemsBusy,
     itemsLoading,
+    packageDataLoaded,
     packageFirstEmptyState,
     packagePendingDeletion,
     pendingItemFocus,
@@ -743,11 +768,12 @@ function ProvincialApplicationItemsPanel({
           packageNumbers,
           selectedPackageNumber,
         ),
-      packageComments: packageCommentsFieldError(packageForm.comments, 'Package comments'),
+      packageComments: packageCommentsFieldError(packageForm.comments, 'Comments'),
+      // A saved package can keep a volume of 0, as legacy and the server allow.
       packageVolume: firstValidationError(
-        () => requiredNumericFieldError(packageForm.volume, PACKAGE_VOLUME_LABEL),
-        () => greaterThanOrEqualFieldError(packageForm.volume, PACKAGE_VOLUME_LABEL, 0),
-        () => atMostOneDecimalFieldError(packageForm.volume, PACKAGE_VOLUME_LABEL),
+        () => requiredNumericFieldError(packageForm.volume, VOLUME_LABEL),
+        () => greaterThanOrEqualFieldError(packageForm.volume, VOLUME_LABEL, 0),
+        () => atMostOneDecimalFieldError(packageForm.volume, VOLUME_LABEL),
       ),
       packageAverageLength: firstValidationError(
         () => requiredNumericFieldError(packageForm.averageLength, AVERAGE_LENGTH_LABEL),
@@ -1392,6 +1418,7 @@ function ProvincialApplicationItemsPanel({
         await onDetailChanged()
         await loadPackageItems(nextPackageNumber)
         onActionResult({ kind: 'success', title: PACKAGE_SAVED_TITLE, message: '' })
+        setPendingItemFocus('saved-package')
       } catch {
         showItemRefreshWarning(
           'Package saved, not refreshed',
@@ -1475,6 +1502,7 @@ function ProvincialApplicationItemsPanel({
         await onDetailChanged()
         await loadPackageItems(nextPackageNumber)
         onActionResult({ kind: 'success', title: PACKAGE_SAVED_TITLE, message: '' })
+        setPendingItemFocus('saved-package')
       } catch {
         showItemRefreshWarning(
           'Package created, not refreshed',
@@ -1770,11 +1798,15 @@ function ProvincialApplicationItemsPanel({
           id="application-items-package"
           tabIndex={-1}
           className="application-items-card application-items-section application-items-section--package-details"
+          aria-labelledby="application-items-package-title"
           hidden={packageFirstEmptyState}
           style={packageFirstEmptyState ? { display: 'none' } : undefined}
         >
           <div className="application-items-section-header">
-            <h3 className="application-items-section-title--icon">
+            <h3
+              id="application-items-package-title"
+              className="application-items-section-title--icon"
+            >
               <Box size={20} aria-hidden="true" />
               <span>
                 {selectedPackageNumber ? `Package ${selectedPackageNumber}` : 'Package details'}
@@ -1800,6 +1832,7 @@ function ProvincialApplicationItemsPanel({
               )}
               {canOpenItemsEditor && canEditPackages && selectedPackageNumber && (
                 <Button
+                  id="application-items-edit-package"
                   kind="tertiary"
                   size="md"
                   renderIcon={Edit}
@@ -1874,8 +1907,9 @@ function ProvincialApplicationItemsPanel({
                 />
                 <TextInput
                   id="applicationItemsPackageVolume"
-                  labelText={requiredLabel(PACKAGE_VOLUME_LABEL)}
+                  labelText={requiredLabel(VOLUME_LABEL)}
                   aria-required="true"
+                  helperText="Must be less than or equal to application request volume"
                   value={packageForm.volume}
                   disabled={!canSaveSelectedPackage}
                   invalid={!!packageFieldError('packageVolume')}
@@ -1887,6 +1921,7 @@ function ProvincialApplicationItemsPanel({
                   id="applicationItemsPackageLength"
                   labelText={requiredLabel(AVERAGE_LENGTH_LABEL)}
                   aria-required="true"
+                  helperText="Must be greater than 0"
                   value={packageForm.averageLength}
                   disabled={!canSaveSelectedPackage}
                   invalid={!!packageFieldError('packageAverageLength')}
@@ -1898,6 +1933,7 @@ function ProvincialApplicationItemsPanel({
                   id="applicationItemsPackageDiameter"
                   labelText={requiredLabel(AVERAGE_DIAMETER_LABEL)}
                   aria-required="true"
+                  helperText="Must be greater than 0"
                   value={packageForm.averageDiameter}
                   disabled={!canSaveSelectedPackage}
                   invalid={!!packageFieldError('packageAverageDiameter')}
@@ -1908,8 +1944,7 @@ function ProvincialApplicationItemsPanel({
               </div>
               <TextArea
                 id="applicationItemsPackageComments"
-                labelText="Package comments"
-                helperText="Use unaccented letters, numbers, spaces, or standard punctuation."
+                labelText="Comments"
                 enableCounter
                 maxCount={PACKAGE_COMMENTS_MAX_LENGTH}
                 maxLength={PACKAGE_COMMENTS_MAX_LENGTH}
@@ -2036,7 +2071,9 @@ function ProvincialApplicationItemsPanel({
                 <div className="application-items-panel-form__pair">
                   <Dropdown<ApplicationCodeOption | null>
                     id="applicationItemsScaleSpecies"
-                    ref={markRequired}
+                    ref={requiredDropdownRef(
+                      !!scaleFieldError('scaleSpeciesCode') && !scaleFieldsDisabled,
+                    )}
                     titleText={requiredLabel('Species')}
                     label=""
                     items={scaleSpeciesOptions}
@@ -2056,7 +2093,11 @@ function ProvincialApplicationItemsPanel({
                   />
                   <Dropdown<ApplicationCodeOption | null>
                     id="applicationItemsScaleGrade"
-                    ref={markRequired}
+                    ref={requiredDropdownRef(
+                      !!scaleFieldError('scaleGradeCode') &&
+                        !scaleFieldsDisabled &&
+                        !!scaleForm.speciesCode,
+                    )}
                     titleText={requiredLabel('Grade')}
                     label=""
                     items={gradeOptions}

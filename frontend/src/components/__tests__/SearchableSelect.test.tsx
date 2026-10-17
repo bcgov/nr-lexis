@@ -24,6 +24,103 @@ describe('SearchableSelect', () => {
     )
   })
 
+  it('marks the combobox invalid while it shows an error', () => {
+    const select = (props: { invalid: boolean; disabled?: boolean }) => (
+      <SearchableSelect
+        id="region"
+        labelText="Region"
+        value=""
+        options={[{ value: '11', label: 'Cariboo' }]}
+        invalidText="Region is required"
+        onChange={vi.fn()}
+        {...props}
+      />
+    )
+    const { rerender } = render(select({ invalid: true }))
+
+    const combobox = screen.getByRole('combobox', { name: 'Region' })
+    expect(combobox).toHaveAttribute('aria-invalid', 'true')
+    expect(combobox).toHaveAccessibleDescription('Region is required')
+
+    rerender(select({ invalid: false }))
+    expect(combobox).not.toHaveAttribute('aria-invalid')
+    rerender(select({ invalid: true, disabled: true }))
+    expect(combobox).not.toHaveAttribute('aria-invalid')
+  })
+
+  it('offers All first, which selects no restriction and has nothing to clear', async () => {
+    const onChange = vi.fn()
+    const statuses = [
+      { value: 'ACT', label: 'Active' },
+      { value: 'CAN', label: 'Cancelled' },
+    ]
+    const { rerender } = render(
+      <SearchableSelect
+        id="permitStatus"
+        labelText="Permit status"
+        value="ACT"
+        options={statuses}
+        placeholder="All"
+        allOptionLabel="All"
+        onChange={onChange}
+      />,
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }))
+    const listbox = screen.getByRole('listbox')
+    expect(
+      within(listbox)
+        .getAllByRole('option')
+        .map((option) => option.textContent),
+    ).toEqual(['All', 'Active', 'Cancelled'])
+    await userEvent.click(within(listbox).getByRole('option', { name: 'All' }))
+    expect(onChange).toHaveBeenCalledWith('')
+
+    rerender(
+      <SearchableSelect
+        id="permitStatus"
+        labelText="Permit status"
+        value=""
+        options={statuses}
+        placeholder="All"
+        allOptionLabel="All"
+        onChange={onChange}
+      />,
+    )
+    expect(screen.getByRole('combobox', { name: 'Permit status' })).toHaveValue('All')
+    expect(document.querySelector('.searchable-select--all')).not.toBeNull()
+  })
+
+  it('keeps a list’s own All option instead of adding a second, and treats it as All', async () => {
+    const options = [
+      { value: 'ALL', label: 'All' },
+      { value: 'M', label: 'Ministerial' },
+    ]
+    const select = (value: string) => (
+      <SearchableSelect
+        id="exemptionType"
+        labelText="Exemption type"
+        value={value}
+        options={options}
+        placeholder="All"
+        allOptionLabel="All"
+        onChange={vi.fn()}
+      />
+    )
+    const { rerender } = render(select('M'))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Open' }))
+    expect(within(screen.getByRole('listbox')).getAllByRole('option')).toHaveLength(2)
+    expect(document.querySelector('.searchable-select--all')).toBeNull()
+
+    // Choosing the list's All, or no value at all, reads as All with nothing to clear.
+    for (const value of ['ALL', '']) {
+      rerender(select(value))
+      expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('All')
+      expect(document.querySelector('.searchable-select--all')).not.toBeNull()
+    }
+  })
+
   it('shows a read-only value without offering other options', async () => {
     const onChange = vi.fn()
     render(

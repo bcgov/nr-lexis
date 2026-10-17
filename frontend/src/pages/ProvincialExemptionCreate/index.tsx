@@ -455,7 +455,6 @@ const ProvincialExemptionCreatePage = () => {
       <Column sm={4} md={8} lg={16}>
         <PageHeader
           title="Create new exemption"
-          subtitle="Enter exemption details and save a new exemption."
           focusTitle
           actions={
             <>
@@ -701,6 +700,7 @@ const ProvincialExemptionCreatePage = () => {
                               selectedItems={selectedRegions}
                               invalid={!!fieldError('regionNumbers')}
                               invalidText={fieldError('regionNumbers')}
+                              showSelectedNames
                               disabled={!optionsLoaded || optionsUnavailable}
                               onChange={(selectedItems) => {
                                 const regionNumbers = selectedItems.map((item) => item.id)
@@ -778,48 +778,61 @@ const ProvincialExemptionCreatePage = () => {
                       {form.enableRateOverride && (
                         <RequiredFieldsLegend className="application-detail-required" />
                       )}
-                      <RadioButtonGroup
-                        legendText={requiredLabel('Override fee rate?')}
-                        required
-                        name="enableExemptionRateOverride"
-                        valueSelected={form.enableRateOverride ? 'yes' : 'no'}
-                        orientation="horizontal"
-                        onChange={(value) => {
-                          const enabled = String(value) === 'yes'
-                          if (enabled === form.enableRateOverride) return
-                          markFormEdited()
-                          setForm((current) => ({
-                            ...current,
-                            enableRateOverride: enabled,
-                            feeRate: enabled ? current.feeRate : '',
-                          }))
-                        }}
-                      >
-                        <RadioButton
-                          id="enableExemptionRateOverride-no"
-                          labelText="No"
-                          value="no"
-                        />
-                        <RadioButton
-                          id="enableExemptionRateOverride-yes"
-                          labelText="Yes"
-                          value="yes"
-                        />
-                      </RadioButtonGroup>
-                      {form.enableRateOverride && (
-                        <TextInput
-                          id="exemptionFeeRate"
-                          labelText={requiredLabel('Fee rate ($/m³)')}
-                          aria-required="true"
-                          value={form.feeRate}
-                          invalid={!!fieldError('feeRate')}
-                          invalidText={fieldError('feeRate')}
-                          onChange={(event) => {
-                            markFormEdited()
-                            setForm((current) => ({ ...current, feeRate: event.target.value }))
-                          }}
-                        />
-                      )}
+                      <RecordFieldGrid editing>
+                        <RecordFieldRow>
+                          <RecordFieldCell>
+                            <RadioButtonGroup
+                              legendText={requiredLabel('Override fee rate?')}
+                              required
+                              name="enableExemptionRateOverride"
+                              valueSelected={form.enableRateOverride ? 'yes' : 'no'}
+                              orientation="horizontal"
+                              onChange={(value) => {
+                                const enabled = String(value) === 'yes'
+                                if (enabled === form.enableRateOverride) return
+                                markFormEdited()
+                                setForm((current) => ({
+                                  ...current,
+                                  enableRateOverride: enabled,
+                                  feeRate: enabled ? current.feeRate : '',
+                                }))
+                              }}
+                            >
+                              <RadioButton
+                                id="enableExemptionRateOverride-no"
+                                labelText="No"
+                                value="no"
+                              />
+                              <RadioButton
+                                id="enableExemptionRateOverride-yes"
+                                labelText="Yes"
+                                value="yes"
+                              />
+                            </RadioButtonGroup>
+                          </RecordFieldCell>
+                        </RecordFieldRow>
+                        <RecordFieldRow>
+                          {form.enableRateOverride && (
+                            <RecordFieldCell>
+                              <TextInput
+                                id="exemptionFeeRate"
+                                labelText={requiredLabel('Fee rate ($/m³)')}
+                                aria-required="true"
+                                value={form.feeRate}
+                                invalid={!!fieldError('feeRate')}
+                                invalidText={fieldError('feeRate')}
+                                onChange={(event) => {
+                                  markFormEdited()
+                                  setForm((current) => ({
+                                    ...current,
+                                    feeRate: event.target.value,
+                                  }))
+                                }}
+                              />
+                            </RecordFieldCell>
+                          )}
+                        </RecordFieldRow>
+                      </RecordFieldGrid>
                     </fieldset>
                   </Tile>
                 </TabPanel>

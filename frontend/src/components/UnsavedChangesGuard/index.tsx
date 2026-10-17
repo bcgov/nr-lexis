@@ -1,7 +1,7 @@
-import { use, useCallback, useEffect, useId, useLayoutEffect, useRef } from 'react'
+import { use, useCallback, useEffect, useId, useLayoutEffect, useRef, useState } from 'react'
 import { Button } from '@carbon/react'
 import { UNSAFE_DataRouterContext, useBeforeUnload, useBlocker } from 'react-router-dom'
-import type { BlockerFunction } from 'react-router-dom'
+import type { Blocker, BlockerFunction } from 'react-router-dom'
 import DiscardChangesModal, { type DiscardChangesCopy } from '@/components/DiscardChangesModal'
 import Modal from '@/components/Modal'
 import { isPageUnloadAuthorized } from '@/utils/page-unload'
@@ -40,10 +40,14 @@ const RouterNavigationGuard = ({
   blockerRef.current = blocker
   const modalRef = useRef<HTMLDivElement>(null)
   const invokingElementRef = useRef<HTMLElement | null>(null)
+  const focusInvokerOnCloseRef = useRef(false)
   const generatedId = useId().replaceAll(':', '')
   const stayButtonId = `lexis-unsaved-changes-stay-${generatedId}`
   const descriptionId = `lexis-unsaved-changes-description-${generatedId}`
-  const isOpen = blocker.state === 'blocked'
+  // The router commits a reset in a transition, so the dialog closes on its own state first.
+  // Focus then returns to the control that opened it without the open dialog pulling it back.
+  const [stayedBlocker, setStayedBlocker] = useState<Blocker | null>(null)
+  const isOpen = blocker.state === 'blocked' && blocker !== stayedBlocker
   const busyWithoutDirtyChanges = isBusy && !isDirty
 
   useLayoutEffect(() => {
@@ -54,18 +58,28 @@ const RouterNavigationGuard = ({
     }
   }, [isOpen])
 
-  const restoreInvokingFocus = useCallback(() => {
+  useLayoutEffect(() => {
+    if (isOpen || !focusInvokerOnCloseRef.current) return
+    focusInvokerOnCloseRef.current = false
     const invokingElement = invokingElementRef.current
-    queueMicrotask(() => {
-      if (invokingElement?.isConnected) invokingElement.focus()
-    })
+    if (invokingElement?.isConnected) invokingElement.focus()
+  }, [isOpen])
+
+  // Cancels the blocked navigation. The discard dialog returns focus itself on Keep editing.
+  const stayOnPage = useCallback((currentBlocker: Blocker, focusInvoker: boolean) => {
+    if (currentBlocker.state !== 'blocked') return
+    focusInvokerOnCloseRef.current = focusInvoker
+    setStayedBlocker(currentBlocker)
+    currentBlocker.reset()
   }, [])
 
+  // A change that finishes while leaving waits cancels the navigation. Focus returns once the
+  // router commits the reset and the dialog closes.
   useEffect(() => {
     if (isDirty || isBusy || blocker.state !== 'blocked') return
+    focusInvokerOnCloseRef.current = true
     blocker.reset()
-    restoreInvokingFocus()
-  }, [blocker, isBusy, isDirty, restoreInvokingFocus])
+  }, [blocker, isBusy, isDirty])
 
   useEffect(() => {
     if (!isOpen || !busyWithoutDirtyChanges) return
@@ -84,11 +98,7 @@ const RouterNavigationGuard = ({
     return `${key}|${pathname}|${search}|${hash}`
   }
 
-  const stay = () => {
-    if (blocker.state !== 'blocked') return
-    blocker.reset()
-    restoreInvokingFocus()
-  }
+  const stay = () => stayOnPage(blocker, true)
 
   const discardAndLeave = () => {
     if (isBusy || blocker.state !== 'blocked') return
@@ -114,9 +124,7 @@ const RouterNavigationGuard = ({
         confirmDisabled={isBusy}
         returnFocusRef={invokingElementRef}
         onDiscard={discardAndLeave}
-        onKeepEditing={() => {
-          if (blocker.state === 'blocked') blocker.reset()
-        }}
+        onKeepEditing={() => stayOnPage(blocker, false)}
       />
     )
   }

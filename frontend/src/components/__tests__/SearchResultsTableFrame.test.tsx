@@ -57,22 +57,21 @@ describe('SearchResultsTableFrame', () => {
     expect(firstSkeletonRow?.querySelectorAll('td')).toHaveLength(9)
   })
 
-  it('shows the result column headers on the loading skeleton', () => {
+  it('shows a grey bar instead of a name in each skeleton header', () => {
     render(
-      <SearchResultsTableFrame
-        loading
-        loadingDescription="Searching"
-        columnHeaders={['', 'Permit number', 'Status']}
-      >
+      <SearchResultsTableFrame loading loadingDescription="Searching" columnCount={3}>
         <table />
       </SearchResultsTableFrame>,
     )
 
-    const skeleton = screen.getByRole('table', { name: 'Searching' })
-    expect(
-      Array.from(skeleton.querySelectorAll('thead th'), (header) => header.textContent),
-    ).toEqual(['', 'Permit number', 'Status'])
-    expect(skeleton.querySelector('tbody tr')?.querySelectorAll('td')).toHaveLength(3)
+    const headers = Array.from(
+      screen.getByRole('table', { name: 'Searching' }).querySelectorAll('thead th'),
+    )
+    expect(headers).toHaveLength(3)
+    headers.forEach((header) => {
+      expect(header.textContent).toBe('')
+      expect(header.querySelector(':scope > span')).toBeInTheDocument()
+    })
   })
 
   it('omits the loading indicator when the table frame is not loading', () => {

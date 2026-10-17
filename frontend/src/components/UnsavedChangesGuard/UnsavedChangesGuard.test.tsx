@@ -1,12 +1,20 @@
-import { useState } from 'react'
+import { use, useState } from 'react'
 import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, Link, RouterProvider } from 'react-router-dom'
+import { createMemoryRouter, Link, RouterProvider, useNavigation } from 'react-router-dom'
 import { describe, expect, it, vi } from 'vitest'
 import { discardNewRecordCopy } from '@/components/DiscardChangesModal'
 import { authorizePageUnload } from '@/utils/page-unload'
 
 import UnsavedChangesGuard, { formValuesEqual } from './index'
+
+// While set, a render that reads router state waits, as a slow page holds the router's transition.
+let heldRouterRender: Promise<void> | null = null
+const RouterStateReader = () => {
+  useNavigation()
+  if (heldRouterRender) use(heldRouterRender)
+  return null
+}
 
 type HarnessProps = {
   isBusy?: boolean
@@ -25,6 +33,7 @@ const GuardHarness = ({ isBusy = false, onDiscard, newRecord = false }: HarnessP
       <Link to="?filter=active">Filter this record</Link>
       <Link to="/edit/two">Other record</Link>
       <Link to="/next">Next page</Link>
+      <RouterStateReader />
       <UnsavedChangesGuard
         isDirty={isDirty}
         isBusy={isBusy}
@@ -94,6 +103,28 @@ describe('UnsavedChangesGuard', () => {
     expect(router.state.location.pathname).toBe('/edit/one')
     expect(screen.getByLabelText('Record value')).toHaveValue('changed')
     await waitFor(() => expect(screen.getByRole('link', { name: 'Next page' })).toHaveFocus())
+  })
+
+  it('closes on Keep editing and returns focus before the router commits the reset', async () => {
+    const router = renderGuard()
+    await makeDirtyAndLeave()
+    let releaseRouterRender = () => {}
+    heldRouterRender = new Promise<void>((resolve) => {
+      releaseRouterRender = resolve
+    })
+
+    try {
+      await userEvent.click(screen.getByRole('button', { name: 'Keep editing' }))
+
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+      await waitFor(() => expect(screen.getByRole('link', { name: 'Next page' })).toHaveFocus())
+    } finally {
+      heldRouterRender = null
+      await act(async () => releaseRouterRender())
+    }
+    expect(router.state.location.pathname).toBe('/edit/one')
+    expect(screen.getByLabelText('Record value')).toHaveValue('changed')
+    expect(screen.getByRole('link', { name: 'Next page' })).toHaveFocus()
   })
 
   it('discards changes and completes the navigation', async () => {

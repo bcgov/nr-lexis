@@ -3,10 +3,10 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
-import { createTestAuthContext } from '@/test-utils/auth'
+import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 import {
-  fetchExemptionClientData,
-  fetchExemptionClientLocations,
+  fetchApplicationClientData,
+  fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
 import { searchForestClients } from '@/service/client-search-service'
 import { addPermitDetail } from '@/service/provincial-permit-documents-invoices-service'
@@ -16,8 +16,8 @@ import BlanketOicPermitCreateForm from './BlanketOicPermitCreateForm'
 vi.mock('@/context/auth/useAuth', () => ({ useAuth: vi.fn() }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
-  fetchExemptionClientData: vi.fn(),
-  fetchExemptionClientLocations: vi.fn(),
+  fetchApplicationClientData: vi.fn(),
+  fetchApplicationClientLocations: vi.fn(),
 }))
 
 vi.mock('@/service/client-search-service', () => ({
@@ -133,10 +133,10 @@ describe('BlanketOicPermitCreateForm', () => {
       { clientNumber: query, companyName: 'Test client', clientAcronym: '' },
     ])
     vi.mocked(fetchShippingReferenceOptions).mockResolvedValue(shippingReferences)
-    vi.mocked(fetchExemptionClientLocations).mockResolvedValue([
+    vi.mocked(fetchApplicationClientLocations).mockResolvedValue([
       { locationCode: '00', locationName: 'Test location', selected: true },
     ])
-    vi.mocked(fetchExemptionClientData).mockResolvedValue({
+    vi.mocked(fetchApplicationClientData).mockResolvedValue({
       clientNumber: '12345678',
       companyName: 'Test client',
       clientAcronym: '',
@@ -270,7 +270,7 @@ describe('BlanketOicPermitCreateForm', () => {
     ).toBeInTheDocument()
   })
 
-  it('keeps optional date errors visible when all required fields are complete', async () => {
+  it('names the tab of an optional date error and shows the error only on its field', async () => {
     const user = userEvent.setup()
     renderForm()
 
@@ -280,14 +280,36 @@ describe('BlanketOicPermitCreateForm', () => {
     await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('00'))
     await user.click(screen.getByRole('tab', { name: 'Permit' }))
     await user.type(screen.getByLabelText('Issued date'), '1900-01-01')
+    await user.click(screen.getByRole('tab', { name: 'Shipping' }))
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
     const summary = await screen.findByRole('group', { name: 'Permit needs attention' })
+    expect(within(summary).getByText('Cannot save yet.')).toBeInTheDocument()
     expect(
-      within(summary).getByText('Issued date must be after or equal to submit date.'),
+      within(summary).getByText('Complete the required fields in the Permit tab.'),
     ).toBeInTheDocument()
-    expect(screen.getByRole('group', { name: 'Permit needs attention' })).toHaveFocus()
+    expect(summary).not.toHaveTextContent('Issued date must be after or equal to submit date')
+    expect(within(summary).queryByRole('list')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('tab', { name: 'Permit, 1 required field outstanding' }),
+    ).toHaveAttribute('aria-selected', 'true')
+    expect(
+      screen.getByText('Issued date must be after or equal to submit date'),
+    ).toBeInTheDocument()
+    expect(summary).toHaveFocus()
     expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('shows a malformed date with the shared date format error', async () => {
+    const user = userEvent.setup()
+    renderForm()
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Save permit' })).toBeEnabled())
+    await user.type(screen.getByLabelText('Expiry date'), '2026-02-30')
+    await user.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    expect(screen.getByText('Date must be YYYY-MM-DD')).toBeInTheDocument()
+    expect(screen.queryByText(/must use YYYY-MM-DD/)).not.toBeInTheDocument()
   })
 
   it('opens Shipping and focuses the error summary when Other port of export is the only missing field', async () => {
@@ -311,7 +333,7 @@ describe('BlanketOicPermitCreateForm', () => {
     expect(addPermitDetail).not.toHaveBeenCalled()
   })
 
-  it('includes a future submit date error in the validation summary', async () => {
+  it('shows a future submit date on its field and names its tab in the summary', async () => {
     const user = userEvent.setup()
     renderForm()
 
@@ -325,8 +347,30 @@ describe('BlanketOicPermitCreateForm', () => {
     await user.click(screen.getByRole('button', { name: 'Save permit' }))
 
     const summary = await screen.findByRole('group', { name: 'Permit needs attention' })
-    expect(within(summary).getByText("Submit date can't be in the future.")).toBeInTheDocument()
+    expect(
+      within(summary).getByText('Complete the required fields in the Permit tab.'),
+    ).toBeInTheDocument()
+    expect(summary).not.toHaveTextContent("Submit date can't be in the future")
+    expect(screen.getByText("Submit date can't be in the future")).toBeInTheDocument()
     expect(addPermitDetail).not.toHaveBeenCalled()
+  })
+
+  it('lists a problem without a field under the summary sentence', async () => {
+    const user = userEvent.setup()
+    vi.mocked(fetchShippingReferenceOptions).mockRejectedValue(new Error('unavailable'))
+    renderForm()
+
+    await user.click(screen.getByRole('button', { name: 'Save permit' }))
+
+    const summary = await screen.findByRole('group', { name: 'Permit needs attention' })
+    expect(
+      within(summary).getByText(/^Complete the required fields in Permit, Applicant and Shipping/),
+    ).toBeInTheDocument()
+    const list = within(summary).getByRole('list')
+    expect(list).toHaveClass('boic-permit-error-list')
+    expect(within(list).getByRole('listitem')).toHaveTextContent(
+      'Shipping reference options could not be loaded. Reload before creating a permit.',
+    )
   })
 
   it('saves explicit zero request totals after correcting the required fields', async () => {
@@ -505,11 +549,11 @@ describe('BlanketOicPermitCreateForm', () => {
     'shows read-only %s contact details and refreshes them for a changed location',
     async (kind) => {
       const user = userEvent.setup()
-      vi.mocked(fetchExemptionClientLocations).mockResolvedValue([
+      vi.mocked(fetchApplicationClientLocations).mockResolvedValue([
         { locationCode: '01', locationName: 'First location', selected: true },
         { locationCode: '02', locationName: 'Second location', selected: false },
       ])
-      vi.mocked(fetchExemptionClientData).mockImplementation(async (clientNumber, locationCode) =>
+      vi.mocked(fetchApplicationClientData).mockImplementation(async (clientNumber, locationCode) =>
         clientDetails(clientNumber, locationCode),
       )
       renderForm()
@@ -537,19 +581,21 @@ describe('BlanketOicPermitCreateForm', () => {
       await user.selectOptions(clientLocationControl(kind === 'Agent' ? 'agent' : 'owner'), '02')
       expect(await within(section()).findByText('Address 02')).toBeInTheDocument()
       expect(section()).toHaveTextContent('Phone 02')
-      expect(fetchExemptionClientData).toHaveBeenCalledWith('12345678', '02')
+      expect(fetchApplicationClientData).toHaveBeenCalledWith('12345678', '02', {
+        counterpartyClientNumber: '',
+      })
       expect(screen.queryByText('Address 01')).not.toBeInTheDocument()
     },
   )
 
   it('clears contact details when the client changes and ignores a stale location response', async () => {
     const user = userEvent.setup()
-    vi.mocked(fetchExemptionClientLocations).mockResolvedValue([
+    vi.mocked(fetchApplicationClientLocations).mockResolvedValue([
       { locationCode: '01', locationName: 'First location', selected: true },
       { locationCode: '02', locationName: 'Second location', selected: false },
     ])
     let resolveOldLocation!: (value: ReturnType<typeof clientDetails>) => void
-    vi.mocked(fetchExemptionClientData).mockImplementation((clientNumber, locationCode) =>
+    vi.mocked(fetchApplicationClientData).mockImplementation((clientNumber, locationCode) =>
       clientNumber === '12345678' && locationCode === '02'
         ? new Promise((resolve) => {
             resolveOldLocation = resolve
@@ -578,7 +624,7 @@ describe('BlanketOicPermitCreateForm', () => {
 
   it('uses selectable applicant and agent locations when the lookup also returns synthetic rows', async () => {
     const user = userEvent.setup()
-    vi.mocked(fetchExemptionClientLocations).mockImplementation(async (clientNumber) =>
+    vi.mocked(fetchApplicationClientLocations).mockImplementation(async (clientNumber) =>
       clientNumber === '12345678'
         ? [
             { locationCode: '0', locationName: 'Synthetic applicant', selected: true },
@@ -589,7 +635,7 @@ describe('BlanketOicPermitCreateForm', () => {
             { locationCode: '02', locationName: 'Agent location', selected: false },
           ],
     )
-    vi.mocked(fetchExemptionClientData).mockImplementation(async (clientNumber) => ({
+    vi.mocked(fetchApplicationClientData).mockImplementation(async (clientNumber) => ({
       clientNumber,
       companyName: 'Test client',
       clientAcronym: '',
@@ -627,8 +673,8 @@ describe('BlanketOicPermitCreateForm', () => {
         agentClientLocation: '02',
       }),
     )
-    expect(fetchExemptionClientData).not.toHaveBeenCalledWith('12345678', '0')
-    expect(fetchExemptionClientData).not.toHaveBeenCalledWith('87654321', '0')
+    expect(fetchApplicationClientData).not.toHaveBeenCalledWith('12345678', '0', expect.anything())
+    expect(fetchApplicationClientData).not.toHaveBeenCalledWith('87654321', '0', expect.anything())
     await waitFor(() => expect(onCreated).toHaveBeenCalledWith('9001'))
   })
 
@@ -647,7 +693,7 @@ describe('BlanketOicPermitCreateForm', () => {
     },
   ])('does not submit a permit with only a synthetic $kind location', async (scenario) => {
     const user = userEvent.setup()
-    vi.mocked(fetchExemptionClientLocations).mockImplementation(async (clientNumber) =>
+    vi.mocked(fetchApplicationClientLocations).mockImplementation(async (clientNumber) =>
       clientNumber === scenario.blockedClientNumber
         ? [{ locationCode: '0', locationName: 'Synthetic location', selected: true }]
         : [{ locationCode: '01', locationName: 'Verified location', selected: true }],
@@ -685,6 +731,130 @@ describe('BlanketOicPermitCreateForm', () => {
       screen.getByRole('tab', { name: 'Applicant, 1 required field outstanding' }),
     ).toHaveAttribute('aria-selected', 'true')
     expect(addPermitDetail).not.toHaveBeenCalled()
-    expect(fetchExemptionClientData).not.toHaveBeenCalledWith(scenario.blockedClientNumber, '0')
+    expect(fetchApplicationClientData).not.toHaveBeenCalledWith(
+      scenario.blockedClientNumber,
+      '0',
+      expect.anything(),
+    )
+  })
+
+  describe('for a Provincial Submitter', () => {
+    const SUBMITTER_CLIENT = '00001074'
+    const OTHER_OWNER = '00002176'
+
+    beforeEach(() => {
+      vi.mocked(useAuth).mockReturnValue(
+        createTestAuthContext({
+          capabilities: createTestCapabilities({
+            principal: 'bceid\\submitter',
+            roles: ['PROVINCIAL_SUBMITTER'],
+            forestClientNumber: SUBMITTER_CLIENT,
+          }),
+          canPerform: vi.fn((action: string) => action !== '/permitsReview'),
+        }),
+      )
+      vi.mocked(fetchApplicationClientLocations).mockResolvedValue([
+        { locationCode: '00', locationName: 'Head office', selected: false },
+        { locationCode: '02', locationName: 'Mill', selected: false },
+      ])
+      vi.mocked(fetchApplicationClientData).mockImplementation(async (clientNumber, locationCode) =>
+        clientDetails(clientNumber, locationCode),
+      )
+    })
+
+    it('starts with their own client as an editable owner and leaves without asking', async () => {
+      const user = userEvent.setup()
+      const { router } = renderForm()
+
+      await user.click(screen.getByRole('tab', { name: 'Applicant' }))
+      await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('00'))
+      expect(clientControl('owner')).toHaveValue(
+        `Resolved client ${SUBMITTER_CLIENT} · ${SUBMITTER_CLIENT}`,
+      )
+      expect(clientControl('owner')).toBeEnabled()
+      expect(fetchApplicationClientLocations).toHaveBeenCalledWith(
+        SUBMITTER_CLIENT,
+        'owner',
+        '',
+        '',
+      )
+      expect(screen.queryByRole('heading', { name: 'Agent' })).not.toBeInTheDocument()
+
+      await user.click(screen.getByRole('button', { name: 'Cancel' }))
+      await waitFor(() => expect(router.state.location.pathname).toBe('/elsewhere'))
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    })
+
+    it('saves as the agent for another owner, naming the other client on each lookup', async () => {
+      const user = userEvent.setup()
+      renderForm()
+
+      await fillRequiredPermitAndShippingFields(user)
+      await user.click(screen.getByRole('tab', { name: 'Applicant' }))
+      await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('00'))
+      // Acting as agent starts with their own client as the agent.
+      await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+      await waitFor(() => expect(clientLocationControl('agent')).toHaveValue('00'))
+      expect(fetchApplicationClientLocations).toHaveBeenCalledWith(
+        SUBMITTER_CLIENT,
+        'agent',
+        '',
+        SUBMITTER_CLIENT,
+      )
+
+      await user.clear(clientControl('owner'))
+      await selectForestClient(user, 'owner', OTHER_OWNER)
+      await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('00'))
+      expect(vi.mocked(searchForestClients).mock.calls.at(-1)?.slice(0, 2)).toEqual([
+        OTHER_OWNER,
+        SUBMITTER_CLIENT,
+      ])
+      expect(fetchApplicationClientLocations).toHaveBeenCalledWith(
+        OTHER_OWNER,
+        'owner',
+        '',
+        SUBMITTER_CLIENT,
+      )
+      expect(fetchApplicationClientData).toHaveBeenCalledWith(OTHER_OWNER, '00', {
+        counterpartyClientNumber: SUBMITTER_CLIENT,
+      })
+      await user.selectOptions(clientLocationControl('owner'), '02')
+      expect(fetchApplicationClientData).toHaveBeenLastCalledWith(OTHER_OWNER, '02', {
+        counterpartyClientNumber: SUBMITTER_CLIENT,
+      })
+
+      await user.click(screen.getByRole('button', { name: 'Save permit' }))
+      await waitFor(() => expect(addPermitDetail).toHaveBeenCalledTimes(1))
+      expect(addPermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerClientNumber: OTHER_OWNER,
+          ownerClientLocation: '02',
+          agentClientNumber: SUBMITTER_CLIENT,
+          agentClientLocation: '00',
+        }),
+      )
+    })
+
+    it('does not save a permit without their client as the owner or the agent', async () => {
+      const user = userEvent.setup()
+      renderForm()
+
+      await fillRequiredPermitAndShippingFields(user)
+      await user.click(screen.getByRole('tab', { name: 'Applicant' }))
+      await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('00'))
+      await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+      await waitFor(() => expect(clientLocationControl('agent')).toHaveValue('00'))
+      await user.clear(clientControl('owner'))
+      await selectForestClient(user, 'owner', OTHER_OWNER)
+      await waitFor(() => expect(clientLocationControl('owner')).toHaveValue('00'))
+      await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+      await user.click(screen.getByRole('button', { name: 'Save permit' }))
+
+      expect(
+        await screen.findByText('Complete the required fields in the Applicant tab.'),
+      ).toBeInTheDocument()
+      expect(screen.getByText('Your client must be the owner or the agent')).toBeInTheDocument()
+      expect(addPermitDetail).not.toHaveBeenCalled()
+    })
   })
 })

@@ -100,8 +100,8 @@ import {
   fetchProvincialExemptionDetail,
 } from '@/service/lexis-detail-service'
 import {
-  fetchExemptionClientData,
-  fetchExemptionClientLocations,
+  fetchApplicationClientData,
+  fetchApplicationClientLocations,
   type ApplicationClientData,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
@@ -158,6 +158,8 @@ import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
 type ExemptionActionResult = ActionResult & {
   source?: 'documents' | 'summary' | 'applications' | 'fees' | 'approval'
+  /** Moves focus to the notice, for a change that removes the control focus would return to. */
+  focusOnReveal?: boolean
 }
 
 type ExemptionDetailTabKey =
@@ -412,6 +414,8 @@ const findAssignedExemptionNumber = async (applicationNumber: string): Promise<s
 
 const formatExemptionVolume = displayVolume
 
+const NO_CLIENT_LOOKUP_FAILURES = { owner: false, agent: false }
+
 const applicantTypeLabel = (value: string): string => {
   switch (value.trim().toUpperCase()) {
     case 'A':
@@ -435,6 +439,7 @@ type ExemptionClient = {
   locations: ApplicationClientLocation[]
   clientData: ApplicationClientData | null
   isLoading: boolean
+  lookupFailed: boolean
 }
 
 const exemptionClientFields = ({
@@ -482,49 +487,34 @@ const exemptionClientFields = ({
 // The agent is a section of the applicant card, as on the application page, not a second card.
 const ExemptionClientFields = (client: ExemptionClient) => {
   const fields = exemptionClientFields(client)
+  const rows = [fields.slice(0, 2), fields.slice(2, 4), fields.slice(4, 9), fields.slice(9)]
   return (
-    <RecordFieldGrid>
-      <RecordFieldRow>
-        {fields.slice(0, 2).map((field: DetailField) => (
-          <RecordField
-            key={field.label}
-            label={field.label}
-            value={field.value}
-            span={field.span}
-          />
+    <>
+      <RecordFieldGrid>
+        {rows.map((row) => (
+          <RecordFieldRow key={row[0].label}>
+            {row.map((field: DetailField) => (
+              <RecordField
+                key={field.label}
+                label={field.label}
+                value={field.value}
+                span={field.span}
+              />
+            ))}
+          </RecordFieldRow>
         ))}
-      </RecordFieldRow>
-      <RecordFieldRow>
-        {fields.slice(2, 4).map((field: DetailField) => (
-          <RecordField
-            key={field.label}
-            label={field.label}
-            value={field.value}
-            span={field.span}
-          />
-        ))}
-      </RecordFieldRow>
-      <RecordFieldRow>
-        {fields.slice(4, 9).map((field: DetailField) => (
-          <RecordField
-            key={field.label}
-            label={field.label}
-            value={field.value}
-            span={field.span}
-          />
-        ))}
-      </RecordFieldRow>
-      <RecordFieldRow>
-        {fields.slice(9).map((field: DetailField) => (
-          <RecordField
-            key={field.label}
-            label={field.label}
-            value={field.value}
-            span={field.span}
-          />
-        ))}
-      </RecordFieldRow>
-    </RecordFieldGrid>
+      </RecordFieldGrid>
+      {client.lookupFailed && !client.isLoading && (
+        <InlineNotification
+          className="detail-context-notification"
+          kind="warning"
+          title="Client details unavailable"
+          subtitle="The saved application values are shown above. Additional client details could not be loaded."
+          lowContrast
+          hideCloseButton
+        />
+      )}
+    </>
   )
 }
 
@@ -569,7 +559,8 @@ const ProvincialExemptionDetailsPage = () => {
   const [clientContextLoading, setClientContextLoading] = useState(false)
   // The client lookup that last finished, so a card counts as loading until its own lookup settles.
   const [settledClientContextKey, setSettledClientContextKey] = useState('')
-  const [clientContextErrorMessage, setClientContextErrorMessage] = useState('')
+  // Each party's lookup that failed; the other party's details still show.
+  const [clientLookupFailures, setClientLookupFailures] = useState(NO_CLIENT_LOOKUP_FAILURES)
   const [documentRows, setDocumentRows] = useState<ProvincialExemptionDocumentRow[]>([])
   const [applications, setApplications] = useState<ExemptionApplicationRow[]>([])
   const [exemptionHolder, setExemptionHolder] = useState('')
@@ -779,7 +770,7 @@ const ProvincialExemptionDetailsPage = () => {
       setAgentClientData(null)
       setOwnerClientLocations([])
       setAgentClientLocations([])
-      setClientContextErrorMessage('')
+      setClientLookupFailures(NO_CLIENT_LOOKUP_FAILURES)
       setClientContextLoading(false)
     }
 
@@ -796,46 +787,58 @@ const ProvincialExemptionDetailsPage = () => {
 
     const loadClientContext = async () => {
       setClientContextLoading(true)
-      setClientContextErrorMessage('')
+      setClientLookupFailures(NO_CLIENT_LOOKUP_FAILURES)
 
-      try {
-        const [nextOwnerData, nextAgentData, nextOwnerLocations, nextAgentLocations] =
-          await Promise.all([
-            exemptionOwnerClientNumber && ownerClientLocationCode
-              ? fetchExemptionClientData(exemptionOwnerClientNumber, ownerClientLocationCode)
-              : Promise.resolve(null),
-            clientContextHasAgent && exemptionAgentClientNumber && agentClientLocationCode
-              ? fetchExemptionClientData(exemptionAgentClientNumber, agentClientLocationCode)
-              : Promise.resolve(null),
-            exemptionOwnerClientNumber
-              ? fetchExemptionClientLocations(exemptionOwnerClientNumber)
-              : Promise.resolve([]),
-            clientContextHasAgent && exemptionAgentClientNumber
-              ? fetchExemptionClientLocations(exemptionAgentClientNumber)
-              : Promise.resolve([]),
-          ])
+      // The linked application scopes these lookups, so a submitter sees the other party too.
+      const lookupContext = { applicationNumber: linkedApplicationNumber }
+      const [ownerDataResult, agentDataResult, ownerLocationsResult, agentLocationsResult] =
+        await Promise.allSettled([
+          exemptionOwnerClientNumber && ownerClientLocationCode
+            ? fetchApplicationClientData(
+                exemptionOwnerClientNumber,
+                ownerClientLocationCode,
+                lookupContext,
+              )
+            : Promise.resolve(null),
+          clientContextHasAgent && exemptionAgentClientNumber && agentClientLocationCode
+            ? fetchApplicationClientData(
+                exemptionAgentClientNumber,
+                agentClientLocationCode,
+                lookupContext,
+              )
+            : Promise.resolve(null),
+          exemptionOwnerClientNumber
+            ? fetchApplicationClientLocations(
+                exemptionOwnerClientNumber,
+                'owner',
+                linkedApplicationNumber,
+              )
+            : Promise.resolve([]),
+          clientContextHasAgent && exemptionAgentClientNumber
+            ? fetchApplicationClientLocations(
+                exemptionAgentClientNumber,
+                'agent',
+                linkedApplicationNumber,
+              )
+            : Promise.resolve([]),
+        ])
 
-        if (!isActive) return
-        setOwnerClientData(nextOwnerData)
-        setAgentClientData(nextAgentData)
-        setOwnerClientLocations(nextOwnerLocations)
-        setAgentClientLocations(nextAgentLocations)
-      } catch (error) {
-        if (!isActive) return
-        console.error(error)
-        setOwnerClientData(null)
-        setAgentClientData(null)
-        setOwnerClientLocations([])
-        setAgentClientLocations([])
-        setClientContextErrorMessage(
-          'Applicant and agent details could not be retrieved from the linked application.',
-        )
-      } finally {
-        if (isActive) {
-          setClientContextLoading(false)
-          setSettledClientContextKey(clientContextKey)
-        }
+      if (!isActive) return
+      const settledValue = <T,>(result: PromiseSettledResult<T>, fallback: T): T => {
+        if (result.status === 'fulfilled') return result.value
+        console.error(result.reason)
+        return fallback
       }
+      setOwnerClientData(settledValue(ownerDataResult, null))
+      setAgentClientData(settledValue(agentDataResult, null))
+      setOwnerClientLocations(settledValue(ownerLocationsResult, []))
+      setAgentClientLocations(settledValue(agentLocationsResult, []))
+      setClientLookupFailures({
+        owner: ownerDataResult.status === 'rejected' || ownerLocationsResult.status === 'rejected',
+        agent: agentDataResult.status === 'rejected' || agentLocationsResult.status === 'rejected',
+      })
+      setClientContextLoading(false)
+      setSettledClientContextKey(clientContextKey)
     }
 
     void loadClientContext()
@@ -1274,10 +1277,11 @@ const ProvincialExemptionDetailsPage = () => {
     locations: ownerClientLocations,
     clientData: ownerClientData,
     isLoading: clientDetailsLoading,
+    lookupFailed: clientLookupFailures.owner,
   }
   const agentClient: ExemptionClient | undefined = showAgent
     ? {
-        title: 'Agent client details',
+        title: 'Agent information',
         clientNumber: exemptionAgentClientNumber,
         applicantType: clientContextApplication?.applicantTypeCode ?? '',
         locationCode: agentClientLocationCode,
@@ -1286,6 +1290,7 @@ const ProvincialExemptionDetailsPage = () => {
         locations: agentClientLocations,
         clientData: agentClientData,
         isLoading: clientDetailsLoading,
+        lookupFailed: clientLookupFailures.agent,
       }
     : undefined
   const feeManagementAvailable =
@@ -1426,7 +1431,9 @@ const ProvincialExemptionDetailsPage = () => {
       errors.expiryDate = 'Expiry date must be after the approval date.'
     }
     const approvedVolume = Number(editForm.approvedVolume)
-    if (
+    if (!editForm.approvedVolume.trim()) {
+      errors.approvedVolume = 'Approval volume is required.'
+    } else if (
       !Number.isFinite(approvedVolume) ||
       approvedVolume <= 0 ||
       approvedVolume > 9_999_999.99 ||
@@ -1943,15 +1950,14 @@ const ProvincialExemptionDetailsPage = () => {
           kind = 'alreadyAssigned'
         }
       }
+      // These messages are sentences, so each keeps its full stop.
       setAddApplicationError(
-        fieldErrorText(
-          addApplicationFailureMessage(
-            kind,
-            enteredNumber,
-            exemptionClientNumber,
-            assignedExemptionNumber,
-            serverMessage,
-          ),
+        addApplicationFailureMessage(
+          kind,
+          enteredNumber,
+          exemptionClientNumber,
+          assignedExemptionNumber,
+          serverMessage,
         ),
       )
     }
@@ -1974,6 +1980,7 @@ const ProvincialExemptionDetailsPage = () => {
           kind: 'success',
           title: 'Application added',
           message: '',
+          focusOnReveal: true,
         })
       } catch (refreshError) {
         console.error(refreshError)
@@ -1982,6 +1989,7 @@ const ProvincialExemptionDetailsPage = () => {
           kind: 'warning',
           title: 'Application added',
           message: `Application ${number} was linked, but the page could not refresh. Reload before changing application links again.`,
+          focusOnReveal: true,
         })
       }
     } catch (error) {
@@ -2046,6 +2054,7 @@ const ProvincialExemptionDetailsPage = () => {
             kind: 'success',
             title: 'Application removed',
             message: '',
+            focusOnReveal: true,
           })
         } catch (refreshError) {
           console.error(refreshError)
@@ -2057,6 +2066,7 @@ const ProvincialExemptionDetailsPage = () => {
             kind: 'warning',
             title: 'Application removed',
             message: `Application ${applicationNumber} was removed, but the page could not refresh. Reload before changing application links again.`,
+            focusOnReveal: true,
           })
         }
       } catch (error) {
@@ -2187,7 +2197,11 @@ const ProvincialExemptionDetailsPage = () => {
 
   const sectionResult = (source: ExemptionActionResult['source']) =>
     actionResult && actionResult.source === source ? (
-      <ActionResultNotification result={actionResult} onClose={() => setActionResult(null)} />
+      <ActionResultNotification
+        result={actionResult}
+        onClose={() => setActionResult(null)}
+        focusOnReveal={actionResult.focusOnReveal}
+      />
     ) : null
 
   return (
@@ -2243,7 +2257,8 @@ const ProvincialExemptionDetailsPage = () => {
                   <Button
                     kind="tertiary"
                     size="md"
-                    disabled={generatingReport}
+                    // While it runs, the button keeps focus and ignores clicks.
+                    aria-disabled={generatingReport || undefined}
                     renderIcon={generatingReport ? PendingIcon : undefined}
                     onClick={() => void onGenerateApprovedReport()}
                   >
@@ -2365,14 +2380,7 @@ const ProvincialExemptionDetailsPage = () => {
                   <TabPanel key="owner" className="application-detail-tab-panel">
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
-                        {clientContextErrorMessage ? (
-                          <EmptyState
-                            title="Client details unavailable"
-                            description={clientContextErrorMessage}
-                            headingLevel={3}
-                            role="alert"
-                          />
-                        ) : showOwner ? (
+                        {showOwner ? (
                           <ExemptionClientTile {...ownerClient} agent={agentClient} />
                         ) : (
                           agentClient && <ExemptionClientTile {...agentClient} />
@@ -2399,8 +2407,7 @@ const ProvincialExemptionDetailsPage = () => {
                                 <RecordFieldCell>
                                   <SearchableSelect
                                     id="exemptionDetailStatus"
-                                    labelText={requiredLabel('Status')}
-                                    required
+                                    labelText="Status"
                                     value={editForm.exemptionStatusCode}
                                     options={statusSelectOptions}
                                     disabled={
@@ -2558,6 +2565,7 @@ const ProvincialExemptionDetailsPage = () => {
                                       id="exemptionDetailRegions"
                                       titleText={requiredLabel('Region')}
                                       required
+                                      showSelectedNames
                                       items={regionOptions}
                                       selectedItems={selectedRegions}
                                       disabled={
@@ -2788,7 +2796,7 @@ const ProvincialExemptionDetailsPage = () => {
                           </div>
                           {sectionResult('applications')}
                           {!applicationsErrorMessage && (
-                            <RecordFieldGrid>
+                            <RecordFieldGrid className="exemption-table-totals">
                               <RecordFieldRow>
                                 <RecordField
                                   label="Total requested volume (m³)"
@@ -2992,7 +3000,10 @@ const ProvincialExemptionDetailsPage = () => {
                           </p>
                         )}
                         {!detail.blanketOic && (
-                          <RecordFieldGrid aria-label="Exemption permit volume totals">
+                          <RecordFieldGrid
+                            className="exemption-table-totals"
+                            aria-label="Exemption permit volume totals"
+                          >
                             <RecordFieldRow>
                               <RecordField
                                 label="Requested volume (m³)"
@@ -3353,7 +3364,10 @@ const ProvincialExemptionDetailsPage = () => {
           aria-describedby="permit-creation-confirmation-description"
           onRequestClose={closePermitCreationConfirmation}
         >
-          <div id="permit-creation-confirmation-description">
+          <div
+            id="permit-creation-confirmation-description"
+            className="permit-creation-confirmation-modal__description"
+          >
             {currentDetail.blanketOic ? (
               <>
                 <p>

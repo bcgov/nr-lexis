@@ -19,8 +19,12 @@ type PageHeaderProps = Omit<ComponentPropsWithoutRef<'header'>, 'title'> & {
   actions?: ReactNode
   headingId?: string
   actionsLabel?: string
-  /** Moves focus to the title when the page opens, as create pages do instead of a field. */
-  focusTitle?: boolean
+  /**
+   * Moves focus to the title when the page opens, as create pages do instead of a field.
+   * 'whenFocusLost' does so only when nothing has focus, as after leaving a page whose control
+   * went away with it.
+   */
+  focusTitle?: boolean | 'whenFocusLost'
 }
 
 /**
@@ -52,6 +56,7 @@ const PageHeader = ({
     const visit = historyEntryKey()
     const active = document.activeElement
     const focusLost = !active || active === document.body
+    if (focusTitle === 'whenFocusLost' && !focusLost) return
     if (visit && visit === focusedTitleVisit && !focusLost) return
     focusedTitleVisit = visit
     titleRef.current?.focus()
@@ -65,16 +70,25 @@ const PageHeader = ({
       aria-describedby={describedBy || undefined}
     >
       <div className="lexis-page-header__top">
-        <div className="lexis-page-header__title-group">
-          <h1
-            ref={titleRef}
-            id={resolvedHeadingId}
-            className="lexis-page-header__title"
-            tabIndex={focusTitle ? -1 : undefined}
-          >
-            {title}
-          </h1>
-          {status ? <div className="lexis-page-header__status">{status}</div> : null}
+        {/* The subtitle stays under the title when the actions wrap below on narrow screens. */}
+        <div className="lexis-page-header__heading">
+          <div className="lexis-page-header__title-group">
+            <h1
+              ref={titleRef}
+              id={resolvedHeadingId}
+              className="lexis-page-header__title"
+              tabIndex={focusTitle ? -1 : undefined}
+            >
+              {title}
+            </h1>
+            {status ? <div className="lexis-page-header__status">{status}</div> : null}
+          </div>
+
+          {subtitle ? (
+            <p id={subtitleId} className="lexis-page-header__subtitle">
+              {subtitle}
+            </p>
+          ) : null}
         </div>
 
         {actions ? (
@@ -83,12 +97,6 @@ const PageHeader = ({
           </div>
         ) : null}
       </div>
-
-      {subtitle ? (
-        <p id={subtitleId} className="lexis-page-header__subtitle">
-          {subtitle}
-        </p>
-      ) : null}
     </header>
   )
 }

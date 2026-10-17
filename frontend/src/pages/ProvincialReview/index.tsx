@@ -826,6 +826,7 @@ const ProvincialReviewPage = () => {
                 labelText="Product type"
                 value={filters.productTypeCode}
                 placeholder="All"
+                allOptionLabel="All"
                 options={productTypeOptions}
                 disabled={optionsLoading || optionsUnavailable}
                 onChange={(value) => updateFilter('productTypeCode', value)}

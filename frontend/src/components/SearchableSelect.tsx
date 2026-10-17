@@ -14,6 +14,8 @@ type SearchableSelectProps = {
   value: string
   options: SearchableSelectOption[]
   placeholder?: string
+  /** Adds a first option with this label that selects no restriction (an empty value). */
+  allOptionLabel?: string
   helperText?: ReactNode
   allowCustomValue?: boolean
   required?: boolean
@@ -35,6 +37,7 @@ export default function SearchableSelect({
   value,
   options,
   placeholder = 'Search and select',
+  allOptionLabel,
   helperText,
   allowCustomValue = false,
   required = false,
@@ -46,23 +49,41 @@ export default function SearchableSelect({
   onFocus,
   onChange,
 }: SearchableSelectProps) {
+  // A list that already has its own All option (or an empty value) keeps it as the All option.
+  const listAllOption =
+    allOptionLabel === undefined
+      ? undefined
+      : options.find(
+          (option) =>
+            option.value === '' || option.label.toLowerCase() === allOptionLabel.toLowerCase(),
+        )
+  const addedAllOption =
+    allOptionLabel !== undefined && !listAllOption ? { value: '', label: allOptionLabel } : null
+  const allOption = listAllOption ?? addedAllOption
+  const items = addedAllOption ? [addedAllOption, ...options] : options
   const selectedItem =
-    options.find((option) => option.value === value) ?? (value ? { value, label: value } : null)
+    items.find((option) => option.value === value) ??
+    (value ? { value, label: value } : (allOption ?? null))
+  const allSelected = !!allOption && (value === '' || value === allOption.value)
 
   return (
     <ComboBox
       id={id}
+      // With All selected there's nothing to clear.
+      className={allSelected ? 'searchable-select--all' : undefined}
       titleText={labelText}
-      items={options}
+      items={items}
       selectedItem={selectedItem}
       itemToString={itemToString}
       shouldFilterItem={({ item, inputValue }) =>
-        shouldFilterSearchableDropdownItem({ item, inputValue, optionCount: options.length })
+        shouldFilterSearchableDropdownItem({ item, inputValue, optionCount: items.length })
       }
       placeholder={placeholder}
       helperText={helperText}
       allowCustomValue={allowCustomValue}
       aria-required={required || undefined}
+      // Carbon links the error text but doesn't mark the input invalid.
+      aria-invalid={invalid && !disabled && !readOnly ? true : undefined}
       disabled={disabled}
       readOnly={readOnly}
       invalid={invalid}

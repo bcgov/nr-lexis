@@ -83,10 +83,22 @@ export default function DetailSidePanel({
     needsFocusReturnRef.current = false
     const frame = requestAnimationFrame(() => {
       const launcher = launcherRef.current
-      const target = launcher?.isConnected
-        ? launcher
-        : document.querySelector<HTMLElement>(fallbackFocusSelector)
-      target?.focus()
+      if (launcher?.isConnected) {
+        launcher.focus()
+        return
+      }
+      // With the launcher gone, the fallback only catches lost focus; it doesn't take focus back
+      // from where the page sent it after the save.
+      const active = document.activeElement
+      if (
+        active instanceof HTMLElement &&
+        active !== document.body &&
+        active.isConnected &&
+        !panelRef.current?.contains(active)
+      ) {
+        return
+      }
+      document.querySelector<HTMLElement>(fallbackFocusSelector)?.focus()
     })
     return () => cancelAnimationFrame(frame)
   }, [open, busy, launcherRef, fallbackFocusSelector])

@@ -639,24 +639,16 @@ describe('Provincial Permit Search Actions', () => {
     )
   })
 
-  it('shows the result columns on the loading skeleton', async () => {
+  it('shows grey header bars for the result columns on the loading skeleton', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
     mockedSearchProvincialPermits.mockReturnValue(new Promise(() => {}))
 
     renderPage()
 
     const skeleton = await screen.findByRole('table', { name: 'Searching' })
-    expect(
-      Array.from(skeleton.querySelectorAll('thead th'), (header) => header.textContent),
-    ).toEqual([
-      'Permit number',
-      'Status',
-      'Owner client number',
-      'Agent client number',
-      'Total volume (m³)',
-      'Issued date',
-      'Region',
-    ])
+    const headers = Array.from(skeleton.querySelectorAll('thead th'))
+    expect(headers).toHaveLength(7)
+    headers.forEach((header) => expect(header.textContent).toBe(''))
   })
 
   it('shows owner then agent client columns, with a dash when there is no agent', async () => {

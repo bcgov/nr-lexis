@@ -50,8 +50,7 @@ import {
 } from '@/service/provincial-permit-documents-invoices-service'
 import {
   fetchApplicationClientData,
-  fetchExemptionClientData,
-  fetchExemptionClientLocations,
+  fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
 import { fetchExemptionRegionContext } from '@/service/provincial-exemption-detail-service'
 import { runReport } from '@/service/report-service'
@@ -126,8 +125,7 @@ vi.mock('@/service/provincial-permit-documents-invoices-service', () => ({
 
 vi.mock('@/service/application-client-lookup-service', () => ({
   fetchApplicationClientData: vi.fn(),
-  fetchExemptionClientData: vi.fn(),
-  fetchExemptionClientLocations: vi.fn(),
+  fetchApplicationClientLocations: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-exemption-detail-service', () => ({
@@ -252,8 +250,7 @@ const mockedSendPermitReviewRequestEmail = vi.mocked(sendPermitReviewRequestEmai
 const mockedUpdatePermitDetail = vi.mocked(updatePermitDetail)
 const mockedUpdatePermitShipping = vi.mocked(updatePermitShipping)
 const mockedFetchApplicationClientData = vi.mocked(fetchApplicationClientData)
-const mockedFetchExemptionClientData = vi.mocked(fetchExemptionClientData)
-const mockedFetchExemptionClientLocations = vi.mocked(fetchExemptionClientLocations)
+const mockedFetchApplicationClientLocations = vi.mocked(fetchApplicationClientLocations)
 const mockedFetchExemptionRegionContext = vi.mocked(fetchExemptionRegionContext)
 const mockedFetchApplicationGradeCodes = vi.mocked(fetchApplicationGradeCodes)
 const mockedFetchApplicationSpeciesCodes = vi.mocked(fetchApplicationSpeciesCodes)
@@ -907,8 +904,37 @@ describe('Provincial Permit Detail Action Smoke', () => {
       rows: [],
       source: 'api',
     })
+    // Editing looks clients up with the client in the other slot as the counterparty.
     mockedFetchApplicationClientData.mockImplementation(
-      async (clientNumber, clientLocationCode) => {
+      async (clientNumber, clientLocationCode, context) => {
+        if (context && 'counterpartyClientNumber' in context) {
+          return {
+            clientNumber: clientNumber === '67890' ? '00067890' : clientNumber,
+            companyName:
+              clientLocationCode === '01' || clientLocationCode === '02' ? 'Agent Co' : 'Owner Co',
+            clientAcronym: '',
+            address:
+              clientLocationCode === '01' || clientLocationCode === '02'
+                ? '2 Agent St'
+                : '1 Owner St',
+            city:
+              clientLocationCode === '01' || clientLocationCode === '02' ? 'Nanaimo' : 'Victoria',
+            province: 'BC',
+            postalCode:
+              clientLocationCode === '01' || clientLocationCode === '02' ? 'V9R 1A1' : 'V8V 1A1',
+            country: 'Canada',
+            phone:
+              clientLocationCode === '01' || clientLocationCode === '02'
+                ? '2505553333'
+                : '2505551111',
+            fax: '',
+            email:
+              clientLocationCode === '01' || clientLocationCode === '02'
+                ? 'agent@example.test'
+                : 'owner@example.test',
+            notfound: '',
+          }
+        }
         if (clientNumber === '00067890' && clientLocationCode === '03') {
           return {
             clientNumber,
@@ -942,7 +968,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
         }
       },
     )
-    mockedFetchExemptionClientLocations.mockImplementation(async (clientNumber) =>
+    mockedFetchApplicationClientLocations.mockImplementation(async (clientNumber) =>
       clientNumber === '00012345'
         ? [
             { locationCode: '01', locationName: 'Agent office', selected: true },
@@ -953,27 +979,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
             { locationCode: '04', locationName: 'Owner mill', selected: false },
           ],
     )
-    mockedFetchExemptionClientData.mockImplementation(async (clientNumber, clientLocationCode) => ({
-      clientNumber: clientNumber === '67890' ? '00067890' : clientNumber,
-      companyName:
-        clientLocationCode === '01' || clientLocationCode === '02' ? 'Agent Co' : 'Owner Co',
-      clientAcronym: '',
-      address:
-        clientLocationCode === '01' || clientLocationCode === '02' ? '2 Agent St' : '1 Owner St',
-      city: clientLocationCode === '01' || clientLocationCode === '02' ? 'Nanaimo' : 'Victoria',
-      province: 'BC',
-      postalCode:
-        clientLocationCode === '01' || clientLocationCode === '02' ? 'V9R 1A1' : 'V8V 1A1',
-      country: 'Canada',
-      phone:
-        clientLocationCode === '01' || clientLocationCode === '02' ? '2505553333' : '2505551111',
-      fax: '',
-      email:
-        clientLocationCode === '01' || clientLocationCode === '02'
-          ? 'agent@example.test'
-          : 'owner@example.test',
-      notfound: '',
-    }))
     mockedFetchApplicationSpeciesCodes.mockResolvedValue([
       { code: 'AL', description: 'Alder' },
       { code: 'FI', description: 'Fir' },
@@ -7583,6 +7588,41 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
+  it("looks up a Blanket OIC permit's clients for editing with the other client named", async () => {
+    configureEditableBlanketOicPackage()
+    configureBlanketOicSubmitter('00012345')
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Owner')
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
+    )
+    const ownerLocation = screen.getByLabelText('Client location', {
+      selector: '#permit-ownerClientLocation',
+    })
+    await waitFor(() => expect(ownerLocation).toBeEnabled())
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+      '00067890',
+      'owner',
+      '',
+      '00012345',
+    )
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+      '00012345',
+      'agent',
+      '',
+      '00067890',
+    )
+
+    await userEvent.selectOptions(ownerLocation, '04')
+    await waitFor(() =>
+      expect(mockedFetchApplicationClientData).toHaveBeenLastCalledWith('00067890', '04', {
+        permitNumber: '777',
+        counterpartyClientNumber: '00012345',
+      }),
+    )
+  })
+
   it('shows saved Blanket OIC applicant and agent contact details in one tab', async () => {
     configureEditableBlanketOicPackage()
     const lookup = mockedFetchApplicationClientData.getMockImplementation()!
@@ -7667,6 +7707,61 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(screen.queryByRole('button', { name: 'Save shipping' })).not.toBeInTheDocument()
   })
 
+  it("starts a Ministerial permit's empty shipping options on the defaults and keeps saved ones", async () => {
+    configureMinisterialActivePermit({
+      destinationCountryCode: 'CA',
+      transportTypeCode: null,
+      portOfExportCode: null,
+    })
+    mockedFetchShippingReferenceOptions.mockResolvedValue({
+      countries: [
+        { code: 'CA', name: 'Canada' },
+        { code: 'US', name: 'United States' },
+      ],
+      transportTypes: [
+        { code: 'S', name: 'Ship' },
+        { code: 'B', name: 'Barge' },
+      ],
+      ports: [
+        { code: 'VA', name: 'Vancouver' },
+        { code: 'CB', name: 'Cowichan Bay' },
+      ],
+    })
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Shipping')
+    const editShipping = await screen.findByRole('button', { name: 'Edit shipping details' })
+    await waitFor(() => expect(editShipping).toBeEnabled())
+    await userEvent.click(editShipping)
+
+    expect(document.getElementById('permit-destinationCountry')).toHaveValue('Canada (CA)')
+    expect(document.getElementById('permit-destinationCountry')).toHaveAttribute(
+      'placeholder',
+      'Search and select a final destination country',
+    )
+    expect(screen.getByLabelText('Transport type')).toHaveValue('B')
+    expect(screen.getByLabelText('Customs port of export')).toHaveValue('CB')
+
+    // The defaults are the starting values, so leaving changes nothing and asks nothing.
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: 'Edit shipping details' })).toBeInTheDocument()
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+
+    // Saving keeps the defaults that filled the empty fields.
+    await userEvent.click(screen.getByRole('button', { name: 'Edit shipping details' }))
+    await userEvent.click(getActiveSectionSaveButton())
+    await waitFor(() =>
+      expect(mockedUpdatePermitShipping).toHaveBeenCalledWith(
+        expect.objectContaining({
+          destinationCountry: 'CA',
+          transportType: 'B',
+          portOfExport: 'CB',
+        }),
+      ),
+    )
+  })
+
   it('rejects Blanket OIC client saves until each selected client location is verified', async () => {
     configureEditableBlanketOicPackage()
     let resolveOwnerLocations:
@@ -7679,7 +7774,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     >((resolve) => {
       resolveOwnerLocations = resolve
     })
-    mockedFetchExemptionClientLocations.mockImplementation((clientNumber) => {
+    mockedFetchApplicationClientLocations.mockImplementation((clientNumber) => {
       if (clientNumber === '00067890') return pendingOwnerLocations
       if (clientNumber === '11111111') return Promise.resolve([])
       return Promise.resolve([{ locationCode: '01', locationName: 'Agent office', selected: true }])

@@ -1,0 +1,65 @@
+// Remark takes the rest of the row; the date, user and Edit columns stay narrow.
+.application-remarks-table {
+  table-layout: fixed;
+
+  td {
+    overflow-wrap: anywhere;
+  }
+
+  // Header-cell selectors outrank Carbon's auto width on the last column.
+  thead th.application-remarks-table__date {
+    inline-size: 19%;
+  }
+
+  thead th.application-remarks-table__user {
+    inline-size: 18%;
+  }
+
+  thead th.application-remarks-table__actions {
+    inline-size: 11%;
+  }
+}
+
+@media (max-width: 671px) {
+  // On a phone the page keeps the shell's gutter, the tab background still reaches the side
+  // navigation and the screen edge, and each card keeps a 16px inset, so fields are wide enough
+  // to show their values.
+  .detail-page-grid.provincial-application-detail {
+    padding-inline: 0;
+
+    .application-detail-tabs-column > .application-detail-tab-panel.cds--tab-content {
+      inline-size: calc(100% + 3rem);
+      margin-inline: -1.5rem;
+      padding-inline: 1.5rem;
+    }
+
+    .application-detail-tab-panel .cds--tile,
+    .application-items-card {
+      padding-inline: 1rem;
+    }
+
+    .cds--text-area {
+      min-inline-size: 0;
+    }
+
+    .cds--combo-box .cds--text-input {
+      text-overflow: ellipsis;
+    }
+
+    // A narrow card wraps an action's label instead of cutting the button off.
+    :is(
+        .detail-section-card__header,
+        .lexis-empty-state__action,
+        .application-items-card-actions,
+        .application-items-package-toolbar,
+        .application-items-scale-summary__header
+      )
+      > .cds--btn {
+      block-size: auto;
+      max-inline-size: 100%;
+      min-block-size: 2.5rem;
+      padding-block: 0.625rem;
+      white-space: normal;
+    }
+  }
+}

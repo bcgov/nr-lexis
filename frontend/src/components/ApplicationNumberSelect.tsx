@@ -107,6 +107,8 @@ export default function ApplicationNumberSelect({
       placeholder={isLoading ? 'Loading applications…' : 'Search application number'}
       allowCustomValue
       aria-required={required || undefined}
+      // Carbon links the error text but doesn't mark the input invalid.
+      aria-invalid={invalid && !disabled ? true : undefined}
       disabled={disabled}
       invalid={invalid}
       invalidText={fieldErrorText(invalidText)}

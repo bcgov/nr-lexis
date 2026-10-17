@@ -5,17 +5,20 @@
   .provincial-exemption-search-grid > .forest-client-combobox:has(#ownerClientNumber) {
     grid-column: 1 / span 2;
   }
+  // Columns size to their content, with tighter padding, so every header fits on two lines and
+  // dates on one at 1440px, with or without the selection column.
   .legacy-search-table-frame .cds--data-table {
     inline-size: 100%;
     min-inline-size: 0;
-    table-layout: fixed;
   }
   .cds--data-table th,
   .cds--data-table td {
     min-inline-size: 0;
     white-space: normal;
-    overflow-wrap: anywhere;
-    padding-inline: 0.75rem;
+    padding-inline: 0.5rem;
+  }
+  .cds--data-table td.legacy-search-table-date {
+    white-space: nowrap;
   }
   // Override the shared search-table nowrap rule on Carbon's actual sortable label.
   .legacy-search-table-frame .cds--data-table thead {
@@ -30,7 +33,7 @@
     }
     .cds--table-sort {
       min-inline-size: 0;
-      padding-inline: 0.75rem;
+      padding-inline: 0.5rem;
     }
     .cds--table-sort__flex {
       min-inline-size: 0;
@@ -49,14 +52,6 @@
   .exemption-search-table--selectable th:first-child,
   .exemption-search-table--selectable td:first-child {
     inline-size: 3rem;
-  }
-  .cds--data-table:not(.exemption-search-table--selectable) th:first-child,
-  .cds--data-table.exemption-search-table--selectable th:nth-child(2) {
-    inline-size: 11%;
-  }
-  .cds--data-table:not(.exemption-search-table--selectable) th:is(:nth-child(6), :nth-child(7)),
-  .cds--data-table.exemption-search-table--selectable th:is(:nth-child(7), :nth-child(8)) {
-    inline-size: 13%;
   }
   .exemption-search-results-notifications:focus {
     outline: 2px solid var(--cds-focus);
