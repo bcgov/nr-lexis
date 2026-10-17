@@ -1181,7 +1181,7 @@ class OracleApplicationDetailsRpcServiceTest {
                 11L,
                 "T",
                 null,
-                null,
+                "O",
                 null,
                 "Owner Contact",
                 null,
@@ -1235,7 +1235,7 @@ class OracleApplicationDetailsRpcServiceTest {
                 11L,
                 "T",
                 null,
-                null,
+                "O",
                 "Agent Contact",
                 "Owner Contact",
                 null,
@@ -1275,7 +1275,7 @@ class OracleApplicationDetailsRpcServiceTest {
             productTypeCode,
             99.9d,
             null,
-            "S".equals(productTypeCode) ? "O" : null);
+            "O");
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.addApplication(request, "idir\\jsmith");
@@ -1297,7 +1297,7 @@ class OracleApplicationDetailsRpcServiceTest {
             productTypeCode,
             150.0d,
             null,
-            "S".equals(productTypeCode) ? "O" : null);
+            "O");
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.addApplication(request, "idir\\jsmith");
@@ -1315,7 +1315,7 @@ class OracleApplicationDetailsRpcServiceTest {
         .thenReturn(
             Optional.of(
                 applicationUpdateRecordWithProductFields(
-                    productTypeCode, "S".equals(productTypeCode) ? "O" : null, 1.5d, "Camp 1")));
+                    productTypeCode, "O", 1.5d, "Camp 1")));
 
     ApplicationDetailsRpcService.CreateApplicationResult response =
         service.updateApplicationSummary(
@@ -1339,7 +1339,7 @@ class OracleApplicationDetailsRpcServiceTest {
                     null,
                     productTypeCode,
                     null,
-                    "S".equals(productTypeCode) ? "O" : null,
+                    "O",
                     null,
                     null,
                     null,
@@ -1403,6 +1403,66 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.valid()).isFalse();
     assertThat(response.errors()).contains("A valid growth type code is required.");
     verifyNoInteractions(repository);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"H", "S", "T"})
+  void addApplicationShouldRequireGrowthTypeForEveryProductTypeBeforeOracleInsert(
+      String productTypeCode) {
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.addApplication(
+            withProductFields(
+                validCreateApplicationRequest(30L), productTypeCode, 2.4d, "Camp 1", null),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).containsExactly("A valid growth type code is required.");
+    verify(repository, never()).insertApplication(any());
+  }
+
+  @ParameterizedTest
+  @EnumSource(
+      value = ApplicationDetailsRpcService.ApplicationSummarySaveSource.class,
+      names = {"FULL", "ITEMS"})
+  void updateApplicationSummaryShouldRequireGrowthTypeForUnmanufacturedTimber(
+      ApplicationDetailsRpcService.ApplicationSummarySaveSource saveSource) {
+    when(repository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(
+            Optional.of(applicationUpdateRecordWithProductFields("T", null, 1.5d, "Camp 1")));
+
+    ApplicationDetailsRpcService.CreateApplicationResult response =
+        service.updateApplicationSummary(
+            withSaveSource(
+                applicationSummaryUpdateRequest(
+                    1000456L,
+                    null,
+                    null,
+                    null,
+                    100.0d,
+                    1.5d,
+                    null,
+                    "Camp 1",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "T",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    true),
+                saveSource),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isFalse();
+    assertThat(response.errors()).contains("A valid growth type code is required.");
+    verify(repository, never()).updateApplication(any());
   }
 
   @Test
@@ -3273,7 +3333,7 @@ class OracleApplicationDetailsRpcServiceTest {
             Optional.of(
                 applicationUpdateRecordWithProductFields(
                     productTypeCode,
-                    "S".equals(productTypeCode) ? "O" : null,
+                    "O",
                     1.5d,
                     "Camp 1")));
     when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
@@ -4447,7 +4507,7 @@ class OracleApplicationDetailsRpcServiceTest {
             Optional.of(
                 applicationUpdateRecordWithProductFields(
                     productTypeCode,
-                    "S".equals(productTypeCode) ? "O" : null,
+                    "O",
                     100.0d,
                     null)));
     stubPersistedApplicationEndUse(11L, true);
@@ -4501,7 +4561,7 @@ class OracleApplicationDetailsRpcServiceTest {
         .thenReturn(
             Optional.of(
                 applicationUpdateRecordWithProductFields(
-                    productTypeCode, "S".equals(productTypeCode) ? "O" : null, 1.5d, "Camp 1")));
+                    productTypeCode, "O", 1.5d, "Camp 1")));
     stubPersistedApplicationEndUse(11L, true);
     org.mockito.Mockito.lenient()
         .when(repository.findCandidateEndUseCodesRequired(1, "HE", 11L))
@@ -4530,7 +4590,7 @@ class OracleApplicationDetailsRpcServiceTest {
                     null,
                     productTypeCode,
                     null,
-                    "S".equals(productTypeCode) ? "O" : null,
+                    "O",
                     null,
                     null,
                     null,
