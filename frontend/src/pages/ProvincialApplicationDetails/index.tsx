@@ -142,7 +142,6 @@ import {
   clientLocationLabel,
   isAgentApplicant,
   isSelectableClientLocation,
-  productTypeRequiresGrowthType,
   productTypeRequiresLogDetails,
   resolveClientLocationCode,
 } from '@/pages/shared/application-form-utils'
@@ -1547,17 +1546,15 @@ const ProvincialApplicationDetailsPage = () => {
             ]
           : []),
         ...(source === 'items' || source === 'summary-items'
-          ? [summaryProductTypeOptions.length === 0 ? 'product type' : null]
-          : []),
-        ...((source === 'items' || source === 'summary-items') &&
-        productTypeRequiresGrowthType(summaryForm?.productTypeCode ?? '')
-          ? [summaryGrowthTypeOptions.length === 0 ? 'age class' : null]
+          ? [
+              summaryProductTypeOptions.length === 0 ? 'product type' : null,
+              summaryGrowthTypeOptions.length === 0 ? 'age class' : null,
+            ]
           : []),
       ].filter((label): label is string => label !== null)
     },
     [
       summaryExemptionReasonOptions.length,
-      summaryForm?.productTypeCode,
       summaryGrowthTypeOptions.length,
       summaryProductTypeOptions.length,
       summaryRegionOptions.length,
@@ -1714,15 +1711,13 @@ const ProvincialApplicationDetailsPage = () => {
             ? null
             : 'Select a valid product type.',
       ),
-      growthTypeCode: productTypeRequiresGrowthType(summaryForm.productTypeCode)
-        ? firstValidationError(
-            () => requiredFieldError(summaryForm.growthTypeCode, 'Age class'),
-            () =>
-              summaryGrowthTypeOptions.some((option) => option.value === summaryForm.growthTypeCode)
-                ? null
-                : 'Select a valid age class.',
-          )
-        : undefined,
+      growthTypeCode: firstValidationError(
+        () => requiredFieldError(summaryForm.growthTypeCode, 'Age class'),
+        () =>
+          summaryGrowthTypeOptions.some((option) => option.value === summaryForm.growthTypeCode)
+            ? null
+            : 'Select a valid age class.',
+      ),
       speciesCodes:
         summaryForm.speciesCodes.length === 0 ? 'At least one species is required.' : undefined,
       exemptionReasonCode: firstValidationError(
@@ -3703,7 +3698,6 @@ const ProvincialApplicationDetailsPage = () => {
     summaryForm?.productTypeCode ?? detail?.productTypeCode,
   )
   const summaryProductTypeCode = summaryForm?.productTypeCode ?? detail?.productTypeCode ?? ''
-  const summaryAgeClassRequired = productTypeRequiresGrowthType(summaryProductTypeCode)
   const summaryLogDetailsRequired = productTypeRequiresLogDetails(summaryProductTypeCode)
   const summaryRegionDescription =
     optionDescription(regionOptions, summaryForm?.orgUnitNumber) ||
@@ -3836,8 +3830,8 @@ const ProvincialApplicationDetailsPage = () => {
         <RecordFieldCell>
           <SearchableSelect
             id="applicationSummaryGrowthType"
-            labelText={requiredLabel('Age class', summaryAgeClassRequired)}
-            required={summaryAgeClassRequired}
+            labelText={requiredLabel('Age class')}
+            required
             value={summaryForm.growthTypeCode}
             invalid={Boolean(visibleSummaryFieldError('growthTypeCode'))}
             invalidText={visibleSummaryFieldError('growthTypeCode')}

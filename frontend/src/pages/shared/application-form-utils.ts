@@ -83,9 +83,6 @@ export const resolveClientLocationCode = (
   return locations.find(isSelectableClientLocation)?.locationCode ?? ''
 }
 
-export const productTypeRequiresGrowthType = (productTypeCode: string): boolean =>
-  ['H', 'S'].includes(productTypeCode.trim().toUpperCase())
-
 export const productTypeRequiresLogDetails = (productTypeCode: string): boolean =>
   productTypeCode.trim().toUpperCase() === 'H'
 

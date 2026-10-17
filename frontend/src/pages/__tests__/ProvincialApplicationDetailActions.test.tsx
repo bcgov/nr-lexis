@@ -2618,6 +2618,40 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
+  it('requires an age class when saving Timber scale details', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      productTypeCode: 'T',
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      productTypeCode: 'T',
+      growthTypeCode: '',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const itemDetails = within(await selectApplicationItemDetailsTile())
+    const ageClass = getSummaryComboBox(itemDetails, 'Age class')
+    expect(ageClass).toHaveAttribute('aria-required', 'true')
+    fireEvent.change(itemDetails.getByLabelText('Location of logs'), {
+      target: { value: 'Camp 2' },
+    })
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+    expect(screen.getAllByText('Age class is required').length).toBeGreaterThan(0)
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
   it('preserves historical region and listing values during an unrelated summary edit', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,

@@ -40,7 +40,6 @@ import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
-import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
 import java.util.IdentityHashMap;
@@ -48,6 +47,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
@@ -138,7 +138,6 @@ public class ApplicationSubmissionImportService {
   private static final String AGE_CLASS_OLD_GROWTH = "O";
   private static final String AGE_CLASS_SECOND_GROWTH = "S";
   private static final int MAX_USER_REFERENCE_LENGTH = 50;
-  private static final String DEFAULT_IMPORT_REMARK = "Created from LEXIS application submission.";
   private static final String FEDERAL_ESF_ONLY_ERROR =
       "ESF legacy LEXIS submissions must be federal. Provincial applications must be uploaded in modern LEXIS.";
   private static final String FEDERAL_ENDPOINT_ONLY_ERROR =
@@ -409,8 +408,7 @@ public class ApplicationSubmissionImportService {
         toCreateApplicationRequest(
             submission,
             LocalDate.now(clock),
-            scheduleResolution.exportScheduleId(),
-            normalizedUserReference);
+            scheduleResolution.exportScheduleId());
     CreateApplicationResult applicationValidation =
         applicationDetailsService.validateApplication(applicationRequest);
     if (!applicationValidation.valid()) {
@@ -426,7 +424,7 @@ public class ApplicationSubmissionImportService {
     SubmissionImportValidationResult importValidation =
         applicationDetailsService.validateApplicationSubmissionImport(
             applicationRequest,
-            toPackageMutationRequest(submission, null, normalizedUserReference),
+            toPackageMutationRequest(submission, null),
             toScaleMutationRequests(submission, null));
     if (importValidation != null) {
       warnings = mergeWarnings(warnings, importValidation.warnings());
@@ -681,13 +679,12 @@ public class ApplicationSubmissionImportService {
         toCreateApplicationRequest(
             submission,
             importDate,
-            scheduleResolution.exportScheduleId(),
-            normalizedUserReference);
+            scheduleResolution.exportScheduleId());
     if (federalOnly) {
       SubmissionImportValidationResult importValidation =
           applicationDetailsService.validateApplicationSubmissionImport(
               createRequest,
-              toPackageMutationRequest(submission, null, normalizedUserReference),
+              toPackageMutationRequest(submission, null),
               toScaleMutationRequests(submission, null));
       if (importValidation != null) {
         warnings = mergeWarnings(warnings, importValidation.warnings());
@@ -723,7 +720,7 @@ public class ApplicationSubmissionImportService {
     if (submission.packageNumber() != null) {
       PackagePersistenceResult packageResult =
           applicationDetailsService.addPackage(
-              toPackageMutationRequest(submission, applicationNumber, normalizedUserReference),
+              toPackageMutationRequest(submission, applicationNumber),
               userId);
       if (!packageResult.valid()) {
         markRollbackOnly();
@@ -1191,15 +1188,10 @@ public class ApplicationSubmissionImportService {
             federalStandingWithoutPackage,
             errors);
     ParsedParties parties =
-        parseSubmissionParties(
-            lexisSubmission,
-            applicantDetails,
-            applicantContact,
-            applicantTypeCode,
-            errors);
-    validateFederalApplicant(applicant, applicantDetails, applicantContact, jurisdictionCode, errors);
-    validateFederalOwner(
-        lexisSubmission, jurisdictionCode, applicantTypeCode, errors);
+        parseSubmissionParties(lexisSubmission, applicantDetails, applicantContact, errors);
+    validateApplicantDeclarations(applicant, jurisdictionCode, errors);
+    validateFederalApplicant(applicantDetails, applicantContact, jurisdictionCode, errors);
+    validateFederalOwner(lexisSubmission, jurisdictionCode, errors);
 
     if (orgUnitNumber == null) {
       errors.add("Forest region code " + nullToValue(regionCode) + " is not mapped to a LEXIS region.");
@@ -1273,7 +1265,7 @@ public class ApplicationSubmissionImportService {
         orgUnitNumber,
         applicationStatusCode,
         exemptionReasonCode,
-        applicantTypeCode,
+        parties.applicantTypeCode(),
         productTypeCode,
         FEDERAL_JURISDICTION.equals(jurisdictionCode)
             ? upper(product.packageNumber())
@@ -1310,8 +1302,47 @@ public class ApplicationSubmissionImportService {
     };
   }
 
+  private void validateApplicantDeclarations(
+      Element applicant, String jurisdictionCode, List<String> errors) {
+    boolean federal = FEDERAL_JURISDICTION.equals(jurisdictionCode);
+    Boolean canadianResident =
+        parseOptionalBoolean(
+            text(
+                applicant,
+                "declarationCanadianResident",
+                "Canadian resident declaration",
+                errors),
+            "Canadian resident declaration",
+            errors);
+    if (canadianResident == null && federal) {
+      errors.add("Canadian resident declaration is required for federal LEXIS submissions.");
+    } else if (Boolean.FALSE.equals(canadianResident)) {
+      errors.add(
+          federal
+              ? "Federal LEXIS applicants must be Canadian residents."
+              : "LEXIS applicants must be Canadian residents.");
+    }
+
+    Boolean submittedOffersPast90Days =
+        parseOptionalBoolean(
+            text(
+                applicant,
+                "declarationSubmittedOffersPast90Days",
+                "Past 90 days offers declaration",
+                errors),
+            "past 90 days offers declaration",
+            errors);
+    if (submittedOffersPast90Days == null && federal) {
+      errors.add("Past 90 days offers declaration is required for federal LEXIS submissions.");
+    } else if (Boolean.TRUE.equals(submittedOffersPast90Days)) {
+      errors.add(
+          federal
+              ? "Federal LEXIS applicants cannot have submitted offers during the past 90 days."
+              : "LEXIS applicants cannot have submitted offers during the past 90 days.");
+    }
+  }
+
   private void validateFederalApplicant(
-      Element applicant,
       Element applicantDetails,
       Element applicantContact,
       String jurisdictionCode,
@@ -1333,37 +1364,6 @@ public class ApplicationSubmissionImportService {
         applicantContact, "contactFirstname", "applicant contact first name", errors);
     requireFederalText(
         applicantContact, "contactTelephoneNumber", "applicant contact telephone number", errors);
-
-    Boolean canadianResident =
-        parseOptionalBoolean(
-            text(
-                applicant,
-                "declarationCanadianResident",
-                "Canadian resident declaration",
-                errors),
-            "Canadian resident declaration",
-            errors);
-    if (canadianResident == null) {
-      errors.add("Canadian resident declaration is required for federal LEXIS submissions.");
-    } else if (!canadianResident) {
-      errors.add("Federal LEXIS applicants must be Canadian residents.");
-    }
-
-    Boolean submittedOffersPast90Days =
-        parseOptionalBoolean(
-            text(
-                applicant,
-                "declarationSubmittedOffersPast90Days",
-                "Past 90 days offers declaration",
-                errors),
-            "past 90 days offers declaration",
-            errors);
-    if (submittedOffersPast90Days == null) {
-      errors.add("Past 90 days offers declaration is required for federal LEXIS submissions.");
-    } else if (submittedOffersPast90Days) {
-      errors.add(
-          "Federal LEXIS applicants cannot have submitted offers during the past 90 days.");
-    }
   }
 
   private void requireFederalText(
@@ -1374,12 +1374,8 @@ public class ApplicationSubmissionImportService {
   }
 
   private void validateFederalOwner(
-      Element lexisSubmission,
-      String jurisdictionCode,
-      String applicantTypeCode,
-      List<String> errors) {
-    if (!FEDERAL_JURISDICTION.equals(jurisdictionCode)
-        || !APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
+      Element lexisSubmission, String jurisdictionCode, List<String> errors) {
+    if (!FEDERAL_JURISDICTION.equals(jurisdictionCode)) {
       return;
     }
     Element owner = firstElement(children(lexisSubmission, "owner"));
@@ -1600,6 +1596,10 @@ public class ApplicationSubmissionImportService {
             "applStatusCode",
             "exemptionRsnCde",
             "applicantTypeCode"));
+    // GeoJSON has no owner section, so it can't describe an agent application.
+    if (APPLICANT_TYPE_AGENT.equals(upper(jsonScalarText(applicationDetail.get("applicantTypeCode"))))) {
+      errors.add("GeoJSON application submissions can't name an owner, so applicant type A isn't supported.");
+    }
 
     Element productDetailElement =
         appendObjectSection(
@@ -2246,37 +2246,31 @@ public class ApplicationSubmissionImportService {
         + (message == null ? "." : ": " + message);
   }
 
+  // The owner section, not the declared applicant type code, decides whether the applicant is the
+  // agent, as in legacy ESF processing.
   private ParsedParties parseSubmissionParties(
       Element lexisSubmission,
       Element applicantDetails,
       Element applicantContact,
-      String applicantTypeCode,
       List<String> errors) {
     ParsedParty applicantParty = parseParty(applicantDetails, applicantContact, "Applicant", errors);
     Element owner =
-        APPLICANT_TYPE_AGENT.equals(applicantTypeCode)
-            ? requiredChild(
-                lexisSubmission,
-                LEXIS_NAMESPACE,
-                "owner",
-                "Owner section is required when applicant type is A.",
-                "Owner section must appear only once.",
-                errors)
-            : optionalChild(
-                lexisSubmission,
-                LEXIS_NAMESPACE,
-                "owner",
-                "Owner section must appear only once.",
-                errors);
-    ParsedParty ownerParty = owner == null ? null : parseOwnerParty(owner, errors);
-    if (APPLICANT_TYPE_AGENT.equals(applicantTypeCode)) {
+        optionalChild(
+            lexisSubmission,
+            LEXIS_NAMESPACE,
+            "owner",
+            "Owner section must appear only once.",
+            errors);
+    if (owner != null) {
+      ParsedParty ownerParty = parseOwnerParty(owner, errors);
       return new ParsedParties(
           applicantParty.clientNumber(),
           applicantParty.clientLocationCode(),
           applicantParty.contactName(),
-          ownerParty == null ? null : ownerParty.clientNumber(),
-          ownerParty == null ? null : ownerParty.clientLocationCode(),
-          ownerParty == null ? null : ownerParty.contactName());
+          ownerParty.clientNumber(),
+          ownerParty.clientLocationCode(),
+          ownerParty.contactName(),
+          APPLICANT_TYPE_AGENT);
     }
     return new ParsedParties(
         null,
@@ -2284,7 +2278,8 @@ public class ApplicationSubmissionImportService {
         null,
         applicantParty.clientNumber(),
         applicantParty.clientLocationCode(),
-        applicantParty.contactName());
+        applicantParty.contactName(),
+        APPLICANT_TYPE_OWNER);
   }
 
   private ParsedParty parseOwnerParty(Element owner, List<String> errors) {
@@ -2516,11 +2511,12 @@ public class ApplicationSubmissionImportService {
     }
   }
 
+  // A federal submission's list date selects its schedule when one matches. Every other
+  // submission gets the next list date still open for applications, or none, as in legacy ESF
+  // processing.
   private ScheduleResolution resolveExportSchedule(ParsedSubmission submission) {
-    if (!FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())) {
-      return ScheduleResolution.resolved(null);
-    }
-    if (submission.biweeklyListDate() == null) {
+    boolean federal = FEDERAL_JURISDICTION.equals(submission.jurisdictionCode());
+    if (federal && submission.biweeklyListDate() == null) {
       return ScheduleResolution.rejected("Federal biweekly list date is required.");
     }
 
@@ -2528,40 +2524,27 @@ public class ApplicationSubmissionImportService {
         scheduleRepositoryProvider == null ? null : scheduleRepositoryProvider.getIfAvailable();
     if (scheduleRepository == null) {
       return ScheduleResolution.rejected(
-          "Export schedule lookup is unavailable for federal LEXIS submission.");
+          "Export schedule lookup is unavailable for LEXIS application submission.");
     }
 
-    Optional<ExportScheduleRowDto> exactSchedule =
-        scheduleRepository.findExportScheduleByAdvertisingDate(submission.biweeklyListDate());
-    if (exactSchedule.isPresent() && exactSchedule.get().exportScheduleId() != null) {
-      return ScheduleResolution.resolved(exactSchedule.get().exportScheduleId());
+    if (federal) {
+      Optional<ExportScheduleRowDto> exactSchedule =
+          scheduleRepository.findExportScheduleByAdvertisingDate(submission.biweeklyListDate());
+      if (exactSchedule.isPresent() && exactSchedule.get().exportScheduleId() != null) {
+        return ScheduleResolution.resolved(exactSchedule.get().exportScheduleId());
+      }
     }
 
-    Optional<Long> nextScheduleId =
-        Optional.ofNullable(scheduleRepository.findUpcomingExportSchedules()).orElse(List.of()).stream()
-            .filter(schedule -> schedule.exportScheduleId() != null)
-            .filter(schedule -> schedule.advertisingDate() != null)
-            .filter(
-                schedule ->
-                    !schedule.advertisingDate().isBefore(submission.biweeklyListDate()))
-            .sorted(
-                Comparator.comparing(ExportScheduleRowDto::advertisingDate)
-                    .thenComparing(ExportScheduleRowDto::exportScheduleId))
-            .map(ExportScheduleRowDto::exportScheduleId)
-            .findFirst();
-    return nextScheduleId
-        .map(ScheduleResolution::resolved)
-        .orElseGet(
-            () ->
-                ScheduleResolution.rejected(
-                    "No export schedule is available for federal LEXIS submission."));
+    return ScheduleResolution.resolved(
+        Optional.ofNullable(scheduleRepository.findNextSchedulesRequired()).orElse(List.of()).stream()
+            .map(LexisReportScheduleRepository.CurrentScheduleRow::exportScheduleId)
+            .filter(Objects::nonNull)
+            .findFirst()
+            .orElse(null));
   }
 
   private CreateApplicationRequest toCreateApplicationRequest(
-      ParsedSubmission submission,
-      LocalDate importDate,
-      Long exportScheduleId,
-      String userReference) {
+      ParsedSubmission submission, LocalDate importDate, Long exportScheduleId) {
     String applicationStatusCode =
         FEDERAL_JURISDICTION.equals(submission.jurisdictionCode())
             ? toFederalCreateApplicationStatusCode(submission.applicationStatusCode())
@@ -2592,12 +2575,12 @@ public class ApplicationSubmissionImportService {
         DEFAULT_OIC_INDICATOR,
         submission.endUseCode(),
         submission.speciesCodes(),
-        importRemark(userReference),
+        null,
         true);
   }
 
   private PackageMutationRequest toPackageMutationRequest(
-      ParsedSubmission submission, Long applicationNumber, String userReference) {
+      ParsedSubmission submission, Long applicationNumber) {
     if (submission.packageNumber() == null) {
       return null;
     }
@@ -2609,7 +2592,7 @@ public class ApplicationSubmissionImportService {
         submission.averageLength(),
         submission.averageDiameter(),
         DEFAULT_PACKAGE_STATUS,
-        importRemark(userReference),
+        null,
         null,
         null,
         DEFAULT_REPROCESSED_INDICATOR,
@@ -2929,14 +2912,6 @@ public class ApplicationSubmissionImportService {
     return List.of();
   }
 
-  private String importRemark(String userReference) {
-    String normalizedUserReference = normalizeUserReference(userReference);
-    if (normalizedUserReference == null) {
-      return DEFAULT_IMPORT_REMARK;
-    }
-    return DEFAULT_IMPORT_REMARK + "\nUser reference: " + normalizedUserReference;
-  }
-
   private ApplicationSubmissionImportResultDto withUserReference(
       ApplicationSubmissionImportResultDto result, String userReference) {
     if (userReference == null || result == null) {
@@ -3156,7 +3131,8 @@ public class ApplicationSubmissionImportService {
       String agentContactName,
       String ownerClientNumber,
       String ownerClientLocationCode,
-      String ownerContactName) {}
+      String ownerContactName,
+      String applicantTypeCode) {}
 
   private record ParsedParty(
       String clientNumber, String clientLocationCode, String contactName) {}

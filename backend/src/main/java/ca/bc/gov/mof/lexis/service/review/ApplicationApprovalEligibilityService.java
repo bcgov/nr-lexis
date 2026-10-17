@@ -29,7 +29,6 @@ public class ApplicationApprovalEligibilityService {
   private static final Set<String> APPLICANT_TYPE_CODES = Set.of("O", "A");
   private static final Set<String> APPROVABLE_JURISDICTIONS = Set.of("P", "F");
   private static final String PRODUCT_HARVESTED = "H";
-  private static final String PRODUCT_STANDING = "S";
   private static final String PRODUCT_UNMANUFACTURED = "T";
   private static final String APPLICANT_AGENT = "A";
   private static final String DEFAULT_END_USE = "OT";
@@ -99,8 +98,7 @@ public class ApplicationApprovalEligibilityService {
     if (!PRODUCT_TYPE_CODES.contains(productType)) {
       errors.add("Application product type is invalid.");
     }
-    if ((PRODUCT_HARVESTED.equals(productType) || PRODUCT_STANDING.equals(productType))
-        && trimToNull(application.growthTypeCode()) == null) {
+    if (trimToNull(application.growthTypeCode()) == null) {
       errors.add("Application growth type is required.");
     }
     if (PRODUCT_HARVESTED.equals(productType)) {
@@ -149,9 +147,7 @@ public class ApplicationApprovalEligibilityService {
     if (!applicationRepository.isProductTypeCodeValidRequired(application.productTypeCode())) {
       errors.add("Application product type code does not exist.");
     }
-    String productType = normalizeCode(application.productTypeCode());
-    if ((PRODUCT_HARVESTED.equals(productType) || PRODUCT_STANDING.equals(productType))
-        && !applicationRepository.isGrowthTypeCodeValidRequired(application.growthTypeCode())) {
+    if (!applicationRepository.isGrowthTypeCodeValidRequired(application.growthTypeCode())) {
       errors.add("Application growth type code does not exist.");
     }
     if (!applicationRepository.isExemptionReasonCodeValidRequired(

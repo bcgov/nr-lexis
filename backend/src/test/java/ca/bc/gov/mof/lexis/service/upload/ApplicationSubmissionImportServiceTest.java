@@ -139,8 +139,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(application.federalApplicationNumber()).isNull();
     assertThat(application.endUseCode()).isEqualTo("PL");
     assertThat(application.speciesCodes()).containsExactly("HE");
-    assertThat(application.remarkBody())
-        .isEqualTo("Created from LEXIS application submission.\nUser reference: CLIENT-REF-1");
+    assertThat(application.remarkBody()).isNull();
 
     ArgumentCaptor<PackageMutationRequest> packageCaptor =
         ArgumentCaptor.forClass(PackageMutationRequest.class);
@@ -152,8 +151,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(packageRequest.averageLength()).isEqualTo(6.7d);
     assertThat(packageRequest.averageDiameter()).isEqualTo(12.8d);
     assertThat(packageRequest.status()).isEqualTo("ACT");
-    assertThat(packageRequest.comments())
-        .isEqualTo("Created from LEXIS application submission.\nUser reference: CLIENT-REF-1");
+    assertThat(packageRequest.comments()).isNull();
     assertThat(packageRequest.endUseCode()).isEqualTo("PL");
     assertThat(packageRequest.speciesCodes()).containsExactly("HE");
 
@@ -277,7 +275,7 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService).validateApplication(requestCaptor.capture());
     assertThat(requestCaptor.getValue().federalApplicationNumber()).isZero();
     assertThat(requestCaptor.getValue().exemptionReasonCode()).isEqualTo("E");
-    assertThat(requestCaptor.getValue().applicantTypeCode()).isEqualTo("M");
+    assertThat(requestCaptor.getValue().applicantTypeCode()).isEqualTo("O");
   }
 
   @Test
@@ -700,21 +698,19 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
-  void shouldUseNextExportScheduleWhenBiweeklyDateHasNoExactSchedule() {
+  void shouldUseNextOpenListDateWhenFederalBiweeklyDateHasNoExactSchedule() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
         .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
     when(scheduleRepository.findExportScheduleByAdvertisingDate(LocalDate.of(2026, 1, 16)))
         .thenReturn(Optional.empty());
-    when(scheduleRepository.findUpcomingExportSchedules())
+    when(scheduleRepository.findNextSchedulesRequired())
         .thenReturn(
             List.of(
-                new ExportScheduleRowDto(
-                    1016L, LocalDate.of(2026, 1, 9), null, null, null, null, null),
-                new ExportScheduleRowDto(
-                    1018L, LocalDate.of(2026, 1, 30), null, null, null, null, null),
-                new ExportScheduleRowDto(
-                    1017L, LocalDate.of(2026, 1, 23), null, null, null, null, null)));
+                new LexisReportScheduleRepository.CurrentScheduleRow(
+                    1015L, LocalDate.of(2026, 1, 9)),
+                new LexisReportScheduleRepository.CurrentScheduleRow(
+                    1017L, LocalDate.of(2026, 1, 23))));
 
     ApplicationSubmissionImportResultDto result =
         service()
@@ -727,42 +723,17 @@ class ApplicationSubmissionImportServiceTest {
     ArgumentCaptor<CreateApplicationRequest> requestCaptor =
         ArgumentCaptor.forClass(CreateApplicationRequest.class);
     verify(applicationDetailsService).validateApplication(requestCaptor.capture());
-    assertThat(requestCaptor.getValue().exportScheduleId()).isEqualTo(1017L);
+    assertThat(requestCaptor.getValue().exportScheduleId()).isEqualTo(1015L);
   }
 
   @Test
-  void shouldRejectFederalSubmissionWhenUpcomingSchedulesPrecedeBiweeklyDate() {
+  void shouldAcceptFederalSubmissionWithoutListDateWhenNoListDateIsOpen() {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
     when(scheduleRepository.findExportScheduleByAdvertisingDate(LocalDate.of(2026, 1, 16)))
         .thenReturn(Optional.empty());
-    when(scheduleRepository.findUpcomingExportSchedules())
-        .thenReturn(
-            List.of(
-                new ExportScheduleRowDto(
-                    1015L, LocalDate.of(2026, 1, 2), null, null, null, null, null),
-                new ExportScheduleRowDto(
-                    1016L, LocalDate.of(2026, 1, 9), null, null, null, null, null)));
-
-    ApplicationSubmissionImportResultDto result =
-        service()
-            .validateDedicatedFederalApplicationSubmission(
-                federalSampleXmlText().getBytes(StandardCharsets.UTF_8),
-                "federal-past-schedules.xml",
-                "FED-REF-PAST-SCHEDULES");
-
-    assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors())
-        .containsExactly("No export schedule is available for federal LEXIS submission.");
-    verify(applicationDetailsService, never())
-        .validateApplication(any(CreateApplicationRequest.class));
-  }
-
-  @Test
-  void shouldRejectFederalSubmissionWhenNoExportScheduleIsAvailable() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(scheduleRepository.findExportScheduleByAdvertisingDate(LocalDate.of(2026, 1, 16)))
-        .thenReturn(Optional.empty());
-    when(scheduleRepository.findUpcomingExportSchedules()).thenReturn(List.of());
+    when(scheduleRepository.findNextSchedulesRequired()).thenReturn(List.of());
 
     ApplicationSubmissionImportResultDto result =
         service()
@@ -771,11 +742,148 @@ class ApplicationSubmissionImportServiceTest {
                 "federal-no-schedule.xml",
                 "FED-REF-NO-SCHEDULE");
 
+    assertThat(result.status()).isEqualTo("validated");
+    ArgumentCaptor<CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().exportScheduleId()).isNull();
+  }
+
+  @Test
+  void shouldGiveProvincialSubmissionTheNextOpenListDate() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
+    when(scheduleRepository.findNextSchedulesRequired())
+        .thenReturn(
+            List.of(
+                new LexisReportScheduleRepository.CurrentScheduleRow(
+                    1020L, LocalDate.of(2026, 11, 6)),
+                new LexisReportScheduleRepository.CurrentScheduleRow(
+                    1021L, LocalDate.of(2026, 11, 20))));
+
+    ApplicationSubmissionImportResultDto validation =
+        service().validateApplicationSubmission(sampleXml());
+    ApplicationSubmissionImportResultDto result =
+        service().importApplicationSubmission(sampleXml(), "jsmith");
+
+    assertThat(validation.status()).isEqualTo("validated");
+    assertThat(result.status()).isEqualTo("accepted");
+    ArgumentCaptor<CreateApplicationRequest> validationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(validationCaptor.capture());
+    assertThat(validationCaptor.getValue().exportScheduleId()).isEqualTo(1020L);
+    ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).addApplication(applicationCaptor.capture(), eq("jsmith"));
+    assertThat(applicationCaptor.getValue().exportScheduleId()).isEqualTo(1020L);
+    verify(scheduleRepository, never()).findExportScheduleByAdvertisingDate(any());
+  }
+
+  @Test
+  void shouldLeaveProvincialListDateBlankWhenNoListDateIsOpen() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    when(scheduleRepository.findNextSchedulesRequired()).thenReturn(List.of());
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(sampleXml());
+
+    assertThat(result.status()).isEqualTo("validated");
+    ArgumentCaptor<CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(requestCaptor.capture());
+    assertThat(requestCaptor.getValue().exportScheduleId()).isNull();
+  }
+
+  @Test
+  void shouldTreatApplicantAsAgentWhenSubmissionHasOwnerSectionWhateverItsApplicantType() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    String xml = SAMPLE_XML.replace("</lexis:applicant>", OWNER_SECTION);
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("owner-section.xml", xml));
+
+    assertThat(result.status()).isEqualTo("validated");
+    ArgumentCaptor<CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(requestCaptor.capture());
+    CreateApplicationRequest request = requestCaptor.getValue();
+    assertThat(request.applicantTypeCode()).isEqualTo("A");
+    assertThat(request.agentClientNumber()).isEqualTo("00001074");
+    assertThat(request.ownerClientNumber()).isEqualTo("00002000");
+    assertThat(request.ownerContactName()).isEqualTo("OLIVIA OWNER");
+  }
+
+  @Test
+  void shouldTreatApplicantAsOwnerWhenAgentTypeSubmissionHasNoOwnerSection() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:applicantTypeCode>O</lexis:applicantTypeCode>",
+            "<lexis:applicantTypeCode>A</lexis:applicantTypeCode>");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("agent-type-no-owner.xml", xml));
+
+    assertThat(result.status()).isEqualTo("validated");
+    ArgumentCaptor<CreateApplicationRequest> requestCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).validateApplication(requestCaptor.capture());
+    CreateApplicationRequest request = requestCaptor.getValue();
+    assertThat(request.applicantTypeCode()).isEqualTo("O");
+    assertThat(request.agentClientNumber()).isNull();
+    assertThat(request.ownerClientNumber()).isEqualTo("00001074");
+  }
+
+  @Test
+  void shouldRejectProvincialApplicantWhoDeclaresTheyAreNotACanadianResident() {
+    String xml =
+        SAMPLE_XML.replace(
+            "</lexis:applicantContact>",
+            "</lexis:applicantContact>\n"
+                + "        <lexis:declarationCanadianResident>false</lexis:declarationCanadianResident>\n"
+                + "        <lexis:declarationSubmittedOffersPast90Days>false</lexis:declarationSubmittedOffersPast90Days>");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("non-resident.xml", xml));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("LEXIS applicants must be Canadian residents.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRejectProvincialApplicantWhoDeclaresOffersInThePast90Days() {
+    String xml =
+        SAMPLE_XML.replace(
+            "</lexis:applicantContact>",
+            "</lexis:applicantContact>\n"
+                + "        <lexis:declarationCanadianResident>true</lexis:declarationCanadianResident>\n"
+                + "        <lexis:declarationSubmittedOffersPast90Days>true</lexis:declarationSubmittedOffersPast90Days>");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("recent-offers.xml", xml));
+
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .containsExactly("No export schedule is available for federal LEXIS submission.");
-    verify(applicationDetailsService, never())
-        .validateApplication(any(CreateApplicationRequest.class));
+        .containsExactly("LEXIS applicants cannot have submitted offers during the past 90 days.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -1002,8 +1110,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(application.exportScheduleId()).isEqualTo(1016L);
     assertThat(application.applicationVolume()).isEqualTo(525.0d);
     assertThat(application.averageLogVolume()).isEqualTo(0.3d);
-    assertThat(application.remarkBody())
-        .isEqualTo("Created from LEXIS application submission.\nUser reference: FED-REF-1");
+    assertThat(application.remarkBody()).isNull();
     verify(scheduleRepository)
         .findExportScheduleByAdvertisingDate(LocalDate.of(2026, 1, 16));
 
@@ -1019,8 +1126,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(packageRequest.status()).isEqualTo("ACT");
     assertThat(packageRequest.endUseCode()).isEqualTo("PL");
     assertThat(packageRequest.speciesCodes()).containsExactly("HE");
-    assertThat(packageRequest.comments())
-        .isEqualTo("Created from LEXIS application submission.\nUser reference: FED-REF-1");
+    assertThat(packageRequest.comments()).isNull();
 
     ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
@@ -2074,6 +2180,27 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
+  void shouldRejectGeoJsonAgentSubmissionBecauseItCannotNameAnOwner() {
+    String geoJson =
+        SAMPLE_GEOJSON.replace("\"applicantTypeCode\": \"O\"", "\"applicantTypeCode\": \"A\"");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                new MockMultipartFile(
+                    "formFile",
+                    "agent.geojson",
+                    "application/geo+json",
+                    geoJson.getBytes(StandardCharsets.UTF_8)));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "GeoJSON application submissions can't name an owner, so applicant type A isn't supported.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
   void shouldImportZippedGeoJsonWhenEntryExtensionDoesNotIdentifyFormat() throws Exception {
     when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
     when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
@@ -2938,6 +3065,22 @@ class ApplicationSubmissionImportServiceTest {
           + "http://www.for.gov.bc.ca/schema/esf/1/xsd/MOF/esf-submission.xsd "
           + "http://www.for.gov.bc.ca/schema/lexis "
           + "http://www.for.gov.bc.ca/schema/lexis/2/xsd/MOF/mof-lexis.xsd";
+
+  private static final String OWNER_SECTION =
+      """
+      </lexis:applicant>
+      <lexis:owner>
+        <lexis:ownerDetails>
+          <lexis:clientNumber>2000</lexis:clientNumber>
+          <lexis:clientLocnCode>01</lexis:clientLocnCode>
+          <lexis:name>Owner Company Ltd.</lexis:name>
+        </lexis:ownerDetails>
+        <lexis:ownerContact>
+          <lexis:contactSurname>OWNER</lexis:contactSurname>
+          <lexis:contactFirstname>OLIVIA</lexis:contactFirstname>
+        </lexis:ownerContact>
+      </lexis:owner>
+      """;
 
   private static final String SAMPLE_XML =
       """

@@ -2796,8 +2796,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         && trimToNull(request.productLocation()) == null) {
       errors.add(required("location of logs"));
     }
-    if (requiresGrowthType(request.productTypeCode())
-        && trimToNull(request.growthTypeCode()) == null) {
+    if (trimToNull(request.growthTypeCode()) == null) {
       errors.add(required("growth type code"));
     }
     if (request.orgUnitNumber() == null || request.orgUnitNumber() <= 0) {
@@ -2939,8 +2938,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
         && trimToNull(record.productLocation()) == null) {
       errors.add(required("location of logs"));
     }
-    if (requiresGrowthType(record.productTypeCode())
-        && trimToNull(record.growthTypeCode()) == null) {
+    if (trimToNull(record.growthTypeCode()) == null) {
       errors.add(required("growth type code"));
     }
     if (record.orgUnitNumber() == null || record.orgUnitNumber() <= 0) {
@@ -3224,8 +3222,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add(required("location of logs"));
     }
     validateOracleText(record.productLocation(), "Location of logs", PRODUCT_LOCATION_MAX_BYTES, errors);
-    if (requiresGrowthType(record.productTypeCode())
-        && trimToNull(record.growthTypeCode()) == null) {
+    if (trimToNull(record.growthTypeCode()) == null) {
       errors.add(required("growth type code"));
     }
   }
@@ -3235,8 +3232,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
     if (!repository.isProductTypeCodeValidRequired(record.productTypeCode())) {
       errors.add("Application product type code does not exist.");
     }
-    if (requiresGrowthType(record.productTypeCode())
-        && !repository.isGrowthTypeCodeValidRequired(record.growthTypeCode())) {
+    if (!repository.isGrowthTypeCodeValidRequired(record.growthTypeCode())) {
       errors.add("Application growth type code does not exist.");
     }
   }
@@ -3293,9 +3289,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
       errors.add("Application product type code does not exist.");
     }
     String growthType = trimToNull(growthTypeCode);
-    if (requiresGrowthType(productType)
-        && growthType != null
-        && !repository.isGrowthTypeCodeValidRequired(growthType)) {
+    if (growthType != null && !repository.isGrowthTypeCodeValidRequired(growthType)) {
       errors.add("Application growth type code does not exist.");
     }
     String exemptionReason = trimToNull(exemptionReasonCode);

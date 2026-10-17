@@ -6,7 +6,6 @@ import {
   codeOptionLabel,
   isAgentApplicant,
   isSelectableClientLocation,
-  productTypeRequiresGrowthType,
   productTypeRequiresLogDetails,
   resolveClientLocationCode,
   toApplicationCodeOption,
@@ -59,9 +58,6 @@ describe('application-form-utils', () => {
   )
 
   it('maps common application option state consistently', () => {
-    expect(productTypeRequiresGrowthType('H')).toBe(true)
-    expect(productTypeRequiresGrowthType('S')).toBe(true)
-    expect(productTypeRequiresGrowthType('T')).toBe(false)
     expect(productTypeRequiresLogDetails('H')).toBe(true)
     expect(productTypeRequiresLogDetails('S')).toBe(false)
     expect(productTypeRequiresLogDetails('T')).toBe(false)

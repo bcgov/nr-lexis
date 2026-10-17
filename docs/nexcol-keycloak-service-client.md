@@ -241,7 +241,8 @@ rules except for the approved federal Interior harvested-timber exception descri
 Compatibility-sensitive rules include:
 
 - exemption reason codes `E`, `S` and `U`;
-- applicant type codes `A`, `M` and `O`;
+- applicant type codes `A`, `M` and `O`, with the owner section deciding the saved parties: with
+  an owner section the applicant is saved as the agent, otherwise as the owner;
 - a non-negative federal office-use reference;
 - case-insensitive federal package-number comparison;
 - federal timber-mark type and status validation, with the first scale timber mark matched to the
@@ -284,8 +285,9 @@ Federal payloads include:
 Permit and shipping details are outside the federal exemption-submission contract.
 
 LEXIS validates the supplied application date and persists the service receipt date. The export
-schedule is resolved from the biweekly list date, with the next available schedule used when an
-exact date is unavailable.
+schedule is the one whose advertising date matches the biweekly list date. When none matches, it is
+the next list date still open for applications, and the application has no list date when none is
+open.
 
 Synthetic XML-shape fixtures are available in `backend/src/test/resources/lexis-upload-samples/`:
 

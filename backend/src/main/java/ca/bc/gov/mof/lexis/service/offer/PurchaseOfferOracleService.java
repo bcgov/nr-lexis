@@ -310,7 +310,9 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
           warnings);
     }
 
-    boolean withdrawn = current.offerWithdrawalDate() == null && updated.offerWithdrawalDate() != null;
+    // Any saved withdrawal date sends the withdrawn email, including edits to an offer that was
+    // already withdrawn.
+    boolean withdrawn = updated.offerWithdrawalDate() != null;
     boolean materialUpdate =
         hasLegacyNotificationUpdate(current, updated, normalizedOfferVolume);
     EmailResult email =
@@ -353,14 +355,23 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         return new EmailResult(
             true, false, null, "Offer saved, but no client email address was found.");
       }
+      Long orgUnitNumber = context.orgUnitNumber();
+      // The Skeena scale-grade rule applies only when the application has scales; otherwise the
+      // offer copies the organization unit's mailbox, which is RNI for Skeena.
       RegionalMailRoute regionalRoute =
-          RegionalMailRoute.forPermitOrOffer(
-              context.orgUnitNumber(),
-              RegionalMailRoute.isSkeena(context.orgUnitNumber())
-                  ? permitRepository.findScaleDetailsByPackageNumber(packageNumber).stream()
+          RegionalMailRoute.isSkeena(orgUnitNumber)
+                  && !permitRepository
+                      .findPermitScaleDetailsByApplicationNumber(applicationNumber)
+                      .isEmpty()
+              ? RegionalMailRoute.forPermitOrOffer(
+                  orgUnitNumber,
+                  permitRepository.findScaleDetailsByPackageNumber(packageNumber).stream()
                       .map(PermitRpcRepository.PermitScaleDetailRow::exportGradeCode)
-                      .toList()
-                  : List.of());
+                      .toList())
+              : RegionalMailRoute.forOrgUnit(orgUnitNumber)
+                  .orElseThrow(
+                      () ->
+                          new IllegalArgumentException("No regional mailbox route is available."));
       RecipientGroup regionalGroup = regionalRecipientResolver.resolveGroupForRoute(regionalRoute);
       List<String> regionalRecipients = safeList(regionalGroup.recipients());
       notificationService.publish(
@@ -864,11 +875,16 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         || legacyTextChanged(current.withdrawReason(), updated.withdrawReason())
         || legacyTextChanged(current.pickupLocation(), updated.pickupLocation())
         || legacyTextChanged(current.offerCondition(), updated.offerCondition())
-        || legacyNumberChanged(current.offerVolume(), normalizedOfferVolume);
+        // A stored NULL volume compares as 0, the value a blank volume saves.
+        || legacyNumberChanged(firstNonNull(current.offerVolume(), 0.0d), normalizedOfferVolume);
   }
 
+  // A blank offer volume saves as 0.
   private Double normalizeLegacyOfferVolume(Double value) {
-    if (value == null || !Double.isFinite(value)) {
+    if (value == null) {
+      return 0.0d;
+    }
+    if (!Double.isFinite(value)) {
       return value;
     }
     return roundForDisplay(value);

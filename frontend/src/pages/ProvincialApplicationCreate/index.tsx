@@ -56,7 +56,6 @@ import {
   clientLocationLabel,
   isAgentApplicant,
   isSelectableClientLocation,
-  productTypeRequiresGrowthType,
   productTypeRequiresLogDetails,
   resolveClientLocationCode,
   toSearchOption,
@@ -1314,15 +1313,13 @@ const ProvincialApplicationCreatePage = () => {
             ? null
             : 'Select a valid product type.',
       ),
-      ageClass: productTypeRequiresGrowthType(form.productTypeCode)
-        ? firstValidationError(
-            () => requiredFieldError(form.ageClass, 'Age class'),
-            () =>
-              growthTypes.some((option) => option.value === form.ageClass)
-                ? null
-                : 'Select a valid age class.',
-          )
-        : undefined,
+      ageClass: firstValidationError(
+        () => requiredFieldError(form.ageClass, 'Age class'),
+        () =>
+          growthTypes.some((option) => option.value === form.ageClass)
+            ? null
+            : 'Select a valid age class.',
+      ),
       // Species wait on a region and product type, which show their own errors until chosen.
       speciesCodes:
         form.speciesCodes.length === 0 && !speciesPrerequisiteText
@@ -1410,14 +1407,13 @@ const ProvincialApplicationCreatePage = () => {
     }
   }, [hasValidationError, status])
   const logDetailsRequired = productTypeRequiresLogDetails(form.productTypeCode)
-  const ageClassRequired = productTypeRequiresGrowthType(form.productTypeCode)
   const requiredApplicationOptionsMissing =
     optionsLoaded &&
     !optionsUnavailable &&
     (productTypes.length === 0 ||
       exemptionReasons.length === 0 ||
       regions.length === 0 ||
-      (ageClassRequired && growthTypes.length === 0))
+      growthTypes.length === 0)
   const missingRequiredOptions = requiredApplicationOptionsMissing && showMissingRequiredOptions
   const hasSelectableOwnerClientLocations = ownerClientLocations.some(isSelectableClientLocation)
   const hasSelectableAgentClientLocations = agentClientLocations.some(isSelectableClientLocation)
@@ -2324,8 +2320,8 @@ const ProvincialApplicationCreatePage = () => {
                       <RecordFieldCell>
                         <SearchableSelect
                           id="ageClass"
-                          labelText={requiredLabel('Age class', ageClassRequired)}
-                          required={ageClassRequired}
+                          labelText={requiredLabel('Age class')}
+                          required
                           value={form.ageClass}
                           disabled={!optionsLoaded || optionsUnavailable}
                           invalid={!!fieldError('ageClass')}

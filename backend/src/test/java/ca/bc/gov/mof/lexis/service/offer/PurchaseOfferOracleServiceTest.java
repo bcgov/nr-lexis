@@ -622,6 +622,8 @@ class PurchaseOfferOracleServiceTest {
                     "O", "00077881", "00", null, null, 1908L)));
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
+    when(permitRepository.findPermitScaleDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleDetail("PKG-903", "1A")));
     when(permitRepository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(List.of(scaleDetail("PKG-903", "1A")));
     when(regionalRecipientResolver.resolveGroupForRoute(RegionalMailRoute.RCO))
@@ -658,6 +660,8 @@ class PurchaseOfferOracleServiceTest {
                     "O", "00077881", "00", null, null, 1908L)));
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
+    when(permitRepository.findPermitScaleDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleDetail("PKG-903", "1")));
     when(permitRepository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(List.of(scaleDetail("PKG-903", "1")));
     when(regionalRecipientResolver.resolveGroupForRoute(RegionalMailRoute.RNI))
@@ -693,6 +697,8 @@ class PurchaseOfferOracleServiceTest {
                     "O", "00077881", "00", null, null, 1908L)));
     when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
         .thenReturn(Optional.of("client@example.com"));
+    when(permitRepository.findPermitScaleDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleDetail("PKG-903", "Z")));
     when(permitRepository.findScaleDetailsByPackageNumber("PKG-903"))
         .thenReturn(List.of(scaleDetail("PKG-903", "Z")));
 
@@ -704,6 +710,43 @@ class PurchaseOfferOracleServiceTest {
     assertThat(response.warnings())
         .containsExactly("Offer saved, but notification recipients could not be resolved.");
     verifyNoInteractions(notificationService);
+  }
+
+  @Test
+  void addOfferShouldEmailTheApplicantAndCopyRniWhenASkeenaApplicationHasNoScales() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null, 1908L)));
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
+        .thenReturn(Optional.of("client@example.com"));
+    when(permitRepository.findPermitScaleDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of());
+    when(regionalRecipientResolver.resolveGroupForRoute(RegionalMailRoute.RNI))
+        .thenReturn(
+            new RegionalMailRecipientResolver.RecipientGroup(
+                RegionalMailRoute.RNI, List.of("northern@example.com")));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, "PKG-903"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.clientHasEmail()).isTrue();
+    assertThat(response.warnings()).isEmpty();
+    verify(permitRepository, never()).findScaleDetailsByPackageNumber(any());
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PurchaseOffer(
+                1000456L,
+                81001L,
+                WorkflowEmailEvent.OfferAction.NEW,
+                "client@example.com",
+                List.of("northern@example.com"),
+                "REGION_RNI"));
   }
 
   @Test
@@ -910,6 +953,22 @@ class PurchaseOfferOracleServiceTest {
 
     PurchaseOfferService.CreateOfferResult response =
         service.addOffer(validCreateRequest(1000456L, null, volume), "test-user");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferInsertRecord> captor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferInsertRecord.class);
+    verify(repository).insertOffer(captor.capture());
+    assertThat(captor.getValue().offerVolume()).isZero();
+  }
+
+  @Test
+  void addOfferShouldSaveABlankVolumeAsZero() {
+    stubProvincialApplication(1000456L, 100.0d);
+    when(repository.insertOffer(any(PurchaseOfferRepository.PurchaseOfferInsertRecord.class)))
+        .thenReturn(Optional.of(new PurchaseOfferRepository.PurchaseOfferInsertRow(81001L)));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.addOffer(validCreateRequest(1000456L, null, null), "test-user");
 
     assertThat(response.success()).isTrue();
     ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferInsertRecord> captor =
@@ -1771,7 +1830,7 @@ class PurchaseOfferOracleServiceTest {
     assertThat(record.teacReviewDate()).isNull();
     assertThat(record.offerRemark()).isNull();
     assertThat(record.offerCondition()).isNull();
-    assertThat(record.offerVolume()).isNull();
+    assertThat(record.offerVolume()).isZero();
     assertThat(record.exportJurisdictionCode()).isEqualTo("P");
     assertThat(record.manufacturingFacilityInfo()).isEqualTo("Existing mill");
     verify(notificationService)
@@ -1836,6 +1895,124 @@ class PurchaseOfferOracleServiceTest {
                 "client@example.com",
                 List.of(),
                 "REGION_RCO"));
+  }
+
+  @Test
+  void updateOfferSnapshotShouldQueueWithdrawnNotificationWhenEditingAWithdrawnOffer() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.PurchaseOfferUpdateSourceRow(
+                    81001L,
+                    1000456L,
+                    "PKG-903",
+                    "Example Lumber",
+                    "Sample Contact",
+                    12500.25d,
+                    LocalDate.of(2026, 3, 2),
+                    LocalDate.of(2026, 3, 10),
+                    LocalDate.of(2026, 3, 18),
+                    "N",
+                    "Y",
+                    "Existing remark",
+                    "N",
+                    "Withdrawn by buyer",
+                    "P",
+                    "Existing mill",
+                    "Port Moody",
+                    "Existing condition",
+                    "creator",
+                    Instant.parse("2026-03-01T18:00:00Z"),
+                    95.5d)));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+    when(repository.findApplicationRecipient(1000456L))
+        .thenReturn(
+            Optional.of(
+                new PurchaseOfferRepository.ApplicationRecipientRow(
+                    "O", "00077881", "00", null, null, 1835L)));
+    when(clientEmailResolver.resolve(1000456L, "O", "00077881", "00", null, null))
+        .thenReturn(Optional.of("client@example.com"));
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOfferSnapshot(
+            new PurchaseOfferService.UpdateOfferRequest(
+                1000456L,
+                81001L,
+                "PKG-903",
+                "Example Lumber",
+                "Sample Contact",
+                13000.0d,
+                LocalDate.of(2026, 3, 2),
+                LocalDate.of(2026, 3, 10),
+                LocalDate.of(2026, 3, 18),
+                "N",
+                "Y",
+                "Existing remark",
+                "N",
+                "Withdrawn by buyer",
+                "P",
+                "Existing mill",
+                "00077881",
+                "Port Moody",
+                "Existing condition",
+                95.5d),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.sendEmail()).isTrue();
+    verify(notificationService)
+        .publish(
+            new WorkflowEmailEvent.PurchaseOffer(
+                1000456L,
+                81001L,
+                WorkflowEmailEvent.OfferAction.WITHDRAWN,
+                "client@example.com",
+                List.of(),
+                "REGION_RCO"));
+  }
+
+  @Test
+  void updateOfferSnapshotShouldSaveABlankVolumeAsZeroWithoutNotifyingForAStoredNullVolume() {
+    stubProvincialApplicationWithPackage(1000456L, "PKG-903");
+    when(repository.findUpdateSourceByOfferNumber(81001L))
+        .thenReturn(Optional.of(updateSource(1000456L, "PKG-903", "P", null)));
+    when(repository.updateOffer(any(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class)))
+        .thenReturn(true);
+
+    PurchaseOfferService.CreateOfferResult response =
+        service.updateOfferSnapshot(
+            new PurchaseOfferService.UpdateOfferRequest(
+                1000456L,
+                81001L,
+                "PKG-903",
+                "Example Lumber",
+                "Sample Contact",
+                12500.25d,
+                LocalDate.of(2026, 3, 2),
+                null,
+                LocalDate.of(2026, 3, 25),
+                "N",
+                "Y",
+                "Existing remark",
+                "N",
+                null,
+                "P",
+                "Existing mill",
+                "00077881",
+                "Port Moody",
+                "Existing condition",
+                null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.sendEmail()).isFalse();
+    ArgumentCaptor<PurchaseOfferRepository.PurchaseOfferUpdateRecord> captor =
+        ArgumentCaptor.forClass(PurchaseOfferRepository.PurchaseOfferUpdateRecord.class);
+    verify(repository).updateOffer(captor.capture());
+    assertThat(captor.getValue().offerVolume()).isZero();
+    verifyNoInteractions(notificationService);
   }
 
   @Test

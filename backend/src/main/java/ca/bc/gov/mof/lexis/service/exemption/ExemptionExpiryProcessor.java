@@ -298,9 +298,11 @@ public class ExemptionExpiryProcessor {
 
   private boolean expireApplications(List<ApplicationUpdateRecord> applications) {
     for (ApplicationUpdateRecord current : applications) {
+      if (EXPIRED_STATUS.equalsIgnoreCase(current.applicationStatusCode())) {
+        continue;
+      }
       boolean remarkExists = hasExpiryRemark(current.applicationNumber());
-      if (!EXPIRED_STATUS.equalsIgnoreCase(current.applicationStatusCode())
-          && !applicationRepository.updateApplication(withExpiredStatus(current))) {
+      if (!applicationRepository.updateApplication(withExpiredStatus(current))) {
         return false;
       }
 

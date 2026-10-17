@@ -1,6 +1,7 @@
 package ca.bc.gov.mof.lexis.service.permit;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.groups.Tuple.tuple;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -153,6 +154,71 @@ class OracleCanadianPermitInvoiceOrchestrationServiceTest {
     assertThat(result.success()).isTrue();
     verify(repository, times(2)).insertPermitInvoiceDetailRequired(any());
     assertNoGbmsWrites();
+  }
+
+  @Test
+  void shouldInvoiceAnUnmanufacturedScaleWithoutATimberMarkAndAZeroVolumeScale() {
+    InternalInvoiceSnapshot valid = invoiceSnapshot();
+    InternalInvoiceDetail unmanufactured =
+        new InternalInvoiceDetail(
+            null,
+            "FI",
+            "A",
+            BigDecimal.TEN,
+            BigDecimal.valueOf(10.00),
+            BigDecimal.ONE,
+            BigDecimal.ZERO,
+            BigDecimal.ZERO);
+    InternalInvoiceDetail zeroVolume =
+        new InternalInvoiceDetail(
+            "TM-2",
+            "HE",
+            "J",
+            BigDecimal.ZERO,
+            BigDecimal.ZERO,
+            BigDecimal.valueOf(85.10),
+            BigDecimal.ZERO,
+            BigDecimal.ZERO);
+    InternalInvoiceSnapshot snapshot =
+        new InternalInvoiceSnapshot(
+            valid.invoiceTotal(),
+            valid.billingClientNumber(),
+            valid.billingClientLocationCode(),
+            valid.exemptionOverrideRate(),
+            valid.permitOverrideAmount(),
+            valid.originOrgNumber(),
+            valid.adminOrgNumber(),
+            valid.ackMaskAcode(),
+            List.of(unmanufactured, zeroVolume));
+    PermitInvoiceDetailRow first = persistedDetail(unmanufactured);
+    PermitInvoiceDetailRow second =
+        new PermitInvoiceDetailRow(
+            1_000_002L,
+            INVOICE_NUMBER,
+            zeroVolume.timberMark(),
+            zeroVolume.speciesCode(),
+            zeroVolume.gradeCode(),
+            zeroVolume.volume(),
+            zeroVolume.amount(),
+            zeroVolume.amvRate(),
+            zeroVolume.feePolicyAdmin(),
+            zeroVolume.feePercentage());
+    when(repository.findByPermitDetailNumberRequired(PERMIT_NUMBER)).thenReturn(List.of());
+    when(repository.insertPermitInvoiceRequired(any())).thenReturn(activeInvoice(null));
+    when(repository.insertPermitInvoiceDetailRequired(any()))
+        .thenReturn(List.of(first), List.of(first, second));
+
+    TransitionResult result =
+        service.orchestrate(
+            transition("ACT", "COM", "CA", snapshot), "idir\\jsmith");
+
+    assertThat(result.success()).isTrue();
+    ArgumentCaptor<PermitInvoiceDetailInsert> detailCaptor =
+        ArgumentCaptor.forClass(PermitInvoiceDetailInsert.class);
+    verify(repository, times(2)).insertPermitInvoiceDetailRequired(detailCaptor.capture());
+    assertThat(detailCaptor.getAllValues())
+        .extracting(PermitInvoiceDetailInsert::timberMark, PermitInvoiceDetailInsert::volume)
+        .containsExactly(tuple(null, BigDecimal.TEN), tuple("TM-2", BigDecimal.ZERO));
   }
 
   @Test

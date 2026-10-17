@@ -51,46 +51,60 @@ class ApplicationApprovalEligibilityServiceTest {
   }
 
   @ParameterizedTest
-  @CsvSource({"S,O", "T,"})
+  @CsvSource({"S,O", "T,S"})
   void shouldAllowStandingAndUnmanufacturedApplicationsWithTheirEnteredScaleDetails(
       String productTypeCode, String growthTypeCode) {
-    ApplicationUpdateRecord harvested = validApplication(null);
-    stubValidApplication(
-        new ApplicationUpdateRecord(
-            harvested.applicationNumber(),
-            harvested.federalApplicationNumber(),
-            harvested.applicationDate(),
-            harvested.termDays(),
-            harvested.receivedDate(),
-            harvested.applicationVolume(),
-            150.0d,
-            " ",
-            harvested.entryUserId(),
-            harvested.entryTimestamp(),
-            harvested.updateUserId(),
-            harvested.updateTimestamp(),
-            harvested.exportScheduleId(),
-            harvested.agentClientNumber(),
-            harvested.agentClientLocationCode(),
-            harvested.ownerClientNumber(),
-            harvested.ownerClientLocationCode(),
-            harvested.exemptionNumber(),
-            harvested.exemptionReasonCode(),
-            harvested.applicationStatusCode(),
-            harvested.applicantTypeCode(),
-            harvested.orgUnitNumber(),
-            productTypeCode,
-            harvested.jurisdictionCode(),
-            growthTypeCode,
-            harvested.agentContactName(),
-            harvested.ownerContactName(),
-            harvested.oicIndicator()),
-        "PL");
+    stubValidApplication(scaleDetailsApplication(productTypeCode, growthTypeCode), "PL");
 
     var result = service.evaluate(1000456L);
 
     assertThat(result.errors()).isEmpty();
     assertThat(result.eligible()).isTrue();
+  }
+
+  @ParameterizedTest
+  @CsvSource({"H", "S", "T"})
+  void shouldRequireAgeClassForEveryProductType(String productTypeCode) {
+    stubValidApplication(scaleDetailsApplication(productTypeCode, null), "PL");
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.eligible()).isFalse();
+    assertThat(result.errors()).contains("Application growth type is required.");
+  }
+
+  private ApplicationUpdateRecord scaleDetailsApplication(
+      String productTypeCode, String growthTypeCode) {
+    ApplicationUpdateRecord harvested = validApplication(null);
+    return new ApplicationUpdateRecord(
+        harvested.applicationNumber(),
+        harvested.federalApplicationNumber(),
+        harvested.applicationDate(),
+        harvested.termDays(),
+        harvested.receivedDate(),
+        harvested.applicationVolume(),
+        150.0d,
+        " ",
+        harvested.entryUserId(),
+        harvested.entryTimestamp(),
+        harvested.updateUserId(),
+        harvested.updateTimestamp(),
+        harvested.exportScheduleId(),
+        harvested.agentClientNumber(),
+        harvested.agentClientLocationCode(),
+        harvested.ownerClientNumber(),
+        harvested.ownerClientLocationCode(),
+        harvested.exemptionNumber(),
+        harvested.exemptionReasonCode(),
+        harvested.applicationStatusCode(),
+        harvested.applicantTypeCode(),
+        harvested.orgUnitNumber(),
+        productTypeCode,
+        harvested.jurisdictionCode(),
+        growthTypeCode,
+        harvested.agentContactName(),
+        harvested.ownerContactName(),
+        harvested.oicIndicator());
   }
 
   @Test

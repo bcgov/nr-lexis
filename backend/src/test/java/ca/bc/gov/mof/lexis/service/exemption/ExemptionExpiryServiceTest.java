@@ -169,7 +169,7 @@ class ExemptionExpiryServiceTest {
   }
 
   @Test
-  void shouldRepairMissingExpiryRemarkWhenApplicationStatusWasAlreadyExpired() {
+  void shouldLeaveAlreadyExpiredApplicationWithoutAnExpiryRemarkUntouched() {
     discoverApplications(101L);
     when(exemptionRepository.findAllExpiringExemptionNumbers()).thenReturn(List.of("EX-100"));
     when(exemptionRepository.findExemptionRecord("EX-100")).thenReturn(Optional.of(exemption()));
@@ -180,8 +180,11 @@ class ExemptionExpiryServiceTest {
                     101L, 10, 10, null, "P", "T")));
     when(applicationRepository.findApplicationUpdateRecord(101L))
         .thenReturn(Optional.of(application("EXP")));
-    when(applicationRepository.findRemarksByApplicationNumber(101L)).thenReturn(List.of());
-    when(applicationRepository.insertRemark(any(), any(), any(), any()))
+    org.mockito.Mockito.lenient()
+        .when(applicationRepository.findRemarksByApplicationNumber(101L))
+        .thenReturn(List.of());
+    org.mockito.Mockito.lenient()
+        .when(applicationRepository.insertRemark(any(), any(), any(), any()))
         .thenReturn(
             Optional.of(
                 new ApplicationDetailsRpcRepository.RemarkRow(
@@ -197,8 +200,7 @@ class ExemptionExpiryServiceTest {
 
     assertThat(result.expiredExemptions()).containsExactly("EX-100");
     verify(applicationRepository, never()).updateApplication(any());
-    verify(applicationRepository)
-        .insertRemark(101L, "Exemption expired, 2026-07-10", "EXPIRY_MONITOR", NOW);
+    verify(applicationRepository, never()).insertRemark(any(), any(), any(), any());
   }
 
   @Test
@@ -212,7 +214,8 @@ class ExemptionExpiryServiceTest {
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     101L, 10, 10, null, "P", "T")));
     when(applicationRepository.findApplicationUpdateRecord(101L))
-        .thenReturn(Optional.of(application("EXP")));
+        .thenReturn(Optional.of(application()));
+    when(applicationRepository.updateApplication(any())).thenReturn(true);
     when(applicationRepository.findRemarksByApplicationNumber(101L))
         .thenReturn(
             List.of(
@@ -226,7 +229,9 @@ class ExemptionExpiryServiceTest {
     ExemptionExpiryService.ExpiryRunResult result = service.expireDueExemptions();
 
     assertThat(result.expiredExemptions()).containsExactly("EX-100");
-    verify(applicationRepository, never()).updateApplication(any());
+    verify(applicationRepository)
+        .updateApplication(
+            org.mockito.ArgumentMatchers.argThat(row -> "EXP".equals(row.applicationStatusCode())));
     verify(applicationRepository, never()).insertRemark(any(), any(), any(), any());
   }
 

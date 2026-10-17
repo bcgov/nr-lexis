@@ -328,7 +328,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=11111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=11111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -422,7 +422,7 @@ describe('Create Page Core Flows', () => {
       agentContactName: '',
       applicantTypeCode: 'O',
       productTypeCode: 'LOG',
-      ageClass: '',
+      ageClass: 'O',
       exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-09',
@@ -712,7 +712,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -805,7 +805,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=5&applicationTermMonths=2&applicationTermYears=1&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=5&applicationTermMonths=2&applicationTermYears=1&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA',
         ]}
       >
         <Routes>
@@ -854,7 +854,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=1903&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=1903&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -906,7 +906,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=11111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=2176&agentClientLocationCode=12&agentContactName=Agent%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=11111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=2176&agentClientLocationCode=12&agentContactName=Agent%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -949,7 +949,7 @@ describe('Create Page Core Flows', () => {
       agentContactName: 'Agent Contact',
       applicantTypeCode: 'A',
       productTypeCode: 'LOG',
-      ageClass: '',
+      ageClass: 'O',
       exemptionType: 'U',
       region: '11',
       applicationDate: '2026-01-09',
@@ -1023,7 +1023,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&applicationVolume=125.5&speciesCodes=HE&endUseCode=SA',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&applicationVolume=125.5&speciesCodes=HE&endUseCode=SA',
         ]}
       >
         <Routes>
@@ -1092,7 +1092,7 @@ describe('Create Page Core Flows', () => {
       render(
         <MemoryRouter
           initialEntries={[
-            '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&applicationVolume=125.5&speciesCodes=HE&endUseCode=SA',
+            '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&applicationVolume=125.5&speciesCodes=HE&endUseCode=SA',
           ]}
         >
           <Routes>
@@ -1148,7 +1148,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=M&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=M&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -1319,7 +1319,7 @@ describe('Create Page Core Flows', () => {
       render(
         <MemoryRouter
           initialEntries={[
-            `/provincial/application/create?ownerClientNumber=${clientNumber}&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready`,
+            `/provincial/application/create?ownerClientNumber=${clientNumber}&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready`,
           ]}
         >
           <Routes>
@@ -1346,7 +1346,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=2176&agentClientLocationCode=12&agentContactName=Agent%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&ownerApplicantType=A&agentClientNumber=2176&agentClientLocationCode=12&agentContactName=Agent%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -1497,7 +1497,7 @@ describe('Create Page Core Flows', () => {
   }
 
   const READY_SUBMITTER_APPLICATION_QUERY =
-    '?ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA'
+    '?ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA'
 
   const confirmSubmitterSave = async () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
@@ -1626,7 +1626,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&applicationVolume=125.5&speciesCodes=HE&endUseCode=SA',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&listingDate=2026-01-11&applicationVolume=125.5&speciesCodes=HE&endUseCode=SA',
         ]}
       >
         <Routes>
@@ -1707,7 +1707,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          `/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=${encodeURIComponent('R'.repeat(255))}`,
+          `/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=${encodeURIComponent('R'.repeat(255))}`,
         ]}
       >
         <Routes>
@@ -1742,7 +1742,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -1935,7 +1935,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -1964,7 +1964,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
@@ -2102,17 +2102,16 @@ describe('Create Page Core Flows', () => {
       </MemoryRouter>,
     )
 
-    const expectScaleFields = (required: { ageClass: boolean; logDetails: boolean }) => {
+    const expectScaleFields = (logDetailsRequired: boolean) => {
       const ageClass = screen.getByRole('combobox', { name: 'Age class' })
       const location = screen.getByRole('textbox', { name: 'Location of logs' })
       const logVolume = screen.getByRole('spinbutton', { name: 'Average log volume (m³)' })
       expect(ageClass).toHaveValue('Old Growth')
       expect(location).toHaveValue('Camp 1')
       expect(logVolume).toHaveValue(1.2)
-      if (required.ageClass) expect(ageClass).toHaveAttribute('aria-required', 'true')
-      else expect(ageClass).not.toHaveAttribute('aria-required')
+      expect(ageClass).toHaveAttribute('aria-required', 'true')
       for (const field of [location, logVolume]) {
-        expect(field).toHaveAttribute('aria-required', String(required.logDetails))
+        expect(field).toHaveAttribute('aria-required', String(logDetailsRequired))
       }
     }
 
@@ -2120,7 +2119,7 @@ describe('Create Page Core Flows', () => {
     const productType = await screen.findByRole('combobox', { name: 'Product type' })
     await waitFor(() => expect(productType).toHaveValue('Harvested Timber'))
     await selectApplicationCreateTab('Scale')
-    await waitFor(() => expectScaleFields({ ageClass: true, logDetails: true }))
+    await waitFor(() => expectScaleFields(true))
 
     await selectApplicationCreateTab('Application')
     await chooseComboBoxOption(
@@ -2128,12 +2127,12 @@ describe('Create Page Core Flows', () => {
       'Standing Timber',
     )
     await selectApplicationCreateTab('Scale')
-    expectScaleFields({ ageClass: true, logDetails: false })
+    expectScaleFields(false)
 
     await selectApplicationCreateTab('Application')
     await chooseComboBoxOption(screen.getByRole('combobox', { name: 'Product type' }), 'Timber')
     await selectApplicationCreateTab('Scale')
-    expectScaleFields({ ageClass: false, logDetails: false })
+    expectScaleFields(false)
   })
 
   it('does not apply H-only rules to a standing-timber application', async () => {
@@ -2168,6 +2167,33 @@ describe('Create Page Core Flows', () => {
     })
   })
 
+  it.each(['H', 'S', 'T'])(
+    'requires an age class before saving product type %s',
+    async (productTypeCode) => {
+      render(
+        <MemoryRouter
+          initialEntries={[
+            `/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=${productTypeCode}&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready`,
+          ]}
+        >
+          <Routes>
+            <Route
+              path="/provincial/application/create"
+              element={<ProvincialApplicationCreatePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      const submitButton = await screen.findByRole('button', { name: 'Save application' })
+      await waitFor(() => expect(submitButton).toBeEnabled())
+      await userEvent.click(submitButton)
+
+      expect(await screen.findAllByText('Age class is required')).not.toHaveLength(0)
+      expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+    },
+  )
+
   it.each(['S', 'T'])(
     'shows an average log volume over 99.9 as a field error for product type %s',
     async (productTypeCode) => {
@@ -2201,7 +2227,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2',
         ]}
       >
         <Routes>
@@ -2232,7 +2258,7 @@ describe('Create Page Core Flows', () => {
     render(
       <MemoryRouter
         initialEntries={[
-          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&exemptionType=ALL&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=LOG&ageClass=O&exemptionType=ALL&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=125.5&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
         ]}
       >
         <Routes>
