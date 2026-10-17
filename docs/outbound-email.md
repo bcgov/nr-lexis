@@ -38,7 +38,9 @@ units, and RSI for Southern Interior organization units. Skeena is normally RNI.
 uses a scale-grade exception only for permit approvals and purchase offers: an `A`–`Y` grade routes
 to RCO, even when the same scale value also contains digits; otherwise a numeric grade routes to
 RNI, and `Z` is ignored while the next scale is considered. If no grade determines a route, LEXIS
-does not queue that notification. Permit review remains RNI for Skeena.
+does not queue that notification. Purchase offers apply the exception only when the application
+has scales; a Skeena offer on an application without scales goes to the applicant with RNI
+copied. Permit review remains RNI for Skeena.
 
 ## GitHub Environment secrets
 
@@ -79,8 +81,8 @@ revision containing this configuration must be deployed to TEST.
 
 Exercise each regional route for application rejection/withdrawal, exemption approval, permit
 approval/payment-pending, permit review, and purchase-offer create/update/withdrawal. Include
-Skeena cases with an `A`–`Y` scale grade and a numeric scale grade, plus a permit-review request
-with the optional entered address.
+Skeena cases with an `A`–`Y` scale grade and a numeric scale grade, a Skeena offer on an
+application without scales, plus a permit-review request with the optional entered address.
 
 For every intercepted message, inspect the raw received headers and the interception label:
 
