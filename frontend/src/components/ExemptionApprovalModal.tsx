@@ -26,7 +26,6 @@ import {
   type ExemptionApprovalRecipientPreview,
 } from '@/service/provincial-exemption-detail-service'
 import { formatBusinessIsoDate, formatIsoDateLabel } from '@/utils/date'
-import { fieldErrorText } from '@/utils/field-error'
 import { focusedElement } from '@/utils/focus'
 import { isValidEmail } from '@/utils/text'
 import { isClientErrorResponse } from '@/utils/http-error'
@@ -360,6 +359,7 @@ const ExemptionApprovalModal = ({
     }
   }
 
+  const certificationInvalid = submitAttempted && !certified
   const showEmailErrorUnderCheckbox =
     submitAttempted && sendEmail && !plural && !retrying && rowsNeedingInput.some(missingAddress)
 
@@ -422,17 +422,24 @@ const ExemptionApprovalModal = ({
                   {plural ? 'They' : 'It'} will be marked with an approval date of{' '}
                   {formatIsoDateLabel(approvalDate)}.
                 </p>
-                <div>
-                  <p>{requiredLabel('Certification')}</p>
+                <div role="group" aria-labelledby={`approval-certification-${id}`}>
+                  <p id={`approval-certification-${id}`}>{requiredLabel('Certification')}</p>
                   <Checkbox
                     id={`approval-certified-${id}`}
                     checked={certified}
                     disabled={pending}
                     labelText={`I certify that ${plural ? 'these exemptions have' : 'this exemption has'} been approved`}
-                    invalid={submitAttempted && !certified}
-                    invalidText={fieldErrorText(
-                      `Confirm that you certify ${plural ? 'these exemptions have' : 'this exemption has'} been approved.`,
-                    )}
+                    invalid={certificationInvalid}
+                    // Carbon doesn't link the checkbox to its error.
+                    aria-invalid={certificationInvalid || undefined}
+                    aria-describedby={
+                      certificationInvalid ? `approval-certification-error-${id}` : undefined
+                    }
+                    invalidText={
+                      <span id={`approval-certification-error-${id}`}>
+                        {`Confirm that you certify ${plural ? 'these exemptions have' : 'this exemption has'} been approved.`}
+                      </span>
+                    }
                     onChange={(_, { checked }) => setCertified(Boolean(checked))}
                   />
                 </div>

@@ -27,3 +27,30 @@
 .boic-permit-agent-information {
   margin-block-start: 1.5rem;
 }
+
+// Problems that have no field follow the summary sentence as a list of their own.
+.boic-permit-error-list {
+  flex-basis: 100%;
+  margin-block-start: 0.25rem;
+  padding-inline-start: 1.25rem;
+  list-style: disc;
+  font-size: 0.875rem;
+  line-height: 1.125rem;
+  letter-spacing: 0.01rem;
+}
+
+// Remarks fit their card at any width, and the counter keeps a gap from the label.
+.boic-permit-create-form .cds--text-area {
+  min-inline-size: 0;
+}
+
+.boic-permit-create-form .cds--text-area__label-wrapper {
+  column-gap: 0.5rem;
+}
+
+@media (max-width: 671px) {
+  // The card already supplies the phone-width inset, so the fields keep room for their values.
+  .boic-permit-create-form .application-detail-tab-panel {
+    padding-inline: 0;
+  }
+}

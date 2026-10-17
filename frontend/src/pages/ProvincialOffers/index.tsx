@@ -120,7 +120,6 @@ const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'asc'
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialOfferSearchSortField[]
-const COLUMN_HEADERS = SORT_COLUMNS.map((column) => column.label)
 
 const buildSearchParams = (
   filters: ProvincialOfferSearchFilters,
@@ -525,6 +524,7 @@ const ProvincialOffersPage = () => {
         <PageHeader
           title="Offer search"
           subtitle="Find offers and check their status"
+          focusTitle="whenFocusLost"
           actions={
             canCreateOffer ? (
               <Button
@@ -647,7 +647,7 @@ const ProvincialOffersPage = () => {
             resultName="offer"
             loading={resultsLoading}
             loadingDescription="Searching"
-            columnHeaders={COLUMN_HEADERS}
+            columnCount={SORT_COLUMNS.length}
             totalItems={
               errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
@@ -686,7 +686,8 @@ const ProvincialOffersPage = () => {
                     ))}
                   </TableRow>
                 </TableHead>
-                <TableBody>
+                {/* The toolbar announces the result count, so the rows aren't read out again. */}
+                <TableBody aria-live="off">
                   {results.content.map((row) => (
                     <TableRow key={row.offerNumber}>
                       <TableCell>

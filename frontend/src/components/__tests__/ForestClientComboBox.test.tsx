@@ -48,6 +48,25 @@ describe('ForestClientComboBox', () => {
     vi.useRealTimers()
   })
 
+  it('marks the client search invalid while it shows an error', () => {
+    render(
+      <ForestClientComboBox
+        id="client"
+        labelText="Client"
+        value=""
+        onChange={vi.fn()}
+        required
+        invalid
+        invalidText="Client is required. Enter name, acronym, or client number (min. 3 characters)."
+      />,
+    )
+
+    expect(input()).toHaveAttribute('aria-invalid', 'true')
+    expect(input()).toHaveAccessibleDescription(
+      'Client is required. Enter name, acronym, or client number (min. 3 characters).',
+    )
+  })
+
   it('waits for three characters and debounces the current query', async () => {
     render(<Harness />)
     expect(input()).toHaveAttribute('aria-required', 'true')

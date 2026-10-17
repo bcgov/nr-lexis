@@ -769,6 +769,7 @@ const ProvincialApplicationPage = () => {
         <PageHeader
           title="Application search"
           subtitle="Find applications and check their status"
+          focusTitle="whenFocusLost"
           actions={
             canCreateApplication ? (
               <Button
@@ -848,6 +849,7 @@ const ProvincialApplicationPage = () => {
                   labelText="Exemption type"
                   value={filters.exemptionType}
                   placeholder="All"
+                  allOptionLabel="All"
                   options={exemptionTypeOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('exemptionType', value)}
@@ -857,6 +859,7 @@ const ProvincialApplicationPage = () => {
                   labelText="Application status"
                   value={filters.applicationStatus}
                   placeholder="All"
+                  allOptionLabel="All"
                   options={applicationStatusOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('applicationStatus', value)}
@@ -885,6 +888,7 @@ const ProvincialApplicationPage = () => {
                     labelText="Product type"
                     value={filters.productTypeCode}
                     placeholder="All"
+                    allOptionLabel="All"
                     options={productTypeOptions}
                     disabled={optionsLoading || optionsUnavailable}
                     onChange={(value) => updateFilter('productTypeCode', value)}
@@ -957,10 +961,7 @@ const ProvincialApplicationPage = () => {
             resultName="application"
             loading={resultsLoading}
             loadingDescription="Searching"
-            columnHeaders={[
-              ...(canCreateExemption ? [''] : []),
-              ...RESULT_COLUMNS.map((column) => column.label),
-            ]}
+            columnCount={RESULT_COLUMNS.length}
             totalItems={
               errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
@@ -1043,7 +1044,8 @@ const ProvincialApplicationPage = () => {
                     ))}
                   </TableRow>
                 </TableHead>
-                <TableBody>
+                {/* The toolbar announces the result count, so the rows aren't read out again. */}
+                <TableBody aria-live="off">
                   {results.content.map((row) => (
                     <TableRow key={row.applicationNumber}>
                       {canCreateExemption && (

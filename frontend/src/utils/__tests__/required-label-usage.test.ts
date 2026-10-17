@@ -17,7 +17,10 @@ const declaresRequired = (attributes: ts.JsxAttributes): boolean =>
     if (!ts.isJsxAttribute(attribute)) return false
     const name = attribute.name.getText()
     if (name === 'required' || name === 'aria-required') return true
-    if (name === 'ref' && attribute.initializer?.getText() === '{markRequired}') return true
+    // requiredDropdownRef(...) calls markRequired as well as setting aria-invalid.
+    const ref = attribute.initializer?.getText() ?? ''
+    if (name === 'ref' && (ref === '{markRequired}' || ref.startsWith('{requiredDropdownRef(')))
+      return true
     return name === 'inputProps' && !!attribute.initializer?.getText().includes('aria-required')
   })
 

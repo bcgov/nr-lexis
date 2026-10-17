@@ -7,6 +7,11 @@
     margin-block-end: 1rem;
   }
 
+  // The grid's row gap spaces the notice from the tabs.
+  .app-inline-notification.application-create-validation-notification {
+    margin-block-end: 0;
+  }
+
   .application-create-client-grid {
     grid-template-columns: minmax(0, 2fr) minmax(0, 1fr);
 
@@ -51,6 +56,28 @@
   @media (max-width: 671px) {
     .application-create-client-grid {
       grid-template-columns: minmax(0, 1fr);
+    }
+
+    // On a phone the page keeps the shell's gutter and each form card fills its tab with a 16px
+    // inset, so fields are wide enough to show their values.
+    &.default-grid {
+      padding-inline: 0;
+    }
+
+    .application-detail-tab-panel:not(.application-detail-tab-panel--empty) {
+      padding-inline: 0;
+    }
+
+    .cds--tile.create-form-tile {
+      padding-inline: 1rem;
+    }
+
+    .cds--text-area {
+      min-inline-size: 0;
+    }
+
+    .cds--combo-box .cds--text-input {
+      text-overflow: ellipsis;
     }
   }
 }

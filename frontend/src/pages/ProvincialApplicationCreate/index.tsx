@@ -1371,6 +1371,7 @@ const ProvincialApplicationCreatePage = () => {
       ),
       applicationVolume: firstValidationError(
         () => requiredFieldError(form.applicationVolume, 'Application volume'),
+        () => greaterThanFieldError(form.applicationVolume, 'Application volume', 0),
         () => positiveNumericFieldError(form.applicationVolume),
         () => maxNumericValueFieldError(form.applicationVolume, 9999999.99, 'Application volume'),
         () => atMostTwoDecimalFieldError(form.applicationVolume, 'Application volume'),
@@ -1433,7 +1434,11 @@ const ProvincialApplicationCreatePage = () => {
     ...selectedApplicationSpeciesOptions,
     ...applicationSpeciesOptions.filter((option) => !form.speciesCodes.includes(option.code)),
   ]
-  const applicationEndUseSelectOptions = applicationEndUseOptions.map(toSearchOption)
+  // End uses are chosen by name, as the saved scale details show them.
+  const applicationEndUseSelectOptions = applicationEndUseOptions.map((option) => ({
+    value: option.code,
+    label: option.description || option.code,
+  }))
   // Refreshing after a species pick keeps the list usable so further picks and focus are not
   // lost; options from another region or product type stay locked until the new list loads.
   const isLoadingApplicationSpeciesScope =
@@ -1786,10 +1791,11 @@ const ProvincialApplicationCreatePage = () => {
         </Column>
       )}
 
-      <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
-        {currentStatus?.placement === 'inline' && !accuracyConfirmationOpen && (
+      {/* Its own grid row keeps the same space above the tabs as the info notice it replaces. */}
+      {currentStatus?.placement === 'inline' && !accuracyConfirmationOpen && (
+        <Column sm={4} md={8} lg={16}>
           <AppNotification
-            className="create-form-validation-notification"
+            className="create-form-validation-notification application-create-validation-notification"
             kind="error"
             revealKey={currentStatus}
             focusOnReveal
@@ -1797,7 +1803,10 @@ const ProvincialApplicationCreatePage = () => {
             subtitle={requiredTabsMessage}
             lowContrast
           />
-        )}
+        </Column>
+      )}
+
+      <Column sm={4} md={8} lg={16} className="application-detail-tabs-column">
         <Tabs
           selectedIndex={selectedApplicationTabIndex}
           onChange={({ selectedIndex }) => {
@@ -2382,11 +2391,21 @@ const ProvincialApplicationCreatePage = () => {
                           items={applicationSpeciesSelectOptions}
                           selectedItems={selectedApplicationSpeciesOptions}
                           itemToString={(item) => (item ? toSearchOption(item).label : '')}
-                          inputProps={{ 'aria-required': true }}
+                          inputProps={{
+                            'aria-required': true,
+                            // Carbon shows the error under the list without linking it.
+                            ...(speciesCodesError &&
+                              !isApplicationSpeciesSelectDisabled && {
+                                'aria-invalid': true,
+                                'aria-describedby': 'applicationSpecies-error',
+                              }),
+                          }}
                           disabled={isApplicationSpeciesSelectDisabled}
                           placeholder={speciesPlaceholder}
                           invalid={!!speciesCodesError}
-                          invalidText={speciesCodesError}
+                          invalidText={
+                            <span id="applicationSpecies-error">{speciesCodesError}</span>
+                          }
                           helperText={speciesHelperText}
                           onChange={({ selectedItems }) => {
                             markFormEdited()

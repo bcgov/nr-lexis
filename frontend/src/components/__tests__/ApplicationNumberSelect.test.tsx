@@ -13,6 +13,25 @@ const mockedSearchProvincialApplicationNumberOptions = vi.mocked(
 )
 
 describe('ApplicationNumberSelect', () => {
+  it('marks the application number invalid while it shows an error', () => {
+    mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([])
+    render(
+      <ApplicationNumberSelect
+        id="applicationNumber"
+        labelText="Application number"
+        value=""
+        required
+        invalid
+        invalidText="Application number is required"
+        onChange={vi.fn()}
+      />,
+    )
+
+    const input = screen.getByRole('combobox', { name: 'Application number' })
+    expect(input).toHaveAttribute('aria-invalid', 'true')
+    expect(input).toHaveAccessibleDescription('Application number is required')
+  })
+
   it('searches application numbers and selects a database result', async () => {
     const onChange = vi.fn()
     mockedSearchProvincialApplicationNumberOptions.mockResolvedValue([

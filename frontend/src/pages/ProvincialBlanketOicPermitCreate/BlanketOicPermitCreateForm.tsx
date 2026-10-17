@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react'
+import { useEffect, useEffectEvent, useRef, useState, type ReactNode } from 'react'
 import {
   Button,
   Checkbox,
@@ -32,19 +32,22 @@ import PendingIcon from '@/components/PendingIcon'
 import PermitCountrySelect from '@/components/PermitCountrySelect'
 import { discardNewRecordCopy } from '@/components/DiscardChangesModal'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
+import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
   clientLocationLabel,
+  clientLookupNumbersMatch,
   isSelectableClientLocation,
   resolveClientLocationCode,
 } from '@/pages/shared/application-form-utils'
-import { isValidIsoDate } from '@/pages/shared/create-form-utils'
+import { isoDateFieldError, isValidIsoDate } from '@/pages/shared/create-form-utils'
+import { withShippingDefaults } from '@/pages/ProvincialPermitDetails/shipping-defaults'
 import { readDetailReturnTo } from '@/pages/shared/detail-navigation'
 import type { IdTextOption } from '@/pages/shared/search-query-utils'
 import {
-  fetchExemptionClientData,
-  fetchExemptionClientLocations,
+  fetchApplicationClientData,
+  fetchApplicationClientLocations,
   type ApplicationClientData,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
@@ -123,21 +126,25 @@ const defaultLayout = ({ actions, content }: { actions: ReactNode; content: Reac
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
 
+// The fields on each tab. The error summary names the tabs with errors, and each tab counts its own.
 const FORM_TABS = [
   {
     label: 'Permit',
     icon: Certificate,
-    requiredFields: [
+    fields: [
       'permitSubmitDate',
+      'permitIssueDate',
+      'permitExpiryDate',
       'orgUnitNumber',
       'oicPermitTotalPieces',
       'oicPermitTotalVolume',
+      'permitRemarks',
     ],
   },
   {
     label: 'Applicant',
     icon: Enterprise,
-    requiredFields: [
+    fields: [
       'ownerClientNumber',
       'ownerClientLocation',
       'agentClientNumber',
@@ -147,7 +154,7 @@ const FORM_TABS = [
   {
     label: 'Shipping',
     icon: EarthFilled,
-    requiredFields: [
+    fields: [
       'destinationCompanyName',
       'destinationCountry',
       'transportType',
@@ -157,34 +164,17 @@ const FORM_TABS = [
       'otherPortOfExport',
     ],
   },
-  { label: 'Scale', icon: Box, requiredFields: [] },
-  { label: 'Documents', icon: DocumentAttachment, requiredFields: [] },
-  { label: 'Fees', icon: Currency, requiredFields: [] },
+  { label: 'Scale', icon: Box, fields: [] },
+  { label: 'Documents', icon: DocumentAttachment, fields: [] },
+  { label: 'Fees', icon: Currency, fields: [] },
 ] as const
 
-const withShippingDefaults = (
-  form: BlanketOicPermitForm,
-  options: ShippingReferenceOptions,
-): BlanketOicPermitForm => ({
-  ...form,
-  destinationCountry:
-    form.destinationCountry ||
-    options.countries.find(({ code }) => code === 'US')?.code ||
-    options.countries[0]?.code ||
-    '',
-  transportType:
-    form.transportType ||
-    options.transportTypes.find(({ code }) => code === 'B')?.code ||
-    options.transportTypes[0]?.code ||
-    '',
-  portOfExport:
-    form.portOfExport ||
-    options.ports.find(({ code }) => code === 'CB')?.code ||
-    options.ports[0]?.code ||
-    '',
-})
+const SUBMITTER_CLIENT_REQUIRED_MESSAGE = 'Your client must be the owner or the agent.'
 
-const initialForm = (defaultRegionNumber: string): BlanketOicPermitForm => {
+const initialForm = (
+  defaultRegionNumber: string,
+  ownerClientNumber: string,
+): BlanketOicPermitForm => {
   const today = formatBusinessIsoDate()
   return {
     permitSubmitDate: today,
@@ -194,7 +184,7 @@ const initialForm = (defaultRegionNumber: string): BlanketOicPermitForm => {
     oicPermitTotalVolume: '',
     orgUnitNumber: defaultRegionNumber,
     permitRemarks: '',
-    ownerClientNumber: '',
+    ownerClientNumber,
     ownerClientLocation: '',
     agentClientNumber: '',
     agentClientLocation: '',
@@ -210,11 +200,11 @@ const initialForm = (defaultRegionNumber: string): BlanketOicPermitForm => {
 
 const requiredDateError = (value: string, label: string): string | undefined => {
   if (!value.trim()) return `${label} is required.`
-  return isValidIsoDate(value) ? undefined : `${label} must use YYYY-MM-DD.`
+  return isoDateFieldError(value) ?? undefined
 }
 
-const optionalDateError = (value: string, label: string): string | undefined =>
-  value.trim() && !isValidIsoDate(value) ? `${label} must use YYYY-MM-DD.` : undefined
+const optionalDateError = (value: string): string | undefined =>
+  value.trim() ? (isoDateFieldError(value) ?? undefined) : undefined
 
 const requiredTextError = (value: string, label: string, maxLength: number): string | undefined => {
   const normalized = value.trim()
@@ -239,40 +229,34 @@ const clientLocationError = (
 
 const isPopulatedIsoDate = (value: string): boolean => !!value.trim() && isValidIsoDate(value)
 
+const tabFieldsHaveError = (fields: readonly FormField[], errors: FormErrors): boolean =>
+  fields.some((field) => !!errors[field])
+
 const firstInvalidTabIndex = (errors: FormErrors): number => {
-  const hasError = (fields: readonly FormField[]) => fields.some((field) => !!errors[field])
-  if (
-    hasError([
-      'permitSubmitDate',
-      'permitIssueDate',
-      'permitExpiryDate',
-      'oicPermitTotalPieces',
-      'oicPermitTotalVolume',
-      'orgUnitNumber',
-      'permitRemarks',
-    ])
-  ) {
-    return 0
-  }
-  if (
-    hasError([
-      'ownerClientNumber',
-      'ownerClientLocation',
-      'agentClientNumber',
-      'agentClientLocation',
-    ])
-  ) {
-    return 1
-  }
-  return 2
+  const index = FORM_TABS.findIndex(({ fields }) => tabFieldsHaveError(fields, errors))
+  return index === -1 ? 2 : index
 }
 
-const validateForm = (form: BlanketOicPermitForm, agentUsed: boolean): FormErrors => {
-  const ownerClientError = clientNumberError(form.ownerClientNumber, 'Client')
+// INTENTIONAL_LEGACY_DIVERGENCE(SUBMITTER_BOIC_PERMIT_CLIENTS): a Provincial Submitter's own
+// client (`submitterClientNumber`) must be the owner, or the agent when they act as one.
+const validateForm = (
+  form: BlanketOicPermitForm,
+  agentUsed: boolean,
+  submitterClientNumber: string,
+): FormErrors => {
+  const submitterIsAgent =
+    agentUsed && clientLookupNumbersMatch(form.agentClientNumber, submitterClientNumber)
+  const ownerClientError =
+    clientNumberError(form.ownerClientNumber, 'Client') ||
+    (submitterClientNumber &&
+    !submitterIsAgent &&
+    !clientLookupNumbersMatch(form.ownerClientNumber, submitterClientNumber)
+      ? SUBMITTER_CLIENT_REQUIRED_MESSAGE
+      : undefined)
   const errors: FormErrors = {
     permitSubmitDate: requiredDateError(form.permitSubmitDate, 'Submit date'),
-    permitIssueDate: optionalDateError(form.permitIssueDate, 'Issued date'),
-    permitExpiryDate: optionalDateError(form.permitExpiryDate, 'Expiry date'),
+    permitIssueDate: optionalDateError(form.permitIssueDate),
+    permitExpiryDate: optionalDateError(form.permitExpiryDate),
     orgUnitNumber: form.orgUnitNumber.trim() ? undefined : 'Region is required.',
     ownerClientNumber: ownerClientError,
     ownerClientLocation: clientLocationError(
@@ -368,12 +352,18 @@ const BlanketOicPermitCreateForm = ({
   onUnknownOutcome,
   layout = defaultLayout,
 }: BlanketOicPermitCreateFormProps) => {
-  const { canPerform } = useAuth()
+  const { canPerform, capabilities } = useAuth()
   const canReviewPermits = canPerform('/permitsReview')
+  // A Provincial Submitter's own client starts as the owner and must stay the owner or the agent.
+  const submitterClientNumber = hasProvincialSubmitterRole(capabilities.roles)
+    ? (capabilities.forestClientNumber?.trim() ?? '')
+    : ''
   const location = useLocation()
   const exemptionReturnTo = readDetailReturnTo(location.state)
   const regionContext = resolveBlanketOicRegionContext(regionOptions, defaultRegionNumbers)
-  const [form, setForm] = useState(() => initialForm(regionContext.defaultRegionNumber))
+  const [form, setForm] = useState(() =>
+    initialForm(regionContext.defaultRegionNumber, submitterClientNumber),
+  )
   const [agentUsed, setAgentUsed] = useState(false)
   const draftBaselineRef = useRef<BlanketOicPermitDraft>({ form, agentUsed: false })
   const formEditedRef = useRef(false)
@@ -411,27 +401,26 @@ const BlanketOicPermitCreateForm = ({
   const ownerPendingLookupRef = useRef<PendingClientLookup | null>(null)
   const agentPendingLookupRef = useRef<PendingClientLookup | null>(null)
   currentFormRef.current = form
-  const formErrors = validateForm(form, agentUsed)
+  const formErrors = validateForm(form, agentUsed, submitterClientNumber)
   const invalidTabLabels = showValidationErrors
-    ? FORM_TABS.filter(({ requiredFields }) =>
-        requiredFields.some((field) => formErrors[field]),
-      ).map(({ label }) => label)
+    ? FORM_TABS.filter(({ fields }) => tabFieldsHaveError(fields, formErrors)).map(
+        ({ label }) => label,
+      )
     : []
   const invalidTabsText =
     invalidTabLabels.length > 1
       ? `${invalidTabLabels.slice(0, -1).join(', ')} and ${invalidTabLabels.at(-1)}`
       : invalidTabLabels[0]
+  const invalidTabsMessage =
+    invalidTabLabels.length === 0
+      ? ''
+      : invalidTabLabels.length === 1
+        ? `Complete the required fields in the ${invalidTabsText} tab.`
+        : `Complete the required fields in ${invalidTabsText} tabs.`
+  // Field errors show on their fields; the summary lists only problems that have no field.
   const errorMessages = Array.from(
     new Set(
       [
-        ...(showValidationErrors
-          ? [
-              formErrors.permitSubmitDate,
-              formErrors.permitIssueDate,
-              formErrors.permitExpiryDate,
-              formErrors.permitRemarks,
-            ]
-          : []),
         shippingReferencesError,
         regionContext.errorMessage,
         clientLookupFailures.size > 0 ? CLIENT_LOOKUP_UNAVAILABLE_MESSAGE : '',
@@ -442,6 +431,9 @@ const BlanketOicPermitCreateForm = ({
       ].filter(Boolean),
     ),
   )
+  const [summaryMessage, ...listedErrorMessages] = invalidTabsMessage
+    ? [invalidTabsMessage, ...errorMessages]
+    : errorMessages
   const isDraftDirty = formEdited && !formValuesEqual({ form, agentUsed }, draftBaselineRef.current)
 
   // A failed save shows the first tab with an error and moves focus to the error summary, so
@@ -501,6 +493,14 @@ const BlanketOicPermitCreateForm = ({
     markFormEdited()
     setForm((current) => ({ ...current, [field]: value }))
   }
+
+  // A client's lookups name the client in the other slot, which lets a Provincial Submitter look
+  // up the owner they act for, or the agent they name.
+  const counterpartyClientNumber = (kind: ClientKind): string =>
+    (kind === 'owner'
+      ? currentFormRef.current.agentClientNumber
+      : currentFormRef.current.ownerClientNumber
+    ).trim()
 
   const updateClientLookupFailure = (kind: ClientKind, failed: boolean) => {
     setClientLookupFailures((current) => {
@@ -566,7 +566,8 @@ const BlanketOicPermitCreateForm = ({
 
     setLoading(true)
     try {
-      const locations = await fetchExemptionClientLocations(clientNumber)
+      const counterparty = counterpartyClientNumber(kind)
+      const locations = await fetchApplicationClientLocations(clientNumber, kind, '', counterparty)
       if (!isLatestRequest()) {
         return currentSelection()
       }
@@ -576,7 +577,9 @@ const BlanketOicPermitCreateForm = ({
         currentSelection().locationCode,
       )
       const clientData = selectedLocation
-        ? await fetchExemptionClientData(clientNumber, selectedLocation)
+        ? await fetchApplicationClientData(clientNumber, selectedLocation, {
+            counterpartyClientNumber: counterparty,
+          })
         : null
       if (!isLatestRequest()) {
         return currentSelection()
@@ -645,6 +648,29 @@ const BlanketOicPermitCreateForm = ({
     return promise
   }
 
+  // The submitter's own client starts as the owner, so its locations load with the page. The
+  // location chosen for it belongs to the initial draft, even if the user started editing first.
+  const prefillSubmitterOwner = useEffectEvent(() => {
+    if (!submitterClientNumber) return
+    void requestClientLocations('owner', submitterClientNumber).then(
+      ({ clientNumber, locationCode }) => {
+        const baseline = draftBaselineRef.current
+        if (
+          clientNumber !== submitterClientNumber ||
+          baseline.form.ownerClientNumber !== submitterClientNumber ||
+          baseline.form.ownerClientLocation
+        ) {
+          return
+        }
+        draftBaselineRef.current = {
+          ...baseline,
+          form: { ...baseline.form, ownerClientLocation: locationCode },
+        }
+      },
+    )
+  })
+  useEffect(() => prefillSubmitterOwner(), [])
+
   const selectClient = (kind: ClientKind, clientNumber: string): void => {
     const requestRef = kind === 'owner' ? ownerLookupRequestRef : agentLookupRequestRef
     const pendingLookupRef = kind === 'owner' ? ownerPendingLookupRef : agentPendingLookupRef
@@ -706,7 +732,9 @@ const BlanketOicPermitCreateForm = ({
       currentFormRef.current[locationField] === locationCode
     setLoading(true)
     try {
-      const clientData = await fetchExemptionClientData(clientNumber, locationCode)
+      const clientData = await fetchApplicationClientData(clientNumber, locationCode, {
+        counterpartyClientNumber: counterpartyClientNumber(kind),
+      })
       if (isLatestRequest()) setClientData(clientData)
     } catch (error) {
       if (isLatestRequest()) {
@@ -782,7 +810,7 @@ const BlanketOicPermitCreateForm = ({
         agentClientNumber,
         agentClientLocation: agentLocation,
       }
-      const errors = validateForm(requestForm, agentUsed)
+      const errors = validateForm(requestForm, agentUsed, submitterClientNumber)
       if (Object.keys(errors).length > 0) {
         setForm(requestForm)
         setSelectedTabIndex(firstInvalidTabIndex(errors))
@@ -884,25 +912,19 @@ const BlanketOicPermitCreateForm = ({
       aria-label="Blanket OIC permit details"
       className="boic-permit-create-form"
     >
-      {invalidTabLabels.length > 0 || errorMessages.length > 0 ? (
+      {summaryMessage ? (
         <div ref={errorSummaryRef} tabIndex={-1} role="group" aria-label="Permit needs attention">
           <InlineNotification
             kind="error"
             role="alert"
             title={invalidTabLabels.length > 0 ? 'Cannot save yet.' : 'Permit needs attention'}
-            subtitle={
-              invalidTabLabels.length > 0
-                ? invalidTabLabels.length === 1
-                  ? `Complete the required fields in the ${invalidTabsText} tab.`
-                  : `Complete the required fields in ${invalidTabsText} tabs.`
-                : undefined
-            }
+            subtitle={summaryMessage}
             lowContrast
             hideCloseButton
           >
-            {errorMessages.length > 0 && (
-              <ul>
-                {errorMessages.map((message) => (
+            {listedErrorMessages.length > 0 && (
+              <ul className="boic-permit-error-list">
+                {listedErrorMessages.map((message) => (
                   <li key={message}>{message}</li>
                 ))}
               </ul>
@@ -927,9 +949,9 @@ const BlanketOicPermitCreateForm = ({
           contained
           className="application-tabs__list application-detail-tab-list"
         >
-          {FORM_TABS.map(({ label, icon, requiredFields }) => {
+          {FORM_TABS.map(({ label, icon, fields }) => {
             const outstanding = showValidationErrors
-              ? requiredFields.filter((field) => !!formErrors[field]).length
+              ? fields.filter((field: FormField) => !!formErrors[field]).length
               : 0
             return (
               <Tab
@@ -1134,6 +1156,7 @@ const BlanketOicPermitCreateForm = ({
                           labelText={requiredLabel('Client')}
                           helperText="Enter name, acronym, or client number (min. 3 characters)"
                           value={form.ownerClientNumber}
+                          selectedClientName={ownerClientData?.companyName}
                           resetKey={clientSearchResetKey}
                           counterpartyClientNumber={form.agentClientNumber}
                           required
@@ -1209,6 +1232,11 @@ const BlanketOicPermitCreateForm = ({
                     markFormEdited()
                     const enabled = Boolean(checked)
                     setAgentUsed(enabled)
+                    // A submitter acting as agent starts as the agent, so the owner they act for
+                    // can be found.
+                    if (enabled && submitterClientNumber && !form.agentClientNumber.trim()) {
+                      selectClient('agent', submitterClientNumber)
+                    }
                     if (!enabled) {
                       agentLookupRequestRef.current += 1
                       setAgentLookupLoading(false)
@@ -1242,6 +1270,7 @@ const BlanketOicPermitCreateForm = ({
                               labelText={requiredLabel('Agent client')}
                               helperText="Enter name, acronym, or client number (min. 3 characters)"
                               value={form.agentClientNumber}
+                              selectedClientName={agentClientData?.companyName}
                               resetKey={clientSearchResetKey}
                               counterpartyClientNumber={form.ownerClientNumber}
                               required

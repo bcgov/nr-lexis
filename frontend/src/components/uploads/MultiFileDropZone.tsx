@@ -140,6 +140,8 @@ function MultiFileDropZone({
         tabIndex={disabled ? -1 : 0}
         aria-disabled={disabled}
         aria-label={`Choose ${multiple ? 'files' : 'file'} for ${title}`}
+        // The drop zone takes focus for the file input, so it's described by the input's error.
+        aria-describedby={invalidText ? `${inputId}-error` : undefined}
         onClick={openFileDialog}
         onKeyDown={onDropZoneKeyDown}
         onDragEnter={(event) => {

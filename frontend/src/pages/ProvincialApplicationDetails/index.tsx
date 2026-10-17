@@ -145,7 +145,6 @@ import {
   productTypeRequiresGrowthType,
   productTypeRequiresLogDetails,
   resolveClientLocationCode,
-  toSearchOption,
 } from '@/pages/shared/application-form-utils'
 import {
   atMostTwoDecimalFieldError,
@@ -178,6 +177,8 @@ import { AppNotification } from '../../components/AppNotification'
 import ProvincialApplicationItemsPanel from './ApplicationItemsPanel'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import { displayVolume, formatVolumeInput } from '@/utils/volume'
+
+import './ProvincialApplicationDetails.scss'
 
 /** The ISO date the given number of days before an ISO date. */
 const isoDateDaysBefore = (isoDate: string, days: number): string => {
@@ -1783,6 +1784,7 @@ const ProvincialApplicationDetailsPage = () => {
       ),
       applicationVolume: firstValidationError(
         () => requiredFieldError(summaryForm.applicationVolume, 'Application volume'),
+        () => greaterThanFieldError(summaryForm.applicationVolume, 'Application volume', 0),
         () => positiveNumericFieldError(summaryForm.applicationVolume),
         () =>
           maxNumericValueFieldError(
@@ -1931,7 +1933,11 @@ const ProvincialApplicationDetailsPage = () => {
   const selectedApplicationSpeciesOptions = applicationSpeciesMultiSelectOptions.filter((option) =>
     summarySpeciesCodes.includes(option.id),
   )
-  const applicationEndUseSelectOptions = applicationEndUseOptions.map(toSearchOption)
+  // End uses are chosen by name, as the saved scale details show them.
+  const applicationEndUseSelectOptions = applicationEndUseOptions.map((option) => ({
+    value: option.code,
+    label: option.description || option.code,
+  }))
   const endUsePlaceholder =
     summarySpeciesCodes.length === 0
       ? 'Add species first'
@@ -3810,7 +3816,7 @@ const ProvincialApplicationDetailsPage = () => {
   const applicationScaleForm = summaryForm && (
     <RecordFieldGrid editing>
       <RecordFieldRow>
-        <RecordFieldCell>
+        <RecordFieldCell span="full">
           <TextArea
             className="application-scale-form__location"
             id="applicationSummaryProductLocation"
@@ -3885,10 +3891,20 @@ const ProvincialApplicationDetailsPage = () => {
             itemToString={(item) => item?.text ?? ''}
             selectedItems={selectedApplicationSpeciesOptions}
             placeholder="Select species"
-            inputProps={{ 'aria-required': true }}
+            inputProps={{
+              'aria-required': true,
+              // Carbon shows the error under the list without linking it.
+              ...(summarySpeciesCodesError &&
+                applicationSpeciesMultiSelectOptions.length > 0 && {
+                  'aria-invalid': true,
+                  'aria-describedby': 'applicationSummarySpecies-error',
+                }),
+            }}
             disabled={applicationSpeciesMultiSelectOptions.length === 0}
             invalid={Boolean(summarySpeciesCodesError)}
-            invalidText={summarySpeciesCodesError}
+            invalidText={
+              <span id="applicationSummarySpecies-error">{summarySpeciesCodesError}</span>
+            }
             onChange={({ selectedItems }) => {
               setSummaryForm((current) =>
                 current
@@ -4308,6 +4324,8 @@ const ProvincialApplicationDetailsPage = () => {
           <ActionResultNotification
             result={pageActionResult}
             onClose={() => setActionResult(null)}
+            // The warning stops the save, so it takes focus from the Save button it disabled.
+            focusOnReveal={pageActionResult.volumeWarning}
           />
         )}
 
@@ -4461,7 +4479,6 @@ const ProvincialApplicationDetailsPage = () => {
                                       )}
                                       invalidText={visibleSummaryFieldError('ownerContactName')}
                                       disabled={isSavingSummary}
-                                      placeholder="Enter contact name"
                                       onChange={(event) =>
                                         onSummaryFormChange('ownerContactName', event.target.value)
                                       }
@@ -4566,7 +4583,6 @@ const ProvincialApplicationDetailsPage = () => {
                                           )}
                                           invalidText={visibleSummaryFieldError('agentContactName')}
                                           disabled={isSavingSummary}
-                                          placeholder="Enter contact name"
                                           onChange={(event) =>
                                             onSummaryFormChange(
                                               'agentContactName',
@@ -5213,13 +5229,25 @@ const ProvincialApplicationDetailsPage = () => {
                           ) : (
                             <>
                               <TableFrame ariaLabel="Application remarks">
-                                <Table size="md" useZebraStyles>
+                                <Table
+                                  size="md"
+                                  useZebraStyles
+                                  className="application-remarks-table"
+                                >
                                   <TableHead>
                                     <TableRow>
-                                      <TableHeader>Date and time</TableHeader>
-                                      <TableHeader>User</TableHeader>
+                                      <TableHeader className="application-remarks-table__date">
+                                        Date and time
+                                      </TableHeader>
+                                      <TableHeader className="application-remarks-table__user">
+                                        User
+                                      </TableHeader>
                                       <TableHeader>Remark</TableHeader>
-                                      {canEditSavedRemarks && <TableHeader>Actions</TableHeader>}
+                                      {canEditSavedRemarks && (
+                                        <TableHeader className="application-remarks-table__actions">
+                                          Actions
+                                        </TableHeader>
+                                      )}
                                     </TableRow>
                                   </TableHead>
                                   <TableBody>

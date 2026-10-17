@@ -64,7 +64,7 @@ class FederalApplicationRepositoryTest {
         .contains("v.ORG_UNIT_NO IN (?, ?)")
         .contains("v.OWNER_CLIENT_NUMBER LIKE '%' || ? || '%'")
         .contains("v.AGENT_CLIENT_NUMBER LIKE '%' || ? || '%'")
-        .contains("ORDER BY v.APPLICATION_NUMBER DESC")
+        .contains("ORDER BY v.RECEIVED_DATE DESC NULLS LAST, v.APPLICATION_NUMBER DESC")
         .doesNotContain("EEA.")
         .doesNotContain(":1");
     assertThat(repository.pageSelectSql())
@@ -105,12 +105,13 @@ class FederalApplicationRepositoryTest {
   }
 
   @Test
-  void searchShouldUseTheWhitelistedApplicationNumberSort() {
+  void searchShouldListTheMostRecentlyReceivedApplicationsFirst() {
     TestFederalApplicationRepository repository = new TestFederalApplicationRepository();
 
     repository.search(emptyCriteria(0, 10));
 
-    assertThat(repository.whereSql()).endsWith("ORDER BY v.APPLICATION_NUMBER DESC");
+    assertThat(repository.whereSql())
+        .endsWith(" ORDER BY v.RECEIVED_DATE DESC NULLS LAST, v.APPLICATION_NUMBER DESC");
   }
 
   @Test

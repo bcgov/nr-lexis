@@ -15,6 +15,7 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
@@ -43,21 +44,25 @@ import org.springframework.web.bind.annotation.RestController;
 public class ExemptionController {
 
   private static final Logger LOGGER = LoggerFactory.getLogger(ExemptionController.class);
+  private static final String ACTION_APPROVE_EXEMPTION = "approveExemption";
 
   private final ObjectProvider<ExemptionService> serviceProvider;
   private final ApplicationEditLockService editLockService;
   private final LexisSessionService sessionService;
   private final ProvincialAuthorizationService provincialAuthorizationService;
+  private final LexisAuthorizationService authorizationService;
 
   public ExemptionController(
       ObjectProvider<ExemptionService> serviceProvider,
       ApplicationEditLockService editLockService,
       LexisSessionService sessionService,
-      ProvincialAuthorizationService provincialAuthorizationService) {
+      ProvincialAuthorizationService provincialAuthorizationService,
+      LexisAuthorizationService authorizationService) {
     this.serviceProvider = serviceProvider;
     this.editLockService = editLockService;
     this.sessionService = sessionService;
     this.provincialAuthorizationService = provincialAuthorizationService;
+    this.authorizationService = authorizationService;
   }
 
   @GetMapping("/search/options")
@@ -177,7 +182,7 @@ public class ExemptionController {
       throw new DataAccessResourceFailureException(
           "Oracle exemption search returned no response");
     }
-    return ResponseEntity.ok(withSearchLocks(response));
+    return ResponseEntity.ok(withSearchRowStates(response, authentication));
   }
 
   @GetMapping("/search/count")
@@ -376,23 +381,37 @@ public class ExemptionController {
         agentClientNumber);
   }
 
-  private ExemptionSearchResponseDto withSearchLocks(ExemptionSearchResponseDto response) {
+  private ExemptionSearchResponseDto withSearchRowStates(
+      ExemptionSearchResponseDto response, Authentication authentication) {
     if (response.results() == null || response.results().isEmpty()) {
       return response;
     }
 
+    boolean canApprove =
+        authorizationService.canPerformAction(
+            sessionService.parseRolesFromPrincipal(authentication), ACTION_APPROVE_EXEMPTION);
     List<ExemptionSearchResultDto> results =
-        response.results().stream().map(this::withSearchLock).toList();
+        response.results().stream()
+            .map(row -> withSearchRowState(row, canApprove, authentication))
+            .toList();
     return new ExemptionSearchResponseDto(
         results, response.total(), response.page(), response.size());
   }
 
-  private ExemptionSearchResultDto withSearchLock(ExemptionSearchResultDto row) {
+  private ExemptionSearchResultDto withSearchRowState(
+      ExemptionSearchResultDto row, boolean canApprove, Authentication authentication) {
     // Legacy approval search treated an exemption as locked even when held by the current session.
     ApplicationEditLockDto lock =
         editLockService.snapshotExemption(row.exemptionNumber(), null, false);
     boolean locked = lock == null || lock.locked();
-    if (row.locked() == locked) {
+    // Approval needs every region the exemption reaches, as the approval request itself checks.
+    boolean outsideApprovalRegions =
+        canApprove
+            && !locked
+            && isApprovalCandidate(row)
+            && !provincialAuthorizationService.canApproveExemption(
+                authentication, row.exemptionNumber(), List.of(), List.of());
+    if (row.locked() == locked && row.outsideApprovalRegions() == outsideApprovalRegions) {
       return row;
     }
     return new ExemptionSearchResultDto(
@@ -408,6 +427,17 @@ public class ExemptionController {
         row.region(),
         row.approvedVolume(),
         row.balanceRemaining(),
-        locked);
+        locked,
+        outsideApprovalRegions);
+  }
+
+  // INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_APPROVAL_MINISTERIAL_ONLY)
+  private static boolean isApprovalCandidate(ExemptionSearchResultDto row) {
+    return "M".equalsIgnoreCase(trimToEmpty(row.exemptionType()))
+        && "NEW".equalsIgnoreCase(trimToEmpty(row.status()));
+  }
+
+  private static String trimToEmpty(String value) {
+    return value == null ? "" : value.trim();
   }
 }

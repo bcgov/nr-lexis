@@ -3,8 +3,10 @@ package ca.bc.gov.mof.lexis.controller;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.nullable;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -18,6 +20,7 @@ import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResponseDto;
 import ca.bc.gov.mof.lexis.dto.exemption.ExemptionSearchResultDto;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
+import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import java.time.LocalDate;
@@ -54,6 +57,7 @@ class ExemptionControllerTest {
 
   @Mock private Authentication authentication;
   @Mock private ProvincialAuthorizationService provincialAuthorizationService;
+  @Mock private LexisAuthorizationService authorizationService;
 
   @InjectMocks private ExemptionController controller;
 
@@ -492,6 +496,102 @@ class ExemptionControllerTest {
         .singleElement()
         .extracting(ExemptionSearchResultDto::locked)
         .isEqualTo(false);
+  }
+
+  @Test
+  void searchShouldMarkNewMinisterialRowsOutsideTheApproverRegions() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(new ExemptionSearchResponseDto(List.of(searchRow(false)), 1, 0, 25));
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+        .thenReturn(true);
+    when(provincialAuthorizationService.canApproveExemption(
+            authentication, "EX-205", List.of(), List.of()))
+        .thenReturn(false);
+
+    ResponseEntity<ExemptionSearchResponseDto> response = searchDefault();
+
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().results())
+        .singleElement()
+        .satisfies(
+            row -> {
+              assertThat(row.outsideApprovalRegions()).isTrue();
+              assertThat(row.locked()).isFalse();
+            });
+  }
+
+  @Test
+  void searchShouldLeaveRowsWithinTheApproverRegionsSelectable() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(new ExemptionSearchResponseDto(List.of(searchRow(false)), 1, 0, 25));
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+        .thenReturn(true);
+    when(provincialAuthorizationService.canApproveExemption(
+            authentication, "EX-205", List.of(), List.of()))
+        .thenReturn(true);
+
+    ResponseEntity<ExemptionSearchResponseDto> response = searchDefault();
+
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().results())
+        .singleElement()
+        .extracting(ExemptionSearchResultDto::outsideApprovalRegions)
+        .isEqualTo(false);
+  }
+
+  @Test
+  void searchShouldNotCheckApprovalRegionsForUsersWhoCannotApproveOrRowsTheyCannotSelect() {
+    ExemptionSearchResultDto approved =
+        new ExemptionSearchResultDto(
+            "EX-206", "M", "APP", null, null, null, null, null, null, "R2", 1.0, 1.0, false);
+    ExemptionSearchResultDto oic =
+        new ExemptionSearchResultDto(
+            "EX-207", "O", "NEW", null, null, null, null, null, null, "R2", 1.0, 1.0, false);
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(new ExemptionSearchResponseDto(List.of(approved, oic), 2, 0, 25));
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_EXEMPTION_APPROVER"), "approveExemption"))
+        .thenReturn(true);
+    lenient()
+        .when(editLockService.snapshotExemption(any(), nullable(String.class), anyBoolean()))
+        .thenReturn(new ApplicationEditLockDto(false, false, null, null, null));
+
+    ResponseEntity<ExemptionSearchResponseDto> response = searchDefault();
+
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().results())
+        .extracting(ExemptionSearchResultDto::outsideApprovalRegions)
+        .containsExactly(false, false);
+    verify(provincialAuthorizationService, never())
+        .canApproveExemption(any(), any(), any(), any());
+  }
+
+  @Test
+  void searchShouldNotCheckApprovalRegionsWithoutTheApprovalAction() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.search(any(ExemptionSearchCriteria.class)))
+        .thenReturn(new ExemptionSearchResponseDto(List.of(searchRow(false)), 1, 0, 25));
+
+    ResponseEntity<ExemptionSearchResponseDto> response = searchDefault();
+
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().results())
+        .singleElement()
+        .extracting(ExemptionSearchResultDto::outsideApprovalRegions)
+        .isEqualTo(false);
+    verify(provincialAuthorizationService, never())
+        .canApproveExemption(any(), any(), any(), any());
   }
 
   @Test

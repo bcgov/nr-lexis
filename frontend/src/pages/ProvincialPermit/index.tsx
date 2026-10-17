@@ -120,7 +120,6 @@ const DEFAULT_SORT_DIRECTION: 'asc' | 'desc' = 'desc'
 const SORT_FIELD_OPTIONS = SORT_COLUMNS.map(
   (column) => column.id,
 ) as ProvincialPermitSearchSortField[]
-const COLUMN_HEADERS = SORT_COLUMNS.map((column) => column.label)
 
 const buildSearchParams = (
   filters: ProvincialPermitSearchFilters,
@@ -501,7 +500,11 @@ const ProvincialPermitPage = () => {
   return (
     <Grid fullWidth className="default-grid fullbleed-table-page provincial-permit-search-page">
       <Column sm={4} md={8} lg={16}>
-        <PageHeader title="Permit search" subtitle="Find permits and check their status" />
+        <PageHeader
+          title="Permit search"
+          subtitle="Find permits and check their status"
+          focusTitle="whenFocusLost"
+        />
       </Column>
 
       {optionsUnavailable && <AuthoritativeOptionsUnavailableNotification />}
@@ -565,6 +568,7 @@ const ProvincialPermitPage = () => {
                   labelText="Permit status"
                   value={filters.permitStatus}
                   placeholder="All"
+                  allOptionLabel="All"
                   options={permitStatusOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('permitStatus', value)}
@@ -620,7 +624,7 @@ const ProvincialPermitPage = () => {
             resultName="permit"
             loading={resultsLoading}
             loadingDescription="Searching"
-            columnHeaders={COLUMN_HEADERS}
+            columnCount={SORT_COLUMNS.length}
             totalItems={
               errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
@@ -659,7 +663,8 @@ const ProvincialPermitPage = () => {
                     ))}
                   </TableRow>
                 </TableHead>
-                <TableBody>
+                {/* The toolbar announces the result count, so the rows aren't read out again. */}
+                <TableBody aria-live="off">
                   {results.content.map((row) => (
                     <TableRow key={row.permitNumber}>
                       <TableCell>

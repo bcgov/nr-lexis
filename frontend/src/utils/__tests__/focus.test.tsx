@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import { Dropdown, TextInput } from '@carbon/react'
 import { describe, expect, it } from 'vitest'
+import IsoDateRangePicker from '@/components/IsoDateRangePicker'
 import { focusFirstEditableField, focusFirstInvalidField } from '@/utils/focus'
 
 describe('focusFirstEditableField', () => {
@@ -74,6 +75,26 @@ describe('focusFirstInvalidField', () => {
     focusFirstInvalidField(container)
 
     expect(screen.getByRole('textbox', { name: 'Volume' })).toHaveFocus()
+  })
+
+  it('focuses an invalid date without opening its calendar over the error', () => {
+    const { container } = render(
+      <IsoDateRangePicker
+        fromId="listingFromDate"
+        toId="listingToDate"
+        fromLabel="List date from"
+        toLabel="List date to"
+        fromValue="2026-02-30"
+        toValue=""
+        onChange={() => {}}
+      />,
+    )
+
+    focusFirstInvalidField(container)
+
+    expect(screen.getByRole('textbox', { name: 'List date from' })).toHaveFocus()
+    expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+    expect(screen.getByText('Date must be YYYY-MM-DD')).toBeVisible()
   })
 
   it('reports when nothing is invalid', () => {

@@ -12,7 +12,6 @@ import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchCriteria;
 import ca.bc.gov.mof.lexis.dto.federal.FederalApplicationSearchResultDto;
 import ca.bc.gov.mof.lexis.repository.oracle.OracleRepositorySupport;
 import java.util.List;
-import java.util.Map;
 import java.util.Optional;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
@@ -64,8 +63,9 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
       FROM
       """
           + FEDERAL_APPLICATION_SEARCH_SOURCE;
-  private static final Map<String, String> SEARCH_SORT_COLUMNS =
-      Map.of("applicationNumber", "v.APPLICATION_NUMBER");
+  // INTENTIONAL_LEGACY_DIVERGENCE(FEDERAL_SEARCH_RECEIVED_DATE_ORDER)
+  private static final String SEARCH_ORDER =
+      " ORDER BY v.RECEIVED_DATE DESC NULLS LAST, v.APPLICATION_NUMBER DESC";
   private static final String FIND_APPLICATION_BY_NUMBER =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPLICATION_BY_NUMBER(?,?)";
   private static final String FIND_PACKAGES_BY_APPLICATION =
@@ -162,14 +162,7 @@ public class FederalApplicationRepository extends OracleRepositorySupport {
 
     where.addLike("v.AGENT_CLIENT_NUMBER", criteria.agentClientNumber());
 
-    String orderBy =
-        sanitizedSort(
-            null,
-            SEARCH_SORT_COLUMNS,
-            "applicationNumber",
-            "DESC",
-            "applicationNumber");
-    return where.build(includeOrderBy ? orderBy : "");
+    return where.build(includeOrderBy ? SEARCH_ORDER : "");
   }
 
   public Optional<FederalApplicationDetailDto> findByApplicationNumber(Long applicationNumber) {

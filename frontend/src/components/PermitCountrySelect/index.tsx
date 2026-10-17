@@ -110,6 +110,8 @@ export default function PermitCountrySelect({
       }
       placeholder={placeholder}
       aria-required={required || undefined}
+      // Carbon links the error text but doesn't mark the input invalid.
+      aria-invalid={invalid && !disabled ? true : undefined}
       disabled={disabled}
       invalid={invalid}
       invalidText={fieldErrorText(invalidText)}
