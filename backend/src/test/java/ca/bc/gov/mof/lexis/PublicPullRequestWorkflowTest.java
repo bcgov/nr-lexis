@@ -31,7 +31,7 @@ class PublicPullRequestWorkflowTest {
     assertThat(workflowJob(workflow, "frontend-tests", "deploys"))
         .doesNotContain(SAME_REPOSITORY_CONDITION);
     assertThat(workflowJob(workflow, "results", null))
-        .contains("contains(needs.*.result, 'failure')")
+        .contains("uses: bcgov/actions/workflow-results@")
         .doesNotContain("contains(needs.*.result, 'skipped')");
 
     String validationWorkflow = read(".github/workflows/pr-validate.yml");

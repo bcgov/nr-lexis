@@ -61,7 +61,7 @@ class DeployedSmokeWorkflowTest {
     assertThat(pullRequestWorkflow).contains("uses: ./.github/workflows/reusable-tests.yml");
     assertThat(pullRequestResults)
         .contains("name: PR Results", "tests,", "if: always()")
-        .contains("contains(needs.*.result, 'failure')", "exit 1");
+        .contains("uses: bcgov/actions/workflow-results@");
     assertThat(mergeWorkflow).contains("uses: ./.github/workflows/reusable-tests.yml");
     assertThat(releaseCandidate)
         .contains("needs: [init, tests]", "CAPTURE_ATTEMPT: ${{ needs.init.outputs.capture_attempt }}")
