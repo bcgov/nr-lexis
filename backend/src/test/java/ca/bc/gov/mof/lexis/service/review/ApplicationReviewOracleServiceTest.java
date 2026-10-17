@@ -661,6 +661,108 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void sendStatusEmailShouldSendOneEmailToTheOwnerAndAgentAddresses() {
+    AuthoritativeApplicantStatusContext applicant =
+        new AuthoritativeApplicantStatusContext("REJ", "A", "00077882", "00", 1835L);
+    when(repository.findAuthoritativeApplicantStatusContext(1000456L))
+        .thenReturn(Optional.of(applicant));
+    when(repository.findLatestAuthoritativeRemark(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ReviewRemarkRow(
+                    77L, 1000456L, "Missing docs", "idir\\reviewer", Instant.EPOCH)));
+    when(repository.sendStatusEmail(1000456L, "REJ", "owner@example.test", "Missing docs"))
+        .thenReturn(true);
+    when(emailSender.sendStatusEmail(
+            1000456L,
+            "REJ",
+            List.of("owner@example.test", "agent@example.test"),
+            "Missing docs",
+            1835L))
+        .thenReturn(true);
+
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto(
+                "REJ", "", "Missing docs", " owner@example.test ", "agent@example.test"));
+
+    assertThat(result.success()).isTrue();
+    verify(emailSender)
+        .sendStatusEmail(
+            1000456L,
+            "REJ",
+            List.of("owner@example.test", "agent@example.test"),
+            "Missing docs",
+            1835L);
+    verifyNoInteractions(clientEmailResolver);
+  }
+
+  @Test
+  void sendStatusEmailShouldSendOnceWhenTheOwnerAndAgentShareAnAddress() {
+    AuthoritativeApplicantStatusContext applicant =
+        new AuthoritativeApplicantStatusContext("WDN", "A", "00077882", "00", 1835L);
+    when(repository.findAuthoritativeApplicantStatusContext(1000456L))
+        .thenReturn(Optional.of(applicant));
+    when(repository.findLatestAuthoritativeRemark(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ReviewRemarkRow(77L, 1000456L, "Withdrawn", "idir\\reviewer", Instant.EPOCH)));
+    when(repository.sendStatusEmail(1000456L, "WDN", "shared@example.test", "Withdrawn"))
+        .thenReturn(true);
+    when(emailSender.sendStatusEmail(
+            1000456L, "WDN", List.of("shared@example.test"), "Withdrawn", 1835L))
+        .thenReturn(true);
+
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto(
+                "WDN", null, "Withdrawn", "shared@example.test", "Shared@Example.test"));
+
+    assertThat(result.success()).isTrue();
+    verify(emailSender)
+        .sendStatusEmail(1000456L, "WDN", List.of("shared@example.test"), "Withdrawn", 1835L);
+  }
+
+  @Test
+  void sendStatusEmailShouldRequireAnOwnerOrAgentAddressWhenEitherIsGiven() {
+    AuthoritativeApplicantStatusContext applicant =
+        new AuthoritativeApplicantStatusContext("REJ", "O", "00077881", "00", 1835L);
+    when(repository.findAuthoritativeApplicantStatusContext(1000456L))
+        .thenReturn(Optional.of(applicant));
+
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto("REJ", null, "Missing docs", " ", ""));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("At least one recipient email address is required.");
+    verifyNoInteractions(clientEmailResolver, emailSender);
+    verify(repository, org.mockito.Mockito.never()).sendStatusEmail(any(), any(), any(), any());
+  }
+
+  @Test
+  void sendStatusEmailShouldRejectAnInvalidOwnerOrAgentAddress() {
+    AuthoritativeApplicantStatusContext applicant =
+        new AuthoritativeApplicantStatusContext("REJ", "A", "00077882", "00", 1835L);
+    when(repository.findAuthoritativeApplicantStatusContext(1000456L))
+        .thenReturn(Optional.of(applicant));
+
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto(
+                "REJ", null, "Missing docs", "owner@example.test", "Agent <agent@example.test>"));
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message()).isEqualTo("A recipient email address is invalid.");
+    verifyNoInteractions(clientEmailResolver, emailSender);
+    verify(repository, org.mockito.Mockito.never()).sendStatusEmail(any(), any(), any(), any());
+  }
+
+  @Test
   void sendStatusEmailShouldNotSendWhenRepositoryCannotStageRequest() {
     AuthoritativeApplicantStatusContext applicant =
         new AuthoritativeApplicantStatusContext("REJ", "00077881", "00");

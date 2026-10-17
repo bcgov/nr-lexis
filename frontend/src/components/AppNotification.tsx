@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, type ReactNode } from 'react'
 import {
   ActionableNotification,
   FeatureFlags,
@@ -12,8 +12,10 @@ import {
 
 type AppNotificationProps = Omit<
   InlineNotificationProps,
-  'onClose' | 'onCloseButtonClick' | 'hideCloseButton'
+  'onClose' | 'onCloseButtonClick' | 'hideCloseButton' | 'title'
 > & {
+  /** Text, or content with a record link; content other than text needs a revealKey. */
+  title?: ReactNode
   onCloseButtonClick?: () => void
   /** Change for a new action attempt that produces the same feedback text. */
   revealKey?: unknown
@@ -37,6 +39,7 @@ export function AppNotification({
 }: AppNotificationProps) {
   const notificationRef = useRef<HTMLDivElement>(null)
   const isActionFeedback = Boolean(onCloseButtonClick)
+  const titleText = typeof title === 'string' ? title : undefined
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -76,11 +79,11 @@ export function AppNotification({
       }
     })
     return () => cancelAnimationFrame(frame)
-  }, [focusOnReveal, isActionFeedback, kind, revealKey, subtitle, title])
+  }, [focusOnReveal, isActionFeedback, kind, revealKey, subtitle, titleText])
 
   return (
     <div className="app-notification-container" ref={notificationRef}>
-      {children ? (
+      {children || (title != null && titleText === undefined) ? (
         // Carbon's inline notification rejects interactive content such as record links, so
         // Keep rich feedback as a status region without Carbon's automatic focus handling.
         <FeatureFlags enableFocusWrapWithoutSentinels>
@@ -101,8 +104,11 @@ export function AppNotification({
                 ? sanitizeNotificationText(subtitle, genericActionFailureMessage)
                 : subtitle
             }
+            // Carbon renders the title as given, so a title can carry a record link.
             title={
-              typeof title === 'string' ? sanitizeNotificationText(title, 'Notification') : title
+              (titleText === undefined
+                ? title
+                : sanitizeNotificationText(titleText, 'Notification')) as string
             }
           >
             {children}
@@ -125,7 +131,9 @@ export function AppNotification({
               : subtitle
           }
           title={
-            typeof title === 'string' ? sanitizeNotificationText(title, 'Notification') : title
+            titleText === undefined
+              ? undefined
+              : sanitizeNotificationText(titleText, 'Notification')
           }
         />
       )}

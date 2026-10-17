@@ -48,6 +48,15 @@ type ApplicationReviewStatusUpdateRequest = {
   clientEmailAddress: string
 }
 
+/**
+ * Owner and agent addresses send the email to each of them; without them it goes to
+ * clientEmailAddress, or to the applicant's email on file when that is blank.
+ */
+export type ApplicationReviewStatusEmailRequest = ApplicationReviewStatusUpdateRequest & {
+  ownerEmail?: string
+  agentEmail?: string
+}
+
 type ApplicationReviewStatusEmailResult = {
   success: boolean
   message: string
@@ -180,7 +189,7 @@ export const updateApplicationReviewStatus = async (
 
 export const sendApplicationReviewStatusEmail = async (
   applicationNumber: string,
-  payload: ApplicationReviewStatusUpdateRequest,
+  payload: ApplicationReviewStatusEmailRequest,
 ): Promise<ApplicationReviewStatusEmailResult> => {
   const response = await apiService
     .getAxiosInstance()

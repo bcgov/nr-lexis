@@ -1833,21 +1833,6 @@ test.describe('TEST IDIR admin regression', () => {
       await clearAll.hover()
       await expect(clearAll).toHaveCSS('background-color', 'rgb(51, 51, 51)')
       await expect(clearAll).toHaveCSS('color', 'rgb(255, 255, 255)')
-
-      const approveSelected = page.getByRole('button', {
-        name: 'Approve selected applications',
-      })
-      await expect(approveSelected).toBeDisabled()
-      const beforeHover = await approveSelected.evaluate((element) => {
-        const style = getComputedStyle(element)
-        return { backgroundColor: style.backgroundColor, color: style.color }
-      })
-      await approveSelected.hover({ force: true })
-      const afterHover = await approveSelected.evaluate((element) => {
-        const style = getComputedStyle(element)
-        return { backgroundColor: style.backgroundColor, color: style.color }
-      })
-      expect(afterHover).toEqual(beforeHover)
     } finally {
       if (!initiallyDark) {
         await themeSwitch.click()
@@ -2378,14 +2363,15 @@ test.describe('TEST IDIR admin regression', () => {
       /^Application review$/,
     )
 
-    const approveSelectedButton = page.getByRole('button', {
-      name: 'Approve selected applications',
-    })
-    await expect(approveSelectedButton).toBeVisible()
-    await expect(approveSelectedButton).toBeDisabled()
-    await expect(
-      page.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
-    ).toBeVisible()
+    const resultsTable = page.getByRole('region', { name: 'Search results table', exact: true })
+    await expect(resultsTable).toHaveAttribute('aria-busy', 'false', { timeout: 30_000 })
+    const selectAll = page.getByRole('checkbox', { name: 'Select all rows on this page' })
+    // Selecting changes nothing until Approve is confirmed; Cancel clears the selection.
+    await selectAll.check({ force: true })
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: /disapprove/i, disabled: false })).toHaveCount(0)
+    await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(page.getByRole('button', { name: 'Approve', exact: true })).toHaveCount(0)
 
     await expect(page.getByRole('button', { name: /reject selected/i })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /update selected/i })).toHaveCount(0)

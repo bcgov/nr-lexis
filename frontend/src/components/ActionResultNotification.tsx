@@ -1,6 +1,35 @@
+import { Fragment, type ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { AppNotification } from './AppNotification'
-import { actionResultTitle, type ActionResult } from '@/utils/action-result'
+import {
+  actionResultTitle,
+  type ActionResult,
+  type ActionResultRecord,
+} from '@/utils/action-result'
+
+const recordLink = ({ id, to, state }: ActionResultRecord): ReactNode =>
+  to ? (
+    <Link className="cds--link" to={to} state={state}>
+      {id}
+    </Link>
+  ) : (
+    id
+  )
+
+/** The title, with the identifier of the record it names linked to that record. */
+const resultTitle = (result: ActionResult): ReactNode => {
+  const title = actionResultTitle(result)
+  const record = result.titleRecord
+  const at = record?.to ? title.indexOf(record.id) : -1
+  if (!record || at < 0) return title
+  return (
+    <>
+      {title.slice(0, at)}
+      {recordLink(record)}
+      {title.slice(at + record.id.length)}
+    </>
+  )
+}
 
 type ActionResultNotificationProps = {
   result: ActionResult
@@ -18,40 +47,50 @@ export function ActionResultNotification({
   className,
   focusOnReveal = false,
 }: ActionResultNotificationProps) {
+  const records = result.records?.length ? (
+    <p className="action-result-notification__records">
+      {result.records.map((record, index) => (
+        <Fragment key={record.id}>
+          {index > 0 ? ', ' : null}
+          {recordLink(record)}
+        </Fragment>
+      ))}
+    </p>
+  ) : null
+  const items = result.items?.length ? (
+    <ul className="action-result-notification__items">
+      {result.items.map((item) => (
+        <li key={item.id}>
+          {recordLink(item)}
+          {item.text}
+          {item.details?.length ? (
+            <ul className="action-result-notification__details">
+              {[...new Set(item.details)].map((detail) => (
+                <li key={detail}>{detail}</li>
+              ))}
+            </ul>
+          ) : null}
+        </li>
+      ))}
+    </ul>
+  ) : null
   return (
     <AppNotification
       kind={result.kind}
-      title={actionResultTitle(result)}
+      title={resultTitle(result)}
       subtitle={result.message || undefined}
       className={className}
       lowContrast
       onCloseButtonClick={onClose}
       focusOnReveal={focusOnReveal}
-      revealKey={focusOnReveal ? result : undefined}
+      revealKey={focusOnReveal || result.titleRecord ? result : undefined}
     >
-      {result.items?.length ? (
-        <ul className="action-result-notification__items">
-          {result.items.map((item) => (
-            <li key={item.id}>
-              {item.to ? (
-                <Link className="cds--link" to={item.to} state={item.state}>
-                  {item.id}
-                </Link>
-              ) : (
-                item.id
-              )}
-              {item.text}
-              {item.details?.length ? (
-                <ul className="action-result-notification__details">
-                  {[...new Set(item.details)].map((detail) => (
-                    <li key={detail}>{detail}</li>
-                  ))}
-                </ul>
-              ) : null}
-            </li>
-          ))}
-        </ul>
-      ) : null}
+      {records || items ? (
+        <>
+          {records}
+          {items}
+        </>
+      ) : undefined}
     </AppNotification>
   )
 }

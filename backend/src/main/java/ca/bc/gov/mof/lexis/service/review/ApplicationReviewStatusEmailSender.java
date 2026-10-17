@@ -5,6 +5,7 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import ca.bc.gov.mof.lexis.service.mail.EmailNotificationService;
 import ca.bc.gov.mof.lexis.service.mail.RegionalMailRoute;
 import ca.bc.gov.mof.lexis.service.mail.WorkflowEmailEvent;
+import java.util.List;
 import org.springframework.stereotype.Service;
 
 @Service
@@ -22,8 +23,19 @@ public class ApplicationReviewStatusEmailSender {
       String recipientAddress,
       String remark,
       Long orgUnitNumber) {
+    return sendStatusEmail(
+        applicationNumber, statusCode, List.of(recipientAddress), remark, orgUnitNumber);
+  }
+
+  /** Sends one message to every address, so a shared owner and agent address gets one email. */
+  public boolean sendStatusEmail(
+      long applicationNumber,
+      String statusCode,
+      List<String> recipientAddresses,
+      String remark,
+      Long orgUnitNumber) {
     RegionalMailRoute senderRoute = RegionalMailRoute.forOrgUnit(orgUnitNumber).orElse(null);
-    if (senderRoute == null) {
+    if (senderRoute == null || recipientAddresses.isEmpty()) {
       return false;
     }
     String statusDescription = statusDescription(statusCode);
@@ -32,7 +44,7 @@ public class ApplicationReviewStatusEmailSender {
             applicationNumber,
             statusDescription,
             trimToNull(remark) == null ? "" : remark.trim(),
-            recipientAddress,
+            recipientAddresses,
             senderRoute));
     return true;
   }
