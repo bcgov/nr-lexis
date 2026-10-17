@@ -53,4 +53,3 @@ USER 1001
 # Startup
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]
 CMD ["run", "--config", "/etc/caddy/Caddyfile", "--adapter", "caddyfile"]
-
