@@ -545,7 +545,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     await selectApplicationDetailTab('Scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
-    const comments = await screen.findByLabelText('Package comments')
+    const comments = await screen.findByLabelText('Comments')
     await userEvent.type(comments, ' updated')
     await userEvent.click(screen.getByRole('button', { name: 'Save package' }))
     expect(await screen.findByText('Package saved.')).toBeInTheDocument()
@@ -2805,6 +2805,8 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     expect(await itemDetails.findByText('At least one species is required')).toBeVisible()
+    expect(species).toHaveAttribute('aria-invalid', 'true')
+    expect(species).toHaveAccessibleDescription('At least one species is required')
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -3096,6 +3098,15 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeGreaterThan(0)
     expect(screen.getAllByText('Average log volume must be 99.9 or less').length).toBeGreaterThan(0)
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    fireEvent.change(applicationVolumeInput, { target: { value: '0' } })
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+    expect(screen.getAllByText('Application volume must be greater than 0').length).toBeGreaterThan(
+      0,
+    )
+    expect(screen.queryByText('Use a positive numeric value')).not.toBeInTheDocument()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
   it.each(['S', 'T'])(
@@ -3318,7 +3329,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     await chooseComboBoxOption(getSummaryComboBox(application, 'Age class'), 'Old Growth')
     await waitFor(() => expect(getSummaryComboBox(application, 'End use')).toBeEnabled())
-    await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'LU - Lumber')
+    await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'Lumber')
     await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
@@ -3373,7 +3384,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
     await chooseComboBoxOption(getSummaryComboBox(dependentScaleDetails, 'Age class'), 'Old Growth')
     await waitFor(() => expect(getSummaryComboBox(dependentScaleDetails, 'End use')).toBeEnabled())
-    await chooseComboBoxOption(getSummaryComboBox(dependentScaleDetails, 'End use'), 'LU - Lumber')
+    await chooseComboBoxOption(getSummaryComboBox(dependentScaleDetails, 'End use'), 'Lumber')
 
     await userEvent.click(application.getByRole('button', { name: 'Cancel' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
@@ -3487,7 +3498,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await chooseComboBoxOption(getSummaryComboBox(application, 'Product type'), 'Standing Timber')
     await chooseComboBoxOption(getSummaryComboBox(application, 'Age class'), 'Old Growth')
     await waitFor(() => expect(getSummaryComboBox(application, 'End use')).toBeEnabled())
-    await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'LU - Lumber')
+    await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'Lumber')
     await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
 
     expect(
@@ -3544,7 +3555,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await chooseComboBoxOption(getSummaryComboBox(application, 'Product type'), 'Standing Timber')
     await chooseComboBoxOption(getSummaryComboBox(application, 'Age class'), 'Old Growth')
     await waitFor(() => expect(getSummaryComboBox(application, 'End use')).toBeEnabled())
-    await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'LU - Lumber')
+    await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'Lumber')
     await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
 
     await waitFor(() => {
@@ -3606,7 +3617,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(application.queryByText('Select a valid list date')).not.toBeInTheDocument()
     await chooseComboBoxOption(getSummaryComboBox(application, 'Age class'), 'Old Growth')
     await waitFor(() => expect(getSummaryComboBox(application, 'End use')).toBeEnabled())
-    await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'LU - Lumber')
+    await chooseComboBoxOption(getSummaryComboBox(application, 'End use'), 'Lumber')
     await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
     const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
     await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))

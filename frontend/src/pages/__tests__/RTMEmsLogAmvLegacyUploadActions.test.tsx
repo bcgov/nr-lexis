@@ -400,6 +400,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       screen.queryByLabelText('Replacement average monthly values spreadsheet'),
     ).not.toBeInTheDocument()
     expect(savedValue).toHaveValue('78.14')
+    expect(screen.getByRole('button', { name: 'Replace file' })).toHaveFocus()
 
     await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
 

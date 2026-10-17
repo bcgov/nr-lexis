@@ -863,6 +863,8 @@ const RtmEmsLogAmvUploadPage = () => {
   const uploadInputRef = useRef<HTMLInputElement>(null)
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const removeFileButtonRef = useRef<HTMLButtonElement>(null)
+  const replaceFileButtonRef = useRef<HTMLButtonElement>(null)
+  const focusReplaceFileButtonRef = useRef(false)
   const replacementPreviewRef = useRef<RtmEmsLogAmvUploadPreview | null>(null)
   const replacementReviewValuesRef = useRef<Record<string, string> | null>(null)
   const [effectiveMonth, setEffectiveMonth] = useState(() =>
@@ -1128,7 +1130,15 @@ const RtmEmsLogAmvUploadPage = () => {
     setReplacementUploadOpen(false)
     replacementPreviewRef.current = null
     replacementReviewValuesRef.current = null
+    focusReplaceFileButtonRef.current = true
   }
+
+  // Keep current values removes the warning it sits in, so focus goes back to Replace file.
+  useEffect(() => {
+    if (replacementUploadOpen || !focusReplaceFileButtonRef.current) return
+    focusReplaceFileButtonRef.current = false
+    replaceFileButtonRef.current?.focus()
+  }, [replacementUploadOpen])
 
   useEffect(() => {
     const requestId = savedValuesRequestRef.current + 1
@@ -1621,6 +1631,7 @@ const RtmEmsLogAmvUploadPage = () => {
           </div>
           {savedUploadState && !replacementUploadOpen && (
             <Button
+              ref={replaceFileButtonRef}
               className="rtm-amv-replace-file-button"
               kind="tertiary"
               size="md"

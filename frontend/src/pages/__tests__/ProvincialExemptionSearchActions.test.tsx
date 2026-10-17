@@ -1,6 +1,13 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { createMemoryRouter, MemoryRouter, Route, RouterProvider, Routes } from 'react-router-dom'
+import {
+  createMemoryRouter,
+  MemoryRouter,
+  Route,
+  RouterProvider,
+  Routes,
+  useLocation,
+} from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
@@ -109,8 +116,13 @@ const selectableExemption = (
   region: '11',
   canApprove: true,
   isLocked: false,
+  outsideApprovalRegions: false,
   canViewExemption: true,
 })
+
+const LocationSearch = () => <span data-testid="location-search">{useLocation().search}</span>
+
+const appliedSearch = () => screen.getByTestId('location-search').textContent ?? ''
 
 const renderPage = (
   path = '/provincial/exemption?region=11&page=1&pageSize=10&sortField=exemptionNumber&sortDirection=desc',
@@ -118,7 +130,15 @@ const renderPage = (
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/provincial/exemption" element={<ProvincialExemptionPage />} />
+        <Route
+          path="/provincial/exemption"
+          element={
+            <>
+              <ProvincialExemptionPage />
+              <LocationSearch />
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   )
@@ -182,6 +202,7 @@ describe('Provincial Exemption Search Actions', () => {
           region: '11',
           canApprove: true,
           isLocked: false,
+          outsideApprovalRegions: false,
           canViewExemption: true,
         },
         {
@@ -199,6 +220,7 @@ describe('Provincial Exemption Search Actions', () => {
           region: '12',
           canApprove: false,
           isLocked: true,
+          outsideApprovalRegions: false,
           canViewExemption: true,
         },
       ]),
@@ -238,73 +260,59 @@ describe('Provincial Exemption Search Actions', () => {
     }))
   })
 
-  it.each(['url', 'session'])(
-    'shows and removes a restored Applicant filter from %s without changing its meaning',
-    async (source) => {
-      mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
-      const storageKey = 'lexis.search-state.v1.provincial-exemptions'
-      const restoredSearch = 'applicantClientNumber=00162575'
-      if (source === 'session') sessionStorage.setItem(storageKey, restoredSearch)
-      renderPage(
-        source === 'url' ? `/provincial/exemption?${restoredSearch}` : '/provincial/exemption',
-      )
+  it('shows and removes a restored Applicant filter from the URL without changing its meaning', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+    renderPage('/provincial/exemption?applicantClientNumber=00162575')
 
-      await screen.findByText('EX-1001')
-      expect(screen.getByText('Applicant client: 00162575')).toBeVisible()
-      expect(
-        screen.getByText(/Matches the agent, or the owner when no agent is recorded/),
-      ).toBeVisible()
-      expect(screen.getByLabelText('Owner client')).toHaveValue('')
-      expect(screen.getByLabelText('Agent client')).toHaveValue('')
+    await screen.findByText('EX-1001')
+    expect(screen.getByText('Applicant client: 00162575')).toBeVisible()
+    expect(
+      screen.getByText(/Matches the agent, or the owner when no agent is recorded/),
+    ).toBeVisible()
+    expect(screen.getByLabelText('Owner client')).toHaveValue('')
+    expect(screen.getByLabelText('Agent client')).toHaveValue('')
+    expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          applicantClientNumber: '00162575',
+          agentClientNumber: '',
+        }),
+      }),
+      expect.any(Object),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Select Agent client' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() =>
       expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
         expect.objectContaining({
           filters: expect.objectContaining({
             applicantClientNumber: '00162575',
-            agentClientNumber: '',
+            agentClientNumber: '00012345',
           }),
         }),
         expect.any(Object),
-      )
+      ),
+    )
 
-      await userEvent.click(screen.getByRole('button', { name: 'Select Agent client' }))
-      await userEvent.click(screen.getByRole('button', { name: 'Search' }))
-      await waitFor(() =>
-        expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
-          expect.objectContaining({
-            filters: expect.objectContaining({
-              applicantClientNumber: '00162575',
-              agentClientNumber: '00012345',
-            }),
+    await userEvent.click(screen.getByRole('button', { name: 'Remove applicant client filter' }))
+    expect(screen.queryByText('Applicant client: 00162575')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('Agent client')).toHaveValue('00012345')
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() =>
+      expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          filters: expect.objectContaining({
+            applicantClientNumber: '',
+            agentClientNumber: '00012345',
           }),
-          expect.any(Object),
-        ),
-      )
-
-      await userEvent.click(screen.getByRole('button', { name: 'Remove applicant client filter' }))
-      expect(screen.queryByText('Applicant client: 00162575')).not.toBeInTheDocument()
-      expect(screen.getByLabelText('Agent client')).toHaveValue('00012345')
-      await userEvent.click(screen.getByRole('button', { name: 'Search' }))
-      await waitFor(() =>
-        expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
-          expect.objectContaining({
-            filters: expect.objectContaining({
-              applicantClientNumber: '',
-              agentClientNumber: '00012345',
-            }),
-          }),
-          expect.any(Object),
-        ),
-      )
-      expect(
-        new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').has('applicantClientNumber'),
-      ).toBe(false)
-      expect(
-        new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').get('agentClientNumber'),
-      ).toBe('00012345')
-    },
-    // Restoring and applying multiple full-page searches exceeds 5s in CI coverage runs.
-    20_000,
-  )
+        }),
+        expect.any(Object),
+      ),
+    )
+    expect(new URLSearchParams(appliedSearch()).has('applicantClientNumber')).toBe(false)
+    expect(new URLSearchParams(appliedSearch()).get('agentClientNumber')).toBe('00012345')
+  }, 20_000) // Restoring and applying multiple full-page searches exceeds 5s in CI coverage runs.
 
   it('shows exemption result list and expiry dates in words', async () => {
     mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
@@ -403,8 +411,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(mockedFetchProvincialExemptionOptions).toHaveBeenCalledWith(true)
 
     const exemptionType = screen.getByRole('combobox', { name: 'Exemption type' })
-    expect(exemptionType).toHaveValue('')
-    expect(exemptionType).toHaveAttribute('placeholder', 'All')
+    expect(exemptionType).toHaveValue('All')
     await userEvent.click(exemptionType)
     await userEvent.click(screen.getByRole('option', { name: 'None' }))
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
@@ -417,14 +424,12 @@ describe('Provincial Exemption Search Actions', () => {
         expect.any(Object),
       )
     })
-    const storageKey = 'lexis.search-state.v1.provincial-exemptions'
-    expect(
-      new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').get('exemptionTypeCode'),
-    ).toBe('NULL')
+    const search = appliedSearch()
+    expect(new URLSearchParams(search).get('exemptionTypeCode')).toBe('NULL')
 
     page.unmount()
     mockedSearchProvincialExemptions.mockClear()
-    renderPage('/provincial/exemption')
+    renderPage(`/provincial/exemption${search}`)
     await screen.findByText('EX-1001')
     expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('None')
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
@@ -434,10 +439,8 @@ describe('Provincial Exemption Search Actions', () => {
     )
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
-    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('')
-    expect(
-      new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').has('exemptionTypeCode'),
-    ).toBe(false)
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('All')
+    expect(new URLSearchParams(appliedSearch()).has('exemptionTypeCode')).toBe(false)
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
       expect(mockedSearchProvincialExemptions).toHaveBeenLastCalledWith(
@@ -446,6 +449,63 @@ describe('Provincial Exemption Search Actions', () => {
       )
     })
   }, 20_000)
+
+  it('opens without a query with filters only and focus on the title', async () => {
+    mockedUseAuth.mockReturnValue(createTestAuthContext({ canPerform: () => true }))
+
+    renderPage('/provincial/exemption')
+
+    expect(await screen.findByRole('button', { name: 'Search' })).toBeInTheDocument()
+    expect(mockedSearchProvincialExemptions).not.toHaveBeenCalled()
+    expect(appliedSearch()).toBe('')
+    // Arriving with nothing focused, as after Cancel on Create exemption, focus starts on the title.
+    expect(screen.getByRole('heading', { level: 1, name: 'Exemption search' })).toHaveFocus()
+  })
+
+  it('shows a New Ministerial exemption outside the approver regions as ineligible', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedSearchProvincialExemptions.mockResolvedValue(
+      exemptionSearchResponse([
+        selectableExemption('26-8840'),
+        { ...selectableExemption('26-8842'), outsideApprovalRegions: true },
+      ]),
+    )
+
+    renderPage()
+    await screen.findByText('26-8842')
+
+    expect(screen.getByRole('checkbox', { name: 'Select exemption 26-8840' })).toBeEnabled()
+    const outsideCheckbox = screen.getByRole('checkbox', { name: 'Select exemption 26-8842' })
+    expect(outsideCheckbox).toHaveAttribute('aria-disabled', 'true')
+    expect(outsideCheckbox).toHaveAccessibleDescription(
+      expect.stringContaining('This exemption is outside your regions and cannot be approved.'),
+    )
+
+    await userEvent.click(outsideCheckbox)
+    expect(screen.queryByRole('button', { name: 'Approve' })).not.toBeInTheDocument()
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+    )
+    expect(screen.getByRole('checkbox', { name: 'Select exemption 26-8840' })).toBeChecked()
+    expect(outsideCheckbox).not.toBeChecked()
+  })
+
+  it('shows grey header bars for the result columns only on the loading skeleton', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({ canPerform: (action: string) => action === 'approveExemption' }),
+    )
+    mockedSearchProvincialExemptions.mockReturnValue(new Promise(() => {}))
+
+    renderPage()
+
+    const skeleton = await screen.findByRole('table', { name: 'Searching' })
+    const headers = Array.from(skeleton.querySelectorAll('thead th'))
+    // Exemption, Type, Status, both client numbers, both volumes, both dates and Region.
+    expect(headers).toHaveLength(10)
+    headers.forEach((header) => expect(header.textContent).toBe(''))
+  })
 
   it('requires explicit certification before approving selected exemptions', async () => {
     mockedUseAuth.mockReturnValue(
@@ -487,13 +547,13 @@ describe('Provincial Exemption Search Actions', () => {
     expect(firstConfirm.parentElement).toHaveClass('cds--modal-footer')
     await userEvent.click(firstConfirm)
     expect(
-      within(firstDialog).getByText('Confirm that you certify this exemption has been approved'),
+      within(firstDialog).getByText('Confirm that you certify this exemption has been approved.'),
     ).toBeVisible()
     expect(mockedApproveExemptions).not.toHaveBeenCalled()
 
     await userEvent.click(firstCertification)
     expect(
-      within(firstDialog).queryByText('Confirm that you certify this exemption has been approved'),
+      within(firstDialog).queryByText('Confirm that you certify this exemption has been approved.'),
     ).not.toBeInTheDocument()
     await userEvent.click(within(firstDialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() =>
@@ -513,7 +573,7 @@ describe('Provincial Exemption Search Actions', () => {
     expect(reopenedCertification).not.toBeChecked()
     expect(
       within(reopenedDialog).queryByText(
-        'Confirm that you certify this exemption has been approved',
+        'Confirm that you certify this exemption has been approved.',
       ),
     ).not.toBeInTheDocument()
     await userEvent.click(reopenedCertification)
@@ -576,6 +636,7 @@ describe('Provincial Exemption Search Actions', () => {
         region: '11',
         canApprove: true,
         isLocked: false,
+        outsideApprovalRegions: false,
         canViewExemption: true,
       },
       {
@@ -593,6 +654,7 @@ describe('Provincial Exemption Search Actions', () => {
         region: '11',
         canApprove: true,
         isLocked: false,
+        outsideApprovalRegions: false,
         canViewExemption: true,
       },
     ]
@@ -1168,6 +1230,7 @@ describe('Provincial Exemption Search Actions', () => {
           region: '11',
           canApprove: true,
           isLocked: false,
+          outsideApprovalRegions: false,
           canViewExemption: true,
         },
         {
@@ -1185,6 +1248,7 @@ describe('Provincial Exemption Search Actions', () => {
           region: '12',
           canApprove: true,
           isLocked: false,
+          outsideApprovalRegions: false,
           canViewExemption: true,
         },
       ]),
@@ -1272,6 +1336,7 @@ describe('Provincial Exemption Search Actions', () => {
           region: '11',
           canApprove: true,
           isLocked: false,
+          outsideApprovalRegions: false,
           canViewExemption: true,
         },
         {
@@ -1289,6 +1354,7 @@ describe('Provincial Exemption Search Actions', () => {
           region: '11',
           canApprove: true,
           isLocked: false,
+          outsideApprovalRegions: false,
           canViewExemption: true,
         },
       ]),
@@ -1369,6 +1435,7 @@ describe('Provincial Exemption Search Actions', () => {
           region: '11',
           canApprove: true,
           isLocked: true,
+          outsideApprovalRegions: false,
           canViewExemption: true,
         },
       ]),
@@ -1412,6 +1479,7 @@ describe('Provincial Exemption Search Actions', () => {
           region: '11',
           canApprove: false,
           isLocked: false,
+          outsideApprovalRegions: false,
           canViewExemption: true,
         },
       ]),
@@ -1720,7 +1788,7 @@ describe('Provincial Exemption Search Actions', () => {
         expect.any(Object),
       )
     })
-    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('')
+    expect(screen.getByRole('combobox', { name: 'Exemption status' })).toHaveValue('All')
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
     await waitFor(() =>
@@ -1755,6 +1823,7 @@ describe('Provincial Exemption Search Actions', () => {
       region: '11',
       canApprove: true,
       isLocked: false,
+      outsideApprovalRegions: false,
       canViewExemption: true,
     }))
     mockedSearchProvincialExemptions.mockResolvedValue({
@@ -1805,6 +1874,7 @@ describe('Provincial Exemption Search Actions', () => {
       region: '11',
       canApprove: true,
       isLocked: false,
+      outsideApprovalRegions: false,
       canViewExemption: true,
     }))
     mockedSearchProvincialExemptions.mockImplementation(async (request) => {

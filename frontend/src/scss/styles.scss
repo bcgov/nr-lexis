@@ -700,7 +700,8 @@ a.csp-side-nav__link.cds--side-nav__link--active[aria-current='page'] {
   display: flex;
   flex-direction: column;
   width: max-content;
-  min-width: var(--csp-profile-panel-width);
+  // Narrow screens get the full width beside any scrollbar, so every control stays on screen.
+  min-width: min(var(--csp-profile-panel-width), 100%);
   max-width: min(90vw, 48rem);
   height: calc(100vh - var(--csp-header-height));
   background-color: var(--cds-layer-02);
@@ -1149,9 +1150,16 @@ legend.cds--label {
   --cds-border-subtle-selected: var(--cds-border-subtle-selected-02);
 }
 
+// Notifications fill their column and wrap, rather than keeping Carbon's 18rem minimum and
+// running past a narrow column (WCAG 1.4.10 at 320px).
 .cds--inline-notification {
   inline-size: 100%;
   max-inline-size: 100%;
+  min-inline-size: 0;
+}
+
+.cds--actionable-notification {
+  min-inline-size: 0;
 }
 
 div.cds--inline-notification--low-contrast::before {
@@ -6025,8 +6033,19 @@ $notification-types: 'error', 'info', 'success', 'warning';
     grid-template-columns: 1fr;
   }
 
-  .provincial-application-search-page .legacy-search-table-frame .cds--data-table {
-    min-inline-size: 50rem;
+  // The table scrolls in its frame here, so columns fit their content: headers wrap between
+  // words and status tags stay inside their cells.
+  .provincial-application-search-page .legacy-search-table-frame {
+    .cds--data-table {
+      min-inline-size: 50rem;
+      table-layout: auto;
+    }
+
+    .cds--data-table th,
+    .cds--data-table td,
+    .cds--data-table thead th .cds--table-header-label {
+      overflow-wrap: normal;
+    }
   }
 
   .provincial-review-search-grid {
@@ -6345,7 +6364,22 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-start: 2rem;
 }
 
-// A disabled combo box can't be cleared, so it shows no clear button.
-.cds--list-box--disabled .cds--list-box__selection {
+// A disabled combo box can't be cleared, so it shows no clear button. Nor does a filter on All.
+.cds--list-box--disabled .cds--list-box__selection,
+.searchable-select--all .cds--list-box__selection {
   display: none;
+}
+
+// A record form's region field names its regions after the count tag, in the value's colour.
+.region-multi-select--named .cds--text-input {
+  text-overflow: ellipsis;
+}
+
+.region-multi-select--named .cds--text-input::placeholder {
+  color: var(--cds-text-primary);
+  opacity: 1;
+}
+
+.region-multi-select--named .cds--text-input:disabled::placeholder {
+  color: var(--cds-text-disabled);
 }

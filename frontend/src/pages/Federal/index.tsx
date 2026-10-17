@@ -99,7 +99,6 @@ const RESULT_COLUMNS: {
   { id: 'receivedDate', label: 'Received date' },
   { id: 'listingDate', label: 'List date' },
 ]
-const COLUMN_HEADERS = RESULT_COLUMNS.map((column) => column.label)
 
 const buildSearchParams = (
   filters: FederalApplicationSearchFilters,
@@ -367,6 +366,7 @@ const FederalPage = () => {
         <PageHeader
           title="Federal application search"
           subtitle="Find federal applications and check their status"
+          focusTitle="whenFocusLost"
         />
       </Column>
 
@@ -400,6 +400,7 @@ const FederalPage = () => {
                   labelText="Application status"
                   value={filters.applicationStatus}
                   placeholder="All"
+                  allOptionLabel="All"
                   options={applicationStatusOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('applicationStatus', value)}
@@ -468,7 +469,7 @@ const FederalPage = () => {
             resultName="application"
             loading={resultsLoading}
             loadingDescription="Searching"
-            columnHeaders={COLUMN_HEADERS}
+            columnCount={RESULT_COLUMNS.length}
             totalItems={
               errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
@@ -497,7 +498,8 @@ const FederalPage = () => {
                     ))}
                   </TableRow>
                 </TableHead>
-                <TableBody>
+                {/* The toolbar announces the result count, so the rows aren't read out again. */}
+                <TableBody aria-live="off">
                   {results.content.map((row) => (
                     <TableRow key={row.applicationNumber}>
                       <TableCell>

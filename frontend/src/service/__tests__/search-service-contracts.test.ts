@@ -364,6 +364,38 @@ describe('search-service contracts', () => {
     )
   })
 
+  it('maps whether an exemption is outside the approver regions', async () => {
+    const row = {
+      exemptionNumber: 'EX-3',
+      exemptionType: 'M',
+      status: 'NEW',
+      applicantClientNumber: null,
+      ownerClientNumber: '00077889',
+      listingDate: null,
+      expiryDate: null,
+      region: 'RCB, RSK',
+      approvedVolume: 10,
+      balanceRemaining: 10,
+      locked: false,
+    }
+    getCachedResponseMock.mockResolvedValue({
+      data: {
+        results: [
+          { ...row, outsideApprovalRegions: true },
+          { ...row, exemptionNumber: 'EX-4', outsideApprovalRegions: false },
+          { ...row, exemptionNumber: 'EX-5' },
+        ],
+        total: 3,
+        page: 0,
+        size: 10,
+      },
+    })
+
+    const result = await searchProvincialExemptions(exemptionRequest)
+
+    expect(result.content.map((item) => item.outsideApprovalRegions)).toEqual([true, false, false])
+  })
+
   it('sends separate exemption agent and owner criteria consistently for results and counts', async () => {
     getCachedResponseMock.mockResolvedValue({ data: { results: [], total: 0, page: 0, size: 10 } })
     const request = {

@@ -146,6 +146,8 @@ function ClientInput({
           if (value) onChange('')
         }}
         aria-required={required || undefined}
+        // Carbon links the error text but doesn't mark the input invalid.
+        aria-invalid={invalid && !disabled ? true : undefined}
         disabled={disabled}
         invalid={invalid}
         invalidText={fieldErrorText(invalidText)}

@@ -504,6 +504,8 @@ describe('Create Page Core Flows', () => {
     // Carbon keeps the multiselect open while selections change.
     await userEvent.click(await screen.findByRole('option', { name: /BA/ }))
     expect(await screen.findByText('At least one species is required')).toBeVisible()
+    await waitFor(() => expect(species).toHaveAttribute('aria-invalid', 'true'))
+    expect(species).toHaveAccessibleDescription('At least one species is required')
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   }, 20_000)
 
@@ -1110,6 +1112,8 @@ describe('Create Page Core Flows', () => {
         await userEvent.keyboard('{Enter}')
         const feedback = await screen.findByRole('status')
         expect(feedback).toHaveTextContent('Cannot save yet.')
+        // A grid row of its own, like the info notice it replaces, above the tabs.
+        expect(feedback.closest('.application-detail-tabs-column')).toBeNull()
         await waitFor(() => expect(feedback).toHaveFocus())
         expect(
           screen.getByRole('tab', { name: 'Applicant, 1 required field outstanding' }),
@@ -2016,6 +2020,31 @@ describe('Create Page Core Flows', () => {
     expect(
       screen.getByText('Average log volume must have no more than one decimal place'),
     ).toBeInTheDocument()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
+  it('asks for an application volume greater than 0, as its helper says', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=H&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&applicationVolume=0&averageLogVolume=1.2&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Save application' }))
+
+    expect(
+      (await screen.findAllByText('Application volume must be greater than 0')).length,
+    ).toBeGreaterThan(0)
+    expect(screen.queryByText('Use a positive numeric value')).not.toBeInTheDocument()
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 

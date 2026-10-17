@@ -36,6 +36,25 @@ const CountrySelectHarness = ({ initialValue = '' }: { initialValue?: string }) 
 }
 
 describe('PermitCountrySelect', () => {
+  it('marks the country invalid while it shows an error', () => {
+    render(
+      <PermitCountrySelect
+        id="destination-country"
+        labelText="Final destination country"
+        value=""
+        options={countryOptions}
+        required
+        invalid
+        invalidText="Final destination country is required"
+        onChange={() => {}}
+      />,
+    )
+
+    const countryInput = screen.getByRole('combobox', { name: 'Final destination country' })
+    expect(countryInput).toHaveAttribute('aria-invalid', 'true')
+    expect(countryInput).toHaveAccessibleDescription('Final destination country is required')
+  })
+
   it('opens with the six preferred countries, a decorative divider, and every remaining country alphabetically', async () => {
     const user = userEvent.setup()
     const { container } = render(<CountrySelectHarness />)

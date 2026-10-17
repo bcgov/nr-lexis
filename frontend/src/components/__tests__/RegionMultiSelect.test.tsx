@@ -125,6 +125,103 @@ describe('RegionMultiSelect', () => {
     expect(screen.getByTestId('selected-regions')).toBeEmptyDOMElement()
   })
 
+  it('names the chosen regions after the count tag when a form asks', async () => {
+    const user = userEvent.setup()
+    const { rerender } = render(
+      <RegionMultiSelect
+        id="record-regions"
+        titleText="Region"
+        items={regions}
+        selectedItems={[]}
+        showSelectedNames
+        onChange={vi.fn()}
+      />,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: /^Region/ })
+    expect(combobox).toHaveAttribute('placeholder', 'Select region(s)')
+    expect(document.querySelector('.region-multi-select')).not.toHaveClass(
+      'region-multi-select--named',
+    )
+
+    rerender(
+      <RegionMultiSelect
+        id="record-regions"
+        titleText="Region"
+        items={regions}
+        selectedItems={regions.slice(0, 2)}
+        showSelectedNames
+        onChange={vi.fn()}
+      />,
+    )
+    expect(combobox).toHaveAccessibleName(/^Region\s*Total items selected:\s*2/)
+    expect(combobox).toHaveAttribute(
+      'placeholder',
+      'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
+    )
+    expect(document.querySelector('.region-multi-select')).toHaveClass('region-multi-select--named')
+    await user.click(combobox)
+    await user.keyboard('{Escape}')
+    expect(combobox).toHaveAttribute(
+      'placeholder',
+      'Cariboo Natural Resource Region, Kootenay-Boundary Natural Resource Region',
+    )
+  })
+
+  it('links its error to the combobox', () => {
+    const { rerender } = render(
+      <RegionMultiSelect
+        id="record-regions"
+        titleText="Region"
+        items={regions}
+        selectedItems={[]}
+        required
+        invalid
+        invalidText="Select at least one region for a Blanket OIC exemption."
+        onChange={vi.fn()}
+      />,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: /^Region/ })
+    expect(combobox).toHaveAttribute('aria-invalid', 'true')
+    expect(combobox).toHaveAccessibleDescription(
+      'Select at least one region for a Blanket OIC exemption',
+    )
+    expect(document.getElementById('record-regions-error-msg')).toHaveTextContent(
+      'Select at least one region for a Blanket OIC exemption',
+    )
+
+    rerender(
+      <RegionMultiSelect
+        id="record-regions"
+        titleText="Region"
+        items={regions}
+        selectedItems={[regions[0]]}
+        required
+        onChange={vi.fn()}
+      />,
+    )
+    expect(combobox).not.toHaveAttribute('aria-invalid')
+    expect(combobox).not.toHaveAttribute('aria-describedby')
+    expect(document.getElementById('record-regions-error-msg')).toBeNull()
+
+    // A disabled field can't be corrected, so it isn't marked invalid.
+    rerender(
+      <RegionMultiSelect
+        id="record-regions"
+        titleText="Region"
+        items={regions}
+        selectedItems={[]}
+        required
+        disabled
+        invalid
+        invalidText="Select at least one region for a Blanket OIC exemption"
+        onChange={vi.fn()}
+      />,
+    )
+    expect(combobox).not.toHaveAttribute('aria-invalid')
+  })
+
   it('disables the Carbon control', () => {
     render(<RegionHarness initialSelected={[regions[0]]} disabled />)
 

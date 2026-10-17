@@ -17,6 +17,8 @@ type RegionMultiSelectProps = {
   disabled?: boolean
   invalid?: boolean
   invalidText?: ReactNode
+  /** Names the chosen regions after the count tag, as a record form does. Filters show the count. */
+  showSelectedNames?: boolean
   onChange: (selectedItems: RegionMultiSelectOption[]) => void
 }
 
@@ -32,22 +34,38 @@ export default function RegionMultiSelect({
   disabled = false,
   invalid = false,
   invalidText,
+  showSelectedNames = false,
   onChange,
 }: RegionMultiSelectProps) {
+  const errorText = fieldErrorText(invalidText)
+  const errorId = `${id}-error-msg`
+  const describedByError = invalid && !!errorText
+  const selectedNames = selectedItems.map(itemToString).join(', ')
   return (
-    <div className="region-multi-select">
+    <div
+      className={`region-multi-select${
+        showSelectedNames && selectedItems.length > 0 ? ' region-multi-select--named' : ''
+      }`}
+    >
       <FilterableMultiSelect
         id={id}
         titleText={titleText}
         items={items}
         itemToString={itemToString}
-        // With regions selected, the count tag stands alone.
-        placeholder={selectedItems.length === 0 ? placeholder : undefined}
+        // With regions selected, the count tag stands alone, or a form names them beside it.
+        placeholder={
+          selectedItems.length === 0 ? placeholder : showSelectedNames ? selectedNames : undefined
+        }
         selectedItems={selectedItems}
-        inputProps={{ 'aria-required': required || undefined }}
+        inputProps={{
+          'aria-required': required || undefined,
+          'aria-invalid': (invalid && !disabled) || undefined,
+          // Carbon doesn't link its error text to the input.
+          ...(describedByError ? { 'aria-describedby': errorId } : {}),
+        }}
         disabled={disabled}
         invalid={invalid}
-        invalidText={fieldErrorText(invalidText)}
+        invalidText={describedByError ? <span id={errorId}>{errorText}</span> : errorText}
         onChange={({ selectedItems: nextSelectedItems }) => {
           onChange(nextSelectedItems)
         }}

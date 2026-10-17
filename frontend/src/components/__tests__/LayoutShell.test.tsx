@@ -1053,10 +1053,8 @@ describe('Layout shell', () => {
 
   it('loads and saves the default region from the profile panel', async () => {
     mockedFetchUserPreferences.mockResolvedValue({ defaultRegion: 'RCO' })
-    window.sessionStorage.setItem(
-      'lexis.search-state.v1.provincial-review',
-      'status=SUBMITTED&region=1903%2C1904&page=3',
-    )
+    const defaultZoneChanged = vi.fn()
+    window.addEventListener('lexis:default-region-change', defaultZoneChanged)
     renderLayout('/admin/rtm/emslogamv')
 
     await userEvent.click(screen.getByRole('button', { name: 'Open profile panel' }))
@@ -1079,9 +1077,8 @@ describe('Layout shell', () => {
 
     expect(mockedUpdateUserPreferences).toHaveBeenCalledWith('RNI')
     expect(await screen.findByRole('status')).toHaveTextContent('Preference saved.')
-    expect(window.sessionStorage.getItem('lexis.search-state.v1.provincial-review')).toBe(
-      'status=SUBMITTED&page=3',
-    )
+    expect(defaultZoneChanged).toHaveBeenCalledTimes(1)
+    window.removeEventListener('lexis:default-region-change', defaultZoneChanged)
   })
 
   it('locks the default zone controls while the preference is saving', async () => {

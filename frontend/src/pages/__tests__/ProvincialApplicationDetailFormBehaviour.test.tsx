@@ -93,7 +93,7 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     renderApplicationDetail('/provincial/application/321?tab=items')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
     const panel = within(packageDrawer())
-    await waitFor(() => expect(panel.getByLabelText('Package volume (m³)')).toBeEnabled())
+    await waitFor(() => expect(panel.getByLabelText('Volume (m³)')).toBeEnabled())
     await userEvent.click(panel.getByRole('button', { name: 'Save package' }))
     await waitFor(() => expect(screen.getByRole('button', { name: 'Edit package' })).toHaveFocus())
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
@@ -165,6 +165,8 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
   it('keeps Save enabled, shows errors on their fields and focuses the first', async () => {
     renderApplicationDetail()
     const { tile, contactName } = await editApplicantDetails()
+    // Like create, an empty Contact name shows no placeholder.
+    expect(contactName).not.toHaveAttribute('placeholder')
     fireEvent.change(contactName, { target: { value: '' } })
     const save = tile.getByRole('button', { name: 'Save changes' })
     expect(save).toBeEnabled()
@@ -329,21 +331,21 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     renderApplicationDetail('/provincial/application/321?tab=items')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
     const drawer = within(packageDrawer())
-    const volume = drawer.getByLabelText('Package volume (m³)')
+    const volume = drawer.getByLabelText('Volume (m³)')
     await waitFor(() => expect(volume).toBeEnabled())
     await userEvent.click(volume)
     await userEvent.clear(volume)
-    expect(drawer.queryByText('Package volume (m³) is required')).not.toBeInTheDocument()
+    expect(drawer.queryByText('Volume (m³) is required')).not.toBeInTheDocument()
 
     await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
 
-    expect(await drawer.findByText('Package volume (m³) is required')).toBeInTheDocument()
+    expect(await drawer.findByText('Volume (m³) is required')).toBeInTheDocument()
     await waitFor(() => expect(volume).toHaveFocus())
     expect(drawer.queryByText('Package save failed')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
 
     await userEvent.type(volume, '9')
-    expect(drawer.queryByText('Package volume (m³) is required')).not.toBeInTheDocument()
+    expect(drawer.queryByText('Volume (m³) is required')).not.toBeInTheDocument()
   })
 
   it('shows a duplicate package number from the server on the package number field', async () => {
@@ -371,7 +373,7 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
   it('asks before a tab switch discards an application package draft', async () => {
     renderApplicationDetail('/provincial/application/321?tab=items')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
-    const volume = within(packageDrawer()).getByLabelText('Package volume (m³)')
+    const volume = within(packageDrawer()).getByLabelText('Volume (m³)')
     await waitFor(() => expect(volume).toBeEnabled())
     await userEvent.clear(volume)
     await userEvent.type(volume, '9')
@@ -460,8 +462,8 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     renderApplicationDetail('/provincial/application/321?tab=items')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
     const drawer = within(packageDrawer())
-    await waitFor(() => expect(drawer.getByLabelText('Package volume (m³)')).toBeEnabled())
-    await userEvent.type(drawer.getByLabelText('Package comments'), ' Pending package')
+    await waitFor(() => expect(drawer.getByLabelText('Volume (m³)')).toBeEnabled())
+    await userEvent.type(drawer.getByLabelText('Comments'), ' Pending package')
     await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
 
     expect(await drawer.findByRole('button', { name: 'Saving…' })).toBeDisabled()

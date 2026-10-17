@@ -2239,6 +2239,34 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ).toBe(true)
   })
 
+  test('keeps the profile panel controls on screen at 320px', async ({ page }) => {
+    await page.setViewportSize({ width: 320, height: 800 })
+    await gotoSyntheticRoute(page, '/provincial/application', {
+      waitUntil: 'domcontentloaded',
+      ready: page.getByRole('button', { name: 'Search', exact: true }),
+    })
+
+    await page.getByRole('button', { name: 'Open profile panel' }).click()
+    const profilePanel = page.getByRole('dialog', { name: 'My profile' })
+    await expect(profilePanel).toHaveClass(/is-open/)
+    // The panel slides in from the right edge; measure once it has arrived.
+    await expect
+      .poll(() => profilePanel.evaluate((panel) => panel.getBoundingClientRect().right))
+      .toBeLessThanOrEqual(320.5)
+    const panelBounds = await profilePanel.boundingBox()
+    expect(panelBounds?.x).toBeGreaterThanOrEqual(0)
+    for (const control of [
+      profilePanel.getByRole('combobox', { name: 'Default zone' }),
+      profilePanel.getByRole('button', { name: 'Save preference' }),
+      profilePanel.getByRole('button', { name: 'Log out' }),
+    ]) {
+      await control.scrollIntoViewIfNeeded()
+      const bounds = await control.boundingBox()
+      expect(bounds?.x).toBeGreaterThanOrEqual(0)
+      expect((bounds?.x ?? 0) + (bounds?.width ?? 0)).toBeLessThanOrEqual(320)
+    }
+  })
+
   test('keeps result toolbar actions within a narrow mobile viewport', async ({ page }) => {
     await page.setViewportSize({ width: 320, height: 720 })
 

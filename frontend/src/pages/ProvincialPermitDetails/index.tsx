@@ -115,6 +115,7 @@ import BlanketOicPackageCodeFields, {
   type BlanketOicPackageOptionsStatus,
 } from './BlanketOicPackageCodeFields'
 import { blanketOicProductTypeLabel } from './blanket-oic-package-options'
+import { withShippingDefaults } from './shipping-defaults'
 import BlanketOicScaleCodeFields, {
   type BlanketOicScaleOptionsStatus,
 } from './BlanketOicScaleCodeFields'
@@ -142,8 +143,7 @@ import {
 } from '@/service/lexis-detail-service'
 import {
   fetchApplicationClientData,
-  fetchExemptionClientData,
-  fetchExemptionClientLocations,
+  fetchApplicationClientLocations,
   type ApplicationClientData,
   type ApplicationClientLocation,
 } from '@/service/application-client-lookup-service'
@@ -613,6 +613,56 @@ const focusFirstPanelError = (panelSelector: string, notificationSelector: strin
     target?.focus()
     target?.scrollIntoView({ block: 'nearest' })
   })
+
+type PermitClientLookupContext = { permitNumber: string; counterpartyClientNumber: string }
+
+// INTENTIONAL_LEGACY_DIVERGENCE(SUBMITTER_BOIC_PERMIT_CLIENTS): a client's lookups name the permit
+// and the client in the other slot, which lets a Provincial Submitter look up the owner they act
+// for, or the agent they name.
+const permitClientLookupContext = (
+  kind: PermitClientKind,
+  permitNumber: string | number | null | undefined,
+  ownerClientNumber: string | null | undefined,
+  agentClientNumber: string | null | undefined,
+): PermitClientLookupContext => ({
+  permitNumber: String(permitNumber ?? '').trim(),
+  counterpartyClientNumber: (
+    (kind === 'owner' ? agentClientNumber : ownerClientNumber) ?? ''
+  ).trim(),
+})
+
+/** Loads the saved owner's locations, and the saved agent's when there is one, for editing. */
+const loadSavedPermitClientLocations = (
+  detail: ProvincialPermitDetail,
+  load: (
+    kind: PermitClientKind,
+    clientNumber: string,
+    currentLocationCode: string,
+    lookupContext: PermitClientLookupContext,
+  ) => Promise<void>,
+): void => {
+  const lookupContext = (kind: PermitClientKind) =>
+    permitClientLookupContext(
+      kind,
+      detail.permitNumber,
+      detail.ownerClientNumber,
+      detail.applicantClientNumber,
+    )
+  void load(
+    'owner',
+    detail.ownerClientNumber ?? '',
+    detail.ownerClientLocationCode ?? '',
+    lookupContext('owner'),
+  )
+  if (detail.applicantClientNumber?.trim()) {
+    void load(
+      'agent',
+      detail.applicantClientNumber,
+      detail.agentClientLocationCode ?? '',
+      lookupContext('agent'),
+    )
+  }
+}
 
 const fetchPermitClientData = (
   clientNumber: string | null,
@@ -2364,7 +2414,24 @@ const ProvincialPermitDetailsPage = () => {
     !!permitForm &&
     !!permitBaselineForm &&
     (permitFormSectionChanged(permitForm, permitBaselineForm, false) || permitAgentToggleDirty)
+  // Shipping edits start an empty country, transport type and port on the usual defaults, as a new
+  // Blanket OIC permit does. The defaults count as the starting values; saved values are kept.
+  const permitShippingBaselineForm = useMemo(
+    () =>
+      permitBaselineForm && usesReviewedPermitFlow && shippingReferences
+        ? withShippingDefaults(permitBaselineForm, shippingReferences, {
+            portLocked: portOfExportLocked,
+          })
+        : permitBaselineForm,
+    [permitBaselineForm, portOfExportLocked, shippingReferences, usesReviewedPermitFlow],
+  )
   const permitShippingDirty =
+    isEditingShipping &&
+    !!permitForm &&
+    !!permitShippingBaselineForm &&
+    permitFormSectionChanged(permitForm, permitShippingBaselineForm, true)
+  // Save compares with the stored values, so defaults shown in an empty field are saved too.
+  const permitShippingUnsaved =
     isEditingShipping &&
     !!permitForm &&
     !!permitBaselineForm &&
@@ -2935,6 +3002,7 @@ const ProvincialPermitDetailsPage = () => {
     kind: PermitClientKind,
     clientNumber: string,
     locationCode: string,
+    lookupContext: PermitClientLookupContext,
   ): Promise<void> => {
     const normalizedClientNumber = clientNumber.trim()
     const normalizedLocationCode = locationCode.trim()
@@ -2955,9 +3023,10 @@ const ProvincialPermitDetailsPage = () => {
 
     setLoading(true)
     try {
-      const clientData = await fetchExemptionClientData(
+      const clientData = await fetchApplicationClientData(
         normalizedClientNumber,
         normalizedLocationCode,
+        lookupContext,
       )
       if (requestRef.current !== requestId) return
       setClientData(clientData)
@@ -2990,6 +3059,7 @@ const ProvincialPermitDetailsPage = () => {
       kind: PermitClientKind,
       clientNumber: string,
       currentLocationCode: string,
+      lookupContext: PermitClientLookupContext,
     ): Promise<void> => {
       const normalizedClientNumber = clientNumber.trim()
       const requestRef =
@@ -3018,7 +3088,12 @@ const ProvincialPermitDetailsPage = () => {
 
       setLoading(true)
       try {
-        const locations = await fetchExemptionClientLocations(normalizedClientNumber)
+        const locations = await fetchApplicationClientLocations(
+          normalizedClientNumber,
+          kind,
+          '',
+          lookupContext.counterpartyClientNumber,
+        )
         if (requestRef.current !== requestId) return
         const selectedLocationCode = resolveClientLocationCode(locations, currentLocationCode)
         setLocations(locations)
@@ -3038,9 +3113,10 @@ const ProvincialPermitDetailsPage = () => {
           return
         }
         if (selectedLocationCode) {
-          const clientData = await fetchExemptionClientData(
+          const clientData = await fetchApplicationClientData(
             normalizedClientNumber,
             selectedLocationCode,
+            lookupContext,
           )
           if (requestRef.current !== requestId) return
           setClientData(clientData)
@@ -3083,7 +3159,17 @@ const ProvincialPermitDetailsPage = () => {
     const { clientNumber, location } = permitClientFields(kind)
     const clientNumberValue = permitForm?.[clientNumber] ?? ''
     setPermitForm((current) => (current ? { ...current, [location]: value } : current))
-    void loadPermitClientData(kind, clientNumberValue, value)
+    void loadPermitClientData(
+      kind,
+      clientNumberValue,
+      value,
+      permitClientLookupContext(
+        kind,
+        detail?.permitNumber ?? permitNumber,
+        permitForm?.ownerClientNumber,
+        permitForm?.agentClientNumber,
+      ),
+    )
   }
 
   const setPermitAgentUsed = (checked: boolean): void => {
@@ -3102,39 +3188,37 @@ const ProvincialPermitDetailsPage = () => {
       setPermitForm((current) =>
         current ? { ...current, agentClientNumber, agentClientLocation } : current,
       )
-      void loadPermitClientLocations('agent', agentClientNumber, agentClientLocation)
+      void loadPermitClientLocations(
+        'agent',
+        agentClientNumber,
+        agentClientLocation,
+        permitClientLookupContext(
+          'agent',
+          detail.permitNumber,
+          permitForm?.ownerClientNumber ?? detail.ownerClientNumber,
+          agentClientNumber,
+        ),
+      )
     }
   }
 
   const resetPermitFormSection = useCallback(
     (shippingFields: boolean): void => {
-      if (detail) {
-        setPermitForm((current) =>
-          mergePermitFormSection(current, buildPermitDetailForm(detail), shippingFields),
-        )
+      const savedForm = shippingFields ? permitShippingBaselineForm : permitBaselineForm
+      if (savedForm) {
+        setPermitForm((current) => mergePermitFormSection(current, savedForm, shippingFields))
       }
 
       setShowPermitValidationErrors(false)
     },
-    [detail],
+    [permitBaselineForm, permitShippingBaselineForm],
   )
 
   const preparePermitClientEdit = (): void => {
     if (!detail) return
     resetPermitFormSection(false)
     setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
-    void loadPermitClientLocations(
-      'owner',
-      detail.ownerClientNumber ?? '',
-      detail.ownerClientLocationCode ?? '',
-    )
-    if (detail.applicantClientNumber?.trim()) {
-      void loadPermitClientLocations(
-        'agent',
-        detail.applicantClientNumber,
-        detail.agentClientLocationCode ?? '',
-      )
-    }
+    loadSavedPermitClientLocations(detail, loadPermitClientLocations)
   }
 
   useEffect(() => {
@@ -3176,6 +3260,8 @@ const ProvincialPermitDetailsPage = () => {
         !ministerialPermit ||
         !canSavePermit ||
         !detail ||
+        // Shipping opens with its defaults, so it waits for the shipping options.
+        isShippingReferencesLoading ||
         newlyCreatedPermitRouteRef.current === routeKey
       ) {
         return
@@ -3185,18 +3271,7 @@ const ProvincialPermitDetailsPage = () => {
       resetPermitFormSection(true)
       setAgentUsed(Boolean(detail.applicantClientNumber?.trim()))
       setPermitEditSection('newPermit')
-      void loadPermitClientLocations(
-        'owner',
-        detail.ownerClientNumber ?? '',
-        detail.ownerClientLocationCode ?? '',
-      )
-      if (detail.applicantClientNumber?.trim()) {
-        void loadPermitClientLocations(
-          'agent',
-          detail.applicantClientNumber,
-          detail.agentClientLocationCode ?? '',
-        )
-      }
+      loadSavedPermitClientLocations(detail, loadPermitClientLocations)
       navigate(locationPath(location), {
         replace: true,
         state: withoutNewlyCreatedPermitNavigation(location.state),
@@ -3207,6 +3282,7 @@ const ProvincialPermitDetailsPage = () => {
   }, [
     canSavePermit,
     detail,
+    isShippingReferencesLoading,
     location,
     ministerialPermit,
     navigate,
@@ -3746,7 +3822,7 @@ const ProvincialPermitDetailsPage = () => {
     }
 
     if (isPermitBusy) return false
-    if (permitEditSections.isEditing('shipping') && !permitShippingDirty) {
+    if (permitEditSections.isEditing('shipping') && !permitShippingUnsaved) {
       setActionResult(null)
       permitEditSections.finishEditing()
       return true
@@ -3825,7 +3901,7 @@ const ProvincialPermitDetailsPage = () => {
   }, [
     activePermitTabId,
     isPermitBusy,
-    permitShippingDirty,
+    permitShippingUnsaved,
     permitEditSections,
     showPermitFieldErrors,
     isShippingReferencesLoading,
@@ -3925,7 +4001,7 @@ const ProvincialPermitDetailsPage = () => {
 
   const onSavePermit = useCallback(async (): Promise<boolean> => {
     setActionResult(null)
-    const resultSubject = permitSaveSubject(permitShippingDirty)
+    const resultSubject = permitSaveSubject(permitShippingUnsaved)
     const resultSource = permitSaveResultSource(activePermitTabId)
     if (paymentPendingReceiptRequiresCompletion) {
       setActionResult(
@@ -3970,10 +4046,10 @@ const ProvincialPermitDetailsPage = () => {
       return false
     }
     if (ministerialScaleSelectionDirty && !(await onSaveScaleSelection())) return false
-    const shippingSaved = permitShippingDirty ? await onSaveShipping() : true
+    const shippingSaved = permitShippingUnsaved ? await onSaveShipping() : true
     if (!shippingSaved) return false
 
-    const includeShipping = permitShippingDirty
+    const includeShipping = permitShippingUnsaved
     if (permitStatusTransitionDraft && permitInvoicePolicyDirty) {
       if (!(await savePermitMutation(includeShipping, true))) return false
     }
@@ -3996,7 +4072,7 @@ const ProvincialPermitDetailsPage = () => {
     permitFieldErrors,
     showPermitFieldErrors,
     permitInvoicePolicyDirty,
-    permitShippingDirty,
+    permitShippingUnsaved,
     permitStatusTransitionDraft,
     savePermitMutation,
   ])
@@ -5192,7 +5268,17 @@ const ProvincialPermitDetailsPage = () => {
                       onChange={(selectedClientNumber) => {
                         setPermitClientNumber(kind, selectedClientNumber)
                         if (selectedClientNumber) {
-                          void loadPermitClientLocations(kind, selectedClientNumber, '')
+                          void loadPermitClientLocations(
+                            kind,
+                            selectedClientNumber,
+                            '',
+                            permitClientLookupContext(
+                              kind,
+                              detail?.permitNumber ?? permitNumber,
+                              permitForm?.ownerClientNumber,
+                              permitForm?.agentClientNumber,
+                            ),
+                          )
                         }
                       }}
                     />
@@ -5945,6 +6031,7 @@ const ProvincialPermitDetailsPage = () => {
                       value: option.code,
                       label: formatShippingReferenceOption(option),
                     }))}
+                    placeholder="Search and select a final destination country"
                     invalid={!!permitFieldError('destinationCountry')}
                     invalidText={permitFieldError('destinationCountry')}
                     onChange={(value) => setPermitFormField('destinationCountry', value)}

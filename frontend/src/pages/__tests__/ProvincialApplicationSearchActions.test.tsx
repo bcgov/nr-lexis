@@ -1,6 +1,6 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { MemoryRouter, Route, Routes } from 'react-router-dom'
+import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import { useDefaultRegionPreference } from '@/pages/shared/useDefaultRegionPreference'
@@ -89,13 +89,25 @@ const mockedCountProvincialApplications = vi.mocked(countProvincialApplications)
 const mockedSearchProvincialApplications = vi.mocked(searchProvincialApplications)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 
+const LocationSearch = () => <span data-testid="location-search">{useLocation().search}</span>
+
+const appliedSearch = () => screen.getByTestId('location-search').textContent ?? ''
+
 const renderPage = (
   path = '/provincial/application?region=11&page=1&pageSize=10&sortField=applicationNumber&sortDirection=desc',
 ) => {
   return render(
     <MemoryRouter initialEntries={[path]}>
       <Routes>
-        <Route path="/provincial/application" element={<ProvincialApplicationPage />} />
+        <Route
+          path="/provincial/application"
+          element={
+            <>
+              <ProvincialApplicationPage />
+              <LocationSearch />
+            </>
+          }
+        />
       </Routes>
     </MemoryRouter>,
   )
@@ -194,8 +206,7 @@ describe('Provincial Application Search Actions', () => {
     expect(mockedFetchProvincialApplicationOptions).toHaveBeenCalledWith(true)
 
     const exemptionType = screen.getByRole('combobox', { name: 'Exemption type' })
-    expect(exemptionType).toHaveValue('')
-    expect(exemptionType).toHaveAttribute('placeholder', 'All')
+    expect(exemptionType).toHaveValue('All')
     await userEvent.click(exemptionType)
     await userEvent.click(screen.getByRole('option', { name: 'None' }))
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
@@ -206,26 +217,37 @@ describe('Provincial Application Search Actions', () => {
         expect.any(Object),
       )
     })
-    const storageKey = 'lexis.search-state.v1.provincial-applications'
-    expect(new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').get('exemptionType')).toBe(
-      'NULL',
-    )
+    const search = appliedSearch()
+    expect(new URLSearchParams(search).get('exemptionType')).toBe('NULL')
 
     page.unmount()
     mockedSearchProvincialApplications.mockClear()
-    renderPage('/provincial/application')
+    renderPage(`/provincial/application${search}`)
     await screen.findByText('321')
     expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('None')
   })
 
-  it('clears a restored None filter to All and submits an unfiltered search', async () => {
-    const storageKey = 'lexis.search-state.v1.provincial-applications'
-    // A complete saved query makes Search refresh results instead of normalizing the URL.
-    sessionStorage.setItem(
-      storageKey,
-      'exemptionType=NULL&region=11&sortField=applicationNumber&sortDirection=desc&page=1&pageSize=10',
-    )
+  it('opens from the menu with filters only, even after an earlier search', async () => {
+    const page = renderPage()
+    await screen.findByText('321')
+    page.unmount()
+    mockedSearchProvincialApplications.mockClear()
+
     renderPage('/provincial/application')
+
+    expect(await screen.findByRole('button', { name: 'Search' })).toBeInTheDocument()
+    expect(screen.queryByText('321')).not.toBeInTheDocument()
+    expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
+    expect(appliedSearch()).toBe('')
+    // Arriving with nothing focused, as after Cancel on Create application, focus starts on the title.
+    expect(screen.getByRole('heading', { level: 1, name: 'Application search' })).toHaveFocus()
+  })
+
+  it('clears a restored None filter to All and submits an unfiltered search', async () => {
+    // A complete query makes Search refresh results instead of normalizing the URL.
+    renderPage(
+      '/provincial/application?exemptionType=NULL&region=11&sortField=applicationNumber&sortDirection=desc&page=1&pageSize=10',
+    )
     await screen.findByText('321')
     expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('None')
 
@@ -239,14 +261,12 @@ describe('Provincial Application Search Actions', () => {
     })
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear all' }))
-    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('')
+    expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveValue('All')
     expect(screen.getByRole('combobox', { name: 'Exemption type' })).toHaveAttribute(
       'placeholder',
       'All',
     )
-    expect(new URLSearchParams(sessionStorage.getItem(storageKey) ?? '').has('exemptionType')).toBe(
-      false,
-    )
+    expect(new URLSearchParams(appliedSearch()).has('exemptionType')).toBe(false)
     mockedSearchProvincialApplications.mockClear()
     await userEvent.click(screen.getByRole('button', { name: 'Search' }))
     await waitFor(() => {
@@ -280,25 +300,17 @@ describe('Provincial Application Search Actions', () => {
     expect(await screen.findByText('Exempted - New')).toBeVisible()
   })
 
-  it('shows the result columns on the loading skeleton', async () => {
+  it('shows grey header bars for the result columns only on the loading skeleton', async () => {
     mockedSearchProvincialApplications.mockReturnValue(new Promise(() => {}))
 
     renderPage()
 
     const skeleton = await screen.findByRole('table', { name: 'Searching' })
-    expect(
-      Array.from(skeleton.querySelectorAll('thead th'), (header) => header.textContent),
-    ).toEqual([
-      '',
-      'Application number',
-      'Status',
-      'Owner client number',
-      'Agent client number',
-      'Application volume (m³)',
-      'Exemption number',
-      'List date',
-      'Region',
-    ])
+    const headers = Array.from(skeleton.querySelectorAll('thead th'))
+    // Application number, Status, both client numbers, volume, exemption, List date and Region.
+    expect(headers).toHaveLength(8)
+    headers.forEach((header) => expect(header.textContent).toBe(''))
+    expect(skeleton.querySelector('tbody tr')?.querySelectorAll('td')).toHaveLength(8)
   })
 
   it('shows the Figma result columns with the recorded agent', async () => {
@@ -831,12 +843,9 @@ describe('Provincial Application Search Actions', () => {
         resolveOptions = resolve
       }),
     )
-    sessionStorage.setItem(
-      'lexis.search-state.v1.provincial-applications',
-      'page=1&pageSize=10&sortField=applicationNumber&sortDirection=desc',
+    renderPage(
+      '/provincial/application?page=1&pageSize=10&sortField=applicationNumber&sortDirection=desc',
     )
-
-    renderPage('/provincial/application')
 
     expect(await screen.findByText('Searching')).toBeInTheDocument()
     expect(screen.queryByText('0 applications found')).not.toBeInTheDocument()
@@ -878,45 +887,38 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
-  it.each(['url', 'session'])(
-    'keeps a restored Applicant criterion separate from Agent and removable from %s',
-    async (source) => {
-      const query = 'applicantClientNumber=00011111&agentClientNumber=00022222'
-      if (source === 'session') {
-        sessionStorage.setItem('lexis.search-state.v1.provincial-applications', query)
-      }
-      renderPage(source === 'url' ? `/provincial/application?${query}` : '/provincial/application')
-      await screen.findByText('321')
-      expect(screen.getByText('Applicant client: 00011111')).toBeVisible()
-      expect(screen.getByLabelText('Agent client')).toHaveValue('00022222')
+  it('keeps a restored Applicant criterion separate from Agent and removable from the URL', async () => {
+    renderPage('/provincial/application?applicantClientNumber=00011111&agentClientNumber=00022222')
+    await screen.findByText('321')
+    expect(screen.getByText('Applicant client: 00011111')).toBeVisible()
+    expect(screen.getByLabelText('Agent client')).toHaveValue('00022222')
+    expect(mockedSearchProvincialApplications).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        filters: expect.objectContaining({
+          applicantClientNumber: '00011111',
+          agentClientNumber: '00022222',
+        }),
+      }),
+      expect.any(Object),
+    )
+
+    mockedSearchProvincialApplications.mockClear()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove applicant client filter' }))
+    expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Agent client')).toHaveValue('00022222')
+    await userEvent.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() =>
       expect(mockedSearchProvincialApplications).toHaveBeenLastCalledWith(
         expect.objectContaining({
           filters: expect.objectContaining({
-            applicantClientNumber: '00011111',
+            applicantClientNumber: '',
             agentClientNumber: '00022222',
           }),
         }),
         expect.any(Object),
-      )
-
-      mockedSearchProvincialApplications.mockClear()
-      await userEvent.click(screen.getByRole('button', { name: 'Remove applicant client filter' }))
-      expect(mockedSearchProvincialApplications).not.toHaveBeenCalled()
-      expect(screen.getByLabelText('Agent client')).toHaveValue('00022222')
-      await userEvent.click(screen.getByRole('button', { name: 'Search' }))
-      await waitFor(() =>
-        expect(mockedSearchProvincialApplications).toHaveBeenLastCalledWith(
-          expect.objectContaining({
-            filters: expect.objectContaining({
-              applicantClientNumber: '',
-              agentClientNumber: '00022222',
-            }),
-          }),
-          expect.any(Object),
-        ),
-      )
-    },
-  )
+      ),
+    )
+  })
 
   it('renders readable results with the count in the toolbar and the pagination', async () => {
     renderPage()
@@ -932,6 +934,8 @@ describe('Provincial Application Search Actions', () => {
     expect(screen.getAllByText('2 applications found')).toHaveLength(1)
     expect(screen.getByText('1–2 of 2 items')).toBeVisible()
     expect(document.querySelector('.legacy-search-result-count--footer')).toBeNull()
+    // Only the count is announced; the rows aren't read out after each search.
+    expect(link.closest('tbody')).toHaveAttribute('aria-live', 'off')
   })
 
   it('restores and submits independently optional list-date bounds from a range control', async () => {

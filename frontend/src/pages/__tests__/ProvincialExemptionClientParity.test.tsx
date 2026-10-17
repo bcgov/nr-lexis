@@ -6,8 +6,8 @@ import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import ProvincialExemptionDetailsPage from '@/pages/ProvincialExemptionDetails'
 import {
-  fetchExemptionClientData,
-  fetchExemptionClientLocations,
+  fetchApplicationClientData,
+  fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
 import {
@@ -26,8 +26,8 @@ vi.mock('@/service/lexis-detail-service', () => ({
 }))
 
 vi.mock('@/service/application-client-lookup-service', () => ({
-  fetchExemptionClientData: vi.fn(),
-  fetchExemptionClientLocations: vi.fn(),
+  fetchApplicationClientData: vi.fn(),
+  fetchApplicationClientLocations: vi.fn(),
 }))
 
 vi.mock('@/service/provincial-exemption-documents-service', () => ({
@@ -112,12 +112,12 @@ describe('Provincial exemption client parity', () => {
       lockMessage: '',
     })
     vi.mocked(fetchExemptionPermits).mockResolvedValue([])
-    vi.mocked(fetchExemptionClientLocations).mockImplementation(async (clientNumber) =>
+    vi.mocked(fetchApplicationClientLocations).mockImplementation(async (clientNumber) =>
       clientNumber === '00001074'
         ? [{ locationCode: '03', locationName: 'WOODLANDS SERVICES', selected: true }]
         : [{ locationCode: '12', locationName: 'EXPORT BILLING', selected: true }],
     )
-    vi.mocked(fetchExemptionClientData).mockImplementation(async (clientNumber) =>
+    vi.mocked(fetchApplicationClientData).mockImplementation(async (clientNumber) =>
       clientNumber === '00001074'
         ? {
             clientNumber,
@@ -180,9 +180,9 @@ describe('Provincial exemption client parity', () => {
   })
 
   it('shows the applicant card as loading before its client lookup starts', async () => {
-    const lookupData = vi.mocked(fetchExemptionClientData).getMockImplementation()
+    const lookupData = vi.mocked(fetchApplicationClientData).getMockImplementation()
     const cardTextWhenLookupStarted: string[] = []
-    vi.mocked(fetchExemptionClientData).mockImplementation(async (...args) => {
+    vi.mocked(fetchApplicationClientData).mockImplementation(async (...args) => {
       const heading = screen.queryByRole('heading', { name: 'Applicant details', level: 2 })
       cardTextWhenLookupStarted.push(heading?.closest('.cds--tile')?.textContent ?? '')
       return lookupData ? lookupData(...args) : null
@@ -293,8 +293,9 @@ describe('Provincial exemption client parity', () => {
     ).toBeInTheDocument()
     expect(within(ownerTile as HTMLElement).getAllByText('Agent')).not.toHaveLength(0)
 
+    // The agent section has the application page's title.
     const agentTile = (
-      await screen.findByRole('heading', { name: 'Agent client details', level: 3 })
+      await screen.findByRole('heading', { name: 'Agent information', level: 3 })
     ).closest('section')
     expect(agentTile).toBeTruthy()
     // The agent is a section of the applicant card, not a second full-height card.
@@ -310,18 +311,23 @@ describe('Provincial exemption client parity', () => {
       ),
     ).toBeInTheDocument()
 
+    // Both parties are looked up through the linked application.
     await waitFor(() => {
-      expect(fetchExemptionClientData).toHaveBeenCalledWith('00001074', '03')
-      expect(fetchExemptionClientData).toHaveBeenCalledWith('00002176', '12')
-      expect(fetchExemptionClientLocations).toHaveBeenCalledWith('00001074')
-      expect(fetchExemptionClientLocations).toHaveBeenCalledWith('00002176')
+      expect(fetchApplicationClientData).toHaveBeenCalledWith('00001074', '03', {
+        applicationNumber: '45242',
+      })
+      expect(fetchApplicationClientData).toHaveBeenCalledWith('00002176', '12', {
+        applicationNumber: '45242',
+      })
+      expect(fetchApplicationClientLocations).toHaveBeenCalledWith('00001074', 'owner', '45242')
+      expect(fetchApplicationClientLocations).toHaveBeenCalledWith('00002176', 'agent', '45242')
     })
   })
 
   it.each([false, true])(
     'uses the selected client-data location name when options contain only codes: %s',
     async (codeOnly) => {
-      vi.mocked(fetchExemptionClientLocations).mockImplementation(async (clientNumber) => {
+      vi.mocked(fetchApplicationClientLocations).mockImplementation(async (clientNumber) => {
         const locationCode = clientNumber === '00001074' ? '03' : '12'
         return codeOnly ? [{ locationCode, locationName: locationCode, selected: true }] : []
       })
@@ -337,16 +343,27 @@ describe('Provincial exemption client parity', () => {
       )
       expect(await screen.findByText('03 - AUTHORITATIVE OWNER LOCATION')).toBeInTheDocument()
       expect(await screen.findByText('12 - AUTHORITATIVE AGENT LOCATION')).toBeInTheDocument()
-      expect(fetchExemptionClientData).toHaveBeenCalledWith('00001074', '03')
-      expect(fetchExemptionClientData).toHaveBeenCalledWith('00002176', '12')
+      expect(fetchApplicationClientData).toHaveBeenCalledWith('00001074', '03', {
+        applicationNumber: '45242',
+      })
+      expect(fetchApplicationClientData).toHaveBeenCalledWith('00002176', '12', {
+        applicationNumber: '45242',
+      })
     },
   )
 
-  it('shows an unavailable state when client lookups fail', async () => {
+  it("keeps one party's details when the other party's lookup fails", async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
-    vi.mocked(fetchExemptionClientLocations).mockRejectedValue(
-      new Error('client endpoint unavailable'),
-    )
+    const forbidden = { response: { status: 403 } }
+    const lookupData = vi.mocked(fetchApplicationClientData).getMockImplementation()
+    vi.mocked(fetchApplicationClientData).mockImplementation(async (...args) => {
+      if (args[0] === '00001074') throw forbidden
+      return lookupData ? lookupData(...args) : null
+    })
+    vi.mocked(fetchApplicationClientLocations).mockImplementation(async (clientNumber) => {
+      if (clientNumber === '00001074') throw forbidden
+      return [{ locationCode: '12', locationName: 'EXPORT BILLING', selected: true }]
+    })
 
     render(
       <MemoryRouter initialEntries={['/provincial/exemption/26-8758']}>
@@ -359,16 +376,26 @@ describe('Provincial exemption client parity', () => {
       </MemoryRouter>,
     )
 
+    const ownerTile = (
+      await screen.findByRole('heading', { name: 'Applicant details', level: 2 })
+    ).closest('.cds--tile') as HTMLElement
+    const agentSection = (
+      await screen.findByRole('heading', { name: 'Agent information', level: 3 })
+    ).closest('section') as HTMLElement
     expect(
-      await screen.findByRole('heading', { name: 'Client details unavailable' }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getAllByText(
-        'Applicant and agent details could not be retrieved from the linked application.',
+      await within(agentSection).findByText(
+        'C/O ACCOUNTS MANAGER PO BOX 49114 TOWER 4 BENTALL CENTRE 3500 1055 DUNSMUIR STREET',
       ),
-    ).not.toHaveLength(0)
+    ).toBeInTheDocument()
+    expect(within(agentSection).getByText('12 - EXPORT BILLING')).toBeInTheDocument()
+    expect(within(agentSection).queryByText('Client details unavailable')).not.toBeInTheDocument()
+
+    // The owner keeps the linked application's saved values and says the rest didn't load.
+    expect(within(ownerTile).getByText('BOB TURMEL')).toBeInTheDocument()
+    expect(within(ownerTile).getByText('NORSKE SKOG CANADA LIMITED · 00001074')).toBeInTheDocument()
+    expect(within(ownerTile).getAllByText('Client details unavailable')).toHaveLength(1)
+    expect(screen.queryByRole('heading', { name: 'Client details unavailable' })).toBeNull()
     expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
-    expect(screen.getByRole('tab', { name: 'Applicant' })).toBeInTheDocument()
 
     consoleError.mockRestore()
   })
@@ -421,10 +448,20 @@ describe('Provincial exemption client parity', () => {
     expect(screen.queryByText('Agent client number')).not.toBeInTheDocument()
 
     await waitFor(() => {
-      expect(fetchExemptionClientData).toHaveBeenCalledWith('00001074', '03')
+      expect(fetchApplicationClientData).toHaveBeenCalledWith('00001074', '03', {
+        applicationNumber: '45242',
+      })
     })
-    expect(fetchExemptionClientData).not.toHaveBeenCalledWith('00002176', '12')
-    expect(fetchExemptionClientLocations).not.toHaveBeenCalledWith('00002176')
+    expect(fetchApplicationClientData).not.toHaveBeenCalledWith(
+      '00002176',
+      expect.anything(),
+      expect.anything(),
+    )
+    expect(fetchApplicationClientLocations).not.toHaveBeenCalledWith(
+      '00002176',
+      expect.anything(),
+      expect.anything(),
+    )
   })
 
   it('keeps OIC client tabs hidden while showing the linked application owner in the summary', async () => {

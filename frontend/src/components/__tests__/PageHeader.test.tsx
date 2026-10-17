@@ -1,4 +1,6 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { createMemoryRouter, Link, Outlet, RouterProvider, useNavigate } from 'react-router-dom'
 
 import PageHeader from '@/components/PageHeader'
 import StatusTag from '@/components/StatusTag'
@@ -39,6 +41,25 @@ describe('PageHeader', () => {
       screen.getByRole('button', { name: 'Edit application' }),
     )
     expect(screen.getByRole('banner')).toHaveClass('application-header')
+  })
+
+  it('keeps the subtitle with the title, ahead of the actions', () => {
+    render(
+      <PageHeader
+        title="Application search"
+        subtitle="Find applications and check their status"
+        actions={<button type="button">Create application</button>}
+      />,
+    )
+
+    const subtitle = screen.getByText('Find applications and check their status')
+    const actions = screen.getByRole('group', { name: 'Page actions' })
+    expect(subtitle.closest('.lexis-page-header__heading')).toContainElement(
+      screen.getByRole('heading', { level: 1, name: 'Application search' }),
+    )
+    expect(
+      subtitle.compareDocumentPosition(actions) & Node.DOCUMENT_POSITION_FOLLOWING,
+    ).toBeTruthy()
   })
 
   it('supports an explicit heading id and caller-provided header attributes', () => {
@@ -97,5 +118,72 @@ describe('PageHeader', () => {
     render(<PageHeader title="Apply for new permit" focusTitle />)
     expect(screen.getByRole('heading', { level: 1 })).toHaveFocus()
     window.history.replaceState(null, '')
+  })
+
+  it('focuses the title only when the page opens with nothing focused, when asked', () => {
+    const first = render(<PageHeader title="Application search" focusTitle="whenFocusLost" />)
+    const heading = screen.getByRole('heading', { level: 1, name: 'Application search' })
+    expect(heading).toHaveFocus()
+    expect(heading).toHaveAttribute('tabindex', '-1')
+    first.unmount()
+
+    const field = document.createElement('input')
+    document.body.append(field)
+    field.focus()
+    render(<PageHeader title="Application search" focusTitle="whenFocusLost" />)
+    expect(screen.getByRole('heading', { level: 1 })).not.toHaveFocus()
+    expect(field).toHaveFocus()
+    field.remove()
+  })
+
+  it('lands on the title after the control that left the last page went away with it', async () => {
+    const CreatePage = () => {
+      const navigate = useNavigate()
+      return (
+        <>
+          <h1>Create new application</h1>
+          <button type="button" onClick={() => navigate('/search')}>
+            Cancel
+          </button>
+        </>
+      )
+    }
+    const router = createMemoryRouter(
+      [
+        {
+          element: (
+            <>
+              <nav>
+                <Link to="/search">Application search</Link>
+              </nav>
+              <Outlet />
+            </>
+          ),
+          children: [
+            { path: '/create', element: <CreatePage /> },
+            {
+              path: '/search',
+              element: <PageHeader title="Application search" focusTitle="whenFocusLost" />,
+            },
+          ],
+        },
+      ],
+      { initialEntries: ['/create'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Application search' }),
+    ).toHaveFocus()
+
+    // Opened from the menu, focus stays on the menu link.
+    await router.navigate('/create')
+    const menuLink = screen.getByRole('link', { name: 'Application search' })
+    await userEvent.click(menuLink)
+    expect(
+      await screen.findByRole('heading', { level: 1, name: 'Application search' }),
+    ).not.toHaveFocus()
+    expect(menuLink).toHaveFocus()
   })
 })

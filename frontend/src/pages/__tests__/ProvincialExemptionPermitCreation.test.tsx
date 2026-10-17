@@ -10,8 +10,8 @@ import { readDetailReturnTo, readDetailReturnTrail } from '@/pages/shared/detail
 import { fetchProvincialExemptionDetail } from '@/service/lexis-detail-service'
 import apiService from '@/service/api-service'
 import {
-  fetchExemptionClientData,
-  fetchExemptionClientLocations,
+  fetchApplicationClientData,
+  fetchApplicationClientLocations,
 } from '@/service/application-client-lookup-service'
 import {
   fetchExemptionApplications,
@@ -268,14 +268,14 @@ const configureBlanketOicCreationDependencies = () => {
     exemptionStatuses: [{ value: 'ACT', label: 'Active' }],
     regions: [{ value: '1909', label: 'South Coast Natural Resource Region' }],
   })
-  vi.mocked(fetchExemptionClientLocations).mockResolvedValue([
+  vi.mocked(fetchApplicationClientLocations).mockResolvedValue([
     {
       locationCode: '00',
       locationName: 'WOODLANDS SERVICES',
       selected: true,
     },
   ])
-  vi.mocked(fetchExemptionClientData).mockImplementation(async (clientNumber) => ({
+  vi.mocked(fetchApplicationClientData).mockImplementation(async (clientNumber) => ({
     clientNumber: clientNumber.padStart(8, '0'),
     companyName: 'Test Client',
     clientAcronym: '',
@@ -916,8 +916,13 @@ describe('permit creation from an exemption', () => {
       ).toHaveValue('00'),
     )
 
-    expect(fetchExemptionClientLocations).toHaveBeenCalledWith('00001074')
-    expect(fetchExemptionClientLocations).toHaveBeenCalledWith('00012345')
+    expect(fetchApplicationClientLocations).toHaveBeenCalledWith('00001074', 'owner', '', '')
+    expect(fetchApplicationClientLocations).toHaveBeenCalledWith(
+      '00012345',
+      'agent',
+      '',
+      '00001074',
+    )
   })
 
   it.each([['zero', { pieces: '0', volume: '0' }]])(
@@ -1024,14 +1029,14 @@ describe('permit creation from an exemption', () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
     let resolveOwnerLocations: (
-      locations: Awaited<ReturnType<typeof fetchExemptionClientLocations>>,
+      locations: Awaited<ReturnType<typeof fetchApplicationClientLocations>>,
     ) => void = () => undefined
     const pendingOwnerLocations = new Promise<
-      Awaited<ReturnType<typeof fetchExemptionClientLocations>>
+      Awaited<ReturnType<typeof fetchApplicationClientLocations>>
     >((resolve) => {
       resolveOwnerLocations = resolve
     })
-    vi.mocked(fetchExemptionClientLocations).mockReturnValue(pendingOwnerLocations)
+    vi.mocked(fetchApplicationClientLocations).mockReturnValue(pendingOwnerLocations)
     vi.mocked(addPermitDetail).mockResolvedValue({
       success: true,
       message: 'The permit was saved successfully.',
@@ -1063,7 +1068,7 @@ describe('permit creation from an exemption', () => {
     await userEvent.click(saveButton)
     await userEvent.click(saveButton)
 
-    await waitFor(() => expect(fetchExemptionClientLocations).toHaveBeenCalledOnce())
+    await waitFor(() => expect(fetchApplicationClientLocations).toHaveBeenCalledOnce())
     expect(saveButton).toBeDisabled()
     resolveOwnerLocations([
       {
@@ -1166,7 +1171,7 @@ describe('permit creation from an exemption', () => {
       ).toHaveValue('00'),
     )
 
-    vi.mocked(fetchExemptionClientLocations).mockRejectedValueOnce(
+    vi.mocked(fetchApplicationClientLocations).mockRejectedValueOnce(
       new Error('client endpoint unavailable'),
     )
     await userEvent.click(ownerClientNumber)
@@ -1192,7 +1197,7 @@ describe('permit creation from an exemption', () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
     const lookupAttempts = new Map<string, number>()
-    vi.mocked(fetchExemptionClientLocations).mockImplementation((clientNumber) => {
+    vi.mocked(fetchApplicationClientLocations).mockImplementation((clientNumber) => {
       const attempt = (lookupAttempts.get(clientNumber) ?? 0) + 1
       lookupAttempts.set(clientNumber, attempt)
       return attempt === 1
@@ -1255,14 +1260,14 @@ describe('permit creation from an exemption', () => {
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
     let resolveFirstLookup: (
-      locations: Awaited<ReturnType<typeof fetchExemptionClientLocations>>,
+      locations: Awaited<ReturnType<typeof fetchApplicationClientLocations>>,
     ) => void = () => undefined
-    const firstLookup = new Promise<Awaited<ReturnType<typeof fetchExemptionClientLocations>>>(
+    const firstLookup = new Promise<Awaited<ReturnType<typeof fetchApplicationClientLocations>>>(
       (resolve) => {
         resolveFirstLookup = resolve
       },
     )
-    vi.mocked(fetchExemptionClientLocations).mockImplementation((clientNumber) =>
+    vi.mocked(fetchApplicationClientLocations).mockImplementation((clientNumber) =>
       clientNumber === '11111111'
         ? firstLookup
         : Promise.resolve([
@@ -1286,7 +1291,9 @@ describe('permit creation from an exemption', () => {
     })
 
     fireEvent.change(ownerClientNumber, { target: { value: '11111111' } })
-    await waitFor(() => expect(fetchExemptionClientLocations).toHaveBeenCalledWith('11111111'))
+    await waitFor(() =>
+      expect(fetchApplicationClientLocations).toHaveBeenCalledWith('11111111', 'owner', '', ''),
+    )
 
     fireEvent.change(ownerClientNumber, { target: { value: '22222222' } })
     await waitFor(() => expect(ownerLocation).toHaveValue('22'))

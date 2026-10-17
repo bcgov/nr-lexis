@@ -177,6 +177,8 @@ describe('Provincial Offer Search Actions', () => {
     const resultsTable = screen.getByRole('region', { name: 'Search results table', hidden: true })
     expect(resultsTable.closest('[hidden]')).toHaveStyle({ display: 'none' })
     expect(resultsTable).not.toBeVisible()
+    // Arriving with nothing focused, as after Cancel on Create offer, focus starts on the title.
+    expect(screen.getByRole('heading', { level: 1, name: 'Offer search' })).toHaveFocus()
   })
 
   it('keeps the results loading while default search filters initialize', async () => {

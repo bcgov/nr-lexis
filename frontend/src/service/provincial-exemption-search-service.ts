@@ -26,6 +26,7 @@ type BackendProvincialExemptionSearchResult = {
   approvedVolume: number
   balanceRemaining: number
   locked: boolean
+  outsideApprovalRegions?: boolean
 }
 
 type ProvincialExemptionSearchOptions = {
@@ -114,7 +115,9 @@ const isBackendSearchResult = (value: unknown): value is BackendProvincialExempt
     Number.isFinite(value.approvedVolume) &&
     typeof value.balanceRemaining === 'number' &&
     Number.isFinite(value.balanceRemaining) &&
-    typeof value.locked === 'boolean'
+    typeof value.locked === 'boolean' &&
+    (value.outsideApprovalRegions === undefined ||
+      typeof value.outsideApprovalRegions === 'boolean')
   )
 }
 
@@ -148,6 +151,7 @@ const parseBackendResponse = (payload: unknown): ProvincialExemptionSearchRespon
       canApprove: statusCode === 'NEW',
       canViewExemption: true,
       isLocked: row.locked,
+      outsideApprovalRegions: row.outsideApprovalRegions ?? false,
     }
   })
 }

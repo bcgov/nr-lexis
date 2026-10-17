@@ -686,21 +686,53 @@ describe('Exemption and Federal Detail Document Actions', () => {
       </MemoryRouter>,
     )
 
-    await selectDetailTab('Applications')
-    const applications = (
-      await screen.findByRole('heading', { name: 'Applications', level: 2 })
-    ).closest('.cds--tile') as HTMLElement
-    await userEvent.click(within(applications).getByRole('button', { name: 'Add application' }))
-    await userEvent.type(await screen.findByLabelText('Application number'), '655')
-    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
-    expect(await within(applications).findByText('Application added')).toBeInTheDocument()
+    const visibleRects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+    try {
+      await selectDetailTab('Applications')
+      const applications = (
+        await screen.findByRole('heading', { name: 'Applications', level: 2 })
+      ).closest('.cds--tile') as HTMLElement
+      // The refresh after each change takes a moment, as it does over the network.
+      mockedFetchExemptionEditContext.mockImplementation(
+        () =>
+          new Promise((resolve) =>
+            setTimeout(
+              () =>
+                resolve({
+                  rateOverrideEnabled: false,
+                  fixedFeeRate: '',
+                  regionNumbers: [],
+                  locked: false,
+                  lockMessage: '',
+                }),
+              20,
+            ),
+          ),
+      )
+      await userEvent.click(within(applications).getByRole('button', { name: 'Add application' }))
+      await userEvent.type(await screen.findByLabelText('Application number'), '655')
+      await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+      const added = (await within(applications).findByText('Application added')).closest(
+        '.app-inline-notification',
+      )
+      // The panel and its launcher leave the page while the list reloads, so the notice takes focus.
+      await waitFor(() => expect(added).toHaveFocus())
 
-    await userEvent.click(within(applications).getByRole('button', { name: 'Remove' }))
-    const confirmation = await screen.findByRole('dialog', {
-      name: 'Are you sure you want to remove this application?',
-    })
-    await userEvent.click(within(confirmation).getByRole('button', { name: 'Remove' }))
-    expect(await within(applications).findByText('Application removed')).toBeInTheDocument()
+      await userEvent.click(within(applications).getByRole('button', { name: 'Remove' }))
+      const confirmation = await screen.findByRole('dialog', {
+        name: 'Are you sure you want to remove this application?',
+      })
+      await userEvent.click(within(confirmation).getByRole('button', { name: 'Remove' }))
+      const removed = (await within(applications).findByText('Application removed')).closest(
+        '.app-inline-notification',
+      )
+      // The removed row's button is gone, so the notice takes focus.
+      await waitFor(() => expect(removed).toHaveFocus())
+    } finally {
+      visibleRects.mockRestore()
+    }
   })
 
   it('checks the application number when Save is clicked and asks before dropping it', async () => {
@@ -804,11 +836,11 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ],
     [
       'Application listing date has not passed.',
-      "Application 654 can't be added while it's being advertised or has a valid offer",
+      "Application 654 can't be added while it's being advertised or has a valid offer.",
     ],
     [
       'Application has valid offers and cannot be added to an exemption.',
-      "Application 654 can't be added while it's being advertised or has a valid offer",
+      "Application 654 can't be added while it's being advertised or has a valid offer.",
     ],
     [
       'Insufficient privileges to add this application.',
@@ -859,7 +891,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     [
       'a permission error',
       { response: { status: 403, data: { message: 'Forbidden' } } },
-      'You do not have permission to add application 654 to this exemption',
+      'You do not have permission to add application 654 to this exemption.',
       false,
     ],
     [
@@ -910,18 +942,18 @@ describe('Exemption and Federal Detail Document Actions', () => {
     [
       'This application is already assigned to an exemption.',
       'EX-900',
-      'Application 654 is already on exemption EX-900',
+      'Application 654 is already on exemption EX-900.',
     ],
     [
       'This application is already assigned to an exemption.',
       'EX-777',
-      'Application 654 is already on this exemption',
+      'Application 654 is already on this exemption.',
     ],
     // The server checks the approved status first, and an application on an exemption is Exempted.
     [
       'Applications must have a status of approved.',
       'EX-900',
-      'Application 654 is already on exemption EX-900',
+      'Application 654 is already on exemption EX-900.',
     ],
   ])(
     'answers "%s" by naming the exemption %s the application is on',

@@ -526,7 +526,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     await selectApplicationDetailTab('Scale')
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
     await selectApplicationItemsForEditing()
-    fireEvent.change(await screen.findByLabelText('Package comments'), {
+    fireEvent.change(await screen.findByLabelText('Comments'), {
       target: { value: 'Saved package change' },
     })
     const detailFetchCountBeforeSave = mockedFetchProvincialApplicationDetail.mock.calls.length

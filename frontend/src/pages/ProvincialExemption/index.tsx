@@ -211,7 +211,11 @@ const isMinisterialExemption = (row: ProvincialExemptionSearchItem): boolean =>
 // INTENTIONAL_LEGACY_DIVERGENCE(EXEMPTION_APPROVAL_MINISTERIAL_ONLY)
 // Figma: search approval is only for Ministerial exemptions in New status.
 const isApprovalSelectable = (row: ProvincialExemptionSearchItem): boolean =>
-  row.canApprove && row.statusCode === 'NEW' && isMinisterialExemption(row) && !row.isLocked
+  row.canApprove &&
+  row.statusCode === 'NEW' &&
+  isMinisterialExemption(row) &&
+  !row.isLocked &&
+  !row.outsideApprovalRegions
 
 const disabledApprovalSelectionDescription = (row: ProvincialExemptionSearchItem): string => {
   if (row.isLocked) {
@@ -222,6 +226,9 @@ const disabledApprovalSelectionDescription = (row: ProvincialExemptionSearchItem
   }
   if (!isMinisterialExemption(row)) {
     return 'Only Ministerial exemptions can be approved from search.'
+  }
+  if (row.outsideApprovalRegions) {
+    return 'This exemption is outside your regions and cannot be approved.'
   }
   return 'This exemption is not eligible for approval.'
 }
@@ -893,6 +900,7 @@ const ProvincialExemptionPage = () => {
         <PageHeader
           title="Exemption search"
           subtitle="Find exemptions and check their status"
+          focusTitle="whenFocusLost"
           actions={
             canCreateExemption ? (
               <Button
@@ -972,6 +980,7 @@ const ProvincialExemptionPage = () => {
                   labelText="Exemption type"
                   value={filters.exemptionTypeCode}
                   placeholder="All"
+                  allOptionLabel="All"
                   options={exemptionTypeOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   readOnly={exemptionTypeLocked}
@@ -982,6 +991,7 @@ const ProvincialExemptionPage = () => {
                   labelText="Exemption status"
                   value={filters.exemptionStatusCode}
                   placeholder="All"
+                  allOptionLabel="All"
                   options={exemptionStatusOptions}
                   disabled={optionsLoading || optionsUnavailable}
                   onChange={(value) => updateFilter('exemptionStatusCode', value)}
@@ -1078,10 +1088,7 @@ const ProvincialExemptionPage = () => {
             resultName="exemption"
             loading={resultsLoading}
             loadingDescription="Searching"
-            columnHeaders={[
-              ...(canApproveExemption ? [''] : []),
-              ...SORT_COLUMNS.map((column) => column.label),
-            ]}
+            columnCount={SORT_COLUMNS.length}
             totalItems={
               errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined
@@ -1164,7 +1171,8 @@ const ProvincialExemptionPage = () => {
                     ))}
                   </TableRow>
                 </TableHead>
-                <TableBody>
+                {/* The toolbar announces the result count, so the rows aren't read out again. */}
+                <TableBody aria-live="off">
                   {results.content.map((row) => {
                     const canSelectRow = canApproveExemption && isApprovalSelectable(row)
                     const canViewExemption = row.canViewExemption

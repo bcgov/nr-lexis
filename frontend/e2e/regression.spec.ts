@@ -1749,7 +1749,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/review')
   })
 
-  test('restores an applied search after navigating to another page', async () => {
+  test('opens a search without a query with filters only and keeps applied searches in history', async () => {
     const page = await authenticatedIdirPage()
 
     await expectAccessiblePage(
@@ -1759,14 +1759,12 @@ test.describe('TEST IDIR admin regression', () => {
     )
     await expect(page.getByText('No results found', { exact: true })).toBeVisible()
 
-    await expectAccessiblePage(
-      page,
-      `/federal?applicationNumber=${missingApplicationNumber}`,
-      /federal application search/i,
-    )
     await expectAccessiblePage(page, '/provincial/application', /^Application search$/)
+    await expect.poll(() => new URL(page.url()).search).toBe('')
+    await expect(page.getByRole('button', { name: 'Search' })).toBeVisible()
+    await expect(page.getByText('No results found', { exact: true })).toHaveCount(0)
 
-    await expect.poll(() => new URL(page.url()).pathname).toBe('/provincial/application')
+    await page.goBack()
     await expect
       .poll(() => new URL(page.url()).searchParams.get('applicationNumber'))
       .toBe(missingApplicationNumber)
