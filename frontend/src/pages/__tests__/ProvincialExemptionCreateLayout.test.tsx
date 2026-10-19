@@ -152,13 +152,84 @@ describe('Provincial exemption create layout', () => {
     expect(screen.getByRole('button', { name: 'Save exemption' })).toBeEnabled()
     expect(submitProvincialExemptionCreate).not.toHaveBeenCalled()
 
+    // The dates and region are still empty, so Save stops at those fields and keeps the
+    // number's message alongside them.
     await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
     expect(submitProvincialExemptionCreate).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Approval date')).toHaveAttribute('aria-invalid', 'true')
     expect(errorMessageFor(number)).toBe(duplicateFieldError)
 
     await userEvent.type(number, '9')
     expect(number).not.toHaveAttribute('aria-invalid')
     expect(screen.queryByText(duplicateFieldError)).not.toBeInTheDocument()
+  })
+
+  it('drops a taken message when a later check finds that number free', async () => {
+    vi.mocked(checkProvincialExemptionNumber).mockResolvedValueOnce({
+      valid: false,
+      message: serverDuplicateError,
+    })
+    renderCreatePage()
+    await chooseBlanketOic()
+    const number = screen.getByRole('textbox', { name: 'Exemption number' })
+
+    await userEvent.type(number, 'T1016R3')
+    await userEvent.tab()
+    await waitFor(() => expect(errorMessageFor(number)).toBe(duplicateFieldError))
+
+    await userEvent.type(number, '9{Backspace}')
+    await userEvent.tab()
+    expect(checkProvincialExemptionNumber).toHaveBeenCalledTimes(2)
+    expect(checkProvincialExemptionNumber).toHaveBeenLastCalledWith('T1016R3')
+    await waitFor(() => expect(number).not.toHaveAttribute('aria-invalid'))
+    expect(screen.queryByText(duplicateFieldError)).not.toBeInTheDocument()
+  })
+
+  it('lets Save submit a number reported taken and shows the refusal on the field', async () => {
+    vi.mocked(checkProvincialExemptionNumber).mockResolvedValue({
+      valid: false,
+      message: serverDuplicateError,
+    })
+    vi.mocked(submitProvincialExemptionCreate).mockResolvedValue({
+      success: false,
+      message: 'The exemption could not be saved.',
+      errors: [serverDuplicateError],
+      warnings: [],
+    })
+    renderCreatePage()
+    await fillBlanketOic()
+    const number = screen.getByRole('textbox', { name: 'Exemption number' })
+    await waitFor(() => expect(errorMessageFor(number)).toBe(duplicateFieldError))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+    await waitFor(() => expect(submitProvincialExemptionCreate).toHaveBeenCalledTimes(1))
+    await waitFor(() => expect(number).toHaveFocus())
+    expect(errorMessageFor(number)).toBe(duplicateFieldError)
+    expect(screen.queryByText('Save failed')).not.toBeInTheDocument()
+  })
+
+  it('puts a past expiry date refusal on the Expiry date field', async () => {
+    vi.mocked(submitProvincialExemptionCreate).mockResolvedValue({
+      success: false,
+      message: 'The exemption could not be saved.',
+      errors: ['An active exemption cannot have an expiry date before today.'],
+      warnings: [],
+    })
+    renderCreatePage()
+    await fillBlanketOic()
+    await userEvent.click(screen.getByRole('tab', { name: 'Fees' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Save exemption' }))
+
+    const expiry = await screen.findByLabelText('Expiry date')
+    await waitFor(() => expect(expiry).toHaveFocus())
+    expect(expiry).toHaveAttribute('aria-invalid', 'true')
+    expect(
+      screen.getByText('An active exemption cannot have an expiry date before today'),
+    ).toBeVisible()
+    expect(screen.queryByText('Save failed')).not.toBeInTheDocument()
+
+    fireEvent.change(expiry, { target: { value: '2027-10-18' } })
+    expect(expiry).not.toHaveAttribute('aria-invalid')
   })
 
   it('checks a number only when it changed and passes local validation', async () => {

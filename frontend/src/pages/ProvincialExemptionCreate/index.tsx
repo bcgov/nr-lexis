@@ -168,7 +168,8 @@ const serverErrorField = (message: string): ProvincialExemptionCreateField | und
   if (message.startsWith('Other conditions ')) return 'otherConditions'
   if (
     message === 'A valid expiry date is required.' ||
-    message === 'The approval date must come before the expiry.'
+    message === 'The approval date must come before the expiry.' ||
+    message === 'An active exemption cannot have an expiry date before today.'
   ) {
     return 'expiryDate'
   }
@@ -389,15 +390,28 @@ const ProvincialExemptionCreatePage = () => {
     checkedExemptionNumberRef.current = exemptionNumber
     try {
       const result = await checkProvincialExemptionNumber(exemptionNumber)
-      if (!result.valid) {
-        setServerFieldErrors((current) => ({
-          ...current,
-          exemptionNumber: {
-            message: DUPLICATE_EXEMPTION_NUMBER_FIELD_ERROR,
-            value: exemptionNumber,
-          },
-        }))
-      }
+      setServerFieldErrors((current) => {
+        if (!result.valid) {
+          return {
+            ...current,
+            exemptionNumber: {
+              message: DUPLICATE_EXEMPTION_NUMBER_FIELD_ERROR,
+              value: exemptionNumber,
+            },
+          }
+        }
+        // A number that is free now drops an earlier taken message for that same number.
+        const previous = current.exemptionNumber
+        if (
+          previous?.value !== exemptionNumber ||
+          previous.message !== DUPLICATE_EXEMPTION_NUMBER_FIELD_ERROR
+        ) {
+          return current
+        }
+        const next = { ...current }
+        delete next.exemptionNumber
+        return next
+      })
     } catch {
       if (checkedExemptionNumberRef.current === exemptionNumber) {
         checkedExemptionNumberRef.current = null
