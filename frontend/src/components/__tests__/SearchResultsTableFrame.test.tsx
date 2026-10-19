@@ -1,7 +1,61 @@
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@carbon/react'
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { describe, expect, it } from 'vitest'
+import Pagination from '@/components/Pagination'
 import { formatDeferredSearchTotalLabel } from '@/pages/shared/deferred-search-total'
 import SearchResultsTableFrame from '../SearchResultsTableFrame'
+
+const SortableResults = ({ page = 1, rows = 1 }: { page?: number; rows?: number }) => (
+  <>
+    <Table>
+      <TableHead>
+        <TableRow>
+          <TableHeader>Application</TableHeader>
+          <TableHeader isSortable isSortHeader sortDirection="DESC" onClick={() => undefined}>
+            List date
+          </TableHeader>
+        </TableRow>
+      </TableHead>
+      <TableBody>
+        {Array.from({ length: rows }, (_, index) => (
+          <TableRow key={index}>
+            <TableCell>{`Row ${index + 1}`}</TableCell>
+            <TableCell>2026-01-10</TableCell>
+          </TableRow>
+        ))}
+      </TableBody>
+    </Table>
+    <Pagination
+      page={page}
+      pageSize={10}
+      pageSizes={[10, 25]}
+      totalItems={20}
+      onChange={() => undefined}
+    />
+  </>
+)
+
+const resultsFrame = (loading: boolean, results = <SortableResults />) => (
+  <>
+    <input aria-label="Filter" />
+    <SearchResultsTableFrame loading={loading} loadingDescription="Searching">
+      {results}
+    </SearchResultsTableFrame>
+  </>
+)
+
+// Moves focus to a control and runs a load that removes it, as a search does.
+const focusThenLoad = (
+  rerender: (ui: React.ReactElement) => void,
+  control: HTMLElement,
+  results = <SortableResults />,
+) => {
+  act(() => control.focus())
+  expect(control).toHaveFocus()
+  rerender(resultsFrame(true, results))
+  expect(document.body).toHaveFocus()
+}
 
 describe('SearchResultsTableFrame', () => {
   it.each([
@@ -41,6 +95,122 @@ describe('SearchResultsTableFrame', () => {
     expect(screen.getByText('Loading search results…')).toBeInTheDocument()
     expect(screen.getByRole('table', { name: 'Loading search results…' })).toBeInTheDocument()
     expect(screen.queryByText('Existing rows')).not.toBeInTheDocument()
+  })
+
+  it('returns focus to the sort header once the results reload', async () => {
+    const { rerender } = render(resultsFrame(false))
+    focusThenLoad(rerender, screen.getByRole('button', { name: /List date/ }))
+
+    rerender(resultsFrame(false))
+
+    await waitFor(() => expect(screen.getByRole('button', { name: /List date/ })).toHaveFocus())
+  })
+
+  it.each([
+    ['Next page', { page: 1 }],
+    ['Previous page', { page: 2 }],
+  ])('returns focus to the %s button once the results reload', async (name, { page }) => {
+    const { rerender } = render(resultsFrame(false, <SortableResults page={page} />))
+    focusThenLoad(rerender, screen.getByRole('button', { name }), <SortableResults page={page} />)
+
+    rerender(resultsFrame(false, <SortableResults page={page} />))
+
+    await waitFor(() => expect(screen.getByRole('button', { name })).toHaveFocus())
+  })
+
+  it.each([['Items per page:'], ['Page of 2 pages']])(
+    'returns focus to the %s select once the results reload',
+    async (name) => {
+      const { rerender } = render(resultsFrame(false))
+      focusThenLoad(rerender, screen.getByRole('combobox', { name }))
+
+      rerender(resultsFrame(false))
+
+      await waitFor(() => expect(screen.getByRole('combobox', { name })).toHaveFocus())
+    },
+  )
+
+  it('moves focus to Previous page when Next page is disabled on the last page', async () => {
+    const { rerender } = render(resultsFrame(false))
+    focusThenLoad(rerender, screen.getByRole('button', { name: 'Next page' }))
+
+    rerender(resultsFrame(false, <SortableResults page={2} />))
+
+    expect(screen.getByRole('button', { name: 'Next page' })).toBeDisabled()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Previous page' })).toHaveFocus())
+  })
+
+  it('moves focus to the results when the controls it held are gone', async () => {
+    const { container, rerender } = render(resultsFrame(false))
+    focusThenLoad(rerender, screen.getByRole('button', { name: 'Next page' }))
+
+    rerender(resultsFrame(false, <p>No results found</p>))
+
+    await waitFor(() => expect(container.querySelector('.legacy-search-table-frame')).toHaveFocus())
+    expect(container.querySelector('.legacy-search-table-frame')).toHaveAttribute('tabindex', '-1')
+  })
+
+  it('does not move focus when the search starts from outside the results', async () => {
+    const { rerender } = render(resultsFrame(false))
+    const filter = screen.getByRole('textbox', { name: 'Filter' })
+    act(() => filter.focus())
+
+    rerender(resultsFrame(true))
+    rerender(resultsFrame(false))
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+    })
+
+    expect(filter).toHaveFocus()
+  })
+
+  it('does not take focus back for a control that had already released it', async () => {
+    const { rerender } = render(resultsFrame(false))
+    const sortHeader = screen.getByRole('button', { name: /List date/ })
+    act(() => sortHeader.focus())
+    act(() => sortHeader.blur())
+
+    rerender(resultsFrame(true))
+    rerender(resultsFrame(false))
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(resolve))
+    })
+
+    expect(document.body).toHaveFocus()
+  })
+
+  it.each(['click', 'key'])(
+    'leaves focus where the user moves to by %s while the results load',
+    async (how) => {
+      const { rerender } = render(resultsFrame(false))
+      focusThenLoad(rerender, screen.getByRole('button', { name: /List date/ }))
+
+      const filter = screen.getByRole('textbox', { name: 'Filter' })
+      if (how === 'click') {
+        await userEvent.click(filter)
+      } else {
+        await userEvent.tab()
+        expect(filter).toHaveFocus()
+      }
+      rerender(resultsFrame(false))
+      await act(async () => {
+        await new Promise((resolve) => requestAnimationFrame(resolve))
+      })
+
+      expect(filter).toHaveFocus()
+    },
+  )
+
+  it('keeps the loading skeleton and busy state while focus is waiting to return', () => {
+    const { rerender } = render(resultsFrame(false))
+    focusThenLoad(rerender, screen.getByRole('button', { name: /List date/ }))
+
+    expect(screen.getByRole('region', { name: 'Search results table' })).toHaveAttribute(
+      'aria-busy',
+      'true',
+    )
+    expect(screen.getByRole('table', { name: 'Searching' })).toBeInTheDocument()
+    expect(screen.queryByText('Row 1')).not.toBeInTheDocument()
   })
 
   it('matches the loading skeleton to the rendered result columns', () => {

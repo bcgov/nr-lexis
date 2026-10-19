@@ -2,10 +2,39 @@
 .boic-permit-details.cds--tile,
 .boic-permit-details-edit.cds--tile {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1.5rem;
 
   > .record-field-grid + .record-field-grid {
     margin-block-start: 0;
+  }
+}
+
+@media (max-width: 671px) {
+  // A narrow card wraps its action's label instead of cutting the button off.
+  #permit-detail-content
+    :is(
+      .detail-section-card__header,
+      .lexis-empty-state__action,
+      .permit-scale-summary__header,
+      .permit-package-toolbar,
+      .permit-fee-card__actions
+    )
+    > .cds--btn {
+    block-size: auto;
+    max-inline-size: 100%;
+    min-block-size: 2.5rem;
+    padding-block: 0.625rem;
+    white-space: normal;
+  }
+
+  #permit-detail-content .lexis-empty-state__action {
+    align-self: stretch;
+  }
+
+  #permit-detail-content .permit-fee-card__actions {
+    max-inline-size: 100%;
+    min-inline-size: 0;
   }
 }
 
@@ -96,12 +125,10 @@
 }
 
 .ministerial-permit-details__applications {
-  min-inline-size: 0;
-}
-
-.ministerial-permit-details__applications {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
+  min-inline-size: 0;
 }
 
 .ministerial-permit-details__applications .detail-section-subtitle {

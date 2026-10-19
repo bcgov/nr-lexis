@@ -575,6 +575,66 @@ describe('api-service cached GET support', () => {
     window.history.replaceState({}, '', previousPath)
   })
 
+  it('checks a review status update on the application page against the loaded version', async () => {
+    const previousPath = window.location.pathname
+    window.history.replaceState({}, '', '/provincial/application/999000001')
+    apiService.registerRecordVersion(
+      'application',
+      '999000001',
+      {
+        headers: { [RECORD_VERSION_HEADER]: 'loaded-version' },
+        data: { applicationNumber: '999000001' },
+      } as unknown as AxiosResponse<unknown>,
+      '/lexis/applications/999000001',
+    )
+    let receivedConflict: OptimisticConflictEvent['detail'] | undefined
+    const conflictListener = (event: Event) => {
+      event.preventDefault()
+      receivedConflict = (event as OptimisticConflictEvent).detail
+    }
+    window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+    const request = await registeredRequestInterceptor()({
+      method: 'post',
+      url: '/lexis/application-reviews/999000001/status',
+      data: { statusCode: 'REJ', remark: 'Needs correction', clientEmailAddress: '' },
+      headers: {},
+    })
+    expect(request.headers).toEqual(
+      expect.objectContaining({ [RECORD_VERSION_HEADER]: 'loaded-version' }),
+    )
+
+    const staleError = {
+      config: request,
+      response: {
+        status: 409,
+        data: {
+          code: 'STALE_RECORD',
+          detail: 'This application was changed by another user.',
+          currentVersion: 'newer-version',
+        },
+      },
+    }
+    getMock.mockResolvedValue({
+      ...buildResponse({ applicationNumber: '999000001' }),
+      headers: { [RECORD_VERSION_HEADER]: 'newer-version' },
+    })
+    const conflictPromise = registeredResponseRejectedInterceptor()(staleError)
+
+    await vi.waitFor(() => expect(receivedConflict).toBeDefined())
+    expect(receivedConflict?.recordType).toBe('application')
+    expect(receivedConflict?.problem).toEqual(
+      expect.objectContaining({ code: 'STALE_RECORD', currentVersion: 'newer-version' }),
+    )
+    expect(requestMock).not.toHaveBeenCalled()
+    const rejectedConflict = expect(conflictPromise).rejects.toBe(staleError)
+    receivedConflict?.refresh()
+    await rejectedConflict
+
+    window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+    window.history.replaceState({}, '', previousPath)
+  })
+
   it('keeps the primary detail version when a supplemental source is newer', async () => {
     const previousPath = window.location.pathname
     window.history.replaceState({}, '', '/provincial/permit/777')

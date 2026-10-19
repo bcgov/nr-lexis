@@ -54,7 +54,11 @@ import {
   fetchProvincialExemptionOptions,
   type SearchOption,
 } from '@/service/search-options-service'
-import { submitProvincialExemptionCreate } from '@/service/create-submit-service'
+import {
+  checkProvincialExemptionNumber,
+  submitProvincialExemptionCreate,
+} from '@/service/create-submit-service'
+import { fieldErrorText } from '@/utils/field-error'
 import { requiredLabel } from '@/utils/required-label'
 import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
@@ -116,6 +120,10 @@ const INITIAL_FORM: ProvincialExemptionCreateForm = {
 const BLANKET_OIC_MAX_VOLUME = '9999999.9'
 const OIC_TYPES = new Set(['O', 'B'])
 const ASCII_PATTERN = /^[\u0000-\u007f]*$/
+const SAVE_FAILED_MESSAGE =
+  'Exemption save failed. Please review the form and try again. If the problem persists, contact support.'
+const DUPLICATE_EXEMPTION_NUMBER_ERROR = '* - this exemption number has already been assigned'
+const DUPLICATE_EXEMPTION_NUMBER_FIELD_ERROR = 'This exemption number has already been assigned.'
 
 const feeRateError = (value: string): string | undefined => {
   const normalized = value.trim()
@@ -139,6 +147,34 @@ type PageStatus = {
   title: string
   message: string
   placement?: 'inline'
+  focusOnReveal?: boolean
+}
+
+// A server message about one field. It shows while the field still holds the value that was
+// rejected, so editing the field clears it.
+type ServerFieldError = { message: string; value: string }
+type ServerFieldErrors = Partial<Record<ProvincialExemptionCreateField, ServerFieldError>>
+
+// Server messages that name one field.
+const serverErrorField = (message: string): ProvincialExemptionCreateField | undefined => {
+  if (message === DUPLICATE_EXEMPTION_NUMBER_ERROR) return 'exemptionNumber'
+  if (
+    message.startsWith('Exemption number ') ||
+    message === 'A valid exemption number is required for an active OIC exemption.'
+  ) {
+    return 'exemptionNumber'
+  }
+  if (message.startsWith('The approved volume ')) return 'approvedVolume'
+  if (message.startsWith('Other conditions ')) return 'otherConditions'
+  if (
+    message === 'A valid expiry date is required.' ||
+    message === 'The approval date must come before the expiry.' ||
+    message === 'An active exemption cannot have an expiry date before today.'
+  ) {
+    return 'expiryDate'
+  }
+  if (message.startsWith('The fee rate ')) return 'feeRate'
+  return undefined
 }
 
 const ProvincialExemptionCreatePage = () => {
@@ -163,6 +199,8 @@ const ProvincialExemptionCreatePage = () => {
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [selectedExemptionTab, setSelectedExemptionTab] = useState<ExemptionCreateTab>('summary')
   const [showAllValidationErrors, setShowAllValidationErrors] = useState(false)
+  const [serverFieldErrors, setServerFieldErrors] = useState<ServerFieldErrors>({})
+  const checkedExemptionNumberRef = useRef<string | null>(null)
   const formRef = useRef<HTMLDivElement>(null)
   const roles = capabilities?.roles ?? []
   const canCreateExemption = canPerform('/createExemption')
@@ -331,14 +369,63 @@ const ProvincialExemptionCreatePage = () => {
     setFormEdited(true)
   }
 
-  const fieldError = (field: ProvincialExemptionCreateField): string | undefined =>
-    getVisibleFieldError(field, fieldErrors, {}, showAllValidationErrors)
+  const fieldError = (field: ProvincialExemptionCreateField): string | undefined => {
+    const serverError = serverFieldErrors[field]
+    return serverError && serverError.value === String(form[field]).trim()
+      ? fieldErrorText(serverError.message)
+      : getVisibleFieldError(field, fieldErrors, {}, showAllValidationErrors)
+  }
+
+  // Asks LEXIS whether a changed exemption number is already assigned. A failed lookup shows
+  // nothing: Save makes the same check.
+  const checkExemptionNumber = async (): Promise<void> => {
+    const exemptionNumber = form.exemptionNumber.trim()
+    if (
+      !exemptionNumber ||
+      exemptionNumber === checkedExemptionNumberRef.current ||
+      fieldErrors.exemptionNumber
+    ) {
+      return
+    }
+    checkedExemptionNumberRef.current = exemptionNumber
+    try {
+      const result = await checkProvincialExemptionNumber(exemptionNumber)
+      setServerFieldErrors((current) => {
+        if (!result.valid) {
+          return {
+            ...current,
+            exemptionNumber: {
+              message: DUPLICATE_EXEMPTION_NUMBER_FIELD_ERROR,
+              value: exemptionNumber,
+            },
+          }
+        }
+        // A number that is free now drops an earlier taken message for that same number.
+        const previous = current.exemptionNumber
+        if (
+          previous?.value !== exemptionNumber ||
+          previous.message !== DUPLICATE_EXEMPTION_NUMBER_FIELD_ERROR
+        ) {
+          return current
+        }
+        const next = { ...current }
+        delete next.exemptionNumber
+        return next
+      })
+    } catch {
+      if (checkedExemptionNumberRef.current === exemptionNumber) {
+        checkedExemptionNumberRef.current = null
+      }
+    }
+  }
 
   const onExemptionTypeChange = (value: string): void => {
     if (value === form.exemptionTypeCode) {
       return
     }
     markFormEdited()
+    setServerFieldErrors({})
+    checkedExemptionNumberRef.current = null
     const typeCode = value.trim().toUpperCase()
     // Legacy creates OIC/BOIC as Active without the separate Ministerial approval permission.
     const nextStatus = OIC_TYPES.has(typeCode) ? 'ACT' : ''
@@ -396,6 +483,7 @@ const ProvincialExemptionCreatePage = () => {
     }
 
     setStatus(null)
+    setServerFieldErrors({})
     setIsSubmitting(true)
     try {
       const result = await submitProvincialExemptionCreate({
@@ -418,22 +506,50 @@ const ProvincialExemptionCreatePage = () => {
         return true
       }
 
-      setStatus({
-        kind: 'error',
-        title: 'Save failed',
-        message:
-          result.errors[0] ||
-          result.message ||
-          'Exemption save failed. Please review the form and try again. If the problem persists, contact support.',
+      const nextServerFieldErrors: ServerFieldErrors = {}
+      const unmappedErrors: string[] = []
+      result.errors.forEach((error) => {
+        const field = serverErrorField(error.trim())
+        if (!field) {
+          unmappedErrors.push(error)
+          return
+        }
+        const message =
+          error.trim() === DUPLICATE_EXEMPTION_NUMBER_ERROR
+            ? DUPLICATE_EXEMPTION_NUMBER_FIELD_ERROR
+            : error
+        const existing = nextServerFieldErrors[field]
+        nextServerFieldErrors[field] = {
+          message: existing ? `${existing.message} ${message}` : message,
+          value: String(form[field]).trim(),
+        }
       })
+      const mappedFields = Object.keys(nextServerFieldErrors)
+      setServerFieldErrors(nextServerFieldErrors)
+      setStatus(
+        unmappedErrors.length > 0 || mappedFields.length === 0
+          ? {
+              kind: 'error',
+              title: 'Save failed',
+              message: unmappedErrors.join(' ') || result.message || SAVE_FAILED_MESSAGE,
+              focusOnReveal: mappedFields.length === 0,
+            }
+          : null,
+      )
+      if (mappedFields.length > 0) {
+        setSelectedExemptionTab(
+          mappedFields.some((field) => field !== 'feeRate') ? 'summary' : 'fees',
+        )
+        focusFirstInvalidFieldAfterRender(() => formRef.current)
+      }
       return false
     } catch (error) {
       console.error(error)
       setStatus({
         kind: 'error',
         title: 'Save failed',
-        message:
-          'Exemption save failed. Please review the form and try again. If the problem persists, contact support.',
+        message: SAVE_FAILED_MESSAGE,
+        focusOnReveal: true,
       })
       return false
     } finally {
@@ -445,6 +561,8 @@ const ProvincialExemptionCreatePage = () => {
     setForm(draftBaselineRef.current)
     setFormEdited(false)
     setShowAllValidationErrors(false)
+    setServerFieldErrors({})
+    checkedExemptionNumberRef.current = null
     setStatus(null)
   }
 
@@ -514,6 +632,8 @@ const ProvincialExemptionCreatePage = () => {
             kind={status.kind}
             title={status.title}
             subtitle={status.message}
+            revealKey={status}
+            focusOnReveal={status.focusOnReveal ?? status.kind === 'error'}
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
           />
@@ -528,6 +648,7 @@ const ProvincialExemptionCreatePage = () => {
             revealKey={status}
             title={status.title}
             subtitle={status.message}
+            focusOnReveal
             lowContrast
             onCloseButtonClick={() => setStatus(null)}
           />
@@ -605,11 +726,13 @@ const ProvincialExemptionCreatePage = () => {
                               invalidText={fieldError('exemptionNumber')}
                               onChange={(event) => {
                                 markFormEdited()
+                                checkedExemptionNumberRef.current = null
                                 setForm((current) => ({
                                   ...current,
-                                  exemptionNumber: event.target.value,
+                                  exemptionNumber: event.target.value.toUpperCase(),
                                 }))
                               }}
+                              onBlur={() => void checkExemptionNumber()}
                             />
                           </RecordFieldCell>
                         )}

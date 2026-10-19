@@ -153,6 +153,23 @@ describe('exemptionApprovalResults', () => {
     ])
   })
 
+  it('links a single approval title only when the caller supplies a record link', () => {
+    const approval = report({
+      approved: [{ exemptionNumber: 'EX-101', email: { status: 'skipped' } }],
+    })
+    expect(exemptionApprovalResults(approval)[0].titleRecord).toBeUndefined()
+    expect(
+      exemptionApprovalResults(approval, () => ({
+        to: '/provincial/exemption/EX-101',
+        state: { returnTo: '/provincial/exemption' },
+      }))[0].titleRecord,
+    ).toEqual({
+      id: 'EX-101',
+      to: '/provincial/exemption/EX-101',
+      state: { returnTo: '/provincial/exemption' },
+    })
+  })
+
   it('gives a single approval one notification without a list', () => {
     expect(
       exemptionApprovalResults(

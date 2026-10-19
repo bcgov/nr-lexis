@@ -164,6 +164,65 @@ describe('DetailDocumentUploadPanel', () => {
     expect(onClose).toHaveBeenCalledTimes(1)
   })
 
+  it('moves focus to the next file Remove button, then the drop zone, when side panel files are removed', async () => {
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        presentation="side-panel"
+        drawer={applicationDrawer}
+        initiallyOpen
+      />,
+    )
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      ['first.pdf', 'second.pdf', 'third.pdf'].map(
+        (name) => new File(['document'], name, { type: 'application/pdf' }),
+      ),
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Remove - second.pdf' }))
+    expect(screen.getByRole('button', { name: 'Remove - third.pdf' })).toHaveFocus()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove - third.pdf' }))
+    expect(screen.getByRole('button', { name: 'Remove - first.pdf' })).toHaveFocus()
+    await userEvent.click(screen.getByRole('button', { name: 'Remove - first.pdf' }))
+    expect(screen.getByRole('button', { name: 'Choose files for Files' })).toHaveFocus()
+    expect(screen.getByText('Choose at least one file to upload')).toBeInTheDocument()
+    expect(mockedSubmitAdminUpload).not.toHaveBeenCalled()
+  })
+
+  it('moves focus to the drop zone when batched side panel removals empty the list', async () => {
+    render(
+      <DetailDocumentUploadPanel
+        workflowType="application"
+        targetNumber="321"
+        inputId="applicationDocuments"
+        presentation="side-panel"
+        drawer={applicationDrawer}
+        initiallyOpen
+      />,
+    )
+    await userEvent.upload(
+      screen.getByLabelText('Document File'),
+      ['first.pdf', 'second.pdf'].map(
+        (name) => new File(['document'], name, { type: 'application/pdf' }),
+      ),
+    )
+    await waitFor(() => {
+      const buttons = screen.getAllByRole('button', { name: /^Remove - / })
+      expect(buttons).toHaveLength(2)
+      buttons.forEach((button) => expect(button).toBeEnabled())
+    })
+    const removeButtons = screen.getAllByRole('button', { name: /^Remove - / })
+
+    act(() => {
+      removeButtons.forEach((button) => button.click())
+    })
+
+    expect(screen.getByRole('button', { name: 'Choose files for Files' })).toHaveFocus()
+    expect(screen.getByText('Choose at least one file to upload')).toBeInTheDocument()
+  })
+
   it('shows a failed side panel file check on the file item', async () => {
     mockedValidateAdminUpload.mockRejectedValueOnce(
       Object.assign(new Error('Upload rejected'), {

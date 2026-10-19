@@ -108,6 +108,8 @@ type ExemptionStatus = {
 }
 
 const EXEMPTION_PERMISSION_MESSAGE = "You don't have permission to create this exemption."
+const EXEMPTION_DIFFERENT_CLIENTS_MESSAGE =
+  'The selected applications must have the same owner and agent. Change your selection and try again.'
 const EXEMPTION_CREATE_FAILED_MESSAGE =
   'The exemption could not be created. Please try again. If the problem persists, contact support.'
 
@@ -140,6 +142,11 @@ const EXEMPTION_CREATE_ERRORS: {
     pattern: /^Application (\S+) listing date has not passed\.$/,
     message: ([, application]) =>
       `Application ${application} can't be exempted until its list date has passed. Remove it from your selection and try again.`,
+  },
+  {
+    pattern:
+      /^Application \S+ cannot be added to this exemption because its owner or agent client details do not match the other applications\.$/,
+    message: () => EXEMPTION_DIFFERENT_CLIENTS_MESSAGE,
   },
   {
     pattern: /^Insufficient privileges to add application \S+\.$/,
@@ -340,6 +347,20 @@ const ProvincialApplicationPage = () => {
     setSelectedRowsById({})
     setExemptionStatus(null)
   }, [])
+  const selectAllRowsRef = useRef<HTMLInputElement>(null)
+  const resultsFrameRef = useRef<HTMLDivElement>(null)
+  // Cancel closes the batch bar that holds focus, so focus goes to the header checkbox.
+  const cancelBatchSelection = useCallback(() => {
+    clearSelection()
+    requestAnimationFrame(() => {
+      const selectAll = selectAllRowsRef.current
+      if (selectAll && !selectAll.disabled) {
+        selectAll.focus()
+      } else {
+        resultsFrameRef.current?.focus()
+      }
+    })
+  }, [clearSelection])
   const updateFilter = useCallback(
     <K extends keyof ProvincialApplicationSearchFilters>(
       key: K,
@@ -691,11 +712,7 @@ const ProvincialApplicationPage = () => {
 
     // The selection and the focused batch action stay, so the selection can be changed.
     if (!allRowsMatchClientNumbers) {
-      setExemptionStatus({
-        kind: 'error',
-        message:
-          'The selected applications must have the same owner and agent. Change your selection and try again.',
-      })
+      setExemptionStatus({ kind: 'error', message: EXEMPTION_DIFFERENT_CLIENTS_MESSAGE })
       return
     }
 
@@ -958,6 +975,7 @@ const ProvincialApplicationPage = () => {
             </div>
           )}
           <SearchResultsTableFrame
+            ref={resultsFrameRef}
             resultName="application"
             loading={resultsLoading}
             loadingDescription="Searching"
@@ -979,7 +997,7 @@ const ProvincialApplicationPage = () => {
                 <TableBatchActions
                   totalSelected={selectedRowsCount}
                   shouldShowBatchActions
-                  onCancel={clearSelection}
+                  onCancel={cancelBatchSelection}
                   translateWithId={APPLICATION_BATCH_SELECTION}
                 >
                   <TableBatchAction renderIcon={Rule} onClick={onCreateExemptionClick}>
@@ -1010,6 +1028,7 @@ const ProvincialApplicationPage = () => {
                           description="No eligible applications are available on this page."
                         >
                           <Checkbox
+                            ref={selectAllRowsRef}
                             id="selectAllCurrentPageRows"
                             hideLabel
                             labelText="Select all eligible rows on this page"

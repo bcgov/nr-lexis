@@ -75,15 +75,19 @@ const visibleEditButton = (buttons: ReadonlySet<HTMLElement> | undefined) =>
       !button.closest('[hidden], [inert], [aria-hidden="true"]'),
   )
 
+const tabListForElement = (element: HTMLElement) => {
+  const tabId = element.closest('[role="tabpanel"]')?.getAttribute('aria-labelledby')
+  return (tabId ? document.getElementById(tabId) : null)?.closest('[role="tablist"]')
+}
+
 // When the section's Edit buttons are all on tabs the user has left, for example after Cancel on
 // another tab of the same section, the open tab takes focus instead.
 const openTabBesideHiddenEditButton = (buttons: ReadonlySet<HTMLElement> | undefined) => {
   for (const button of buttons ?? []) {
     const panel = button.isConnected ? button.closest('[role="tabpanel"][hidden]') : null
-    const tabId = panel?.getAttribute('aria-labelledby')
-    const openTab = (tabId ? document.getElementById(tabId) : null)
-      ?.closest('[role="tablist"]')
-      ?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+    const openTab = panel
+      ? tabListForElement(button)?.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')
+      : null
     if (openTab && !openTab.closest('[hidden], [inert], [aria-hidden="true"]')) return openTab
   }
   return undefined
@@ -244,12 +248,27 @@ export const useEditSections = <S extends string>({
         action()
         return
       }
+      // Mouse clicks do not focus tabs in every browser, so the edited panel's tab list stands in
+      // for the clicked tab's.
+      const tabList =
+        document.activeElement?.closest('[role="tablist"]') ??
+        (editingSection
+          ? Array.from(sectionElementsRef.current.get(editingSection) ?? [])
+              .map(tabListForElement)
+              .find(Boolean)
+          : null)
       confirmLeaveDiscard(() => {
         leavingRef.current = editingSection !== null
         if (editingSection) onDiscardRef.current(editingSection)
         onLeaveDiscardRef.current?.()
         setEditingSection(null)
         action()
+        // Discard closes the dialog without returning focus, so the newly selected tab takes it.
+        requestAnimationFrame(() => {
+          if (tabList?.isConnected && focusWasLost(undefined)) {
+            tabList.querySelector<HTMLElement>('[role="tab"][aria-selected="true"]')?.focus()
+          }
+        })
       })
     },
     [confirmLeaveDiscard, editingSection, leaveGuard?.isBusy, setEditingSection],

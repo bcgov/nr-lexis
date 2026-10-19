@@ -1414,13 +1414,15 @@ const ProvincialExemptionDetailsPage = () => {
           'Exemption number contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
       }
     }
+    const approvalDateError = isoDateFieldError(editForm.approvalDate)
+    const expiryDateError = isoDateFieldError(editForm.expiryDate)
     if ((currentTypeCode === 'O' || currentTypeCode === 'B') && !editForm.approvalDate.trim()) {
       errors.approvalDate = 'Approval date is required.'
-    } else if (isoDateFieldError(editForm.approvalDate)) {
-      errors.approvalDate = 'Approval date must be YYYY-MM-DD.'
+    } else if (approvalDateError) {
+      errors.approvalDate = approvalDateError
     }
-    if (isoDateFieldError(editForm.expiryDate)) {
-      errors.expiryDate = 'Expiry date must be YYYY-MM-DD.'
+    if (expiryDateError) {
+      errors.expiryDate = expiryDateError
     } else if (!editForm.expiryDate.trim()) {
       errors.expiryDate = 'Expiry date is required.'
     } else if (

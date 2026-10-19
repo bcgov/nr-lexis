@@ -94,7 +94,6 @@ import {
   type ProvincialApplicationDocumentRow,
 } from '@/service/provincial-application-documents-service'
 import {
-  checkApplicationVolumeUsage,
   fetchApplicationEndUsesForSpeciesRegion,
   fetchApplicationPermits,
   fetchApplicationSummarySnapshot,
@@ -109,8 +108,6 @@ import {
 } from '@/service/provincial-application-items-service'
 import {
   approveApplicationReview,
-  sendApplicationReviewStatusEmail,
-  updateApplicationReviewStatus,
   type ApplicationReviewStatusUpdateResult,
 } from '@/service/application-review-search-service'
 import {
@@ -160,6 +157,8 @@ import {
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useEditSections } from '@/pages/shared/useEditSections'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
+import DisapproveApplicationModal from '@/pages/ProvincialReview/DisapproveApplicationModal'
+import { disapprovalResult } from '@/pages/ProvincialReview/review-results'
 import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { fieldErrorText } from '@/utils/field-error'
 import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
@@ -167,8 +166,6 @@ import { requiredLabel } from '@/utils/required-label'
 import {
   displayTableValue,
   displayValueText,
-  isValidEmail,
-  normalizeTrimmedText as normalizeEmail,
   normalizeUpperText as normalizeReviewStatus,
 } from '@/utils/text'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
@@ -191,7 +188,7 @@ const APPLICATION_WRITE_ACTIONS = [
   '/applicationsReview',
 ]
 
-const EMAIL_SUPPORTED_STATUS_CODES = new Set(['REJ', 'WDN'])
+const DISAPPROVAL_STATUS_CODES = new Set(['REJ', 'WDN'])
 // Figma confirms every Applicant, Application and Scale save, including the first, with this title.
 const APPLICATION_SAVED_TITLE = 'The application was saved.'
 
@@ -201,22 +198,8 @@ const clientLookupKey = (clientNumber: string, locationCode: string): string =>
 const clientLookupContext = (applicationNumber: string, counterpartyClientNumber: string) =>
   counterpartyClientNumber ? { applicationNumber, counterpartyClientNumber } : { applicationNumber }
 
-const REVIEW_STATUS_SUCCESS_TITLES: Record<string, string> = {
-  REJ: 'Application rejected.',
-  WDN: 'Application withdrawn.',
-}
-const REVIEW_STATUS_ACTION_LABELS: Record<string, string> = {
-  APP: 'Approve application',
-  REJ: 'Reject application',
-  WDN: 'Withdraw application',
-}
-const REVIEW_STATUSES_REQUIRING_REMARK = new Set(['EXP', 'REJ', 'WDN'])
 const REVIEW_STATUSES_WITH_PERSISTED_REMARK = new Set(['EXP', 'REJ', 'WDN'])
 const REVIEW_STATUS_REQUIRED_MESSAGE = 'Choose an application status before updating review status.'
-// Shown only on the Remarks field.
-const REVIEW_REMARK_REQUIRED_MESSAGE = fieldErrorText(
-  'Status change remark is required when rejecting, withdrawing, or expiring an application.',
-)
 const APPROVAL_REMARK_REQUIRED_MESSAGE = fieldErrorText('Remark is required.')
 type LookupAvailability = 'loading' | 'available' | 'unavailable'
 /** The cards that edit in place; only one edits at a time. */
@@ -268,10 +251,6 @@ const APPLICATION_DETAIL_TAB_SLOTS: readonly ApplicationDetailTabKey[] = [
   'offers',
   'review',
 ]
-const REVIEW_EMAIL_UNSUPPORTED_MESSAGE =
-  'Status email is only supported for rejected or withdrawn applications.'
-const REVIEW_EMAIL_REQUIRED_MESSAGE = 'Enter one valid client email address.'
-const REVIEW_EMAIL_PREVIEW_HELPER = "Editing this address won't change the client's record."
 const APPROVABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND'])
 const REVIEWABLE_SOURCE_STATUS_CODES = new Set(['NEW', 'PND', 'APP'])
 const APPLICATION_STATUS_LABELS: Record<string, string> = {
@@ -735,25 +714,32 @@ const applicationDocumentUploadUnavailableMessage = (
   return ''
 }
 
-const normalizeReviewEmail = (value: string | null | undefined): string => {
-  const normalized = normalizeEmail(value ?? '')
-  const lowered = normalized.toLowerCase()
-  return lowered === 'none' || lowered === 'not on file' ? '' : normalized
+// A volume in whole tenths, rounded half up from its two decimals; null when it isn't a number.
+const volumeInTenths = (value: number | string): number | null => {
+  const text = String(value).trim()
+  const volume = Number(text)
+  if (!text || !Number.isFinite(volume) || volume < 0) {
+    return null
+  }
+  return Math.floor((Math.round(volume * 100) + 5) / 10)
 }
 
-const reviewEmailCandidate = (
-  applicantTypeCode: string,
-  ownerClientData: ApplicationClientData | null,
-  agentClientData: ApplicationClientData | null,
-): string => {
-  const ownerEmail = normalizeReviewEmail(ownerClientData?.email ?? '')
-  const agentEmail = normalizeReviewEmail(agentClientData?.email ?? '')
-
-  if (isAgentApplicant(applicantTypeCode)) {
-    return agentEmail
+// The application volume is used unless it exceeds the package volumes, each taken at one decimal.
+// The server refuses a volume below the package total, and a volume that isn't a number is left
+// for the field checks.
+const isApplicationVolumeUsed = (
+  applicationVolume: string,
+  packages: ProvincialApplicationDetail['packages'],
+): boolean => {
+  const applicationTenths = volumeInTenths(applicationVolume)
+  if (applicationTenths === null) {
+    return true
   }
-
-  return ownerEmail
+  const packageTenths = packages.reduce(
+    (total, item) => total + (volumeInTenths(item.volume) ?? 0),
+    0,
+  )
+  return applicationTenths <= packageTenths
 }
 
 // Remark numbers come from a sequence, so the highest is the newest.
@@ -792,6 +778,9 @@ const ProvincialApplicationDetailsPage = () => {
     navigationState?.applicationCreationNotice?.applicationNumber.trim()
   // The create page's Save button is gone, so focus starts at the new application's title.
   const [focusCreatedApplicationTitle] = useState(() => !!createdApplicationNumber)
+  // Set once the new application first shows, so later refreshes don't pull focus back to the
+  // title.
+  const createdTitleFocusLatchedRef = useRef(false)
   const [detail, setDetail] = useState<ProvincialApplicationDetail | null>(null)
   const [documentRows, setDocumentRows] = useState<ProvincialApplicationDocumentRow[]>([])
   const [permitRows, setPermitRows] = useState<ApplicationPermitRow[]>([])
@@ -803,6 +792,12 @@ const ProvincialApplicationDetailsPage = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [documentsErrorMessage, setDocumentsErrorMessage] = useState('')
   const [partialLoadMessage, setPartialLoadMessage] = useState('')
+  // The saved summary the editors start from. Without it the form holds blanks for the fields
+  // the detail doesn't carry, such as the List date, and saving would clear them.
+  const [loadedSummarySnapshot, setLoadedSummarySnapshot] = useState<{
+    applicationNumber: string
+    jurisdictionCode: string
+  } | null>(null)
   const [clientLookupFailures, setClientLookupFailures] = useState<
     ReadonlySet<ApplicationClientLookupFailure>
   >(() => new Set())
@@ -938,28 +933,14 @@ const ProvincialApplicationDetailsPage = () => {
   >('loading')
   const [reviewStatusCode, setReviewStatusCode] = useState('')
   const [reviewStatusRemark, setReviewStatusRemark] = useState('')
-  const [isRetryingApprovalRemark, setIsRetryingApprovalRemark] = useState(false)
-  const [sendReviewEmail, setSendReviewEmail] = useState(false)
-  // Sent status emails are not recorded, so only an email sent from this page can be shown.
-  const [sentReviewEmail, setSentReviewEmail] = useState<{
+  const [reviewDisapproveTarget, setReviewDisapproveTarget] = useState<{
     applicationNumber: string
-    address: string
+    statusCode: string
+    remark: string
   } | null>(null)
+  const [isRetryingApprovalRemark, setIsRetryingApprovalRemark] = useState(false)
   const [reviewStatusBaselineCode, setReviewStatusBaselineCode] = useState('')
   const [reviewStatusRemarkBaseline, setReviewStatusRemarkBaseline] = useState('')
-  const reviewStatusEmailCandidate = useMemo(
-    () =>
-      reviewEmailCandidate(summaryForm?.applicantTypeCode ?? '', ownerClientData, agentClientData),
-    [agentClientData, ownerClientData, summaryForm?.applicantTypeCode],
-  )
-  const [reviewStatusEmailOverride, setReviewStatusEmailOverride] = useState<{
-    applicationNumber: string
-    value: string
-  } | null>(null)
-  const reviewStatusEmailAddress =
-    reviewStatusEmailOverride?.applicationNumber === (applicationNumber ?? '')
-      ? reviewStatusEmailOverride.value
-      : reviewStatusEmailCandidate
   const seededReviewFieldsApplicationRef = useRef<string | null>(null)
   const [reviewValidationMessage, setReviewValidationMessage] = useState('')
   const [isSubmittingReviewAction, setIsSubmittingReviewAction] = useState(false)
@@ -1033,6 +1014,7 @@ const ProvincialApplicationDetailsPage = () => {
         setPartialLoadMessage('')
         setActionResult(null)
         setLoading(false)
+        setLoadedSummarySnapshot(null)
         setSummaryForm(null)
         setSummaryBaselineForm(null)
         setEditingSection(null)
@@ -1059,12 +1041,12 @@ const ProvincialApplicationDetailsPage = () => {
       setActionResult((current) => (current?.createdFor === applicationNumber ? current : null))
       setPermitLookupAvailability('loading')
       if (!retainingCurrentDetail) {
+        setLoadedSummarySnapshot(null)
         setEditingSection(null)
         setApplicationItemsEditing(false)
         setIsEditingDocuments(false)
         setIsEditingRemarks(false)
         setIsRetryingApprovalRemark(false)
-        setReviewStatusEmailOverride(null)
         setDocumentRows([])
         setPermitRows([])
         setDocumentLookupAvailability('loading')
@@ -1103,6 +1085,7 @@ const ProvincialApplicationDetailsPage = () => {
           setEditingRemarkId(null)
         }
         if (!response) {
+          setLoadedSummarySnapshot(null)
           setErrorMessage(`No provincial application found for ${applicationNumber}.`)
           setDocumentRows([])
           setPermitRows([])
@@ -1119,16 +1102,26 @@ const ProvincialApplicationDetailsPage = () => {
           return
         }
 
-        if (
+        const summarySnapshot =
           summarySnapshotResult.status === 'fulfilled' &&
           summarySnapshotResult.value &&
           String(summarySnapshotResult.value.applicationNumber) === applicationNumber
-        ) {
+            ? summarySnapshotResult.value
+            : null
+        setLoadedSummarySnapshot(
+          summarySnapshot && {
+            applicationNumber,
+            jurisdictionCode: summarySnapshot.jurisdictionCode.trim().toUpperCase(),
+          },
+        )
+        if (summarySnapshot) {
           editableSummaryForm = normalizeSummaryAgentFields(
-            toSummarySnapshotFormState(summarySnapshotResult.value),
+            toSummarySnapshotFormState(summarySnapshot),
           )
-        } else if (summarySnapshotResult.status === 'rejected') {
-          setPartialLoadMessage('Unable to retrieve complete application summary fields.')
+        } else {
+          setPartialLoadMessage(
+            "Unable to retrieve complete application summary fields. Application details can't be edited until they load.",
+          )
         }
 
         if (applicationSpeciesResult.status === 'fulfilled' && editableSummaryForm) {
@@ -1265,10 +1258,11 @@ const ProvincialApplicationDetailsPage = () => {
     !detail?.locked &&
     !detail?.readOnly &&
     !isApplicationExpired
-  // Exemption Approvers don't hold createApplication; the server's package and scale rights say
-  // what they can change.
+  // Exemption Approvers don't hold createApplication; their item rights also need their approval
+  // region.
   const canUseApplicationItemMutations =
-    (canPerform('createApplication', applicationOrgUnit) || !!detail?.exemptionApprover) &&
+    (canPerform('createApplication', applicationOrgUnit) ||
+      (!!detail?.exemptionApprover && canPerform('approveExemption', applicationOrgUnit))) &&
     !detail?.locked &&
     !detail?.readOnly &&
     !isApplicationExpired
@@ -1279,7 +1273,10 @@ const ProvincialApplicationDetailsPage = () => {
   const canAddScales = canUseApplicationItemMutations && !!detail?.canAddScales
   const canDeleteScales =
     canUseApplicationItemMutations && (detail?.canDeleteScales ?? !!detail?.canAddScales)
-  const canEditSummary = canUseApplicationMutations && !!detail?.canEditApplicationDetails
+  const canEditApplicationRecord = canUseApplicationMutations && !!detail?.canEditApplicationDetails
+  // The summary editors save the whole form, so they open only from the saved summary.
+  const hasLoadedSummary = loadedSummarySnapshot?.applicationNumber === applicationNumber
+  const canEditSummary = canEditApplicationRecord && hasLoadedSummary
   const needsApplicationOptions =
     Boolean(summaryForm) ||
     canEditSummary ||
@@ -1289,7 +1286,7 @@ const ProvincialApplicationDetailsPage = () => {
     canAddScales ||
     canDeleteScales
   const canUpdatePackageNumber = canEditPackages && !!detail?.canUpdatePackageNumber
-  const canManageRemarks = canViewRemarks && canEditSummary
+  const canManageRemarks = canViewRemarks && canEditApplicationRecord
   // Saved remarks stay editable after the application details lock.
   const canEditSavedRemarks =
     canViewRemarks &&
@@ -1311,10 +1308,31 @@ const ProvincialApplicationDetailsPage = () => {
   // pending.
   const canChangeAgentOnly =
     canUseApplicationMutations &&
-    !canEditSummary &&
+    hasLoadedSummary &&
+    !canEditApplicationRecord &&
     canChangeApplicantType &&
     !!detail?.canChangeAgent
   const canEditApplicant = canEditSummary || canChangeAgentOnly
+  // A federal application opened at the provincial address moves to its own page.
+  const isFederalApplication = hasLoadedSummary && loadedSummarySnapshot?.jurisdictionCode === 'F'
+  useEffect(() => {
+    if (!isFederalApplication || !applicationNumber) return
+    navigate(
+      {
+        pathname: `/federal/application/${encodeURIComponent(applicationNumber)}`,
+        search: location.search,
+        hash: location.hash,
+      },
+      { replace: true, state: location.state },
+    )
+  }, [
+    applicationNumber,
+    isFederalApplication,
+    location.hash,
+    location.search,
+    location.state,
+    navigate,
+  ])
   const canReviewApplication = canPerform('/applicationsReview', applicationOrgUnit)
   // Clients cannot change the list date once the application is approved.
   const listDateLocked =
@@ -1342,11 +1360,11 @@ const ProvincialApplicationDetailsPage = () => {
     () => normalizeReviewStatus(reviewStatusCode),
     [reviewStatusCode],
   )
-  const canSendReviewStatusEmail = EMAIL_SUPPORTED_STATUS_CODES.has(normalizedReviewStatusCode)
+  const disapproveStatusOptions = reviewStatusOptions
+    .map((option) => ({ ...option, value: normalizeReviewStatus(option.value) }))
+    .filter((option) => DISAPPROVAL_STATUS_CODES.has(option.value))
   const isReviewStatusInvalid = reviewValidationMessage === REVIEW_STATUS_REQUIRED_MESSAGE
-  const isReviewRemarkInvalid =
-    reviewValidationMessage === REVIEW_REMARK_REQUIRED_MESSAGE ||
-    reviewValidationMessage === APPROVAL_REMARK_REQUIRED_MESSAGE
+  const isReviewRemarkInvalid = reviewValidationMessage === APPROVAL_REMARK_REQUIRED_MESSAGE
   const showReviewValidationNotification =
     !!reviewValidationMessage && !isReviewStatusInvalid && !isReviewRemarkInvalid
   const hasSummaryForm = summaryForm !== null
@@ -1761,8 +1779,11 @@ const ProvincialApplicationDetailsPage = () => {
             'Exemption term days',
           ),
       ),
+      // Without an open list date to pick, the application saves with none.
       exportScheduleId:
-        (!summaryForm.exportScheduleId && canReviewApplication) ||
+        (!summaryForm.exportScheduleId &&
+          (canReviewApplication ||
+            (summaryOptionsAvailability === 'available' && summaryScheduleOptions.length === 0))) ||
         (Boolean(summaryForm.exportScheduleId) &&
           isActiveOrUnchangedOption(
             summaryScheduleOptions,
@@ -1802,6 +1823,7 @@ const ProvincialApplicationDetailsPage = () => {
     summaryForm,
     summaryGrowthTypeOptions,
     summaryProductTypeOptions,
+    summaryOptionsAvailability,
     summaryRegionOptions,
     summaryScheduleOptions,
     summaryBaselineForm,
@@ -3043,9 +3065,12 @@ const ProvincialApplicationDetailsPage = () => {
           return { ...current, ownerClientNumber, agentClientNumber }
         })
 
-        if ((source === 'items' || source === 'summary-items') && !summaryVolumeWarningAccepted) {
-          const volumeUsage = await checkApplicationVolumeUsage(String(detail.applicationNumber))
-          if (!volumeUsage.volumeUsed) {
+        if (
+          (source === 'items' || source === 'summary-items') &&
+          !summaryVolumeWarningAccepted &&
+          !isApplicationExpired
+        ) {
+          if (!isApplicationVolumeUsed(summaryRequestForm.applicationVolume, detail.packages)) {
             setSummaryVolumeWarningAccepted(true)
             setActionResult({
               kind: 'warning',
@@ -3142,6 +3167,7 @@ const ProvincialApplicationDetailsPage = () => {
       canChangeApplicantType,
       detail,
       editingRemarkId,
+      isApplicationExpired,
       isSavingSummary,
       loadApplicationDetail,
       remarkBody,
@@ -3179,8 +3205,6 @@ const ProvincialApplicationDetailsPage = () => {
   const discardReviewDraft = useCallback(() => {
     setReviewStatusCode(reviewStatusBaselineCode)
     setReviewStatusRemark(reviewStatusRemarkBaseline)
-    setReviewStatusEmailOverride(null)
-    setSendReviewEmail(false)
     setReviewValidationMessage('')
     setIsRetryingApprovalRemark(false)
   }, [reviewStatusBaselineCode, reviewStatusRemarkBaseline])
@@ -3227,70 +3251,6 @@ const ProvincialApplicationDetailsPage = () => {
     }
   }, [completeSummarySave, isSavingSummary, pendingSummarySaveSource, summaryAccuracyConfirmed])
 
-  const buildReviewStatusPayload = useCallback(
-    (requireEmail: boolean) => {
-      const statusCode = normalizedReviewStatusCode
-      const normalizedClientEmailAddress = normalizeReviewEmail(reviewStatusEmailAddress)
-      const clientEmailAddress = isValidEmail(normalizedClientEmailAddress)
-        ? normalizedClientEmailAddress
-        : ''
-      const remark = reviewStatusRemark.trim()
-      if (
-        !statusCode ||
-        !reviewStatusOptions.some((option) => normalizeReviewStatus(option.value) === statusCode)
-      ) {
-        return {
-          valid: false,
-          message: REVIEW_STATUS_REQUIRED_MESSAGE,
-          payload: null,
-        }
-      }
-
-      if (REVIEW_STATUSES_REQUIRING_REMARK.has(statusCode) && !remark) {
-        return {
-          valid: false,
-          message: REVIEW_REMARK_REQUIRED_MESSAGE,
-          payload: null,
-        }
-      }
-
-      if (requireEmail) {
-        if (!canSendReviewStatusEmail) {
-          return {
-            valid: false,
-            message: REVIEW_EMAIL_UNSUPPORTED_MESSAGE,
-            payload: null,
-          }
-        }
-
-        if (!clientEmailAddress || !isValidEmail(clientEmailAddress)) {
-          return {
-            valid: false,
-            message: REVIEW_EMAIL_REQUIRED_MESSAGE,
-            payload: null,
-          }
-        }
-      }
-
-      return {
-        valid: true,
-        message: '',
-        payload: {
-          statusCode,
-          remark,
-          clientEmailAddress,
-        },
-      }
-    },
-    [
-      canSendReviewStatusEmail,
-      normalizedReviewStatusCode,
-      reviewStatusEmailAddress,
-      reviewStatusRemark,
-      reviewStatusOptions,
-    ],
-  )
-
   const onApproveApplication = useCallback(async (): Promise<'saved' | 'partial' | 'failed'> => {
     if (
       !detail ||
@@ -3329,7 +3289,6 @@ const ProvincialApplicationDetailsPage = () => {
           // Review owns this draft; the separate Remarks editor may already have unsaved work.
           setReviewStatusRemark(approvalRemark)
           setIsRetryingApprovalRemark(true)
-          setReviewStatusEmailOverride(null)
           setEditingSection('review')
           selectApplicationTab('review')
           setReviewValidationMessage(
@@ -3388,119 +3347,8 @@ const ProvincialApplicationDetailsPage = () => {
     selectApplicationTab,
   ])
 
-  const onUpdateReviewStatus = useCallback(
-    async (sendEmail: boolean): Promise<'saved' | 'partial' | 'failed'> => {
-      if (
-        !detail ||
-        !canEditApplicationReview ||
-        isSubmittingReviewAction ||
-        reviewOptionsAvailability !== 'available' ||
-        reviewStatusOptions.length === 0
-      ) {
-        return 'failed'
-      }
-
-      const payloadResult = buildReviewStatusPayload(sendEmail)
-      if (!payloadResult.valid || !payloadResult.payload) {
-        setReviewValidationMessage(payloadResult.message)
-        focusFirstInvalidFieldAfterRender(() =>
-          document.getElementById(APPLICATION_EDIT_SECTION_CARD_IDS.review),
-        )
-        return 'failed'
-      }
-
-      setActionResult(null)
-      setReviewValidationMessage('')
-      setIsSubmittingReviewAction(true)
-      try {
-        const updateResult = await updateApplicationReviewStatus(
-          String(detail.applicationNumber),
-          payloadResult.payload,
-        )
-        if (!updateResult.valid || !updateResult.updated) {
-          setActionResult({
-            kind: 'error',
-            message: updateResult.message || 'Unable to update application status.',
-          })
-          return 'failed'
-        }
-
-        // The status and remark are committed before the separate email request.
-        applyReviewStatusResult(updateResult, payloadResult.payload.remark)
-        setEditingSection(null)
-        setReviewStatusEmailOverride(null)
-        setSentReviewEmail(null)
-        const { statusCode, clientEmailAddress } = payloadResult.payload
-        const savedStatusTitle =
-          REVIEW_STATUS_SUCCESS_TITLES[statusCode] ?? 'Application status updated.'
-        if (sendEmail) {
-          try {
-            const emailResult = await sendApplicationReviewStatusEmail(
-              String(detail.applicationNumber),
-              payloadResult.payload,
-            )
-            if (!emailResult.success) {
-              setActionResult({
-                kind: 'warning',
-                title: savedStatusTitle,
-                source: 'review',
-                message:
-                  emailResult.message ===
-                  'Application status email is not configured yet. No email was sent.'
-                    ? 'Application status email is not configured yet. The application status was updated, but no email was sent.'
-                    : `The application status was updated, but the email could not be sent.${emailResult.message ? ` ${emailResult.message}` : ''}`,
-              })
-              return 'partial'
-            }
-          } catch {
-            setActionResult({
-              kind: 'warning',
-              title: savedStatusTitle,
-              source: 'review',
-              message:
-                'The application status was updated, but the email result could not be confirmed. Check delivery before sending another email.',
-            })
-            return 'partial'
-          }
-        }
-
-        setSentReviewEmail(
-          sendEmail
-            ? { applicationNumber: String(detail.applicationNumber), address: clientEmailAddress }
-            : null,
-        )
-        setActionResult({
-          kind: 'success',
-          title: savedStatusTitle,
-          source: 'review',
-          message: sendEmail
-            ? `Email sent to ${clientEmailAddress}.`
-            : EMAIL_SUPPORTED_STATUS_CODES.has(statusCode)
-              ? 'No email was sent to the client.'
-              : '',
-        })
-        return 'saved'
-      } catch {
-        setActionResult({ kind: 'error', message: 'Unable to update application status.' })
-        return 'failed'
-      } finally {
-        setIsSubmittingReviewAction(false)
-      }
-    },
-    [
-      applyReviewStatusResult,
-      buildReviewStatusPayload,
-      canEditApplicationReview,
-      detail,
-      isSubmittingReviewAction,
-      reviewOptionsAvailability,
-      reviewStatusOptions.length,
-    ],
-  )
-
   const onApproveApplicationFromEdit = useCallback(async () => {
     if ((await onApproveApplication()) === 'saved') {
-      setReviewStatusEmailOverride(null)
       setEditingSection(null)
     }
   }, [onApproveApplication])
@@ -3582,9 +3430,7 @@ const ProvincialApplicationDetailsPage = () => {
       isEditingReview &&
       // The review form opens on its default status; only a different choice is a change.
       (normalizedReviewStatusCode !== reviewFormDefaultStatusCode ||
-        reviewStatusRemark !== reviewStatusRemarkBaseline ||
-        reviewStatusEmailAddress !== reviewStatusEmailCandidate ||
-        (canSendReviewStatusEmail && sendReviewEmail)))
+        reviewStatusRemark !== reviewStatusRemarkBaseline))
   const isApplicationDirty =
     summaryDirty || remarkDirty || reviewDirty || applicationItemsDirty || documentUploadDirty
   const isApplicationBusy =
@@ -3622,8 +3468,6 @@ const ProvincialApplicationDetailsPage = () => {
     setRemarkValidationMessage('')
     setReviewStatusCode(reviewStatusBaselineCode)
     setReviewStatusRemark(reviewStatusRemarkBaseline)
-    setReviewStatusEmailOverride(null)
-    setSendReviewEmail(false)
     setReviewValidationMessage('')
     setActionResult(withoutDraftResult)
     setDocumentUploadDirty(false)
@@ -3982,7 +3826,6 @@ const ProvincialApplicationDetailsPage = () => {
       setReviewValidationMessage('')
       setReviewStatusCode(reviewFormDefaultStatusCode)
       setReviewStatusRemark('')
-      setSendReviewEmail(false)
     })
   const onSaveReview = () => {
     const reviewOptionsMessage = isRetryingApprovalRemark
@@ -3996,8 +3839,22 @@ const ProvincialApplicationDetailsPage = () => {
       setActionResult({ kind: 'error', message: reviewOptionsMessage, source: 'review' })
     } else if (normalizedReviewStatusCode === 'APP') {
       void onApproveApplicationFromEdit()
+    } else if (
+      detail &&
+      disapproveStatusOptions.some((option) => option.value === normalizedReviewStatusCode)
+    ) {
+      // Rejected and Withdrawn continue in the disapproval dialog, which saves the status.
+      setReviewValidationMessage('')
+      setReviewDisapproveTarget({
+        applicationNumber: String(detail.applicationNumber),
+        statusCode: normalizedReviewStatusCode,
+        remark: reviewStatusRemark,
+      })
     } else {
-      void onUpdateReviewStatus(sendReviewEmail && canSendReviewStatusEmail)
+      setReviewValidationMessage(REVIEW_STATUS_REQUIRED_MESSAGE)
+      focusFirstInvalidFieldAfterRender(() =>
+        document.getElementById(APPLICATION_EDIT_SECTION_CARD_IDS.review),
+      )
     }
   }
   const isReviewNotStarted =
@@ -4040,6 +3897,7 @@ const ProvincialApplicationDetailsPage = () => {
           <ActionResultNotification
             result={reviewActionResult}
             onClose={() => setActionResult(null)}
+            focusOnReveal={!canEditApplicationReview && !isEditingReview}
           />
         )}
         {isEditingReview ? (
@@ -4077,12 +3935,7 @@ const ProvincialApplicationDetailsPage = () => {
                       ...(canApproveApplicationReview || isRetryingApprovalRemark
                         ? [{ value: 'APP', label: 'Approved' }]
                         : []),
-                      ...reviewStatusOptions
-                        .map((option) => ({
-                          ...option,
-                          value: normalizeReviewStatus(option.value),
-                        }))
-                        .filter((option) => ['REJ', 'WDN'].includes(option.value)),
+                      ...disapproveStatusOptions,
                     ].map((option) => (
                       <RadioButton
                         key={option.value}
@@ -4100,16 +3953,8 @@ const ProvincialApplicationDetailsPage = () => {
                   <RecordFieldCell span="full">
                     <TextArea
                       id="applicationDetailReviewRemark"
-                      labelText={requiredLabel(
-                        'Remarks',
-                        isRetryingApprovalRemark ||
-                          REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode),
-                      )}
-                      aria-required={
-                        isRetryingApprovalRemark ||
-                        REVIEW_STATUSES_REQUIRING_REMARK.has(normalizedReviewStatusCode) ||
-                        undefined
-                      }
+                      labelText={requiredLabel('Remarks', isRetryingApprovalRemark)}
+                      aria-required={isRetryingApprovalRemark || undefined}
                       helperText="Saved to the Remarks tab."
                       rows={5}
                       enableCounter
@@ -4124,40 +3969,6 @@ const ProvincialApplicationDetailsPage = () => {
                       }
                       onChange={(event) => {
                         setReviewStatusRemark(event.target.value)
-                        setReviewValidationMessage('')
-                      }}
-                    />
-                  </RecordFieldCell>
-                )}
-              </RecordFieldRow>
-              <RecordFieldRow>
-                {canSendReviewStatusEmail && (
-                  <RecordFieldCell span="full">
-                    <Checkbox
-                      id="applicationDetailReviewSendEmail"
-                      labelText="Send email notification to the client, including the remark"
-                      checked={sendReviewEmail}
-                      onChange={(_, { checked }) => setSendReviewEmail(checked)}
-                    />
-                  </RecordFieldCell>
-                )}
-              </RecordFieldRow>
-              <RecordFieldRow>
-                {canSendReviewStatusEmail && sendReviewEmail && (
-                  <RecordFieldCell>
-                    <TextInput
-                      id="applicationDetailReviewEmail"
-                      labelText={requiredLabel('Client email address')}
-                      required
-                      helperText={REVIEW_EMAIL_PREVIEW_HELPER}
-                      value={reviewStatusEmailAddress}
-                      invalid={reviewValidationMessage === REVIEW_EMAIL_REQUIRED_MESSAGE}
-                      invalidText={reviewValidationMessage}
-                      onChange={(event) => {
-                        setReviewStatusEmailOverride({
-                          applicationNumber: applicationNumber ?? '',
-                          value: event.target.value,
-                        })
                         setReviewValidationMessage('')
                       }}
                     />
@@ -4192,9 +4003,9 @@ const ProvincialApplicationDetailsPage = () => {
               >
                 {isRetryingApprovalRemark
                   ? 'Save remark'
-                  : `${REVIEW_STATUS_ACTION_LABELS[normalizedReviewStatusCode] ?? 'Update status'}${
-                      canSendReviewStatusEmail && sendReviewEmail ? ' and send email' : ''
-                    }`}
+                  : normalizedReviewStatusCode === 'APP'
+                    ? 'Approve application'
+                    : 'Update status'}
               </Button>
             </div>
           </div>
@@ -4219,9 +4030,6 @@ const ProvincialApplicationDetailsPage = () => {
               ],
               ...(reviewStatusRemarkBaseline.trim()
                 ? [['Remarks', reviewStatusRemarkBaseline]]
-                : []),
-              ...(sentReviewEmail?.applicationNumber === String(detail.applicationNumber)
-                ? [['Client email address', sentReviewEmail.address]]
                 : []),
             ].map(([label, value]) => (
               <RecordFieldRow key={String(label)}>
@@ -4253,8 +4061,14 @@ const ProvincialApplicationDetailsPage = () => {
   ) : null
 
   const detailMatchesRoute =
-    !!detail && !!applicationNumber && String(detail.applicationNumber) === applicationNumber
+    !!detail &&
+    !!applicationNumber &&
+    String(detail.applicationNumber) === applicationNumber &&
+    !isFederalApplication
   const isRefreshingDetail = loading && detailMatchesRoute
+  if (detailMatchesRoute && !isRefreshingDetail && focusCreatedApplicationTitle) {
+    createdTitleFocusLatchedRef.current = true
+  }
 
   return (
     <Grid
@@ -4281,7 +4095,7 @@ const ProvincialApplicationDetailsPage = () => {
           title={`Application ${
             detailMatchesRoute ? (detail?.applicationNumber ?? '') : (applicationNumber ?? '')
           }`.trim()}
-          focusTitle={focusCreatedApplicationTitle && detailMatchesRoute && !isRefreshingDetail}
+          focusTitle={createdTitleFocusLatchedRef.current}
           subtitle={
             detail && detailMatchesRoute ? `Author: ${displayValueText(detail.author)}` : undefined
           }
@@ -5392,6 +5206,42 @@ const ProvincialApplicationDetailsPage = () => {
             onError={() => undefined}
           />
         )}
+      {reviewDisapproveTarget && reviewDisapproveTarget.applicationNumber === applicationNumber && (
+        <DisapproveApplicationModal
+          applicationNumber={reviewDisapproveTarget.applicationNumber}
+          statusOptions={disapproveStatusOptions}
+          initialStatusCode={reviewDisapproveTarget.statusCode}
+          initialRemark={reviewDisapproveTarget.remark}
+          checkLoadedRecordVersion
+          onStatusSaved={(result, remark) => {
+            if (
+              String(currentDetailRef.current?.applicationNumber) ===
+              reviewDisapproveTarget.applicationNumber
+            ) {
+              applyReviewStatusResult(result, remark)
+            }
+          }}
+          onComplete={async (outcome) => {
+            setReviewDisapproveTarget(null)
+            if (
+              String(currentDetailRef.current?.applicationNumber) !== outcome.applicationNumber ||
+              currentApplicationNumberRef.current !== outcome.applicationNumber
+            ) {
+              return
+            }
+            setEditingSection(null)
+            // The new status changes which edits the record allows, so the page reloads before it
+            // shows the notice; the reload clears any notice already shown.
+            await loadApplicationDetail({ preserveRemarkDraft: true })
+            if (currentApplicationNumberRef.current !== outcome.applicationNumber) {
+              return
+            }
+            setActionResult({ ...disapprovalResult(outcome), source: 'review' })
+          }}
+          onClose={() => setReviewDisapproveTarget(null)}
+          onBusyChange={setIsSubmittingReviewAction}
+        />
+      )}
       {remarkDiscardModal}
       {sections.discardModal}
       <UnsavedChangesGuard
