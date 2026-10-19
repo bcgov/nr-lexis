@@ -31,6 +31,11 @@
   #permit-detail-content .lexis-empty-state__action {
     align-self: stretch;
   }
+
+  #permit-detail-content .permit-fee-card__actions {
+    max-inline-size: 100%;
+    min-inline-size: 0;
+  }
 }
 
 // The grid gap already spaces these cards' children, so the 32px record-card rhythm adds 8px.
