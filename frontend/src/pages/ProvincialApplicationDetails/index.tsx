@@ -724,8 +724,9 @@ const volumeInTenths = (value: number | string): number | null => {
   return Math.floor((Math.round(volume * 100) + 5) / 10)
 }
 
-// The application volume is used when the package volumes add up to it, each taken at one
-// decimal. A volume that isn't a number is left for the field checks.
+// The application volume is used unless it exceeds the package volumes, each taken at one decimal.
+// The server refuses a volume below the package total, and a volume that isn't a number is left
+// for the field checks.
 const isApplicationVolumeUsed = (
   applicationVolume: string,
   packages: ProvincialApplicationDetail['packages'],
@@ -738,7 +739,7 @@ const isApplicationVolumeUsed = (
     (total, item) => total + (volumeInTenths(item.volume) ?? 0),
     0,
   )
-  return applicationTenths === packageTenths
+  return applicationTenths <= packageTenths
 }
 
 // Remark numbers come from a sequence, so the highest is the newest.
@@ -935,7 +936,6 @@ const ProvincialApplicationDetailsPage = () => {
   const [reviewDisapproveTarget, setReviewDisapproveTarget] = useState<{
     applicationNumber: string
     statusCode: string
-    returnStatusCode: string
     remark: string
   } | null>(null)
   const [isRetryingApprovalRemark, setIsRetryingApprovalRemark] = useState(false)
@@ -3839,8 +3839,22 @@ const ProvincialApplicationDetailsPage = () => {
       setActionResult({ kind: 'error', message: reviewOptionsMessage, source: 'review' })
     } else if (normalizedReviewStatusCode === 'APP') {
       void onApproveApplicationFromEdit()
+    } else if (
+      detail &&
+      disapproveStatusOptions.some((option) => option.value === normalizedReviewStatusCode)
+    ) {
+      // Rejected and Withdrawn continue in the disapproval dialog, which saves the status.
+      setReviewValidationMessage('')
+      setReviewDisapproveTarget({
+        applicationNumber: String(detail.applicationNumber),
+        statusCode: normalizedReviewStatusCode,
+        remark: reviewStatusRemark,
+      })
     } else {
       setReviewValidationMessage(REVIEW_STATUS_REQUIRED_MESSAGE)
+      focusFirstInvalidFieldAfterRender(() =>
+        document.getElementById(APPLICATION_EDIT_SECTION_CARD_IDS.review),
+      )
     }
   }
   const isReviewNotStarted =
@@ -3910,16 +3924,6 @@ const ProvincialApplicationDetailsPage = () => {
                     }
                     onChange={(value) => {
                       const nextStatus = String(value)
-                      if (DISAPPROVAL_STATUS_CODES.has(nextStatus)) {
-                        setReviewDisapproveTarget({
-                          applicationNumber: String(detail.applicationNumber),
-                          statusCode: nextStatus,
-                          returnStatusCode: reviewStatusCode,
-                          remark: reviewStatusRemark,
-                        })
-                        setReviewStatusCode(nextStatus)
-                        return
-                      }
                       setReviewStatusCode(nextStatus)
                       if (nextStatus === 'APP' && !canManageRemarks) {
                         setReviewStatusRemark('')
@@ -5208,6 +5212,7 @@ const ProvincialApplicationDetailsPage = () => {
           statusOptions={disapproveStatusOptions}
           initialStatusCode={reviewDisapproveTarget.statusCode}
           initialRemark={reviewDisapproveTarget.remark}
+          checkLoadedRecordVersion
           onStatusSaved={(result, remark) => {
             if (
               String(currentDetailRef.current?.applicationNumber) ===
@@ -5233,10 +5238,7 @@ const ProvincialApplicationDetailsPage = () => {
             }
             setActionResult({ ...disapprovalResult(outcome), source: 'review' })
           }}
-          onClose={() => {
-            setReviewStatusCode(reviewDisapproveTarget.returnStatusCode)
-            setReviewDisapproveTarget(null)
-          }}
+          onClose={() => setReviewDisapproveTarget(null)}
           onBusyChange={setIsSubmittingReviewAction}
         />
       )}

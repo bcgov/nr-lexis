@@ -70,6 +70,11 @@ type Props = {
   initialRemark?: string
   /** Update an open record as soon as its status commits, before the separate email request. */
   onStatusSaved?: (result: ApplicationReviewStatusUpdateResult, remark: string) => void
+  /**
+   * Opened on the record's own page: the save is checked against the version the page loaded, so
+   * a change made since then ends in a conflict instead of being saved over.
+   */
+  checkLoadedRecordVersion?: boolean
   /** The status is saved; the dialog has closed. */
   onComplete: (outcome: DisapprovalOutcome) => void
   /** Closed without saving. */
@@ -117,6 +122,7 @@ const DisapproveApplicationModal = ({
   initialStatusCode = DISAPPROVE_DEFAULT_STATUS,
   initialRemark = '',
   onStatusSaved,
+  checkLoadedRecordVersion = false,
   onComplete,
   onClose,
   onBusyChange,
@@ -228,7 +234,9 @@ const DisapproveApplicationModal = ({
     setPending(true)
     let email: DisapprovalEmailResult = { status: 'skipped' }
     try {
-      const recordVersion = await fetchCurrentApplicationRecordVersion(applicationNumber)
+      const recordVersion = checkLoadedRecordVersion
+        ? undefined
+        : await fetchCurrentApplicationRecordVersion(applicationNumber)
       const saved = await updateApplicationReviewStatus(applicationNumber, payload, recordVersion)
       if (!saved.valid || !saved.updated) {
         setSaveError(saved.message || DISAPPROVE_FAILED)

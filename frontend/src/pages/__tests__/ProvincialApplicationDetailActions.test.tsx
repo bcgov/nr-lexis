@@ -3901,6 +3901,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const reviewTile = await selectApplicationReviewTile()
     await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Rejected' }))
+    await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update status' }))
     const dialog = within(screen.getByRole('dialog', { name: 'Disapprove application 321' }))
     await waitFor(() => {
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01', {
@@ -4130,6 +4131,23 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({ saveSource: 'items', applicationVolume: '100.1' }),
       ),
     )
+  })
+
+  it('leaves an application volume below the package total to the server without a warning', async () => {
+    renderApplicationDetailPage()
+
+    const itemDetails = within(await selectApplicationItemDetailsTile())
+    fireEvent.change(await itemDetails.findByLabelText('Application volume (m³)'), {
+      target: { value: '99.9' },
+    })
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({ saveSource: 'items', applicationVolume: '99.9' }),
+      ),
+    )
+    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
   })
 
   it('does not warn when the application volume is lowered to the package total', async () => {

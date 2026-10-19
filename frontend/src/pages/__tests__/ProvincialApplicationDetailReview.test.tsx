@@ -21,6 +21,7 @@ import {
   mockedFetchApplicationPermits,
   mockedFetchApplicationReviewOptions,
   mockedFetchApplicationSummarySnapshot,
+  mockedFetchCurrentApplicationRecordVersion,
   mockedFetchProvincialApplicationDetail,
   mockedSaveApplicationRemark,
   mockedSendApplicationReviewStatusEmail,
@@ -81,6 +82,7 @@ const renderReviewPage = () =>
 const openReviewDisapproval = async (statusLabel = 'Rejected') => {
   const review = await selectApplicationReviewTile()
   await userEvent.click(within(review).getByRole('radio', { name: statusLabel }))
+  await userEvent.click(within(review).getByRole('button', { name: 'Update status' }))
   const dialog = await screen.findByRole('dialog', { name: 'Disapprove application 321' })
   return { review, dialog, controls: within(dialog) }
 }
@@ -1440,6 +1442,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       target: { value: 'Typed on the tab' },
     })
     await userEvent.click(within(review).getByRole('radio', { name: 'Withdrawn' }))
+    await userEvent.click(within(review).getByRole('button', { name: 'Update status' }))
 
     const dialog = within(await screen.findByRole('dialog', { name: 'Disapprove application 321' }))
     expect(dialog.getByRole('combobox', { name: 'Application status' })).toHaveValue('Withdrawn')
@@ -1576,6 +1579,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     await userEvent.click(controls.getByRole('checkbox', { name: 'Send disapproval email' }))
     await userEvent.type(controls.getByLabelText('Remark'), 'Needs correction')
     await userEvent.click(controls.getByRole('button', { name: 'Disapprove application' }))
+    // No version is passed, so the save carries the version the page loaded.
     await waitFor(() =>
       expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
         '321',
@@ -1584,9 +1588,10 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
           remark: 'Needs correction',
           clientEmailAddress: '',
         },
-        'test-application-version',
+        undefined,
       ),
     )
+    expect(mockedFetchCurrentApplicationRecordVersion).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
     expect(await within(review).findByText('No disapproval email was sent.')).toBeVisible()
     await waitFor(() => expect(within(review).getByRole('status')).toHaveFocus())
@@ -1914,6 +1919,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
         expect(review.queryByRole('radio', { name: 'Approved' })).not.toBeInTheDocument()
       }
       await userEvent.click(review.getByRole('radio', { name: label }))
+      await userEvent.click(review.getByRole('button', { name: 'Update status' }))
       const dialog = within(screen.getByRole('dialog', { name: 'Disapprove application 321' }))
       await userEvent.click(dialog.getByRole('checkbox', { name: 'Send disapproval email' }))
       fireEvent.change(dialog.getByLabelText('Remark'), { target: { value: 'Review reason' } })
@@ -1922,11 +1928,57 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
         expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
           '321',
           expect.objectContaining({ statusCode, remark: 'Review reason' }),
-          'test-application-version',
+          undefined,
         ),
       )
     },
   )
+
+  it('keeps focus on the status while the arrow keys move through Rejected and Withdrawn', async () => {
+    renderReviewPage()
+    const review = within(await selectApplicationReviewTile())
+    await waitFor(() => expect(review.getByRole('radio', { name: 'Rejected' })).toBeEnabled())
+    const approved = review.getByRole('radio', { name: 'Approved' })
+    await userEvent.click(approved)
+    expect(approved).toHaveFocus()
+
+    await userEvent.keyboard('{ArrowDown}')
+    const rejected = review.getByRole('radio', { name: 'Rejected' })
+    expect(rejected).toBeChecked()
+    expect(rejected).toHaveFocus()
+    await userEvent.keyboard('{ArrowDown}')
+    const withdrawn = review.getByRole('radio', { name: 'Withdrawn' })
+    expect(withdrawn).toBeChecked()
+    expect(withdrawn).toHaveFocus()
+
+    expect(
+      screen.queryByRole('dialog', { name: 'Disapprove application 321' }),
+    ).not.toBeInTheDocument()
+    expect(review.getByRole('button', { name: 'Update status' })).toBeVisible()
+  })
+
+  it('focuses the status when Update status is used without a choice', async () => {
+    // An approved application can't be approved again, so its review opens without a choice.
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...reviewableApplicationDetail,
+      applicationStatusCode: 'APP',
+      statusDescription: 'Approved',
+    })
+    renderReviewPage()
+    const review = within(await selectApplicationReviewTile())
+    await waitFor(() => expect(review.getByRole('radio', { name: 'Rejected' })).toBeEnabled())
+    expect(review.getByRole('radio', { name: 'Rejected' })).not.toBeChecked()
+    await userEvent.click(review.getByRole('button', { name: 'Update status' }))
+
+    expect(
+      review.getByText('Choose an application status before updating review status.'),
+    ).toBeVisible()
+    await waitFor(() => expect(review.getByRole('radio', { name: 'Rejected' })).toHaveFocus())
+    expect(
+      screen.queryByRole('dialog', { name: 'Disapprove application 321' }),
+    ).not.toBeInTheDocument()
+    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+  })
 
   it('does not offer an approval action when an already approved application has no selected status', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
@@ -1978,6 +2030,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
       const reviewTile = await selectApplicationReviewTile()
       await userEvent.click(within(reviewTile).getByRole('radio', { name: statusLabel }))
+      await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update status' }))
       const dialog = within(screen.getByRole('dialog', { name: 'Disapprove application 321' }))
       await userEvent.click(dialog.getByRole('checkbox', { name: 'Send disapproval email' }))
       await userEvent.click(dialog.getByRole('button', { name: 'Disapprove application' }))
@@ -1987,19 +2040,22 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     },
   )
 
-  it('cancels disapproval without changing the existing approval draft', async () => {
+  it('cancels disapproval and keeps the Review tab draft', async () => {
     renderReviewPage()
     const review = within(await selectApplicationReviewTile())
-    await userEvent.type(review.getByLabelText('Remarks'), 'Draft approval note')
+    await userEvent.type(review.getByLabelText('Remarks'), 'Draft review note')
     await userEvent.click(review.getByRole('radio', { name: 'Withdrawn' }))
+    const updateStatus = review.getByRole('button', { name: 'Update status' })
+    await userEvent.click(updateStatus)
     const dialog = within(screen.getByRole('dialog', { name: 'Disapprove application 321' }))
-    expect(dialog.getByLabelText('Remark')).toHaveValue('Draft approval note')
+    expect(dialog.getByLabelText('Remark')).toHaveValue('Draft review note')
     fireEvent.change(dialog.getByLabelText('Remark'), { target: { value: 'Discard this draft' } })
     await userEvent.click(dialog.getByRole('button', { name: 'Cancel' }))
 
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
-    expect(review.getByRole('radio', { name: 'Approved' })).toBeChecked()
-    expect(review.getByLabelText('Remarks')).toHaveValue('Draft approval note')
+    expect(review.getByRole('radio', { name: 'Withdrawn' })).toBeChecked()
+    expect(review.getByLabelText('Remarks')).toHaveValue('Draft review note')
+    await waitFor(() => expect(updateStatus).toHaveFocus())
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
   })
@@ -2050,7 +2106,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
     await userEvent.click(controls.getByRole('button', { name: 'Cancel' }))
     expect(
-      within(await selectApplicationReviewTile(false)).getByRole('radio', { name: 'Approved' }),
+      within(await selectApplicationReviewTile(false)).getByRole('radio', { name: 'Rejected' }),
     ).toBeChecked()
   })
 
