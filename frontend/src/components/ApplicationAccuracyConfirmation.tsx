@@ -64,7 +64,13 @@ const ApplicationAccuracyConfirmation = ({
       errorTitle={errorTitle}
     >
       {warningMessage && (
-        <AppNotification kind="warning" title="Review package volumes" subtitle={warningMessage} />
+        <AppNotification
+          focusOnReveal
+          revealKey={warningMessage}
+          kind="warning"
+          title="Review package volumes"
+          subtitle={warningMessage}
+        />
       )}
       <Checkbox
         id={checkboxId}

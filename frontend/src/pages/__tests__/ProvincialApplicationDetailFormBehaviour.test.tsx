@@ -241,6 +241,7 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
         'true',
       ),
     )
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Application' })).toHaveFocus())
     await selectApplicationDetailTab('Applicant')
     expect(tile.getByRole('button', { name: 'Edit applicant details' })).toBeInTheDocument()
     expect(tile.getByText('Owner Contact')).toBeInTheDocument()

@@ -1118,9 +1118,13 @@ describe('Provincial exemption edit context', () => {
     fireEvent.change(screen.getByLabelText('Approval date'), {
       target: { value: '2026-02-31' },
     })
+    fireEvent.change(screen.getByLabelText('Expiry date'), {
+      target: { value: '2027-02-30' },
+    })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(screen.getAllByText('Approval date must be YYYY-MM-DD').length).toBeGreaterThan(0)
+    expect(screen.getAllByText('Date must be YYYY-MM-DD').length).toBeGreaterThanOrEqual(2)
+    expect(screen.queryByText(/(Approval|Expiry) date must be YYYY-MM-DD/)).not.toBeInTheDocument()
     expect(screen.queryByText('Review exemption values')).not.toBeInTheDocument()
     expect(vi.mocked(updateExemption)).not.toHaveBeenCalled()
   })

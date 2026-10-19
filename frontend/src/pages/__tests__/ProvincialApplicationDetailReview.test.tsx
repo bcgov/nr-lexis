@@ -34,11 +34,55 @@ import {
   selectApplicationSummaryTile,
 } from './ProvincialApplicationDetailActions.support'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
+import { formatBusinessIsoDate } from '@/utils/date'
 
 const reviewableApplicationDetail: ProvincialApplicationDetail = {
   ...applicationDetail,
   applicationStatusCode: 'NEW',
   statusDescription: 'New',
+}
+
+// The application as the server returns it once the disapproval is saved: the new status, the
+// remark entered with it, and no application-detail edits.
+const disapprovedApplicationDetail = (
+  applicationStatusCode: string,
+  statusDescription: string,
+  remark: string,
+): ProvincialApplicationDetail => ({
+  ...reviewableApplicationDetail,
+  applicationStatusCode,
+  statusDescription,
+  canEditApplicationDetails: false,
+  remarks: [
+    { remarkId: 99, title: remark, remark, user: 'idir\\reviewer', date: '2026-01-05' },
+    ...reviewableApplicationDetail.remarks,
+  ],
+})
+
+// Serves the new application first and the disapproved one on every reload after it.
+const mockDetailAfterDisapproval = (disapproved: ProvincialApplicationDetail) =>
+  mockedFetchProvincialApplicationDetail
+    .mockReset()
+    .mockResolvedValueOnce(reviewableApplicationDetail)
+    .mockResolvedValue(disapproved)
+
+const renderReviewPage = () =>
+  render(
+    <MemoryRouter initialEntries={['/provincial/application/321']}>
+      <Routes>
+        <Route
+          path="/provincial/application/:applicationNumber"
+          element={<ProvincialApplicationDetailsPage />}
+        />
+      </Routes>
+    </MemoryRouter>,
+  )
+
+const openReviewDisapproval = async (statusLabel = 'Rejected') => {
+  const review = await selectApplicationReviewTile()
+  await userEvent.click(within(review).getByRole('radio', { name: statusLabel }))
+  const dialog = await screen.findByRole('dialog', { name: 'Disapprove application 321' })
+  return { review, dialog, controls: within(dialog) }
 }
 
 describe.sequential('Provincial Application Detail Actions - review', () => {
@@ -380,7 +424,8 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     await userEvent.click(review.getByRole('button', { name: 'Update status' }))
 
     expect(await review.findByRole('group', { name: /Application status/ })).toBeInTheDocument()
-    expect(review.getByRole('button', { name: 'Update status' })).toBeInTheDocument()
+    expect(review.getByRole('radio', { name: 'Rejected' })).toBeEnabled()
+    expect(review.getByRole('radio', { name: 'Withdrawn' })).toBeEnabled()
     expect(review.queryByRole('button', { name: 'Approve application' })).not.toBeInTheDocument()
   })
 
@@ -1375,36 +1420,30 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
   })
 
-  it('prefills application review email from the applicant client data', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
+  it('opens the shared disapproval modal with both client-location recipients and email checked', async () => {
+    renderReviewPage()
+    const { controls } = await openReviewDisapproval()
+    expect(controls.getByRole('checkbox', { name: 'Send disapproval email' })).toBeChecked()
+    expect(await controls.findByText('owner@example.test')).toBeVisible()
+    expect(controls.getByText('agent@example.test')).toBeVisible()
+    expect(controls.getByRole('combobox', { name: 'Application status' })).toHaveValue('Rejected')
+    await userEvent.click(controls.getByRole('button', { name: 'Edit recipients' }))
+    expect(controls.getByLabelText('Owner email')).toHaveValue('owner@example.test')
+    expect(controls.getByLabelText('Agent email')).toHaveValue('agent@example.test')
+    expect(controls.getAllByText('Changes apply to this email only.')).toHaveLength(2)
+  })
 
-    const reviewTile = await selectApplicationReviewTile()
-    await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Rejected' }))
-    await userEvent.click(
-      within(reviewTile).getByRole('checkbox', {
-        name: 'Send email notification to the client, including the remark',
-      }),
-    )
-    await waitFor(() => {
-      expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
-        'agent@example.test',
-      )
+  it('carries the remark typed on the Review tab into the disapproval dialog', async () => {
+    renderReviewPage()
+    const review = await selectApplicationReviewTile()
+    fireEvent.change(within(review).getByLabelText('Remarks'), {
+      target: { value: 'Typed on the tab' },
     })
-    expect(within(reviewTile).getByLabelText(/client email address/i)).not.toHaveAttribute(
-      'readonly',
-    )
-    expect(
-      within(reviewTile).getByText("Editing this address won't change the client's record."),
-    ).toBeInTheDocument()
+    await userEvent.click(within(review).getByRole('radio', { name: 'Withdrawn' }))
+
+    const dialog = within(await screen.findByRole('dialog', { name: 'Disapprove application 321' }))
+    expect(dialog.getByRole('combobox', { name: 'Application status' })).toHaveValue('Withdrawn')
+    expect(dialog.getByLabelText('Remark')).toHaveValue('Typed on the tab')
   })
 
   it('shows the owner client location and email without a separate notification field', async () => {
@@ -1509,152 +1548,138 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     ).toBeVisible()
   })
 
-  it('defaults owner application review mail to the owner client-location email', async () => {
-    mockedFetchProvincialApplicationDetail.mockReset().mockResolvedValue({
+  it('shows only the owner email for an owner application', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       agentClientNumber: null,
     })
-    mockedFetchApplicationSummarySnapshot.mockReset().mockResolvedValue({
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
       ...applicationSummarySnapshot,
       applicantTypeCode: 'O',
       agentClientNumber: '',
       agentClientLocationCode: '',
       agentContactName: '',
     })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const reviewTile = await selectApplicationReviewTile()
-    await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Rejected' }))
-    await userEvent.click(
-      within(reviewTile).getByRole('checkbox', {
-        name: 'Send email notification to the client, including the remark',
-      }),
-    )
-    await waitFor(() =>
-      expect(within(reviewTile).getByLabelText('Client email address')).toHaveValue(
-        'owner@example.test',
-      ),
-    )
+    renderReviewPage()
+    const { controls } = await openReviewDisapproval()
+    expect(await controls.findByText('owner@example.test')).toBeVisible()
+    expect(controls.queryByText('Agent email')).not.toBeInTheDocument()
   })
 
-  it('updates a single rejection with the loaded client email without sending email', async () => {
+  it('saves a rejection without email and focuses its result after the edit action disappears', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([
+      new DOMRect(0, 0, 100, 100),
+    ] as unknown as DOMRectList)
+    mockDetailAfterDisapproval(disapprovedApplicationDetail('REJ', 'Rejected', 'Needs correction'))
+    renderReviewPage()
+    const { review, controls } = await openReviewDisapproval()
+    await userEvent.click(controls.getByRole('checkbox', { name: 'Send disapproval email' }))
+    await userEvent.type(controls.getByLabelText('Remark'), 'Needs correction')
+    await userEvent.click(controls.getByRole('button', { name: 'Disapprove application' }))
+    await waitFor(() =>
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
+        '321',
+        {
+          statusCode: 'REJ',
+          remark: 'Needs correction',
+          clientEmailAddress: '',
+        },
+        'test-application-version',
+      ),
+    )
+    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+    expect(await within(review).findByText('No disapproval email was sent.')).toBeVisible()
+    await waitFor(() => expect(within(review).getByRole('status')).toHaveFocus())
+    expect(within(review).queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+    expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
+    await selectApplicationDetailTab('Remarks')
+    expect(
+      within(screen.getByRole('tabpanel', { name: 'Remarks' })).getAllByText('Needs correction'),
+    ).toHaveLength(1)
+  })
+
+  it('reloads the application after a rejection so the record drops the edits its new status locks', async () => {
+    mockDetailAfterDisapproval(disapprovedApplicationDetail('REJ', 'Rejected', 'Needs correction'))
+    renderReviewPage()
+    const summaryTile = await selectApplicationSummaryTile(false)
+    expect(
+      within(summaryTile).getByRole('button', { name: 'Edit application details' }),
+    ).toBeInTheDocument()
+
+    const { review, controls } = await openReviewDisapproval()
+    await userEvent.click(controls.getByRole('checkbox', { name: 'Send disapproval email' }))
+    await userEvent.type(controls.getByLabelText('Remark'), 'Needs correction')
+    await userEvent.click(controls.getByRole('button', { name: 'Disapprove application' }))
+
+    expect(await within(review).findByText('No disapproval email was sent.')).toBeVisible()
+    expect(within(review).getByText('Application 321 rejected.')).toBeVisible()
+    expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+    expect(mockedFetchProvincialApplicationDetail).toHaveBeenLastCalledWith('321')
+    expect(within(review).queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+
+    expect(
+      within(await selectApplicationSummaryTile(false)).queryByRole('button', {
+        name: 'Edit application details',
+      }),
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the disapproval notice when the reload after it fails', async () => {
+    mockedFetchProvincialApplicationDetail
+      .mockReset()
+      .mockResolvedValueOnce(reviewableApplicationDetail)
+      .mockRejectedValue(new Error('Detail unavailable'))
+    renderReviewPage()
+    const { review, controls } = await openReviewDisapproval()
+    await userEvent.click(controls.getByRole('checkbox', { name: 'Send disapproval email' }))
+    await userEvent.type(controls.getByLabelText('Remark'), 'Needs correction')
+    await userEvent.click(controls.getByRole('button', { name: 'Disapprove application' }))
+
+    expect(await within(review).findByText('Application 321 rejected.')).toBeVisible()
+    expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+    expect(
+      await screen.findByText('Unable to retrieve provincial application detail.'),
+    ).toBeVisible()
+  })
+
+  it('defaults withdrawal email on, sends to both owner and agent, and focuses the result', async () => {
+    vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([
+      new DOMRect(0, 0, 100, 100),
+    ] as unknown as DOMRectList)
     mockedUpdateApplicationReviewStatus.mockResolvedValueOnce({
       updated: true,
       valid: true,
-      statusCode: 'REJ',
-      clientEmail: 'agent@example.test',
-      remark: 'Cannot approve this application',
+      statusCode: 'WDN',
+      remark: 'Client request',
       remarkId: 99,
-      remarkUser: 'idir\\reviewer',
-      remarkDate: '2026-01-05T10:15:00Z',
+      clientEmail: '',
       message: 'Application status updated.',
     })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const reviewTile = await selectApplicationReviewTile()
-    const reviewControls = within(reviewTile)
-    await userEvent.click(reviewControls.getByRole('radio', { name: 'Rejected' }))
-    await userEvent.click(
-      reviewControls.getByRole('checkbox', {
-        name: 'Send email notification to the client, including the remark',
-      }),
-    )
-    await waitFor(() => {
-      expect(reviewControls.getByLabelText(/client email address/i)).toHaveValue(
-        'agent@example.test',
-      )
-    })
-    await userEvent.click(
-      reviewControls.getByRole('checkbox', {
-        name: 'Send email notification to the client, including the remark',
-      }),
-    )
-    fireEvent.change(reviewControls.getByLabelText('Remarks'), {
-      target: { value: 'Cannot approve this application' },
-    })
-    await userEvent.click(reviewControls.getByRole('button', { name: 'Reject application' }))
-
-    await waitFor(() => {
-      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith('321', {
-        statusCode: 'REJ',
-        remark: 'Cannot approve this application',
-        clientEmailAddress: 'agent@example.test',
-      })
-    })
-    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
-    expect(await within(reviewTile).findByText('Application rejected.')).toBeVisible()
-    expect(screen.getByText('No email was sent to the client.')).toBeInTheDocument()
-    expect(within(reviewTile).queryByText('Client email address')).not.toBeInTheDocument()
-  })
-
-  it('leaves the withdrawal email unticked until the reviewer opts in', async () => {
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const reviewControls = within(await selectApplicationReviewTile())
-    expect(reviewControls.getByRole('radio', { name: 'Approved' })).toBeChecked()
-    await userEvent.click(reviewControls.getByRole('radio', { name: 'Withdrawn' }))
-    const sendEmail = reviewControls.getByRole('checkbox', {
-      name: 'Send email notification to the client, including the remark',
-    })
-    expect(sendEmail).not.toBeChecked()
-    expect(reviewControls.queryByLabelText(/client email address/i)).not.toBeInTheDocument()
-    expect(reviewControls.getByRole('button', { name: 'Withdraw application' })).toBeEnabled()
-
-    await userEvent.click(sendEmail)
-    await waitFor(() =>
-      expect(reviewControls.getByLabelText(/client email address/i)).toHaveValue(
-        'agent@example.test',
-      ),
-    )
-    fireEvent.change(reviewControls.getByLabelText('Remarks'), {
-      target: { value: 'Withdrawn at the client request' },
-    })
-    await userEvent.click(
-      reviewControls.getByRole('button', { name: 'Withdraw application and send email' }),
-    )
-
+    mockDetailAfterDisapproval(disapprovedApplicationDetail('WDN', 'Withdrawn', 'Client request'))
+    renderReviewPage()
+    const { review, controls } = await openReviewDisapproval('Withdrawn')
+    expect(controls.getByRole('combobox', { name: 'Application status' })).toHaveValue('Withdrawn')
+    expect(controls.getByRole('checkbox', { name: 'Send disapproval email' })).toBeChecked()
+    await controls.findByText('agent@example.test')
+    await userEvent.type(controls.getByLabelText('Remark'), 'Client request')
+    await userEvent.click(controls.getByRole('button', { name: 'Disapprove and send email' }))
     await waitFor(() =>
       expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith('321', {
         statusCode: 'WDN',
-        remark: 'Withdrawn at the client request',
-        clientEmailAddress: 'agent@example.test',
+        remark: 'Client request',
+        clientEmailAddress: '',
+        ownerEmail: 'owner@example.test',
+        agentEmail: 'agent@example.test',
       }),
     )
-    expect(await reviewControls.findByText('Application withdrawn.')).toBeVisible()
-    expect(screen.getByText('Email sent to agent@example.test.')).toBeInTheDocument()
-    const savedEmail = within(await selectApplicationReviewTile(false))
-      .getByText('Client email address')
-      .closest('.record-field, .detail-field-item') as HTMLElement
-    expect(within(savedEmail).getByText('agent@example.test')).toBeInTheDocument()
+    expect(
+      await within(review).findByText(/Disapproval email sent to the owner/),
+    ).toHaveTextContent('and the agent (agent@example.test)')
+    expect(within(review).getByText('Application 321 withdrawn.')).toBeVisible()
+    expect(within(review).queryByRole('link', { name: /321/ })).not.toBeInTheDocument()
+    await waitFor(() => expect(within(review).getByRole('status')).toHaveFocus())
+    expect(within(review).queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+    expect(within(review).queryByText('Client email address')).not.toBeInTheDocument()
   })
 
   it('loads persisted review status remark without treating placeholder email as persisted', async () => {
@@ -1751,10 +1776,10 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     ).not.toBeInTheDocument()
   })
 
-  it('blocks status email when the authoritative client account has no valid address', async () => {
+  it('requires at least one recipient before committing the disapproval', async () => {
     mockedFetchApplicationClientData.mockResolvedValue({
       clientNumber: '00033344',
-      companyName: 'Applicant without email',
+      companyName: 'No email',
       clientAcronym: '',
       address: '',
       city: '',
@@ -1766,132 +1791,56 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       email: '',
       notfound: '',
     })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const reviewTile = await selectApplicationReviewTile()
-    const reviewControls = within(reviewTile)
-    await userEvent.click(reviewControls.getByRole('radio', { name: 'Rejected' }))
-    await userEvent.click(
-      reviewControls.getByRole('checkbox', {
-        name: 'Send email notification to the client, including the remark',
-      }),
-    )
-    await waitFor(() =>
-      expect(reviewControls.getByLabelText(/client email address/i)).toHaveValue(''),
-    )
-    await userEvent.type(reviewControls.getByLabelText('Remarks'), 'Missing recipient')
-    await userEvent.click(
-      reviewControls.getByRole('button', {
-        name: 'Reject application and send email',
-      }),
-    )
-
+    renderReviewPage()
+    const { controls } = await openReviewDisapproval()
+    await controls.findByLabelText('Owner email')
+    await userEvent.type(controls.getByLabelText('Remark'), 'Missing recipients')
+    await userEvent.click(controls.getByRole('button', { name: 'Disapprove and send email' }))
     expect(
-      (await screen.findAllByText('Enter one valid client email address.')).length,
-    ).toBeGreaterThan(0)
+      await controls.findByText(
+        'Enter at least one email address, or clear Send disapproval email to notify the applicant another way.',
+      ),
+    ).toBeVisible()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
   })
 
-  it('retains the saved status and closes the editor when status email is unavailable', async () => {
-    const detailAfterStatusUpdate: ProvincialApplicationDetail = {
-      ...reviewableApplicationDetail,
-      applicationStatusCode: 'REJ',
-      statusDescription: 'Rejected',
-    }
-    mockedFetchProvincialApplicationDetail
-      .mockResolvedValueOnce(reviewableApplicationDetail)
-      .mockResolvedValueOnce(detailAfterStatusUpdate)
-    mockedUpdateApplicationReviewStatus.mockResolvedValueOnce({
-      updated: true,
-      valid: true,
-      statusCode: 'REJ',
-      clientEmail: 'edited.client@example.test',
-      remark: 'Needs correction',
-      remarkId: 99,
-      remarkUser: 'idir\\reviewer',
-      remarkDate: '2026-01-05T10:15:00Z',
-      message: 'Application status updated.',
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const reviewTile = await selectApplicationReviewTile()
-    await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Rejected' }))
-    await userEvent.click(
-      within(reviewTile).getByRole('checkbox', {
-        name: 'Send email notification to the client, including the remark',
-      }),
-    )
-    await waitFor(() => {
-      expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
-        'agent@example.test',
-      )
-    })
-    fireEvent.change(within(reviewTile).getByLabelText(/client email address/i), {
-      target: { value: 'edited.client@example.test' },
-    })
-    await userEvent.type(within(reviewTile).getByLabelText('Remarks'), 'Needs correction')
-    expect(within(reviewTile).getByLabelText(/client email address/i)).toHaveValue(
-      'edited.client@example.test',
-    )
+  it('retains the committed status and one remark when email is not sent', async () => {
     mockedSendApplicationReviewStatusEmail.mockResolvedValueOnce({
       success: false,
-      message: 'Application status email is not configured yet. No email was sent.',
+      message: 'Not sent',
     })
-    await userEvent.click(
-      within(reviewTile).getByRole('button', {
-        name: 'Reject application and send email',
+    mockDetailAfterDisapproval(disapprovedApplicationDetail('REJ', 'Rejected', 'Needs correction'))
+    renderReviewPage()
+    const { review, controls } = await openReviewDisapproval()
+    await controls.findByText('agent@example.test')
+    await userEvent.click(controls.getByRole('button', { name: 'Edit recipients' }))
+    fireEvent.change(controls.getByLabelText('Agent email'), {
+      target: { value: 'edited.agent@example.test' },
+    })
+    await userEvent.type(controls.getByLabelText('Remark'), 'Needs correction')
+    await userEvent.click(controls.getByRole('button', { name: 'Disapprove and send email' }))
+    expect(
+      await within(review).findByText('The disapproval email could not be sent.'),
+    ).toBeVisible()
+    expect(
+      screen.queryByRole('dialog', { name: 'Disapprove application 321' }),
+    ).not.toBeInTheDocument()
+    expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(1)
+    expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
+      '321',
+      expect.objectContaining({
+        ownerEmail: 'owner@example.test',
+        agentEmail: 'edited.agent@example.test',
       }),
     )
-
-    await waitFor(() => {
-      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith('321', {
-        statusCode: 'REJ',
-        remark: 'Needs correction',
-        clientEmailAddress: 'edited.client@example.test',
-      })
-      expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith('321', {
-        statusCode: 'REJ',
-        remark: 'Needs correction',
-        clientEmailAddress: 'edited.client@example.test',
-      })
-      expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
-    })
-    expect(
-      await screen.findByText(
-        'Application status email is not configured yet. The application status was updated, but no email was sent.',
-      ),
-    ).toBeInTheDocument()
-    expect(within(reviewTile).queryByLabelText(/client email address/i)).not.toBeInTheDocument()
-    expect(within(reviewTile).queryByRole('textbox', { name: 'Remarks' })).not.toBeInTheDocument()
-    expect(
-      within(reviewTile).queryByRole('button', { name: 'Update status' }),
-    ).not.toBeInTheDocument()
-    expect(screen.getAllByText('Rejected').length).toBeGreaterThan(0)
-    expect(screen.getAllByText('Needs correction').length).toBeGreaterThan(0)
+    expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
+    expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
+    expect(within(review).getByText('Rejected')).toBeVisible()
+    expect(within(review).queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
   })
 
-  it('applies the committed rejection before email completes and reports an unconfirmed send separately', async () => {
+  it('keeps the same dialog while email is pending and reports an unknown send without resaving status', async () => {
     let rejectEmail!: (reason: Error) => void
     mockedSendApplicationReviewStatusEmail.mockImplementationOnce(
       () =>
@@ -1899,59 +1848,34 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
           rejectEmail = reject
         }),
     )
-    mockedUpdateApplicationReviewStatus.mockResolvedValueOnce({
-      valid: true,
-      updated: true,
-      statusCode: 'REJ',
-      remark: 'Needs correction',
-      remarkId: 99,
-      clientEmail: 'agent@example.test',
-      message: 'Application status updated.',
-    })
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const reviewTile = await selectApplicationReviewTile()
-    const review = within(reviewTile)
-    await userEvent.click(review.getByRole('radio', { name: 'Rejected' }))
-    fireEvent.change(review.getByLabelText('Remarks'), { target: { value: 'Needs correction' } })
-    await userEvent.click(
-      review.getByRole('checkbox', {
-        name: 'Send email notification to the client, including the remark',
-      }),
-    )
-    await waitFor(() =>
-      expect(review.getByLabelText('Client email address')).toHaveValue('agent@example.test'),
-    )
-    await userEvent.click(review.getByRole('button', { name: 'Reject application and send email' }))
+    mockDetailAfterDisapproval(disapprovedApplicationDetail('REJ', 'Rejected', 'Needs correction'))
+    renderReviewPage()
+    const { review, dialog, controls } = await openReviewDisapproval()
+    await controls.findByText('agent@example.test')
+    await userEvent.type(controls.getByLabelText('Remark'), 'Needs correction')
+    await userEvent.click(controls.getByRole('button', { name: 'Disapprove and send email' }))
     await waitFor(() => expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledTimes(1))
-    expect(review.getByText('Rejected')).toBeInTheDocument()
-    expect(review.getByText('Needs correction')).toBeInTheDocument()
-    expect(review.queryByRole('textbox', { name: 'Remarks' })).not.toBeInTheDocument()
-
+    expect(screen.getByRole('dialog', { name: 'Disapprove application 321' })).toBe(dialog)
+    expect(controls.getByRole('button', { name: 'Saving…' })).toBeDisabled()
+    expect(controls.getByRole('button', { name: 'Cancel' })).toBeDisabled()
+    // The saved status changes the record header before the separate email settles.
+    expect(
+      screen.getByRole('heading', { name: 'Application 321' }).closest('.lexis-page-header'),
+    ).toHaveTextContent('Rejected')
     await act(async () => rejectEmail(new Error('Network response lost')))
     expect(
-      await review.findByText(
-        'The application status was updated, but the email result could not be confirmed. Check delivery before sending another email.',
+      await within(review).findByText(
+        'The disapproval email status could not be confirmed. Check whether it was sent before sending it again.',
       ),
-    ).toBeInTheDocument()
-    expect(screen.queryByText('Unable to update application status.')).not.toBeInTheDocument()
-    expect(review.queryByText('Client email address')).not.toBeInTheDocument()
-    expect(review.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+    ).toBeVisible()
     expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(1)
     expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledTimes(1)
+    expect(within(review).queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
   })
 
   it.each([
     ['NEW', 'Rejected', 'REJ'],
+    ['APP', 'Rejected', 'REJ'],
     ['APP', 'Withdrawn', 'WDN'],
   ])(
     'keeps case-insensitive review options selectable from %s',
@@ -1959,6 +1883,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       mockedFetchProvincialApplicationDetail.mockResolvedValue({
         ...reviewableApplicationDetail,
         applicationStatusCode: sourceStatus,
+        listingDate: formatBusinessIsoDate(),
       })
       mockedFetchApplicationReviewOptions.mockResolvedValue({
         productTypes: [],
@@ -1989,50 +1914,52 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
         expect(review.queryByRole('radio', { name: 'Approved' })).not.toBeInTheDocument()
       }
       await userEvent.click(review.getByRole('radio', { name: label }))
-      fireEvent.change(review.getByLabelText('Remarks'), { target: { value: 'Review reason' } })
-      await userEvent.click(
-        review.getByRole('button', {
-          name: statusCode === 'REJ' ? 'Reject application' : 'Withdraw application',
-        }),
-      )
+      const dialog = within(screen.getByRole('dialog', { name: 'Disapprove application 321' }))
+      await userEvent.click(dialog.getByRole('checkbox', { name: 'Send disapproval email' }))
+      fireEvent.change(dialog.getByLabelText('Remark'), { target: { value: 'Review reason' } })
+      await userEvent.click(dialog.getByRole('button', { name: 'Disapprove application' }))
       await waitFor(() =>
         expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledWith(
           '321',
           expect.objectContaining({ statusCode, remark: 'Review reason' }),
+          'test-application-version',
         ),
       )
     },
   )
 
-  it('validates application review status before updating from detail', async () => {
-    // Approval is preselected when available, so use a status that opens without a choice.
+  it('does not offer an approval action when an already approved application has no selected status', async () => {
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...reviewableApplicationDetail,
       applicationStatusCode: 'APP',
       statusDescription: 'Approved',
     })
-
-    render(
-      <MemoryRouter initialEntries={['/provincial/application/321']}>
-        <Routes>
-          <Route
-            path="/provincial/application/:applicationNumber"
-            element={<ProvincialApplicationDetailsPage />}
-          />
-        </Routes>
-      </MemoryRouter>,
-    )
-
-    const reviewTile = await selectApplicationReviewTile()
-    expect(
-      within(reviewTile).getByRole('group', { name: /Application status/ }),
-    ).toBeInTheDocument()
-    await userEvent.click(within(reviewTile).getByRole('button', { name: 'Update status' }))
-
-    expect(
-      screen.getByText('Choose an application status before updating review status.'),
-    ).toBeInTheDocument()
+    renderReviewPage()
+    const review = within(await selectApplicationReviewTile())
+    expect(review.getByRole('group', { name: /Application status/ })).toBeVisible()
+    expect(review.queryByRole('button', { name: 'Approve application' })).not.toBeInTheDocument()
+    expect(review.getByRole('radio', { name: 'Rejected' })).not.toBeChecked()
+    expect(review.getByRole('radio', { name: 'Withdrawn' })).not.toBeChecked()
     expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+  })
+
+  it('keeps the Review action unavailable outside the reviewer region', async () => {
+    const canPerform = vi.fn(
+      (action: string, orgUnit?: number | null) =>
+        action !== '/applicationsReview' || orgUnit === 1903,
+    )
+    mockApplicationDetailAuth(canPerform, ['APPLICATION_APPROVER'], {
+      actionRegions: { '/applicationsReview': ['1903'] },
+    })
+    renderReviewPage()
+    await screen.findByRole('heading', { name: 'Application 321' })
+
+    expect(canPerform).toHaveBeenCalledWith('/applicationsReview', 12)
+    expect(screen.queryByRole('tab', { name: 'Review' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('dialog', { name: 'Disapprove application 321' }),
+    ).not.toBeInTheDocument()
   })
 
   it.each(['Rejected', 'Withdrawn'])(
@@ -2051,26 +1978,81 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
       const reviewTile = await selectApplicationReviewTile()
       await userEvent.click(within(reviewTile).getByRole('radio', { name: statusLabel }))
-      await userEvent.click(
-        within(reviewTile).getByRole('button', {
-          name:
-            statusLabel === 'Rejected'
-              ? 'Reject application'
-              : statusLabel === 'Withdrawn'
-                ? 'Withdraw application'
-                : 'Update status',
-        }),
-      )
-
-      expect(within(reviewTile).getByLabelText('Remarks')).toBeInvalid()
-      expect(
-        screen.getByText(
-          'Status change remark is required when rejecting, withdrawing, or expiring an application',
-        ),
-      ).toBeInTheDocument()
+      const dialog = within(screen.getByRole('dialog', { name: 'Disapprove application 321' }))
+      await userEvent.click(dialog.getByRole('checkbox', { name: 'Send disapproval email' }))
+      await userEvent.click(dialog.getByRole('button', { name: 'Disapprove application' }))
+      expect(dialog.getByLabelText('Remark')).toBeInvalid()
+      expect(dialog.getByText('Remark is required')).toBeVisible()
       expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
     },
   )
+
+  it('cancels disapproval without changing the existing approval draft', async () => {
+    renderReviewPage()
+    const review = within(await selectApplicationReviewTile())
+    await userEvent.type(review.getByLabelText('Remarks'), 'Draft approval note')
+    await userEvent.click(review.getByRole('radio', { name: 'Withdrawn' }))
+    const dialog = within(screen.getByRole('dialog', { name: 'Disapprove application 321' }))
+    expect(dialog.getByLabelText('Remark')).toHaveValue('Draft approval note')
+    fireEvent.change(dialog.getByLabelText('Remark'), { target: { value: 'Discard this draft' } })
+    await userEvent.click(dialog.getByRole('button', { name: 'Cancel' }))
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+    expect(review.getByRole('radio', { name: 'Approved' })).toBeChecked()
+    expect(review.getByLabelText('Remarks')).toHaveValue('Draft approval note')
+    expect(mockedUpdateApplicationReviewStatus).not.toHaveBeenCalled()
+    expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
+  })
+
+  it.each(['Owner email', 'Agent email'])(
+    'allows removing %s while sending to the other recipient',
+    async (removedLabel) => {
+      renderReviewPage()
+      const { controls } = await openReviewDisapproval()
+      await userEvent.click(await controls.findByRole('button', { name: 'Edit recipients' }))
+      await userEvent.clear(controls.getByLabelText(removedLabel))
+      await userEvent.type(controls.getByLabelText('Remark'), 'Needs correction')
+      await userEvent.click(controls.getByRole('button', { name: 'Disapprove and send email' }))
+
+      await waitFor(() =>
+        expect(mockedSendApplicationReviewStatusEmail).toHaveBeenCalledWith(
+          '321',
+          expect.objectContaining({
+            ownerEmail: removedLabel === 'Owner email' ? '' : 'owner@example.test',
+            agentEmail: removedLabel === 'Agent email' ? '' : 'agent@example.test',
+          }),
+        ),
+      )
+      expect(mockedUpdateApplicationReviewStatus).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it('keeps disapproval fields and the unchanged record when its status save fails', async () => {
+    mockedUpdateApplicationReviewStatus.mockResolvedValueOnce({
+      valid: false,
+      updated: false,
+      statusCode: 'NEW',
+      clientEmail: '',
+      remark: '',
+      message: 'The application changed. Reload before updating its status.',
+    })
+    renderReviewPage()
+    const { dialog, controls } = await openReviewDisapproval()
+    await controls.findByText('agent@example.test')
+    await userEvent.type(controls.getByLabelText('Remark'), 'Needs correction')
+    await userEvent.click(controls.getByRole('button', { name: 'Disapprove and send email' }))
+
+    expect(
+      await controls.findByText('The application changed. Reload before updating its status.'),
+    ).toBeVisible()
+    expect(screen.getByRole('dialog', { name: 'Disapprove application 321' })).toBe(dialog)
+    expect(controls.getByLabelText('Remark')).toHaveValue('Needs correction')
+    expect(mockedSendApplicationReviewStatusEmail).not.toHaveBeenCalled()
+    await userEvent.click(controls.getByRole('button', { name: 'Cancel' }))
+    expect(
+      within(await selectApplicationReviewTile(false)).getByRole('radio', { name: 'Approved' }),
+    ).toBeChecked()
+  })
 
   it('validates application remark before saving', async () => {
     render(

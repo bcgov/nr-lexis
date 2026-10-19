@@ -59,7 +59,6 @@ vi.mock('@/service/provincial-exemption-documents-service', () => ({
 }))
 
 vi.mock('@/service/provincial-application-items-service', () => ({
-  checkApplicationVolumeUsage: vi.fn(),
   fetchApplicationEndUsesForSpeciesRegion: vi.fn().mockResolvedValue([]),
   fetchApplicationPermits: vi.fn().mockResolvedValue([]),
   fetchApplicationRemainingSpecies: vi.fn().mockResolvedValue([]),

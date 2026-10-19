@@ -376,6 +376,20 @@ const ProvincialExemptionPage = () => {
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
   }, [])
+  const selectAllRowsRef = useRef<HTMLInputElement>(null)
+  const resultsFrameRef = useRef<HTMLDivElement>(null)
+  // Cancel closes the batch bar that holds focus, so focus goes to the header checkbox.
+  const cancelBatchSelection = useCallback(() => {
+    clearSelection()
+    requestAnimationFrame(() => {
+      const selectAll = selectAllRowsRef.current
+      if (selectAll && !selectAll.disabled) {
+        selectAll.focus()
+      } else {
+        resultsFrameRef.current?.focus()
+      }
+    })
+  }, [clearSelection])
   const updateFilter = useCallback(
     <K extends keyof ProvincialExemptionSearchFilters>(
       key: K,
@@ -1085,6 +1099,7 @@ const ProvincialExemptionPage = () => {
             </div>
           )}
           <SearchResultsTableFrame
+            ref={resultsFrameRef}
             resultName="exemption"
             loading={resultsLoading}
             loadingDescription="Searching"
@@ -1106,7 +1121,7 @@ const ProvincialExemptionPage = () => {
                 <TableBatchActions
                   totalSelected={selectedRowsCount}
                   shouldShowBatchActions
-                  onCancel={clearSelection}
+                  onCancel={cancelBatchSelection}
                   translateWithId={EXEMPTION_BATCH_SELECTION}
                 >
                   <TableBatchAction
@@ -1141,6 +1156,7 @@ const ProvincialExemptionPage = () => {
                           description="No eligible exemptions are available on this page."
                         >
                           <Checkbox
+                            ref={selectAllRowsRef}
                             id="selectAllCurrentPageRows"
                             hideLabel
                             labelText="Select all eligible rows on this page"

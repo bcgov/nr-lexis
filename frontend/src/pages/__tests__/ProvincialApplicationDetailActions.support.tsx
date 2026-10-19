@@ -74,6 +74,10 @@ vi.mock('@/service/application-client-lookup-service', () => ({
   fetchApplicationClientLocations: vi.fn(),
 }))
 
+vi.mock('@/service/record-version-service', () => ({
+  fetchCurrentApplicationRecordVersion: vi.fn().mockResolvedValue('test-application-version'),
+}))
+
 vi.mock('@/service/provincial-application-documents-service', () => ({
   fetchApplicationDocuments: vi.fn(),
   openApplicationDocument: vi.fn(),

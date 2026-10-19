@@ -1472,6 +1472,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   color: var(--csp-text-primary);
 }
 
+.landing-request-access-modal a {
+  overflow-wrap: anywhere;
+}
+
 .landing-request-access-modal h3 {
   margin: 0;
   @include carbon-type.type-style('heading-compact-02');
@@ -5363,6 +5367,17 @@ $notification-types: 'error', 'info', 'success', 'warning';
 
   .rtm-amv-template-link {
     justify-self: start;
+  }
+
+  .rtm-amv-values-heading {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  // The notice's close-button margin is dropped (the notice has no close button) so the text
+  // keeps its width.
+  .rtm-amv-review-card .rtm-amv-review-notification .cds--inline-notification__details {
+    margin-inline-end: 0.8125rem;
   }
 
   .admin-upload-fspts-page .admin-upload-drop-zone,

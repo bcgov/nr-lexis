@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import {
+  checkProvincialExemptionNumber,
   fetchProvincialExemptionCreatePreview,
   submitProvincialApplicationCreate,
   submitProvincialExemptionCreate,
@@ -87,6 +88,47 @@ describe('create-submit-service', () => {
 
     await expect(fetchProvincialExemptionCreatePreview(['123'])).rejects.toThrow(
       'LEXIS returned an invalid exemption preview.',
+    )
+  })
+
+  it('asks LEXIS whether an exemption number is already assigned', async () => {
+    getMock.mockResolvedValue({
+      data: { valid: false, message: '* - this exemption number has already been assigned' },
+    })
+
+    await expect(checkProvincialExemptionNumber(' T1016R3 ')).resolves.toEqual({
+      valid: false,
+      message: '* - this exemption number has already been assigned',
+    })
+
+    expect(getMock).toHaveBeenCalledTimes(1)
+    const [path, config] = getMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/exemption-details/check-exemption-number')
+    expect(config.params).toEqual({ exemptionNumber: 'T1016R3' })
+  })
+
+  it('reads an available exemption number from either validity key', async () => {
+    getMock.mockResolvedValueOnce({ data: { valid: true } })
+    await expect(checkProvincialExemptionNumber('T1016R4')).resolves.toEqual({
+      valid: true,
+      message: '',
+    })
+
+    getMock.mockResolvedValueOnce({ data: { isValid: false, message: 'Taken.' } })
+    await expect(checkProvincialExemptionNumber('T1016R3')).resolves.toEqual({
+      valid: false,
+      message: 'Taken.',
+    })
+  })
+
+  it.each([
+    ['an empty response', ''],
+    ['no validity flag', { message: 'Taken.' }],
+  ])('rejects an exemption number check with %s', async (_, data) => {
+    getMock.mockResolvedValue({ data })
+
+    await expect(checkProvincialExemptionNumber('T1016R3')).rejects.toThrow(
+      'LEXIS returned an invalid exemption number check.',
     )
   })
 

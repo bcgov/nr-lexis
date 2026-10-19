@@ -9,7 +9,7 @@ import {
   Routes,
 } from 'react-router-dom'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
-import { beforeEach, describe, expect, it } from 'vitest'
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import {
   setupApplicationDetailTests,
   NavigateButton,
@@ -19,7 +19,6 @@ import {
   getApplicationSummaryTile,
   getSummaryComboBox,
   mockApplicationDetailAuth,
-  mockedCheckApplicationVolumeUsage,
   mockedFetchApplicationClientData,
   mockedFetchApplicationClientLocations,
   mockedFetchApplicationDocuments,
@@ -811,7 +810,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
   })
 
   it('edits owner contact and location with the Figma read-only client', async () => {
-    mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
     mockedFetchApplicationSummarySnapshot.mockResolvedValue({
       ...applicationSummarySnapshot,
       applicationVolume: '',
@@ -883,7 +881,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       screen.getByText('The application was saved.').closest('.cds--inline-notification'),
     ).toHaveClass('cds--inline-notification--success')
-    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
   })
 
   it("keeps a saved Ministerial applicant type when I'm an agent is cleared again", async () => {
@@ -1852,7 +1850,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
   })
 
   it('saves application summary edits and refreshes detail', async () => {
-    mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
     const detailAfterSummarySave: ProvincialApplicationDetail = {
       ...applicationDetail,
       termDays: 430,
@@ -1880,7 +1877,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       applicantTypeCode: 'A',
       orgUnitNumber: '13',
       productTypeCode: 'TIMBER',
-      jurisdictionCode: 'F',
+      jurisdictionCode: 'P',
       growthTypeCode: 'S',
       agentContactName: 'Agent Contact',
       ownerContactName: 'Owner Alternate Contact',
@@ -1959,7 +1956,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2)
     })
     expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
-    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
   }, 30000)
 
   it.each(['owner', 'agent'] as const)(
@@ -2023,12 +2020,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
           }),
         ),
       )
-      expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+      expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
     },
   )
 
   it('saves Application-owned fields while unrelated client lookups remain pending', async () => {
-    mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
     mockedFetchApplicationClientLocations.mockImplementation(
       () => new Promise<never>(() => undefined),
     )
@@ -2057,7 +2053,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         expect.objectContaining({ termDays: '31' }),
       )
     })
-    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
   })
 
   it('enforces the single exemption term day input boundaries before saving', async () => {
@@ -2085,14 +2081,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(await screen.findAllByText('Exemption term days must be 99999 or less')).toHaveLength(1)
     expect(termDays).toHaveAttribute('aria-invalid', 'true')
     await waitFor(() => expect(termDays).toHaveFocus())
-    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     fireEvent.change(termDays, { target: { value: '0' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
     expect(await screen.findAllByText('Exemption term days must be greater than 0')).toHaveLength(1)
-    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -2120,7 +2116,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
 
     expect(itemDetails.getByText('Location of logs must be 250 characters or fewer')).toBeVisible()
-    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
 
@@ -3182,6 +3178,10 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
   })
 
   it('rejects three application-volume decimals and accepts the exact Oracle maximum', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [{ packageNumber: 'PKG-1', volume: 9999999.99, pieceCount: 5 }],
+    })
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
         <Routes>
@@ -3481,7 +3481,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       growthTypeCode: '',
       endUseCode: '',
     })
-    mockedCheckApplicationVolumeUsage.mockResolvedValue({ volumeUsed: false })
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -3506,7 +3505,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
         'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
       ),
     ).toBeInTheDocument()
-    expect(mockedCheckApplicationVolumeUsage).toHaveBeenCalledWith('321')
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     await userEvent.click(application.getByRole('button', { name: 'Save changes' }))
@@ -3526,7 +3524,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       productTypeCode: 'T',
-      packages: [],
     })
     mockedFetchApplicationSummarySnapshot.mockResolvedValue({
       ...applicationSummarySnapshot,
@@ -3580,7 +3577,6 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       applicationStatusCode: 'APP',
       statusDescription: 'Approved',
       productTypeCode: 'T',
-      packages: [],
       listingDate: null,
     })
     mockedFetchApplicationSummarySnapshot.mockResolvedValue({
@@ -3635,13 +3631,14 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
   })
 
   it('requires submitter accuracy confirmation while preserving the volume warning', async () => {
+    const visibleRects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 100, 100)] as unknown as DOMRectList)
+    onTestFinished(() => visibleRects.mockRestore())
     mockApplicationDetailAuth(() => true, ['PROVINCIAL_SUBMITTER_00011122'])
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
       ...applicationDetail,
       industryUser: true,
-    })
-    mockedCheckApplicationVolumeUsage.mockResolvedValue({
-      volumeUsed: false,
     })
 
     render(
@@ -3674,7 +3671,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(firstAcknowledgement).not.toBeChecked()
     expect(firstConfirm).toBeDisabled()
     await userEvent.click(firstConfirm)
-    expect(mockedCheckApplicationVolumeUsage).not.toHaveBeenCalled()
+    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
 
     await userEvent.click(firstAcknowledgement)
@@ -3691,11 +3688,12 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     await userEvent.click(reopenedAcknowledgement)
     await userEvent.click(within(reopenedDialog).getByRole('button', { name: 'Save changes' }))
 
-    expect(
-      await within(reopenedDialog).findByText(
-        'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
-      ),
-    ).toBeInTheDocument()
+    const warning = await within(reopenedDialog).findByText(
+      'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
+    )
+    expect(warning).toBeInTheDocument()
+    // The warning takes focus from the Save button the check disabled.
+    await waitFor(() => expect(warning.closest('.app-inline-notification')).toHaveFocus())
     expect(screen.getAllByText('Review package volumes')).toHaveLength(1)
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
     expect(reopenedDialog).toBeVisible()
@@ -3874,7 +3872,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     })
   })
 
-  it('does not substitute the owner email when an agent applicant has no email', async () => {
+  it('keeps a missing agent email separate from the available owner email', async () => {
     mockedFetchApplicationClientData.mockImplementation(async (clientNumber) => ({
       clientNumber,
       companyName: clientNumber === '00033344' ? 'Agent without email' : 'Owner Forestry Ltd.',
@@ -3903,18 +3901,356 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
 
     const reviewTile = await selectApplicationReviewTile()
     await userEvent.click(within(reviewTile).getByRole('radio', { name: 'Rejected' }))
-    await userEvent.click(
-      within(reviewTile).getByRole('checkbox', {
-        name: 'Send email notification to the client, including the remark',
-      }),
-    )
+    const dialog = within(screen.getByRole('dialog', { name: 'Disapprove application 321' }))
     await waitFor(() => {
       expect(mockedFetchApplicationClientData).toHaveBeenCalledWith('00033344', '01', {
         applicationNumber: '321',
       })
-      expect(within(reviewTile).getByLabelText('Client email address')).toHaveValue('')
+      expect(dialog.getByLabelText('Agent email')).toHaveValue('')
+    })
+    expect(dialog.getByText('owner@example.test')).toBeVisible()
+  })
+
+  it('returns focus to the section Edit button after saving on a page that follows create', async () => {
+    let finishRefresh: (detail: ProvincialApplicationDetail) => void = () => undefined
+    mockedFetchProvincialApplicationDetail
+      .mockResolvedValueOnce(applicationDetail)
+      .mockImplementationOnce(
+        () =>
+          new Promise<ProvincialApplicationDetail>((resolve) => {
+            finishRefresh = resolve
+          }),
+      )
+    const { container } = render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/application/321',
+            state: { applicationCreationNotice: { applicationNumber: '321' } },
+          },
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    const title = await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await waitFor(() => expect(title).toHaveFocus())
+    const ownerControls = within(getOwnerClientDetailsTile())
+    await userEvent.click(
+      await ownerControls.findByRole('button', { name: 'Edit applicant details' }),
+    )
+    fireEvent.change(ownerControls.getAllByRole('textbox', { name: 'Contact name' })[0], {
+      target: { value: 'Advertising Owner' },
+    })
+    await userEvent.click(ownerControls.getByRole('button', { name: 'Save changes' }))
+
+    // The page is inert while it refreshes after the save.
+    await waitFor(() =>
+      expect(container.querySelector('.provincial-application-detail')).toHaveAttribute(
+        'aria-busy',
+        'true',
+      ),
+    )
+    await act(async () => finishRefresh(applicationDetail))
+
+    await waitFor(() =>
+      expect(ownerControls.getByRole('button', { name: 'Edit applicant details' })).toHaveFocus(),
+    )
+    expect(title).not.toHaveFocus()
+  })
+
+  it('moves a federal application opened at the provincial address to its own page', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      jurisdictionCode: 'F',
+    })
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/application/:applicationNumber',
+          element: <ProvincialApplicationDetailsPage />,
+        },
+        { path: '/federal/application/:applicationNumber', element: <h1>Federal record</h1> },
+      ],
+      { initialEntries: ['/provincial/application/321?from=search'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    expect(await screen.findByRole('heading', { name: 'Federal record' })).toBeVisible()
+    expect(router.state.location.pathname).toBe('/federal/application/321')
+    expect(router.state.location.search).toBe('?from=search')
+    expect(router.state.historyAction).toBe('REPLACE')
+    expect(screen.queryByRole('tab', { name: 'Applicant' })).not.toBeInTheDocument()
+  })
+
+  it('keeps a provincial application on its own page', async () => {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/provincial/application/:applicationNumber',
+          element: <ProvincialApplicationDetailsPage />,
+        },
+        { path: '/federal/application/:applicationNumber', element: <h1>Federal record</h1> },
+      ],
+      { initialEntries: ['/provincial/application/321'] },
+    )
+    render(<RouterProvider router={router} />)
+
+    expect(await screen.findByRole('tab', { name: 'Applicant' })).toBeVisible()
+    expect(router.state.location.pathname).toBe('/provincial/application/321')
+  })
+
+  it.each([
+    [
+      'cannot be loaded',
+      () => mockedFetchApplicationSummarySnapshot.mockRejectedValue(new Error()),
+    ],
+    ['is empty', () => mockedFetchApplicationSummarySnapshot.mockResolvedValue(null)],
+    [
+      'is for another application',
+      () =>
+        mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+          ...applicationSummarySnapshot,
+          applicationNumber: '999',
+        }),
+    ],
+  ])('opens no summary editor when the saved summary %s', async (_name, failSnapshot) => {
+    failSnapshot()
+    renderApplicationDetailPage()
+
+    expect(
+      await screen.findByText('Application data unavailable', {
+        selector: '.cds--inline-notification__title',
+      }),
+    ).toBeVisible()
+    await selectApplicationDetailTab('Applicant')
+    expect(screen.queryByRole('button', { name: 'Edit applicant details' })).toBeNull()
+    await selectApplicationDetailTab('Application')
+    expect(screen.queryByRole('button', { name: 'Edit application details' })).toBeNull()
+    await selectApplicationDetailTab('Scale')
+    expect(screen.queryByRole('button', { name: 'Edit scale details' })).toBeNull()
+    // Remarks don't depend on the summary.
+    await selectApplicationDetailTab('Remarks')
+    expect(screen.getByRole('button', { name: 'Add remark' })).toBeEnabled()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+  })
+
+  it('opens the summary editors once a refresh brings the saved summary back', async () => {
+    mockedFetchApplicationSummarySnapshot.mockResolvedValueOnce(null)
+    renderApplicationDetailPage()
+
+    await screen.findByText('Application data unavailable', {
+      selector: '.cds--inline-notification__title',
+    })
+    await selectApplicationDetailTab('Application')
+    expect(screen.queryByRole('button', { name: 'Edit application details' })).toBeNull()
+
+    await selectApplicationRemarksForEditing()
+    fireEvent.change(await screen.findByLabelText('Remark'), {
+      target: { value: 'New application note' },
+    })
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
+    await waitFor(() => expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(2))
+
+    await selectApplicationDetailTab('Application')
+    expect(await screen.findByRole('button', { name: 'Edit application details' })).toBeVisible()
+  })
+
+  it('accepts an application without a list date when no list date is open for a submitter', async () => {
+    mockApplicationDetailAuth(
+      (action: string) => action === 'createApplication',
+      ['LEXIS_PROVINCIAL_SUBMITTER_00011122'],
+    )
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationStatusCode: 'NEW',
+      statusDescription: 'New',
+      listingDate: null,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicationStatusCode: 'NEW',
+      exportScheduleId: '',
+    })
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce({
+      exemptionTypes: [],
+      exemptionReasons: [{ value: 'U', label: 'Utilization' }],
+      applicationStatuses: [{ value: 'ACTIVE', label: 'Active' }],
+      productTypes: [{ value: 'H', label: 'Harvested Timber' }],
+      growthTypes: [{ value: 'O', label: 'Old Growth' }],
+      regions: [{ value: '12', label: 'Coast' }],
+      currentSchedules: [{ value: '', label: 'Blank' }],
+      nextSchedules: [{ value: '', label: 'Blank' }],
+    })
+    renderApplicationDetailPage()
+
+    const summaryControls = within(await selectApplicationSummaryTile())
+    const listDate = await summaryControls.findByRole('group', { name: 'List date' })
+    await waitFor(() => expect(within(listDate).queryAllByRole('radio')).toHaveLength(0))
+
+    fireEvent.change(screen.getByLabelText('Exemption term (days)'), { target: { value: '31' } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
+    expect(summaryControls.queryByText('Select a valid list date')).not.toBeInTheDocument()
+    const dialog = screen.getByRole('dialog', { name: 'Confirm application accuracy' })
+    await userEvent.click(within(dialog).getByRole('checkbox', { name: 'I Agree' }))
+    await userEvent.click(within(dialog).getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => {
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({ applicationNumber: '321', exportScheduleId: '', termDays: '31' }),
+      )
     })
   })
+
+  it('warns when the application volume is raised above the package total, then saves on the next save', async () => {
+    renderApplicationDetailPage()
+
+    const itemDetails = within(await selectApplicationItemDetailsTile())
+    fireEvent.change(await itemDetails.findByLabelText('Application volume (m³)'), {
+      target: { value: '100.1' },
+    })
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+    expect(
+      await screen.findByText(
+        'The sum of package volumes is less than the total application volume. Review package volumes or save again to continue.',
+      ),
+    ).toBeVisible()
+    expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({ saveSource: 'items', applicationVolume: '100.1' }),
+      ),
+    )
+  })
+
+  it('does not warn when the application volume is lowered to the package total', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      applicationVolume: 150,
+    })
+    mockedFetchApplicationSummarySnapshot.mockResolvedValue({
+      ...applicationSummarySnapshot,
+      applicationVolume: '150',
+    })
+    renderApplicationDetailPage()
+
+    const itemDetails = within(await selectApplicationItemDetailsTile())
+    fireEvent.change(await itemDetails.findByLabelText('Application volume (m³)'), {
+      target: { value: '100.0' },
+    })
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() =>
+      expect(mockedUpdateApplicationSummary).toHaveBeenCalledWith(
+        expect.objectContaining({ saveSource: 'items', applicationVolume: '100.0' }),
+      ),
+    )
+    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { volume: '100.04', warns: false },
+    { volume: '100.05', warns: true },
+  ])(
+    'judges an application volume of $volume at one decimal against the package total',
+    async ({ volume, warns }) => {
+      renderApplicationDetailPage()
+
+      const itemDetails = within(await selectApplicationItemDetailsTile())
+      fireEvent.change(await itemDetails.findByLabelText('Application volume (m³)'), {
+        target: { value: volume },
+      })
+      await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+      if (warns) {
+        expect(await screen.findByText('Review package volumes')).toBeVisible()
+        expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
+      } else {
+        await waitFor(() => expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1))
+        expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+      }
+    },
+  )
+
+  it('adds the package volumes of one decimal each when judging the application volume', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [
+        { packageNumber: 'PKG-1', volume: 40.04, pieceCount: 1 },
+        { packageNumber: 'PKG-2', volume: 60.06, pieceCount: 1 },
+      ],
+    })
+    renderApplicationDetailPage()
+
+    const itemDetails = within(await selectApplicationItemDetailsTile())
+    fireEvent.change(await itemDetails.findByLabelText('Application volume (m³)'), {
+      target: { value: '100.1' },
+    })
+    await userEvent.click(itemDetails.getByRole('button', { name: 'Save changes' }))
+
+    await waitFor(() => expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1))
+    expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { region: 'South Coast', orgUnitNumber: 1909, editable: true },
+    { region: 'Cariboo', orgUnitNumber: 1903, editable: false },
+  ])(
+    'limits exemption approver package and scale actions to its approval region ($region)',
+    async ({ orgUnitNumber, editable }) => {
+      mockApplicationDetailAuth(
+        (action: string, recordOrgUnit?: number | string | null) =>
+          action === '/applicationDetails' ||
+          (action === 'approveExemption' &&
+            (recordOrgUnit === undefined || String(recordOrgUnit) === '1909')),
+        ['LEXIS_EXEMPTION_APPROVER'],
+        {
+          grantedActions: ['/applicationDetails', 'approveExemption'],
+          actionRegions: {
+            applicationdetails: ['1903', '1909'],
+            approveexemption: ['1909'],
+          },
+        },
+      )
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        orgUnitNumber,
+        applicationStatusCode: 'PMT',
+        statusDescription: 'Permitted',
+        exemptionApprover: true,
+        canEditApplicationDetails: false,
+        canEditPackages: true,
+        canAddPackages: false,
+        canDeletePackages: true,
+        canAddScales: true,
+        canDeleteScales: true,
+        canUpdatePackageNumber: false,
+      })
+      renderApplicationDetailPage()
+
+      await selectApplicationDetailTab('Scale')
+      expect(await screen.findByText('TM001')).toBeInTheDocument()
+      const scaleRow = screen.getByText('TM001').closest('tr') as HTMLElement
+      if (editable) {
+        expect(screen.getByRole('button', { name: 'Edit package' })).toBeEnabled()
+        expect(screen.getByRole('button', { name: 'Add scale' })).toBeEnabled()
+        expect(within(scaleRow).getByRole('button', { name: 'Delete' })).toBeEnabled()
+      } else {
+        expect(screen.queryByRole('button', { name: 'Edit package' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Add scale' })).not.toBeInTheDocument()
+        expect(within(scaleRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+      }
+    },
+  )
 
   it('shows detail error contract when application detail endpoint fails', async () => {
     mockedFetchProvincialApplicationDetail.mockRejectedValue(new Error('backend down'))

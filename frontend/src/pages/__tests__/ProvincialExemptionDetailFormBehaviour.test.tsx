@@ -287,6 +287,7 @@ describe('Provincial exemption detail form behaviour', () => {
       within(await discardDialog()).getByRole('button', { name: 'Discard changes' }),
     )
     expect(screen.getByRole('tab', { name: 'Fees' })).toHaveAttribute('aria-selected', 'true')
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'Fees' })).toHaveFocus())
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.click(screen.getByRole('tab', { name: 'Exemption details' }))
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()

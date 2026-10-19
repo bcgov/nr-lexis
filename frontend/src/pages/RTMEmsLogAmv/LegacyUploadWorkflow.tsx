@@ -48,7 +48,6 @@ import {
   type RtmEmsLogAmvLastSaved,
   type RtmEmsLogAmvSaveRequest,
   type RtmEmsLogAmvUploadPreview,
-  type RtmEmsLogAmvUploadResult,
 } from '@/service/rtm-emslogamv-service'
 import { validateUploadFileSize } from '@/components/uploads/uploadQueueHelpers'
 import { formatBusinessIsoDate } from '@/utils/date'
@@ -71,6 +70,8 @@ type DiscardConfirmation = 'cancel' | 'file' | 'saved-changes'
 
 type SavedNotification = 'discarded' | 'saved'
 
+type FocusTarget = 'replaceFileButton' | 'replacementDropZone' | 'uploadDropZone'
+
 type RtmReviewSpeciesColumn = {
   key: string
   label: string
@@ -86,22 +87,6 @@ type RtmSpeciesReviewRow = {
 
 type RtmReviewCellValues = Record<string, number | null>
 
-const uploadResultStatusClass = (status: string | undefined) => {
-  if (!status) {
-    return 'queued'
-  }
-
-  if (status === 'accepted') {
-    return 'complete'
-  }
-
-  if (status === 'validation_failed') {
-    return 'invalid'
-  }
-
-  return 'failed'
-}
-
 const formatMoney = (value: number | null) => {
   if (value === null || Number.isNaN(value)) {
     return ''
@@ -114,7 +99,7 @@ const formatMoney = (value: number | null) => {
 }
 
 const createResultMessage = (message: string, errors: string[]): string => {
-  return [message, ...errors].filter(Boolean).join(' ')
+  return [...new Set([message, ...errors].filter(Boolean))].join(' ')
 }
 
 const formatUploadMonth = (dateValue: string | null | undefined): string | null => {
@@ -241,6 +226,7 @@ const RTM_UPLOAD_FIELD_HELPER = 'Accepted format: .xlsx, up to 20 MB.'
 const RTM_UPLOAD_SYSTEM_ERROR_TITLE = 'Upload could not be completed'
 const RTM_UPLOAD_SYSTEM_ERROR_MESSAGE = 'Something went wrong on our end. Please try again.'
 const RTM_VALUES_LOAD_ERROR_TITLE = 'Average market values could not be loaded'
+const RTM_VALUES_SAVE_ERROR_TITLE = 'Average market values could not be saved'
 const RTM_VALUES_LOAD_ERROR_MESSAGE =
   'Something went wrong on our end. Refresh the page to try again.'
 
@@ -726,13 +712,11 @@ const ReviewUploadContent = ({
   onValueChange,
   previewResult,
   reviewValues,
-  uploadResult,
 }: {
   disabled: boolean
   onValueChange: (key: string, value: string) => void
   previewResult: RtmEmsLogAmvUploadPreview
   reviewValues: Record<string, string>
-  uploadResult: RtmEmsLogAmvUploadResult | null
 }) => {
   const [selectedSpeciesIndex, setSelectedSpeciesIndex] = useState(0)
   const speciesColumns = RTM_REVIEW_SPECIES_COLUMNS
@@ -835,21 +819,6 @@ const ReviewUploadContent = ({
         title="Fixed values are not shown here"
         subtitle="Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit Fees tab."
       />
-
-      {uploadResult && (
-        <div className="admin-upload-result" role="status">
-          <span
-            className={`admin-upload-status-text admin-upload-status-text--${uploadResultStatusClass(uploadResult.status)}`}
-          >
-            {uploadResult.status}
-          </span>
-          <p>{createResultMessage(uploadResult.message, uploadResult.errors)}</p>
-          <p>
-            Attempted rows: {uploadResult.attemptedRowCount} | Uploaded rows:{' '}
-            {uploadResult.uploadedRowCount}
-          </p>
-        </div>
-      )}
     </section>
   )
 }
@@ -861,10 +830,11 @@ const RtmEmsLogAmvUploadPage = () => {
   const saveRequestRef = useRef(0)
   const savedValuesRequestRef = useRef(0)
   const uploadInputRef = useRef<HTMLInputElement>(null)
+  const uploadDropZoneRef = useRef<HTMLDivElement>(null)
+  const replacementDropZoneRef = useRef<HTMLDivElement>(null)
   const cancelButtonRef = useRef<HTMLButtonElement>(null)
   const removeFileButtonRef = useRef<HTMLButtonElement>(null)
   const replaceFileButtonRef = useRef<HTMLButtonElement>(null)
-  const focusReplaceFileButtonRef = useRef(false)
   const replacementPreviewRef = useRef<RtmEmsLogAmvUploadPreview | null>(null)
   const replacementReviewValuesRef = useRef<Record<string, string> | null>(null)
   const [effectiveMonth, setEffectiveMonth] = useState(() =>
@@ -879,10 +849,6 @@ const RtmEmsLogAmvUploadPage = () => {
   const [uploadErrors, setUploadErrors] = useState<string[]>([])
   const [uploadSystemError, setUploadSystemError] = useState(false)
   const [notification, setNotification] = useState('')
-  const [notificationTitle, setNotificationTitle] = useState('Average monthly values')
-  const [notificationKind, setNotificationKind] = useState<
-    'success' | 'error' | 'warning' | 'info'
-  >('info')
   const [previewResult, setPreviewResult] = useState<RtmEmsLogAmvUploadPreview | null>(null)
   const [savedPreviewResult, setSavedPreviewResult] = useState<RtmEmsLogAmvUploadPreview | null>(
     null,
@@ -895,11 +861,12 @@ const RtmEmsLogAmvUploadPage = () => {
   const [selectedUploadFile, setSelectedUploadFile] = useState<File | null>(null)
   const [pendingUploadValidation, setPendingUploadValidation] =
     useState<PendingUploadValidation | null>(null)
-  const [uploadResult, setUploadResult] = useState<RtmEmsLogAmvUploadResult | null>(null)
   const [uploadInputKey, setUploadInputKey] = useState(0)
   const [isDraggingUpload, setIsDraggingUpload] = useState(false)
   const [replacementUploadOpen, setReplacementUploadOpen] = useState(false)
   const [discardConfirmation, setDiscardConfirmation] = useState<DiscardConfirmation | null>(null)
+  const [focusRequest, setFocusRequest] = useState<{ target: FocusTarget } | null>(null)
+  const [saveFeedbackFocusKey, setSaveFeedbackFocusKey] = useState<number | null>(null)
 
   useEffect(() => {
     const previousTitle = document.title
@@ -927,7 +894,6 @@ const RtmEmsLogAmvUploadPage = () => {
     setSelectedUploadFile(nextFile)
     setUploadErrors([])
     setUploadSystemError(false)
-    setUploadResult(null)
     setPendingUploadValidation(null)
     setNotification('')
 
@@ -1065,9 +1031,9 @@ const RtmEmsLogAmvUploadPage = () => {
     setPendingUploadValidation(null)
     setUploadErrors([])
     setUploadSystemError(false)
-    setUploadResult(null)
     setIsDraggingUpload(false)
     setUploadInputKey((current) => current + 1)
+    setFocusRequest({ target: 'replacementDropZone' })
   }
 
   const onUploadDropZoneKeyDown = (event: KeyboardEvent<HTMLDivElement>) => {
@@ -1094,7 +1060,6 @@ const RtmEmsLogAmvUploadPage = () => {
     setSavedUploadState(null)
     setLastSaved(null)
     setSavedNotification(null)
-    setUploadResult(null)
     setPendingUploadValidation(null)
     setNotification('')
     setUploadInputKey((current) => current + 1)
@@ -1113,7 +1078,6 @@ const RtmEmsLogAmvUploadPage = () => {
     setPendingUploadValidation(null)
     setUploadErrors([])
     setUploadSystemError(false)
-    setUploadResult(null)
     setIsDraggingUpload(false)
     setIsPreviewing(false)
     setUploadInputKey((current) => current + 1)
@@ -1125,20 +1089,37 @@ const RtmEmsLogAmvUploadPage = () => {
     }
   }
 
+  const removeReplacementFile = () => {
+    clearReplacementFile()
+    setFocusRequest({ target: 'replacementDropZone' })
+  }
+
+  const removeInitialUpload = () => {
+    clearUploadState()
+    setFocusRequest({ target: 'uploadDropZone' })
+  }
+
   const closeReplacementUpload = () => {
     clearReplacementFile()
     setReplacementUploadOpen(false)
     replacementPreviewRef.current = null
     replacementReviewValuesRef.current = null
-    focusReplaceFileButtonRef.current = true
+    setFocusRequest({ target: 'replaceFileButton' })
   }
 
-  // Keep current values removes the warning it sits in, so focus goes back to Replace file.
+  // The control that triggered these actions unmounts, so focus moves to the control that replaces it.
   useEffect(() => {
-    if (replacementUploadOpen || !focusReplaceFileButtonRef.current) return
-    focusReplaceFileButtonRef.current = false
-    replaceFileButtonRef.current?.focus()
-  }, [replacementUploadOpen])
+    if (!focusRequest) return
+    const frame = requestAnimationFrame(() => {
+      const targets = {
+        replaceFileButton: replaceFileButtonRef,
+        replacementDropZone: replacementDropZoneRef,
+        uploadDropZone: uploadDropZoneRef,
+      }
+      targets[focusRequest.target].current?.focus()
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [focusRequest])
 
   useEffect(() => {
     const requestId = savedValuesRequestRef.current + 1
@@ -1239,7 +1220,7 @@ const RtmEmsLogAmvUploadPage = () => {
     }
   }, [clearUploadState])
 
-  const submitUpload = async () => {
+  const submitUpload = async (focusFeedback = false) => {
     if (!canManage) {
       setUploadErrors(['You do not have permission to upload average monthly value rows.'])
       return
@@ -1262,7 +1243,6 @@ const RtmEmsLogAmvUploadPage = () => {
     }
 
     setUploadErrors([])
-    setUploadResult(null)
     setIsUploading(true)
     const requestId = saveRequestRef.current + 1
     saveRequestRef.current = requestId
@@ -1279,20 +1259,8 @@ const RtmEmsLogAmvUploadPage = () => {
         return
       }
 
-      const response: RtmEmsLogAmvUploadResult = {
-        status: result.status,
-        fileName: selectedUploadFile?.name,
-        fileSize: selectedUploadFile?.size,
-        message: result.message,
-        attemptedRowCount: saveRequests.length,
-        uploadedRowCount: result.rows.length,
-        errors: result.errors,
-        warnings: [],
-        rows: result.rows,
-      }
-
-      setNotificationKind(response.status === 'accepted' ? 'success' : 'error')
-      if (response.status === 'accepted') {
+      setSaveFeedbackFocusKey(focusFeedback ? requestId : null)
+      if (result.status === 'accepted') {
         setSavedReviewValues({ ...reviewValues })
         setSavedPreviewResult(previewResult)
         setSavedUploadState({
@@ -1307,11 +1275,10 @@ const RtmEmsLogAmvUploadPage = () => {
         setPendingUploadValidation(null)
         setUploadInputKey((current) => current + 1)
         setNotification('')
-        setUploadResult(null)
       } else {
-        setUploadResult(response)
-        setNotificationTitle('Average monthly values')
-        setNotification(createResultMessage(response.message, response.errors))
+        setNotification(
+          createResultMessage(result.message, result.errors) || RTM_UPLOAD_SYSTEM_ERROR_MESSAGE,
+        )
       }
     } catch (error) {
       if (saveRequestRef.current !== requestId) {
@@ -1319,19 +1286,8 @@ const RtmEmsLogAmvUploadPage = () => {
       }
 
       console.error(error)
-      const message = 'Unable to apply average monthly value upload.'
-      setNotificationKind('error')
-      setNotificationTitle('Average monthly values')
-      setNotification(message)
-      setUploadResult({
-        status: 'rejected',
-        message,
-        attemptedRowCount: 0,
-        uploadedRowCount: 0,
-        errors: [message],
-        warnings: [],
-        rows: [],
-      })
+      setSaveFeedbackFocusKey(focusFeedback ? requestId : null)
+      setNotification(RTM_UPLOAD_SYSTEM_ERROR_MESSAGE)
     } finally {
       if (saveRequestRef.current === requestId) {
         setIsUploading(false)
@@ -1361,7 +1317,7 @@ const RtmEmsLogAmvUploadPage = () => {
       return
     }
 
-    clearReplacementFile()
+    removeReplacementFile()
   }
   const savedActionsUnavailable =
     savedReviewValues !== null && !hasUnsavedChanges && !hasValidatedUpload
@@ -1444,6 +1400,7 @@ const RtmEmsLogAmvUploadPage = () => {
 
         {!showUploadedReplacement && (
           <div
+            ref={isReplacement ? replacementDropZoneRef : uploadDropZoneRef}
             className={uploadDropZoneClassName}
             role="button"
             tabIndex={isFileSelectionDisabled ? -1 : 0}
@@ -1502,7 +1459,7 @@ const RtmEmsLogAmvUploadPage = () => {
             <RejectedUploadFile
               fileName={selectedUploadFile.name}
               issues={rejectedFileIssues}
-              onClear={isReplacement ? requestReplacementFileRemoval : clearUploadState}
+              onClear={isReplacement ? requestReplacementFileRemoval : removeInitialUpload}
               removeButtonRef={isReplacement ? removeFileButtonRef : undefined}
             />
           ) : (
@@ -1521,7 +1478,7 @@ const RtmEmsLogAmvUploadPage = () => {
                 type="button"
                 className="admin-upload-file-chip__remove"
                 aria-label="Clear selected file"
-                onClick={isReplacement ? requestReplacementFileRemoval : clearUploadState}
+                onClick={isReplacement ? requestReplacementFileRemoval : removeInitialUpload}
               >
                 <Close size={16} />
               </button>
@@ -1599,10 +1556,12 @@ const RtmEmsLogAmvUploadPage = () => {
       {notification && (
         <Column sm={4} md={8} lg={16}>
           <AppNotification
-            kind={notificationKind}
+            kind="error"
             role="status"
-            title={notificationTitle}
+            title={RTM_VALUES_SAVE_ERROR_TITLE}
             subtitle={notification}
+            focusOnReveal={saveFeedbackFocusKey !== null}
+            revealKey={saveFeedbackFocusKey}
             onCloseButtonClick={() => {
               setNotification('')
             }}
@@ -1615,6 +1574,8 @@ const RtmEmsLogAmvUploadPage = () => {
           <AppNotification
             kind="success"
             title={savedNotification === 'discarded' ? 'Changes discarded' : 'Values saved'}
+            focusOnReveal={saveFeedbackFocusKey !== null}
+            revealKey={saveFeedbackFocusKey}
             subtitle={
               savedNotification === 'discarded'
                 ? 'Values are back to your last save.'
@@ -1704,11 +1665,9 @@ const RtmEmsLogAmvUploadPage = () => {
                 disabled={isUploading || isPreviewing}
                 previewResult={previewResult}
                 reviewValues={reviewValues}
-                uploadResult={uploadResult}
                 onValueChange={(key, value) => {
                   setReviewValues((current) => ({ ...current, [key]: value }))
                   setSavedNotification(null)
-                  setUploadResult(null)
                 }}
               />
             )}
@@ -1751,7 +1710,7 @@ const RtmEmsLogAmvUploadPage = () => {
                   if (savedActionsUnavailable) {
                     return
                   }
-                  void submitUpload()
+                  void submitUpload(true)
                 }}
                 disabled={isUploadDisabled}
                 aria-disabled={savedActionsUnavailable || undefined}
@@ -1819,8 +1778,8 @@ const RtmEmsLogAmvUploadPage = () => {
                   replacementPreviewRef.current = null
                   replacementReviewValuesRef.current = null
                   setNotification('')
+                  setSaveFeedbackFocusKey(null)
                   setSavedNotification('discarded')
-                  setUploadResult(null)
                 }
               : undefined
           }
@@ -1828,8 +1787,8 @@ const RtmEmsLogAmvUploadPage = () => {
             discardConfirmation === 'saved-changes'
               ? submitUpload
               : discardConfirmation === 'file' && replacementUploadOpen
-                ? clearReplacementFile
-                : clearUploadState
+                ? removeReplacementFile
+                : removeInitialUpload
           }
           onClose={() => setDiscardConfirmation(null)}
         />

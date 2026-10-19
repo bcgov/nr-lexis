@@ -69,14 +69,17 @@ const emailRecipients = (ownerEmail: string, agentEmail: string) =>
     .filter(Boolean)
     .join(' and ')
 
-/** The page notification for a disapproval: the status saved, and what happened to the email. */
+/**
+ * The page notification for a disapproval: the status saved, and what happened to the email. The
+ * number in the title links to its record unless the notice is shown on that record.
+ */
 export const disapprovalResult = (
   { applicationNumber, statusLabel, email }: DisapprovalOutcome,
-  link: RecordLink,
+  link?: RecordLink,
 ): ActionResult => {
   const base = {
     title: `Application ${applicationNumber} ${statusLabel.toLowerCase()}.`,
-    titleRecord: { id: applicationNumber, ...link(applicationNumber) },
+    ...(link && { titleRecord: { id: applicationNumber, ...link(applicationNumber) } }),
   }
   switch (email.status) {
     case 'sent':

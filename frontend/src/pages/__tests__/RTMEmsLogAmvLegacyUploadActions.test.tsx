@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import RtmEmsLogAmvUploadPage from '@/pages/RTMEmsLogAmv/LegacyUploadWorkflow'
 import {
@@ -44,6 +44,56 @@ const renderUploadPage = async () => {
   await act(async () => {
     render(<RtmEmsLogAmvUploadPage />)
   })
+}
+
+const uploadDropZone = () =>
+  screen.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' })
+
+const replacementDropZone = () =>
+  screen.getByRole('button', { name: 'Choose a replacement average monthly values spreadsheet' })
+
+const spreadsheetFile = (name: string) =>
+  new File([new Uint8Array([1])], name, {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  })
+
+const amvRow = (
+  retrievalDate: string,
+  updateDate: string,
+  currentValue: number,
+  newValue: number,
+) => ({
+  species: 'BA',
+  grade: 'D',
+  growthIndicator: 'O',
+  retrievalDate,
+  updateDate,
+  currentValue,
+  newValue,
+  returnCode: '0',
+})
+
+const mockAcceptedPreview = (retrievalDate: string, updateDate: string, newValue: number) =>
+  mockedPreviewUpload.mockResolvedValue({
+    status: 'accepted',
+    fileName: 'test-2026-10-18.xlsx',
+    fileSize: 1,
+    message: 'Spreadsheet is valid.',
+    rowCount: 1,
+    retrievalDate,
+    updateDate,
+    errors: [],
+    warnings: [],
+    rows: [amvRow(retrievalDate, updateDate, 75.29, newValue)],
+  })
+
+const mockSavedValues = () => {
+  const nextMonth = monthOffset(`${formatBusinessIsoDate().slice(0, 7)}-01`, 1)
+  const comparisonMonth = monthOffset(nextMonth, -1)
+  mockedSearch.mockResolvedValueOnce([amvRow(nextMonth, nextMonth, 78.14, 78.14)])
+  mockedSearch.mockResolvedValueOnce([amvRow(comparisonMonth, comparisonMonth, 75.29, 75.29)])
+  mockAcceptedPreview(comparisonMonth, nextMonth, 91.25)
+  return { comparisonMonth, nextMonth }
 }
 
 describe('RTM EMS Log AMV spreadsheet upload actions', () => {
@@ -400,7 +450,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       screen.queryByLabelText('Replacement average monthly values spreadsheet'),
     ).not.toBeInTheDocument()
     expect(savedValue).toHaveValue('78.14')
-    expect(screen.getByRole('button', { name: 'Replace file' })).toHaveFocus()
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Replace file' })).toHaveFocus())
 
     await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
 
@@ -842,6 +892,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       screen.queryByRole('alert', { name: 'Rejected average monthly values upload file' }),
     ).not.toBeInTheDocument()
     expect(screen.getByText('Drag and drop your file here or click to upload')).toBeVisible()
+    await waitFor(() => expect(uploadDropZone()).toHaveFocus())
     expect(mockedSaveBatch).not.toHaveBeenCalled()
   })
 
@@ -1560,11 +1611,149 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(savingButton.querySelector('.cds--loading')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled()
 
+    const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     await act(async () => rejectSave(new Error('unavailable')))
+    consoleError.mockRestore()
 
-    expect(await screen.findByText('Unable to apply average monthly value upload.')).toBeVisible()
+    expect(
+      await screen.findByText('Something went wrong on our end. Please try again.'),
+    ).toBeVisible()
+    expect(screen.getAllByText('Something went wrong on our end. Please try again.')).toHaveLength(
+      1,
+    )
+    expect(screen.getByText('Average market values could not be saved')).toBeVisible()
+    expect(document.querySelector('.admin-upload-result')).toBeNull()
+    expect(screen.queryByText(/Attempted rows/)).not.toBeInTheDocument()
+    expect(screen.queryByText('Unable to apply average monthly value upload.')).toBeNull()
     expect(reviewTable).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled()
+  })
+
+  it('shows a rejected save once, in the notice, with the backend message', async () => {
+    mockAcceptedPreview('2026-06-01', '2026-07-01', 78.14)
+    mockedSaveBatch.mockResolvedValue({
+      status: 'validation_failed',
+      message: 'These values could not be saved.',
+      errors: ['These values could not be saved.'],
+      rows: [],
+    })
+    await renderUploadPage()
+    await userEvent.upload(
+      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      spreadsheetFile('test-2026-10-18.xlsx'),
+    )
+    await screen.findByRole('table', { name: 'Balsam average market value review' })
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+
+    expect(await screen.findAllByText('These values could not be saved.')).toHaveLength(1)
+    expect(screen.getByText('Average market values could not be saved')).toBeVisible()
+    expect(document.querySelector('.admin-upload-result')).toBeNull()
+    expect(screen.queryByText('validation_failed')).not.toBeInTheDocument()
+    expect(screen.queryByText(/Attempted rows/)).not.toBeInTheDocument()
+  })
+
+  describe('focus after actions that remove the control', () => {
+    it('moves focus to the replacement drop zone when Replace file opens', async () => {
+      mockSavedValues()
+      await renderUploadPage()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
+
+      await waitFor(() => expect(replacementDropZone()).toHaveFocus())
+    })
+
+    it('returns focus to the replacement drop zone after removing a replacement file', async () => {
+      const { nextMonth } = mockSavedValues()
+      await renderUploadPage()
+      await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
+      await userEvent.upload(
+        screen.getByLabelText('Replacement average monthly values spreadsheet'),
+        spreadsheetFile('test-2026-10-18.xlsx'),
+      )
+      await screen.findByLabelText('Uploaded replacement average monthly values file')
+      expect(
+        screen.queryByRole('button', {
+          name: 'Choose a replacement average monthly values spreadsheet',
+        }),
+      ).not.toBeInTheDocument()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+      expect(
+        screen.queryByRole('dialog', { name: 'Are you sure you want to remove this file?' }),
+      ).not.toBeInTheDocument()
+      await waitFor(() => expect(replacementDropZone()).toHaveFocus())
+
+      await userEvent.upload(
+        screen.getByLabelText('Replacement average monthly values spreadsheet'),
+        spreadsheetFile('test-2026-10-18.xlsx'),
+      )
+      const editedValue = await screen.findByLabelText(
+        `Balsam grade D ${monthLabel(nextMonth)} value`,
+      )
+      await userEvent.clear(editedValue)
+      await userEvent.type(editedValue, '92.50')
+      await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Remove file' }))
+
+      await waitFor(() => expect(replacementDropZone()).toHaveFocus())
+    })
+
+    it('returns focus to the upload drop zone after discarding values before the first save', async () => {
+      mockAcceptedPreview('2026-06-01', '2026-07-01', 78.14)
+      await renderUploadPage()
+      await userEvent.upload(
+        screen.getByLabelText('Average monthly values upload spreadsheet'),
+        spreadsheetFile('test-2026-10-18.xlsx'),
+      )
+      await screen.findByRole('table', { name: 'Balsam average market value review' })
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      await userEvent.click(
+        within(screen.getByRole('dialog', { name: 'Discard these values?' })).getByRole('button', {
+          name: 'Discard values',
+        }),
+      )
+      await waitFor(() => expect(uploadDropZone()).toHaveFocus())
+
+      await userEvent.upload(
+        screen.getByLabelText('Average monthly values upload spreadsheet'),
+        spreadsheetFile('test-2026-10-18.xlsx'),
+      )
+      await screen.findByRole('table', { name: 'Balsam average market value review' })
+      await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Remove file' }))
+
+      await waitFor(() => expect(uploadDropZone()).toHaveFocus())
+    })
+
+    it('moves focus to the saved or failed notice after Save values', async () => {
+      const visibleRects = vi
+        .spyOn(HTMLElement.prototype, 'getClientRects')
+        .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
+      onTestFinished(() => {
+        visibleRects.mockRestore()
+        consoleError.mockRestore()
+      })
+      mockAcceptedPreview('2026-06-01', '2026-07-01', 78.14)
+      mockedSaveBatch.mockRejectedValueOnce(new Error('unavailable'))
+      await renderUploadPage()
+      await userEvent.upload(
+        screen.getByLabelText('Average monthly values upload spreadsheet'),
+        spreadsheetFile('test-2026-10-18.xlsx'),
+      )
+      await screen.findByRole('table', { name: 'Balsam average market value review' })
+
+      await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+
+      const failure = await screen.findByText('Something went wrong on our end. Please try again.')
+      await waitFor(() => expect(failure.closest('.app-inline-notification')).toHaveFocus())
+
+      await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+
+      const saved = await screen.findByText('Values saved')
+      await waitFor(() => expect(saved.closest('.app-inline-notification')).toHaveFocus())
+    })
   })
 })

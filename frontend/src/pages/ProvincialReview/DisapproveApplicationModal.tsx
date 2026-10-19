@@ -22,6 +22,7 @@ import { fetchApplicationClientData } from '@/service/application-client-lookup-
 import {
   sendApplicationReviewStatusEmail,
   updateApplicationReviewStatus,
+  type ApplicationReviewStatusUpdateResult,
 } from '@/service/application-review-search-service'
 import { fetchApplicationSummarySnapshot } from '@/service/provincial-application-items-service'
 import { fetchCurrentApplicationRecordVersion } from '@/service/record-version-service'
@@ -65,6 +66,10 @@ type Props = {
   applicationNumber: string
   /** Rejected and Withdrawn. */
   statusOptions: SearchOption[]
+  initialStatusCode?: string
+  initialRemark?: string
+  /** Update an open record as soon as its status commits, before the separate email request. */
+  onStatusSaved?: (result: ApplicationReviewStatusUpdateResult, remark: string) => void
   /** The status is saved; the dialog has closed. */
   onComplete: (outcome: DisapprovalOutcome) => void
   /** Closed without saving. */
@@ -109,6 +114,9 @@ const responseReason = (error: unknown): string => {
 const DisapproveApplicationModal = ({
   applicationNumber,
   statusOptions,
+  initialStatusCode = DISAPPROVE_DEFAULT_STATUS,
+  initialRemark = '',
+  onStatusSaved,
   onComplete,
   onClose,
   onBusyChange,
@@ -117,8 +125,8 @@ const DisapproveApplicationModal = ({
   // The control that opened the dialog, captured before the dialog moves focus inside.
   const [opener] = useState(focusedElement)
   const id = useId().replaceAll(':', '')
-  const [statusCode, setStatusCode] = useState(DISAPPROVE_DEFAULT_STATUS)
-  const [remark, setRemark] = useState('')
+  const [statusCode, setStatusCode] = useState(initialStatusCode)
+  const [remark, setRemark] = useState(initialRemark)
   const [sendEmail, setSendEmail] = useState(true)
   const [recipients, setRecipients] = useState<Recipients | null>(null)
   const [loadError, setLoadError] = useState(false)
@@ -226,6 +234,7 @@ const DisapproveApplicationModal = ({
         setSaveError(saved.message || DISAPPROVE_FAILED)
         return
       }
+      onStatusSaved?.(saved, payload.remark)
       // The status is saved; from here only the email can fail, and the dialog closes either way.
       if (sendEmail && recipients) {
         const ownerEmail = recipients.ownerEmail.trim()
