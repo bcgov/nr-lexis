@@ -770,6 +770,40 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.queryByText('Values saved')).not.toBeInTheDocument()
   })
 
+  it('clears the save-failure notice when a failed replacement is closed', async () => {
+    const { nextMonth } = mockSavedValues()
+    mockedSaveBatch.mockResolvedValueOnce({
+      status: 'validation_failed',
+      message: 'These values could not be saved.',
+      errors: ['These values could not be saved.'],
+      rows: [],
+    })
+
+    await renderUploadPage()
+    const savedValueLabel = `Balsam grade D ${monthLabel(nextMonth)} value`
+    expect(screen.getByLabelText(savedValueLabel)).toHaveValue('78.14')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
+    await userEvent.upload(
+      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      spreadsheetFile('test-2026-10-19.xlsx'),
+    )
+    expect(await screen.findByLabelText(savedValueLabel)).toHaveValue('91.25')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+    expect(await screen.findByText('Average market values could not be saved')).toBeVisible()
+    expect(screen.getByText('These values could not be saved.')).toBeVisible()
+    expect(screen.getByLabelText(savedValueLabel)).toHaveValue('91.25')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Keep current values' }))
+
+    expect(screen.queryByText('Average market values could not be saved')).not.toBeInTheDocument()
+    expect(screen.queryByText('These values could not be saved.')).not.toBeInTheDocument()
+    expect(screen.getByLabelText(savedValueLabel)).toHaveValue('78.14')
+    expect(screen.getByRole('button', { name: 'Replace file' })).toBeVisible()
+  })
+
   it('advances to the next editable month and clears the prior workflow at rollover', async () => {
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2026-09-01T06:59:30Z'))

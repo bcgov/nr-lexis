@@ -1101,6 +1101,7 @@ const RtmEmsLogAmvUploadPage = () => {
 
   const closeReplacementUpload = () => {
     clearReplacementFile()
+    setNotification('')
     setReplacementUploadOpen(false)
     replacementPreviewRef.current = null
     replacementReviewValuesRef.current = null

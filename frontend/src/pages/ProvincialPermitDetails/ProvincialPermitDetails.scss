@@ -17,7 +17,8 @@
       .detail-section-card__header,
       .lexis-empty-state__action,
       .permit-scale-summary__header,
-      .permit-package-toolbar
+      .permit-package-toolbar,
+      .permit-fee-card__actions
     )
     > .cds--btn {
     block-size: auto;
@@ -119,12 +120,10 @@
 }
 
 .ministerial-permit-details__applications {
-  min-inline-size: 0;
-}
-
-.ministerial-permit-details__applications {
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 1rem;
+  min-inline-size: 0;
 }
 
 .ministerial-permit-details__applications .detail-section-subtitle {
