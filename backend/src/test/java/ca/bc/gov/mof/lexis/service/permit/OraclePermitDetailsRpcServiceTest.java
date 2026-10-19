@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.atLeastOnce;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
@@ -48,8 +49,8 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.repository.exemption.ExemptionDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationInfoRow;
-import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationStatusRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.BoicScaleMutationRecord;
+import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.BoicTimberMarkRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.CountryCodeRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.EndUsePairRow;
@@ -117,6 +118,8 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
 class OraclePermitDetailsRpcServiceTest {
 
   private static final LocalDate FEE_MASK_EFFECTIVE_DATE = LocalDate.of(2024, 6, 27);
+  private static final String INVOICE_DETAILS_LOCKED_MESSAGE =
+      "Invoice-related permit details cannot be changed after permit invoicing. Restore their saved values, or save the permit as Active first.";
 
   @Mock private PermitRpcRepository repository;
   @Mock private LexisApplicationService applicationService;
@@ -159,9 +162,6 @@ class OraclePermitDetailsRpcServiceTest {
     lenient()
         .when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(1000456L));
-    lenient()
-        .when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(new ApplicationStatusRow(1000456L, "EXE")));
     lenient()
         .when(repository.findApplicationStatusCodeByNumber(1000456L))
         .thenReturn(Optional.of("EXE"));
@@ -232,9 +232,84 @@ class OraclePermitDetailsRpcServiceTest {
         service.sendRequestPermitEmail(7000123L, null, "idir\\submitter");
 
     assertThat(response.success()).isTrue();
-    assertThat(response.permitRequestDate()).isEqualTo("2026-03-15");
+    assertThat(response.message())
+        .isEqualTo(
+            "Your email request for Permit Number 7000123 has been sent to the Regional office for review. You will be notified when the Permit to Transport Unmanufactured Timber from BC has been issued.");
+    assertThat(response.permitRequestDate()).isNull();
     verify(permitEmailService).sendRequest(7000123L, 1835L, null);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void requestEmailShouldNotReturnTheStoredDateForABlanketOicPermitThatAlreadyHasOne() {
+    PermitMutationRow permit = blanketOicPermitMutationRow(LocalDate.of(2026, 3, 15));
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permit));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    stubOicApplicationBinding("EX-700");
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L))
+        .thenReturn(List.of("BOIC-1"));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(scale("101", "TM1", "HEM", "J", 7.6d, 11L, "7000123", "BOIC-1")));
+    when(permitEmailService.sendRequest(7000123L, 1835L, null)).thenReturn(true);
+
+    PermitDetailsRpcService.PermitEmailResult response =
+        service.sendRequestPermitEmail(7000123L, null, "idir\\submitter");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.permitRequestDate()).isNull();
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void requestEmailShouldAskForTheRegionalOfficeToBeNotifiedWhenNoAddressIsFound() {
+    PermitMutationRow permit = permitMutationRow();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permit));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of(1000456L));
+    when(repository.findPackageNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of("PKG-903"));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(scale("101", "TM1", "HEM", "J", 7.6d, 11L, "7000123", "PKG-903")));
+    when(permitEmailService.sendRequest(7000123L, 1835L, null)).thenReturn(false);
+    when(permitEmailService.requestRecipients(1835L)).thenReturn(List.of());
+
+    PermitDetailsRpcService.PermitEmailResult response =
+        service.sendRequestPermitEmail(7000123L, null, "idir\\submitter");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.message())
+        .isEqualTo(
+            "Your email request for Permit Number 7000123 has NOT been sent to the Regional office for review. Regional Office Email address not found. Warning: Regional Office must be otherwise notified.");
+    assertThat(response.permitRequestDate()).isNull();
+  }
+
+  @Test
+  void requestEmailShouldAskForTheRegionalOfficeToBeNotifiedWhenTheEmailIsNotSent() {
+    PermitMutationRow permit = permitMutationRow();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permit));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of(1000456L));
+    when(repository.findPackageNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of("PKG-903"));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(
+            List.of(scale("101", "TM1", "HEM", "J", 7.6d, 11L, "7000123", "PKG-903")));
+    when(permitEmailService.sendRequest(7000123L, 1835L, null)).thenReturn(false);
+    when(permitEmailService.requestRecipients(1835L)).thenReturn(List.of("region@example.test"));
+
+    PermitDetailsRpcService.PermitEmailResult response =
+        service.sendRequestPermitEmail(7000123L, null, "idir\\submitter");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.message())
+        .isEqualTo("Email was not sent. Warning: Regional Office must be otherwise notified.");
   }
 
   @Test
@@ -826,6 +901,11 @@ class OraclePermitDetailsRpcServiceTest {
                     "O",
                     "Old Growth",
                     BigDecimal.valueOf(95.0d))));
+    when(repository.findCorePackageContexts(7000123L, false))
+        .thenReturn(
+            List.of(
+                coreContext("PKG-903", 1000456L, true),
+                coreContext("PKG-999", 1000457L, true, "O", "S")));
 
     PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
 
@@ -843,6 +923,152 @@ class OraclePermitDetailsRpcServiceTest {
     verify(repository, never()).isApplicationUnmanufactured(anyLong());
     verify(repository, never()).findSpeciesDescription(any());
     verify(repository, never()).findGradeDescription(any());
+    verify(repository, never()).findApplicationInfoByNumber(anyLong());
+    verify(repository, never()).findGrowthTypeDescription(any());
+    verifyNoInteractions(applicationService);
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      value = {
+        "O, O, NULL, Old Growth",
+        "O, O, S, Old Growth",
+        "M, O, NULL, Old Growth",
+        "M, O, S, Old Growth",
+        "B, O, S, Second Growth",
+        "B, O, NULL, ''",
+        "O, NULL, S, ''",
+        "M, NULL, S, ''",
+        "O, MISSING, S, ''",
+        "M, MISSING, S, ''"
+      },
+      nullValues = "NULL")
+  void allScaleFeeCaptionsShouldUseTheApplicationForOrdinaryPermitsAndThePackageForBlanketOic(
+      String exemptionType, String applicationGrowth, String packageGrowth, String expectedCaption) {
+    boolean blanketOic = "B".equals(exemptionType);
+    when(repository.findPermitPolicyContextByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                new PermitPolicyContextRow(
+                    7000123L, 1903L, FEE_MASK_EFFECTIVE_DATE, "EX-700", "US", 0.0d)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of(exemptionType));
+    when(repository.findCorePackageContexts(7000123L, blanketOic))
+        .thenReturn(
+            List.of(
+                coreContext("PKG-903", 1000456L, true, applicationGrowth, packageGrowth),
+                coreContext("PKG-900", 1000456L, false, applicationGrowth, packageGrowth)));
+    when(repository.findPermitFeeScaleRows(7000123L))
+        .thenReturn(
+            List.of(
+                new PermitFeeScaleRow(
+                    scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903"),
+                    "T",
+                    "Hemlock",
+                    "Grade J",
+                    "S",
+                    "Second Growth",
+                    BigDecimal.valueOf(125))));
+
+    PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
+
+    assertThat(response.packageList())
+        .extracting("packageNumber", "totalFeeForPackage", "growthType")
+        .containsExactly(
+            tuple("PKG-903", "$7.60", expectedCaption),
+            tuple("PKG-900", "$0.00", expectedCaption));
+    assertThat(response.totalVolume()).isEqualTo("7.6");
+    verify(repository, never()).findApplicationInfoByNumber(anyLong());
+    verify(repository, never()).findGrowthTypeDescription(any());
+    verifyNoInteractions(applicationService);
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      value = {
+        "O, O, NULL, Old Growth",
+        "O, O, S, Old Growth",
+        "M, O, NULL, Old Growth",
+        "M, O, S, Old Growth",
+        "B, O, S, Second Growth",
+        "B, O, NULL, ''",
+        "O, NULL, S, ''",
+        "M, NULL, S, ''",
+        "O, MISSING, S, ''",
+        "M, MISSING, S, ''"
+      },
+      nullValues = "NULL")
+  void packageFeeAndSummaryCaptionsShouldUseTheApplicationForOrdinaryPermitsAndThePackageForBlanketOic(
+      String exemptionType, String applicationGrowth, String packageGrowth, String expectedCaption) {
+    boolean blanketOic = "B".equals(exemptionType);
+    PermitScaleDetailRow scale = scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903");
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of(scale));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of(scale));
+    when(repository.findPermitPolicyContextByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                new PermitPolicyContextRow(
+                    7000123L, 1903L, FEE_MASK_EFFECTIVE_DATE, "EX-700", "US", 0.0d)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of(exemptionType));
+    when(applicationService.findPackageByPackageNumber("PKG-903"))
+        .thenReturn(
+            Optional.of(new LexisPackageLookupDto("PKG-903", 1000456L, 10.0d, packageGrowth)));
+    if (!blanketOic) {
+      when(repository.findApplicationInfoByNumber(1000456L))
+          .thenReturn(
+              Optional.ofNullable(
+                  coreContext("PKG-903", 1000456L, true, applicationGrowth, packageGrowth)
+                      .applicationInfo()));
+    }
+    if (!expectedCaption.isEmpty()) {
+      when(repository.findGrowthTypeDescription(blanketOic ? packageGrowth : applicationGrowth))
+          .thenReturn(Optional.of(expectedCaption));
+    }
+    when(repository.findAverageMarketValueByScaleId("101"))
+        .thenReturn(Optional.of(BigDecimal.valueOf(125)));
+
+    PermitScaleFeesRpcResponseDto packageFees =
+        service.getScaleFeesForPackage("PKG-903", 7000123L, true);
+    PermitSummaryRpcResponseDto summary =
+        service.getPermitSummary(7000123L, "US", "2024-06-27", "PKG-903", true);
+
+    assertThat(packageFees.growthType()).isEqualTo(expectedCaption);
+    assertThat(summary.growthType()).isEqualTo(expectedCaption);
+    assertThat(packageFees.totalFeeForPackage()).isEqualTo("$7.60");
+    assertThat(summary.totalFeeForPackage()).isEqualTo("$7.60");
+    assertThat(summary.totalFees()).isEqualTo("$7.60");
+    if (blanketOic) {
+      verify(repository, never()).findApplicationInfoByNumber(anyLong());
+    }
+  }
+
+  @ParameterizedTest
+  @CsvSource({"O, ''", "M, ''", "B, Second Growth"})
+  void allScaleFeeCaptionsShouldNotUseThePackageFallbackForOrdinaryPermitsWithoutAContext(
+      String exemptionType, String expectedCaption) {
+    when(repository.findPermitPolicyContextByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                new PermitPolicyContextRow(
+                    7000123L, 1903L, FEE_MASK_EFFECTIVE_DATE, "EX-700", "US", 0.0d)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of(exemptionType));
+    when(repository.findPermitFeeScaleRows(7000123L))
+        .thenReturn(
+            List.of(
+                new PermitFeeScaleRow(
+                    scale("101", "TM1", "HEM", "J", 7.60d, 11L, "7000123", "PKG-903"),
+                    "T",
+                    "Hemlock",
+                    "Grade J",
+                    "S",
+                    "Second Growth",
+                    BigDecimal.valueOf(125))));
+
+    PermitAllScaleFeesRpcResponseDto response = service.getAllScaleFees(7000123L, true);
+
+    assertThat(response.packageList())
+        .extracting("growthType", "totalFeeForPackage")
+        .containsExactly(tuple(expectedCaption, "$7.60"));
+    verify(repository, never()).findApplicationInfoByNumber(anyLong());
     verifyNoInteractions(applicationService);
   }
 
@@ -1395,7 +1621,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void availableApplicationListShouldExcludeSelectedAndAssignedApplications() {
+  void availableApplicationListShouldDisableOnlyTheApplicationsAlreadyOnThePermit() {
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .thenReturn(
             List.of(
@@ -1412,12 +1638,21 @@ class OraclePermitDetailsRpcServiceTest {
     PermitAvailableApplicationListRpcResponseDto response =
         service.getAvailableApplicationList("EX-700", "1000458", ignored -> true);
 
-    assertThat(response.applicationList()).containsExactly("1000456");
+    assertThat(response.applicationList()).containsExactly("1000456", "1000457");
     assertThat(response.errorMessage()).isNull();
+    assertThat(response.applicationItems())
+        .extracting(
+            PermitAvailableApplicationItemRpcResponseDto::applicationNumber,
+            PermitAvailableApplicationItemRpcResponseDto::disabled,
+            PermitAvailableApplicationItemRpcResponseDto::disabledReason)
+        .containsExactly(
+            tuple("1000456", false, null),
+            tuple("1000457", false, null),
+            tuple("1000458", true, "Already associated with this permit."));
   }
 
   @Test
-  void availableApplicationListShouldIncludeApplicationsWithUnassignedScaleRows() {
+  void availableApplicationListShouldListApplicationsWithAndWithoutUnassignedScaleRows() {
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .thenReturn(
             List.of(
@@ -1430,14 +1665,17 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleMutationDetailsByApplicationNumber(1001457L))
         .thenReturn(
             List.of(scaleMutation("102", 1001457L, "PKG-ASSIGNED-902", 7001123L)));
-    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(new ApplicationStatusRow(1001456L, "EXE")));
 
     PermitAvailableApplicationListRpcResponseDto response =
         service.getAvailableApplicationList("EX-700", "", ignored -> true);
 
-    assertThat(response.applicationList()).containsExactly("1001456");
+    assertThat(response.applicationList()).containsExactly("1001456", "1001457");
     assertThat(response.errorMessage()).isNull();
+    assertThat(response.applicationItems())
+        .extracting(
+            PermitAvailableApplicationItemRpcResponseDto::applicationNumber,
+            PermitAvailableApplicationItemRpcResponseDto::unassignedPieces)
+        .containsExactly(tuple("1001456", 12L), tuple("1001457", null));
   }
 
   @Test
@@ -1455,14 +1693,17 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleMutationDetailsByApplicationNumber(1001457L))
         .thenReturn(
             List.of(scaleMutation("103", 1001457L, "PKG-ASSIGNED-902", 7001123L)));
-    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(new ApplicationStatusRow(1001456L, "EXE")));
 
     PermitAvailableApplicationListRpcResponseDto response =
         service.getAvailableApplicationList("EX-700", "", ignored -> true);
 
-    assertThat(response.applicationList()).containsExactly("1001456");
+    assertThat(response.applicationList()).containsExactly("1001456", "1001457");
     assertThat(response.errorMessage()).isNull();
+    assertThat(response.applicationItems())
+        .extracting(
+            PermitAvailableApplicationItemRpcResponseDto::applicationNumber,
+            PermitAvailableApplicationItemRpcResponseDto::unassignedPieces)
+        .containsExactly(tuple("1001456", 12L), tuple("1001457", null));
   }
 
   @ParameterizedTest
@@ -1476,8 +1717,12 @@ class OraclePermitDetailsRpcServiceTest {
     PermitAvailableApplicationListRpcResponseDto response =
         service.getAvailableApplicationList("EX-700", "", ignored -> true);
 
-    assertThat(response.applicationList()).isEmpty();
-    assertThat(response.errorMessage()).isEqualTo("No applications are currently available.");
+    assertThat(response.applicationItems())
+        .extracting(
+            PermitAvailableApplicationItemRpcResponseDto::applicationNumber,
+            PermitAvailableApplicationItemRpcResponseDto::unassignedPieces,
+            PermitAvailableApplicationItemRpcResponseDto::unassignedVolume)
+        .containsExactly(tuple("1001456", null, null));
   }
 
   @Test
@@ -1557,7 +1802,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void availableApplicationListShouldExposeAccessibleIneligibleItemsWithReasonsAndTotals() {
+  void availableApplicationListShouldListEveryAccessibleApplicationWhateverItsStatus() {
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .thenReturn(
             List.of(
@@ -1576,20 +1821,12 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleMutationDetailsByApplicationNumber(1000458L)).thenReturn(List.of());
     when(repository.findScaleMutationDetailsByApplicationNumber(1000459L))
         .thenReturn(List.of(scaleMutation("104", 1000459L, "PKG-904", null)));
-    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
-        .thenReturn(
-            List.of(
-                new ApplicationStatusRow(1000456L, "EXE"),
-                new ApplicationStatusRow(1000457L, "PMT"),
-                new ApplicationStatusRow(1000458L, "EXE"),
-                new ApplicationStatusRow(1000459L, "APP"),
-                new ApplicationStatusRow(1000460L, "EXE")));
 
     PermitAvailableApplicationListRpcResponseDto response =
         service.getAvailableApplicationList(
             "EX-700", "1000457", applicationNumber -> applicationNumber != 1000460L);
 
-    assertThat(response.applicationList()).containsExactly("1000456");
+    assertThat(response.applicationList()).containsExactly("1000456", "1000458", "1000459");
     assertThat(response.errorMessage()).isNull();
     assertThat(response.applicationItems())
         .extracting(
@@ -1601,98 +1838,27 @@ class OraclePermitDetailsRpcServiceTest {
         .containsExactly(
             tuple("1000456", false, null, 24L, 69.0d),
             tuple("1000457", true, "Already associated with this permit.", 12L, 34.5d),
-            tuple("1000458", true, "No unassigned scale rows are available.", null, null),
-            tuple(
-                "1000459",
-                true,
-                "Application must be exempted or permitted before it can be added to a permit.",
-                12L,
-                34.5d));
+            tuple("1000458", false, null, null, null),
+            tuple("1000459", false, null, 12L, 34.5d));
     verify(repository, never()).findScaleMutationDetailsByApplicationNumber(1000460L);
-    verify(repository).findApplicationStatusesByExemptionNumberRequired("EX-700");
     verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
     verify(repository, never()).findApplicationNumbersByExemptionNumberRequired(any());
   }
 
   @Test
-  void availableApplicationListShouldUseOneStatusLookupAndDisableUnverifiedStatuses() {
-    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(
-            List.of(
-                new PackageCandidateRow(1000456L, "PKG-1000456"),
-                new PackageCandidateRow(1000457L, "PKG-1000457"),
-                new PackageCandidateRow(1000458L, "PKG-1000458"),
-                new PackageCandidateRow(1000459L, "PKG-1000459"),
-                new PackageCandidateRow(1000460L, "PKG-1000460")));
-    for (long applicationNumber = 1000456L; applicationNumber <= 1000460L; applicationNumber++) {
-      when(repository.findScaleMutationDetailsByApplicationNumber(applicationNumber))
-          .thenReturn(
-              List.of(
-                  scaleMutation(
-                      String.valueOf(applicationNumber),
-                      applicationNumber,
-                      "PKG-" + applicationNumber,
-                      null)));
-    }
-    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
-        .thenReturn(
-            List.of(
-                new ApplicationStatusRow(1000456L, " exe "),
-                new ApplicationStatusRow(1000457L, " pmt "),
-                new ApplicationStatusRow(1000458L, null),
-                new ApplicationStatusRow(1000459L, " ")));
-
-    PermitAvailableApplicationListRpcResponseDto response =
-        service.getAvailableApplicationList("EX-700", "", ignored -> true);
-
-    assertThat(response.applicationList()).containsExactly("1000456", "1000457");
-    assertThat(response.applicationItems())
-        .extracting(
-            PermitAvailableApplicationItemRpcResponseDto::applicationNumber,
-            PermitAvailableApplicationItemRpcResponseDto::disabled,
-            PermitAvailableApplicationItemRpcResponseDto::disabledReason)
-        .containsExactly(
-            tuple("1000456", false, null),
-            tuple("1000457", false, null),
-            tuple("1000458", true, "Application status could not be verified."),
-            tuple("1000459", true, "Application status could not be verified."),
-            tuple("1000460", true, "Application status could not be verified."));
-    verify(repository).findApplicationStatusesByExemptionNumberRequired("EX-700");
-    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
-    verify(repository, never()).findApplicationNumbersByExemptionNumberRequired(any());
-  }
-
-  @Test
-  void availableApplicationListShouldExposeAccessibleApplicationWithoutPackagesAsDisabled() {
-    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
-        .thenReturn(
-            List.of(
-                new ApplicationStatusRow(1000456L, "EXE"),
-                new ApplicationStatusRow(1000457L, "EXE"),
-                new ApplicationStatusRow(1000458L, "EXE")));
+  void availableApplicationListShouldNotListApplicationsWithoutPackages() {
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-901")));
     when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
         .thenReturn(List.of(scaleMutation("101", 1000456L, "PKG-901", null)));
 
     PermitAvailableApplicationListRpcResponseDto response =
-        service.getAvailableApplicationList(
-            "EX-700", "", applicationNumber -> applicationNumber != 1000458L);
+        service.getAvailableApplicationList("EX-700", "", ignored -> true);
 
     assertThat(response.applicationList()).containsExactly("1000456");
-    assertThat(response.errorMessage()).isNull();
     assertThat(response.applicationItems())
-        .extracting(
-            PermitAvailableApplicationItemRpcResponseDto::applicationNumber,
-            PermitAvailableApplicationItemRpcResponseDto::disabled,
-            PermitAvailableApplicationItemRpcResponseDto::disabledReason,
-            PermitAvailableApplicationItemRpcResponseDto::unassignedPieces,
-            PermitAvailableApplicationItemRpcResponseDto::unassignedVolume)
-        .containsExactly(
-            tuple("1000456", false, null, 12L, 34.5d),
-            tuple("1000457", true, "No unassigned scale rows are available.", null, null));
-    verify(repository, never()).findScaleMutationDetailsByApplicationNumber(1000457L);
-    verify(repository, never()).findScaleMutationDetailsByApplicationNumber(1000458L);
+        .extracting(PermitAvailableApplicationItemRpcResponseDto::applicationNumber)
+        .containsExactly("1000456");
   }
 
   @Test
@@ -1706,19 +1872,6 @@ class OraclePermitDetailsRpcServiceTest {
                 service.getAvailableApplicationList(
                     "EX-700", "", ignored -> true))
         .isSameAs(failure);
-  }
-
-  @Test
-  void availableApplicationListShouldPropagateStatusLookupFailure() {
-    DataAccessResourceFailureException failure =
-        new DataAccessResourceFailureException("Oracle applications unavailable");
-    when(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
-        .thenThrow(failure);
-
-    assertThatThrownBy(
-            () -> service.getAvailableApplicationList("EX-700", "", ignored -> true))
-        .isSameAs(failure);
-    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
   }
 
   @Test
@@ -1913,7 +2066,6 @@ class OraclePermitDetailsRpcServiceTest {
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
     when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(1000456L, 1000457L));
-    when(repository.findApplicationStatusCodeByNumber(1000457L)).thenReturn(Optional.of("EXE"));
     when(repository.findApplicationInfoByNumber(1000457L))
         .thenReturn(
             Optional.of(
@@ -1964,6 +2116,58 @@ class OraclePermitDetailsRpcServiceTest {
     verify(repository).findScaleMutationDetailsByApplicationNumber(1000457L);
     verify(applicationReviewRepository, never())
         .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
+  void createPermitFromExemptionShouldTakeTheOwnerAndAgentFromTheFirstPackageApplication() {
+    stubValidOrderInCouncilPermitCreationContext();
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(1000456L, 1000457L));
+    ApplicationInfoRow packageApplication =
+        permitCreationApplication(
+            1000457L, "EX-700", 1908L, "00077999", "05", null, null, "T", "S");
+    when(repository.findApplicationInfoByNumber(1000457L))
+        .thenReturn(Optional.of(packageApplication));
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation ->
+                Optional.of(withPermitNumber(invocation.getArgument(0), 7000123L)));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(1000456L, "PKG-903"),
+                new PackageCandidateRow(1000457L, "PKG-904")));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L)).thenReturn(List.of());
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000457L))
+        .thenReturn(List.of(scaleMutation("201", 1000457L, "PKG-904", null, entryTimestamp)));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-904", 1000457L)));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("201", "TM1", "HEM", "J", 34.5d, 12L, "7000123", "PKG-904")));
+    permitTotalsUpdateSucceeds();
+
+    PermitMutationRpcResponseDto response =
+        service.createPermitFromExemption("EX-700", "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> insertCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(insertCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(insertCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    ArgumentCaptor<PermitMutationRow> updateCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository, atLeastOnce())
+        .updatePermitDetail(updateCaptor.capture(), eq("idir\\jsmith"), isNull());
+    PermitMutationRow clientUpdate = updateCaptor.getAllValues().get(0);
+    assertThat(clientUpdate.clientNumber()).isEqualTo("00077999");
+    assertThat(clientUpdate.clientLocationCode()).isEqualTo("05");
+    assertThat(clientUpdate.agentNumber()).isNull();
+    assertThat(clientUpdate.agentLocationCode()).isNull();
   }
 
   @Test
@@ -2058,49 +2262,40 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void createPermitFromExemptionShouldRejectApplicationsOutsideExemptedOrPermittedStatus() {
-    stubPermitCreationExemption(
-        "EX-700", "M", "ACT", "00077881", "00077880");
-    when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(1000456L, 1000457L));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("EXE"));
-    when(repository.findApplicationStatusCodeByNumber(1000457L))
-        .thenReturn(Optional.of("APP"));
+  void createPermitFromExemptionShouldNotRequireAnApplicationStatus() {
+    stubValidMinisterialPermitCreationContext();
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation ->
+                Optional.of(withPermitNumber(invocation.getArgument(0), 7000123L)));
 
     PermitMutationRpcResponseDto response =
         service.createPermitFromExemption("EX-700", "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Every application linked to a Ministerial exemption must be exempted or permitted before a permit can be created.");
-    verify(repository, never()).findApplicationInfoByNumber(anyLong());
-    verify(repository, never()).insertPermitDetail(any(), any());
+    assertThat(response.success()).isTrue();
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verify(applicationReviewRepository, never())
+        .updateStatusWithRemarkFromAllowedSources(any(), any(), any(), any(), any());
   }
 
   @Test
-  void createPermitFromExemptionShouldAllowAdditionalPermitsForPermittedApplications() {
+  void createPermitFromExemptionShouldTakeTheContextFromTheLowestApplicationNumber() {
     stubValidMinisterialPermitCreationContext();
     when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(1000456L, 1000457L));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("PMT"));
-    when(repository.findApplicationStatusCodeByNumber(1000457L))
-        .thenReturn(Optional.of("EXE"));
+        .thenReturn(List.of(1000457L, 1000456L));
     when(repository.findApplicationInfoByNumber(1000457L))
         .thenReturn(
             Optional.of(
                 permitCreationApplication(
                     1000457L,
                     "EX-700",
-                    1835L,
+                    1908L,
                     "00077881",
-                    "01",
+                    "03",
                     "00077880",
-                    "02",
-                    "T",
-                    "S")));
+                    "04",
+                    "L",
+                    "O")));
     when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
         .thenAnswer(
             invocation ->
@@ -2111,15 +2306,22 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isTrue();
     assertThat(response.permitNumber()).isEqualTo(7000123L);
+    ArgumentCaptor<PermitMutationRow> insertCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(insertCaptor.capture(), eq("idir\\jsmith"));
+    PermitMutationRow inserted = insertCaptor.getValue();
+    assertThat(inserted.orgUnitNo()).isEqualTo(1835L);
+    assertThat(inserted.clientLocationCode()).isEqualTo("01");
+    assertThat(inserted.agentLocationCode()).isEqualTo("02");
+    assertThat(inserted.growthTypeCode()).isEqualTo("S");
+    assertThat(inserted.productTypeCode()).isEqualTo("T");
   }
 
   @Test
-  void createPermitFromExemptionShouldRejectDivergentApplicationPermitContext() {
-    stubValidMinisterialPermitCreationContext();
+  void createPermitFromExemptionShouldAllowApplicationsThatDifferInOwnerRegionAndClassification() {
+    stubValidOrderInCouncilPermitCreationContext();
     when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(1000456L, 1000457L));
-    when(repository.findApplicationStatusCodeByNumber(1000457L))
-        .thenReturn(Optional.of("PMT"));
     when(repository.findApplicationInfoByNumber(1000457L))
         .thenReturn(
             Optional.of(
@@ -2127,21 +2329,26 @@ class OraclePermitDetailsRpcServiceTest {
                     1000457L,
                     "EX-700",
                     1908L,
-                    "00077881",
-                    "01",
-                    "00077880",
-                    "02",
+                    "00077999",
+                    "05",
+                    null,
+                    null,
                     "L",
                     "O")));
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation ->
+                Optional.of(withPermitNumber(invocation.getArgument(0), 7000123L)));
 
     PermitMutationRpcResponseDto response =
         service.createPermitFromExemption("EX-700", "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Linked applications do not share one permit client, region, growth, and product context.");
-    verify(repository, never()).insertPermitDetail(any(), any());
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> insertCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(insertCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(insertCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    assertThat(insertCaptor.getValue().orgUnitNo()).isEqualTo(1835L);
   }
 
   @Test
@@ -2703,8 +2910,6 @@ class OraclePermitDetailsRpcServiceTest {
             Optional.of(
                 exemptionDetailWithClients(
                     "EX-700", "M", "00070001", "00070002")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("PMT"));
     when(repository.findExemptionExpiryDate("EX-700"))
         .thenReturn(Optional.of(LocalDate.of(2026, 6, 27)));
     when(repository.insertPermitDetail(
@@ -2762,7 +2967,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void addPermitShouldRejectDivergentMinisterialApplicationContext() {
+  void addPermitShouldTakeTheContextFromTheLowestApplicationNumber() {
     PermitMutationRequestDto request =
         permitMutationRequest("EX-700", "00070001", "00070002", null);
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
@@ -2772,9 +2977,7 @@ class OraclePermitDetailsRpcServiceTest {
                 exemptionDetailWithClients(
                     "EX-700", "M", "00070001", "00070002")));
     when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(1000456L, 1000457L));
-    when(repository.findApplicationStatusCodeByNumber(1000457L))
-        .thenReturn(Optional.of("PMT"));
+        .thenReturn(List.of(1000457L, 1000456L));
     when(repository.findApplicationInfoByNumber(1000457L))
         .thenReturn(
             Optional.of(
@@ -2786,16 +2989,21 @@ class OraclePermitDetailsRpcServiceTest {
                     "01",
                     "00070002",
                     "02",
-                    "T",
-                    "S")));
+                    "L",
+                    "O")));
+    when(repository.findExemptionExpiryDate("EX-700"))
+        .thenReturn(Optional.of(LocalDate.of(2026, 6, 27)));
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenReturn(Optional.empty());
 
-    PermitMutationRpcResponseDto response = service.addPermit(request, "idir\\jsmith");
+    service.addPermit(request, "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Linked applications do not share one permit client, region, growth, and product context.");
-    verify(repository, never()).insertPermitDetail(any(), any());
+    ArgumentCaptor<PermitMutationRow> insertCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(insertCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(insertCaptor.getValue().orgUnitNo()).isEqualTo(1835L);
+    assertThat(insertCaptor.getValue().growthTypeCode()).isEqualTo("S");
+    assertThat(insertCaptor.getValue().productTypeCode()).isEqualTo("T");
   }
 
   @Test
@@ -2946,7 +3154,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void addPermitShouldRejectApplicationsOutsideExemptedOrPermittedStatus() {
+  void addPermitShouldNotRequireAnApplicationStatus() {
     PermitMutationRequestDto request =
         permitMutationRequest("EX-700", "00070001", "00070002", null);
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
@@ -2955,39 +3163,16 @@ class OraclePermitDetailsRpcServiceTest {
             Optional.of(
                 exemptionDetailWithClients(
                     "EX-700", "M", "00070001", "00070002")));
-    when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(1000456L, 1000457L));
-    when(repository.findApplicationStatusCodeByNumber(1000457L))
-        .thenReturn(Optional.of("APP"));
-
-    PermitMutationRpcResponseDto response = service.addPermit(request, "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .contains(
-            "Every application linked to a Ministerial exemption must be exempted or permitted before a permit can be created.");
-    verify(repository, never()).insertPermitDetail(any(), any());
-  }
-
-  @Test
-  void addPermitShouldFailClosedWhenApplicationStatusIsMissing() {
-    PermitMutationRequestDto request =
-        permitMutationRequest("EX-700", "00070001", "00070002", null);
-    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
-    when(exemptionService.findByExemptionNumber("EX-700"))
-        .thenReturn(
-            Optional.of(
-                exemptionDetailWithClients(
-                    "EX-700", "M", "00070001", "00070002")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
+    when(repository.findExemptionExpiryDate("EX-700"))
+        .thenReturn(Optional.of(LocalDate.of(2026, 6, 27)));
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
         .thenReturn(Optional.empty());
 
     PermitMutationRpcResponseDto response = service.addPermit(request, "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .contains("Application 1000456 status could not be verified.");
-    verify(repository, never()).insertPermitDetail(any(), any());
+    assertThat(response.errors()).containsExactly("Unable to save permit.");
+    verify(repository).insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith"));
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
   }
 
   @Test
@@ -3429,9 +3614,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -3570,9 +3753,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -3588,9 +3769,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -3999,38 +4178,13 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.errors())
         .containsExactlyInAnyOrder(
             "Permit request pieces must be a nonnegative whole number no greater than 9999999999.",
-            "Permit request volume must be a nonnegative number of 9 characters or fewer with no more than 2 decimal places.");
+            "Permit request volume must be a nonnegative number of 9 characters or fewer.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
   @ParameterizedTest
-  @CsvSource({
-    "0,1.0,The total scale pieces exceed the permit request pieces.",
-    "2,0.5,The total scale volume exceeds the permit request volume."
-  })
-  void updatePermitShouldRejectRequestLimitsBelowIncludedScales(
-      String pieces, String volume, String expectedError) {
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
-    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
-    when(exemptionService.findByExemptionNumber("EX-700"))
-        .thenReturn(
-            Optional.of(
-                exemptionDetailWithClients("EX-700", "B", "00077881", "00077880")));
-    when(repository.findScaleDetailsByPermitNumber(7000123L))
-        .thenReturn(List.of(scale("101", "TM-1", "HE", "A", 1.0d, 1L, "7000123", "PKG-1")));
-    stubOicApplicationBinding("EX-700");
-
-    PermitMutationRpcResponseDto response =
-        service.updatePermit(oicRequestLimitsRequest("ACT", pieces, volume), "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors()).containsExactly(expectedError);
-    verify(repository, never()).updatePermitDetail(any(), any(), any());
-  }
-
-  @Test
-  void updatePermitShouldAllowRequestLimitsEqualToIncludedScalesWithoutRoundingError() {
+  @CsvSource({"0,1.0", "2,0.5", "1,0.2"})
+  void updatePermitShouldSaveRequestLimitsBelowIncludedScales(String pieces, String volume) {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
@@ -4041,21 +4195,24 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(
             List.of(
-                scale("101", "TM-1", "HE", "A", 0.1d, 1L, "7000123", "PKG-1"),
-                scale("102", "TM-2", "FI", "B", 0.2d, 2L, "7000123", "PKG-2")));
+                scale("101", "TM-1", "HE", "A", 0.5d, 1L, "7000123", "PKG-1"),
+                scale("102", "TM-2", "FI", "B", 0.5d, 1L, "7000123", "PKG-2")));
     stubOicApplicationBinding("EX-700");
     when(repository.updatePermitDetail(
             any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
-        service.updatePermit(oicRequestLimitsRequest("ACT", "3", "0.3"), "idir\\jsmith");
+        service.updatePermit(oicRequestLimitsRequest("ACT", pieces, volume), "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
+    assertThat(response.errors()).isEmpty();
     ArgumentCaptor<PermitMutationRow> permit = ArgumentCaptor.forClass(PermitMutationRow.class);
     verify(repository).updatePermitDetail(permit.capture(), any(), any());
-    assertThat(permit.getValue().oicRequestPieces()).isEqualTo(3L);
-    assertThat(permit.getValue().oicRequestVolume()).isEqualTo(0.3d);
+    assertThat(permit.getValue().oicRequestPieces()).isEqualTo(Long.parseLong(pieces));
+    assertThat(permit.getValue().oicRequestVolume()).isEqualTo(Double.parseDouble(volume));
+    assertThat(permit.getValue().numberOfPieces()).isEqualTo(2L);
+    assertThat(permit.getValue().permitVolume()).isEqualTo(1.0d);
   }
 
   @Test
@@ -4427,9 +4584,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -4499,9 +4654,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
     verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
   }
@@ -4579,8 +4732,6 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
     when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
         .thenReturn(List.of(scaleMutation("101", 1000456L, null, entryTimestamp)));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("EXE"));
     stubExemptionBalanceRemaining("EX-700", 30.0d);
 
     PermitPersistenceRpcResponseDto response =
@@ -4625,7 +4776,8 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
     when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of("PKG-903  "));
-    when(repository.isValidBoicTimberMarkRequired("TM3", "EX-700")).thenReturn(true);
+    when(repository.findValidBoicTimberMarkRequired("TM3", "EX-700"))
+        .thenReturn(Optional.of(boicTimberMark("ACT", "B01")));
     when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
     when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903  ")).thenReturn(List.of());
@@ -4635,8 +4787,6 @@ class OraclePermitDetailsRpcServiceTest {
                 new PackageDetailsRow(
                     "PKG-903  ", 100.0d, 10.0d, 20.0d, "ACT", null, "N", "S")));
     stubOicApplicationBinding("EX-700");
-    when(repository.findApplicationStatusCodeByNumber(1000999L))
-        .thenReturn(Optional.of("PMT"));
     when(repository.insertBoicScaleDetail(any(BoicScaleMutationRecord.class)))
         .thenReturn(
             Optional.of(
@@ -4680,7 +4830,6 @@ class OraclePermitDetailsRpcServiceTest {
                   scaleMutation(
                       id, 1000999L, "PKG-903  ", null, Timestamp.valueOf("2026-01-01 10:00:00"))));
     }
-    when(repository.findApplicationStatusCodeByNumber(1000999L)).thenReturn(Optional.of("PMT"));
     when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
         .thenReturn(true);
     lenient()
@@ -4711,9 +4860,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
     verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
   }
@@ -4774,6 +4921,62 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePermitShouldCompletePaymentPendingOrderInCouncilPermitWhoseApplicationLocationsDiffer() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                permitMutationRowWithIssueAndReceipt(
+                    "PPD", LocalDate.of(2026, 3, 16), null)));
+    stubOrderInCouncilFirstApplication("00077881", "09", "00077880", "08");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            formCheckRequest("COM", "42", "Legacy notes", "RCPT-200"), "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().permitStatusCode()).isEqualTo("COM");
+    assertThat(permitCaptor.getValue().receiptNumber()).isEqualTo("RCPT-200");
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    assertThat(permitCaptor.getValue().clientLocationCode()).isEqualTo("01");
+    assertThat(permitCaptor.getValue().agentNumber()).isEqualTo("00077880");
+    assertThat(permitCaptor.getValue().agentLocationCode()).isEqualTo("01");
+  }
+
+  @Test
+  void updatePermitShouldGiveAPaymentPendingOrderInCouncilPermitTheReplacementApplicationAgent() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("PPD")));
+    stubOrderInCouncilFirstApplication("00077881", "09", "00099998", "04");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(formCheckRequest("PPD", "42", "Legacy notes"), "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    assertThat(permitCaptor.getValue().clientLocationCode()).isEqualTo("01");
+    assertThat(permitCaptor.getValue().agentNumber()).isEqualTo("00099998");
+    assertThat(permitCaptor.getValue().agentLocationCode()).isEqualTo("04");
+  }
+
+  @Test
   void updatePermitShouldRejectIssueDateChangeDuringPaymentPendingCompletion() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(
@@ -4788,9 +4991,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -4841,16 +5042,12 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldFailClosedWhenALinkedApplicationHasAnUnexpectedStatus() {
-    stubInvoiceOrchestrationAvailability();
+  void updatePermitShouldLeaveALinkedApplicationInAnUnexpectedStatusAlone() {
+    stubInvoiceOrchestration();
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(withOrgUnit(permitMutationRow("ACT"), 1903L)));
-    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
-    when(exemptionService.findByExemptionNumber("EX-700"))
-        .thenReturn(
-            Optional.of(
-                exemptionDetailWithClients(
-                    "EX-700", "M", "00077881", "00077880")));
+    stubTargetMinisterialExemption("EX-700");
+    stubNonCanadianInvoiceSnapshot(1903L);
     when(repository.updatePermitDetail(
             any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
@@ -4858,15 +5055,22 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(List.of(1000457L, 1000456L));
     when(repository.findApplicationStatusCodeByNumber(1000457L))
         .thenReturn(Optional.of("APP"));
+    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE")))
+        .thenReturn(
+            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
+                true, true, true, "EXE", null));
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
             invoiceMaterialChangeRequest("COM", "US"), "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors()).containsExactly("Unable to update linked application statuses.");
-    verify(applicationReviewRepository, never())
+    assertThat(response.success()).isTrue();
+    verify(applicationReviewRepository, times(1))
         .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
+    verify(applicationReviewRepository)
+        .updateStatusWithRemarkFromAllowedSources(
+            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE"));
   }
 
   @Test
@@ -4888,9 +5092,6 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(List.of(1000456L));
     when(repository.findApplicationStatusCodeByNumber(1000456L))
         .thenReturn(Optional.of("PMT"));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)));
     when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
             1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
         .thenReturn(
@@ -4927,8 +5128,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldPreservePermittedApplicationWhenAnotherEffectivePermitRemains() {
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+  void updatePermitShouldRevertEveryPermittedApplicationEvenWhenAnotherPermitHoldsItsScales() {
     stubInvoiceOrchestration();
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
@@ -4940,50 +5140,67 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(List.of(1000456L));
     when(repository.findApplicationStatusCodeByNumber(1000456L))
         .thenReturn(Optional.of("PMT"));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
         .thenReturn(
-            List.of(
-                scaleMutation("101", 1000456L, 7000123L, entryTimestamp),
-                scaleMutation("102", 1000456L, 7000999L, entryTimestamp)));
-    when(repository.findPermitMutationByPermitNumber(7000999L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
+            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
+                true, true, true, "PMT", null));
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(formCheckRequest("CAN", "42", "Legacy notes"), "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
-    verify(applicationReviewRepository, never())
+    verify(applicationReviewRepository)
+        .updateStatusWithRemarkFromAllowedSources(
+            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT"));
+    verify(repository, never()).findScaleMutationDetailsByApplicationNumber(anyLong());
+    verify(repository, never()).findPermitMutationByPermitNumber(7000999L);
+  }
+
+  @Test
+  void updatePermitShouldRevertPermittedApplicationsWhenAnActivePermitIsCancelled() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("ACT")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
+        .thenReturn(List.of(1000456L, 1000457L));
+    when(repository.findApplicationStatusCodeByNumber(1000456L))
+        .thenReturn(Optional.of("PMT"));
+    when(repository.findApplicationStatusCodeByNumber(1000457L))
+        .thenReturn(Optional.of("EXE"));
+    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
+            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
+        .thenReturn(
+            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
+                true, true, true, "PMT", null));
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(formCheckRequest("CAN", "42", "Legacy notes"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    verify(applicationReviewRepository, times(1))
         .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
   }
 
   @Test
-  void updatePermitShouldFailClosedWhenAnotherLinkedPermitCannotBeResolved() {
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    stubInvoiceOrchestrationAvailability();
+  void updatePermitShouldNotChangeApplicationStatusesWhenAnInvoicedPermitIsReactivated() {
+    stubInvoiceOrchestration();
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow("COM")));
     stubTargetMinisterialExemption("EX-700");
     when(repository.updatePermitDetail(
             any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
-    when(repository.findApplicationNumbersByPermitNumberRequired(7000123L))
-        .thenReturn(List.of(1000456L));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("PMT"));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(
-                scaleMutation("101", 1000456L, 7000123L, entryTimestamp),
-                scaleMutation("102", 1000456L, 7000999L, entryTimestamp)));
-    when(repository.findPermitMutationByPermitNumber(7000999L)).thenReturn(Optional.empty());
 
     PermitMutationRpcResponseDto response =
-        service.updatePermit(formCheckRequest("CAN", "42", "Legacy notes"), "idir\\jsmith");
+        service.updatePermit(formCheckRequest("ACT", "42", "Legacy notes"), "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors()).containsExactly("Unable to update linked application statuses.");
-    verify(applicationReviewRepository, never())
-        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
+    assertThat(response.success()).isTrue();
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
   }
 
   @Test
@@ -5005,9 +5222,6 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(List.of(1000456L));
     when(repository.findApplicationStatusCodeByNumber(1000456L))
         .thenReturn(Optional.of("PMT"));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)));
     when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
             1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
         .thenReturn(
@@ -5040,9 +5254,6 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(List.of(1000456L));
     when(repository.findApplicationStatusCodeByNumber(1000456L))
         .thenReturn(Optional.of("PMT"));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)));
     when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
             1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
         .thenReturn(
@@ -5614,12 +5825,16 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updatePermitShouldFailClosedWhenCanadianInvoiceApplicationDateIsMissing() {
+  void updatePermitShouldNameTheSubmitDateWhenCompletionHasNoneToInvoice() {
     PermitMutationRow current =
         withInvoiceContext(permitMutationRow("ACT"), null, "CA", null, null);
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(current));
     stubTargetMinisterialExemption("EX-700");
+    stubInvoiceOrchestrationAvailability();
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
@@ -5627,28 +5842,57 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly("A valid submit date is required to complete a permit.");
-    verify(repository, never()).updatePermitDetail(any(), any(), any());
+        .containsExactly("Enter a submit date on the Permit tab before completing the permit.");
     verify(permitInvoiceOrchestrationService, never()).orchestrate(any(), any());
   }
 
   @Test
-  void updatePermitShouldRejectFutureSubmitDateBeforeCanadianInvoicing() {
-    PermitMutationRow current =
-        withInvoiceContext(
-            permitMutationRow("ACT"), LexisBusinessTime.today().plusDays(1), "CA", null, null);
+  void updatePermitShouldCompleteAMinisterialPermitWhoseExpiryIsAfterTheExemptionExpiry() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(current));
+        .thenReturn(Optional.of(withOrgUnit(permitMutationRow("ACT"), 1903L)));
+    stubTargetMinisterialExemption("EX-700");
+    stubInvoiceOrchestration();
+    stubNonCanadianInvoiceSnapshot(1903L);
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    // The exemption expires on 2026-12-31. Only an active permit must expire within it.
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            withExpiryAndPort(
+                formCheckRequest("COM", "42", "Legacy notes", "RCPT-100", "1903"),
+                "02/01/2027",
+                "VA"),
+            "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().expiryDate()).isEqualTo(LocalDate.of(2027, 2, 1));
+    verify(permitInvoiceOrchestrationService).orchestrate(any(), eq("idir\\jsmith"));
+  }
+
+  @Test
+  void updatePermitShouldStillCheckTheDateRelationshipsWhileThePermitStaysActive() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("ACT")));
     stubTargetMinisterialExemption("EX-700");
 
     PermitMutationRpcResponseDto response =
         service.updatePermit(
-            invoiceMaterialChangeRequest("COM", "CA"), "idir\\jsmith");
+            withExpiryAndPort(
+                formCheckRequest("ACT", "42", "Legacy notes"), "02/01/2027", "VA"),
+            "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors()).contains("Submit date can't be in the future.");
+    assertThat(response.errors())
+        .containsExactly("Expiry date cannot be after the exemption expiry date.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
-    verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -6514,30 +6758,238 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {"COM", "PPD"})
-  void updateShippingShouldAcceptDestinationCountryChangeAfterInvoicing(
+  @ValueSource(strings = {"ACT", "PPD"})
+  void updateShippingShouldRefreshFeesWhenTheCountryChangesOnAnActiveOrPaymentPendingPermit(
       String permitStatus) {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow(permitStatus)));
     stubTargetMinisterialExemption("EX-700");
     when(repository.updatePermitDetail(
-            any(PermitMutationRow.class),
-            eq("idir\\jsmith"),
-            isNull()))
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
         service.updateShipping(
-            updateShippingRequest("2026-06-10", "Destination Co", "CA"),
-            "idir\\jsmith");
+            updateShippingRequest("2026-06-10", "Destination Co", "CA"), "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
     ArgumentCaptor<PermitMutationRow> permitCaptor =
         ArgumentCaptor.forClass(PermitMutationRow.class);
     verify(repository)
         .updatePermitDetail(
-            permitCaptor.capture(), eq("idir\\jsmith"), isNull());
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
     assertThat(permitCaptor.getValue().countryCode()).isEqualTo("CA");
+  }
+
+  @ParameterizedTest
+  @CsvSource({"true,true", "false,false"})
+  void updateShippingShouldRefreshFeesForACompletedPermitOnlyWhenMinistryStaffChangeTheCountry(
+      boolean ministryUser, boolean refreshed) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("COM")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class),
+            eq("idir\\jsmith"),
+            refreshed ? eq(FEE_MASK_EFFECTIVE_DATE) : isNull()))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Destination Co", "CA"),
+            "idir\\jsmith",
+            ministryUser);
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(),
+            eq("idir\\jsmith"),
+            refreshed ? eq(FEE_MASK_EFFECTIVE_DATE) : isNull());
+    assertThat(permitCaptor.getValue().countryCode()).isEqualTo("CA");
+  }
+
+  @Test
+  void updateShippingShouldNeverRefreshFeesForACancelledPermit() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("CAN")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith"), isNull()))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Destination Co", "CA"), "idir\\jsmith", true);
+
+    assertThat(response.success()).isTrue();
+    verify(repository, never())
+        .updatePermitDetail(any(), any(), eq(FEE_MASK_EFFECTIVE_DATE));
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"ACT", "PPD", "COM"})
+  void updateShippingShouldNotRefreshFeesWhenTheCountryIsUnchanged(String permitStatus) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow(permitStatus)));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith"), isNull()))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Destination Co", "us"), "idir\\jsmith", true);
+
+    assertThat(response.success()).isTrue();
+    verify(repository, never())
+        .updatePermitDetail(any(), any(), eq(FEE_MASK_EFFECTIVE_DATE));
+  }
+
+  @Test
+  void updateShippingTwoArgumentFormShouldNotTreatTheCallerAsMinistryStaff() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow("COM")));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith"), isNull()))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Destination Co", "CA"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    verify(repository, never())
+        .updatePermitDetail(any(), any(), eq(FEE_MASK_EFFECTIVE_DATE));
+  }
+
+  @Test
+  void updateShippingShouldRefuseMinistryStaffWhenAnInteriorCompletePermitWouldBecomePaymentPending() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                withOrgUnit(
+                    permitMutationRowWithIssueAndReceipt("COM", LocalDate.of(2026, 3, 16), null),
+                    1903L)));
+    stubTargetMinisterialExemption("EX-700");
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Updated destination"), "idir\\jsmith", true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Fee Receipt Number should not be empty for a complete Permit so it will be saved as Payment Pending.");
+    verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updateShippingShouldSaveASubmitterChangeToAnInteriorCompletePermitAsPaymentPending() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                withOrgUnit(
+                    permitMutationRowWithIssueAndReceipt("COM", LocalDate.of(2026, 3, 16), null),
+                    1903L)));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("bceid\\submitter"), isNull()))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Updated destination"), "bceid\\submitter", false);
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.permitStatus()).isEqualTo("PPD");
+    assertThat(response.warnings())
+        .containsExactly(
+            "Receipt number should not be empty for a complete permit so it will be saved as Payment Pending.");
+    ArgumentCaptor<PermitMutationRow> captor = ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).updatePermitDetail(captor.capture(), eq("bceid\\submitter"), isNull());
+    assertThat(captor.getValue().permitStatusCode()).isEqualTo("PPD");
+    assertThat(captor.getValue().destinationCompanyName()).isEqualTo("Updated destination");
+  }
+
+  @Test
+  void updatePermitShouldSaveShippingChangesAndPaymentPendingForACompleteInteriorPermitWithoutAReceipt() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                withOrgUnit(
+                    permitMutationRowWithIssueAndReceipt("COM", LocalDate.of(2026, 3, 16), null),
+                    1903L)));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            withShipping(
+                formCheckRequest("COM", "42", "Legacy notes", "", "1903"),
+                "test-2026-10-19",
+                "CA",
+                "MV South"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.permitStatus()).isEqualTo("PPD");
+    assertThat(response.warnings())
+        .containsExactly(ProvincialPermitMutationValidator.PAYMENT_PENDING_WARNING);
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().permitStatusCode()).isEqualTo("PPD");
+    assertThat(permitCaptor.getValue().receiptNumber()).isNull();
+    assertThat(permitCaptor.getValue().destinationCompanyName()).isEqualTo("test-2026-10-19");
+    assertThat(permitCaptor.getValue().countryCode()).isEqualTo("CA");
+    assertThat(permitCaptor.getValue().transportName()).isEqualTo("MV South");
+    // Both statuses are invoiced, so the move between them leaves the invoice alone.
+    verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void updateShippingShouldSaveACompletePermitWithoutAReceiptOutsideTheInterior() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                permitMutationRowWithIssueAndReceipt("COM", LocalDate.of(2026, 3, 16), null)));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith"), isNull()))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Updated destination"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.permitStatus()).isEqualTo("COM");
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"ACT", "COM"})
+  void updateShippingShouldSaveAPermitWhoseStoredOverrideFeeIsZero(String permitStatus) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRowWithOverride(permitStatus, 0.0d, null)));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith"), isNull()))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Updated destination"), "idir\\jsmith");
+
+    assertThat(response.errors()).isEmpty();
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(permitCaptor.capture(), eq("idir\\jsmith"), isNull());
+    assertThat(permitCaptor.getValue().overrideFee()).isNull();
   }
 
   @Test
@@ -6957,16 +7409,10 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updateScaleSelectionShouldReconcileAndRecalculateOnceAfterAllChanges() {
+  void updateScaleSelectionShouldRecalculateOnceAfterAllChangesWithoutChangingApplicationStatuses() {
     stubScaleSelection();
     when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
         .thenReturn(true);
-    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("EXE"));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, true, true, "EXE", null));
     when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(
             List.of(
@@ -6981,27 +7427,21 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(result.success()).isTrue();
     assertThat(transactionManager.commits).isEqualTo(1);
     assertThat(transactionManager.rollbacks).isZero();
-    var order = inOrder(repository, applicationReviewRepository);
+    var order = inOrder(repository);
     order.verify(repository, times(2))
         .updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith"));
-    order.verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(
-            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE"));
     order.verify(repository).findScaleDetailsByPermitNumber(7000123L);
     ArgumentCaptor<PermitMutationRow> totals = ArgumentCaptor.forClass(PermitMutationRow.class);
     order.verify(repository).updatePermitDetail(totals.capture(), eq("idir\\jsmith"), eq(null));
     assertThat(totals.getValue().permitVolume()).isEqualTo(3d);
     assertThat(totals.getValue().numberOfPieces()).isEqualTo(4L);
     verify(repository).findPackagesByExemptionNumberRequired("EX-700");
-    verify(repository).findApplicationStatusCodeByNumber(1000456L);
-    verify(repository).findScaleDetailsByPermitNumber(7000123L);
-    verify(repository).updatePermitDetail(any(), eq("idir\\jsmith"), eq(null));
-    verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
   }
 
   @Test
-  void updateScaleSelectionShouldKeepReplacementApplicationPermitted() {
+  void updateScaleSelectionShouldLeaveApplicationStatusesAloneForAReplacementRow() {
     stubScaleSelection();
     when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
         .thenReturn(true);
@@ -7021,7 +7461,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(rows.getAllValues())
         .extracting(ScaleMutationRecord::scaleDetailId, ScaleMutationRecord::exportPermitDetailNumber)
         .containsExactly(tuple("101", null), tuple("102", 7000123L));
-    verify(repository).findApplicationStatusCodeByNumber(1000456L);
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
     verify(repository, never()).findScaleMutationDetailsByApplicationNumber(anyLong());
     verifyNoInteractions(applicationReviewRepository);
     verify(repository).findScaleDetailsByPermitNumber(7000123L);
@@ -7040,7 +7480,6 @@ class OraclePermitDetailsRpcServiceTest {
             List.of(
                 new PackageCandidateRow(1000456L, "PKG-903"),
                 new PackageCandidateRow(1000457L, "PKG-904")));
-    when(repository.findApplicationStatusCodeByNumber(1000457L)).thenReturn(Optional.of("PMT"));
     when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
         .thenReturn(true);
 
@@ -7096,7 +7535,6 @@ class OraclePermitDetailsRpcServiceTest {
                   scaleMutation(
                       id, 1000999L, "PKG-903  ", null, Timestamp.valueOf("2026-01-01 10:00:00"))));
     }
-    when(repository.findApplicationStatusCodeByNumber(1000999L)).thenReturn(Optional.of("PMT"));
     when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
         .thenReturn(true);
 
@@ -7112,7 +7550,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updateScaleSelectionShouldReconcileRemovedApplicationOnceAfterAllRemovals() {
+  void updateScaleSelectionShouldLeaveTheApplicationPermittedWhenItsScalesAreExcluded() {
     permitTotalsUpdateSucceeds();
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow()));
@@ -7124,23 +7562,13 @@ class OraclePermitDetailsRpcServiceTest {
                   scaleMutation(id, 1000456L, 7000123L, Timestamp.valueOf("2026-01-01 10:00:00"))));
     }
     when(repository.updateScaleDetail(any(), eq("idir\\jsmith"))).thenReturn(true);
-    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("PMT"));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, true, true, "PMT", null));
 
     PermitPersistenceRpcResponseDto result =
         service.updateScaleSelection(7000123L, List.of(), List.of("101", "102"), "idir\\jsmith");
 
     assertThat(result.success()).isTrue();
-    var order = inOrder(repository, applicationReviewRepository);
+    var order = inOrder(repository);
     order.verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
-    order.verify(repository).findScaleMutationDetailsByApplicationNumber(1000456L);
-    order.verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(
-            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT"));
     order.verify(repository).findScaleDetailsByPermitNumber(7000123L);
     ArgumentCaptor<PermitMutationRow> totals = ArgumentCaptor.forClass(PermitMutationRow.class);
     order.verify(repository).updatePermitDetail(totals.capture(), eq("idir\\jsmith"), eq(null));
@@ -7148,11 +7576,9 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(totals.getValue().numberOfPieces()).isEqualTo(0L);
     verify(repository, never()).findPackagesByExemptionNumberRequired(any());
     verify(repository, never()).findPackageNumbersByOicPermitNumber(anyLong());
-    verify(repository).findScaleMutationDetailsByApplicationNumber(1000456L);
-    verify(repository).findApplicationStatusCodeByNumber(1000456L);
-    verify(repository).findScaleDetailsByPermitNumber(7000123L);
-    verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
+    verify(repository, never()).findScaleMutationDetailsByApplicationNumber(anyLong());
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
   }
 
   @Test
@@ -7192,29 +7618,6 @@ class OraclePermitDetailsRpcServiceTest {
     verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
     verify(repository, never()).findScaleDetailsByPermitNumber(anyLong());
     verifyNoInteractions(applicationReviewRepository);
-    assertThat(transactionManager.commits).isZero();
-    assertThat(transactionManager.rollbacks).isEqualTo(1);
-  }
-
-  @Test
-  void updateScaleSelectionShouldRollBackWhenFinalReconciliationFails() {
-    stubScaleSelection();
-    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
-        .thenReturn(true);
-    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("EXE"));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE")))
-        .thenReturn(ApplicationReviewRepository.ApplicationStatusTransitionRow.notAllowed("APP"));
-    RecordingTransactionManager transactionManager = new RecordingTransactionManager();
-
-    PermitPersistenceRpcResponseDto result =
-        transactionalService(transactionManager)
-            .updateScaleSelection(7000123L, List.of("101", "102"), List.of(), "idir\\jsmith");
-
-    assertThat(result.success()).isFalse();
-    assertThat(result.errors()).containsExactly("Unable to reconcile application 1000456 status.");
-    verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
-    verify(repository, never()).findScaleDetailsByPermitNumber(anyLong());
     assertThat(transactionManager.commits).isZero();
     assertThat(transactionManager.rollbacks).isEqualTo(1);
   }
@@ -7324,7 +7727,6 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(Optional.of(scaleMutation("102", 1000456L, null, entryTimestamp)));
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("PMT"));
     when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
         .thenReturn(true);
 
@@ -7344,7 +7746,6 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(Optional.of(permitMutationRow()));
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("PMT"));
     for (String id : List.of("101", "102")) {
       when(repository.findScaleMutationById(id))
           .thenReturn(
@@ -7386,13 +7787,6 @@ class OraclePermitDetailsRpcServiceTest {
                     entryTimestamp)));
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("EXE"));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, true, true, "EXE", null));
     when(repository.updateScaleDetail(
             org.mockito.ArgumentMatchers.any(ScaleMutationRecord.class),
             org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
@@ -7427,9 +7821,9 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(scaleCaptor.getValue().exportPermitDetailNumber()).isEqualTo(7000123L);
     assertThat(scaleCaptor.getValue().entryUserId()).isEqualTo("entry-user");
     assertThat(scaleCaptor.getValue().entryTimestamp()).isEqualTo(entryTimestamp);
-    verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(
-            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE"));
+    // Attaching a scale leaves the application's status as it is.
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
 
     org.mockito.ArgumentCaptor<PermitMutationRow> permitCaptor =
         org.mockito.ArgumentCaptor.forClass(PermitMutationRow.class);
@@ -7458,105 +7852,6 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updateScaleAttachmentShouldPreserveAlreadyPermittedApplicationStatus() {
-    permitTotalsUpdateSucceeds();
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findScaleMutationById("101"))
-        .thenReturn(Optional.of(scaleMutation("101", 1000456L, null, entryTimestamp)));
-    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("PMT"));
-    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
-        .thenReturn(true);
-    when(repository.findScaleDetailsByPermitNumber(7000123L))
-        .thenReturn(
-            List.of(
-                scale("101", "TM1", "HEM", "J", 34.5d, 12L, "7000123", "PKG-903")));
-
-    PermitPersistenceRpcResponseDto response =
-        service.updateScaleAttachment("101", 7000123L, true, "idir\\jsmith");
-
-    assertThat(response.success()).isTrue();
-    verify(applicationReviewRepository, never())
-        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
-  }
-
-  @Test
-  void updateScaleAttachmentShouldRejectApplicationOutsideExemptedOrPermittedStatus() {
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findScaleMutationById("101"))
-        .thenReturn(Optional.of(scaleMutation("101", 1000456L, null, entryTimestamp)));
-    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("APP"));
-
-    PermitPersistenceRpcResponseDto response =
-        service.updateScaleAttachment("101", 7000123L, true, "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Application 1000456 must be exempted or permitted before a scale can be added to a permit.");
-    verify(repository, never()).updateScaleDetail(any(), any());
-    verify(applicationReviewRepository, never())
-        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
-  }
-
-  @Test
-  void updateScaleAttachmentShouldRejectMissingApplicationStatus() {
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findScaleMutationById("101"))
-        .thenReturn(Optional.of(scaleMutation("101", 1000456L, null, entryTimestamp)));
-    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.empty());
-
-    PermitPersistenceRpcResponseDto response =
-        service.updateScaleAttachment("101", 7000123L, true, "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly("Application 1000456 status could not be verified.");
-    verify(repository, never()).updateScaleDetail(any(), any());
-  }
-
-  @Test
-  void updateScaleAttachmentShouldFailWhenExemptedStatusChangesConcurrently() {
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findScaleMutationById("101"))
-        .thenReturn(Optional.of(scaleMutation("101", 1000456L, null, entryTimestamp)));
-    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
-        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("EXE"));
-    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
-        .thenReturn(true);
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE")))
-        .thenReturn(
-            ApplicationReviewRepository.ApplicationStatusTransitionRow.notAllowed("APP"));
-
-    PermitPersistenceRpcResponseDto response =
-        service.updateScaleAttachment("101", 7000123L, true, "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly("Unable to reconcile application 1000456 status.");
-    verify(repository, never()).findScaleDetailsByPermitNumber(7000123L);
-  }
-
-  @Test
   void updateScaleAttachmentShouldDetachScaleAndRecalculatePermitTotals() {
     permitTotalsUpdateSucceeds();
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
@@ -7581,15 +7876,6 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(true);
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(List.of());
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("PMT"));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, true, true, "PMT", null));
     when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(List.of(scale("102", "TM2", "CED", "B", 8.25d, 4L, "7000123", "PKG-903")));
 
@@ -7608,9 +7894,10 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(scaleCaptor.getValue().exportPermitDetailNumber()).isNull();
     assertThat(scaleCaptor.getValue().entryUserId()).isEqualTo("entry-user");
     assertThat(scaleCaptor.getValue().entryTimestamp()).isEqualTo(entryTimestamp);
-    verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(
-            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT"));
+    // Detaching a scale leaves the application's status as it is.
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verify(repository, never()).findScaleMutationDetailsByApplicationNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
 
     org.mockito.ArgumentCaptor<PermitMutationRow> permitCaptor =
         org.mockito.ArgumentCaptor.forClass(PermitMutationRow.class);
@@ -7619,58 +7906,6 @@ class OraclePermitDetailsRpcServiceTest {
             permitCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"), org.mockito.ArgumentMatchers.isNull());
     assertThat(permitCaptor.getValue().permitVolume()).isEqualTo(8.25d);
     assertThat(permitCaptor.getValue().numberOfPieces()).isEqualTo(4L);
-  }
-
-  @Test
-  void updateScaleAttachmentShouldPreservePermittedStatusWithAnotherPermitLink() {
-    permitTotalsUpdateSucceeds();
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findScaleMutationById("101"))
-        .thenReturn(
-            Optional.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)));
-    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
-        .thenReturn(true);
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(scaleMutation("102", 1000456L, 7000999L, entryTimestamp)));
-    when(repository.findPermitMutationByPermitNumber(7000999L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("PMT"));
-    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
-
-    PermitPersistenceRpcResponseDto response =
-        service.updateScaleAttachment("101", 7000123L, false, "idir\\jsmith");
-
-    assertThat(response.success()).isTrue();
-    verify(repository).findApplicationStatusCodeByNumber(1000456L);
-    verify(applicationReviewRepository, never())
-        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
-  }
-
-  @Test
-  void updateScaleAttachmentShouldPropagatePostDetachRelationshipLookupOutage() {
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    DataRetrievalFailureException failure =
-        new DataRetrievalFailureException("Oracle unavailable");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findScaleMutationById("101"))
-        .thenReturn(
-            Optional.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)));
-    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
-        .thenReturn(true);
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenThrow(failure);
-
-    assertThatThrownBy(
-            () -> service.updateScaleAttachment("101", 7000123L, false, "idir\\jsmith"))
-        .isSameAs(failure);
-
-    verify(repository).updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith"));
-    verify(repository, never()).findScaleDetailsByPermitNumber(7000123L);
   }
 
   @Test
@@ -7826,11 +8061,14 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void addApplicationsToPermitShouldPreflightEveryStatusBeforeWritingScales() {
+  void addApplicationsToPermitShouldAddApplicationsInAnyStatusAndSetThemPermitted() {
+    permitTotalsUpdateSucceeds();
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow()));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(1000456L, 1000457L));
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .thenReturn(
             List.of(
@@ -7847,21 +8085,31 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(Optional.of("EXE"));
     when(repository.findApplicationStatusCodeByNumber(1000457L))
         .thenReturn(Optional.of("APP"));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
+            anyLong(), eq("PMT"), isNull(), eq("idir\\jsmith"), any()))
+        .thenReturn(
+            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
+                true, true, true, "EXE", null));
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
 
     PermitPersistenceRpcResponseDto response =
         service.addApplicationsToPermit(7000123L, "1000456,1000457", "idir\\jsmith");
 
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Application 1000457 must be exempted or permitted before it can be added to a permit.");
-    verify(repository, never()).updateScaleDetail(any(), any());
-    verify(applicationReviewRepository, never())
-        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
+    assertThat(response.success()).isTrue();
+    assertThat(response.message()).isEqualTo("Application scale rows were added to the permit.");
+    verify(repository, times(2)).updateScaleDetail(any(), eq("idir\\jsmith"));
+    verify(applicationReviewRepository)
+        .updateStatusWithRemarkFromAllowedSources(
+            1000456L, "PMT", null, "idir\\jsmith", List.of("EXE"));
+    verify(applicationReviewRepository)
+        .updateStatusWithRemarkFromAllowedSources(
+            1000457L, "PMT", null, "idir\\jsmith", List.of("APP"));
   }
 
   @Test
-  void addApplicationsToPermitShouldRejectMissingApplicationStatusBeforeWriting() {
+  void addApplicationsToPermitShouldFailWhenTheAttachedApplicationStatusCannotBeRead() {
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow()));
@@ -7872,37 +8120,143 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(List.of(scaleMutation("101", 1000456L, null, entryTimestamp)));
     when(repository.findApplicationStatusCodeByNumber(1000456L))
         .thenReturn(Optional.empty());
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
 
     PermitPersistenceRpcResponseDto response =
         service.addApplicationsToPermit(7000123L, "1000456", "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly("Application 1000456 status could not be verified.");
-    verify(repository, never()).updateScaleDetail(any(), any());
+        .containsExactly("Unable to reconcile application 1000456 status.");
+    verify(repository, never()).findScaleDetailsByPermitNumber(7000123L);
   }
 
   @Test
-  void addApplicationsToPermitShouldFailWhenEligibilityDisappearsBeforeWriting() {
+  void addApplicationsToPermitShouldLeaveAnApplicationWithNothingToAttachAlone() {
+    permitTotalsUpdateSucceeds();
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(permitMutationRow()));
     when(repository.findPackagesByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
     when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(scaleMutation("101", 1000456L, null, entryTimestamp)),
-            List.of(scaleMutation("101", 1000456L, 7000999L, entryTimestamp)));
+        .thenReturn(List.of(scaleMutation("101", 1000456L, 7000999L, entryTimestamp)));
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
 
     PermitPersistenceRpcResponseDto response =
         service.addApplicationsToPermit(7000123L, "1000456", "idir\\jsmith");
 
+    assertThat(response.success()).isTrue();
+    assertThat(response.message())
+        .isEqualTo("The selected applications have no unassigned scale rows to add to the permit.");
+    verify(repository, never()).updateScaleDetail(any(), any());
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
+  }
+
+  @Test
+  void addApplicationsToPermitShouldStillAddTheOtherApplicationsWhenOneHasNothingToAttach() {
+    permitTotalsUpdateSucceeds();
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+    when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(1000456L, 1000457L));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(1000456L, "PKG-903"),
+                new PackageCandidateRow(1000457L, "PKG-904")));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleMutation("101", 1000456L, 7000999L, entryTimestamp)));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000457L))
+        .thenReturn(
+            List.of(scaleMutation("102", 1000457L, "PKG-904", null, entryTimestamp)));
+    when(repository.findApplicationStatusCodeByNumber(1000457L))
+        .thenReturn(Optional.of("EXE"));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
+            1000457L, "PMT", null, "idir\\jsmith", List.of("EXE")))
+        .thenReturn(
+            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
+                true, true, true, "EXE", null));
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
+
+    PermitPersistenceRpcResponseDto response =
+        service.addApplicationsToPermit(7000123L, "1000456,1000457", "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    verify(repository, times(1)).updateScaleDetail(any(), eq("idir\\jsmith"));
+    verify(repository, never()).findApplicationStatusCodeByNumber(1000456L);
+    verify(applicationReviewRepository, times(1))
+        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
+  }
+
+  @Test
+  void addApplicationsToPermitShouldRefuseAnApplicationOutsideThePermitExemption() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
+
+    PermitPersistenceRpcResponseDto response =
+        service.addApplicationsToPermit(7000123L, "1000456,1009999", "idir\\jsmith");
+
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .containsExactly(
-            "Application 1000456 is no longer eligible to be added to this permit.");
-    verify(repository, never()).findApplicationStatusCodeByNumber(1000456L);
+        .containsExactly("Applications are not eligible for this permit: 1009999.");
     verify(repository, never()).updateScaleDetail(any(), any());
+  }
+
+  @Test
+  void addApplicationsToPermitShouldTakeTheOwnerAndAgentFromTheFirstPackageApplication() {
+    permitTotalsUpdateSucceeds();
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("O"));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(new PackageCandidateRow(1000456L, "PKG-903")));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleMutation("101", 1000456L, null, entryTimestamp)));
+    when(repository.findApplicationStatusCodeByNumber(1000456L))
+        .thenReturn(Optional.of("PMT"));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-903", 1000456L)));
+    when(repository.findApplicationInfoByNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                permitCreationApplication(
+                    1000456L,
+                    "EX-700",
+                    1835L,
+                    "00077999",
+                    "05",
+                    "00077998",
+                    "06",
+                    "T",
+                    "S")));
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
+
+    PermitPersistenceRpcResponseDto response =
+        service.addApplicationsToPermit(7000123L, "1000456", "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor = ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository, atLeastOnce())
+        .updatePermitDetail(permitCaptor.capture(), eq("idir\\jsmith"), isNull());
+    assertThat(permitCaptor.getAllValues())
+        .anySatisfy(
+            row -> {
+              assertThat(row.clientNumber()).isEqualTo("00077999");
+              assertThat(row.clientLocationCode()).isEqualTo("05");
+              assertThat(row.agentNumber()).isEqualTo("00077998");
+              assertThat(row.agentLocationCode()).isEqualTo("06");
+            });
   }
 
   @Test
@@ -7946,8 +8300,6 @@ class OraclePermitDetailsRpcServiceTest {
             List.of(
                 scaleMutation("101", 1000456L, null, entryTimestamp),
                 scaleMutation("102", 1000456L, null, entryTimestamp)));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("EXE"));
     when(repository.updateScaleDetail(
             org.mockito.ArgumentMatchers.any(ScaleMutationRecord.class),
             org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
@@ -7969,7 +8321,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void removeApplicationFromPermitShouldPreservePermittedStatusWithOneRemainingPermitLink() {
+  void removeApplicationFromPermitShouldDetachTheScaleRowsWithoutChangingTheApplicationStatus() {
     permitTotalsUpdateSucceeds();
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
     when(repository.findPermitMutationByPermitNumber(7000123L))
@@ -7979,12 +8331,7 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(
             List.of(
                 scaleMutation("101", 1000456L, 7000123L, entryTimestamp),
-                scaleMutation("102", 1000456L, 7000999L, entryTimestamp)),
-            List.of(scaleMutation("102", 1000456L, 7000999L, entryTimestamp)));
-    when(repository.findPermitMutationByPermitNumber(7000999L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("PMT"));
+                scaleMutation("102", 1000456L, 7000999L, entryTimestamp)));
     when(repository.updateScaleDetail(
             org.mockito.ArgumentMatchers.any(ScaleMutationRecord.class),
             org.mockito.ArgumentMatchers.eq("idir\\jsmith")))
@@ -8004,18 +8351,15 @@ class OraclePermitDetailsRpcServiceTest {
             scaleCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
     assertThat(scaleCaptor.getValue().scaleDetailId()).isEqualTo("101");
     assertThat(scaleCaptor.getValue().exportPermitDetailNumber()).isNull();
-    verify(applicationReviewRepository, never())
-        .updateStatusWithRemarkFromAllowedSources(
-            org.mockito.ArgumentMatchers.anyLong(),
-            org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.any(),
-            org.mockito.ArgumentMatchers.anyString(),
-            org.mockito.ArgumentMatchers.any());
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
+    // Detaching an application refreshes the totals without the fee mask date.
+    verify(repository, never()).updatePermitDetail(any(), any(), eq(FEE_MASK_EFFECTIVE_DATE));
   }
 
   @ParameterizedTest
   @ValueSource(strings = {"ACT", "PPD"})
-  void removeApplicationFromPermitShouldRestoreExemptedStatusWithZeroRemainingPermitLinks(
+  void removeApplicationFromPermitShouldNotRevertThePermittedStatusOfTheLastDetachedApplication(
       String permitStatus) {
     permitTotalsUpdateSucceeds();
     Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
@@ -8023,26 +8367,59 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(Optional.of(permitMutationRow(permitStatus)));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
     when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)),
-            List.of(scaleMutation("101", 1000456L, null, entryTimestamp)));
+        .thenReturn(List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)));
     when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
         .thenReturn(true);
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("PMT"));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, true, true, "PMT", null));
 
     PermitPersistenceRpcResponseDto response =
         service.removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
-    verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(
-            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT"));
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
+  }
+
+  @Test
+  void removeApplicationFromPermitShouldTakeTheOwnerAndAgentFromTheFirstRemainingApplication() {
+    permitTotalsUpdateSucceeds();
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("O"));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
+        .thenReturn(List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-904", 1000457L)));
+    when(repository.findApplicationInfoByNumber(1000457L))
+        .thenReturn(
+            Optional.of(
+                permitCreationApplication(
+                    1000457L,
+                    "EX-700",
+                    1835L,
+                    "00077881",
+                    "01",
+                    null,
+                    null,
+                    "T",
+                    "S")));
+
+    PermitPersistenceRpcResponseDto response =
+        service.removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor = ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository, atLeastOnce())
+        .updatePermitDetail(permitCaptor.capture(), eq("idir\\jsmith"), isNull());
+    assertThat(permitCaptor.getAllValues())
+        .anySatisfy(
+            row -> {
+              assertThat(row.clientNumber()).isEqualTo("00077881");
+              assertThat(row.agentNumber()).isNull();
+              assertThat(row.agentLocationCode()).isNull();
+            });
   }
 
   @ParameterizedTest
@@ -8078,153 +8455,6 @@ class OraclePermitDetailsRpcServiceTest {
         .containsExactly(
             "Applications cannot be added to a completed, payment-pending, expired, or cancelled permit.");
     verify(repository, never()).updateScaleDetail(any(), any());
-  }
-
-  @Test
-  void removeApplicationFromPermitShouldFailClosedForAnUnexpectedApplicationStatus() {
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)),
-            List.of(scaleMutation("101", 1000456L, null, entryTimestamp)));
-    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
-        .thenReturn(true);
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("APP"));
-
-    PermitPersistenceRpcResponseDto response =
-        service.removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly("Unable to reconcile application 1000456 status.");
-    verify(applicationReviewRepository, never())
-        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
-    verify(repository, never()).findScaleDetailsByPermitNumber(7000123L);
-  }
-
-  @Test
-  void removeApplicationFromPermitShouldRestoreExemptedStatusWhenOnlyInactiveLinksRemain() {
-    permitTotalsUpdateSucceeds();
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    ScaleMutationRow inactiveRelationship =
-        scaleMutation("102", 1000456L, 7000999L, entryTimestamp);
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(
-                scaleMutation("101", 1000456L, 7000123L, entryTimestamp),
-                inactiveRelationship),
-            List.of(inactiveRelationship));
-    when(repository.findPermitMutationByPermitNumber(7000999L))
-        .thenReturn(Optional.of(permitMutationRow("CAN")));
-    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
-        .thenReturn(true);
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("PMT"));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, true, true, "PMT", null));
-
-    PermitPersistenceRpcResponseDto response =
-        service.removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith");
-
-    assertThat(response.success()).isTrue();
-    verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(
-            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT"));
-  }
-
-  @Test
-  void removeApplicationFromPermitShouldPreservePermittedStatusWithMultipleRemainingPermitLinks() {
-    permitTotalsUpdateSucceeds();
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    ScaleMutationRow firstRemaining =
-        scaleMutation("102", 1000456L, 7000999L, entryTimestamp);
-    ScaleMutationRow secondRemaining =
-        scaleMutation("103", 1000456L, 7000888L, entryTimestamp);
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("M"));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(
-                scaleMutation("101", 1000456L, 7000123L, entryTimestamp),
-                firstRemaining,
-                secondRemaining),
-            List.of(firstRemaining, secondRemaining));
-    when(repository.findPermitMutationByPermitNumber(7000999L))
-        .thenReturn(Optional.of(permitMutationRow("ACT")));
-    when(repository.findPermitMutationByPermitNumber(7000888L))
-        .thenReturn(Optional.of(permitMutationRow("CAN")));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("PMT"));
-    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
-        .thenReturn(true);
-
-    PermitPersistenceRpcResponseDto response =
-        service.removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith");
-
-    assertThat(response.success()).isTrue();
-    verify(applicationReviewRepository, never())
-        .updateStatusWithRemarkFromAllowedSources(
-            anyLong(), any(), any(), any(), any());
-  }
-
-  @Test
-  void removeApplicationFromPermitShouldFailWhenPermittedStatusChangesConcurrently() {
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(
-            List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)),
-            List.of(scaleMutation("101", 1000456L, null, entryTimestamp)));
-    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
-        .thenReturn(true);
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("PMT"));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000456L, "EXE", null, "idir\\jsmith", List.of("PMT")))
-        .thenReturn(
-            ApplicationReviewRepository.ApplicationStatusTransitionRow.notAllowed("APP"));
-
-    PermitPersistenceRpcResponseDto response =
-        service.removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly("Unable to reconcile application 1000456 status.");
-    verify(repository, never()).findScaleDetailsByPermitNumber(7000123L);
-  }
-
-  @Test
-  void removeApplicationFromPermitShouldPropagateRequiredPostRemovalLookupOutage() {
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    DataRetrievalFailureException failure =
-        new DataRetrievalFailureException("Oracle unavailable");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(permitMutationRow()));
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L))
-        .thenReturn(List.of(scaleMutation("101", 1000456L, 7000123L, entryTimestamp)))
-        .thenThrow(failure);
-    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
-        .thenReturn(true);
-
-    assertThatThrownBy(
-            () -> service.removeApplicationFromPermit(7000123L, 1000456L, "idir\\jsmith"))
-        .isSameAs(failure);
-
-    verify(applicationReviewRepository, never())
-        .updateStatusWithRemarkFromAllowedSources(anyLong(), any(), any(), any(), any());
-    verify(repository, never()).findScaleDetailsByPermitNumber(7000123L);
   }
 
   @Test
@@ -8272,7 +8502,8 @@ class OraclePermitDetailsRpcServiceTest {
         .thenReturn(Optional.of(blanketOicPermitMutationRowWithStatus(permitStatus)));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
     when(repository.findPackageNumbersByOicPermitNumber(7000123L)).thenReturn(List.of("PKG-903  "));
-    when(repository.isValidBoicTimberMarkRequired("TM3", "EX-700")).thenReturn(true);
+    when(repository.findValidBoicTimberMarkRequired("TM3", "EX-700"))
+        .thenReturn(Optional.of(boicTimberMark("ACT", "B01")));
     when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
     when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903  ")).thenReturn(List.of());
@@ -8282,13 +8513,6 @@ class OraclePermitDetailsRpcServiceTest {
                 new PackageDetailsRow(
                     "PKG-903  ", 100.0d, 10.0d, 20.0d, "ACT", null, "N", "S")));
     stubOicApplicationBinding("EX-700");
-    when(repository.findApplicationStatusCodeByNumber(1000999L))
-        .thenReturn(Optional.of("EXE"));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000999L, "PMT", null, "idir\\jsmith", List.of("EXE")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, true, true, "EXE", null));
     when(repository.findFixedExemptionRate("EX-700")).thenReturn(Optional.of(BigDecimal.valueOf(2.5d)));
     when(repository.insertBoicScaleDetail(
             org.mockito.ArgumentMatchers.any(BoicScaleMutationRecord.class)))
@@ -8322,9 +8546,9 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(scaleCaptor.getValue().applicationNumber()).isEqualTo(1000999L);
     assertThat(scaleCaptor.getValue().exportPermitDetailNumber()).isEqualTo(7000123L);
     assertThat(scaleCaptor.getValue().exemptionOverrideRate()).isEqualTo(2.5d);
-    verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(
-            1000999L, "PMT", null, "idir\\jsmith", List.of("EXE"));
+    // The hidden application keeps its status when a scale is added.
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
 
     org.mockito.ArgumentCaptor<PermitMutationRow> permitCaptor =
         org.mockito.ArgumentCaptor.forClass(PermitMutationRow.class);
@@ -8342,7 +8566,8 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
     when(repository.findPackageNumbersByOicPermitNumber(7000123L))
         .thenReturn(List.of("PKG-903"));
-    when(repository.isValidBoicTimberMarkRequired("TM3", "EX-700")).thenReturn(true);
+    when(repository.findValidBoicTimberMarkRequired("TM3", "EX-700"))
+        .thenReturn(Optional.of(boicTimberMark("ACT", "B01")));
     when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
     when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
@@ -8353,8 +8578,6 @@ class OraclePermitDetailsRpcServiceTest {
                 new PackageDetailsRow(
                     "PKG-903", 100.0d, 10.0d, 20.0d, "ACT", null, "N", "S")));
     stubOicApplicationBinding("EX-700");
-    when(repository.findApplicationStatusCodeByNumber(1000999L))
-        .thenReturn(Optional.of("EXE"));
     when(repository.findFixedExemptionRate("EX-700"))
         .thenReturn(Optional.of(BigDecimal.valueOf(2.5d)));
     when(repository.insertBoicScaleDetail(any(BoicScaleMutationRecord.class)))
@@ -8390,7 +8613,8 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
     when(repository.findPackageNumbersByOicPermitNumber(7000123L))
         .thenReturn(List.of("PKG-903"));
-    when(repository.isValidBoicTimberMarkRequired("TM3", "EX-700")).thenReturn(true);
+    when(repository.findValidBoicTimberMarkRequired("TM3", "EX-700"))
+        .thenReturn(Optional.of(boicTimberMark("ACT", "B01")));
     when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
     when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
@@ -8401,8 +8625,6 @@ class OraclePermitDetailsRpcServiceTest {
                 new PackageDetailsRow(
                     "PKG-903", 100.0d, 10.0d, 20.0d, "ACT", null, "N", "S")));
     stubOicApplicationBinding("EX-700");
-    when(repository.findApplicationStatusCodeByNumber(1000999L))
-        .thenReturn(Optional.of("EXE"));
     when(repository.findFixedExemptionRate("EX-700"))
         .thenReturn(Optional.of(BigDecimal.valueOf(2.5d)));
     when(repository.insertBoicScaleDetail(any(BoicScaleMutationRecord.class)))
@@ -8448,7 +8670,8 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
     when(repository.findPackageNumbersByOicPermitNumber(7000123L))
         .thenReturn(List.of("PKG-903"));
-    when(repository.isValidBoicTimberMarkRequired("TM3", "EX-700")).thenReturn(true);
+    when(repository.findValidBoicTimberMarkRequired("TM3", "EX-700"))
+        .thenReturn(Optional.of(boicTimberMark("ACT", "B01")));
     when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
     when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
@@ -8474,56 +8697,13 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void addBlanketOicScaleShouldFailWhenHiddenApplicationStatusChangesConcurrently() {
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
-    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
-    when(repository.findPackageNumbersByOicPermitNumber(7000123L))
-        .thenReturn(List.of("PKG-903"));
-    when(repository.isValidBoicTimberMarkRequired("TM3", "EX-700")).thenReturn(true);
-    when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
-    when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
-    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
-    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
-    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
-        .thenReturn(
-            Optional.of(
-                new PackageDetailsRow(
-                    "PKG-903", 100.0d, 10.0d, 20.0d, "ACT", null, "N", "S")));
-    stubOicApplicationBinding("EX-700");
-    when(repository.findApplicationStatusCodeByNumber(1000999L))
-        .thenReturn(Optional.of("EXE"));
-    when(repository.findFixedExemptionRate("EX-700"))
-        .thenReturn(Optional.of(BigDecimal.valueOf(2.5d)));
-    when(repository.insertBoicScaleDetail(any(BoicScaleMutationRecord.class)))
-        .thenReturn(
-            Optional.of(
-                scale(
-                    "103", "TM3", "HE", "A", 12.5d, 7L, "7000123", "PKG-903", 1000999L)));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000999L, "PMT", null, "idir\\jsmith", List.of("EXE")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, false, false, "PMT", null));
-
-    PermitPersistenceRpcResponseDto response =
-        service.addBlanketOicScale(
-            7000123L, "PKG-903", "TM3", "12.5", 7L, "HE", "A", "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly("Unable to reconcile the hidden OIC application status.");
-    verify(repository, never()).updatePermitDetail(any(), any(), any());
-  }
-
-  @Test
   void addBlanketOicScaleShouldRejectInvalidTimberMarkForExemption() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
     when(repository.findPackageNumbersByOicPermitNumber(7000123L))
         .thenReturn(List.of("PKG-903"));
-    when(repository.isValidBoicTimberMarkRequired("TM3", "EX-700")).thenReturn(false);
+    when(repository.findValidBoicTimberMarkRequired("TM3", "EX-700")).thenReturn(Optional.empty());
     when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
     when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
@@ -8554,7 +8734,8 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
     when(repository.findPackageNumbersByOicPermitNumber(7000123L))
         .thenReturn(List.of("PKG-903"));
-    when(repository.isValidBoicTimberMarkRequired("TM3", "EX-700")).thenReturn(true);
+    when(repository.findValidBoicTimberMarkRequired("TM3", "EX-700"))
+        .thenReturn(Optional.of(boicTimberMark("ACT", "B01")));
     when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
     when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
     when(repository.findScaleDetailsByPackageNumber("PKG-903"))
@@ -8597,9 +8778,13 @@ class OraclePermitDetailsRpcServiceTest {
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
-        .contains(
-            "The scale pieces must be less than 999999999.",
-            "The scale volume must be less than 99999.9.");
+        .satisfiesExactly(
+            error ->
+                assertThat(error)
+                    .matches("The scale pieces must be less than( or equal to)? 999999999\\."),
+            error ->
+                assertThat(error)
+                    .matches("The scale volume must be less than( or equal to)? 99999\\.9\\."));
     verify(repository, never()).findPermitMutationByPermitNumber(org.mockito.ArgumentMatchers.anyLong());
   }
 
@@ -8621,8 +8806,8 @@ class OraclePermitDetailsRpcServiceTest {
 
   @ParameterizedTest
   @ValueSource(strings = {"ACT", "PPD"})
-  void deleteBlanketOicScaleShouldRemoveScaleAndRecalculatePermitTotals(String permitStatus) {
-    permitTotalsUpdateSucceeds();
+  void deleteBlanketOicScaleShouldRemoveTheScaleAndRefreshTheTotalsWithTheFeeMaskDate(
+      String permitStatus) {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRowWithStatus(permitStatus)));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
@@ -8643,16 +8828,10 @@ class OraclePermitDetailsRpcServiceTest {
                     Timestamp.valueOf("2026-01-01 10:00:00"))));
     stubOicApplicationBinding("EX-700");
     when(repository.deleteScaleDetailById("103", "idir\\jsmith")).thenReturn(true);
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000999L))
-        .thenReturn(List.of());
-    when(repository.findApplicationStatusCodeByNumber(1000999L))
-        .thenReturn(Optional.of("PMT"));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000999L, "EXE", null, "idir\\jsmith", List.of("PMT")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, true, true, "PMT", null));
     when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
 
     PermitPersistenceRpcResponseDto response =
         service.deleteBlanketOicScale("103", 7000123L, "idir\\jsmith");
@@ -8660,42 +8839,14 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isTrue();
     assertThat(response.message()).isEqualTo("Blanket OIC scale detail was removed.");
     verify(repository).deleteScaleDetailById("103", "idir\\jsmith");
-    verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(
-            1000999L, "EXE", null, "idir\\jsmith", List.of("PMT"));
-  }
-
-  @Test
-  void deleteBlanketOicScaleShouldRestorePermittedStatusWhenAnEffectiveLinkRemains() {
-    permitTotalsUpdateSucceeds();
-    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
-    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
-    when(repository.findScaleMutationById("103"))
-        .thenReturn(
-            Optional.of(scaleMutation("103", 1000999L, 7000123L, entryTimestamp)));
-    stubOicApplicationBinding("EX-700");
-    when(repository.deleteScaleDetailById("103", "idir\\jsmith")).thenReturn(true);
-    when(repository.findScaleMutationDetailsByApplicationNumber(1000999L))
-        .thenReturn(
-            List.of(scaleMutation("104", 1000999L, 7000123L, entryTimestamp)));
-    when(repository.findApplicationStatusCodeByNumber(1000999L))
-        .thenReturn(Optional.of("EXE"));
-    when(applicationReviewRepository.updateStatusWithRemarkFromAllowedSources(
-            1000999L, "PMT", null, "idir\\jsmith", List.of("EXE")))
-        .thenReturn(
-            new ApplicationReviewRepository.ApplicationStatusTransitionRow(
-                true, true, true, "EXE", null));
-    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
-
-    PermitPersistenceRpcResponseDto response =
-        service.deleteBlanketOicScale("103", 7000123L, "idir\\jsmith");
-
-    assertThat(response.success()).isTrue();
-    verify(applicationReviewRepository)
-        .updateStatusWithRemarkFromAllowedSources(
-            1000999L, "PMT", null, "idir\\jsmith", List.of("EXE"));
+    ArgumentCaptor<PermitMutationRow> totals = ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(totals.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(totals.getValue().permitVolume()).isZero();
+    assertThat(totals.getValue().numberOfPieces()).isZero();
+    // The hidden application keeps its status when a scale is deleted.
+    verify(repository, never()).findApplicationStatusCodeByNumber(anyLong());
+    verifyNoInteractions(applicationReviewRepository);
   }
 
   @Test
@@ -8728,6 +8879,10 @@ class OraclePermitDetailsRpcServiceTest {
         .containsExactly(
             "The hidden OIC application does not belong to this permit's exemption.");
     verify(repository, never()).deleteScaleDetailById(any(), any());
+  }
+
+  private BoicTimberMarkRow boicTimberMark(String markStatus, String fileTypeCode) {
+    return new BoicTimberMarkRow("TM3", markStatus, fileTypeCode);
   }
 
   private void permitTotalsUpdateSucceeds() {
@@ -8802,31 +8957,59 @@ class OraclePermitDetailsRpcServiceTest {
 
   private PermitCorePackageContextRow coreContext(
       String packageNumber, Long applicationNumber, boolean assignedToPermit) {
+    return coreContext(packageNumber, applicationNumber, assignedToPermit, "S", "S");
+  }
+
+  // An application growth of "MISSING" leaves the context without its application row.
+  private PermitCorePackageContextRow coreContext(
+      String packageNumber,
+      Long applicationNumber,
+      boolean assignedToPermit,
+      String applicationGrowth,
+      String packageGrowth) {
     ApplicationInfoRow applicationInfo =
-        new ApplicationInfoRow(
-            applicationNumber,
-            "EX-700",
-            1835L,
-            "Coast Region",
-            "T",
-            "S",
-            null,
-            "00000001",
-            "00",
-            "00000002",
-            "00",
-            "N");
+        "MISSING".equals(applicationGrowth)
+            ? null
+            : new ApplicationInfoRow(
+                applicationNumber,
+                "EX-700",
+                1835L,
+                "Coast Region",
+                "T",
+                applicationGrowth,
+                null,
+                "00000001",
+                "00",
+                "00000002",
+                "00",
+                "N");
     return new PermitCorePackageContextRow(
-        corePackage(packageNumber, applicationNumber),
+        new PermitCorePackageRow(
+            packageNumber,
+            applicationNumber,
+            10.0d,
+            5.0d,
+            2.0d,
+            "ACT",
+            "",
+            "N",
+            packageGrowth,
+            "T"),
         applicationInfo,
         "P",
         "M",
         "Unmanufactured Timber",
         "Unmanufactured Timber",
-        "Second Growth",
-        "Second Growth",
+        growthDescription(applicationGrowth),
+        growthDescription(packageGrowth),
         "Active",
         assignedToPermit);
+  }
+
+  private static String growthDescription(String growthTypeCode) {
+    return "O".equals(growthTypeCode)
+        ? "Old Growth"
+        : "S".equals(growthTypeCode) ? "Second Growth" : null;
   }
 
   private PermitCoreScaleRow coreScale(PermitScaleDetailRow scale) {
@@ -9423,6 +9606,47 @@ class OraclePermitDetailsRpcServiceTest {
         request.overrideComment());
   }
 
+  private PermitMutationRequestDto withShipping(
+      PermitMutationRequestDto request,
+      String destinationCompanyName,
+      String destinationCountry,
+      String transportName) {
+    return new PermitMutationRequestDto(
+        request.permitNumber(),
+        request.permitStatus(),
+        request.permitSubmitDate(),
+        request.permitIssueDate(),
+        request.permitExpiryDate(),
+        request.permitRequestDate(),
+        request.exemptionNumber(),
+        destinationCompanyName,
+        destinationCountry,
+        request.transportType(),
+        transportName,
+        request.estimatedShippingDate(),
+        request.portOfExport(),
+        request.otherPortOfExport(),
+        request.permitReceiptNo(),
+        request.permitRemarks(),
+        request.permitGrowthType(),
+        request.permitTotalVolume(),
+        request.permitNumberOfPieces(),
+        request.orgUnitNumber(),
+        request.ownerClientNumber(),
+        request.ownerClientLocation(),
+        request.agentClientNumber(),
+        request.agentClientLocation(),
+        request.oicApplicationNumber(),
+        request.oicRegion(),
+        request.oicPermitTotalPieces(),
+        request.oicPermitTotalVolume(),
+        request.packageAgeClass(),
+        request.packageProductType(),
+        request.overrideInd(),
+        request.overrideFee(),
+        request.overrideComment());
+  }
+
   private PermitMutationRequestDto withClientLocations(
       PermitMutationRequestDto request, String ownerClientLocation, String agentClientLocation) {
     return new PermitMutationRequestDto(
@@ -9523,7 +9747,6 @@ class OraclePermitDetailsRpcServiceTest {
     stubPermitCreationExemption("EX-700", "O", "ACT", null, null);
     when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(1000456L));
-    when(repository.findApplicationStatusCodeByNumber(1000456L)).thenReturn(Optional.of("EXE"));
     when(repository.findApplicationInfoByNumber(1000456L))
         .thenReturn(Optional.of(permitCreationApplication()));
     lenient().when(repository.findGrowthTypeDescription("S"))
@@ -9544,8 +9767,6 @@ class OraclePermitDetailsRpcServiceTest {
         exemptionAgentClientNumber);
     when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
         .thenReturn(List.of(1000456L));
-    when(repository.findApplicationStatusCodeByNumber(1000456L))
-        .thenReturn(Optional.of("EXE"));
     when(repository.findApplicationInfoByNumber(1000456L))
         .thenReturn(Optional.of(application));
     lenient().when(repository.findGrowthTypeDescription("S"))
@@ -10054,6 +10275,31 @@ class OraclePermitDetailsRpcServiceTest {
             Optional.of(
                 exemptionDetailWithClients(
                     "EX-700", "M", ownerClientNumber, agentClientNumber)));
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-903", 1000456L)));
+    when(repository.findApplicationInfoByNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                permitCreationApplication(
+                    1000456L,
+                    "EX-700",
+                    1835L,
+                    ownerClientNumber,
+                    ownerClientLocationCode,
+                    agentClientNumber,
+                    agentClientLocationCode,
+                    "T",
+                    "S")));
+  }
+
+  private void stubOrderInCouncilFirstApplication(
+      String ownerClientNumber,
+      String ownerClientLocationCode,
+      String agentClientNumber,
+      String agentClientLocationCode) {
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("O"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(Optional.of(exemptionDetailWithClients("EX-700", "O", null, null)));
     when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
         .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-903", 1000456L)));
     when(repository.findApplicationInfoByNumber(1000456L))

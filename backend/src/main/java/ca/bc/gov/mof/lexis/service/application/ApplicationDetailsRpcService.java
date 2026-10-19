@@ -83,6 +83,14 @@ public interface ApplicationDetailsRpcService {
     return Optional.empty();
   }
 
+  /**
+   * Returns the permit a scale is linked to. The result is empty when the scale is not linked to a
+   * permit, does not exist, or carries a permit reference that is not a positive number.
+   */
+  default Optional<Long> findPermitNumberForScale(String scaleDetailId) {
+    return Optional.empty();
+  }
+
   default boolean documentBelongsToApplication(Long documentId, Long applicationNumber) {
     return findDocumentForApplication(documentId, applicationNumber).isPresent();
   }
@@ -236,7 +244,20 @@ public interface ApplicationDetailsRpcService {
   boolean synchronizePackageVolumeForPermitTransition(
       String packageNumber, Double volume, String userId);
 
+  /**
+   * Adds a scale to a package. The package room check rounds each scale volume, and the new one, to
+   * one decimal before adding them.
+   */
   ScalePersistenceResult addScaleToPackage(ScaleMutationRequest request, String userId);
+
+  /**
+   * Adds a scale from an imported submission to its package. The package room check adds the scale
+   * volumes at their stored two decimals, as the import preflight does. When {@code
+   * validateTimberMarkRegion} is false the timber mark must still be valid, but it is not required
+   * to belong to the application's region.
+   */
+  ScalePersistenceResult addImportedScaleToPackage(
+      ScaleMutationRequest request, String userId, boolean validateTimberMarkRegion);
 
   boolean deleteScaleById(String scaleDetailId, String userId);
 

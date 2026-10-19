@@ -15,13 +15,15 @@ import org.springframework.stereotype.Repository;
 public class ClientLookupRepository extends OracleRepositorySupport {
 
   // Replaces LEXIS_GROUP_5.FIND_CLIENT_LOCATION: the same location and client join, plus the
-  // client acronym shown with the client name.
+  // client acronym shown with the client name and the legal first and middle names.
   private static final String FIND_CLIENT_LOCATION =
       """
       SELECT L.CLIENT_NUMBER,
              L.CLIENT_LOCN_CODE,
              L.CLIENT_LOCN_NAME,
              FC.CLIENT_NAME AS COMPANY_NAME,
+             FC.LEGAL_FIRST_NAME,
+             FC.LEGAL_MIDDLE_NAME,
              L.ADDRESS_1,
              L.ADDRESS_2,
              L.ADDRESS_3,
@@ -204,7 +206,19 @@ public class ClientLookupRepository extends OracleRepositorySupport {
         getString(rs, "BUSINESS_PHONE"),
         getString(rs, "FAX_NUMBER"),
         getString(rs, "EMAIL_ADDRESS"),
-        getString(rs, "CLIENT_ACRONYM"));
+        getString(rs, "CLIENT_ACRONYM"),
+        legalContactName(getString(rs, "LEGAL_FIRST_NAME"), getString(rs, "LEGAL_MIDDLE_NAME")));
+  }
+
+  /** The legal first and middle names joined by a space, or null unless both are present. */
+  private static String legalContactName(String legalFirstName, String legalMiddleName) {
+    if (legalFirstName == null
+        || legalFirstName.isBlank()
+        || legalMiddleName == null
+        || legalMiddleName.isBlank()) {
+      return null;
+    }
+    return legalFirstName.trim() + " " + legalMiddleName.trim();
   }
 
   public List<ClientContactRow> findContactsByClientNumberCode(
@@ -290,7 +304,44 @@ public class ClientLookupRepository extends OracleRepositorySupport {
       String businessPhone,
       String faxNumber,
       String emailAddress,
-      String clientAcronym) {}
+      String clientAcronym,
+      String legalContactName) {
+
+    public ClientLocationRow(
+        String clientNumber,
+        String clientLocationCode,
+        String clientLocationName,
+        String companyName,
+        String address1,
+        String address2,
+        String address3,
+        String city,
+        String province,
+        String postalCode,
+        String country,
+        String businessPhone,
+        String faxNumber,
+        String emailAddress,
+        String clientAcronym) {
+      this(
+          clientNumber,
+          clientLocationCode,
+          clientLocationName,
+          companyName,
+          address1,
+          address2,
+          address3,
+          city,
+          province,
+          postalCode,
+          country,
+          businessPhone,
+          faxNumber,
+          emailAddress,
+          clientAcronym,
+          null);
+    }
+  }
 
   public record ClientContactRow(String contactName, String contactId) {}
 

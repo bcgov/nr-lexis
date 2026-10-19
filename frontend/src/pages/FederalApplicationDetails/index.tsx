@@ -1,14 +1,17 @@
-import { RecordFieldCell, RecordFieldGrid, RecordFieldRow } from '@/pages/shared/RecordFieldGrid'
+import {
+  RecordField,
+  RecordFieldCell,
+  RecordFieldGrid,
+  RecordFieldRow,
+} from '@/pages/shared/RecordFieldGrid'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Edit } from '@carbon/icons-react'
 import {
   Button,
   Column,
   Grid,
+  HStack,
   InlineNotification,
   Loading,
-  Select,
-  SelectItem,
   Tab,
   TabList,
   TabPanel,
@@ -39,6 +42,7 @@ import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { readDetailReturnTo } from '@/pages/shared/detail-navigation'
+import { storedRemarkLengthError } from '@/pages/shared/remark-storage'
 import { useEditSections } from '@/pages/shared/useEditSections'
 import { hasFieldErrors, useFieldErrors, type FieldErrors } from '@/pages/shared/useFieldErrors'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -64,7 +68,7 @@ import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
 import { displayAuditIdentity, displayTableValue } from '@/utils/text'
 import { requiredLabel } from '@/utils/required-label'
 import { requiredFieldError } from '@/pages/shared/create-form-utils'
-import { allowedFederalStatusTransitions } from './status-transitions'
+import { allowedFederalStatusTransitions, type FederalStatusTransition } from './status-transitions'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 import { displayVolume } from '@/utils/volume'
 
@@ -84,29 +88,37 @@ const FEDERAL_APPLICATION_DETAIL_TAB_SLOTS: readonly FederalApplicationDetailTab
   'remarks',
 ]
 
-type FederalEditSection = 'status' | 'new-remark' | `remark-${number}`
+// Withdraw and Reject each open the status form with their status fixed.
+type FederalStatusSection = `status-${FederalStatusTransition['code']}`
 
-type FederalStatusField = 'statusCode' | 'statusRemark'
+type FederalEditSection = FederalStatusSection | 'new-remark' | `remark-${number}`
+
+type FederalStatusField = 'statusRemark'
+
+// The server refuses remark text outside plain ASCII with this message.
+const UNSUPPORTED_REMARK_CHARACTERS_MESSAGE =
+  'Application remarks contain unsupported special characters. Remove them and try again.'
 
 const isRemarkSection = (section: FederalEditSection | null): boolean =>
   section === 'new-remark' || !!section?.startsWith('remark-')
 
-const statusRemarkRequired = (statusCode: string): boolean =>
-  statusCode === 'REJ' || statusCode === 'WDN'
+const statusSectionFor = (transition: FederalStatusTransition): FederalStatusSection =>
+  `status-${transition.code}`
 
-const federalStatusServerField = (message: string): FederalStatusField | undefined => {
-  if (message === 'Federal status must be APP, REJ, or WDN.') return 'statusCode'
-  if (
-    message === 'A remark is required when rejecting or withdrawing a federal application.' ||
-    message === 'Remark is too long to save. Shorten it and try again.'
-  ) {
-    return 'statusRemark'
-  }
-  return undefined
-}
+const isStatusSection = (section: FederalEditSection | null): section is FederalStatusSection =>
+  section === 'status-WDN' || section === 'status-REJ'
+
+const federalStatusServerField = (message: string): FederalStatusField | undefined =>
+  message === 'A remark is required when rejecting or withdrawing a federal application.' ||
+  message === 'Remark is too long to save. Shorten it and try again.' ||
+  message === UNSUPPORTED_REMARK_CHARACTERS_MESSAGE
+    ? 'statusRemark'
+    : undefined
 
 const federalRemarkServerField = (message: string): 'remark' | undefined =>
-  message === 'Remark is required.' || message === 'Remark must not exceed 250 characters.'
+  message === 'Remark is required.' ||
+  message === 'Remark must not exceed 250 characters.' ||
+  message === UNSUPPORTED_REMARK_CHARACTERS_MESSAGE
     ? 'remark'
     : undefined
 
@@ -149,13 +161,12 @@ const FederalApplicationDetailsPage = () => {
   const [errorMessage, setErrorMessage] = useState('')
   const [remarksErrorMessage, setRemarksErrorMessage] = useState('')
   const [actionResult, setActionResult] = useState<ActionResult | null>(null)
-  const [statusCode, setStatusCode] = useState('')
   const [statusRemark, setStatusRemark] = useState('')
   const [remarkDraft, setRemarkDraft] = useState('')
   const [editingRemarkId, setEditingRemarkId] = useState<number | null>(null)
   const [remarkValidationMessage, setRemarkValidationMessage] = useState('')
   const [editingSection, setEditingSection] = useState<FederalEditSection | null>(null)
-  const isEditingFederalStatus = editingSection === 'status'
+  const isEditingFederalStatus = isStatusSection(editingSection)
   const isEditingFederalRemarks = isRemarkSection(editingSection)
   const {
     clearFieldError: clearStatusFieldError,
@@ -202,10 +213,11 @@ const FederalApplicationDetailsPage = () => {
     currentDetail?.listingDate,
     businessToday,
   )
+  const editingStatusTransition =
+    statusTransitions.find((transition) => statusSectionFor(transition) === editingSection) ?? null
+  const statusCode = editingStatusTransition?.code ?? ''
   const statusDraftDirty =
-    canMutateFederalApplication &&
-    isEditingFederalStatus &&
-    (statusCode !== (statusTransitions[0]?.code ?? '') || statusRemark.length > 0)
+    canMutateFederalApplication && !!editingStatusTransition && statusRemark.length > 0
   const remarkBaseline =
     editingRemarkId === null
       ? ''
@@ -267,13 +279,6 @@ const FederalApplicationDetailsPage = () => {
           return
         }
         setDetail(response)
-        setStatusCode(
-          allowedFederalStatusTransitions(
-            response?.statusCode,
-            response?.listingDate,
-            formatBusinessIsoDate(),
-          )[0]?.code ?? '',
-        )
         setStatusRemark('')
         setEditingSection(null)
         if (!response) {
@@ -360,15 +365,8 @@ const FederalApplicationDetailsPage = () => {
     if (!applicationNumber) return
     const refreshed = await fetchFederalApplicationDetail(applicationNumber)
     setDetail(refreshed)
-    setStatusCode(
-      allowedFederalStatusTransitions(
-        refreshed?.statusCode,
-        refreshed?.listingDate,
-        formatBusinessIsoDate(),
-      )[0]?.code ?? '',
-    )
     setStatusRemark('')
-    setEditingSection((current) => (current === 'status' ? null : current))
+    setEditingSection((current) => (isStatusSection(current) ? null : current))
     if (canViewFederalRemarks) {
       try {
         setRemarkRows(await fetchFederalApplicationRemarks(applicationNumber))
@@ -388,9 +386,7 @@ const FederalApplicationDetailsPage = () => {
       !statusTransitions.some((transition) => transition.code === statusCode)
     )
       return false
-    const statusRemarkError = statusRemarkRequired(statusCode)
-      ? requiredFieldError(statusRemark, 'Remark')
-      : null
+    const statusRemarkError = requiredFieldError(statusRemark, 'Remark')
     if (!showStatusFieldErrors({ statusRemark: statusRemarkError }, () => statusFormRef.current)) {
       return false
     }
@@ -429,7 +425,7 @@ const FederalApplicationDetailsPage = () => {
             'Federal application status updated, but details could not be refreshed. Reload before making more changes.',
         })
       }
-      setEditingSection((current) => (current === 'status' ? null : current))
+      setEditingSection((current) => (isStatusSection(current) ? null : current))
       return true
     } catch (error) {
       console.error(error)
@@ -465,7 +461,7 @@ const FederalApplicationDetailsPage = () => {
       ? 'Remark is required.'
       : normalizedRemark.length > 250
         ? 'Remark must not exceed 250 characters.'
-        : ''
+        : (storedRemarkLengthError(normalizedRemark) ?? '')
     if (remarkError) {
       setRemarkValidationMessage(remarkError)
       focusFirstInvalidFieldAfterRender(() => remarkFormRef.current)
@@ -535,8 +531,7 @@ const FederalApplicationDetailsPage = () => {
 
   const onDiscardFederalSection = useCallback(
     (section: FederalEditSection) => {
-      if (section === 'status') {
-        setStatusCode(statusTransitions[0]?.code ?? '')
+      if (isStatusSection(section)) {
         setStatusRemark('')
         resetStatusFieldErrors()
       } else {
@@ -546,13 +541,12 @@ const FederalApplicationDetailsPage = () => {
       }
       setActionResult(withoutActionError)
     },
-    [resetStatusFieldErrors, statusTransitions],
+    [resetStatusFieldErrors],
   )
 
   const isFederalApplicationDirty = statusDraftDirty || remarkDraftDirty
   const isFederalApplicationBusy = isSavingStatus || isSavingRemark
   const onDiscardFederalApplicationChanges = useCallback(() => {
-    setStatusCode(statusTransitions[0]?.code ?? '')
     setStatusRemark('')
     setRemarkDraft('')
     setEditingRemarkId(null)
@@ -560,7 +554,7 @@ const FederalApplicationDetailsPage = () => {
     resetStatusFieldErrors()
     setEditingSection(null)
     setActionResult(withoutActionError)
-  }, [resetStatusFieldErrors, statusTransitions])
+  }, [resetStatusFieldErrors])
 
   const sections = useEditSections<FederalEditSection>({
     isDirty: isFederalApplicationDirty,
@@ -866,22 +860,25 @@ const FederalApplicationDetailsPage = () => {
                           canMutateFederalApplication &&
                           statusTransitions.length > 0 &&
                           !isEditingFederalStatus ? (
-                            <Button
-                              ref={sections.editButtonRef('status')}
-                              kind="tertiary"
-                              size="md"
-                              renderIcon={Edit}
-                              onClick={() =>
-                                sections.startEditing('status', () => {
-                                  setStatusCode(statusTransitions[0]?.code ?? '')
-                                  setStatusRemark('')
-                                  resetStatusFieldErrors()
-                                  setActionResult(withoutActionError)
-                                })
-                              }
-                            >
-                              Edit federal status
-                            </Button>
+                            <HStack gap={4}>
+                              {statusTransitions.map((transition) => (
+                                <Button
+                                  key={transition.code}
+                                  ref={sections.editButtonRef(statusSectionFor(transition))}
+                                  kind="tertiary"
+                                  size="md"
+                                  onClick={() =>
+                                    sections.startEditing(statusSectionFor(transition), () => {
+                                      setStatusRemark('')
+                                      resetStatusFieldErrors()
+                                      setActionResult(withoutActionError)
+                                    })
+                                  }
+                                >
+                                  {transition.actionLabel}
+                                </Button>
+                              ))}
+                            </HStack>
                           ) : undefined
                         }
                         fields={[
@@ -931,83 +928,53 @@ const FederalApplicationDetailsPage = () => {
                           ],
                         ]}
                       />
-                      {canMutateFederalApplication &&
-                        statusTransitions.length > 0 &&
-                        isEditingFederalStatus && (
-                          <Tile ref={sections.sectionRef('status')}>
-                            <h2 className="detail-tile-title">Update federal status</h2>
-                            <RequiredFieldsLegend />
-                            <RecordFieldGrid editing ref={statusFormRef}>
-                              <RecordFieldRow>
-                                <RecordFieldCell>
-                                  <Select
-                                    id="federalApplicationStatus"
-                                    labelText={requiredLabel('Status')}
-                                    aria-required="true"
-                                    value={statusCode}
-                                    {...statusInvalidProps('statusCode')}
-                                    onChange={(event) => {
-                                      setStatusCode(event.target.value)
-                                      clearStatusFieldError('statusCode')
-                                      if (!statusRemarkRequired(event.target.value)) {
-                                        clearStatusFieldError('statusRemark')
-                                      }
-                                    }}
-                                  >
-                                    {statusTransitions.map((transition) => (
-                                      <SelectItem
-                                        key={transition.code}
-                                        value={transition.code}
-                                        text={transition.label}
-                                      />
-                                    ))}
-                                  </Select>
-                                </RecordFieldCell>
-                              </RecordFieldRow>
-                              <RecordFieldRow>
-                                <RecordFieldCell span="full">
-                                  <TextArea
-                                    id="federalApplicationStatusRemark"
-                                    labelText={requiredLabel(
-                                      'Remark',
-                                      statusCode === 'REJ' || statusCode === 'WDN',
-                                    )}
-                                    aria-required={
-                                      statusCode === 'REJ' || statusCode === 'WDN'
-                                        ? 'true'
-                                        : undefined
-                                    }
-                                    value={statusRemark}
-                                    {...statusInvalidProps('statusRemark')}
-                                    onChange={(event) => {
-                                      setStatusRemark(event.target.value)
-                                      clearStatusFieldError('statusRemark')
-                                    }}
-                                  />
-                                </RecordFieldCell>
-                              </RecordFieldRow>
-                            </RecordFieldGrid>
-                            <div className="legacy-search-actions">
-                              <Button
-                                kind="ghost"
-                                size="md"
-                                disabled={isSavingStatus}
-                                onClick={sections.cancelEditing}
-                              >
-                                Cancel
-                              </Button>
-                              <Button
-                                kind="primary"
-                                size="md"
-                                disabled={isSavingStatus}
-                                renderIcon={isSavingStatus ? PendingIcon : undefined}
-                                onClick={() => void onSaveStatus()}
-                              >
-                                {isSavingStatus ? 'Saving…' : 'Update status'}
-                              </Button>
-                            </div>
-                          </Tile>
-                        )}
+                      {canMutateFederalApplication && editingStatusTransition && (
+                        <Tile ref={sections.sectionRef(statusSectionFor(editingStatusTransition))}>
+                          <h2 className="detail-tile-title">Update federal status</h2>
+                          <RequiredFieldsLegend />
+                          <RecordFieldGrid editing ref={statusFormRef}>
+                            <RecordFieldRow>
+                              <RecordField label="Status" value={editingStatusTransition.label} />
+                            </RecordFieldRow>
+                            <RecordFieldRow>
+                              <RecordFieldCell span="full">
+                                <TextArea
+                                  id="federalApplicationStatusRemark"
+                                  labelText={requiredLabel('Remark')}
+                                  aria-required="true"
+                                  enableCounter
+                                  maxCount={250}
+                                  value={statusRemark}
+                                  {...statusInvalidProps('statusRemark')}
+                                  onChange={(event) => {
+                                    setStatusRemark(event.target.value)
+                                    clearStatusFieldError('statusRemark')
+                                  }}
+                                />
+                              </RecordFieldCell>
+                            </RecordFieldRow>
+                          </RecordFieldGrid>
+                          <div className="legacy-search-actions">
+                            <Button
+                              kind="ghost"
+                              size="md"
+                              disabled={isSavingStatus}
+                              onClick={sections.cancelEditing}
+                            >
+                              Cancel
+                            </Button>
+                            <Button
+                              kind="primary"
+                              size="md"
+                              disabled={isSavingStatus}
+                              renderIcon={isSavingStatus ? PendingIcon : undefined}
+                              onClick={() => void onSaveStatus()}
+                            >
+                              {isSavingStatus ? 'Saving…' : 'Update status'}
+                            </Button>
+                          </div>
+                        </Tile>
+                      )}
                     </Column>
                   </Grid>
                 </TabPanel>
@@ -1168,6 +1135,7 @@ const FederalApplicationDetailsPage = () => {
                                       : 'New remark',
                                   )}
                                   aria-required="true"
+                                  enableCounter
                                   maxCount={250}
                                   value={remarkDraft}
                                   invalid={!!remarkValidationMessage}

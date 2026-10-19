@@ -64,7 +64,10 @@ unknown.
 The successful flow is aligned with legacy. Both implementations use the same Oracle procedures,
 invoice types, accounting codes, fee calculations, header-to-notation order, cancellation rules,
 and one eligible prior replacement invoice. Both create an invoice for `ACT` or `CAN` to `COM` or
-`PPD`; `PPD` to `COM` does not create another invoice.
+`PPD`; `PPD` to `COM` does not create another invoice. One difference is kept: a permit's GBMS
+invoice lines and internal invoice total count only the scales on that permit when a package is
+split across permits (`GBMS_PACKAGE_LINES_THIS_PERMIT_ONLY` in the
+[intentional legacy divergences](intentional-legacy-divergences.md)).
 
 Modern LEXIS deliberately does not reproduce legacy failure defects. Legacy could create an
 internal LEXIS invoice after GBMS creation failed, and its cancellation and replacement paths used
@@ -77,6 +80,10 @@ the first matching history row without verifying the result. Modern LEXIS instea
 
 These checks preserve the legacy business outcome for valid data. Inconsistent legacy history can
 stop the transition and require reconciliation instead of producing another partial invoice.
+
+A refused transition names the cause in plain language. When the user can fix it, such as a missing
+submit date or destination country, the message says where to correct it. When the cause is in the
+GBMS or LEXIS invoice history, it tells the user to contact the LEXIS administrator.
 
 ## Consistency and recovery
 

@@ -920,6 +920,44 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalledTimes(1)
   })
 
+  it('counts &, < and > at their stored length before saving a remark', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/321']}>
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationRemarksForEditing()
+    const remarkInput = await screen.findByLabelText('Remark')
+    const tooLongOnceStored = `${'R'.repeat(248)}&&`
+    fireEvent.change(remarkInput, { target: { value: tooLongOnceStored } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
+
+    expect(
+      await screen.findByText(
+        'Remark must not exceed 250 characters once saved. Each & counts as 5 characters, and each < or > as 4.',
+      ),
+    ).toBeInTheDocument()
+    expect(remarkInput).toHaveValue(tooLongOnceStored)
+    expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
+
+    const fitsOnceStored = `${'R'.repeat(241)}&<`
+    fireEvent.change(remarkInput, { target: { value: fitsOnceStored } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
+
+    await waitFor(() =>
+      expect(mockedSaveApplicationRemark).toHaveBeenCalledWith({
+        applicationNumber: '321',
+        remarkBody: fitsOnceStored,
+      }),
+    )
+  })
+
   it('does not treat a normal remark as a new review-status draft', async () => {
     const rejectedDetail: ProvincialApplicationDetail = {
       ...applicationDetail,

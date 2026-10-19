@@ -921,6 +921,64 @@ class ApplicationReviewOracleServiceTest {
   }
 
   @Test
+  void sendStatusEmailShouldResolveTheOwnerAddressForAMinisterialApplicant() {
+    AuthoritativeApplicantStatusContext applicant =
+        new AuthoritativeApplicantStatusContext("REJ", "M", "00077881", "00", 1835L);
+    when(repository.findAuthoritativeApplicantStatusContext(1000456L))
+        .thenReturn(Optional.of(applicant));
+    when(clientEmailResolver.resolve(1000456L, "M", "00077881", "00", null, null))
+        .thenReturn(Optional.of("owner@example.test"));
+    when(repository.findLatestAuthoritativeRemark(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ReviewRemarkRow(
+                    77L, 1000456L, "Missing docs", "idir\\reviewer", Instant.EPOCH)));
+    when(repository.sendStatusEmail(1000456L, "REJ", "owner@example.test", "Missing docs"))
+        .thenReturn(true);
+    when(emailSender.sendStatusEmail(
+            1000456L, "REJ", "owner@example.test", "Missing docs", 1835L))
+        .thenReturn(true);
+
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto("REJ", " ", "Missing docs"));
+
+    assertThat(result.success()).isTrue();
+    verify(emailSender)
+        .sendStatusEmail(1000456L, "REJ", "owner@example.test", "Missing docs", 1835L);
+  }
+
+  @Test
+  void sendStatusEmailShouldResolveTheAgentAddressForAnAgentApplicant() {
+    AuthoritativeApplicantStatusContext applicant =
+        new AuthoritativeApplicantStatusContext("REJ", "A", "00077882", "00", 1835L);
+    when(repository.findAuthoritativeApplicantStatusContext(1000456L))
+        .thenReturn(Optional.of(applicant));
+    when(clientEmailResolver.resolve(1000456L, "A", null, null, "00077882", "00"))
+        .thenReturn(Optional.of("agent@example.test"));
+    when(repository.findLatestAuthoritativeRemark(1000456L))
+        .thenReturn(
+            Optional.of(
+                new ReviewRemarkRow(
+                    77L, 1000456L, "Missing docs", "idir\\reviewer", Instant.EPOCH)));
+    when(repository.sendStatusEmail(1000456L, "REJ", "agent@example.test", "Missing docs"))
+        .thenReturn(true);
+    when(emailSender.sendStatusEmail(
+            1000456L, "REJ", "agent@example.test", "Missing docs", 1835L))
+        .thenReturn(true);
+
+    ApplicationReviewStatusEmailResultDto result =
+        service.sendStatusEmail(
+            1000456L,
+            new ApplicationReviewStatusEmailRequestDto("REJ", " ", "Missing docs"));
+
+    assertThat(result.success()).isTrue();
+    verify(emailSender)
+        .sendStatusEmail(1000456L, "REJ", "agent@example.test", "Missing docs", 1835L);
+  }
+
+  @Test
   void sendStatusEmailShouldPropagateAuthoritativeRemarkLookupOutageWithoutStaging() {
     AuthoritativeApplicantStatusContext applicant =
         new AuthoritativeApplicantStatusContext("REJ", "00077881", "00");

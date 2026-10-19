@@ -15,13 +15,13 @@ class ScaleDomainValidatorTest {
             ScaleDomainValidator.validateNumericValues(
                 ScaleDomainValidator.MAX_SCALE_PIECES + 1, Double.NaN, false))
         .containsExactly(
-            "The scale pieces must be less than 999999999.",
+            "The scale pieces must be less than or equal to 999999999.",
             "The scale volume must be greater than or equal to 0.");
 
     assertThat(
             ScaleDomainValidator.validateNumericValues(
                 1L, ScaleDomainValidator.MAX_SCALE_VOLUME.doubleValue() + 0.1d, true))
-        .containsExactly("The scale volume must be less than 99999.9.");
+        .containsExactly("The scale volume must be less than or equal to 99999.9.");
 
     assertThat(
             ScaleDomainValidator.validateNumericValues(
@@ -29,8 +29,12 @@ class ScaleDomainValidatorTest {
         .isEmpty();
     assertThat(
             ScaleDomainValidator.validateNumericValues(
+                1L, ScaleDomainValidator.MAX_SCALE_VOLUME.doubleValue(), true))
+        .isEmpty();
+    assertThat(
+            ScaleDomainValidator.validateNumericValues(
                 ScaleDomainValidator.MAX_SCALE_PIECES + 1L, 1.0d, false))
-        .containsExactly("The scale pieces must be less than 999999999.");
+        .containsExactly("The scale pieces must be less than or equal to 999999999.");
   }
 
   @Test

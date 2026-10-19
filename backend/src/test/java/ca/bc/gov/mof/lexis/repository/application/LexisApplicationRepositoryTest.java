@@ -815,19 +815,22 @@ class LexisApplicationRepositoryTest {
   }
 
   @ParameterizedTest
-  @ValueSource(strings = {
-    "Use &amp; in the document",
-    "A &amp; B; &lt;b&gt;text&lt;/b&gt;; literal &amp;lt;",
-    "Raw <b>text</b> & more; &copy; &#39;"
-  })
-  void detailRemarkShouldPreserveStoredTextForBothDisplayAndEdit(String storedText) throws Exception {
+  @CsvSource(
+      delimiter = '|',
+      value = {
+        "Use &amp; in the document|Use & in the document",
+        "A &amp; B; &lt;b&gt;text&lt;/b&gt;; literal &amp;lt;|A & B; <b>text</b>; literal &lt;",
+        "Raw <b>text</b> & more; &copy; &#39;|Raw <b>text</b> & more; &copy; &#39;"
+      })
+  void detailRemarkShouldDecodeOneLayerOfStoredEntitiesForBothDisplayAndEdit(
+      String storedText, String expectedText) throws Exception {
     TestLexisApplicationRepository repository = new TestLexisApplicationRepository();
     ResultSet rs = org.mockito.Mockito.mock(ResultSet.class);
     when(rs.getString("REMARK")).thenReturn(storedText);
 
     LexisApplicationDetailDto.LexisRemarkDto remark = repository.mapRemarkRow(rs);
 
-    assertThat(remark.remark()).isEqualTo(storedText);
+    assertThat(remark.remark()).isEqualTo(expectedText);
     assertThat(remark.title()).isEqualTo(remark.remark());
   }
 

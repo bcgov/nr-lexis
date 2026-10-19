@@ -9,8 +9,8 @@ describe('federal application status transitions', () => {
 
   it('offers rejection and withdrawal through the listing day', () => {
     expect(allowedFederalStatusTransitions('APP', '2026-07-11', '2026-07-11')).toEqual([
-      { code: 'REJ', label: 'Rejected' },
-      { code: 'WDN', label: 'Withdrawn' },
+      { code: 'WDN', label: 'Withdrawn', actionLabel: 'Withdraw' },
+      { code: 'REJ', label: 'Rejected', actionLabel: 'Reject' },
     ])
   })
 

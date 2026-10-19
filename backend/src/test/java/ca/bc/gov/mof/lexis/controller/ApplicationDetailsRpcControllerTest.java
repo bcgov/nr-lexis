@@ -15,6 +15,7 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
+import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
@@ -23,6 +24,7 @@ import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
+import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.application.OracleApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
@@ -31,12 +33,14 @@ import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.ApplicationItemMutation;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.io.ByteArrayOutputStream;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
@@ -639,6 +643,43 @@ class ApplicationDetailsRpcControllerTest {
     assertThat(response.getBody().message())
         .isEqualTo("Application remarks must not exceed 254 characters.");
     verify(service, never()).persistRemark(any(), any(), any(), any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "50, 0, 0, true",
+    "51, 0, 0, false",
+    "0, 63, 0, true",
+    "0, 0, 64, false",
+    "10, 20, 30, true",
+    "20, 20, 20, false"
+  })
+  void persistRemarkShouldLimitTheEscapedLengthOfTheRemark(
+      int ampersands, int lessThans, int greaterThans, boolean accepted) {
+    TestingAuthenticationToken authentication = authorized("/applicationRemarks");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    String remark = "&".repeat(ampersands) + "<".repeat(lessThans) + ">".repeat(greaterThans);
+    if (accepted) {
+      when(service.persistRemark("new", 1000456L, remark, "idir\\jsmith"))
+          .thenReturn(
+              Optional.of(
+                  new ApplicationDetailsRpcService.PersistedRemark(
+                      44L, remark, remark, "idir\\jsmith", Instant.parse("2026-05-27T17:00:00Z"))));
+    }
+
+    ResponseEntity<ApplicationDetailsRpcController.PersistRemarkResponseDto> response =
+        controller.persistRemark("new", "1000456", remark, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    if (accepted) {
+      assertThat(response.getBody().status()).isEqualTo("ok");
+      verify(service).persistRemark("new", 1000456L, remark, "idir\\jsmith");
+    } else {
+      assertThat(response.getBody().status()).isEqualTo("validation_error");
+      assertThat(response.getBody().message())
+          .isEqualTo("Application remarks must not exceed 254 characters.");
+      verify(service, never()).persistRemark(any(), any(), any(), any());
+    }
   }
 
   @Test
@@ -1560,6 +1601,92 @@ class ApplicationDetailsRpcControllerTest {
 
     assertThat(response.getBody().valid()).isTrue();
     verify(service).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void provincialSubmitterCanCreateApplicationWithoutListDateWhenNoListDateIsOpen() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    nextListDates(new CodeNameDto("", "Blank"));
+    when(service.addApplication(any(), eq("bceid\\submitter")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(new LinkedMultiValueMap<>(), authentication);
+
+    assertThat(response.getBody().valid()).isTrue();
+    verify(service).addApplication(any(), eq("bceid\\submitter"));
+  }
+
+  @Test
+  void provincialSubmitterMustStillChooseAListDateWhileOneIsOpenForNewApplications() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    nextListDates(new CodeNameDto("1234", "2026-11-04"), new CodeNameDto("", "Blank"));
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.addApplicationLegacy(new LinkedMultiValueMap<>(), authentication);
+
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors()).containsExactly("Select a list date.");
+    verify(service, never()).addApplication(any(), any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"summary", "summary-items"})
+  void provincialSubmitterCanSaveWithoutListDateWhenNoListDateIsOpen(String saveSource) {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    nextListDates(new CodeNameDto("", "Blank"));
+    when(service.getApplicationSummarySnapshot(1000456L)).thenReturn(Optional.of(summarySnapshot()));
+    when(service.updateApplicationSummary(any(), any()))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("saveSource", saveSource);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getBody().valid()).isTrue();
+    verify(service).updateApplicationSummary(any(), any());
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"summary", "summary-items"})
+  void provincialSubmitterMustStillChooseAListDateWhileOneIsOpenForSummarySaves(String saveSource) {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00077881"),
+            "createApplication");
+    nextListDates(new CodeNameDto("1234", "2026-11-04"), new CodeNameDto("", "Blank"));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("saveSource", saveSource);
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors()).containsExactly("Select a list date.");
+    verify(service, never()).updateApplicationSummary(any(), any());
   }
 
   @Test
@@ -3436,6 +3563,125 @@ class ApplicationDetailsRpcControllerTest {
     verifyNoInteractions(service);
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "LEXIS_PROVINCIAL_SUBMITTER_00011111, outside client scope",
+    "LEXIS_APPLICATION_APPROVER, outside region scope"
+  })
+  void linkedScaleDeleteShouldEnforcePermitClientAndRegionScope(String role, String message) {
+    String principal =
+        role.startsWith("LEXIS_PROVINCIAL_SUBMITTER") ? "bceid\\owner" : "idir\\approver";
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(principal, List.of(role), "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findPermitNumberForScale("55")).thenReturn(Optional.of(7000123L));
+    doThrow(new AccessDeniedException(message))
+        .when(provincialAuthorizationService)
+        .requireApplicationScaleDeleteAccess(authentication, 1000456L, 7000123L);
+
+    assertThatThrownBy(() -> controller.deleteScaleById("55", "1000456", authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage(message);
+
+    verify(service, never()).deleteScaleById(any(), any());
+  }
+
+  @Test
+  void linkedScaleDeleteShouldRecheckTheCurrentPermitAfterLocks() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findPermitNumberForScale("55"))
+        .thenReturn(Optional.of(7000123L), Optional.of(7000456L));
+    when(service.getPermitNumbersForApplicationMutation(1000456L))
+        .thenReturn(List.of(7000123L, 7000456L));
+    org.mockito.Mockito.doNothing()
+        .when(provincialAuthorizationService)
+        .requireApplicationScaleDeleteAccess(authentication, 1000456L, 7000123L);
+    doThrow(new AccessDeniedException("current permit is outside scope"))
+        .when(provincialAuthorizationService)
+        .requireApplicationScaleDeleteAccess(authentication, 1000456L, 7000456L);
+
+    assertThatThrownBy(() -> controller.deleteScaleById("55", "1000456", authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("current permit is outside scope");
+
+    verify(provincialAuthorizationService)
+        .requireApplicationScaleDeleteAccess(authentication, 1000456L, 7000123L);
+    verify(provincialAuthorizationService)
+        .requireApplicationScaleDeleteAccess(authentication, 1000456L, 7000456L);
+    verify(service, never()).deleteScaleById(any(), any());
+  }
+
+  @Test
+  void linkedScaleDeleteShouldPreserveExemptionApproverChildPermission() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions("idir\\approver", List.of("LEXIS_EXEMPTION_APPROVER"));
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.findPermitNumberForScale("55")).thenReturn(Optional.of(7000123L));
+    when(service.deleteScaleById("55", "idir\\approver")).thenReturn(true);
+
+    var response = controller.deleteScaleById("55", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().success()).isTrue();
+    verify(provincialAuthorizationService, times(2))
+        .requireApplicationScaleDeleteAccess(authentication, 1000456L, 7000123L);
+    verify(applicationEditPolicyService, times(2))
+        .requireScaleDelete(authentication, service, 1000456L);
+    verify(authorizationService, never()).canPerformAction(any(), eq("/permitDetails"));
+  }
+
+  @Test
+  void unlinkedScaleDeleteShouldStillRequireTheItemMutationRegions() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.deleteScaleById("55", "idir\\jsmith")).thenReturn(true);
+
+    controller.deleteScaleById("55", "1000456", authentication);
+
+    verify(provincialAuthorizationService, times(2))
+        .requireApplicationScaleDeleteAccess(authentication, 1000456L, null);
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "packageAdd, CREATE_PACKAGE",
+    "packageEdit, CHANGE_ITEMS",
+    "packageDelete, CHANGE_ITEMS",
+    "scaleAdd, CHANGE_ITEMS"
+  })
+  void itemChangesShouldRequireTheMatchingMutationScopeBeforeAndAfterLocking(
+      String action, ApplicationItemMutation mutation) {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    stubItemWrites();
+
+    mutateItem(action, authentication);
+
+    verify(provincialAuthorizationService, times(2))
+        .requireApplicationItemMutation(authentication, 1000456L, mutation);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"packageAdd", "packageEdit", "packageDelete", "scaleAdd"})
+  void itemChangesOutsideTheMutationScopeShouldNotLockOrWrite(String action) {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    doThrow(new AccessDeniedException("outside mutation regions"))
+        .when(provincialAuthorizationService)
+        .requireApplicationItemMutation(any(), any(), any());
+
+    assertThatThrownBy(() -> mutateItem(action, authentication))
+        .isInstanceOf(AccessDeniedException.class)
+        .hasMessage("outside mutation regions");
+
+    verify(editLockService, never()).requireEditable(any(), any(), any());
+    verify(service, never()).addPackage(any(), any());
+    verify(service, never()).updatePackage(any(), any());
+    verify(service, never()).deletePackageById(any(), any());
+    verify(service, never()).addScaleToPackage(any(), any());
+  }
+
   @Test
   void exemptionApproverShouldReachExistingItemChangesThroughTheEditPolicy() {
     TestingAuthenticationToken authentication =
@@ -3485,6 +3731,45 @@ class ApplicationDetailsRpcControllerTest {
     verify(service).deletePackageById("PKG-903", "idir\\jsmith");
     verify(applicationEditPolicyService, times(2))
         .requirePackageDelete(authentication, service, 1000456L);
+  }
+
+  private void mutateItem(String action, TestingAuthenticationToken authentication) {
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("applicationNumber", "1000456");
+    params.add("packageNumber", "PKG-903");
+    switch (action) {
+      case "packageAdd" -> controller.addPackageToApplication(params, authentication);
+      case "packageEdit" -> controller.updatePackage(params, authentication);
+      case "packageDelete" -> controller.deletePackageById("PKG-903", "1000456", authentication);
+      case "scaleAdd" -> controller.addScaleToPackage(params, authentication);
+      default -> throw new IllegalArgumentException("Unknown item action: " + action);
+    }
+  }
+
+  private void stubItemWrites() {
+    var packageResult =
+        new ApplicationDetailsRpcService.PackagePersistenceResult(
+            true, "PKG-903", "1.0", "1.0", "10.0", "A", List.of(), List.of());
+    lenient().when(service.addPackage(any(), any())).thenReturn(packageResult);
+    lenient().when(service.updatePackage(any(), any())).thenReturn(packageResult);
+    lenient().when(service.deletePackageById(any(), any())).thenReturn(true);
+    lenient()
+        .when(service.addScaleToPackage(any(), any()))
+        .thenReturn(
+            new ApplicationDetailsRpcService.ScalePersistenceResult(
+                true, null, List.of(), List.of()));
+  }
+
+  @SuppressWarnings("unchecked")
+  private void nextListDates(CodeNameDto... nextSchedules) {
+    ObjectProvider<LexisApplicationService> applicationServiceProvider = mock(ObjectProvider.class);
+    LexisApplicationService applications = mock(LexisApplicationService.class);
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applications);
+    when(applications.hasUpcomingListDate())
+        .thenReturn(
+            Arrays.stream(nextSchedules)
+                .anyMatch(option -> option.code() != null && !option.code().isBlank()));
+    controller.setApplicationServiceProvider(applicationServiceProvider);
   }
 
   private TestingAuthenticationToken authorized(String... actions) {

@@ -1100,33 +1100,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return findApplicationNumbersByExemptionNumber(exemptionNumber, true);
   }
 
-  /** Loads application numbers and statuses together using the existing exemption cursor. */
-  public List<ApplicationStatusRow> findApplicationStatusesByExemptionNumberRequired(
-      String exemptionNumber) {
-    String normalizedExemptionNumber = trim(exemptionNumber);
-    if (normalizedExemptionNumber == null) {
-      return List.of();
-    }
-
-    List<ApplicationStatusRow> applicationStatuses =
-        queryCursorProcedureRequired(
-            FIND_APPLICATION_BY_EXEMPTION,
-            cs -> cs.setString(1, normalizedExemptionNumber),
-            2,
-            rs ->
-                new ApplicationStatusRow(
-                    getLong(rs, "APPLICATION_NUMBER"),
-                    getString(rs, "EXPORT_APPLICATION_STATUS_CODE")));
-    if (applicationStatuses.stream()
-        .anyMatch(row -> row.applicationNumber() == null || row.applicationNumber() < 1)) {
-      throw new DataRetrievalFailureException(
-          "An invalid application relationship was returned for exemption "
-              + normalizedExemptionNumber
-              + ".");
-    }
-    return applicationStatuses;
-  }
-
   private List<Long> findApplicationNumbersByExemptionNumber(
       String exemptionNumber, boolean strictRelationships) {
     String normalizedExemptionNumber = trim(exemptionNumber);
@@ -1799,22 +1772,29 @@ public class PermitRpcRepository extends OracleRepositorySupport {
     return codeExistsDirectRequired(LexisCodeQueries.GRADE_BY_CODE, gradeCode);
   }
 
-  public boolean isValidBoicTimberMarkRequired(
+  /**
+   * The timber mark row for a Blanket OIC exemption, with the mark status and the file type the
+   * scale checks need. Empty when the mark is not valid for the exemption.
+   */
+  public Optional<BoicTimberMarkRow> findValidBoicTimberMarkRequired(
       String timberMark, String exemptionNumber) {
     String normalizedTimberMark = trim(timberMark);
     String normalizedExemptionNumber = trim(exemptionNumber);
     if (normalizedTimberMark == null || normalizedExemptionNumber == null) {
-      return false;
+      return Optional.empty();
     }
     return queryCursorSingleRequired(
-            FIND_VALID_BOIC_TIMBER_MARK,
-            cs -> {
-              cs.setString(1, normalizedTimberMark);
-              cs.setString(2, normalizedExemptionNumber);
-            },
-            3,
-            rs -> Boolean.TRUE)
-        .orElse(false);
+        FIND_VALID_BOIC_TIMBER_MARK,
+        cs -> {
+          cs.setString(1, normalizedTimberMark);
+          cs.setString(2, normalizedExemptionNumber);
+        },
+        3,
+        rs ->
+            new BoicTimberMarkRow(
+                getString(rs, "TIMBER_MARK"),
+                getString(rs, "MARK_STATUS_ST"),
+                getString(rs, "FILE_TYPE_CODE")));
   }
 
   public Optional<String> findGrowthTypeDescription(String growthTypeCode) {
@@ -2219,6 +2199,8 @@ public class PermitRpcRepository extends OracleRepositorySupport {
 
   public record CountryCodeRow(String code, String description, long groupBy, long orderBy) {}
 
+  public record BoicTimberMarkRow(String timberMark, String markStatus, String fileTypeCode) {}
+
   public record PermitScaleDetailRow(
       String exportScaleDetailId,
       String timberMark,
@@ -2421,9 +2403,6 @@ public class PermitRpcRepository extends OracleRepositorySupport {
    * authoritative only on {@code EXPORT_SCALE_DETAIL.EXPORT_PERMIT_DETAIL_NUMBER}.
    */
   public record PackageCandidateRow(Long applicationNumber, String packageNumber) {}
-
-  /** Application/status projection from the authoritative exemption application cursor. */
-  public record ApplicationStatusRow(Long applicationNumber, String statusCode) {}
 
   public record PermitFeeOverrideRow(Double overrideFee, String overrideComment, Long orgUnitNo) {}
 

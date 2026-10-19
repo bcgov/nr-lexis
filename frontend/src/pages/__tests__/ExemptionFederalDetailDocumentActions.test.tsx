@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import {
   createMemoryRouter,
@@ -130,8 +130,15 @@ const selectDetailTab = async (name: string) => {
   }
 }
 
-const enterFederalStatusEditMode = async (): Promise<void> => {
-  await userEvent.click(await screen.findByRole('button', { name: 'Edit federal status' }))
+const enterFederalStatusEditMode = async (
+  action: 'Withdraw' | 'Reject' = 'Reject',
+): Promise<void> => {
+  await userEvent.click(await screen.findByRole('button', { name: action }))
+}
+
+const expectNoFederalStatusActions = (): void => {
+  expect(screen.queryByRole('button', { name: 'Withdraw' })).not.toBeInTheDocument()
+  expect(screen.queryByRole('button', { name: 'Reject' })).not.toBeInTheDocument()
 }
 
 const enterFederalRemarkEditMode = async (): Promise<void> => {
@@ -826,12 +833,78 @@ describe('Exemption and Federal Detail Document Actions', () => {
   })
 
   it.each([
+    ['M', 'Ministerial', 'Approved applications for client 00055566 only.'],
+    ['O', 'Order in Council', 'Approved applications only.'],
+  ])(
+    'words the add application helper for a %s exemption by whether the owner is compared',
+    async (typeCode, typeDescription, helperText) => {
+      mockedFetchProvincialExemptionDetail.mockResolvedValue({
+        ...exemptionDetail,
+        exemptionTypeCode: typeCode,
+        exemptionTypeDescription: typeDescription,
+      })
+      render(
+        <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+          <Routes>
+            <Route
+              path="/provincial/exemption/:exemptionNumber"
+              element={<ProvincialExemptionDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectDetailTab('Applications')
+      await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+      expect(await screen.findByLabelText('Application number')).toHaveAccessibleDescription(
+        helperText,
+      )
+    },
+  )
+
+  it('does not name a client when an Order in Council application cannot be added', async () => {
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: 'O',
+      exemptionTypeDescription: 'Order in Council',
+    })
+    vi.mocked(addApplicationToExemption).mockResolvedValueOnce({
+      success: false,
+      message: '',
+      exemptionNumber: 'EX-777',
+      errors: [''],
+      warnings: [],
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+    await userEvent.type(await screen.findByLabelText('Application number'), '654')
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+
+    expect(
+      await screen.findByText(
+        "Application 654 can't be added. Check that it's approved and isn't on another exemption.",
+      ),
+    ).toBeVisible()
+  })
+
+  it.each([
     [
       'Application 654 does not exist',
       'No application found with number 654. Check the number and try again.',
     ],
     [
-      'Application cannot be added to this exemption because its owner or agent client details do not match the other applications.',
+      'The application you entered cannot be assigned to this exemption due to the owner client number not matching the other applications.',
       'Application 654 belongs to a different client. This exemption only includes applications from client 00055566.',
     ],
     [
@@ -1951,7 +2024,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
 
     await selectDetailTab('Application')
-    expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
+    expectNoFederalStatusActions()
     expect(screen.queryByRole('heading', { name: 'Update federal status' })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
 
@@ -2121,7 +2194,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
       await selectDetailTab('Application')
       expect(await screen.findByText('FED-888')).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
+      expectNoFederalStatusActions()
       expect(screen.queryByLabelText('Status')).not.toBeInTheDocument()
       expect(screen.queryByRole('option', { name: 'Approved' })).not.toBeInTheDocument()
       expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
@@ -2152,14 +2225,13 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Application')
-    await enterFederalStatusEditMode()
+    await enterFederalStatusEditMode('Withdraw')
     const updateButton = await screen.findByRole('button', { name: 'Update status' })
     expect(
       within(updateButton.closest('.legacy-search-actions') as HTMLElement)
         .getAllByRole('button')
         .map((button) => button.textContent),
     ).toEqual(['Cancel', 'Update status'])
-    await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
     await userEvent.type(screen.getByLabelText('Remark'), 'Applicant withdrew')
 
     await userEvent.click(updateButton)
@@ -2174,7 +2246,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
     expect(await screen.findByText('Federal application status updated.')).toBeInTheDocument()
     expect(screen.getAllByText('Withdrawn').length).toBeGreaterThan(0)
-    expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
+    expectNoFederalStatusActions()
   })
 
   it('asks before switching tabs away from an unsaved federal status draft', async () => {
@@ -2186,8 +2258,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     })
     renderFederalDataRouter()
     await selectDetailTab('Application')
-    await enterFederalStatusEditMode()
-    await userEvent.selectOptions(screen.getByLabelText('Status'), 'WDN')
+    await enterFederalStatusEditMode('Withdraw')
     await userEvent.type(screen.getByLabelText('Remark'), 'Awaiting withdrawal confirmation')
 
     await userEvent.click(screen.getByRole('tab', { name: 'Items' }))
@@ -2198,7 +2269,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       'aria-selected',
       'true',
     )
-    expect(screen.getByLabelText('Status')).toHaveValue('WDN')
+    expect(screen.getByText('Withdrawn', { selector: '.detail-field-value' })).toBeInTheDocument()
     expect(screen.getByLabelText('Remark')).toHaveValue('Awaiting withdrawal confirmation')
 
     await userEvent.click(screen.getByRole('tab', { name: 'Items' }))
@@ -2241,7 +2312,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
   })
 
-  it('offers only listing-day outcomes from an approved federal application', async () => {
+  it('offers Withdraw and Reject as header actions that fix the status', async () => {
     mockedFetchFederalApplicationDetail.mockResolvedValue({
       ...federalDetail,
       statusCode: 'APP',
@@ -2258,11 +2329,51 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Application')
-    await enterFederalStatusEditMode()
-    const statusSelect = await screen.findByLabelText('Status')
-    expect(within(statusSelect).queryByRole('option', { name: 'Approved' })).not.toBeInTheDocument()
-    expect(within(statusSelect).getByRole('option', { name: 'Rejected' })).toBeInTheDocument()
-    expect(within(statusSelect).getByRole('option', { name: 'Withdrawn' })).toBeInTheDocument()
+    const withdraw = await screen.findByRole('button', { name: 'Withdraw' })
+    const reject = screen.getByRole('button', { name: 'Reject' })
+    expect(withdraw).toHaveClass('cds--btn--tertiary')
+    expect(reject).toHaveClass('cds--btn--tertiary')
+    expect(withdraw.compareDocumentPosition(reject) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(withdraw.closest('.detail-section-card__header')).toContainElement(reject)
+    expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
+
+    await userEvent.click(reject)
+    const form = (await screen.findByRole('heading', { name: 'Update federal status' })).closest(
+      '.cds--tile',
+    ) as HTMLElement
+    expect(within(form).getByText('Rejected')).toBeInTheDocument()
+    expect(within(form).queryByText('Withdrawn')).not.toBeInTheDocument()
+    expect(within(form).queryByRole('combobox')).not.toBeInTheDocument()
+    expectNoFederalStatusActions()
+    await userEvent.click(within(form).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reject' })).toHaveFocus())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+    expect(
+      within(
+        (await screen.findByRole('heading', { name: 'Update federal status' })).closest(
+          '.cds--tile',
+        ) as HTMLElement,
+      ).getByText('Withdrawn'),
+    ).toBeInTheDocument()
+  })
+
+  it('counts the status remark against the 250 character limit', async () => {
+    mockedFetchFederalApplicationDetail.mockResolvedValue({
+      ...federalDetail,
+      statusCode: 'APP',
+      statusDescription: 'Approved',
+      listingDate: '2999-12-31',
+    })
+    renderFederalDataRouter()
+
+    await selectDetailTab('Application')
+    await enterFederalStatusEditMode('Withdraw')
+    const remark = screen.getByLabelText('Remark')
+    expect(screen.getByText('0/250')).toBeVisible()
+    await userEvent.type(remark, 'R'.repeat(251))
+    expect(remark).toHaveValue('R'.repeat(250))
+    expect(screen.getByText('250/250')).toBeVisible()
   })
 
   it('requires a review-outcome remark and preserves the draft when status update fails', async () => {
@@ -2287,11 +2398,10 @@ describe('Exemption and Federal Detail Document Actions', () => {
     )
 
     await selectDetailTab('Application')
-    await enterFederalStatusEditMode()
-    const statusSelect = await screen.findByLabelText('Status')
-    const remark = screen.getByLabelText('Remark')
+    await enterFederalStatusEditMode('Reject')
+    const remark = await screen.findByLabelText('Remark')
     const updateButton = screen.getByRole('button', { name: 'Update status' })
-    expect(statusSelect).toHaveValue('REJ')
+    expect(screen.getByText('Rejected', { selector: '.detail-field-value' })).toBeInTheDocument()
     expect(updateButton).toBeEnabled()
 
     await userEvent.click(updateButton)
@@ -2309,7 +2419,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeInTheDocument()
     expect(mockedUpdateFederalApplicationStatus).toHaveBeenCalledWith('888', 'REJ', 'Not eligible')
     expect(mockedFetchFederalApplicationDetail).toHaveBeenCalledTimes(1)
-    expect(statusSelect).toHaveValue('REJ')
+    expect(screen.getByText('Rejected', { selector: '.detail-field-value' })).toBeInTheDocument()
     expect(remark).toHaveValue('Not eligible')
   })
 
@@ -2407,13 +2517,27 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await enterFederalRemarkEditMode()
     const newRemarkInput = screen.getByLabelText('New remark')
     expect(newRemarkInput.closest('.legacy-search-actions')).toHaveTextContent('Save remark')
+    expect(screen.getByText('0/250')).toBeVisible()
 
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
     expect(await screen.findByText('Remark is required')).toBeInTheDocument()
 
     await userEvent.type(newRemarkInput, 'R'.repeat(251))
+    expect(newRemarkInput).toHaveValue('R'.repeat(250))
+    expect(screen.getByText('250/250')).toBeVisible()
+
+    fireEvent.change(newRemarkInput, { target: { value: 'R'.repeat(251) } })
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
     expect(await screen.findByText('Remark must not exceed 250 characters')).toBeInTheDocument()
+    expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
+
+    fireEvent.change(newRemarkInput, { target: { value: `${'R'.repeat(246)}&` } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
+    expect(
+      await screen.findByText(
+        'Remark must not exceed 250 characters once saved. Each & counts as 5 characters, and each < or > as 4.',
+      ),
+    ).toBeInTheDocument()
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
 
     await userEvent.clear(newRemarkInput)
@@ -2507,7 +2631,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       renderFederalDataRouter()
       await selectDetailTab('Application')
       expect(await screen.findByText('FED-888')).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
+      expectNoFederalStatusActions()
       await selectDetailTab('Remarks')
       expect(await screen.findByText('Review note')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
@@ -2577,7 +2701,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
       await selectDetailTab('Application')
       expect(await screen.findByText('FED-888')).toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: 'Edit federal status' })).not.toBeInTheDocument()
+      expectNoFederalStatusActions()
       expect(screen.queryByRole('button', { name: 'Update status' })).not.toBeInTheDocument()
       if (role === 'LEXIS_FEDERAL_READ_ONLY') {
         expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()

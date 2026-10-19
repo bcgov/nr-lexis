@@ -9,7 +9,6 @@ import static ca.bc.gov.mof.lexis.controller.RequestParameterUtils.firstPresent;
 
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
-import ca.bc.gov.mof.lexis.dto.exemption.ExemptionAccessDto;
 import ca.bc.gov.mof.lexis.dto.permit.PermitDetailDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitAllScaleFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitCountryListRpcResponseDto;
@@ -35,7 +34,6 @@ import ca.bc.gov.mof.lexis.dto.permit.rpc.PermitTotalFeesRpcResponseDto;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
-import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.permit.PermitDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.permit.PermitOperationMutex;
@@ -91,7 +89,6 @@ public class PermitDetailsRpcController {
   private static final String PERMIT_STATUS_EXPIRED = "EXP";
   private static final String PERMIT_STATUS_PAYMENT_PENDING = "PPD";
   private static final String PORT_OF_EXPORT_OTHER = "OT";
-  private static final String EXEMPTION_TYPE_BLANKET_OIC = "B";
   private static final String LEGACY_ACTION_SAVE_PERMIT = "savePermit";
   private static final String LEGACY_ACTION_REVIEW_PERMITS = "/permitsReview";
   private static final String LEGACY_ACTION_APPLICATION_DETAILS = "/applicationDetails";
@@ -108,7 +105,6 @@ public class PermitDetailsRpcController {
   private LexisPrincipalService principalService;
   private ApplicationEditLockService editLockService;
   private PermitService permitService;
-  private ExemptionService exemptionService;
 
   public PermitDetailsRpcController(
       ObjectProvider<PermitDetailsRpcService> serviceProvider,
@@ -151,11 +147,6 @@ public class PermitDetailsRpcController {
   @Autowired(required = false)
   void setPermitService(PermitService permitService) {
     this.permitService = permitService;
-  }
-
-  @Autowired(required = false)
-  void setExemptionService(ExemptionService exemptionService) {
-    this.exemptionService = exemptionService;
   }
 
   @GetMapping("/permit-summary")
@@ -671,9 +662,6 @@ public class PermitDetailsRpcController {
         && !mutationRequest.exemptionNumber().isBlank()) {
       requireExemptionAccess(mutationRequest.exemptionNumber(), authentication);
     }
-    if (!canUpdatePermitForPersistedClients(service, permitNumber, authentication)) {
-      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
-    }
     requirePermitDetailsMutable(permitNumber, authentication);
 
     PermitMutationRpcResponseDto response =
@@ -709,14 +697,12 @@ public class PermitDetailsRpcController {
     List<Long> applicationLocksToRelease = List.of();
     try {
       requirePermitEditable(permitNumber, authentication);
-      if (!canUpdatePermitForPersistedClients(service, permitNumber, authentication)) {
-        throw new AccessDeniedException(
-            "Permit client scope changed while the mutation was waiting.");
-      }
       List<Long> linkedApplicationNumbers =
           applicationNumbersForPermitMutation(service, mutationRequest);
       linkedApplicationNumbers.forEach(
-          applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+          applicationNumber ->
+              requirePermitApplicationAccess(
+                  service, permitNumber, applicationNumber, authentication));
       applicationLocksToRelease =
           acquireApplicationLocksForMutation(linkedApplicationNumbers, authentication);
       return canChangePermitAgent(authentication)
@@ -751,52 +737,6 @@ public class PermitDetailsRpcController {
       applicationNumbers.add(requestedOicApplicationNumber);
     }
     return List.copyOf(applicationNumbers);
-  }
-
-  /**
-   * Normal permits inherit client fields from their first linked application, so no direct permit
-   * client-scope check applies. Blanket OIC permits maintain client fields directly; authorize
-   * against the persisted values, never request fields a caller can forge or omit.
-   */
-  private boolean canUpdatePermitForPersistedClients(
-      PermitDetailsRpcService service,
-      Long permitNumber,
-      Authentication authentication) {
-    if (!authorization().hasClientScope(authentication)
-        || !isCanonicalBlanketOicPermit(service, permitNumber)) {
-      return true;
-    }
-    PermitDetailsRpcService.PermitMutationClientScope clientScope =
-        service.getClientScopeForPermitMutation(permitNumber);
-    return authorization().canCreateForClient(
-        authentication, clientScope.ownerClientNumber(), clientScope.agentClientNumber());
-  }
-
-  private boolean isCanonicalBlanketOicPermit(
-      PermitDetailsRpcService service, Long permitNumber) {
-    String exemptionNumber =
-        requiredExemptionNumber(service.getExemptionNumberForPermitMutation(permitNumber));
-    if (exemptionService == null) {
-      throw new DataRetrievalFailureException(
-          "The permit exemption type could not be verified for mutation.");
-    }
-    ExemptionAccessDto exemption =
-        exemptionService
-            .findAccessByExemptionNumber(exemptionNumber)
-            .filter(
-                detail ->
-                    exemptionNumber.equalsIgnoreCase(normalizeExemptionNumber(detail.exemptionNumber())))
-            .orElseThrow(
-                () ->
-                    new DataRetrievalFailureException(
-                        "The permit exemption type could not be verified for mutation."));
-    String exemptionType = normalizeExemptionNumber(exemption.exemptionTypeCode());
-    boolean blanketOic = EXEMPTION_TYPE_BLANKET_OIC.equalsIgnoreCase(exemptionType);
-    if (exemptionType == null || exemption.blanketOic() != blanketOic) {
-      throw new DataRetrievalFailureException(
-          "The permit exemption type could not be verified for mutation.");
-    }
-    return blanketOic;
   }
 
   private List<Long> applicationNumbersForExemptionMutation(
@@ -880,7 +820,8 @@ public class PermitDetailsRpcController {
           requirePermitEditable(permitNumber, authentication);
           requireSubmitterPortsUnchanged(permitNumber, mutationRequest, authentication);
           return ResponseEntity.ok(
-              service.updateShipping(mutationRequest, userId(authentication)));
+              service.updateShipping(
+                  mutationRequest, userId(authentication), isMinistryUser(authentication)));
         });
   }
 
@@ -906,7 +847,9 @@ public class PermitDetailsRpcController {
     List<Long> affectedApplications =
         service.getApplicationNumberForScaleMutation(resolvedScaleId).stream().toList();
     affectedApplications.forEach(
-        applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+        applicationNumber ->
+            requirePermitApplicationAccess(
+                service, permitNumber, applicationNumber, authentication));
     return permitOperationMutex.executeAggregate(
         affectedApplications,
         List.of(permitNumber),
@@ -921,7 +864,9 @@ public class PermitDetailsRpcController {
                 "The scale application relationship changed during mutation.");
           }
           actualApplications.forEach(
-              applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+              applicationNumber ->
+                  requirePermitApplicationAccess(
+                      service, permitNumber, applicationNumber, authentication));
           List<Long> applicationLocksToRelease =
               acquireApplicationLocksForMutation(actualApplications, authentication);
           try {
@@ -966,7 +911,9 @@ public class PermitDetailsRpcController {
             .sorted()
             .toList();
     affectedApplications.forEach(
-        applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+        applicationNumber ->
+            requirePermitApplicationAccess(
+                service, permitNumber, applicationNumber, authentication));
     return permitOperationMutex.executeAggregate(
         affectedApplications,
         List.of(permitNumber),
@@ -984,7 +931,9 @@ public class PermitDetailsRpcController {
                 "The scale application relationship changed during mutation.");
           }
           actualApplications.forEach(
-              applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+              applicationNumber ->
+                  requirePermitApplicationAccess(
+                      service, permitNumber, applicationNumber, authentication));
           List<Long> applicationLocksToRelease =
               acquireApplicationLocksForMutation(actualApplications, authentication);
           try {
@@ -1109,7 +1058,9 @@ public class PermitDetailsRpcController {
           List<Long> applicationNumbers =
               service.getApplicationNumbersForPermitMutation(permitNumber);
           applicationNumbers.forEach(
-              applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+              applicationNumber ->
+                  requirePermitApplicationAccess(
+                      service, permitNumber, applicationNumber, authentication));
           List<Long> applicationLocksToRelease =
               acquireApplicationLocksForMutation(applicationNumbers, authentication);
           try {
@@ -1154,7 +1105,9 @@ public class PermitDetailsRpcController {
           List<Long> applicationNumbers =
               service.getApplicationNumbersForPermitMutation(permitNumber);
           applicationNumbers.forEach(
-              applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+              applicationNumber ->
+                  requirePermitApplicationAccess(
+                      service, permitNumber, applicationNumber, authentication));
           List<Long> applicationLocksToRelease =
               acquireApplicationLocksForMutation(applicationNumbers, authentication);
           try {
@@ -1641,6 +1594,29 @@ public class PermitDetailsRpcController {
   private void requireApplicationAccess(
       Long applicationNumber, Authentication authentication) {
     authorization().requireApplication(authentication, applicationNumber);
+  }
+
+  /**
+   * A client-scoped owner or agent of the permit may act through the permit's stored hidden
+   * Blanket OIC application even when that application's own parties no longer include them;
+   * every other linked application still requires its own access.
+   */
+  private void requirePermitApplicationAccess(
+      PermitDetailsRpcService service,
+      Long permitNumber,
+      Long applicationNumber,
+      Authentication authentication) {
+    if (authorization().hasClientScope(authentication)
+        && service.isHiddenApplicationForPermitMutation(permitNumber, applicationNumber)) {
+      PermitDetailsRpcService.PermitMutationClientScope clients =
+          service.getClientScopeForPermitMutation(permitNumber);
+      if (authorization()
+          .canCreateForClient(
+              authentication, clients.ownerClientNumber(), clients.agentClientNumber())) {
+        return;
+      }
+    }
+    requireApplicationAccess(applicationNumber, authentication);
   }
 
   private Predicate<Long> applicationAccessPredicate(Authentication authentication) {

@@ -65,6 +65,13 @@ class OracleBlanketOicPackageServiceTest {
     assertThat(applicationCaptor.getValue().oicIndicator()).isEqualTo("Y");
     assertThat(applicationCaptor.getValue().applicationStatusCode()).isEqualTo("EXE");
     assertThat(applicationCaptor.getValue().validationEnabled()).isTrue();
+    assertThat(applicationCaptor.getValue().applicantTypeCode()).isEqualTo("O");
+    assertThat(applicationCaptor.getValue().ownerClientNumber()).isEqualTo(permit.clientNumber());
+    assertThat(applicationCaptor.getValue().ownerClientLocationCode())
+        .isEqualTo(permit.clientLocationCode());
+    assertThat(applicationCaptor.getValue().agentClientNumber()).isEqualTo(permit.agentNumber());
+    assertThat(applicationCaptor.getValue().agentClientLocationCode())
+        .isEqualTo(permit.agentLocationCode());
 
     ArgumentCaptor<PermitMutationRow> permitCaptor = ArgumentCaptor.forClass(PermitMutationRow.class);
     verify(permitRepository).updatePermitDetail(permitCaptor.capture(), eq("idir\\jsmith"), eq(null));

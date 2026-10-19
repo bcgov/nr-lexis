@@ -11,6 +11,7 @@
         <lexis:applicantContact>
           <lexis:contactSurname>SERVICE</lexis:contactSurname>
           <lexis:contactFirstname>CUSTOMER</lexis:contactFirstname>
+          <lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>
         </lexis:applicantContact>
       </lexis:applicant>
       <lexis:applicationDetail>

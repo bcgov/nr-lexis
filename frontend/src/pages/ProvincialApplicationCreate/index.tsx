@@ -51,6 +51,7 @@ import {
 } from '@/pages/shared/application-list-date-options'
 import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
+  clientDisplayName,
   averageLogVolumeFieldError,
   clientLookupNumbersMatch,
   clientLocationLabel,
@@ -265,8 +266,8 @@ const INITIAL_FORM: ProvincialApplicationCreateForm = {
   exportScheduleId: '',
   listingDate: '',
   productLocation: '',
-  applicationVolume: '',
-  averageLogVolume: '',
+  applicationVolume: '0.0',
+  averageLogVolume: '0.0',
   speciesCodes: [],
   endUseCode: '',
 }
@@ -317,8 +318,9 @@ const buildInitialFormFromQuery = (
     exportScheduleId: query.get('exportScheduleId') ?? query.get('legacyExportScheduleId') ?? '',
     listingDate: query.get('listingDate') ?? '',
     productLocation: query.get('productLocation') ?? query.get('logLocation') ?? '',
-    applicationVolume: query.get('applicationVolume') ?? '',
-    averageLogVolume: query.get('averageLogVolume') ?? query.get('logVolume') ?? '',
+    applicationVolume: query.get('applicationVolume') ?? INITIAL_FORM.applicationVolume,
+    averageLogVolume:
+      query.get('averageLogVolume') ?? query.get('logVolume') ?? INITIAL_FORM.averageLogVolume,
     speciesCodes: (query.get('speciesCodes') ?? query.get('speciesTableValues') ?? '')
       .split(',')
       .map((value) => value.trim())
@@ -1355,8 +1357,9 @@ const ProvincialApplicationCreatePage = () => {
         () => greaterThanFieldError(form.applicationTermDays, 'Exemption term days', 0),
         () => maxNumericValueFieldError(form.applicationTermDays, 99999, 'Exemption term days'),
       ),
+      // A blank list date is allowed for approvers and while no schedule is open.
       exportScheduleId:
-        (canReviewApplications && !form.exportScheduleId) ||
+        (!form.exportScheduleId && (canReviewApplications || currentSchedules.length === 0)) ||
         currentSchedules.some((option) => option.value === form.exportScheduleId)
           ? undefined
           : 'Select a valid list date.',
@@ -1407,6 +1410,8 @@ const ProvincialApplicationCreatePage = () => {
     }
   }, [hasValidationError, status])
   const logDetailsRequired = productTypeRequiresLogDetails(form.productTypeCode)
+  // With no open schedule the list date has nothing to choose from and stays blank.
+  const listDateRequired = !optionsLoaded || currentSchedules.length > 0
   const requiredApplicationOptionsMissing =
     optionsLoaded &&
     !optionsUnavailable &&
@@ -1908,7 +1913,7 @@ const ProvincialApplicationCreatePage = () => {
                           labelText={requiredLabel('Client')}
                           value={form.ownerClientNumber}
                           resetKey={clientSearchResetKey}
-                          selectedClientName={ownerClientData?.companyName}
+                          selectedClientName={clientDisplayName(ownerClientData, '')}
                           counterpartyClientNumber={form.agentClientNumber}
                           required
                           invalid={!!fieldError('ownerClientNumber')}
@@ -2048,7 +2053,7 @@ const ProvincialApplicationCreatePage = () => {
                               labelText={requiredLabel('Agent client')}
                               value={form.agentClientNumber}
                               resetKey={clientSearchResetKey}
-                              selectedClientName={agentClientData?.companyName}
+                              selectedClientName={clientDisplayName(agentClientData, '')}
                               counterpartyClientNumber={form.ownerClientNumber}
                               required
                               invalid={!!fieldError('agentClientNumber')}
@@ -2215,13 +2220,13 @@ const ProvincialApplicationCreatePage = () => {
                     <RecordFieldCell>
                       <div className="application-list-date-field">
                         <RadioButtonGroup
-                          legendText={requiredLabel('List date')}
+                          legendText={requiredLabel('List date', listDateRequired)}
                           name="exportScheduleId"
                           valueSelected={
                             form.exportScheduleId ||
                             (canReviewApplications ? NO_LIST_DATE_VALUE : '')
                           }
-                          required
+                          required={listDateRequired}
                           orientation="vertical"
                           disabled={!optionsLoaded || optionsUnavailable}
                           onChange={(value) => {

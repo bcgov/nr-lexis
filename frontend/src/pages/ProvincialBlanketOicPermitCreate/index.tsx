@@ -4,6 +4,7 @@ import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailLoadError from '@/components/DetailLoadError'
 import PageHeader from '@/components/PageHeader'
+import { AppNotification } from '@/components/AppNotification'
 import { useAuth } from '@/context/auth/useAuth'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole, hasRole } from '@/context/auth/role-utils'
@@ -132,7 +133,7 @@ const BlanketOicPermitCreateContent = ({
     <Column sm={4} md={8} lg={16} className="detail-page-header">
       <PageHeader
         title="Apply for new permit"
-        focusTitle
+        focusTitle={!outcomeUnknownMessage}
         actions={actions}
         actionsLabel="Blanket OIC permit actions"
       />
@@ -171,12 +172,12 @@ const BlanketOicPermitCreateContent = ({
 
       {!loading && !errorMessage && !eligibilityMessage && !!outcomeUnknownMessage && (
         <Column sm={4} md={8} lg={16} className="detail-page-error">
-          <InlineNotification
+          <AppNotification
             kind="error"
             title="Permit creation outcome unknown"
             subtitle={outcomeUnknownMessage}
             lowContrast
-            hideCloseButton
+            focusOnReveal
           />
           <div className="legacy-search-actions application-create-actions">
             <Button kind="tertiary" size="md" onClick={onCancel}>

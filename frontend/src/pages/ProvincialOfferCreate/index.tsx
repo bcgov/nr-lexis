@@ -145,6 +145,8 @@ type PageStatus = {
 type CreatedOfferNavigation = {
   path: string
   warnings: string[]
+  /** The server's save message, shown on the offer page when the save raised no warnings. */
+  message: string
 }
 
 type ScopedOfferClientContext = {
@@ -306,6 +308,7 @@ const ProvincialOfferCreatePage = () => {
     [],
   )
   const formRef = useRef<HTMLDivElement>(null)
+  const teacSeedRef = useRef<{ applicationNumber: string; value: string } | null>(null)
   const [createdOfferNavigation, setCreatedOfferNavigation] =
     useState<CreatedOfferNavigation | null>(null)
   const [applicationContext, dispatchApplicationContext] = useReducer(
@@ -336,6 +339,15 @@ const ProvincialOfferCreatePage = () => {
   })
   const [scopedContact, setScopedContact] = useState({ clientNumber: '', contactName: '' })
   const scopedContactBaselineRef = useRef(scopedContact)
+  // Fills the submitter's contact name from the client's legal name unless they already typed one.
+  const prefillScopedContactName = useCallback((clientNumber: string, contactName: string) => {
+    setScopedContact((current) =>
+      current.clientNumber === clientNumber ? current : { clientNumber, contactName },
+    )
+    if (scopedContactBaselineRef.current.clientNumber !== clientNumber) {
+      scopedContactBaselineRef.current = { clientNumber, contactName }
+    }
+  }, [])
   const canManageOfferApproval =
     hasRole(capabilities.roles, 'APPLICATION_APPROVER') || hasRole(capabilities.roles, 'ADMIN')
   const isScopedProvincialSubmitter =
@@ -425,6 +437,18 @@ const ProvincialOfferCreatePage = () => {
       return
     }
 
+    if (createdOfferNavigation.message) {
+      navigate(createdOfferNavigation.path, {
+        state: {
+          offerCreationNotice: {
+            warnings: [],
+            message: createdOfferNavigation.message,
+          },
+        },
+      })
+      return
+    }
+
     navigate(createdOfferNavigation.path)
   }, [createdOfferNavigation, navigate])
 
@@ -448,6 +472,10 @@ const ProvincialOfferCreatePage = () => {
             ? ''
             : 'The offering company could not be loaded from the authenticated forest client.',
         })
+        const legalContactName = clientData?.legalContactName?.trim()
+        if (legalContactName) {
+          prefillScopedContactName(requestedClientNumber, legalContactName)
+        }
       })
       .catch((error) => {
         if (!active) {
@@ -466,7 +494,7 @@ const ProvincialOfferCreatePage = () => {
     return () => {
       active = false
     }
-  }, [authoritativeOfferingClientNumber, isScopedProvincialSubmitter])
+  }, [authoritativeOfferingClientNumber, isScopedProvincialSubmitter, prefillScopedContactName])
 
   useEffect(() => {
     const rawApplicationNumber = applicationNumberForLookup.trim()
@@ -556,12 +584,28 @@ const ProvincialOfferCreatePage = () => {
           applicationVolume: nextApplicationVolume ?? '',
           packageOptions: nextPackageOptions,
         })
-        applyLoadedFormValues((current) => {
+        // The schedule's TEAC date fills the field once per application, so an approver who
+        // clears it keeps it empty. A date the approver typed for another application stays.
+        const scheduleTeacReviewDate =
+          detailsResult.status === 'fulfilled' && detailsResult.value.success
+            ? detailsResult.value.teacReviewDate
+            : ''
+        const previousTeacSeed = teacSeedRef.current
+        const seedTeacReviewDate = previousTeacSeed?.applicationNumber !== applicationNumber
+        if (seedTeacReviewDate) {
+          teacSeedRef.current = { applicationNumber, value: scheduleTeacReviewDate }
+        }
+        applyLoadedFormValues((loaded) => {
           if (
-            normalizeProvincialApplicationNumber(current.applicationNumber) !== applicationNumber
+            normalizeProvincialApplicationNumber(loaded.applicationNumber) !== applicationNumber
           ) {
-            return current
+            return loaded
           }
+          const current =
+            seedTeacReviewDate &&
+            (loaded.teacReviewDate === '' || loaded.teacReviewDate === previousTeacSeed?.value)
+              ? { ...loaded, teacReviewDate: scheduleTeacReviewDate }
+              : loaded
           const firstPackageNumber = nextPackageOptions[0]?.value
           if (!firstPackageNumber) {
             return current.packageNumber ? { ...current, packageNumber: '' } : current
@@ -776,7 +820,7 @@ const ProvincialOfferCreatePage = () => {
         companyName: effectiveCompanyName,
         contactName: effectiveContactName,
         teacReviewDate: canManageOfferApproval
-          ? form.teacReviewDate || applicationDetails?.teacReviewDate || ''
+          ? form.teacReviewDate
           : applicationDetails?.teacReviewDate || '',
         fairOfferIndicator: canManageOfferApproval ? form.fairOfferIndicator : 'N',
         validOfferIndicator: canManageOfferApproval ? form.validOfferIndicator : 'Y',
@@ -791,6 +835,7 @@ const ProvincialOfferCreatePage = () => {
           setCreatedOfferNavigation({
             path: `/provincial/offers/${encodeURIComponent(result.createdId)}`,
             warnings: result.warnings,
+            message: result.message.trim(),
           })
           return true
         }
@@ -1212,7 +1257,7 @@ const ProvincialOfferCreatePage = () => {
                     <IsoDatePicker
                       id="teacReviewDate"
                       labelText="TEAC review date"
-                      value={form.teacReviewDate || applicationDetails?.teacReviewDate || ''}
+                      value={form.teacReviewDate}
                       invalid={!!fieldError('teacReviewDate')}
                       invalidText={fieldError('teacReviewDate')}
                       onBlur={() => markFieldTouched('teacReviewDate')}

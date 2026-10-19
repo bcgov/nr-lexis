@@ -491,20 +491,30 @@ BRITISH COLUMBIA]]></text>
 				</textElement>
 				<textFieldExpression><![CDATA[$V{CCF8_FormattedExpiryDate}]]></textFieldExpression>
 			</textField>
-			<textField>
-				<reportElement uuid="b3769f94-62ca-4cde-9f3a-14f0cf3da1fb" x="544" y="17" width="13" height="13"/>
-				<textElement markup="none">
-					<font fontName="DejaVu Sans" size="10"/>
-				</textElement>
-				<textFieldExpression><![CDATA["☑"]]></textFieldExpression>
-			</textField>
-			<textField>
-				<reportElement uuid="dca9b4b4-7a10-47d0-b031-0fd499d1f04c" x="544" y="66" width="13" height="13"/>
-				<textElement markup="none">
-					<font fontName="DejaVu Sans" size="10"/>
-				</textElement>
-				<textFieldExpression><![CDATA["☐"]]></textFieldExpression>
-			</textField>
+			<rectangle>
+				<reportElement uuid="b3769f94-62ca-4cde-9f3a-14f0cf3da1fb" mode="Transparent" x="544" y="17" width="13" height="13" forecolor="#000000"/>
+				<graphicElement>
+					<pen lineWidth="0.75" lineStyle="Solid"/>
+				</graphicElement>
+			</rectangle>
+			<line>
+				<reportElement uuid="8bca3b38-f9b9-4723-b4c9-747f15396d6d" x="546" y="23" width="3" height="3" forecolor="#000000"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<line direction="BottomUp">
+				<reportElement uuid="93fa011c-e0b6-401b-bfc0-6d99d3e6aee7" x="549" y="19" width="6" height="7" forecolor="#000000"/>
+				<graphicElement>
+					<pen lineWidth="1.0" lineStyle="Solid"/>
+				</graphicElement>
+			</line>
+			<rectangle>
+				<reportElement uuid="dca9b4b4-7a10-47d0-b031-0fd499d1f04c" mode="Transparent" x="544" y="66" width="13" height="13" forecolor="#000000"/>
+				<graphicElement>
+					<pen lineWidth="0.75" lineStyle="Solid"/>
+				</graphicElement>
+			</rectangle>
 		</band>
 		<band height="98">
 			<line>

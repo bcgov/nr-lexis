@@ -48,6 +48,7 @@ const regressionSubmissionXml = (
         <lexis:applicantContact>
           <lexis:contactSurname>REGRESSION</lexis:contactSurname>
           <lexis:contactFirstname>E2E</lexis:contactFirstname>
+          <lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>
         </lexis:applicantContact>
       </lexis:applicant>
       <lexis:applicationDetail>

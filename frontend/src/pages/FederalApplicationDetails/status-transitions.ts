@@ -1,13 +1,16 @@
-type FederalStatusTransition = {
+export type FederalStatusTransition = {
   code: 'REJ' | 'WDN'
+  /** The status the application ends in. */
   label: string
+  /** The header action that starts the change. */
+  actionLabel: string
 }
 
 // New and pending federal applications are approved from Application Review, so the record only
 // offers rejection or withdrawal of an approved application through its list date.
 const REVIEW_OUTCOME_TRANSITIONS: FederalStatusTransition[] = [
-  { code: 'REJ', label: 'Rejected' },
-  { code: 'WDN', label: 'Withdrawn' },
+  { code: 'WDN', label: 'Withdrawn', actionLabel: 'Withdraw' },
+  { code: 'REJ', label: 'Rejected', actionLabel: 'Reject' },
 ]
 
 const normalizedIsoDate = (value: string | null | undefined): string | null => {

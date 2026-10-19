@@ -34,6 +34,8 @@ public class ApplicationApprovalEligibilityService {
   private static final String DEFAULT_END_USE = "OT";
   private static final BigDecimal MAX_APPLICATION_VOLUME = new BigDecimal("9999999.99");
   private static final BigDecimal MAX_AVERAGE_LOG_VOLUME = new BigDecimal("99.9");
+  private static final Set<Long> LEXIS_REGION_NUMBERS =
+      Set.of(1903L, 1904L, 1905L, 1906L, 1907L, 1908L, 1909L, 1910L);
 
   private final ApplicationDetailsRpcRepository applicationRepository;
   private final ClientLookupRepository clientRepository;
@@ -113,7 +115,7 @@ public class ApplicationApprovalEligibilityService {
       }
     }
 
-    if (application.orgUnitNumber() == null || application.orgUnitNumber() < 1) {
+    if (!isLexisRegion(application.orgUnitNumber())) {
       errors.add("Application region is required.");
     }
     if (trimToNull(application.ownerClientNumber()) == null) {
@@ -161,7 +163,9 @@ public class ApplicationApprovalEligibilityService {
     if (!applicationRepository.isJurisdictionCodeValidRequired(application.jurisdictionCode())) {
       errors.add("Application jurisdiction code does not exist.");
     }
-    if (!applicationRepository.isOrgUnitValidRequired(application.orgUnitNumber())) {
+    // A region outside the LEXIS regions is already reported as required.
+    if (isLexisRegion(application.orgUnitNumber())
+        && !applicationRepository.isOrgUnitValidRequired(application.orgUnitNumber())) {
       errors.add("Application region does not exist.");
     }
   }
@@ -286,6 +290,11 @@ public class ApplicationApprovalEligibilityService {
         .isPresent()) {
       errors.add("Applications linked to a Blanket OIC permit cannot be approved.");
     }
+  }
+
+  /** Whether the organization unit is one of the configured LEXIS regions (1903-1910). */
+  public static boolean isLexisRegion(Long orgUnitNumber) {
+    return orgUnitNumber != null && LEXIS_REGION_NUMBERS.contains(orgUnitNumber);
   }
 
   private static String normalizeCode(String value) {

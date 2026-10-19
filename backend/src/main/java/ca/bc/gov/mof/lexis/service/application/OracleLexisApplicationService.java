@@ -56,6 +56,12 @@ public class OracleLexisApplicationService implements LexisApplicationService {
   }
 
   @Override
+  public boolean hasUpcomingListDate() {
+    return safeList(scheduleRepository.findNextSchedulesRequired()).stream()
+        .anyMatch(row -> row.exportScheduleId() != null && row.advertisingDate() != null);
+  }
+
+  @Override
   public LexisApplicationSearchResponseDto search(LexisApplicationSearchCriteria criteria) {
     return search(criteria, null);
   }

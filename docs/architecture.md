@@ -80,9 +80,12 @@ creating an application under an exemption, linking or unlinking an exemption's 
 removing its documents and sending its approval emails. Activating an exemption through a save or create is an approval, so it needs the regions of
 the user's Exemption Approver grants rather than those of the route's save or create action.
 Creating a permit from an exemption needs one of its regions, and the permit's own region must be
-granted. A regional user's reports must name only their regions, including the tenure type and
-timber mark analyses that legacy always ran province-wide; a region sent as either `region` or
-`orgUnitNumber` is copied to the other key before authorization, so the report filters on exactly
+granted. Changing an application's packages or scales needs the application's region in an
+Application Approver grant; an Exemption Approver grant adds its regions only for the items of an
+eligible Ministerial application, and Read Only never authorizes the change. Deleting a scale that
+is on a permit also needs the permit's region. A regional user's reports must name only their
+regions, including the tenure type and timber mark analyses that legacy always ran province-wide; a
+region sent as either `region` or `orgUnitNumber` is copied to the other key before authorization, so the report filters on exactly
 what was authorized. Records without a region, or
 still tagged with a pre-2010 forest region, are outside every regional grant. Administrator and
 Business BCeID roles are never regional. Session capabilities list each region-limited action's regions

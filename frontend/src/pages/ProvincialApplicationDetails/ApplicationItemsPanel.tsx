@@ -174,8 +174,9 @@ const SCALE_INPUT_FIELDS: Record<keyof ScaleFormState, ApplicationItemField> = {
 const DUPLICATE_SCALE_MESSAGE = 'A scale with this timber mark, species, and grade already exists.'
 
 const CREATE_PACKAGE_SERVER_FIELDS: Array<[RegExp, ApplicationItemField]> = [
-  [/^Package number .+ already exists\.$/, 'createPackageNumber'],
+  [/^Package (number )?.+ already exists\.$/, 'createPackageNumber'],
   [/^The (total )?package volume .+\.$/, 'createPackageVolume'],
+  [/^The application volume has already been met\.$/, 'createPackageVolume'],
   [/^The package average length .+\.$/, 'createPackageAverageLength'],
   [/^The package average diameter .+\.$/, 'createPackageAverageDiameter'],
   [/^Package comments .+\.$/, 'createPackageComments'],
@@ -1270,12 +1271,19 @@ function ProvincialApplicationItemsPanel({
   const canManageItems =
     !hideMutationActions &&
     (canEditPackages || canAddPackages || canDeletePackages || canAddScales || canDeleteScales)
-  // A single package has no selector, so focus returns to its card.
+  // A saved package's form and page must land on the same action, whichever runs first. Other
+  // closes return to the selector, or to the card when there is only one package.
   const packageFocusFallbackSelector =
-    packageNumbers.length > 1 ? '#applicationItemsPackageSelect' : '#application-items-package'
+    pendingItemFocus === 'saved-package'
+      ? '#application-items-edit-package:not(:disabled)'
+      : packageNumbers.length > 1
+        ? '#applicationItemsPackageSelect'
+        : '#application-items-package'
   const canOpenItemsEditor =
     !editingBlocked &&
     (packageFirstEmptyState ? !hideMutationActions && canAddPackages : canManageItems)
+  // Scales on a completed permit have no Delete, so the column only shows when a row can use it.
+  const showScaleActions = canOpenItemsEditor && scales.some((row) => !row.permitted)
   const canSaveSelectedPackage =
     activeDrawer === 'edit' &&
     canEditPackages &&
@@ -1298,8 +1306,15 @@ function ProvincialApplicationItemsPanel({
     packageDataLoaded &&
     !!selectedPackageNumber &&
     !isSavingPackage &&
-    !selectedPackageHasPermittedScale &&
-    selectedPackageTotalPieces === 0
+    scales.length === 0
+  // The server refuses to delete a package that still has scales, even ones with no pieces.
+  const packageDeleteBlockedByScales =
+    !itemsBusy &&
+    canDeletePackages &&
+    packageDataLoaded &&
+    !!selectedPackageNumber &&
+    !isSavingPackage &&
+    scales.length > 0
 
   const startItemEditing = (drawer: 'create' | 'edit' | 'scale', launcher: HTMLElement) => {
     if (!canOpenItemsEditor || itemsBusy) return
@@ -1496,6 +1511,8 @@ function ProvincialApplicationItemsPanel({
       const nextPackageNumber = result.packageNumber || createPackageForm.packageNumber
       dispatchPackageSelection({ type: 'add', packageNumber: nextPackageNumber })
       resetCreatePackageDraft()
+      // The new package's Edit package button takes focus, not the launcher that opened the form.
+      packageLauncherRef.current = null
       setActiveDrawer(null)
       setIsEditingItems(false)
       try {
@@ -1531,8 +1548,8 @@ function ProvincialApplicationItemsPanel({
       throw new Error('Package delete is not allowed after a scale has been permitted.')
     }
 
-    if (selectedPackageTotalPieces > 0) {
-      throw new Error('Package delete is not allowed after scale pieces have been added.')
+    if (scales.length > 0) {
+      throw new Error('Package delete is not allowed while the package has scales.')
     }
 
     setIsSavingPackage(true)
@@ -1650,7 +1667,9 @@ function ProvincialApplicationItemsPanel({
     try {
       const result = await deleteApplicationScale(row.id, applicationNumber)
       if (!result.success) {
-        throw new Error('Scale delete failed. Refresh and try again.')
+        throw new Error(
+          'Scale not deleted. It may now be on a completed permit. Reload the application to check.',
+        )
       }
       setScales((current) => current.filter((item) => item.id !== row.id))
       try {
@@ -1674,15 +1693,6 @@ function ProvincialApplicationItemsPanel({
     }
   }
 
-  const selectedSpeciesOptions = packageSpeciesCodes.map((species) => {
-    const known = speciesOptions.find((option) => option.code === species)
-    return {
-      code: species,
-      description: known?.description ?? species,
-    }
-  })
-  const scaleSpeciesOptions =
-    selectedSpeciesOptions.length > 0 ? selectedSpeciesOptions : speciesOptions
   return (
     <div
       id="application-items"
@@ -1813,6 +1823,11 @@ function ProvincialApplicationItemsPanel({
               </span>
             </h3>
             <div className="application-items-card-actions">
+              {canOpenItemsEditor && packageDeleteBlockedByScales && (
+                <p id="application-items-delete-package-reason" className="cds--form__helper-text">
+                  A package with scales can&apos;t be deleted.
+                </p>
+              )}
               {canOpenItemsEditor && canDeleteSelectedPackage && (
                 <Button
                   kind="danger--ghost"
@@ -2076,9 +2091,9 @@ function ProvincialApplicationItemsPanel({
                     )}
                     titleText={requiredLabel('Species')}
                     label=""
-                    items={scaleSpeciesOptions}
+                    items={speciesOptions}
                     itemToString={optionName}
-                    selectedItem={findOption(scaleSpeciesOptions, scaleForm.speciesCode)}
+                    selectedItem={findOption(speciesOptions, scaleForm.speciesCode)}
                     disabled={scaleFieldsDisabled}
                     invalid={!!scaleFieldError('scaleSpeciesCode')}
                     invalidText={scaleFieldError('scaleSpeciesCode')}
@@ -2148,7 +2163,7 @@ function ProvincialApplicationItemsPanel({
                       <TableHeader>Species</TableHeader>
                       <TableHeader>Grade</TableHeader>
                       <TableHeader>Volume (m³)</TableHeader>
-                      {canOpenItemsEditor && <TableHeader>Actions</TableHeader>}
+                      {showScaleActions && <TableHeader>Actions</TableHeader>}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -2160,31 +2175,32 @@ function ProvincialApplicationItemsPanel({
                         <TableCell>{row.species}</TableCell>
                         <TableCell>{row.grade}</TableCell>
                         <TableCell>{formatVolume(row.volume)}</TableCell>
-                        {canOpenItemsEditor && (
+                        {showScaleActions && (
                           <TableCell>
-                            <Button
-                              type="button"
-                              kind="danger--ghost"
-                              size="md"
-                              disabled={
-                                !canDeleteScales ||
-                                itemsBusy ||
-                                !packageDataLoaded ||
-                                deletingScaleId === row.id ||
-                                row.permitted
-                              }
-                              renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
-                              onClick={() => {
-                                if (itemsBusy) return
-                                confirmItemDiscard(() => {
-                                  cancelItemEditing()
-                                  onActionResult(null)
-                                  setScalePendingDeletion(row)
-                                })
-                              }}
-                            >
-                              {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
-                            </Button>
+                            {!row.permitted && (
+                              <Button
+                                type="button"
+                                kind="danger--ghost"
+                                size="md"
+                                disabled={
+                                  !canDeleteScales ||
+                                  itemsBusy ||
+                                  !packageDataLoaded ||
+                                  deletingScaleId === row.id
+                                }
+                                renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
+                                onClick={() => {
+                                  if (itemsBusy) return
+                                  confirmItemDiscard(() => {
+                                    cancelItemEditing()
+                                    onActionResult(null)
+                                    setScalePendingDeletion(row)
+                                  })
+                                }}
+                              >
+                                {deletingScaleId === row.id ? 'Deleting…' : 'Delete'}
+                              </Button>
+                            )}
                           </TableCell>
                         )}
                       </TableRow>

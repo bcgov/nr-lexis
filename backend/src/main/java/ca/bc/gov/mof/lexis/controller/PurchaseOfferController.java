@@ -24,6 +24,7 @@ import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.Positive;
@@ -348,9 +349,16 @@ public class PurchaseOfferController {
     return isApplicationApprover(roles);
   }
 
+  /** An offering client keeps its edit rights on the day it withdraws an offer, not after. */
   private boolean canEditOfferDetails(
       String scopedClientNumber, List<String> roles, PurchaseOfferDetailDto detail) {
-    return isApplicationApprover(roles) || isOfferingClient(scopedClientNumber, detail);
+    return isApplicationApprover(roles)
+        || (isOfferingClient(scopedClientNumber, detail) && !withdrawnBeforeToday(detail));
+  }
+
+  private boolean withdrawnBeforeToday(PurchaseOfferDetailDto detail) {
+    return detail.offerWithdrawalDate() != null
+        && detail.offerWithdrawalDate().isBefore(LexisBusinessTime.today());
   }
 
   private boolean canEditWithdrawFields(

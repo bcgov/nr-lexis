@@ -34,6 +34,7 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.InjectMocks;
@@ -692,6 +693,29 @@ class FederalApplicationOracleServiceTest {
     verifyNoInteractions(repository, applicationDetailsRepository, applicationReviewRepository);
   }
 
+  @ParameterizedTest
+  @ValueSource(strings = {"caf\u00e9", "it\u2019s a \u201cquote\u201d", "dash \u2013 here"})
+  void remarkMutationsShouldRefuseNonAsciiTextBeforeOracleMutation(String text) {
+    String message =
+        "Application remarks contain unsupported special characters. Remove them and try again.";
+    FederalApplicationService.FederalRemarkMutationRequest request =
+        new FederalApplicationService.FederalRemarkMutationRequest(text);
+
+    assertThat(service.addRemark(1000456L, request, "idir\\approver").errors())
+        .containsExactly(message);
+    assertThat(service.updateRemark(1000456L, 44L, request, "idir\\approver").errors())
+        .containsExactly(message);
+    assertThat(
+            service
+                .updateStatus(
+                    1000456L,
+                    new FederalApplicationService.FederalStatusMutationRequest("WDN", text),
+                    "idir\\approver")
+                .errors())
+        .containsExactly(message);
+    verifyNoInteractions(repository, applicationDetailsRepository, applicationReviewRepository);
+  }
+
   @Test
   void remarkMutationsShouldRejectStorageOverflowBeforeOracleMutation() {
     FederalApplicationService.FederalRemarkMutationRequest request =
@@ -713,8 +737,20 @@ class FederalApplicationOracleServiceTest {
   }
 
   @Test
-  void addRemarkShouldAcceptExactly250CharactersWithoutConvertingLiteralEntities() {
-    String text = "&amp;".repeat(50);
+  void remarkMutationsShouldCountTheEscapedCharactersAgainstTheLimit() {
+    FederalApplicationService.FederalRemarkMutationRequest request =
+        new FederalApplicationService.FederalRemarkMutationRequest("x".repeat(246) + "&&");
+
+    assertThat(service.addRemark(1000456L, request, "idir\\approver").errors())
+        .containsExactly("Remark must not exceed 250 characters.");
+    assertThat(service.updateRemark(1000456L, 44L, request, "idir\\approver").errors())
+        .containsExactly("Remark must not exceed 250 characters.");
+    verifyNoInteractions(repository, applicationDetailsRepository, applicationReviewRepository);
+  }
+
+  @Test
+  void addRemarkShouldAcceptARemarkWhoseEscapedFormIsExactly250CharactersWithoutConvertingLiteralEntities() {
+    String text = "&amp;".repeat(27) + "x".repeat(7);
     when(repository.findMutationContextRequired(1000456L))
         .thenReturn(Optional.of(federalContext("NEW", LocalDate.of(2026, 3, 1))));
     when(applicationDetailsRepository.insertRemark(

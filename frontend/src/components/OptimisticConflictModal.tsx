@@ -7,6 +7,7 @@ import {
   type OptimisticConflictRequest,
   type OptimisticRecordType,
 } from '@/service/optimistic-conflict'
+import { recordVersionLoadedAt } from '@/service/record-version-service'
 import { formatBusinessIsoDate, formatIsoDateLabel, LEXIS_BUSINESS_TIME_ZONE } from '@/utils/date'
 
 import './OptimisticConflictModal.scss'
@@ -19,32 +20,54 @@ const RECORD_NOUNS: Record<OptimisticRecordType, string> = {
   offer: 'offer',
 }
 
-const formatSavedAt = (value: string | undefined): { date: string; time: string } | undefined => {
-  if (!value) return undefined
-  const savedAt = new Date(value)
-  if (Number.isNaN(savedAt.getTime())) return undefined
-  return {
-    date: formatIsoDateLabel(formatBusinessIsoDate(savedAt)),
-    // "10:39 a.m."
-    time: new Intl.DateTimeFormat('en-CA', {
-      timeZone: LEXIS_BUSINESS_TIME_ZONE,
-      hour: 'numeric',
-      minute: '2-digit',
-      hour12: true,
-    }).format(savedAt),
-  }
+// Accounts that save on the system's behalf are described by what they did, never named.
+const SYSTEM_USER_MESSAGES: Record<string, string> = {
+  EXPIRY_MONITOR: 'This exemption expired overnight.',
 }
 
+const systemUserMessage = (userId: string | undefined): string | undefined =>
+  userId ? SYSTEM_USER_MESSAGES[userId.toUpperCase()] : undefined
+
+const parseSavedAt = (value: string | undefined): Date | undefined => {
+  if (!value) return undefined
+  const savedAt = new Date(value)
+  return Number.isNaN(savedAt.getTime()) ? undefined : savedAt
+}
+
+const formatSavedAt = (savedAt: Date): { date: string; time: string } => ({
+  date: formatIsoDateLabel(formatBusinessIsoDate(savedAt)),
+  // "10:39 a.m."
+  time: new Intl.DateTimeFormat('en-CA', {
+    timeZone: LEXIS_BUSINESS_TIME_ZONE,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  }).format(savedAt),
+})
+
 const staleRecordMessage = (conflict: OptimisticConflictRequest, recordNoun: string): string => {
-  const updatedBy = conflict.problem.updatedBy?.trim()
-  const savedAt = formatSavedAt(conflict.problem.savedAt)
-  const when = savedAt ? ` on ${savedAt.date} at ${savedAt.time},` : ''
-  const saved = updatedBy
-    ? `${updatedBy} saved changes${when} after you opened this ${recordNoun}.`
-    : `Changes were saved${when} after you opened this ${recordNoun}.`
   const notSaved = conflict.saveSubject
     ? `Your ${conflict.saveSubject} was not saved.`
     : 'Your changes were not saved.'
+  const savedAt = parseSavedAt(conflict.problem.savedAt)
+  const openedAt =
+    conflict.recordType && conflict.recordId
+      ? recordVersionLoadedAt(conflict.recordType, conflict.recordId)
+      : undefined
+  // The newest saved row can be older than the version that was opened, such as after a delete.
+  // That save is not the change that made this one stale, so its user and time are not shown.
+  // Both times are the server's; with no server time for the opened version, the save is shown.
+  const newerThanOpened = !savedAt || openedAt === undefined || savedAt.getTime() >= openedAt
+  const updatedBy = newerThanOpened ? conflict.problem.updatedBy?.trim() : undefined
+
+  const systemMessage = systemUserMessage(updatedBy)
+  if (systemMessage) return `${systemMessage} ${notSaved}`
+
+  const formatted = newerThanOpened && savedAt ? formatSavedAt(savedAt) : undefined
+  const when = formatted ? ` on ${formatted.date} at ${formatted.time},` : ''
+  const saved = updatedBy
+    ? `${updatedBy} saved changes${when} after you opened this ${recordNoun}.`
+    : `Changes were saved${when} after you opened this ${recordNoun}.`
   return `${saved} ${notSaved}`
 }
 

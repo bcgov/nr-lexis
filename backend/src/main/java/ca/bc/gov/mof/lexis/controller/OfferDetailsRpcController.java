@@ -30,7 +30,6 @@ import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import jakarta.servlet.http.HttpServletRequest;
 import java.math.BigDecimal;
 import java.time.LocalDate;
-import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
@@ -68,8 +67,6 @@ public class OfferDetailsRpcController {
   private static final String FAIR_OFFER_DEFAULT = "N";
   private static final String VALID_OFFER_DEFAULT = "Y";
   private static final String APPROVAL_DEFAULT = "N";
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER =
-      DateTimeFormatter.ofPattern("MM/dd/yyyy");
 
   private final ObjectProvider<LexisApplicationService> applicationServiceProvider;
   private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
@@ -180,7 +177,7 @@ public class OfferDetailsRpcController {
         new OfferApplicationDetailsResponseDto(
             true,
             resolveApplicationSpeciesGradeCode(parsed),
-            formatLegacyDate(detail.get().listingDate()),
+            formatIsoDate(detail.get().listingDate()),
             formatIsoDate(detail.get().teacMeetingDate()),
             applicationRegion(detail.get())));
   }
@@ -350,12 +347,14 @@ public class OfferDetailsRpcController {
                         data.phone(),
                         data.fax(),
                         data.email(),
+                        data.legalContactName(),
                         null)))
         .orElseGet(
             () ->
                 ResponseEntity.ok(
                     new OfferClientDataResponseDto(
-                        null, null, null, null, null, null, null, null, null, null, "true")));
+                        null, null, null, null, null, null, null, null, null, null, null,
+                        "true")));
   }
 
   @PostMapping("/offer")
@@ -559,9 +558,15 @@ public class OfferDetailsRpcController {
     }
     PurchaseOfferService.UpdateOfferRequest request =
         toUpdateOfferRequest(parameters, currentOffer.get());
+    // An offering client can change a withdrawn offer only on the day it was withdrawn. A request
+    // without a withdrawal date keeps the stored one.
+    LocalDate effectiveWithdrawalDate =
+        request.offerWithdrawalDate() != null
+            ? request.offerWithdrawalDate()
+            : currentOffer.get().offerWithdrawalDate();
     if (scopedOfferingClient
-        && withdrawalDateChanged(request, currentOffer.get())
-        && !LexisBusinessTime.today().equals(request.offerWithdrawalDate())) {
+        && effectiveWithdrawalDate != null
+        && !LexisBusinessTime.today().equals(effectiveWithdrawalDate)) {
       return invalidUpdate(
           currentOffer.get(), "Offer withdrawn date must be the current date.");
     }
@@ -714,7 +719,7 @@ public class OfferDetailsRpcController {
           "Application "
               + applicationNumber
               + " can not accept offers until "
-              + listingDate.format(LEGACY_DATE_FORMATTER));
+              + formatIsoDate(listingDate));
     }
     if (listingDate != null) {
       return List.of("Application " + applicationNumber + " is no longer accepting offers");
@@ -1190,13 +1195,6 @@ public class OfferDetailsRpcController {
         result.warnings());
   }
 
-  private String formatLegacyDate(LocalDate value) {
-    if (value == null) {
-      return "";
-    }
-    return value.format(LEGACY_DATE_FORMATTER);
-  }
-
   private String formatIsoDate(LocalDate value) {
     return value == null ? "" : value.toString();
   }
@@ -1260,6 +1258,7 @@ public class OfferDetailsRpcController {
       String phone,
       String fax,
       String email,
+      String legalContactName,
       String notfound) {}
 
   public record OfferPersistenceResponseDto(

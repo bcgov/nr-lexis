@@ -1,7 +1,7 @@
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialExemptionDetail } from '@/interfaces/LexisDetails'
 import ProvincialBlanketOicPermitCreatePage from '@/pages/ProvincialBlanketOicPermitCreate'
@@ -603,7 +603,7 @@ describe('permit creation from an exemption', () => {
     expect(within(table).getByRole('cell', { name: '2.0' })).toBeVisible()
   })
 
-  it('renders the legacy permit issue date in words without shifting its day', async () => {
+  it('renders the permit issue date in words without shifting its day', async () => {
     const actualService = await vi.importActual<{
       fetchExemptionPermits: typeof fetchExemptionPermits
     }>('@/service/provincial-exemption-detail-service')
@@ -613,7 +613,7 @@ describe('permit creation from an exemption', () => {
           permitNumber: 900123,
           permitVolume: '2.0',
           permitStatus: 'Complete',
-          permitIssueDate: '03/10/2026',
+          permitIssueDate: '2026-03-10',
           canViewPermit: true,
         },
       ],
@@ -626,7 +626,7 @@ describe('permit creation from an exemption', () => {
       const table = await screen.findByRole('region', { name: 'Related exemption permits' })
       expect(within(table).getByText('Mar 10, 2026')).toBeVisible()
       expect(within(table).queryByText('Mar 9, 2026')).not.toBeInTheDocument()
-      expect(within(table).queryByText('03/10/2026')).not.toBeInTheDocument()
+      expect(within(table).queryByText('2026-03-10')).not.toBeInTheDocument()
     } finally {
       get.mockRestore()
     }
@@ -982,7 +982,7 @@ describe('permit creation from an exemption', () => {
     ).not.toHaveLength(0)
     expect(
       within(page).getAllByText(
-        'Permit request volume must be non-negative, 9 characters or fewer, with at most 2 decimal places',
+        'Permit request volume must be a non-negative number of 9 characters or fewer',
       ),
     ).not.toHaveLength(0)
     expect(addPermitDetail).not.toHaveBeenCalled()
@@ -1361,6 +1361,10 @@ describe('permit creation from an exemption', () => {
   })
 
   it('requires a reload after an unknown Blanket OIC creation outcome', async () => {
+    const visibleRects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+    onTestFinished(() => visibleRects.mockRestore())
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     mockRole(['LEXIS_APPLICATION_APPROVER'], ['createPermit', 'savePermit'])
     configureBlanketOicCreationDependencies()
@@ -1380,6 +1384,11 @@ describe('permit creation from an exemption', () => {
     expect(screen.queryByRole('button', { name: 'Save permit' })).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Return to exemption' })).toBeInTheDocument()
     expect(router.state.location.pathname).toBe('/provincial/exemption/TEST13E2/permit/new')
+    await waitFor(() =>
+      expect(
+        screen.getByText('Permit creation outcome unknown').closest('.app-inline-notification'),
+      ).toHaveFocus(),
+    )
     consoleError.mockRestore()
   })
 

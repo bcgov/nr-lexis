@@ -117,6 +117,30 @@ class ApplicationApprovalEligibilityServiceTest {
     assertThat(result.errors()).isEmpty();
   }
 
+  @ParameterizedTest
+  @CsvSource({"1903", "1904", "1905", "1906", "1907", "1908", "1909", "1910"})
+  void shouldAllowEveryLexisRegion(long orgUnitNumber) {
+    stubValidApplication(validApplicationInRegion(orgUnitNumber), "SA");
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.errors()).isEmpty();
+    assertThat(result.eligible()).isTrue();
+  }
+
+  @ParameterizedTest
+  @CsvSource(value = {"11", "1902", "1911", "NULL"}, nullValues = "NULL")
+  void shouldRequireTheApplicationRegionToBeALexisRegion(Long orgUnitNumber) {
+    when(applicationRepository.findApplicationUpdateRecord(1000456L))
+        .thenReturn(Optional.of(validApplicationInRegion(orgUnitNumber)));
+
+    var result = service.evaluate(1000456L);
+
+    assertThat(result.eligible()).isFalse();
+    assertThat(result.errors()).contains("Application region is required.");
+    assertThat(result.errors()).doesNotContain("Application region does not exist.");
+  }
+
   @Test
   void shouldAllowAValidPendingFederalApplicationWhenLegacySingleCodeLookupOmitsPending() {
     stubValidApplication("F");
@@ -296,12 +320,14 @@ class ApplicationApprovalEligibilityServiceTest {
     when(applicationRepository.isApplicantTypeCodeValidRequired("O")).thenReturn(true);
     when(applicationRepository.isJurisdictionCodeValidRequired(application.jurisdictionCode()))
         .thenReturn(true);
-    when(applicationRepository.isOrgUnitValidRequired(1909L)).thenReturn(true);
+    when(applicationRepository.isOrgUnitValidRequired(application.orgUnitNumber()))
+        .thenReturn(true);
     when(clientRepository.findLocationByClientNumberCodeRequired("00011111", "01"))
         .thenReturn(Optional.of(clientLocation()));
     when(applicationRepository.findEndUsesByApplicationNumberRequired(1000456L))
         .thenReturn(List.of(new EndUseRow("FI", endUseCode)));
-    when(applicationRepository.findCandidateExcolCodesRequired(1, "FI", endUseCode, 1909L))
+    when(applicationRepository.findCandidateExcolCodesRequired(
+            1, "FI", endUseCode, application.orgUnitNumber()))
         .thenReturn(List.of(new ExcolValidationRow("FI/" + endUseCode)));
     when(applicationRepository.findPackageMutationsByApplicationNumber(1000456L))
         .thenReturn(List.of(packageRow(50.0d)));
@@ -325,6 +351,15 @@ class ApplicationApprovalEligibilityServiceTest {
 
   private ApplicationUpdateRecord validApplication(
       String exemptionNumber, String jurisdictionCode, String statusCode) {
+    return validApplication(exemptionNumber, jurisdictionCode, statusCode, 1909L);
+  }
+
+  private ApplicationUpdateRecord validApplicationInRegion(Long orgUnitNumber) {
+    return validApplication(null, "P", "NEW", orgUnitNumber);
+  }
+
+  private ApplicationUpdateRecord validApplication(
+      String exemptionNumber, String jurisdictionCode, String statusCode, Long orgUnitNumber) {
     return new ApplicationUpdateRecord(
         1000456L,
         null,
@@ -347,7 +382,7 @@ class ApplicationApprovalEligibilityServiceTest {
         "S",
         statusCode,
         "O",
-        1909L,
+        orgUnitNumber,
         "H",
         jurisdictionCode,
         "O",

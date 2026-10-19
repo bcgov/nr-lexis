@@ -43,9 +43,17 @@ class OfferWithdrawalPolicyTest {
   }
 
   @Test
-  void shouldIncludeTheWithdrawalDeadline() {
+  void shouldCloseWithdrawalWhenTheWithdrawalDateBegins() {
     LocalDate today = LexisBusinessTime.today();
     stubSchedule(today.plusDays(10), today);
+
+    assertThat(policy.canWithdraw(1000456L)).isFalse();
+  }
+
+  @Test
+  void shouldAllowWithdrawalOnTheDayBeforeTheWithdrawalDate() {
+    LocalDate today = LexisBusinessTime.today();
+    stubSchedule(today.plusDays(10), today.plusDays(1));
 
     assertThat(policy.canWithdraw(1000456L)).isTrue();
   }

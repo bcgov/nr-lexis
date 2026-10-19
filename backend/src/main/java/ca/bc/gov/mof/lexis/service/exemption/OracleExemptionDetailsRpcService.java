@@ -56,7 +56,9 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final String EXEMPTION_TYPE_MINISTERIAL = "M";
   private static final String APPLICATION_STATUS_APPROVED = "APP";
   private static final String APPLICATION_STATUS_EXEMPTED = "EXE";
+  private static final String APPLICATION_STATUS_PERMITTED = "PMT";
   private static final String APPLICANT_TYPE_AGENT = "A";
+  private static final String EXPORT_PRODUCT_TYPE_STANDING = "S";
   private static final String EXPORT_PRODUCT_TYPE_UNMANUFACTURED = "T";
   private static final String APPROVAL_EMAIL_NO_APPLICATION_MESSAGE =
       "An approval email can't be sent because this exemption has no linked application.";
@@ -76,7 +78,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final int MAX_OTHER_CONDITIONS_BYTES = 254;
   private static final long MAX_APPLICATION_TERM_DAYS = 99_999L;
   private static final long LEGACY_DEFAULT_EXEMPTION_TERM_DAYS = 30L;
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+  private static final DateTimeFormatter DISPLAY_DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
 
   private final ExemptionDetailsRpcRepository repository;
   private final ApplicationNotificationRecipientResolver notificationRecipientResolver;
@@ -229,7 +231,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                   row.permitNumber(),
                   formatVolume(row.permitVolume()),
                   row.statusDescription(),
-                  formatLegacyDate(row.issueDate()),
+                  formatDisplayDate(row.issueDate()),
                   canViewPermit);
             })
         .toList();
@@ -643,11 +645,9 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       errors.add("Application has valid offers and cannot be added to an exemption.");
     } else if (!oicExemption && appNotPastListingDate(application)) {
       errors.add("Application listing date has not passed.");
-    } else if (!oicExemption
-        && applicantIdentityMismatch(
-            loadAssignedApplications(assignedApplications), application)) {
+    } else if (!oicExemption && ownerClientMismatch(assignedApplications, application)) {
       errors.add(
-          "Application cannot be added to this exemption because its owner or agent client details do not match the other applications.");
+          "The application you entered cannot be assigned to this exemption due to the owner client number not matching the other applications.");
     } else if (!canViewFederalApplications && JURISDICTION_FEDERAL.equalsIgnoreCase(application.exportJurisdictionCode())) {
       errors.add("Insufficient privileges to add this application.");
     } else if (RETIRED_INDIAN_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(
@@ -1074,11 +1074,11 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return true;
   }
 
-  private String formatLegacyDate(LocalDate date) {
+  private String formatDisplayDate(LocalDate date) {
     if (date == null) {
       return "";
     }
-    return date.format(LEGACY_DATE_FORMATTER);
+    return date.format(DISPLAY_DATE_FORMATTER);
   }
 
   /**
@@ -1095,12 +1095,37 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return Double.isNaN(value) ? "" : formatVolume(value);
   }
 
+  /**
+   * True when the application is advertised and its List date is after today. An application with
+   * no Advertising List date, or whose List date is today or earlier, has passed it.
+   */
   private boolean appNotPastListingDate(ExemptionDetailsRpcRepository.ApplicationLinkRecord application) {
     if (application.exportScheduleId() == null || application.listingDate() == null) {
       return false;
     }
     LocalDate today = LexisBusinessTime.today();
-    return !application.listingDate().isBefore(today);
+    return application.listingDate().isAfter(today);
+  }
+
+  private boolean isStandingTimber(ExemptionDetailsRpcRepository.ApplicationLinkRecord application) {
+    return EXPORT_PRODUCT_TYPE_STANDING.equalsIgnoreCase(
+        trimToNull(application.exportProductTypeCode()));
+  }
+
+  /**
+   * Compares the candidate's owner with the owner of the exemption's first linked application.
+   * Owner location and agent are not compared, and the linked applications are not compared with
+   * each other.
+   */
+  private boolean ownerClientMismatch(
+      List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> assignedApplications,
+      ExemptionDetailsRpcRepository.ApplicationLinkRecord candidate) {
+    if (assignedApplications == null || assignedApplications.isEmpty() || candidate == null) {
+      return false;
+    }
+    return !Objects.equals(
+        normalizeClientNumber(assignedApplications.get(0).ownerClientNumber()),
+        normalizeClientNumber(candidate.ownerClientNumber()));
   }
 
   private boolean applicantIdentityMismatch(
@@ -1115,29 +1140,6 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             .map(this::applicantIdentity)
             .anyMatch(identity -> !expected.equals(identity))
         || !expected.equals(applicantIdentity(candidate));
-  }
-
-  private List<ExemptionDetailsRpcRepository.ApplicationLinkRecord> loadAssignedApplications(
-      List<ExemptionDetailsRpcRepository.ApplicationSummaryRow> assignedApplications) {
-    if (assignedApplications == null || assignedApplications.isEmpty()) {
-      return List.of();
-    }
-
-    List<ExemptionDetailsRpcRepository.ApplicationLinkRecord> applications = new ArrayList<>();
-    for (ExemptionDetailsRpcRepository.ApplicationSummaryRow summary : assignedApplications) {
-      if (summary == null || summary.applicationNumber() < 1) {
-        throw new DataRetrievalFailureException(
-            "Exemption contains an invalid application reference.");
-      }
-      applications.add(
-          repository
-              .findApplicationLinkRecord(summary.applicationNumber())
-              .orElseThrow(
-                  () ->
-                      new DataRetrievalFailureException(
-                          "Exemption application identity could not be verified.")));
-    }
-    return List.copyOf(applications);
   }
 
   private ApplicantIdentity applicantIdentity(
@@ -1208,7 +1210,9 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                 + displayApplicationNumber(applicationNumber)
                 + " has valid offers and cannot be added to an exemption.");
         eligible = false;
-      } else if (!oicExemption && appNotPastListingDate(application)) {
+      } else if (!oicExemption
+          && !isStandingTimber(application)
+          && appNotPastListingDate(application)) {
         errors.add(
             "Application "
                 + displayApplicationNumber(applicationNumber)
@@ -1266,7 +1270,9 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       if (eligible) {
         assignedApplications.add(application);
         longestTermDays = Math.max(longestTermDays, termDays);
-        requestedVolume = requestedVolume.add(BigDecimal.valueOf(applicationVolume));
+        requestedVolume =
+            requestedVolume.add(
+                ExemptionActivationEligibilityValidator.oneDecimalVolume(applicationVolume));
       }
     }
 
@@ -1278,8 +1284,8 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return new CreateApplicationDerivation(
         applicationNumbers,
         List.copyOf(assignedApplications),
-        // Round the complete sum once; legacy's per-row rounding was order-dependent.
-        requestedVolume.setScale(1, RoundingMode.HALF_UP),
+        // The sum of each application's one-decimal volume, which is what approval compares.
+        requestedVolume,
         LexisBusinessTime.today().plusDays(longestTermDays),
         List.of());
   }
@@ -1507,13 +1513,19 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             : input.regionNumbers().stream()
                 .distinct()
                 .toList();
+    String exemptionTypeCode = trimToNull(input.exemptionTypeCode());
+    // A Ministerial approval date is set only by approving the exemption.
+    LocalDate approvalDate =
+        EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(exemptionTypeCode)
+            ? null
+            : input.approvalDate();
     return new CreateExemptionRequest(
         trimToNull(input.exemptionNumber()),
         input.approvedVolume(),
-        input.approvalDate(),
+        approvalDate,
         input.expiryDate(),
         input.otherConditions() == null ? "" : input.otherConditions().trim(),
-        trimToNull(input.exemptionTypeCode()),
+        exemptionTypeCode,
         trimToNull(input.exemptionStatusCode()),
         input.feeRate(),
         input.enableRateOverride(),
@@ -1876,8 +1888,12 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     }
 
     String typeCode = Optional.ofNullable(trimToNull(request.exemptionTypeCode())).orElse(previous.exemptionTypeCode());
+    // A Ministerial approval date is set only by approving the exemption; the stored date stays.
     LocalDate approvalDate =
-        request.approvalDate() == null ? previous.approvalDate() : request.approvalDate();
+        request.approvalDate() == null
+                || EXEMPTION_TYPE_MINISTERIAL.equalsIgnoreCase(typeCode)
+            ? previous.approvalDate()
+            : request.approvalDate();
     return new ExemptionDetailsRpcRepository.ExemptionUpdateRecord(
         exemptionNumber,
         previousExemptionNumber,
@@ -1999,11 +2015,12 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
             || EXEMPTION_STATUS_ACTIVE.equals(targetStatus));
   }
 
-  // An Exempted or Approved application can leave the exemption; a Permitted one can't.
+  // An Exempted, Approved or Permitted application can leave while no permit uses it.
   private boolean isAllowedRemovalSourceStatus(String applicationStatus) {
     String normalizedApplicationStatus = normalizeCode(applicationStatus);
     return APPLICATION_STATUS_EXEMPTED.equals(normalizedApplicationStatus)
-        || APPLICATION_STATUS_APPROVED.equals(normalizedApplicationStatus);
+        || APPLICATION_STATUS_APPROVED.equals(normalizedApplicationStatus)
+        || APPLICATION_STATUS_PERMITTED.equals(normalizedApplicationStatus);
   }
 
   /** Applies the rules of {@link #removeApplicationFromExemption} to a listed application. */

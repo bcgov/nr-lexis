@@ -80,6 +80,61 @@ class ClientLookupRepositoryTest {
   }
 
   @Test
+  @SuppressWarnings("unchecked")
+  void clientDetailShouldSelectTheLegalFirstAndMiddleNames() throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString("CLIENT_NUMBER")).thenReturn("00001086");
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("00001086"), eq("00")))
+        .thenAnswer(
+            invocation ->
+                List.of(invocation.getArgument(1, RowMapper.class).mapRow(resultSet, 0)));
+    ClientLookupRepository repository = new ClientLookupRepository(jdbcTemplate);
+
+    repository.findLocationByClientNumberCode("00001086", "00");
+
+    ArgumentCaptor<String> sql = ArgumentCaptor.forClass(String.class);
+    verify(jdbcTemplate).query(sql.capture(), any(RowMapper.class), eq("00001086"), eq("00"));
+    assertThat(sql.getValue())
+        .contains("FC.LEGAL_FIRST_NAME")
+        .contains("FC.LEGAL_MIDDLE_NAME");
+  }
+
+  @Test
+  void legalContactNameShouldJoinTheFirstAndMiddleNamesWhenBothArePresent() throws Exception {
+    assertThat(legalContactNameFor(" Jane ", " Quinn ")).isEqualTo("Jane Quinn");
+  }
+
+  @Test
+  void legalContactNameShouldBeEmptyUnlessBothNamesArePresent() throws Exception {
+    assertThat(legalContactNameFor("Jane", null)).isNull();
+    assertThat(legalContactNameFor("Jane", "  ")).isNull();
+    assertThat(legalContactNameFor(null, "Quinn")).isNull();
+    assertThat(legalContactNameFor("", "Quinn")).isNull();
+    assertThat(legalContactNameFor(null, null)).isNull();
+  }
+
+  @SuppressWarnings("unchecked")
+  private static String legalContactNameFor(String firstName, String middleName)
+      throws Exception {
+    JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
+    ResultSet resultSet = mock(ResultSet.class);
+    when(resultSet.getString("CLIENT_NUMBER")).thenReturn("00001086");
+    when(resultSet.getString("LEGAL_FIRST_NAME")).thenReturn(firstName);
+    when(resultSet.getString("LEGAL_MIDDLE_NAME")).thenReturn(middleName);
+    when(jdbcTemplate.query(anyString(), any(RowMapper.class), eq("00001086"), eq("00")))
+        .thenAnswer(
+            invocation ->
+                List.of(invocation.getArgument(1, RowMapper.class).mapRow(resultSet, 0)));
+    ClientLookupRepository repository = new ClientLookupRepository(jdbcTemplate);
+
+    return repository
+        .findLocationByClientNumberCode("00001086", "00")
+        .map(ClientLocationRow::legalContactName)
+        .orElse(null);
+  }
+
+  @Test
   void clientDetailShouldPropagateOracleFailure() {
     ClientLookupRepository repository = new FailingClientLookupRepository();
 
@@ -163,7 +218,8 @@ class ClientLookupRepositoryTest {
       jdbcTemplate.execute(
           """
           CREATE TABLE THE.V_CLIENT_PUBLIC (
-            CLIENT_NUMBER VARCHAR(8) PRIMARY KEY, CLIENT_NAME VARCHAR(100)
+            CLIENT_NUMBER VARCHAR(8) PRIMARY KEY, CLIENT_NAME VARCHAR(100),
+            LEGAL_FIRST_NAME VARCHAR(60), LEGAL_MIDDLE_NAME VARCHAR(60)
           )
           """);
       jdbcTemplate.execute(
@@ -180,8 +236,10 @@ class ClientLookupRepositoryTest {
           """);
       jdbcTemplate.execute(
           """
-          INSERT INTO THE.V_CLIENT_PUBLIC VALUES
-          ('00001086', 'Example Forestry'), ('00001087', 'Other Forestry')
+          INSERT INTO THE.V_CLIENT_PUBLIC
+            (CLIENT_NUMBER, CLIENT_NAME, LEGAL_FIRST_NAME, LEGAL_MIDDLE_NAME)
+          VALUES ('00001086', 'Example Forestry', ' Jane ', ' Quinn '),
+                 ('00001087', 'Other Forestry', 'Sam', NULL)
           """);
       jdbcTemplate.execute(
           """
@@ -207,10 +265,15 @@ class ClientLookupRepositoryTest {
                 assertThat(row.clientLocationName()).isEqualTo("Primary");
                 assertThat(row.companyName()).isEqualTo("Example Forestry");
                 assertThat(row.clientAcronym()).isEqualTo("ALPHA");
+                assertThat(row.legalContactName()).isEqualTo("Jane Quinn");
               });
       assertThat(requiredLocation).isEqualTo(location);
       assertThat(repository.findLocationByClientNumberCode("00001087", "00"))
-          .hasValueSatisfying(row -> assertThat(row.clientAcronym()).isNull());
+          .hasValueSatisfying(
+              row -> {
+                assertThat(row.clientAcronym()).isNull();
+                assertThat(row.legalContactName()).isNull();
+              });
       assertThat(repository.findLocationByClientNumberCodeRequired("00001087", "00"))
           .hasValueSatisfying(row -> assertThat(row.clientAcronym()).isNull());
     } finally {

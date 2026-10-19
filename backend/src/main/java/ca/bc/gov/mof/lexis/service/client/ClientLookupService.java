@@ -30,13 +30,22 @@ public interface ClientLookupService {
       String fax,
       String email,
       String clientAcronym,
-      String locationName) {
+      String locationName,
+      String legalContactName) {
+    public ClientData(
+        String clientNumber, String companyName, String address, String city, String province,
+        String postalCode, String country, String phone, String fax, String email,
+        String clientAcronym, String locationName) {
+      this(clientNumber, companyName, address, city, province, postalCode, country, phone, fax,
+          email, clientAcronym, locationName, null);
+    }
+
     public ClientData(
         String clientNumber, String companyName, String address, String city, String province,
         String postalCode, String country, String phone, String fax, String email,
         String clientAcronym) {
       this(clientNumber, companyName, address, city, province, postalCode, country, phone, fax,
-          email, clientAcronym, null);
+          email, clientAcronym, null, null);
     }
   }
 

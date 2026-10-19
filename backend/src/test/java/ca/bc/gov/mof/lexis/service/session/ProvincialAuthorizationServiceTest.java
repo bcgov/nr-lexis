@@ -21,6 +21,7 @@ import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.exemption.ExemptionService;
 import ca.bc.gov.mof.lexis.service.offer.PurchaseOfferService;
 import ca.bc.gov.mof.lexis.service.permit.PermitService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.ApplicationItemMutation;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Optional;
@@ -981,6 +982,157 @@ class ProvincialAuthorizationServiceTest {
     assertThat(service.canAccessApplication(submitter("00012345"), unknown)).isFalse();
     assertThat(service.canAccessApplication(approver, unknown)).isFalse();
     assertThat(service.canAccessApplication(administrator, unknown)).isTrue();
+  }
+
+  @Test
+  void itemMutationsFollowApplicationApproverRegionsAndNeverReadOnlyGrants() {
+    Authentication approver =
+        staff(
+            "LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO",
+            "LEXIS_READ_ONLY_REGION_REGION-SKEENA");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findAccessByApplicationNumber(1L))
+        .thenReturn(Optional.of(applicationAccess(1L, "00012345", null, 1903L, "P")));
+    when(applicationService.findAccessByApplicationNumber(2L))
+        .thenReturn(Optional.of(applicationAccess(2L, "00012345", null, 1908L, "P")));
+
+    assertThat(service.canAccessApplication(approver, 2L)).isTrue();
+    assertThatCode(
+            () ->
+                service.requireApplicationItemMutation(
+                    approver, 1L, ApplicationItemMutation.CREATE_PACKAGE))
+        .doesNotThrowAnyException();
+    assertThatCode(
+            () ->
+                service.requireApplicationItemMutation(
+                    approver, 1L, ApplicationItemMutation.CHANGE_ITEMS))
+        .doesNotThrowAnyException();
+    for (var mutation : ApplicationItemMutation.values()) {
+      assertThatThrownBy(() -> service.requireApplicationItemMutation(approver, 2L, mutation))
+          .isInstanceOf(AccessDeniedException.class);
+    }
+  }
+
+  @Test
+  void itemMutationsRefuseUnknownAndFederalApplicationsEvenForAdministrators() {
+    Authentication administrator = new TestingAuthenticationToken("admin", "n/a", "LEXIS_ADMIN");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findAccessByApplicationNumber(1L))
+        .thenReturn(Optional.of(applicationAccess(1L, null, null, 1903L, "P")));
+    when(applicationService.findAccessByApplicationNumber(2L))
+        .thenReturn(Optional.of(applicationAccess(2L, null, null, 1903L, "F")));
+    when(applicationService.findAccessByApplicationNumber(3L)).thenReturn(Optional.empty());
+
+    assertThatCode(
+            () ->
+                service.requireApplicationItemMutation(
+                    administrator,
+                    1L,
+                    ApplicationItemMutation.CREATE_PACKAGE))
+        .doesNotThrowAnyException();
+    for (long applicationNumber : new long[] {2L, 3L, 0L}) {
+      assertThatThrownBy(
+              () ->
+                  service.requireApplicationItemMutation(
+                      administrator,
+                      applicationNumber,
+                      ApplicationItemMutation.CHANGE_ITEMS))
+          .isInstanceOf(AccessDeniedException.class);
+    }
+  }
+
+  @Test
+  void exemptionApproverChangesOnlyEligibleMinisterialItemsInItsRegionsAndNeverCreatesPackages() {
+    Authentication approver = staff("LEXIS_EXEMPTION_APPROVER_REGION_REGION-CARIBOO");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    for (long applicationNumber : new long[] {1L, 2L, 3L}) {
+      when(applicationService.findAccessByApplicationNumber(applicationNumber))
+          .thenReturn(Optional.of(applicationAccess(applicationNumber, "00012345", null, 1903L, "P")));
+    }
+    when(applicationDetailsService.getApplicationEditContext(1L))
+        .thenReturn(Optional.of(ministerialEditContext(1L, "N", true)));
+    when(applicationDetailsService.getApplicationEditContext(2L))
+        .thenReturn(Optional.of(ministerialEditContext(2L, "N", false)));
+    when(applicationDetailsService.getApplicationEditContext(3L))
+        .thenReturn(Optional.of(ministerialEditContext(3L, "Y", true)));
+
+    assertThatCode(
+            () ->
+                service.requireApplicationItemMutation(
+                    approver, 1L, ApplicationItemMutation.CHANGE_ITEMS))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(
+            () ->
+                service.requireApplicationItemMutation(
+                    approver, 1L, ApplicationItemMutation.CREATE_PACKAGE))
+        .isInstanceOf(AccessDeniedException.class);
+    for (long applicationNumber : new long[] {2L, 3L}) {
+      assertThatThrownBy(
+              () ->
+                  service.requireApplicationItemMutation(
+                      approver,
+                      applicationNumber,
+                      ApplicationItemMutation.CHANGE_ITEMS))
+          .isInstanceOf(AccessDeniedException.class);
+    }
+  }
+
+  @Test
+  void scaleDeleteRequiresThePermitRegionOfAnApplicationApprover() {
+    Authentication approver = staff("LEXIS_APPLICATION_APPROVER_REGION_REGION-CARIBOO");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
+    when(applicationService.findAccessByApplicationNumber(1L))
+        .thenReturn(Optional.of(applicationAccess(1L, "00012345", null, 1903L, "P")));
+    when(permitService.findAccessByPermitNumber(10L))
+        .thenReturn(Optional.of(permitAccess(10L, "00012345", 1903L)));
+    when(permitService.findAccessByPermitNumber(11L))
+        .thenReturn(Optional.of(permitAccess(11L, "00012345", 1908L)));
+    when(permitService.findAccessByPermitNumber(12L)).thenReturn(Optional.empty());
+
+    assertThatCode(() -> service.requireApplicationScaleDeleteAccess(approver, 1L, null))
+        .doesNotThrowAnyException();
+    assertThatCode(() -> service.requireApplicationScaleDeleteAccess(approver, 1L, 10L))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> service.requireApplicationScaleDeleteAccess(approver, 1L, 11L))
+        .isInstanceOf(AccessDeniedException.class);
+    assertThatThrownBy(() -> service.requireApplicationScaleDeleteAccess(approver, 1L, 12L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  @Test
+  void scaleDeleteRequiresPermitAccessForAScopedSubmitter() {
+    Authentication owner = submitter("00012345");
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(permitServiceProvider.getIfAvailable()).thenReturn(permitService);
+    when(applicationService.findAccessByApplicationNumber(1L))
+        .thenReturn(Optional.of(applicationAccess(1L, "00012345", null, 1903L, "P")));
+    when(permitService.findAccessByPermitNumber(20L))
+        .thenReturn(Optional.of(new PermitAccessDto(20L, "00088888", "00099999", 1903L)));
+    when(permitService.findAccessByPermitNumber(21L))
+        .thenReturn(Optional.of(new PermitAccessDto(21L, "00088888", "00012345", 1903L)));
+
+    assertThatCode(() -> service.requireApplicationScaleDeleteAccess(owner, 1L, 21L))
+        .doesNotThrowAnyException();
+    assertThatThrownBy(() -> service.requireApplicationScaleDeleteAccess(owner, 1L, 20L))
+        .isInstanceOf(AccessDeniedException.class);
+  }
+
+  private static ApplicationDetailsRpcService.ApplicationEditContext ministerialEditContext(
+      Long applicationNumber, String oicIndicator, boolean ministerialItemOverrideEligible) {
+    return new ApplicationDetailsRpcService.ApplicationEditContext(
+        applicationNumber,
+        "EXE",
+        "P",
+        "S",
+        null,
+        null,
+        false,
+        false,
+        false,
+        oicIndicator,
+        ministerialItemOverrideEligible);
   }
 
   private static Authentication staff(String... authorities) {

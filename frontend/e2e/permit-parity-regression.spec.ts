@@ -778,17 +778,23 @@ test.describe('Provincial permit parity regressions', () => {
     })
     await expect(page.getByRole('heading', { level: 1, name: /Permit 91001/ })).toBeVisible()
 
-    await selectTab(page, 'Items')
+    await selectTab(page, 'Scale')
     const itemTable = page.getByRole('region', { name: 'Permit item rows' }).getByRole('table')
     await expect(itemTable).toBeVisible()
     await expect(
       itemTable.getByRole('columnheader', { name: 'Package', exact: true }),
     ).toBeVisible()
 
+    // The Scale tab lists the selected package's rows, starting with the first package.
     const packageARow = itemTable.getByRole('row').filter({ hasText: 'TM-A' })
     const packageBRow = itemTable.getByRole('row').filter({ hasText: 'TM-B' })
     await expect(packageARow.getByRole('cell', { name: 'PKG-A', exact: true })).toBeVisible()
+    await expect(packageBRow).toHaveCount(0)
+
+    await page.getByRole('combobox', { name: 'Package number', exact: true }).click()
+    await page.getByRole('option', { name: 'PKG-B', exact: true }).click()
     await expect(packageBRow.getByRole('cell', { name: 'PKG-B', exact: true })).toBeVisible()
+    await expect(packageARow).toHaveCount(0)
     expect(fixture.unexpectedRequests).toEqual([])
   })
 

@@ -95,6 +95,35 @@ class ProvincialPermitMutationValidatorTest {
   }
 
   @Test
+  void shouldNotRequireASubmitDateOrCheckDateRelationshipsWhenCompleting() {
+    var result =
+        validator.validate(
+            permit()
+                .permitStatusCode("COM")
+                .applicationDate(null)
+                .issueDate(LocalDate.of(2026, 7, 10))
+                .expiryDate(LocalDate.of(2026, 7, 20))
+                .build(),
+            ministerialExemption(LocalDate.of(2026, 7, 9)));
+
+    assertThat(result.valid()).isTrue();
+    assertThat(result.errors()).isEmpty();
+  }
+
+  @Test
+  void shouldStillRequireTheIssueAndExpiryDatesToCompleteAPermit() {
+    var result =
+        validator.validate(
+            permit().permitStatusCode("COM").issueDate(null).expiryDate(null).build(),
+            ministerialExemption(LocalDate.of(2026, 7, 31)));
+
+    assertThat(result.errors())
+        .contains(
+            "A valid permit issue date is required to complete a permit.",
+            "A valid expiry date is required to complete a permit.");
+  }
+
+  @Test
   void shouldRequireShippingClientAndValidCodes() {
     when(repository.isPermitStatusCodeValidRequired("BAD")).thenReturn(false);
     when(repository.isCountryCodeValidRequired("XX")).thenReturn(false);
@@ -130,6 +159,25 @@ class ProvincialPermitMutationValidatorTest {
             "A valid scale method code is required.",
             "A valid transport type code is required.",
             "A valid other port of export description is required.");
+  }
+
+  @Test
+  void shouldRequireTheShippingDetailsWhenCancellingAPermit() {
+    var result =
+        validator.validate(
+            permit()
+                .permitStatusCode("CAN")
+                .destinationCompanyName(null)
+                .transportName(null)
+                .estimatedShippingDate(null)
+                .build(),
+            ministerialExemption(LocalDate.of(2026, 7, 31)));
+
+    assertThat(result.errors())
+        .containsExactlyInAnyOrder(
+            "A valid company name on the Shipping tab is required.",
+            "A valid transport name on the Shipping tab is required.",
+            "A valid estimated shipping date on the Shipping tab is required.");
   }
 
   @Test

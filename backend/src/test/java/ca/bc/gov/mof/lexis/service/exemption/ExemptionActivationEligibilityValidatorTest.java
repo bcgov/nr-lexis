@@ -316,6 +316,43 @@ class ExemptionActivationEligibilityValidatorTest {
   }
 
   @Test
+  void activationShouldRequireAnApprovalDateAndAnExpiryNotBeforeToday() {
+    ExemptionActivationEligibilityValidator.ActivationCandidate candidate =
+        new ExemptionActivationEligibilityValidator.ActivationCandidate(
+            "EX-205",
+            100.0d,
+            null,
+            LexisBusinessTime.today().minusDays(1),
+            "O",
+            "ACT",
+            List.of(),
+            List.of(),
+            false,
+            true,
+            false);
+
+    assertThat(validator.validate(candidate))
+        .containsExactly(
+            "A valid approval date is required for an active exemption.",
+            "An active exemption cannot have an expiry date before today.");
+  }
+
+  @Test
+  void approvalShouldCompareTheSumOfEachApplicationsOneDecimalVolume() {
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(List.of(summary(1000456L, 100.25d), summary(1000457L, 200.25d)));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(application(1000456L, "EXE", "EX-205", 100.25d)));
+    when(repository.findApplicationLinkRecord(1000457L))
+        .thenReturn(Optional.of(application(1000457L, "EXE", "EX-205", 200.25d)));
+
+    assertThat(validator.validate(existingCandidate("M", 300.5d, true)))
+        .containsExactly(
+            "The approved volume must be greater than or equal to the total requested volume (300.6).");
+    assertThat(validator.validate(existingCandidate("M", 300.6d, true))).isEmpty();
+  }
+
+  @Test
   void authoritativeLookupFailureShouldFailClosed() {
     when(repository.isExemptionTypeCodeValidRequired("M"))
         .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));

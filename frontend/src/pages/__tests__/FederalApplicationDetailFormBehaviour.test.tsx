@@ -45,6 +45,9 @@ const mockedUpdateFederalApplicationStatus = vi.mocked(updateFederalApplicationS
 const mockedFetchFederalApplicationRemarks = vi.mocked(fetchFederalApplicationRemarks)
 const mockedSaveFederalApplicationRemark = vi.mocked(saveFederalApplicationRemark)
 
+const UNSUPPORTED_CHARACTERS =
+  'Application remarks contain unsupported special characters. Remove them and try again.'
+
 const federalDetail: FederalApplicationDetail = {
   applicationNumber: 888,
   federalApplicationNumber: 'FED-888',
@@ -146,7 +149,7 @@ describe('Federal application detail form behaviour', () => {
     })
   })
 
-  it('focuses the status field on edit and shows a server remark message on the remark', async () => {
+  it('focuses the remark on Withdraw and shows a server remark message on the remark', async () => {
     mockedUpdateFederalApplicationStatus.mockResolvedValue({
       success: false,
       message: null,
@@ -154,10 +157,10 @@ describe('Federal application detail form behaviour', () => {
     })
     renderPage()
     await selectTab('Application')
-    await userEvent.click(screen.getByRole('button', { name: 'Edit federal status' }))
-    const status = await screen.findByLabelText('Status')
-    await waitFor(() => expect(status).toHaveFocus())
-    const remark = screen.getByLabelText('Remark')
+    await userEvent.click(screen.getByRole('button', { name: 'Withdraw' }))
+    const remark = await screen.findByLabelText('Remark')
+    await waitFor(() => expect(remark).toHaveFocus())
+    expect(screen.getByText('Withdrawn', { selector: '.detail-field-value' })).toBeInTheDocument()
     await userEvent.type(remark, 'Not eligible')
 
     await userEvent.click(screen.getByRole('button', { name: 'Update status' }))
@@ -170,9 +173,57 @@ describe('Federal application detail form behaviour', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'Edit federal status' })).toHaveFocus(),
-    )
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Withdraw' })).toHaveFocus())
+  })
+
+  it('returns focus to the Reject action it was opened from', async () => {
+    renderPage()
+    await selectTab('Application')
+    await userEvent.click(screen.getByRole('button', { name: 'Reject' }))
+    await waitFor(() => expect(screen.getByLabelText('Remark')).toHaveFocus())
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Reject' })).toHaveFocus())
+  })
+
+  it('shows the unsupported-character message on the status remark', async () => {
+    mockedUpdateFederalApplicationStatus.mockResolvedValue({
+      success: false,
+      message: null,
+      errors: [UNSUPPORTED_CHARACTERS],
+    })
+    renderPage()
+    await selectTab('Application')
+    await userEvent.click(screen.getByRole('button', { name: 'Reject' }))
+    const remark = await screen.findByLabelText('Remark')
+    await userEvent.type(remark, 'Caf\u00e9')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Update status' }))
+
+    await waitFor(() => expect(remark).toHaveAttribute('aria-invalid', 'true'))
+    expect(screen.getByText(UNSUPPORTED_CHARACTERS)).toBeInTheDocument()
+    expect(screen.queryByText('Unable to update federal application status.')).toBeNull()
+  })
+
+  it('shows the unsupported-character message on the new remark', async () => {
+    mockedSaveFederalApplicationRemark.mockResolvedValue({
+      success: false,
+      message: null,
+      remark: null,
+      errors: [UNSUPPORTED_CHARACTERS],
+    })
+    renderPage()
+    await selectTab('Remarks')
+    await userEvent.click(await screen.findByRole('button', { name: 'Add remark' }))
+    const remark = await screen.findByLabelText('New remark')
+    await userEvent.type(remark, 'It\u2019s here')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
+
+    await waitFor(() => expect(remark).toHaveAttribute('aria-invalid', 'true'))
+    expect(screen.getByText(UNSUPPORTED_CHARACTERS)).toBeInTheDocument()
+    expect(screen.queryByText('Unable to save federal application remark.')).toBeNull()
+    await waitFor(() => expect(remark).toHaveFocus())
   })
 
   it('asks before another remark edit drops unsaved remark changes', async () => {

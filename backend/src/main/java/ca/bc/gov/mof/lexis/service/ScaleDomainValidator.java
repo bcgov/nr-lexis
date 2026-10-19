@@ -25,7 +25,7 @@ public final class ScaleDomainValidator {
               ? "A valid pieces count is required."
               : "The scale pieces must be greater than or equal to 0.");
     } else if (pieces > MAX_SCALE_PIECES) {
-      errors.add("The scale pieces must be less than 999999999.");
+      errors.add("The scale pieces must be less than or equal to 999999999.");
     }
 
     if (volume == null || !Double.isFinite(volume) || volume < minimumVolume) {
@@ -34,7 +34,7 @@ public final class ScaleDomainValidator {
               ? "A valid scale volume is required."
               : "The scale volume must be greater than or equal to 0.");
     } else if (BigDecimal.valueOf(volume).compareTo(MAX_SCALE_VOLUME) > 0) {
-      errors.add("The scale volume must be less than 99999.9.");
+      errors.add("The scale volume must be less than or equal to 99999.9.");
     }
     return errors;
   }

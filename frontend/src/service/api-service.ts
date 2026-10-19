@@ -113,6 +113,8 @@ class APIService {
   private readonly responseCache = new Map<string, CachedResponse>()
   private readonly inFlightGets = new Map<string, Promise<AxiosResponse<unknown>>>()
   private readonly recordSnapshots = new Map<string, RecordSnapshot>()
+  // The server's time, from the response Date header, when each record's version was loaded.
+  private readonly recordVersionLoadTimes = new Map<string, number>()
   private cacheGeneration = 0
 
   constructor() {
@@ -220,6 +222,27 @@ class APIService {
 
   public clearRecordVersions(): void {
     this.recordSnapshots.clear()
+    this.recordVersionLoadTimes.clear()
+  }
+
+  /** Notes that the record's current version was just loaded, using the response's Date header. */
+  public markRecordVersionLoaded(
+    recordType: OptimisticRecordType,
+    recordId: string,
+    headers: unknown,
+  ): void {
+    this.noteRecordVersionLoaded(this.recordVersionKey(recordType, recordId), headers)
+  }
+
+  /**
+   * The server time (milliseconds since the epoch) at which the record's current version was
+   * loaded, or undefined when the server did not report it.
+   */
+  public recordVersionLoadedAt(
+    recordType: OptimisticRecordType,
+    recordId: string,
+  ): number | undefined {
+    return this.recordVersionLoadTimes.get(this.recordVersionKey(recordType, recordId))
   }
 
   public registerRecordVersion(
@@ -248,14 +271,16 @@ class APIService {
     } else {
       sources.push(source)
     }
+    const versionLoaded =
+      Boolean(normalizedVersion) && (!existing || sourceKey === primarySourceKey)
     this.recordSnapshots.set(key, {
-      version:
-        normalizedVersion && (!existing || sourceKey === primarySourceKey)
-          ? normalizedVersion
-          : (existing?.version ?? normalizedVersion),
+      version: versionLoaded ? normalizedVersion : (existing?.version ?? normalizedVersion),
       primarySourceKey,
       sources,
     })
+    if (versionLoaded) {
+      this.noteRecordVersionLoaded(key, response.headers)
+    }
   }
 
   public async getCachedData<T>(
@@ -509,7 +534,7 @@ class APIService {
     }
 
     // The user may move to another record while the conflict is enriched.
-    const recordType = this.activeRecord()?.recordType
+    const activeRecord = this.activeRecord()
     const authorizationHeader = this.getHeader(originalConfig.headers, 'authorization')
     return this.enrichOptimisticConflictWithinTimeout(
       problem,
@@ -519,7 +544,8 @@ class APIService {
         new Promise<AxiosResponse<unknown>>((_, reject) => {
           const event = createOptimisticConflictEvent({
             problem: enrichedProblem,
-            recordType,
+            recordType: activeRecord?.recordType,
+            recordId: activeRecord?.recordId,
             saveSubject: conflictSaveSubject(originalConfig.method, originalConfig.url),
             refresh: () => {
               this.clearCachedGetData()
@@ -580,6 +606,18 @@ class APIService {
     const snapshot = this.recordSnapshots.get(key)
     if (snapshot) {
       this.recordSnapshots.set(key, { ...snapshot, version: version.trim() })
+      this.noteRecordVersionLoaded(key, response.headers)
+    }
+  }
+
+  private noteRecordVersionLoaded(key: string, headers: unknown): void {
+    const serverDate = this.getHeader(headers, 'date')
+    const loadedAt = typeof serverDate === 'string' ? Date.parse(serverDate) : Number.NaN
+    // A version loaded without a server time leaves the earlier time out of date, so it is dropped.
+    if (Number.isNaN(loadedAt)) {
+      this.recordVersionLoadTimes.delete(key)
+    } else {
+      this.recordVersionLoadTimes.set(key, loadedAt)
     }
   }
 

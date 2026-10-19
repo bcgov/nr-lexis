@@ -3,14 +3,24 @@ package ca.bc.gov.mof.lexis.service.report;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatCode;
 
+import com.lowagie.text.pdf.PRTokeniser;
+import com.lowagie.text.pdf.PdfContentParser;
+import com.lowagie.text.pdf.PdfNumber;
+import com.lowagie.text.pdf.PdfObject;
+import com.lowagie.text.pdf.PdfReader;
 import java.awt.Font;
 import java.awt.font.FontRenderContext;
+import java.awt.image.BufferedImage;
 import java.io.InputStream;
+import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
+import java.sql.Timestamp;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.HexFormat;
 import java.util.List;
 import java.util.Map;
@@ -19,6 +29,13 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import javax.xml.parsers.DocumentBuilderFactory;
 import net.sf.jasperreports.engine.JasperCompileManager;
+import net.sf.jasperreports.engine.JasperExportManager;
+import net.sf.jasperreports.engine.JasperFillManager;
+import net.sf.jasperreports.engine.JasperPrintManager;
+import net.sf.jasperreports.engine.SimpleJasperReportsContext;
+import net.sf.jasperreports.engine.data.JRMapCollectionDataSource;
+import net.sf.jasperreports.engine.design.JRDesignSection;
+import net.sf.jasperreports.engine.xml.JRXmlLoader;
 import org.junit.jupiter.api.Test;
 import org.springframework.core.io.ClassPathResource;
 import org.w3c.dom.Document;
@@ -199,6 +216,138 @@ class LexisJasperTemplateCompileTest {
         .contains("$P{P_INVOICE_NUMBER} == null ? \"\" : $P{P_INVOICE_NUMBER}")
         .doesNotContain("fontName=\"Calibri\"")
         .doesNotContain("$F{COAST_INTERIOR_IND}.equalsIgnoreCase(\"I\")");
+  }
+
+  @Test
+  void permitPdfShouldDrawBothHolderBoxesAndOnlyCheckTheOwner() throws Exception {
+    var directory = new ClassPathResource("reports/lexis").getFile().toPath();
+    var design = JRXmlLoader.load(directory.resolve("LEXIS_PERMIT.jrxml").toFile());
+    // Render the real first-page band without invoking the unrelated Oracle subreport.
+    var detail = (JRDesignSection) design.getDetailSection();
+    while (detail.getBands().length > 1) {
+      detail.removeBand(1);
+    }
+    Map<String, Object> row = new HashMap<>();
+    row.put("EXPORT_PERMIT_DETAIL_NUMBER", BigDecimal.valueOf(9021049));
+    row.put("NUMBER_OF_PIECES", BigDecimal.valueOf(5));
+    row.put("PERMIT_VOLUME", BigDecimal.valueOf(5));
+    row.put("CLIENT_NUMBER", "00162575");
+    row.put("OWNER_COMPANY_NAME", "TEST owner");
+    row.put("AGENT_CLIENT_NUMBER", "00001074");
+    row.put("AGT_COMPANY_NAME", "TEST agent");
+    row.put("EXPORT_APPLICANT_TYPE_CODE", "A");
+    for (String date : List.of("ESTIMATED_SHIPPING_DATE", "EXPORT_PERMIT_ISSUE_DATE", "EXPIRY_DATE")) {
+      row.put(date, Timestamp.valueOf("2026-10-17 12:00:00"));
+    }
+    // Exercise the missing-font fallback without requiring an extra system glyph font.
+    var context = new SimpleJasperReportsContext();
+    context.setProperty("net.sf.jasperreports.awt.ignore.missing.font", "true");
+    var print =
+        JasperFillManager.getInstance(context)
+            .fill(
+                JasperCompileManager.compileReport(design),
+                new HashMap<>(Map.of("SUBREPORT_DIR", directory.toString() + "/")),
+                new JRMapCollectionDataSource(List.of(row)));
+    byte[] pdf = JasperExportManager.getInstance(context).exportToPdf(print);
+
+    List<PdfStroke> drawings = strokedPdfDrawings(pdf);
+    // PDF coordinates start at the bottom; original boxes are 13pt at (544,17)/(544,66)
+    // inside the first detail band, after the report's 18pt margin and 66pt page header.
+    assertBoxOutline(drawings, 562, 498);
+    assertBoxOutline(drawings, 562, 449);
+    assertThat(drawings.stream().filter(d -> d.isDiagonalInside(563, 500, 574, 510)))
+        .hasSize(2);
+    assertThat(drawings.stream().filter(d -> d.isDiagonalInside(563, 451, 574, 461)))
+        .isEmpty();
+
+    BufferedImage image =
+        (BufferedImage) JasperPrintManager.getInstance(context).printToImage(print, 0, 2f);
+    assertThat(darkPixels(image, 562, 101, 13, 13)).isGreaterThan(40);
+    assertThat(darkPixels(image, 562, 150, 13, 13)).isGreaterThan(40);
+    assertThat(darkPixels(image, 564, 103, 9, 9)).isGreaterThan(10);
+    assertThat(darkPixels(image, 564, 152, 9, 9)).isZero();
+  }
+
+  private List<PdfStroke> strokedPdfDrawings(byte[] pdf) throws Exception {
+    List<PdfStroke> painted = new ArrayList<>();
+    try (PdfReader reader = new PdfReader(pdf);
+        PRTokeniser tokens = new PRTokeniser(reader.getPageContent(1))) {
+      PdfContentParser parser = new PdfContentParser(tokens);
+      List<PdfObject> operands = new ArrayList<>();
+      List<PdfStroke> path = new ArrayList<>();
+      float x = 0;
+      float y = 0;
+      while (!parser.parse(operands).isEmpty()) {
+        String operator = operands.getLast().toString();
+        if ("re".equals(operator)) {
+          float left = number(operands, 0);
+          float bottom = number(operands, 1);
+          float right = left + number(operands, 2);
+          float top = bottom + number(operands, 3);
+          path.addAll(
+              List.of(
+                  new PdfStroke(left, bottom, right, bottom),
+                  new PdfStroke(right, bottom, right, top),
+                  new PdfStroke(right, top, left, top),
+                  new PdfStroke(left, top, left, bottom)));
+        } else if ("m".equals(operator)) {
+          x = number(operands, 0);
+          y = number(operands, 1);
+        } else if ("l".equals(operator)) {
+          float nextX = number(operands, 0);
+          float nextY = number(operands, 1);
+          path.add(new PdfStroke(x, y, nextX, nextY));
+          x = nextX;
+          y = nextY;
+        } else if ("S".equals(operator)) {
+          painted.addAll(path);
+          path.clear();
+        } else if (List.of("n", "f", "f*", "B", "B*", "b", "b*").contains(operator)) {
+          path.clear();
+        }
+      }
+    }
+    return painted;
+  }
+
+  private float number(List<PdfObject> operands, int index) {
+    return ((PdfNumber) operands.get(index)).floatValue();
+  }
+
+  private void assertBoxOutline(List<PdfStroke> strokes, float x, float y) {
+    assertThat(strokes)
+        .contains(
+            new PdfStroke(x, y, x + 13, y),
+            new PdfStroke(x + 13, y, x + 13, y + 13),
+            new PdfStroke(x + 13, y + 13, x, y + 13),
+            new PdfStroke(x, y + 13, x, y));
+  }
+
+  private int darkPixels(BufferedImage image, int x, int y, int width, int height) {
+    int count = 0;
+    for (int py = y * 2; py < (y + height) * 2; py++) {
+      for (int px = x * 2; px < (x + width) * 2; px++) {
+        if ((image.getRGB(px, py) & 0x00ffffff) < 0x808080) {
+          count++;
+        }
+      }
+    }
+    return count;
+  }
+
+  private record PdfStroke(float x, float y, float endX, float endY) {
+    boolean isDiagonalInside(float minX, float minY, float maxX, float maxY) {
+      return x != endX
+          && y != endY
+          && x >= minX
+          && x <= maxX
+          && endX >= minX
+          && endX <= maxX
+          && y >= minY
+          && y <= maxY
+          && endY >= minY
+          && endY <= maxY;
+    }
   }
 
   @Test

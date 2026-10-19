@@ -202,9 +202,26 @@ class OfferDetailsRpcControllerTest {
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().success()).isTrue();
     assertThat(response.getBody().speciesGradeCode()).isEqualTo("FI/HE/LUM");
-    assertThat(response.getBody().advertisingDate()).isEqualTo("02/26/2026");
+    assertThat(response.getBody().advertisingDate()).isEqualTo("2026-02-26");
     assertThat(response.getBody().teacReviewDate()).isEqualTo("2026-03-05");
     assertThat(response.getBody().region()).isEqualTo("R2");
+  }
+
+  @Test
+  void validateShouldNameTheListingDateInIsoFormatWhenOffersAreNotYetOpen() {
+    when(applicationServiceProvider.getIfAvailable()).thenReturn(applicationService);
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(
+            Optional.of(
+                application(1000456L, "APP", LocalDate.of(2999, 2, 26), false, List.of())));
+
+    ResponseEntity<OfferDetailsRpcController.OfferValidationResponseDto> response =
+        controller.validateApplicationNumber("1000456");
+
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().isValid()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("Application 1000456 can not accept offers until 2999-02-26");
   }
 
   @Test
@@ -301,6 +318,62 @@ class OfferDetailsRpcControllerTest {
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     assertThat(response.getBody()).isNotNull();
     assertThat(response.getBody().volume()).isEqualTo("0.0");
+  }
+
+  @Test
+  void clientDataShouldReturnTheLegalContactName() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getClientData("00077881", "00"))
+        .thenReturn(
+            Optional.of(
+                new ClientLookupService.ClientData(
+                    "00077881",
+                    "Buyer, Jane Quinn",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    "Jane Quinn")));
+
+    ResponseEntity<OfferDetailsRpcController.OfferClientDataResponseDto> response =
+        controller.getClientData("00077881", "00");
+
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().companyName()).isEqualTo("Buyer, Jane Quinn");
+    assertThat(response.getBody().legalContactName()).isEqualTo("Jane Quinn");
+    assertThat(response.getBody().notfound()).isNull();
+  }
+
+  @Test
+  void clientDataShouldLeaveTheLegalContactNameEmptyWhenTheClientHasNone() {
+    when(clientLookupServiceProvider.getIfAvailable()).thenReturn(clientLookupService);
+    when(clientLookupService.getClientData("00077881", "00"))
+        .thenReturn(
+            Optional.of(
+                new ClientLookupService.ClientData(
+                    "00077881",
+                    "Example Forest Products Ltd.",
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null,
+                    null)));
+
+    ResponseEntity<OfferDetailsRpcController.OfferClientDataResponseDto> response =
+        controller.getClientData("00077881", "00");
+
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().legalContactName()).isNull();
   }
 
   @Test
@@ -1126,6 +1199,79 @@ class OfferDetailsRpcControllerTest {
   }
 
   @Test
+  void updateOfferLegacyShouldRefuseAScopedOfferingClientChangeAfterTheDayOfWithdrawal() {
+    stubScopedOfferingClient();
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(
+            Optional.of(offerWithdrawnOn(LexisBusinessTime.today().minusDays(1))));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("purchaseOfferAmount", "13000.00");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("Offer withdrawn date must be the current date.");
+    verify(purchaseOfferService, never())
+        .updateOfferSnapshot(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void updateOfferLegacyShouldRefuseAScopedClientThatBlanksTheWithdrawalDateOfAnEarlierWithdrawal() {
+    stubScopedOfferingClient();
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(
+            Optional.of(offerWithdrawnOn(LexisBusinessTime.today().minusDays(3))));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("purchaseOfferAmount", "13000.00");
+    params.add("offerWithdrawalDate", "");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isFalse();
+    assertThat(response.getBody().errors())
+        .containsExactly("Offer withdrawn date must be the current date.");
+    verify(purchaseOfferService, never())
+        .updateOfferSnapshot(org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any());
+  }
+
+  @Test
+  void updateOfferLegacyShouldAllowAScopedOfferingClientChangeOnTheDayOfWithdrawal() {
+    stubScopedOfferingClient();
+    when(authentication.getName()).thenReturn("bceid\\buyer");
+    LocalDate today = LexisBusinessTime.today();
+    when(purchaseOfferService.findByOfferNumber(81001L))
+        .thenReturn(Optional.of(offerWithdrawnOn(today)));
+    when(purchaseOfferService.updateOfferSnapshot(
+            org.mockito.ArgumentMatchers.any(),
+            org.mockito.ArgumentMatchers.eq("bceid\\buyer")))
+        .thenReturn(
+            new PurchaseOfferService.CreateOfferResult(
+                true, "updated", 1000456L, 81001L, false, null, false, true, List.of(), List.of()));
+    MultiValueMap<String, String> params = new LinkedMultiValueMap<>();
+    params.add("exportPurchaseOfferNumber", "81001");
+    params.add("purchaseOfferAmount", "13000.00");
+
+    ResponseEntity<OfferDetailsRpcController.OfferPersistenceResponseDto> response =
+        controller.updateOfferLegacy(params, authentication);
+
+    assertThat(response.getBody()).isNotNull();
+    assertThat(response.getBody().success()).isTrue();
+    ArgumentCaptor<PurchaseOfferService.UpdateOfferRequest> requestCaptor =
+        ArgumentCaptor.forClass(PurchaseOfferService.UpdateOfferRequest.class);
+    verify(purchaseOfferService)
+        .updateOfferSnapshot(requestCaptor.capture(), org.mockito.ArgumentMatchers.any());
+    assertThat(requestCaptor.getValue().purchaseOfferAmount()).isEqualTo(13000.0d);
+    assertThat(requestCaptor.getValue().offerWithdrawalDate()).isEqualTo(today);
+  }
+
+  @Test
   void updateOfferLegacyShouldApplyIndustryWithdrawalRuleToDualRoleOfferingClient() {
     List<String> roles =
         List.of("LEXIS_APPLICATION_APPROVER", "LEXIS_PROVINCIAL_SUBMITTER");
@@ -1271,6 +1417,48 @@ class OfferDetailsRpcControllerTest {
         packages,
         List.of(),
         List.of());
+  }
+
+  private void stubScopedOfferingClient() {
+    when(purchaseOfferServiceProvider.getIfAvailable()).thenReturn(purchaseOfferService);
+    when(sessionService.parseRolesFromPrincipal(authentication))
+        .thenReturn(List.of("LEXIS_PROVINCIAL_SUBMITTER"));
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "createOffer"))
+        .thenReturn(false);
+    when(authorizationService.canPerformAction(
+            List.of("LEXIS_PROVINCIAL_SUBMITTER"), "/offerDetails"))
+        .thenReturn(true);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+  }
+
+  private PurchaseOfferDetailDto offerWithdrawnOn(LocalDate withdrawalDate) {
+    return new PurchaseOfferDetailDto(
+        81001L,
+        1000456L,
+        "PKG-903",
+        45.5,
+        "FI/HE/LUM",
+        "Original Buyer",
+        "Buyer Contact",
+        12500.25,
+        LocalDate.of(2026, 3, 2),
+        withdrawalDate,
+        LocalDate.of(2026, 3, 5),
+        "N",
+        "Y",
+        "N",
+        "Initial offer",
+        "Withdrawn by buyer",
+        "P",
+        "Mill details",
+        "00077881",
+        "Port Moody",
+        "Condition notes",
+        LocalDate.of(2026, 2, 25),
+        LocalDate.of(2026, 12, 31),
+        90.0d,
+        "12");
   }
 
   private PurchaseOfferDetailDto offerDetailForRestrictedUpdate() {

@@ -158,7 +158,9 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     TransitionResult result = service.orchestrate(enteringTransition(), "idir\\jsmith");
 
     assertThat(result.success()).isFalse();
-    assertThat(result.message()).contains("preflight");
+    assertThat(result.message())
+        .isEqualTo(
+            "The GBMS invoices for this permit do not match its LEXIS invoices, so its status cannot be changed. Contact the LEXIS administrator.");
     verify(gbmsInvoices, never()).createInvoice(any(), any(), any());
     verify(invoiceRepository, never()).insertPermitInvoiceRequired(any());
   }
@@ -174,7 +176,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     TransitionResult result = service.orchestrate(enteringTransition(), "idir\\jsmith");
 
     assertThat(result.success()).isFalse();
-    assertThat(result.message()).contains("preflight");
+    assertThat(result.message()).contains("Contact the LEXIS administrator");
     verify(gbmsInvoices, never()).createInvoice(any(), any(), any());
     verify(invoiceRepository, never()).insertPermitInvoiceRequired(any());
   }
@@ -193,7 +195,9 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     TransitionResult result = service.orchestrate(enteringTransition(), "idir\\jsmith");
 
     assertThat(result.success()).isFalse();
-    assertThat(result.message()).contains("reconcile before retry");
+    assertThat(result.message())
+        .isEqualTo(
+            "The permit invoice was only partly processed in GBMS, so the permit was not changed. Contact the LEXIS administrator before trying again.");
   }
 
   @Test
@@ -210,7 +214,7 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     TransitionResult result = service.orchestrate(enteringTransition(), "idir\\jsmith");
 
     assertThat(result.success()).isFalse();
-    assertThat(result.message()).contains("reconcile before retry");
+    assertThat(result.message()).contains("only partly processed in GBMS");
     verify(invoiceRepository, never()).insertPermitInvoiceRequired(any());
   }
 
@@ -274,6 +278,9 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
 
     assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .isEqualTo(
+            "The GBMS invoices for this permit do not match its LEXIS invoices, so its status cannot be changed. Contact the LEXIS administrator.");
     verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
     verify(gbmsInvoices, never()).cancelInvoice(any(), any());
   }
@@ -340,7 +347,9 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
         service.orchestrate(leavingTransition(country, "CAN"), "idir\\jsmith");
 
     assertThat(result.success()).isFalse();
-    assertThat(result.message()).contains("preflight");
+    assertThat(result.message())
+        .isEqualTo(
+            "The GBMS invoices for this permit do not match its LEXIS invoices, so its status cannot be changed. Contact the LEXIS administrator.");
     verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
     verifyNoInteractions(gbmsInvoices);
   }
@@ -355,7 +364,9 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
         service.orchestrate(leavingTransition(country, "ACT"), "idir\\jsmith");
 
     assertThat(result.success()).isFalse();
-    assertThat(result.message()).contains("preflight");
+    assertThat(result.message())
+        .isEqualTo(
+            "This permit does not have exactly one active invoice, so its status cannot be changed. Contact the LEXIS administrator.");
     verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
     verifyNoInteractions(gbmsInvoices);
   }
@@ -371,8 +382,58 @@ class OracleLegacyPermitInvoiceOrchestrationServiceTest {
     TransitionResult result = service.orchestrate(leavingTransition(), "idir\\jsmith");
 
     assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .isEqualTo(
+            "The active GBMS invoice does not match the permit's LEXIS invoice, so its status cannot be changed. Contact the LEXIS administrator.");
     verify(invoiceRepository, never()).updatePermitInvoiceRequired(any());
     verify(gbmsInvoices, never()).cancelInvoice(any(), any());
+  }
+
+  @Test
+  void shouldBlockAnInvoiceWhenMoreThanOnePriorGbmsInvoiceCouldBeReplaced() {
+    PermitInvoiceRow first = cancelledInternal("GBMS-OLD-1");
+    PermitInvoiceRow second = cancelledInternal("GBMS-OLD-2");
+    when(invoiceRepository.findByPermitDetailNumberRequired(PERMIT_NUMBER))
+        .thenReturn(List.of(first, second));
+    when(permitRepository.findGbmsInvoiceHistoryRequired("RCPT-1", PERMIT_NUMBER))
+        .thenReturn(
+            List.of(
+                history("GBMS-OLD-1", 8.0d, "GBMS-CANCEL-1", null, LocalDate.of(2026, 3, 1)),
+                history("GBMS-OLD-2", 8.0d, "GBMS-CANCEL-2", null, LocalDate.of(2026, 3, 1))));
+
+    TransitionResult result = service.orchestrate(enteringTransition(), "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .isEqualTo(
+            "More than one earlier GBMS invoice could be replaced by this permit's invoice. Contact the LEXIS administrator.");
+    verify(gbmsInvoices, never()).createInvoice(any(), any(), any());
+  }
+
+  @Test
+  void shouldGiveAPlainMessageWhenTheInvoiceCannotBePrepared() {
+    TransitionResult result =
+        service.orchestrate(
+            new Transition(
+                PERMIT_NUMBER,
+                "ACT",
+                "COM",
+                "CA",
+                "EX-700",
+                1835L,
+                "00077881",
+                "01",
+                "RCPT-1",
+                null,
+                null),
+            "idir\\jsmith");
+
+    assertThat(result.success()).isFalse();
+    assertThat(result.message())
+        .startsWith("The permit invoice could not be prepared, so the permit was not changed.")
+        .contains("contact the LEXIS administrator")
+        .doesNotContain("preflight");
+    verify(invoiceRepository, never()).insertPermitInvoiceRequired(any());
   }
 
   @Test

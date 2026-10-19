@@ -31,6 +31,7 @@ import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitConstraint;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import java.time.LocalDate;
 import java.util.List;
 import java.util.Optional;
@@ -502,6 +503,48 @@ class PurchaseOfferControllerTest {
     assertThat(response.getBody().offerRemark()).isNull();
     verify(service).findByOfferNumber(81009L);
     verify(applicationService).findByApplicationNumber(1000456L);
+  }
+
+  @Test
+  void detailShouldHideEditFromTheOfferingClientAfterTheDayOfWithdrawal() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    PurchaseOfferDetailDto offer =
+        offerDetail("00077881", LexisBusinessTime.today().minusDays(1), "Buyer withdrew");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(false, false, false, false));
+  }
+
+  @Test
+  void detailShouldKeepEditForTheOfferingClientOnTheDayOfWithdrawal() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(sessionService.resolveForestClientNumber(authentication)).thenReturn("00077881");
+    PurchaseOfferDetailDto offer =
+        offerDetail("00077881", LexisBusinessTime.today(), "Buyer withdrew");
+    when(service.findByOfferNumber(81009L)).thenReturn(Optional.of(offer));
+    when(applicationService.findByApplicationNumber(1000456L))
+        .thenReturn(Optional.of(applicationDetail("00099999", "00088888")));
+    mockApplicationSpeciesGradeCode();
+
+    ResponseEntity<PurchaseOfferDetailDto> response =
+        controller.getByOfferNumber(81009L, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody())
+        .isEqualTo(
+            offer.withApplicationContext(45.5, "FI/HE/LUM")
+                .withEditPermissions(false, false, true, false));
   }
 
   @Test

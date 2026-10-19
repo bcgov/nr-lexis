@@ -36,6 +36,7 @@ import { hasProvincialSubmitterRole } from '@/context/auth/role-utils'
 import { useAuth } from '@/context/auth/useAuth'
 import {
   CLIENT_LOOKUP_UNAVAILABLE_MESSAGE,
+  clientDisplayName,
   clientLocationLabel,
   clientLookupNumbersMatch,
   isSelectableClientLocation,
@@ -295,12 +296,11 @@ const validateForm = (
   if (!volume) {
     errors.oicPermitTotalVolume = 'Permit request volume is required.'
   } else if (
-    !/^\d+(?:\.\d{1,2})?$/.test(volume) ||
-    Number(volume) < 0 ||
+    !/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(volume) ||
     volume.length > MAX_OIC_REQUEST_VOLUME_LENGTH
   ) {
     errors.oicPermitTotalVolume =
-      'Permit request volume must be non-negative, 9 characters or fewer, with at most 2 decimal places.'
+      'Permit request volume must be a non-negative number of 9 characters or fewer.'
   }
 
   if (form.permitRemarks.length > 250) {
@@ -1156,7 +1156,7 @@ const BlanketOicPermitCreateForm = ({
                           labelText={requiredLabel('Client')}
                           helperText="Enter name, acronym, or client number (min. 3 characters)"
                           value={form.ownerClientNumber}
-                          selectedClientName={ownerClientData?.companyName}
+                          selectedClientName={clientDisplayName(ownerClientData, '')}
                           resetKey={clientSearchResetKey}
                           counterpartyClientNumber={form.agentClientNumber}
                           required
@@ -1270,7 +1270,7 @@ const BlanketOicPermitCreateForm = ({
                               labelText={requiredLabel('Agent client')}
                               helperText="Enter name, acronym, or client number (min. 3 characters)"
                               value={form.agentClientNumber}
-                              selectedClientName={agentClientData?.companyName}
+                              selectedClientName={clientDisplayName(agentClientData, '')}
                               resetKey={clientSearchResetKey}
                               counterpartyClientNumber={form.ownerClientNumber}
                               required
