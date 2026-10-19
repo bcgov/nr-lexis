@@ -11,6 +11,7 @@
         <lexis:applicantContact>
           <lexis:contactSurname>DOE</lexis:contactSurname>
           <lexis:contactFirstname>JORDAN</lexis:contactFirstname>
+          <lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>
         </lexis:applicantContact>
       </lexis:applicant>
       <lexis:applicationDetail>
@@ -22,7 +23,7 @@
       </lexis:applicationDetail>
       <lexis:productDetail>
         <lexis:productTypeCode>H</lexis:productTypeCode>
-        <lexis:boomNumber>QA26-RSI-002</lexis:boomNumber>
+        <lexis:boomNumber>QA26-RSC-002</lexis:boomNumber>
         <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
         <lexis:productLocation>Campbell River dryland sort</lexis:productLocation>
         <lexis:ageClass>S</lexis:ageClass>

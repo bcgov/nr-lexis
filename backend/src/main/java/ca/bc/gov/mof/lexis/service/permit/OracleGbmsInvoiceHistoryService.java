@@ -69,8 +69,9 @@ final class OracleGbmsInvoiceHistoryService {
             .filter(invoiceNumber -> !cancellationInvoices.contains(invoiceNumber))
             .anyMatch(invoiceNumber -> !activeLinkedInvoices.contains(invoiceNumber));
     if (hasMisalignedActiveInvoice) {
-      throw new DataRetrievalFailureException(
-          "GBMS and internal permit invoice history require reconciliation.");
+      throw new OracleInternalPermitInvoiceService.InvoiceBlockedException(
+          "The GBMS invoices for this permit do not match its LEXIS invoices, so its status"
+              + " cannot be changed. Contact the LEXIS administrator.");
     }
   }
 

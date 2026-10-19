@@ -144,10 +144,10 @@ See [Shared ClamAV service](../docs/shared-clamav-service.md) for GitHub environ
 receiver-side NetworkPolicy requirements, local configuration, and verification.
 
 Backend replicas use optimistic version checks for interactive saves. A stale save returns a
-conflict so the user can refresh or explicitly overwrite after reviewing newer changes. Short
-multi-row mutations take Oracle row locks in a consistent order, with Oracle transactions,
-constraints, and conditional writes as the data-integrity boundary. When expiry is enabled, its
-scheduler uses `THE.LEXIS_SHEDLOCK` through the existing Oracle connection.
+conflict and offers Refresh, never an overwrite. Short multi-row mutations take Oracle row locks in
+a consistent order, with Oracle transactions, constraints, and conditional writes as the
+data-integrity boundary. When expiry is enabled, its scheduler uses `THE.LEXIS_SHEDLOCK` through
+the existing Oracle connection.
 
 ### Spring Profiles
 

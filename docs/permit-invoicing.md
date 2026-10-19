@@ -78,6 +78,10 @@ the first matching history row without verifying the result. Modern LEXIS instea
 These checks preserve the legacy business outcome for valid data. Inconsistent legacy history can
 stop the transition and require reconciliation instead of producing another partial invoice.
 
+A refused transition names the cause in plain language. When the user can fix it, such as a missing
+submit date or destination country, the message says where to correct it. When the cause is in the
+GBMS or LEXIS invoice history, it tells the user to contact the LEXIS administrator.
+
 ## Consistency and recovery
 
 This integration is ordered synchronous best effort, not an atomic distributed transaction. The

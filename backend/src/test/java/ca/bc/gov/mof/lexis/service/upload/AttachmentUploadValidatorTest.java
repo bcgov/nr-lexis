@@ -12,6 +12,7 @@ import java.awt.image.BufferedImage;
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.io.FilterInputStream;
 import java.io.InputStream;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -26,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.Arguments;
 import org.junit.jupiter.params.provider.MethodSource;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -70,6 +72,17 @@ class AttachmentUploadValidatorTest {
   }
 
   @ParameterizedTest
+  @ValueSource(
+      strings = {
+        "Permit 1:2 signed.pdf",
+        "Joe's report (final) #2 & more, v1.0.pdf",
+        "a name with spaces.pdf"
+      })
+  void shouldAcceptColonsAndOtherPrintableAsciiInFileNames(String fileName) {
+    assertThat(validator.validate(file(fileName, validPdf()), "Signed: 10:30").accepted()).isTrue();
+  }
+
+  @ParameterizedTest
   @MethodSource("unsafeFileNames")
   void shouldRejectUnsafeFileNames(String fileName) {
     ValidationResult result = validator.validate(file(fileName, validPdf()), "description");
@@ -104,6 +117,43 @@ class AttachmentUploadValidatorTest {
   }
 
   @Test
+  void shouldRejectMacroAndEmbeddedObjectStoragesInLegacyOfficeFiles() throws IOException {
+    for (String unsafeName : new String[] {"Macros", "_VBA_PROJECT_CUR", "ObjectPool"}) {
+      assertThat(
+              validator
+                  .validate(file("word.doc", oleDocumentWithDirectory("WordDocument", unsafeName)), null)
+                  .accepted())
+          .as("DOC storage %s", unsafeName)
+          .isFalse();
+      assertThat(
+              validator
+                  .validate(file("sheet.xls", oleDocumentWithDirectory("Workbook", unsafeName)), null)
+                  .accepted())
+          .as("XLS storage %s", unsafeName)
+          .isFalse();
+    }
+  }
+
+  @Test
+  void shouldRejectEmbeddedRtfObjects() {
+    for (String controlWord : new String[] {"object", "objdata"}) {
+      byte[] content =
+          ("{\\rtf1\\ansi {\\" + controlWord + " data}}").getBytes(StandardCharsets.US_ASCII);
+      assertThat(validator.validate(file("embedded.rtf", content), null).accepted())
+          .as("RTF control word %s", controlWord)
+          .isFalse();
+    }
+  }
+
+  @Test
+  void shouldAcceptRtfWithOrdinaryControlWordsThatStartLikeObject() {
+    byte[] content =
+        "{\\rtf1\\ansi \\objectivefont plain text}".getBytes(StandardCharsets.US_ASCII);
+
+    assertThat(validator.validate(file("letter.rtf", content), null).accepted()).isTrue();
+  }
+
+  @Test
   void shouldRejectOoxmlWordAndExcelExtensionMismatch() throws IOException {
     assertThat(validator.validate(file("word.xlsx", officePackage(true, Map.of())), null).accepted())
         .isFalse();
@@ -135,24 +185,184 @@ class AttachmentUploadValidatorTest {
         .isFalse();
   }
 
-  @Test
-  void shouldRejectMacroEnabledAndUnsafeExternalOoxml() throws IOException {
-    byte[] macroEnabled =
+  @ParameterizedTest(name = "rejects active content part {1}")
+  @MethodSource("activeOoxmlParts")
+  void shouldRejectMacroActiveXEmbeddedAndExternalDataParts(boolean word, String entryName)
+      throws IOException {
+    byte[] content = officePackage(word, Map.of(entryName, new byte[] {1, 2, 3}));
+
+    assertThat(validator.validate(file(word ? "active.docx" : "active.xlsx", content), null).accepted())
+        .isFalse();
+  }
+
+  @ParameterizedTest(name = "rejects active content type {1}")
+  @MethodSource("activeOoxmlContentTypes")
+  void shouldRejectMacroActiveXEmbeddedAndExternalDataContentTypes(
+      boolean word, String contentType)
+      throws IOException {
+    byte[] content =
         officePackage(
-            true,
-            Map.of(
-                "word/vbaProject.bin", new byte[] {1, 2, 3}));
-    byte[] external =
+            word,
+            Map.of(),
+            "<Default Extension=\"dat\" ContentType=\"" + contentType + "\"/>");
+
+    assertThat(validator.validate(file(word ? "active.docx" : "active.xlsx", content), null).accepted())
+        .isFalse();
+  }
+
+  @ParameterizedTest(name = "rejects relationship type {0}")
+  @MethodSource("activeOoxmlRelationshipTypes")
+  void shouldRejectMacroActiveXEmbeddedTemplateAndExternalDataRelationships(
+      String relationshipType)
+      throws IOException {
+    byte[] content =
         officePackage(
             true,
             Map.of(
                 "word/_rels/document.xml.rels",
                 relationships(
-                        "<Relationship Id=\"rId2\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate\" Target=\"file:///unsafe/template.dotm\" TargetMode=\"External\"/>")
+                        "<Relationship Id=\"rId2\" Type=\""
+                            + relationshipType
+                            + "\" Target=\"parts/part1.bin\"/>")
                     .getBytes(StandardCharsets.UTF_8)));
 
-    assertThat(validator.validate(file("macro.docx", macroEnabled), null).accepted()).isFalse();
-    assertThat(validator.validate(file("external.docx", external), null).accepted()).isFalse();
+    assertThat(validator.validate(file("active.docx", content), null).accepted()).isFalse();
+  }
+
+  @Test
+  void shouldRejectRemoteObjectAndOtherExternalRelationships() throws IOException {
+    String oleObjectType =
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject";
+    String imageType = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/image";
+    for (String relationship :
+        new String[] {
+          "<Relationship Id=\"rId2\" Type=\"" + oleObjectType
+              + "\" Target=\"https://attacker.invalid/payload.html!\" TargetMode=\"External\"/>",
+          "<Relationship Id=\"rId2\" Type=\"" + imageType
+              + "\" Target=\"https://attacker.invalid/pixel.png\" TargetMode=\"External\"/>"
+        }) {
+      byte[] content =
+          officePackage(
+              true,
+              Map.of(
+                  "word/_rels/document.xml.rels",
+                  relationships(relationship).getBytes(StandardCharsets.UTF_8)));
+
+      assertThat(validator.validate(file("external.docx", content), null).accepted())
+          .as(relationship)
+          .isFalse();
+    }
+  }
+
+  @ParameterizedTest(name = "rejects attached template target {0}")
+  @ValueSource(
+      strings = {
+        "Letter.dotx",
+        "../Templates/Letter.dotx",
+        "file:///C:/Users/analyst/Templates/Letter.dotx",
+        "C:\\Users\\analyst\\Templates\\Letter.dotx",
+        "https://example.gov.bc.ca/templates/Letter.dotm",
+        "\\\\ministry.invalid\\templates\\Letter.dotx",
+        "file://ministry.invalid/templates/Letter.dotx"
+      })
+  void shouldRejectDocumentsWithAnAttachedTemplate(String templateTarget) throws IOException {
+    for (String type :
+        new String[] {
+          "http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate",
+          "http://purl.oclc.org/ooxml/officeDocument/relationships/attachedTemplate"
+        }) {
+      for (String targetMode : new String[] {" TargetMode=\"External\"", ""}) {
+        assertThat(
+                validator
+                    .validate(
+                        documentWithSettingsRelationship(
+                            "<Relationship Id=\"rId1\" Type=\""
+                                + type
+                                + "\" Target=\""
+                                + templateTarget
+                                + "\""
+                                + targetMode
+                                + "/>"),
+                        null)
+                    .accepted())
+            .as("%s %s%s", type, templateTarget, targetMode)
+            .isFalse();
+      }
+    }
+  }
+
+  @Test
+  void shouldAcceptOrdinarySettingsRelationships() throws IOException {
+    String relationship =
+        "<Relationship Id=\"rId1\" Type=\"http://schemas.openxmlformats.org/officeDocument/2006/relationships/image\""
+            + " Target=\"media/image1.png\"/>";
+
+    assertThat(validator.validate(documentWithSettingsRelationship(relationship), null).accepted())
+        .isTrue();
+  }
+
+  private MultipartFile documentWithSettingsRelationship(String relationship) throws IOException {
+    byte[] content =
+        officePackage(
+            true,
+            Map.of(
+                "word/_rels/settings.xml.rels",
+                relationships(relationship).getBytes(StandardCharsets.UTF_8)));
+    return file("letter.docx", content);
+  }
+
+  @ParameterizedTest(name = "rejects a chart that embeds a workbook in {0}")
+  @ValueSource(booleans = {true, false})
+  void shouldRejectChartsThatEmbedAWorkbook(boolean word) throws IOException {
+    String folder = word ? "word/" : "xl/";
+    String officeRelationships = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/";
+    Map<String, byte[]> chartOnly = new LinkedHashMap<>();
+    chartOnly.put(
+        folder + "_rels/" + (word ? "document" : "workbook") + ".xml.rels",
+        relationships(
+                "<Relationship Id=\"rId1\" Type=\""
+                    + officeRelationships
+                    + "chart\" Target=\"charts/chart1.xml\"/>")
+            .getBytes(StandardCharsets.UTF_8));
+    chartOnly.put(
+        folder + "charts/chart1.xml",
+        "<?xml version=\"1.0\"?><chart/>".getBytes(StandardCharsets.UTF_8));
+    Map<String, byte[]> withEmbeddedWorkbook = new LinkedHashMap<>(chartOnly);
+    withEmbeddedWorkbook.put(
+        folder + "charts/_rels/chart1.xml.rels",
+        relationships(
+                "<Relationship Id=\"rId1\" Type=\""
+                    + officeRelationships
+                    + "package\" Target=\"../embeddings/Microsoft_Excel_Sheet1.xlsx\"/>")
+            .getBytes(StandardCharsets.UTF_8));
+    withEmbeddedWorkbook.put(
+        folder + "embeddings/Microsoft_Excel_Sheet1.xlsx", new byte[] {'P', 'K', 3, 4});
+    String contentTypes =
+        "<Default Extension=\"xlsx\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"/>"
+            + "<Override PartName=\"/"
+            + folder
+            + "charts/chart1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawingml.chart+xml\"/>";
+    String fileName = word ? "chart.docx" : "chart.xlsx";
+
+    assertThat(
+            validator
+                .validate(file(fileName, officePackage(word, chartOnly, contentTypes)), null)
+                .accepted())
+        .isTrue();
+    assertThat(
+            validator
+                .validate(
+                    file(fileName, officePackage(word, withEmbeddedWorkbook, contentTypes)), null)
+                .accepted())
+        .isFalse();
+  }
+
+  @Test
+  void shouldRejectMacroProjectsHiddenInsideEmbeddings() throws IOException {
+    byte[] content =
+        officePackage(true, Map.of("word/embeddings/vbaProject.bin", new byte[] {1, 2, 3}));
+
+    assertThat(validator.validate(file("embedded-macro.docx", content), null).accepted()).isFalse();
   }
 
   @Test
@@ -273,6 +483,78 @@ class AttachmentUploadValidatorTest {
   }
 
   @Test
+  void shouldAcceptJpegWithDataAfterTheEndMarker() throws IOException {
+    byte[] photo = image("jpg");
+    byte[] withTrailer = concat(photo, "MPF-trailer-data".getBytes(StandardCharsets.US_ASCII));
+    byte[] withPadding = concat(photo, new byte[32]);
+
+    assertThat(validator.validate(file("phone.jpg", withTrailer), null).accepted()).isTrue();
+    assertThat(validator.validate(file("padded.jpg", withPadding), null).accepted()).isTrue();
+  }
+
+  @Test
+  void shouldRejectJpegNamedContentThatIsNotAJpeg() throws IOException {
+    assertThat(validator.validate(file("document.jpg", validPdf()), null).accepted()).isFalse();
+    assertThat(validator.validate(file("image.jpg", image("png")), null).accepted()).isFalse();
+    assertThat(
+            validator
+                .validate(file("short.jpg", new byte[] {(byte) 0xff, (byte) 0xd8}), null)
+                .accepted())
+        .isFalse();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"notes.txt", "records.csv"})
+  void shouldAcceptUtf16TextWithAByteOrderMark(String fileName) {
+    String text = "id,name\r\n1,Caf\u00e9 \u201cquoted\u201d \u2013 dash\r\n";
+    byte[] littleEndian =
+        concat(new byte[] {(byte) 0xff, (byte) 0xfe}, text.getBytes(StandardCharsets.UTF_16LE));
+    byte[] bigEndian =
+        concat(new byte[] {(byte) 0xfe, (byte) 0xff}, text.getBytes(StandardCharsets.UTF_16BE));
+
+    assertThat(validator.validate(file(fileName, littleEndian), null).accepted()).isTrue();
+    assertThat(validator.validate(file(fileName, bigEndian), null).accepted()).isTrue();
+  }
+
+  @Test
+  void shouldAcceptUtf16TextRegardlessOfHowTheStreamIsChunked() throws IOException {
+    String text = "line of unicode text \u2013 caf\u00e9\n".repeat(2000);
+    byte[] content =
+        concat(new byte[] {(byte) 0xff, (byte) 0xfe}, text.getBytes(StandardCharsets.UTF_16LE));
+    MultipartFile file =
+        new MockMultipartFile("formFile", "export.txt", "text/plain", content) {
+          @Override
+          public InputStream getInputStream() {
+            return new SingleByteReadsInputStream(new ByteArrayInputStream(content));
+          }
+        };
+
+    assertThat(validator.validate(file, null).accepted()).isTrue();
+  }
+
+  @Test
+  void shouldRejectUtf16TextThatIsTruncatedOrContainsControlCharacters() {
+    byte[] bom = new byte[] {(byte) 0xff, (byte) 0xfe};
+    byte[] truncated = concat(bom, new byte[] {'a', 0, 'b'});
+    byte[] withNul = concat(bom, new byte[] {'a', 0, 0, 0, 'b', 0});
+    byte[] withEscape = concat(bom, new byte[] {'a', 0, 0x1b, 0, 'b', 0});
+    byte[] onlyLineBreaks = concat(bom, new byte[] {'\r', 0, '\n', 0});
+
+    assertThat(validator.validate(file("truncated.txt", truncated), null).accepted()).isFalse();
+    assertThat(validator.validate(file("nul.txt", withNul), null).accepted()).isFalse();
+    assertThat(validator.validate(file("escape.csv", withEscape), null).accepted()).isFalse();
+    assertThat(validator.validate(file("blank.txt", onlyLineBreaks), null).accepted()).isFalse();
+  }
+
+  @Test
+  void shouldRejectBinaryContentNamedAsTextWithoutAByteOrderMark() {
+    byte[] withNul = new byte[] {'a', 0, 'b', 0, 'c', 0};
+
+    assertThat(validator.validate(file("binary.txt", withNul), null).accepted()).isFalse();
+    assertThat(validator.validate(file("binary.csv", withNul), null).accepted()).isFalse();
+  }
+
+  @Test
   void shouldRejectDeclaredOversizeBeforeOpeningContent() throws IOException {
     MultipartFile file = mock(MultipartFile.class);
     when(file.getOriginalFilename()).thenReturn("oversize.txt");
@@ -328,10 +610,62 @@ class AttachmentUploadValidatorTest {
         Arguments.of("archive.zip", zip(Map.of("file.txt", "content".getBytes(StandardCharsets.UTF_8)))));
   }
 
+  private static Stream<Arguments> activeOoxmlParts() {
+    return Stream.of(
+        Arguments.of(true, "word/vbaProject.bin"),
+        Arguments.of(true, "word/activeX/activeX1.xml"),
+        Arguments.of(true, "word/embeddings/oleObject1.bin"),
+        Arguments.of(true, "word/embeddings/Microsoft_Excel_Sheet1.xlsx"),
+        Arguments.of(true, "word/externalLinks/externalLink1.xml"),
+        Arguments.of(true, "word/customUI/customUI.xml"),
+        Arguments.of(true, "word/afchunk.htm"),
+        Arguments.of(false, "xl/vbaProject.bin"),
+        Arguments.of(false, "xl/activeX/activeX1.xml"),
+        Arguments.of(false, "xl/embeddings/oleObject1.bin"),
+        Arguments.of(false, "xl/embeddings/Microsoft_Word_Document1.docx"),
+        Arguments.of(false, "xl/externalLinks/externalLink1.xml"),
+        Arguments.of(false, "xl/connections.xml"),
+        Arguments.of(false, "xl/queryTables/queryTable1.xml"),
+        Arguments.of(false, "xl/customUI/customUI.xml"));
+  }
+
+  private static Stream<Arguments> activeOoxmlContentTypes() {
+    return Stream.of(
+        Arguments.of(true, "application/vnd.ms-word.document.macroEnabled.12"),
+        Arguments.of(true, "application/vnd.ms-office.vbaProject"),
+        Arguments.of(true, "application/vnd.ms-office.activeX+xml"),
+        Arguments.of(true, "application/vnd.openxmlformats-officedocument.oleObject"),
+        Arguments.of(false, "application/vnd.openxmlformats-officedocument.oleObject"),
+        Arguments.of(false, "application/vnd.ms-excel.sheet.macroEnabled.12"),
+        Arguments.of(false, "application/vnd.ms-excel.macrosheet+xml"),
+        Arguments.of(
+            false, "application/vnd.openxmlformats-officedocument.spreadsheetml.externalLink+xml"),
+        Arguments.of(
+            false, "application/vnd.openxmlformats-officedocument.spreadsheetml.connections+xml"),
+        Arguments.of(
+            false, "application/vnd.openxmlformats-officedocument.spreadsheetml.queryTable+xml"));
+  }
+
+  private static Stream<String> activeOoxmlRelationshipTypes() {
+    return Stream.of(
+        "http://schemas.microsoft.com/office/2006/relationships/vbaProject",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/activeXControl",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships/oleObject",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate",
+        "http://purl.oclc.org/ooxml/officeDocument/relationships/attachedTemplate",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/connections",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/queryTable",
+        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk");
+  }
+
   private static Stream<String> unsafeFileNames() {
     return Stream.of(
         "a".repeat(247) + ".PDF",
         "résumé.pdf",
+        "Joe\u2019s permit.pdf",
+        "Permit 12 \u2013 signed.pdf",
         "../application.pdf",
         "folder/application.pdf",
         "folder\\application.pdf",
@@ -341,7 +675,12 @@ class AttachmentUploadValidatorTest {
   }
 
   private static Stream<String> unsafeDescriptions() {
-    return Stream.of("d".repeat(251), "café", "contains\u0000nul", "escape\u001bsequence");
+    return Stream.of(
+        "d".repeat(251),
+        "café",
+        "Joe\u2019s permit",
+        "contains\u0000nul",
+        "escape\u001bsequence");
   }
 
   private static MockMultipartFile file(String fileName, byte[] content) {
@@ -389,9 +728,34 @@ class AttachmentUploadValidatorTest {
     return output.toByteArray();
   }
 
+  private static byte[] oleDocumentWithDirectory(String streamName, String directoryName)
+      throws IOException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    try (POIFSFileSystem fileSystem = new POIFSFileSystem()) {
+      fileSystem.createDocument(
+          new ByteArrayInputStream("legacy-content".getBytes(StandardCharsets.US_ASCII)),
+          streamName);
+      fileSystem.getRoot().createDirectory(directoryName);
+      fileSystem.writeFilesystem(output);
+    }
+    return output.toByteArray();
+  }
+
+  private static byte[] concat(byte[] first, byte[] second) {
+    byte[] combined = java.util.Arrays.copyOf(first, first.length + second.length);
+    System.arraycopy(second, 0, combined, first.length, second.length);
+    return combined;
+  }
+
   private static byte[] officePackage(boolean word, Map<String, byte[]> extraEntries)
       throws IOException {
-    return officePackage(word, extraEntries, false, false);
+    return officePackage(word, extraEntries, false, false, "");
+  }
+
+  private static byte[] officePackage(
+      boolean word, Map<String, byte[]> extraEntries, String extraContentTypes)
+      throws IOException {
+    return officePackage(word, extraEntries, false, false, extraContentTypes);
   }
 
   private static byte[] officePackage(
@@ -399,6 +763,16 @@ class AttachmentUploadValidatorTest {
       Map<String, byte[]> extraEntries,
       boolean defaultMainContentType,
       boolean strictRelationship)
+      throws IOException {
+    return officePackage(word, extraEntries, defaultMainContentType, strictRelationship, "");
+  }
+
+  private static byte[] officePackage(
+      boolean word,
+      Map<String, byte[]> extraEntries,
+      boolean defaultMainContentType,
+      boolean strictRelationship,
+      String extraContentTypes)
       throws IOException {
     String mainPart = word ? "word/document.xml" : "xl/workbook.xml";
     String mainType =
@@ -422,6 +796,7 @@ class AttachmentUploadValidatorTest {
             + xmlDefaultType
             + "\"/>"
             + mainOverride
+            + extraContentTypes
             + "</Types>";
     String relationshipType =
         strictRelationship
@@ -514,6 +889,17 @@ class AttachmentUploadValidatorTest {
       }
     }
     throw new AssertionError("ZIP signature not found");
+  }
+
+  private static final class SingleByteReadsInputStream extends FilterInputStream {
+    private SingleByteReadsInputStream(InputStream input) {
+      super(input);
+    }
+
+    @Override
+    public int read(byte[] bytes, int offset, int length) throws IOException {
+      return super.read(bytes, offset, Math.min(length, 1));
+    }
   }
 
   private static final class PatternInputStream extends InputStream {

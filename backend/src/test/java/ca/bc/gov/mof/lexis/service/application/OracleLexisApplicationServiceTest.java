@@ -142,6 +142,40 @@ class OracleLexisApplicationServiceTest {
   }
 
   @Test
+  void hasUpcomingListDateShouldLookOnlyAtTheUpcomingSchedules() {
+    when(scheduleRepository.findNextSchedulesRequired())
+        .thenReturn(
+            List.of(
+                new CurrentScheduleRow(null, LocalDate.of(2026, 8, 5)),
+                new CurrentScheduleRow(990L, null),
+                new CurrentScheduleRow(989L, LocalDate.of(2026, 8, 12))));
+
+    assertThat(service.hasUpcomingListDate()).isTrue();
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void hasUpcomingListDateShouldBeFalseWhenNoUpcomingScheduleHasAnIdAndDate() {
+    when(scheduleRepository.findNextSchedulesRequired())
+        .thenReturn(
+            List.of(
+                new CurrentScheduleRow(null, LocalDate.of(2026, 8, 5)),
+                new CurrentScheduleRow(990L, null)));
+
+    assertThat(service.hasUpcomingListDate()).isFalse();
+    verifyNoInteractions(repository);
+  }
+
+  @Test
+  void hasUpcomingListDateShouldPropagateScheduleLookupFailure() {
+    DataAccessResourceFailureException failure =
+        new DataAccessResourceFailureException("Schedules unavailable");
+    when(scheduleRepository.findNextSchedulesRequired()).thenThrow(failure);
+
+    assertThatThrownBy(service::hasUpcomingListDate).isSameAs(failure);
+  }
+
+  @Test
   void searchShouldQueryRepositoryWhenRegionNotSelected() {
     LexisApplicationSearchCriteria criteria =
         new LexisApplicationSearchCriteria(

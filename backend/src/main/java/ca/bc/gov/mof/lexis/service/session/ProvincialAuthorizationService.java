@@ -659,6 +659,93 @@ public class ProvincialAuthorizationService {
     }
   }
 
+  /** What an item mutation does to an application's packages and scales. */
+  public enum ApplicationItemMutation {
+    CREATE_PACKAGE,
+    CHANGE_ITEMS
+  }
+
+  /**
+   * INTENTIONAL_LEGACY_DIVERGENCE(FAM_STAFF_GLOBAL_DATA_SCOPE): a regional staff user changes an
+   * application's packages and scales only in the regions of an Application Approver grant. An
+   * Exemption Approver grant adds its regions for changes to the items of an eligible Ministerial
+   * application, never for package creation. Read Only grants never authorize an item change. The
+   * child edit policy still decides status eligibility.
+   */
+  public void requireApplicationItemMutation(
+      Authentication authentication, Long applicationNumber, ApplicationItemMutation mutation) {
+    requireApplicationItemMutationRegions(authentication, applicationNumber, mutation);
+  }
+
+  /**
+   * Deleting a scale needs the item-mutation regions on the application and, when the scale is on a
+   * permit, on the permit's region too, without granting Exemption Approvers permit navigation. A
+   * client-scoped user must be able to open the permit.
+   */
+  public void requireApplicationScaleDeleteAccess(
+      Authentication authentication, Long applicationNumber, Long permitNumber) {
+    OrgUnitConstraint mutationRegions =
+        requireApplicationItemMutationRegions(
+            authentication, applicationNumber, ApplicationItemMutation.CHANGE_ITEMS);
+    if (permitNumber == null) {
+      return;
+    }
+    if (roles(authentication).contains(ROLE_ADMIN)
+        || scopedClientNumber(authentication) != null) {
+      requirePermit(authentication, permitNumber);
+      return;
+    }
+    PermitService permits = permitServiceProvider.getIfAvailable();
+    PermitAccessDto permit =
+        permits == null ? null : permits.findAccessByPermitNumber(permitNumber).orElse(null);
+    if (permit == null || !mutationRegions.allows(permit.orgUnitNumber())) {
+      throw new AccessDeniedException("The permit is outside the authenticated mutation regions.");
+    }
+  }
+
+  private OrgUnitConstraint requireApplicationItemMutationRegions(
+      Authentication authentication, Long applicationNumber, ApplicationItemMutation mutation) {
+    LexisApplicationService applications = applicationServiceProvider.getIfAvailable();
+    ApplicationAccessContextDto application =
+        applications == null || applicationNumber == null || applicationNumber < 1
+            ? null
+            : applications.findAccessByApplicationNumber(applicationNumber).orElse(null);
+    if (application == null
+        || !"P".equalsIgnoreCase(application.jurisdictionCode())
+        || !canAccessApplication(authentication, application)) {
+      throw new AccessDeniedException("The application is outside the authenticated access scope.");
+    }
+    if (roles(authentication).contains(ROLE_ADMIN)
+        || scopedClientNumber(authentication) != null) {
+      return UNRESTRICTED;
+    }
+
+    boolean eligibleExemptionApprover = false;
+    if (mutation == ApplicationItemMutation.CHANGE_ITEMS
+        && roles(authentication).contains(ROLE_EXEMPTION_APPROVER)) {
+      ApplicationDetailsRpcService details = applicationDetailsServiceProvider.getIfAvailable();
+      ApplicationDetailsRpcService.ApplicationEditContext context =
+          details == null ? null : details.getApplicationEditContext(applicationNumber).orElse(null);
+      eligibleExemptionApprover =
+          context != null
+              && applicationNumber.equals(context.applicationNumber())
+              && "P".equalsIgnoreCase(context.jurisdictionCode())
+              && !"Y".equalsIgnoreCase(context.oicIndicator())
+              && context.ministerialItemOverrideEligible();
+    }
+    OrgUnitConstraint mutationRegions =
+        roleRegions(
+            authentication,
+            eligibleExemptionApprover
+                ? Set.of(ROLE_APPLICATION_APPROVER, ROLE_EXEMPTION_APPROVER)
+                : Set.of(ROLE_APPLICATION_APPROVER));
+    if (!mutationRegions.allows(application.orgUnitNumber())) {
+      throw new AccessDeniedException(
+          "Application items are outside the authenticated mutation regions.");
+    }
+    return mutationRegions;
+  }
+
   public void requireApplicationAttachmentMutation(
       Authentication authentication, Long applicationNumber) {
     LexisApplicationService service = applicationServiceProvider.getIfAvailable();

@@ -20,6 +20,17 @@ import org.springframework.dao.DataRetrievalFailureException;
 /** Shared LEXIS-internal invoice persistence for Canadian and GBMS-backed permits. */
 final class OracleInternalPermitInvoiceService {
 
+  /**
+   * A known refusal whose message says what the person saving the permit can do about it. Every
+   * other invoice failure keeps a generic message.
+   */
+  static final class InvoiceBlockedException extends DataRetrievalFailureException {
+
+    InvoiceBlockedException(String userMessage) {
+      super(userMessage);
+    }
+  }
+
   private final PermitInvoiceRepository repository;
 
   OracleInternalPermitInvoiceService(PermitInvoiceRepository repository) {
@@ -30,8 +41,9 @@ final class OracleInternalPermitInvoiceService {
     validateSnapshot(transition.internalInvoice(), gbmsRequired);
     List<PermitInvoiceRow> existing = findInvoices(transition.permitNumber());
     if (!activeRows(existing).isEmpty()) {
-      throw new DataRetrievalFailureException(
-          "An active permit invoice already exists for the permit.");
+      throw new InvoiceBlockedException(
+          "This permit already has an active invoice, so it cannot be completed again."
+              + " Contact the LEXIS administrator.");
     }
     return existing;
   }
@@ -93,8 +105,9 @@ final class OracleInternalPermitInvoiceService {
   PermitInvoiceRow requireSingleActive(List<PermitInvoiceRow> rows) {
     List<PermitInvoiceRow> active = activeRows(rows);
     if (active.size() != 1) {
-      throw new DataRetrievalFailureException(
-          "Exactly one active permit invoice is required for cancellation.");
+      throw new InvoiceBlockedException(
+          "This permit does not have exactly one active invoice, so its status cannot be changed."
+              + " Contact the LEXIS administrator.");
     }
     return active.get(0);
   }

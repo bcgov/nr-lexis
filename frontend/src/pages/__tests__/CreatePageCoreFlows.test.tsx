@@ -1548,6 +1548,49 @@ describe('Create Page Core Flows', () => {
     )
   })
 
+  const NO_OPEN_SCHEDULES_OPTIONS = {
+    productTypes: [{ value: 'LOG', label: 'Logs' }],
+    exemptionTypes: [{ value: 'SECTION_1', label: 'Section 1' }],
+    exemptionReasons: [{ value: 'U', label: 'Unadvertised' }],
+    applicationStatuses: [],
+    growthTypes: [{ value: 'O', label: 'Old Growth' }],
+    regions: [{ value: '11', label: 'Cariboo' }],
+    currentSchedules: [],
+    nextSchedules: [],
+  } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>
+
+  it('lets a provincial submitter save with a blank List date while no list date is open', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('912'))
+    mockedFetchProvincialApplicationOptions.mockResolvedValueOnce(NO_OPEN_SCHEDULES_OPTIONS)
+    renderSubmitterApplicationCreate(READY_SUBMITTER_APPLICATION_QUERY)
+
+    await waitForApplicationCreateLoads('Applicant client details')
+    await selectApplicationCreateTab('Application')
+    expect(screen.getByText('List date').closest('.required-label')).toBeNull()
+    expect(screen.queryAllByRole('radio')).toHaveLength(0)
+    await confirmSubmitterSave()
+
+    await waitFor(() =>
+      expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ exportScheduleId: '' }),
+      ),
+    )
+    expect(screen.queryByText('Select a valid list date')).not.toBeInTheDocument()
+  })
+
+  it('still asks a provincial submitter for a List date when a list date is open', async () => {
+    renderSubmitterApplicationCreate(
+      READY_SUBMITTER_APPLICATION_QUERY.replace('listingDate=2026-01-11', 'listingDate=2026-02-02'),
+    )
+
+    await waitForApplicationCreateLoads('Applicant client details')
+    await userEvent.click(await screen.findByRole('button', { name: 'Save application' }))
+
+    await selectApplicationCreateTab('Application')
+    expect(await screen.findAllByText('Select a valid list date')).not.toHaveLength(0)
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
   it('lets a provincial submitter act as the agent for an owner they look up', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('911'))
     renderSubmitterApplicationCreate(READY_SUBMITTER_APPLICATION_QUERY)
@@ -2048,6 +2091,50 @@ describe('Create Page Core Flows', () => {
     expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
   })
 
+  it('starts Application volume and Average log volume at 0.0', async () => {
+    render(
+      <MemoryRouter initialEntries={['/provincial/application/create']}>
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectApplicationCreateTab('Scale')
+    expect(await screen.findByRole('textbox', { name: 'Application volume (m³)' })).toHaveValue(
+      '0.0',
+    )
+    expect(screen.getByRole('spinbutton', { name: 'Average log volume (m³)' })).toHaveValue(0)
+  })
+
+  it('refuses an Application volume left at its 0.0 starting value', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=H&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&productLocation=Camp%201&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Save application' }))
+
+    expect(
+      (await screen.findAllByText('Application volume must be greater than 0')).length,
+    ).toBeGreaterThan(0)
+    expect(screen.queryByText(/Average log volume/, { selector: '[role="alert"]' })).toBeNull()
+    expect(mockedSubmitProvincialApplicationCreate).not.toHaveBeenCalled()
+  })
+
   it('rejects application volume above the Oracle maximum and accepts the exact maximum', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('905'))
 
@@ -2161,8 +2248,35 @@ describe('Create Page Core Flows', () => {
           productTypeCode: 'S',
           ageClass: 'O',
           productLocation: '',
-          averageLogVolume: '',
+          averageLogVolume: '0.0',
         }),
+      )
+    })
+  })
+
+  it('lets a standing-timber application save with a cleared average log volume', async () => {
+    mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
+
+    render(
+      <MemoryRouter
+        initialEntries={[
+          '/provincial/application/create?ownerClientNumber=00011111&ownerClientLocationCode=00&ownerContactName=Owner%20Contact&productTypeCode=S&ageClass=O&exemptionReason=U&region=11&applicationDate=2026-01-09&applicationTermDays=30&receivedDate=2026-01-10&listingDate=2026-01-11&applicationVolume=125.5&averageLogVolume=&speciesCodes=HE&endUseCode=SA&comments=Ready',
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/create"
+            element={<ProvincialApplicationCreatePage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await userEvent.click(await screen.findByRole('button', { name: 'Save application' }))
+
+    await waitFor(() => {
+      expect(mockedSubmitProvincialApplicationCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ productTypeCode: 'S', averageLogVolume: '' }),
       )
     })
   })
@@ -3669,7 +3783,9 @@ describe('Create Page Core Flows', () => {
         }),
       )
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8084')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8084', {
+      state: { offerCreationNotice: { message: 'ok', warnings: [] } },
+    })
   })
 
   it('keeps a dual-role approver scoped to its authoritative offering client', async () => {
@@ -3836,6 +3952,8 @@ describe('Create Page Core Flows', () => {
         }),
       )
     })
-    expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8083')
+    expect(mockNavigate).toHaveBeenCalledWith('/provincial/offers/8083', {
+      state: { offerCreationNotice: { message: 'ok', warnings: [] } },
+    })
   })
 })

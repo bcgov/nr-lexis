@@ -24,6 +24,10 @@ final class ProvincialPermitMutationValidator {
   static final String PAYMENT_PENDING_WARNING =
       "Receipt number should not be empty for a complete permit so it will be saved as Payment Pending.";
 
+  /** Refusal for a shipping save that would move an Interior Complete permit to Payment pending. */
+  static final String PAYMENT_PENDING_SHIPPING_MESSAGE =
+      "Fee Receipt Number should not be empty for a complete Permit so it will be saved as Payment Pending.";
+
   private static final String STATUS_ACTIVE = "ACT";
   private static final String STATUS_COMPLETE = "COM";
   private static final String STATUS_PAYMENT_PENDING = "PPD";
@@ -177,31 +181,18 @@ final class ProvincialPermitMutationValidator {
       PermitMutationRow permit, ExemptionDetailDto exemption, List<String> errors) {
     String status = normalizeCode(permit.permitStatusCode());
 
-    // ProvincialPermit.validate() applied this relationship block only to active permits.
+    // Date relationships are checked only for an active permit.
     if (!STATUS_ACTIVE.equals(status)) {
       return;
     }
-    validateDateRelationships(permit, exemption, false, errors);
-  }
-
-  List<String> validateCompletionDateRelationships(
-      PermitMutationRow permit, ExemptionDetailDto exemption) {
-    List<String> errors = new ArrayList<>();
-    validateDateRelationships(permit, exemption, true, errors);
-    return List.copyOf(errors);
+    validateDateRelationships(permit, exemption, errors);
   }
 
   private void validateDateRelationships(
-      PermitMutationRow permit,
-      ExemptionDetailDto exemption,
-      boolean requireSubmitDate,
-      List<String> errors) {
+      PermitMutationRow permit, ExemptionDetailDto exemption, List<String> errors) {
     LocalDate submitDate = permit.applicationDate();
     LocalDate issueDate = permit.permitIssueDate();
     LocalDate expiryDate = permit.expiryDate();
-    if (requireSubmitDate && submitDate == null) {
-      errors.add("A valid submit date is required to complete a permit.");
-    }
     if (submitDate != null && submitDate.isAfter(LocalDate.now(clock))) {
       errors.add("Submit date can't be in the future.");
     }

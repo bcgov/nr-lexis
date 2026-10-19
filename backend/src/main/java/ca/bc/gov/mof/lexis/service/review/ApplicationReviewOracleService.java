@@ -462,23 +462,18 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
     if (contactRecipients != null) {
       clientEmail = contactRecipients.getFirst();
     } else if (requestedRecipient == null) {
+      // The repository selected the agent for an agent applicant with an agent client and the
+      // owner for every other supported applicant.
+      boolean agentRecipient = "A".equalsIgnoreCase(context.applicantTypeCode());
       clientEmail =
           notificationRecipientResolver
               .resolve(
                   applicationNumber,
                   context.applicantTypeCode(),
-                  "O".equalsIgnoreCase(context.applicantTypeCode())
-                      ? context.clientNumber()
-                      : null,
-                  "O".equalsIgnoreCase(context.applicantTypeCode())
-                      ? context.locationCode()
-                      : null,
-                  "A".equalsIgnoreCase(context.applicantTypeCode())
-                      ? context.clientNumber()
-                      : null,
-                  "A".equalsIgnoreCase(context.applicantTypeCode())
-                      ? context.locationCode()
-                      : null)
+                  agentRecipient ? null : context.clientNumber(),
+                  agentRecipient ? null : context.locationCode(),
+                  agentRecipient ? context.clientNumber() : null,
+                  agentRecipient ? context.locationCode() : null)
               .orElse(null);
     } else {
       clientEmail = MailRecipientValidator.normalize(requestedRecipient).orElse(null);

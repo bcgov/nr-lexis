@@ -98,6 +98,7 @@ type PageStatus = {
 type OfferCreationNavigationState = Record<string, unknown> & {
   offerCreationNotice?: {
     warnings: string[]
+    message?: string
   }
 }
 
@@ -146,7 +147,9 @@ const ProvincialOfferDetailsPage = () => {
       .map((warning) => warning.trim())
       .filter(Boolean)
       .join(' ') ?? ''
-  const preserveStatusOnNextLoadRef = useRef(Boolean(creationWarningMessage))
+  const creationSuccessMessage = navigationState?.offerCreationNotice?.message?.trim() ?? ''
+  const creationNoticeMessage = creationWarningMessage || creationSuccessMessage
+  const preserveStatusOnNextLoadRef = useRef(Boolean(creationNoticeMessage))
   const [detail, setDetail] = useState<ProvincialOfferDetail | null>(null)
   const [form, setForm] = useState<ProvincialOfferUpdateSubmission | null>(null)
   const [loading, setLoading] = useState(true)
@@ -161,7 +164,13 @@ const ProvincialOfferDetailsPage = () => {
           title: 'Offer saved with warning',
           message: creationWarningMessage,
         }
-      : null,
+      : creationSuccessMessage
+        ? {
+            kind: 'success',
+            title: 'Offer saved',
+            message: creationSuccessMessage,
+          }
+        : null,
   )
   const { clearFieldError, resetFieldErrors, showFieldErrors, invalidProps } =
     useFieldErrors<ProvincialOfferDetailField>()
@@ -245,7 +254,7 @@ const ProvincialOfferDetailsPage = () => {
   }, [loadOfferDetail])
 
   useEffect(() => {
-    if (!creationWarningMessage) {
+    if (!creationNoticeMessage) {
       return
     }
 
@@ -263,7 +272,7 @@ const ProvincialOfferDetailsPage = () => {
       },
     )
   }, [
-    creationWarningMessage,
+    creationNoticeMessage,
     location.hash,
     location.pathname,
     location.search,

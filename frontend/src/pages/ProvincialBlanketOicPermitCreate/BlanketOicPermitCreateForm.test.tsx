@@ -270,6 +270,39 @@ describe('BlanketOicPermitCreateForm', () => {
     ).toBeInTheDocument()
   })
 
+  it.each(['0', '123.456', '1234.5678', '.5', '123456789'])(
+    'accepts %s as the permit request volume',
+    async (volume) => {
+      const user = userEvent.setup()
+      renderForm()
+
+      await user.type(screen.getByLabelText('Permit request volume (m³)'), volume)
+      await user.click(screen.getByRole('button', { name: 'Save permit' }))
+
+      await screen.findByRole('group', { name: 'Permit needs attention' })
+      expect(screen.queryByText(/Permit request volume must be/)).not.toBeInTheDocument()
+      expect(screen.queryByText('Permit request volume is required')).not.toBeInTheDocument()
+    },
+  )
+
+  it.each(['-5', '1.2.3', '12a', '1234567890'])(
+    'refuses %s as the permit request volume',
+    async (volume) => {
+      const user = userEvent.setup()
+      renderForm()
+
+      await user.type(screen.getByLabelText('Permit request volume (m³)'), volume)
+      await user.click(screen.getByRole('button', { name: 'Save permit' }))
+
+      expect(
+        await screen.findByText(
+          'Permit request volume must be a non-negative number of 9 characters or fewer',
+        ),
+      ).toBeInTheDocument()
+      expect(addPermitDetail).not.toHaveBeenCalled()
+    },
+  )
+
   it('names the tab of an optional date error and shows the error only on its field', async () => {
     const user = userEvent.setup()
     renderForm()
@@ -759,6 +792,29 @@ describe('BlanketOicPermitCreateForm', () => {
       ])
       vi.mocked(fetchApplicationClientData).mockImplementation(async (clientNumber, locationCode) =>
         clientDetails(clientNumber, locationCode),
+      )
+    })
+
+    it('preserves resolved acronyms when prefilling the owner and agent', async () => {
+      vi.mocked(fetchApplicationClientData).mockImplementation(
+        async (clientNumber, locationCode) => ({
+          ...clientDetails(clientNumber, locationCode),
+          clientAcronym: 'FCC',
+        }),
+      )
+      const user = userEvent.setup()
+      renderForm()
+      await user.click(screen.getByRole('tab', { name: 'Applicant' }))
+      await waitFor(() =>
+        expect(clientControl('owner')).toHaveValue(
+          `Resolved client ${SUBMITTER_CLIENT} (FCC) · ${SUBMITTER_CLIENT}`,
+        ),
+      )
+      await user.click(screen.getByRole('checkbox', { name: "I'm an agent" }))
+      await waitFor(() =>
+        expect(clientControl('agent')).toHaveValue(
+          `Resolved client ${SUBMITTER_CLIENT} (FCC) · ${SUBMITTER_CLIENT}`,
+        ),
       )
     })
 

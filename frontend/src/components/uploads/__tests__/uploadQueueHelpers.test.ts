@@ -52,6 +52,54 @@ describe('uploadQueueHelpers', () => {
     expect(validateDocumentUploadDescription('Line one\nLine two')).toBe('')
   })
 
+  it('accepts the file names and descriptions the server accepts, including colons', () => {
+    const acceptedNames = [
+      'Permit 1:2 signed.pdf',
+      "Joe's report (final) #2 & more, v1.0.pdf",
+      'a name with spaces.pdf',
+      `${'a'.repeat(246)}.pdf`,
+    ]
+    for (const name of acceptedNames) {
+      expect(validateDocumentUploadFile(new File(['content'], name))).toBe('')
+    }
+
+    expect(validateDocumentUploadDescription('Signed: 10:30\tLine one\r\nLine two')).toBe('')
+    expect(validateDocumentUploadDescription('a'.repeat(250))).toBe('')
+    expect(validateDocumentUploadDescription('  padded  ')).toBe('')
+  })
+
+  it('refuses the file names and descriptions the server refuses', () => {
+    const unsupportedName =
+      'File name contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation, without slashes.'
+    const refusedNames = [
+      'Joe\u2019s permit.pdf',
+      'Permit 12 \u2013 signed.pdf',
+      'folder\\permit.pdf',
+      'folder/permit.pdf',
+      'permit\u0001.pdf',
+      'permit\u007f.pdf',
+      ' permit.pdf',
+      'permit.pdf ',
+    ]
+    for (const name of refusedNames) {
+      expect(validateDocumentUploadFile(new File(['content'], name)), name).toBe(unsupportedName)
+    }
+
+    const unsupportedDescription =
+      'Document description contains unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.'
+    for (const description of [
+      'Joe\u2019s permit',
+      'dash \u2013 here',
+      'nul\u0000',
+      'esc\u001b',
+      'del\u007f',
+    ]) {
+      expect(validateDocumentUploadDescription(description), description).toBe(
+        unsupportedDescription,
+      )
+    }
+  })
+
   it('keeps actionable validation errors from failed uploads', () => {
     const result = extractUploadErrorDetails({
       response: {

@@ -21,7 +21,7 @@ regional recipient.
 
 | Workflow | From | To | Cc |
 | --- | --- | --- | --- |
-| Application Review — rejected or withdrawn | Regional positional mailbox | Editable owner recipient, plus the agent when the applicant is an agent (one message) | — |
+| Application Review or Review tab — rejected or withdrawn | Regional positional mailbox | Editable owner recipient, plus the agent when the applicant is an agent (one message) | — |
 | Exemption approval | Regional positional mailbox for the first linked application | Editable owner recipient, plus the agent when the applicant is an agent (one message) | — |
 | Permit approval and payment pending | Regional positional mailbox | Editable applicant recipient | — |
 | Permit review | Provincial/system mailbox | Regional positional mailbox, then the optional validated permit-review address as a second `To` recipient | — |
@@ -29,11 +29,17 @@ regional recipient.
 
 Applicant defaults come from the workflow record's owner or agent client/location. They do not
 come from the logged-in WebADE or Keycloak (FAM) identity, and `CLIENT_CONTACT` is not an automatic
-fallback. The Application review page sends to the owner, and to the agent when the applicant is an
-agent, as one message to the distinct addresses. A rejection or withdrawal from an application's
-Review tab follows the legacy agent-email-when-present, otherwise-owner rule.
+fallback. Rejecting or withdrawing an application, from Application review or from an application's
+Review tab, uses the same disapproval dialog. It sends to the owner, and to the agent when the
+applicant is an agent, as one message to the distinct addresses.
 Authorized staff may replace an applicant recipient for that send only; the edited address is not
 persisted.
+
+The applicant type decides which client location supplies the default. Owner and Ministerial
+applicants use the owner's location and agent applicants the agent's. A status email with a single
+recipient goes to the agent when an agent applicant has an agent client, otherwise to the owner. A
+new offer is emailed only for owner and agent applicants. An updated or withdrawn offer goes to the
+agent for an agent applicant and to the owner for every other applicant type.
 
 The regional mapping is RCO for Coast organization units, RNI for Northern Interior organization
 units, and RSI for Southern Interior organization units. Skeena is normally RNI. Legacy parity

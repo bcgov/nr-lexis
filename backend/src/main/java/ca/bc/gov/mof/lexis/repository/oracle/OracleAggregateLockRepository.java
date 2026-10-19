@@ -47,10 +47,6 @@ public class OracleAggregateLockRepository {
   private static final String FIND_OFFER =
       "SELECT * FROM EXPORT_PURCHASE_OFFER WHERE EXPORT_PURCHASE_OFFER_NUMBER = ?";
 
-  private static final String APPLICATION_REMARKS =
-      "SELECT r.* FROM EXPORT_EXEMPTION_APP_REMARKS r "
-          + "WHERE r.APPLICATION_NUMBER = ? "
-          + "ORDER BY r.APPLICATION_NUMBER, r.EXPORT_EXMPTN_APPL_REMARK_NMBR";
   private static final String APPLICATION_PACKAGES =
       "SELECT p.* FROM EXPORT_PACKAGE p WHERE p.APPLICATION_NUMBER = ? "
           + "ORDER BY p.PACKAGE_NUMBER";
@@ -64,16 +60,6 @@ public class OracleAggregateLockRepository {
       "SELECT s.* FROM EXPORT_SCALE_DETAIL s "
           + "INNER JOIN EXPORT_PACKAGE p ON p.PACKAGE_NUMBER = s.PACKAGE_NUMBER "
           + "WHERE p.APPLICATION_NUMBER = ? ORDER BY s.EXPORT_SCALE_DETAIL_ID";
-  private static final String APPLICATION_ATTACHMENTS =
-      "SELECT a.EXPORT_ATTACHMENT_ID AS LINK_ATTACHMENT_ID, a.APPLICATION_NUMBER, "
-          + "DBMS_LOB.GETLENGTH(a.EXPORT_EXEMPTION_FILE) AS CONTENT_LENGTH, "
-          + "f.EXPORT_ATTACHMENT_ID, f.FILE_NAME, f.DESCRIPTION, f.EXPORT_FILE_TYPE_CODE, "
-          + "f.EXPORT_ATTACHMENT_TYPE_CODE, f.EXPORT_FILE_MIME_TYPE_CODE, "
-          + "f.ENTRY_USERID, f.ENTRY_TIMESTAMP, f.UPDATE_USERID, f.UPDATE_TIMESTAMP "
-          + "FROM EXPORT_APPL_FILE_ATTCHMNT a "
-          + "INNER JOIN EXPORT_FILE_ATTACHMENT f "
-          + "ON f.EXPORT_ATTACHMENT_ID = a.EXPORT_ATTACHMENT_ID "
-          + "WHERE a.APPLICATION_NUMBER = ? ORDER BY a.EXPORT_ATTACHMENT_ID";
   private static final String APPLICATION_FEDERAL_DETAILS =
       "SELECT f.* FROM EXPORT_FEDERAL_PERMIT_DETAIL f "
           + "INNER JOIN EXPORT_PACKAGE p "
@@ -92,16 +78,6 @@ public class OracleAggregateLockRepository {
   private static final String EXEMPTION_ORG_UNITS =
       "SELECT o.* FROM OIC_EXEMPTION_ORG_UNIT o WHERE o.EXEMPTION_NUMBER = ? "
           + "ORDER BY o.EXEMPTION_NUMBER, o.ORG_UNIT_NO";
-  private static final String EXEMPTION_ATTACHMENTS =
-      "SELECT a.EXPORT_ATTACHMENT_ID AS LINK_ATTACHMENT_ID, a.EXEMPTION_NUMBER, "
-          + "DBMS_LOB.GETLENGTH(a.EXPORT_EXEMPTION_FILE) AS CONTENT_LENGTH, "
-          + "f.EXPORT_ATTACHMENT_ID, f.FILE_NAME, f.DESCRIPTION, f.EXPORT_FILE_TYPE_CODE, "
-          + "f.EXPORT_ATTACHMENT_TYPE_CODE, f.EXPORT_FILE_MIME_TYPE_CODE, "
-          + "f.ENTRY_USERID, f.ENTRY_TIMESTAMP, f.UPDATE_USERID, f.UPDATE_TIMESTAMP "
-          + "FROM EXPORT_EXEMPT_FILE_ATTCHMNT a "
-          + "INNER JOIN EXPORT_FILE_ATTACHMENT f "
-          + "ON f.EXPORT_ATTACHMENT_ID = a.EXPORT_ATTACHMENT_ID "
-          + "WHERE a.EXEMPTION_NUMBER = ? ORDER BY a.EXPORT_ATTACHMENT_ID";
   private static final String EXEMPTION_APPLICATIONS =
       "SELECT a.* FROM EXPORT_EXEMPTION_APPLICATION a WHERE a.EXEMPTION_NUMBER = ? "
           + "ORDER BY a.APPLICATION_NUMBER";
@@ -155,16 +131,13 @@ public class OracleAggregateLockRepository {
   }
 
   private Optional<RootRecordSnapshot> readApplication(String rootSql, Long applicationNumber) {
+    // Remarks and documents are added and removed through their own flows, so they must not make
+    // an open detail save stale.
     return readAggregate(
         rootSql,
         "EXPORT_EXEMPTION_APPLICATION",
         applicationNumber,
         rowSets -> {
-          rowSets.add(
-              readRows(
-                  "EXPORT_EXEMPTION_APP_REMARKS",
-                  APPLICATION_REMARKS,
-                  applicationNumber));
           rowSets.add(readRows("EXPORT_PACKAGE", APPLICATION_PACKAGES, applicationNumber));
           rowSets.add(
               readRows(
@@ -173,8 +146,6 @@ public class OracleAggregateLockRepository {
                   applicationNumber,
                   applicationNumber));
           rowSets.add(readRows("EXPORT_SCALE_DETAIL", APPLICATION_SCALES, applicationNumber));
-          rowSets.add(
-              readRows("EXPORT_APPL_FILE_ATTCHMNT", APPLICATION_ATTACHMENTS, applicationNumber));
           rowSets.add(
               readRows(
                   "EXPORT_FEDERAL_PERMIT_DETAIL",
@@ -186,6 +157,8 @@ public class OracleAggregateLockRepository {
   }
 
   private Optional<RootRecordSnapshot> readExemption(String rootSql, String exemptionNumber) {
+    // Documents are added and removed through their own flow, so they must not make an open
+    // detail save stale.
     return readAggregate(
         rootSql,
         "EXPORT_EXEMPTION",
@@ -193,8 +166,6 @@ public class OracleAggregateLockRepository {
         rowSets -> {
           rowSets.add(readRows("EXPORT_EXEMPTION_RATE", EXEMPTION_RATE, exemptionNumber));
           rowSets.add(readRows("OIC_EXEMPTION_ORG_UNIT", EXEMPTION_ORG_UNITS, exemptionNumber));
-          rowSets.add(
-              readRows("EXPORT_EXEMPT_FILE_ATTCHMNT", EXEMPTION_ATTACHMENTS, exemptionNumber));
           rowSets.add(
               readRows(
                   "EXPORT_EXEMPTION_APPLICATION",

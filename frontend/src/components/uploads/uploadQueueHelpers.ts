@@ -146,6 +146,9 @@ export const DOCUMENT_UPLOAD_ACCEPT = DOCUMENT_UPLOAD_EXTENSIONS.join(',')
 export const DOCUMENT_UPLOAD_GUIDANCE =
   'Accepted file types: BMP, CSV, DOC, DOCX, JPG, PDF, PNG, RTF, TXT, XLS, XLSX, XML and ZIP. Maximum file size: 20 MB.'
 
+// File names and descriptions are stored in US7ASCII VARCHAR2(250 BYTE) columns, so the server
+// accepts printable US-ASCII text of at most 250 characters and nothing else. These patterns and
+// limits repeat the server rules so a file the server would refuse is flagged before it is queued.
 const MAX_ATTACHMENT_METADATA_BYTES = 250
 const PRINTABLE_US_ASCII_PATTERN = /^[\x20-\x7e]+$/
 const DESCRIPTION_US_ASCII_PATTERN = /^[\x09\x0a\x0d\x20-\x7e]*$/

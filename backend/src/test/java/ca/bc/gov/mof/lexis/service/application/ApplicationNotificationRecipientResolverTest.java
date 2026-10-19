@@ -58,6 +58,70 @@ class ApplicationNotificationRecipientResolverTest {
   }
 
   @Test
+  void ministerialRecipientShouldUseOwnerClientLocationEmail() {
+    ApplicationNotificationRecipientResolver resolver = resolver();
+    when(clientEmailResolver.resolve("00011111", "02"))
+        .thenReturn(Optional.of("owner@example.com"));
+
+    Optional<String> result =
+        resolver.resolve(1000456L, "M", "00011111", "02", "00022222", "03");
+
+    assertThat(result).contains("owner@example.com");
+    verify(clientEmailResolver).resolve("00011111", "02");
+    verifyNoMoreInteractions(clientEmailResolver);
+  }
+
+  @Test
+  void newOfferRecipientShouldBeResolvedOnlyForOwnerAndAgentApplicants() {
+    ApplicationNotificationRecipientResolver resolver = resolver();
+    when(clientEmailResolver.resolve("00011111", "02"))
+        .thenReturn(Optional.of("owner@example.com"));
+    when(clientEmailResolver.resolve("00022222", "03"))
+        .thenReturn(Optional.of("agent@example.com"));
+
+    assertThat(resolver.resolveOwnerOrAgent(1L, "O", "00011111", "02", "00022222", "03"))
+        .contains("owner@example.com");
+    assertThat(resolver.resolveOwnerOrAgent(1L, "A", "00011111", "02", "00022222", "03"))
+        .contains("agent@example.com");
+    assertThat(resolver.resolveOwnerOrAgent(1L, "M", "00011111", "02", "00022222", "03"))
+        .isEmpty();
+    assertThat(resolver.resolveOwnerOrAgent(1L, "X", "00011111", "02", "00022222", "03"))
+        .isEmpty();
+    assertThat(resolver.resolveOwnerOrAgent(1L, null, "00011111", "02", "00022222", "03"))
+        .isEmpty();
+  }
+
+  @Test
+  void offerUpdateRecipientShouldBeTheAgentForAgentApplicantsAndTheOwnerOtherwise() {
+    ApplicationNotificationRecipientResolver resolver = resolver();
+    when(clientEmailResolver.resolve("00011111", "02"))
+        .thenReturn(Optional.of("owner@example.com"));
+    when(clientEmailResolver.resolve("00022222", "03"))
+        .thenReturn(Optional.of("agent@example.com"));
+
+    assertThat(resolver.resolveAgentOrOwner("A", "00011111", "02", "00022222", "03"))
+        .contains("agent@example.com");
+    assertThat(resolver.resolveAgentOrOwner("O", "00011111", "02", "00022222", "03"))
+        .contains("owner@example.com");
+    assertThat(resolver.resolveAgentOrOwner("M", "00011111", "02", "00022222", "03"))
+        .contains("owner@example.com");
+    assertThat(resolver.resolveAgentOrOwner("X", "00011111", "02", "00022222", "03"))
+        .contains("owner@example.com");
+    assertThat(resolver.resolveAgentOrOwner(null, "00011111", "02", "00022222", "03"))
+        .contains("owner@example.com");
+  }
+
+  @Test
+  void agentApplicantWithoutAgentEmailShouldNotFallBackToTheOwnerForOffers() {
+    ApplicationNotificationRecipientResolver resolver = resolver();
+    when(clientEmailResolver.resolve("00022222", "03")).thenReturn(Optional.empty());
+
+    assertThat(resolver.resolveAgentOrOwner("A", "00011111", "02", "00022222", "03")).isEmpty();
+    verify(clientEmailResolver).resolve("00022222", "03");
+    verifyNoMoreInteractions(clientEmailResolver);
+  }
+
+  @Test
   void unknownApplicantTypeShouldNotResolveARecipient() {
     ApplicationNotificationRecipientResolver resolver = resolver();
 

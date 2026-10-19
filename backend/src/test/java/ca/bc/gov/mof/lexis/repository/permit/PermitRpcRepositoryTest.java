@@ -11,7 +11,6 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
-import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.ApplicationStatusRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitMutationRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.DocumentRow;
 import ca.bc.gov.mof.lexis.repository.permit.PermitRpcRepository.PermitDocumentContextRow;
@@ -846,15 +845,30 @@ class PermitRpcRepositoryTest {
   }
 
   @Test
-  void requiredBoicMarkLookupShouldUseOracleRows() throws Exception {
+  void requiredBoicMarkLookupShouldReturnTheOracleMarkRow() throws Exception {
     PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
     stubCursorProcedure("{ call LEXIS_CODES.FIND_VALID_BOIC_TIMBER_MARK(?,?,?) }", 3);
     when(resultSet.next()).thenReturn(true, false);
+    when(resultSet.getString("TIMBER_MARK")).thenReturn("TM-1");
+    when(resultSet.getString("MARK_STATUS_ST")).thenReturn(" HA ");
+    when(resultSet.getString("FILE_TYPE_CODE")).thenReturn("B01");
 
-    assertThat(repository.isValidBoicTimberMarkRequired("TM-1", "EX-1")).isTrue();
+    assertThat(repository.findValidBoicTimberMarkRequired("TM-1", "EX-1"))
+        .contains(new PermitRpcRepository.BoicTimberMarkRow("TM-1", "HA", "B01"));
     verify(callableStatement).setString(1, "TM-1");
     verify(callableStatement).setString(2, "EX-1");
     verify(callableStatement).registerOutParameter(3, Types.REF_CURSOR);
+  }
+
+  @Test
+  void requiredBoicMarkLookupShouldBeEmptyWhenOracleReturnsNoRow() throws Exception {
+    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
+    stubCursorProcedure("{ call LEXIS_CODES.FIND_VALID_BOIC_TIMBER_MARK(?,?,?) }", 3);
+    when(resultSet.next()).thenReturn(false);
+
+    assertThat(repository.findValidBoicTimberMarkRequired("TM-1", "EX-1")).isEmpty();
+    assertThat(repository.findValidBoicTimberMarkRequired(" ", "EX-1")).isEmpty();
+    assertThat(repository.findValidBoicTimberMarkRequired("TM-1", null)).isEmpty();
   }
 
   @Test
@@ -969,62 +983,6 @@ class PermitRpcRepositoryTest {
     assertThat(repository.findApplicationStatusCodeByNumber(1000456L)).contains("PMT");
     verify(callableStatement).setString(1, "1000456");
     verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
-  }
-
-  @Test
-  void requiredExemptionApplicationStatusesShouldUseOneCursorAndPreserveUnknownStatus()
-      throws Exception {
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, true, false);
-    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(1000456L, 1000457L);
-    when(resultSet.wasNull()).thenReturn(false);
-    when(resultSet.getString("EXPORT_APPLICATION_STATUS_CODE")).thenReturn("EXE", null);
-    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
-
-    assertThat(repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
-        .containsExactly(
-            new ApplicationStatusRow(1000456L, "EXE"), new ApplicationStatusRow(1000457L, null));
-    verify(jdbcTemplate)
-        .execute(
-            eq("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }"),
-            any(CallableStatementCallback.class));
-    verify(callableStatement).setString(1, "EX-700");
-    verify(callableStatement).registerOutParameter(2, Types.REF_CURSOR);
-  }
-
-  @Test
-  void requiredExemptionApplicationStatusesShouldRejectMalformedRelationships() throws Exception {
-    stubCursorProcedure("{ call LEXIS_GROUP_5.FIND_APPLICATION_BY_EXEMPTION(?,?) }", 2);
-    when(resultSet.next()).thenReturn(true, false);
-    when(resultSet.getLong("APPLICATION_NUMBER")).thenReturn(0L);
-    when(resultSet.wasNull()).thenReturn(true);
-    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
-
-    assertThatThrownBy(
-            () -> repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
-        .isInstanceOf(DataRetrievalFailureException.class)
-        .hasMessageContaining("invalid application relationship")
-        .hasMessageContaining("exemption EX-700");
-  }
-
-  @Test
-  void requiredExemptionApplicationStatusesShouldRejectBlankInputWithoutQueryingOracle() {
-    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
-
-    assertThat(repository.findApplicationStatusesByExemptionNumberRequired(" ")).isEmpty();
-    verifyNoInteractions(jdbcTemplate);
-  }
-
-  @Test
-  void requiredExemptionApplicationStatusesShouldPropagateOracleFailure() {
-    when(jdbcTemplate.execute(any(String.class), any(CallableStatementCallback.class)))
-        .thenThrow(new DataAccessResourceFailureException("Oracle unavailable"));
-    PermitRpcRepository repository = new PermitRpcRepository(jdbcTemplate);
-
-    assertThatThrownBy(
-            () -> repository.findApplicationStatusesByExemptionNumberRequired("EX-700"))
-        .isInstanceOf(DataAccessResourceFailureException.class)
-        .hasMessage("Oracle unavailable");
   }
 
   @Test

@@ -47,6 +47,7 @@ import {
   selectApplicationItemsForEditing,
   selectApplicationSummaryTile,
 } from './ProvincialApplicationDetailActions.support'
+import { fetchApplicationSpeciesCodes } from '@/service/provincial-application-items-service'
 import ProvincialApplicationDetailsPage from '@/pages/ProvincialApplicationDetails'
 import ProvincialApplicationItemsPanel from '@/pages/ProvincialApplicationDetails/ApplicationItemsPanel'
 import type { ActionResult } from '@/utils/action-result'
@@ -2402,18 +2403,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   })
 
   it('deletes the selected application package', async () => {
-    mockedFetchApplicationPackageScales.mockResolvedValue([
-      {
-        permitted: false,
-        timberMark: 'TM001',
-        species: 'Douglas-fir',
-        grade: 'Sawlog',
-        pieces: 0,
-        volume: '0.0',
-        id: '55',
-        cascadeSplitCode: 'S',
-      },
-    ])
+    mockedFetchApplicationPackageScales.mockResolvedValue([])
 
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -2515,18 +2505,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
   })
 
   it('keeps a failed package deletion open for retry', async () => {
-    mockedFetchApplicationPackageScales.mockResolvedValue([
-      {
-        permitted: false,
-        timberMark: 'TM001',
-        species: 'Douglas-fir',
-        grade: 'Sawlog',
-        pieces: 0,
-        volume: '0.0',
-        id: '55',
-        cascadeSplitCode: 'S',
-      },
-    ])
+    mockedFetchApplicationPackageScales.mockResolvedValue([])
     mockedDeleteApplicationPackage.mockResolvedValue({ success: false })
 
     render(
@@ -3269,5 +3248,302 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     await waitFor(() => {
       expect(mockedUpdateApplicationSummary).toHaveBeenCalledTimes(1)
     })
+  })
+
+  it("keeps focus on the new package's Edit package button after creating a second package", async () => {
+    mockedAddApplicationPackage.mockImplementationOnce(async () => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        packages: [
+          { packageNumber: 'PKG-1', volume: 100, pieceCount: 5 },
+          { packageNumber: 'PKG-NEW', volume: 25, pieceCount: 0 },
+        ],
+      })
+      return { valid: true, packageNumber: 'PKG-NEW', errors: [], warnings: [] }
+    })
+    renderApplicationItems()
+
+    const drawer = await openCreatePackageControls()
+    const toolbarLauncher = screen.getByRole('button', { name: 'Create package' })
+    fillNewPackage(drawer, 'PKG-NEW')
+    const save = drawer.getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await userEvent.click(save)
+
+    const packageCard = await screen.findByRole('region', { name: 'Package PKG-NEW' })
+    const editPackage = within(packageCard).getByRole('button', { name: 'Edit package' })
+    await waitFor(() => expect(editPackage).toHaveFocus())
+    // The toolbar button that opened the form doesn't take focus back once the form closes.
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(editPackage).toHaveFocus()
+    expect(toolbarLauncher).not.toHaveFocus()
+  })
+
+  it('lands on Edit package after the first package on a page opened from Create application', async () => {
+    mockedFetchProvincialApplicationDetail.mockResolvedValue({
+      ...applicationDetail,
+      packages: [],
+    })
+    mockedAddApplicationPackage.mockImplementationOnce(async () => {
+      mockedFetchProvincialApplicationDetail.mockResolvedValue({
+        ...applicationDetail,
+        packages: [{ packageNumber: 'PKG-NEW', volume: 25, pieceCount: 0 }],
+      })
+      return { valid: true, packageNumber: 'PKG-NEW', errors: [], warnings: [] }
+    })
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/application/321',
+            state: { applicationCreationNotice: { applicationNumber: '321' } },
+          },
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('The application was saved.')).toBeInTheDocument()
+    const drawer = await openCreatePackageControls()
+    fillNewPackage(drawer, 'PKG-NEW')
+    const save = drawer.getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
+    await userEvent.click(save)
+
+    const packageCard = await screen.findByRole('region', { name: 'Package PKG-NEW' })
+    const editPackage = within(packageCard).getByRole('button', { name: 'Edit package' })
+    await waitFor(() => expect(editPackage).toHaveFocus())
+    await new Promise((resolve) => setTimeout(resolve, 100))
+    expect(editPackage).toHaveFocus()
+  })
+
+  it('offers every species for a new scale, not only the package species', async () => {
+    vi.mocked(fetchApplicationSpeciesCodes).mockResolvedValue([
+      { code: 'HE', description: 'Hemlock' },
+      { code: 'FI', description: 'Douglas-fir' },
+    ])
+    mockedFetchApplicationPackageSpecies.mockResolvedValue([
+      { species: 'HE', endUse: 'LU', endUseDescription: 'Lumber' },
+    ])
+    renderApplicationItems()
+    const drawer = await openScaleControls()
+    const species = drawer.getByRole('combobox', { name: 'Species' })
+    const grade = drawer.getByRole('combobox', { name: 'Grade' })
+
+    await waitFor(() => expect(species).toBeEnabled())
+    await userEvent.click(species)
+    expect(await screen.findByRole('option', { name: 'Hemlock' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'Douglas-fir' })).toBeInTheDocument()
+    await userEvent.click(screen.getByRole('option', { name: 'Hemlock' }))
+    await chooseDropdownOption(grade, 'Sawlog')
+
+    // A different species starts with no grade, then saves with the species chosen.
+    await chooseDropdownOption(species, 'Douglas-fir')
+    expect(grade).not.toHaveTextContent('Sawlog')
+    await waitFor(() =>
+      expect(mockedFetchApplicationGradeCodes).toHaveBeenLastCalledWith('12', 'FI'),
+    )
+    await chooseDropdownOption(grade, 'Sawlog')
+    fireEvent.change(drawer.getByLabelText('Timber mark'), { target: { value: 'TM002' } })
+    fireEvent.change(drawer.getByLabelText('Pieces'), { target: { value: '2' } })
+    fireEvent.change(drawer.getByLabelText('Volume (m³)'), { target: { value: '8.0' } })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
+
+    await waitFor(() =>
+      expect(mockedAddApplicationScaleToPackage).toHaveBeenCalledWith(
+        expect.objectContaining({ packageNumber: 'PKG-1', speciesCode: 'FI', gradeCode: '1' }),
+      ),
+    )
+    expect(mockedUpdateApplicationPackage).not.toHaveBeenCalled()
+  })
+
+  it('offers Delete only on scales that are not on a completed permit', async () => {
+    mockedFetchApplicationPackageScales.mockResolvedValue([
+      {
+        permitted: true,
+        timberMark: 'TM-DONE',
+        species: 'Douglas-fir',
+        grade: 'Sawlog',
+        pieces: 5,
+        volume: '20.0',
+        id: '55',
+        cascadeSplitCode: 'S',
+      },
+      {
+        permitted: false,
+        timberMark: 'TM-OPEN',
+        species: 'Douglas-fir',
+        grade: 'Sawlog',
+        pieces: 3,
+        volume: '10.0',
+        id: '56',
+        cascadeSplitCode: 'S',
+      },
+    ])
+    renderApplicationItems()
+    await selectApplicationDetailTab('Scale')
+
+    const lockedRow = (await screen.findByText('TM-DONE')).closest('tr') as HTMLElement
+    const openRow = screen.getByText('TM-OPEN').closest('tr') as HTMLElement
+    expect(within(lockedRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    await waitFor(() =>
+      expect(within(openRow).getByRole('button', { name: 'Delete' })).toBeEnabled(),
+    )
+    expect(screen.getByRole('columnheader', { name: 'Actions' })).toBeInTheDocument()
+  })
+
+  it('has no scale Actions column when every scale is on a completed permit', async () => {
+    mockedFetchApplicationPackageScales.mockResolvedValue([
+      {
+        permitted: true,
+        timberMark: 'TM-DONE',
+        species: 'Douglas-fir',
+        grade: 'Sawlog',
+        pieces: 5,
+        volume: '20.0',
+        id: '55',
+        cascadeSplitCode: 'S',
+      },
+    ])
+    renderApplicationItems()
+    await selectApplicationDetailTab('Scale')
+
+    expect(await screen.findByText('TM-DONE')).toBeInTheDocument()
+    expect(screen.queryByRole('columnheader', { name: 'Actions' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+  })
+
+  it('explains a refused scale delete as a possible completed permit', async () => {
+    mockedDeleteApplicationScale.mockResolvedValueOnce({ success: false })
+    renderApplicationItems()
+    await selectApplicationDetailTab('Scale')
+
+    const row = (await screen.findByText('TM001')).closest('tr') as HTMLElement
+    await userEvent.click(within(row).getByRole('button', { name: 'Delete' }))
+    const confirmation = await screen.findByRole('dialog', {
+      name: 'Are you sure you want to delete this scale?',
+    })
+    await userEvent.click(within(confirmation).getByRole('button', { name: 'Delete' }))
+
+    expect(await screen.findByText('Failed to delete scale')).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Scale not deleted. It may now be on a completed permit. Reload the application to check.',
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Scale delete failed. Refresh and try again.'),
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { label: 'a scale with no pieces', pieces: 0, volume: '0.0' },
+    { label: 'a scale with pieces', pieces: 5, volume: '20.0' },
+  ])('hides Delete package and says why for a package with $label', async ({ pieces, volume }) => {
+    mockedFetchApplicationPackageScales.mockResolvedValue([
+      {
+        permitted: false,
+        timberMark: 'TM001',
+        species: 'Douglas-fir',
+        grade: 'Sawlog',
+        pieces,
+        volume,
+        id: '55',
+        cascadeSplitCode: 'S',
+      },
+    ])
+    renderApplicationItems()
+    await selectApplicationDetailTab('Scale')
+
+    expect(await screen.findByText("A package with scales can't be deleted.")).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Delete package' })).not.toBeInTheDocument()
+  })
+
+  it('offers Delete package without a reason when the package has no scales', async () => {
+    mockedFetchApplicationPackageScales.mockResolvedValue([])
+    renderApplicationItems()
+    await selectApplicationDetailTab('Scale')
+
+    expect(await screen.findByRole('button', { name: 'Delete package' })).toBeInTheDocument()
+    expect(screen.queryByText("A package with scales can't be deleted.")).not.toBeInTheDocument()
+  })
+
+  it.each([
+    {
+      message: 'The application volume has already been met.',
+      shown: 'The application volume has already been met',
+    },
+    {
+      message: 'The package volume must be less than or equal to 40.0.',
+      shown: 'The package volume must be less than or equal to 40.0',
+    },
+  ])('shows "$message" on the Create package Volume field', async ({ message, shown }) => {
+    mockedAddApplicationPackage.mockResolvedValueOnce({
+      valid: false,
+      packageNumber: 'PKG-NEW',
+      errors: [message],
+      warnings: [],
+    })
+    renderApplicationItems()
+    const drawer = await openCreatePackageControls()
+    fillNewPackage(drawer, 'PKG-NEW')
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+
+    const volume = drawer.getByLabelText('Volume (m³)')
+    await waitFor(() => expect(volume).toHaveAttribute('aria-invalid', 'true'))
+    expect(drawer.getByText(shown)).toBeInTheDocument()
+    expect(drawer.queryByText('Package creation failed')).not.toBeInTheDocument()
+    await waitFor(() => expect(volume).toHaveFocus())
+  })
+
+  it('shows a server duplicate package number on the Create package number field', async () => {
+    mockedAddApplicationPackage.mockResolvedValueOnce({
+      valid: false,
+      packageNumber: 'PKG-NEW',
+      errors: ['Package PKG-NEW already exists.'],
+      warnings: [],
+    })
+    renderApplicationItems()
+    const drawer = await openCreatePackageControls()
+    fillNewPackage(drawer, 'PKG-NEW')
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+
+    const packageNumber = drawer.getByLabelText('Package number')
+    await waitFor(() => expect(packageNumber).toHaveAttribute('aria-invalid', 'true'))
+    expect(drawer.getByText('Package PKG-NEW already exists')).toBeInTheDocument()
+    expect(drawer.queryByText('Package creation failed')).not.toBeInTheDocument()
+    await waitFor(() => expect(packageNumber).toHaveFocus())
+  })
+
+  it('shows the scale-volume floor rejection on the Edit package Volume field', async () => {
+    mockedUpdateApplicationPackage.mockResolvedValueOnce({
+      valid: false,
+      packageNumber: 'PKG-1',
+      errors: [
+        'The package volume must be greater than or equal to the total scale volume (20.0).',
+      ],
+      warnings: [],
+    })
+    renderApplicationItems()
+    await selectApplicationItemsForEditing()
+    const comments = await screen.findByLabelText('Comments')
+    const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
+    fireEvent.change(comments, { target: { value: 'Updated comment' } })
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+
+    const volume = drawer.getByLabelText('Volume (m³)')
+    await waitFor(() => expect(volume).toHaveAttribute('aria-invalid', 'true'))
+    expect(
+      drawer.getByText(
+        'The package volume must be greater than or equal to the total scale volume (20.0)',
+      ),
+    ).toBeInTheDocument()
+    expect(drawer.queryByText('Package save failed')).not.toBeInTheDocument()
   })
 })

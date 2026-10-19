@@ -174,13 +174,19 @@ export const fetchProvincialPermitExemptionContext = async (
   }
 }
 
+type ProvincialPermitDetailOptions = {
+  /** Reads the permit from the server instead of the short-lived cache. */
+  fresh?: boolean
+}
+
 export const fetchProvincialPermitDetail = async (
   permitNumber: string,
+  { fresh = false }: ProvincialPermitDetailOptions = {},
 ): Promise<ProvincialPermitDetail | null> => {
   try {
     const path = `/lexis/permits/${permitNumber}`
     const response = await apiService.getCachedResponse<ProvincialPermitDetail>(path, undefined, {
-      ttlMs: DETAIL_CACHE_TTL_MS,
+      ttlMs: fresh ? 0 : DETAIL_CACHE_TTL_MS,
     })
     apiService.registerRecordVersion('permit', permitNumber, response, path)
     const permitDetail = response.data

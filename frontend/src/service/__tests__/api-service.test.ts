@@ -692,6 +692,160 @@ describe('api-service cached GET support', () => {
     window.history.replaceState({}, '', previousPath)
   })
 
+  describe('server time a record version was loaded', () => {
+    const versionResponse = (version: string, date?: string, data: unknown = {}) =>
+      ({
+        headers: { [RECORD_VERSION_HEADER]: version, ...(date ? { date } : {}) },
+        data,
+      }) as unknown as AxiosResponse<unknown>
+
+    it('reports the response Date of the record, separately for each record', () => {
+      apiService.registerRecordVersion(
+        'application',
+        '999000001',
+        versionResponse('v1', 'Tue, 06 Oct 2026 20:00:00 GMT'),
+        '/lexis/applications/999000001',
+      )
+      apiService.registerRecordVersion(
+        'application',
+        '999000002',
+        versionResponse('v1', 'Tue, 06 Oct 2026 22:00:00 GMT'),
+        '/lexis/applications/999000002',
+      )
+
+      expect(apiService.recordVersionLoadedAt('application', '999000001')).toBe(
+        Date.parse('2026-10-06T20:00:00Z'),
+      )
+      expect(apiService.recordVersionLoadedAt('application', ' 999000002 ')).toBe(
+        Date.parse('2026-10-06T22:00:00Z'),
+      )
+      expect(apiService.recordVersionLoadedAt('permit', '999000001')).toBeUndefined()
+    })
+
+    it('moves with the version, not with a supplemental source of the same record', () => {
+      apiService.registerRecordVersion(
+        'permit',
+        '777',
+        versionResponse('v1', 'Tue, 06 Oct 2026 20:00:00 GMT'),
+        '/lexis/permits/777',
+      )
+      apiService.registerRecordVersion(
+        'permit',
+        '777',
+        versionResponse('v1-tabs', 'Tue, 06 Oct 2026 23:00:00 GMT'),
+        '/lexis/permits/777/tabs',
+      )
+      expect(apiService.recordVersionLoadedAt('permit', '777')).toBe(
+        Date.parse('2026-10-06T20:00:00Z'),
+      )
+
+      apiService.registerRecordVersion(
+        'permit',
+        '777',
+        versionResponse('v2', 'Tue, 06 Oct 2026 21:00:00 GMT'),
+        '/lexis/permits/777',
+      )
+      expect(apiService.recordVersionLoadedAt('permit', '777')).toBe(
+        Date.parse('2026-10-06T21:00:00Z'),
+      )
+    })
+
+    it('forgets an earlier time when a newer version arrives without a Date header', () => {
+      apiService.registerRecordVersion(
+        'permit',
+        '777',
+        versionResponse('v1', 'Tue, 06 Oct 2026 20:00:00 GMT'),
+        '/lexis/permits/777',
+      )
+      apiService.registerRecordVersion('permit', '777', versionResponse('v2'), '/lexis/permits/777')
+
+      expect(apiService.recordVersionLoadedAt('permit', '777')).toBeUndefined()
+    })
+
+    it('ignores a Date header that is not a date', () => {
+      apiService.registerRecordVersion(
+        'permit',
+        '777',
+        versionResponse('v1', 'not a date'),
+        '/lexis/permits/777',
+      )
+
+      expect(apiService.recordVersionLoadedAt('permit', '777')).toBeUndefined()
+    })
+
+    it('takes the time of a successful save of the open record', () => {
+      const previousPath = window.location.pathname
+      window.history.replaceState({}, '', '/provincial/permit/777')
+      apiService.registerRecordVersion(
+        'permit',
+        '777',
+        versionResponse('v1', 'Tue, 06 Oct 2026 20:00:00 GMT'),
+        '/lexis/permits/777',
+      )
+
+      registeredResponseResolvedInterceptor()({
+        ...buildResponse({ success: true }),
+        headers: {
+          [RECORD_VERSION_HEADER]: 'v2',
+          date: 'Tue, 06 Oct 2026 20:30:00 GMT',
+        },
+        config: {
+          method: 'post',
+          url: '/lexis/rpc/permit-details/update-permit',
+          data: 'permitNumber=777',
+        },
+      } as unknown as AxiosResponse<unknown>)
+
+      expect(apiService.recordVersionLoadedAt('permit', '777')).toBe(
+        Date.parse('2026-10-06T20:30:00Z'),
+      )
+      window.history.replaceState({}, '', previousPath)
+    })
+
+    it('notes a version loaded outside the detail page', () => {
+      apiService.markRecordVersionLoaded('exemption', 'EX-9', {
+        date: 'Tue, 06 Oct 2026 21:15:00 GMT',
+      })
+
+      expect(apiService.recordVersionLoadedAt('exemption', 'EX-9')).toBe(
+        Date.parse('2026-10-06T21:15:00Z'),
+      )
+    })
+
+    it('forgets every time with the record versions', () => {
+      apiService.markRecordVersionLoaded('exemption', 'EX-9', {
+        date: 'Tue, 06 Oct 2026 21:15:00 GMT',
+      })
+
+      apiService.clearRecordVersions()
+
+      expect(apiService.recordVersionLoadedAt('exemption', 'EX-9')).toBeUndefined()
+    })
+
+    it('names the open record on a conflict event', async () => {
+      const previousPath = window.location.pathname
+      window.history.replaceState({}, '', '/provincial/permit/777')
+      let receivedConflict: OptimisticConflictEvent['detail'] | undefined
+      const conflictListener = (event: Event) => {
+        event.preventDefault()
+        receivedConflict = (event as OptimisticConflictEvent).detail
+      }
+      window.addEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+
+      void registeredResponseRejectedInterceptor()({
+        config: { method: 'post', url: '/lexis/rpc/permit-details/update-permit' },
+        response: { status: 409, data: { code: 'STALE_RECORD' } },
+      })
+
+      await vi.waitFor(() => expect(receivedConflict).toBeDefined())
+      expect(receivedConflict?.recordType).toBe('permit')
+      expect(receivedConflict?.recordId).toBe('777')
+
+      window.removeEventListener(OPTIMISTIC_CONFLICT_EVENT, conflictListener)
+      window.history.replaceState({}, '', previousPath)
+    })
+  })
+
   it('refetches cached status-filtered page data after a write starts', async () => {
     type StatusSearchResponse = { rows: Array<{ applicationNumber: string; status: string }> }
 

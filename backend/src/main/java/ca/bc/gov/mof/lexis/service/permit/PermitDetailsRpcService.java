@@ -103,11 +103,20 @@ public interface PermitDetailsRpcService {
 
   PermitMutationRpcResponseDto updateShipping(PermitMutationRequestDto request, String userId);
 
+  /** The ministry context must come from authenticated roles, never submitted form fields. */
+  PermitMutationRpcResponseDto updateShipping(
+      PermitMutationRequestDto request, String userId, boolean ministryUser);
+
   String getExemptionNumberForPermitMutation(Long permitNumber);
 
   PermitMutationClientScope getClientScopeForPermitMutation(Long permitNumber);
 
   List<Long> getApplicationNumbersForPermitMutation(Long permitNumber);
+
+  /** Identifies only the stored internal Blanket OIC child application of the permit. */
+  default boolean isHiddenApplicationForPermitMutation(Long permitNumber, Long applicationNumber) {
+    return false;
+  }
 
   List<Long> getApplicationNumbersForExemptionMutation(String exemptionNumber);
 

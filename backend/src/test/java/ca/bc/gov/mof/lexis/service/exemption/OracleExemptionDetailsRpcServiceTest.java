@@ -696,9 +696,17 @@ class OracleExemptionDetailsRpcServiceTest {
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000459L, 13.0d, 13.0d, "00077881", "P", "S", "PMT"),
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
-                    1000460L, 14.0d, 14.0d, "00077881", "P", "S", "APP")));
+                    1000460L, 14.0d, 14.0d, "00077881", "P", "S", "APP"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000461L, 15.0d, 15.0d, "00077881", "P", "S", "PMT"),
+                new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
+                    1000462L, 16.0d, 16.0d, "00077881", "P", "S", "REJ")));
     when(repository.findExemptionRecord("EX-205")).thenReturn(Optional.of(exemption("ACT")));
     when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
+    when(repository.findPermitsByApplicationNumberRequired(1000459L)).thenReturn(List.of());
+    when(repository.findPermitsByApplicationNumberRequired(1000461L))
+        .thenReturn(
+            List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000125L, "EX-205")));
     when(repository.findPermitsByApplicationNumberRequired(1000457L))
         .thenReturn(
             List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000123L, "EX-205")));
@@ -718,9 +726,11 @@ class OracleExemptionDetailsRpcServiceTest {
             tuple(1000456L, true),
             tuple(1000457L, false),
             tuple(1000458L, true),
-            tuple(1000459L, false),
-            tuple(1000460L, false));
-    verify(repository, never()).findPermitsByApplicationNumberRequired(1000459L);
+            tuple(1000459L, true),
+            tuple(1000460L, false),
+            tuple(1000461L, false),
+            tuple(1000462L, false));
+    verify(repository, never()).findPermitsByApplicationNumberRequired(1000462L);
   }
 
   @ParameterizedTest
@@ -1119,13 +1129,13 @@ class OracleExemptionDetailsRpcServiceTest {
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.addExemption(
             new ExemptionDetailsRpcService.CreateExemptionRequest(
-                null,
+                "EX-205",
                 250.5d,
                 approvalDate,
                 approvalDate,
                 "Conditions",
-                "M",
-                "NEW",
+                "O",
+                "ACT",
                 null,
                 null,
                 List.of(),
@@ -1144,13 +1154,13 @@ class OracleExemptionDetailsRpcServiceTest {
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.addExemption(
             new ExemptionDetailsRpcService.CreateExemptionRequest(
-                null,
+                "EX-205",
                 250.5d,
                 LocalDate.of(2026, 3, 1),
                 null,
                 "Conditions",
-                "M",
-                "NEW",
+                "O",
+                "ACT",
                 null,
                 null,
                 List.of(),
@@ -1172,10 +1182,40 @@ class OracleExemptionDetailsRpcServiceTest {
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.addExemption(
             new ExemptionDetailsRpcService.CreateExemptionRequest(
-                null,
+                "EX-205",
                 250.5d,
                 approvalDate,
                 approvalDate.plusDays(1),
+                "Conditions",
+                "O",
+                "ACT",
+                null,
+                null,
+                List.of(),
+                false,
+                List.of()),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class);
+    verify(repository).insertExemption(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().approvalDate()).isEqualTo(approvalDate);
+  }
+
+  @Test
+  void addExemptionShouldIgnoreTheRequestApprovalDateOfAMinisterialExemption() {
+    when(repository.insertExemption(any()))
+        .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-205")));
+
+    // The approval date and its expiry check come from approving the exemption, not the request.
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(
+            new ExemptionDetailsRpcService.CreateExemptionRequest(
+                null,
+                250.5d,
+                LocalDate.of(2026, 3, 1),
+                null,
                 "Conditions",
                 "M",
                 "NEW",
@@ -1187,7 +1227,10 @@ class OracleExemptionDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
-    verify(repository).insertExemption(any());
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionInsertRecord> recordCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class);
+    verify(repository).insertExemption(recordCaptor.capture());
+    assertThat(recordCaptor.getValue().approvalDate()).isNull();
   }
 
   @ParameterizedTest
@@ -1491,6 +1534,108 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(preview.valid()).isTrue();
     assertThat(preview.expiryDate()).isEqualTo(LexisBusinessTime.today().plusDays(30));
+  }
+
+  @ParameterizedTest
+  @CsvSource({"100.25,200.25,300.6", "200.25,100.25,300.6", "0.05,0.05,0.2", "100.04,200.05,300.1"})
+  void previewCreateExemptionShouldDefaultTheApprovedVolumeToTheSumOfOneDecimalVolumes(
+      double first, double second, String expectedApprovedVolume) {
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(applicationForPreview(1000456L, 30L, first, "APP", null)));
+    when(repository.findApplicationLinkRecord(1000457L))
+        .thenReturn(Optional.of(applicationForPreview(1000457L, 30L, second, "APP", null)));
+
+    ExemptionDetailsRpcService.CreateExemptionPreview preview =
+        service.previewCreateExemption(List.of(1000456L, 1000457L), true);
+
+    assertThat(preview.valid()).isTrue();
+    assertThat(preview.approvedVolume()).isEqualTo(expectedApprovedVolume);
+  }
+
+  @ParameterizedTest
+  @CsvSource({"S,true", "s,true", "H,false", "T,false"})
+  void previewCreateExemptionShouldAllowOnlyStandingTimberBeforeItsListDate(
+      String productType, boolean expectedValid) {
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(applicationForPreview(
+            1000456L, 30L, 100.0d, "APP", null, 31945L, productType,
+            LexisBusinessTime.today().plusDays(1))));
+
+    ExemptionDetailsRpcService.CreateExemptionPreview preview =
+        service.previewCreateExemption(List.of(1000456L), true);
+
+    assertThat(preview.valid()).isEqualTo(expectedValid);
+    if (expectedValid) {
+      assertThat(preview.errors()).isEmpty();
+      assertThat(preview.applicationNumbers()).containsExactly(1000456L);
+    } else {
+      assertThat(preview.errors())
+          .containsExactly("Application 1000456 listing date has not passed.");
+    }
+    verify(repository, never()).insertExemption(any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"S,0", "H,0", "T,0", "H,-1"})
+  void previewCreateExemptionShouldAllowAnApplicationOnceItsListDateIsTodayOrEarlier(
+      String productType, long daysFromToday) {
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(applicationForPreview(
+            1000456L, 30L, 100.0d, "APP", null, 31945L, productType,
+            LexisBusinessTime.today().plusDays(daysFromToday))));
+
+    ExemptionDetailsRpcService.CreateExemptionPreview preview =
+        service.previewCreateExemption(List.of(1000456L), true);
+
+    assertThat(preview.valid()).isTrue();
+    assertThat(preview.errors()).isEmpty();
+  }
+
+  @Test
+  void previewCreateExemptionShouldNotCheckTheListDateOfAnUnscheduledApplication() {
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(applicationForPreview(
+            1000456L, 30L, 100.0d, "APP", null, null, "H",
+            LexisBusinessTime.today().plusDays(5))));
+
+    ExemptionDetailsRpcService.CreateExemptionPreview preview =
+        service.previewCreateExemption(List.of(1000456L), true);
+
+    assertThat(preview.valid()).isTrue();
+  }
+
+  @Test
+  void addExemptionShouldLinkFutureListedStandingTimberWhenCreatingAnExemption() {
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord application =
+        applicationForPreview(
+            1000456L, 30L, 95.0d, "APP", null, 31945L, "S",
+            LexisBusinessTime.today().plusDays(1));
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(application));
+    when(repository.insertExemption(any(ExemptionDetailsRpcRepository.ExemptionInsertRecord.class)))
+        .thenReturn(Optional.of(new ExemptionDetailsRpcRepository.ExemptionInsertRow("EX-205")));
+    when(repository.updateApplicationExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(createExemptionRequest("M", List.of(1000456L)), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    verify(repository).updateApplicationExemption(any());
+  }
+
+  @Test
+  void addExemptionShouldRefuseFutureListedHarvestedTimberWithoutWriting() {
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(applicationForPreview(
+            1000456L, 30L, 95.0d, "APP", null, 31945L, "H",
+            LexisBusinessTime.today().plusDays(1))));
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.addExemption(createExemptionRequest("M", List.of(1000456L)), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).contains("Application 1000456 listing date has not passed.");
+    verify(repository, never()).insertExemption(any());
+    verify(repository, never()).updateApplicationExemption(any());
   }
 
   @Test
@@ -1842,30 +1987,17 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
-  @MethodSource("mismatchedApplicantIdentities")
-  void addApplicationToExemptionShouldRejectMixedApplicantIdentityWithoutWriting(
-      String candidateOwnerNumber,
-      String candidateOwnerLocation,
-      String candidateAgentNumber,
-      String candidateAgentLocation) {
-    ExemptionDetailsRpcRepository.ApplicationLinkRecord assigned =
-        applicationWithIdentity(
-            1000457L, "00077881", "00", "00055667", "00", "EXE", "EX-205");
+  @ValueSource(strings = {"00099999", "99999"})
+  void addApplicationToExemptionShouldRefuseAnApplicationOfAnotherOwnerWithoutWriting(
+      String candidateOwnerNumber) {
     ExemptionDetailsRpcRepository.ApplicationLinkRecord candidate =
         applicationWithIdentity(
-            1000456L,
-            candidateOwnerNumber,
-            candidateOwnerLocation,
-            candidateAgentNumber,
-            candidateAgentLocation,
-            "APP",
-            null);
+            1000456L, candidateOwnerNumber, "00", "00055667", "00", "APP", null);
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption("ACT")));
     when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(candidate));
     when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
-        .thenReturn(List.of(applicationSummary(1000457L, assigned.ownerClientNumber())));
-    when(repository.findApplicationLinkRecord(1000457L)).thenReturn(Optional.of(assigned));
+        .thenReturn(List.of(applicationSummary(1000457L, "00077881")));
 
     ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
         service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
@@ -1877,20 +2009,47 @@ class OracleExemptionDetailsRpcServiceTest {
     verify(repository, never()).updateApplicationExemption(any());
   }
 
-  @Test
-  void addApplicationToExemptionShouldAcceptNormalizedIdentityWithoutComparingAgentLocation() {
-    ExemptionDetailsRpcRepository.ApplicationLinkRecord assigned =
-        applicationWithIdentity(
-            1000457L, "77881", " 00 ", "55667", "00", "EXE", "EX-205");
+  @ParameterizedTest
+  @MethodSource("sameOwnerWithAnotherLocationOrAgent")
+  void addApplicationToExemptionShouldAcceptTheSameOwnerWithAnotherLocationOrAgent(
+      String candidateOwnerLocation, String candidateAgentNumber, String candidateAgentLocation) {
     ExemptionDetailsRpcRepository.ApplicationLinkRecord candidate =
         applicationWithIdentity(
-            1000456L, "00077881", "00", "00055667", "09", "APP", null);
+            1000456L,
+            "00077881",
+            candidateOwnerLocation,
+            candidateAgentNumber,
+            candidateAgentLocation,
+            "APP",
+            null);
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption("ACT")));
     when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(candidate));
     when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
-        .thenReturn(List.of(applicationSummary(1000457L, assigned.ownerClientNumber())));
-    when(repository.findApplicationLinkRecord(1000457L)).thenReturn(Optional.of(assigned));
+        .thenReturn(List.of(applicationSummary(1000457L, "00077881")));
+    when(repository.updateApplicationExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isTrue();
+    verify(repository).updateApplicationExemption(any());
+    verify(repository, never()).findApplicationLinkRecord(1000457L);
+  }
+
+  @Test
+  void addApplicationToExemptionShouldCompareOnlyTheFirstLinkedApplicationsOwner() {
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord candidate =
+        applicationWithIdentity(
+            1000456L, "00077881", "00", "00055667", "00", "APP", null);
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("NEW")));
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(candidate));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205"))
+        .thenReturn(
+            List.of(
+                applicationSummary(1000457L, "77881"),
+                applicationSummary(1000458L, "00099999")));
     when(repository.updateApplicationExemption(any())).thenReturn(true);
 
     ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
@@ -1918,6 +2077,45 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.success()).isTrue();
     verify(repository).updateApplicationExemption(any());
     verify(repository, never()).findApplicationLinkRecord(1000457L);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"S", "H"})
+  void addApplicationToExemptionShouldRefuseAnyApplicationBeforeItsListDate(String productType) {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(applicationForPreview(
+            1000456L, 30L, 100.0d, "APP", null, 31945L, productType,
+            LexisBusinessTime.today().plusDays(1))));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205")).thenReturn(List.of());
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly("Application listing date has not passed.");
+    verify(repository, never()).updateApplicationExemption(any());
+  }
+
+  @ParameterizedTest
+  @CsvSource({"S,0", "H,0", "H,-1"})
+  void addApplicationToExemptionShouldAllowAnApplicationOnceItsListDateIsTodayOrEarlier(
+      String productType, long daysFromToday) {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(applicationForPreview(
+            1000456L, 30L, 100.0d, "APP", null, 31945L, productType,
+            LexisBusinessTime.today().plusDays(daysFromToday))));
+    when(repository.findApplicationSummariesByExemptionNumber("EX-205")).thenReturn(List.of());
+    when(repository.updateApplicationExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.addApplicationToExemption(1000456L, "EX-205", "idir\\jsmith", true);
+
+    assertThat(response.success()).isTrue();
+    verify(repository).updateApplicationExemption(any());
   }
 
   @Test
@@ -2014,11 +2212,54 @@ class OracleExemptionDetailsRpcServiceTest {
   }
 
   @Test
-  void removeApplicationFromExemptionShouldRejectPermittedApplicationStatus() {
+  void removeApplicationFromExemptionShouldRestoreApprovedStatusOfAPermittedApplicationWithoutAPermit() {
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord permitted =
+        application("PMT", "EX-205", "P");
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationLinkRecord(1000456L)).thenReturn(Optional.of(permitted));
+    when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
+    when(repository.updateApplicationExemption(any())).thenReturn(true);
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.removeApplicationFromExemption(1000456L, "EX-205", "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord> captor =
+        ArgumentCaptor.forClass(
+            ExemptionDetailsRpcRepository.ApplicationLinkUpdateRecord.class);
+    verify(repository).updateApplicationExemption(captor.capture());
+    assertThat(captor.getValue().application()).isEqualTo(permitted);
+    assertThat(captor.getValue().exemptionNumber()).isNull();
+    assertThat(captor.getValue().applicationStatusCode()).isEqualTo("APP");
+  }
+
+  @Test
+  void removeApplicationFromExemptionShouldKeepAPermittedApplicationOnAPermit() {
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption("ACT")));
     when(repository.findApplicationLinkRecord(1000456L))
         .thenReturn(Optional.of(application("PMT", "EX-205", "P")));
+    when(repository.findPermitsByApplicationNumberRequired(1000456L))
+        .thenReturn(
+            List.of(new ExemptionDetailsRpcRepository.ApplicationPermitRow(7000123L, "EX-205")));
+
+    ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
+        service.removeApplicationFromExemption(1000456L, "EX-205", "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly(
+            "Application cannot be removed from the exemption while it is linked to a permit.");
+    verify(repository, never()).updateApplicationExemption(any());
+  }
+
+  @Test
+  void removeApplicationFromExemptionShouldRejectStatusesOutsideTheRemovableSet() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT")));
+    when(repository.findApplicationLinkRecord(1000456L))
+        .thenReturn(Optional.of(application("REJ", "EX-205", "P")));
 
     ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
         service.removeApplicationFromExemption(1000456L, "EX-205", "idir\\jsmith");
@@ -2092,12 +2333,12 @@ class OracleExemptionDetailsRpcServiceTest {
   void removeApplicationFromExemptionShouldFailWhenSourceStatusChangesBeforeWrite() {
     ExemptionDetailsRpcRepository.ApplicationLinkRecord exempted =
         application("EXE", "EX-205", "P");
-    ExemptionDetailsRpcRepository.ApplicationLinkRecord permitted =
-        application("PMT", "EX-205", "P");
+    ExemptionDetailsRpcRepository.ApplicationLinkRecord rejected =
+        application("REJ", "EX-205", "P");
     when(repository.findExemptionRecord("EX-205"))
         .thenReturn(Optional.of(exemption("ACT")));
     when(repository.findApplicationLinkRecord(1000456L))
-        .thenReturn(Optional.of(exempted), Optional.of(permitted));
+        .thenReturn(Optional.of(exempted), Optional.of(rejected));
     when(repository.findPermitsByApplicationNumberRequired(1000456L)).thenReturn(List.of());
 
     ExemptionDetailsRpcService.ApplicationExemptionLinkResult response =
@@ -2461,7 +2702,7 @@ class OracleExemptionDetailsRpcServiceTest {
                 "EX-205",
                 "EX-205",
                 250.5d,
-                approvalDate,
+                null,
                 approvalDate,
                 "Conditions",
                 "M",
@@ -2481,7 +2722,7 @@ class OracleExemptionDetailsRpcServiceTest {
   @Test
   void updateExemptionShouldRequireExpiryWhenApprovalDateIsPresent() {
     when(repository.findExemptionRecord("EX-205"))
-        .thenReturn(Optional.of(exemption("NEW", "M", null, null)));
+        .thenReturn(Optional.of(exemption("NEW", "M", LocalDate.of(2026, 3, 1), null)));
 
     ExemptionDetailsRpcService.CreateExemptionResult response =
         service.updateExemption(
@@ -2489,7 +2730,7 @@ class OracleExemptionDetailsRpcServiceTest {
                 "EX-205",
                 "EX-205",
                 250.5d,
-                LocalDate.of(2026, 3, 1),
+                null,
                 null,
                 "Conditions",
                 "M",
@@ -2503,6 +2744,72 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors()).containsExactly("A valid expiry date is required.");
     verify(repository, never()).updateExemption(any());
+  }
+
+  @ParameterizedTest
+  @CsvSource(value = {"2026-03-01", "NULL"}, nullValues = "NULL")
+  void updateExemptionShouldKeepTheStoredApprovalDateOfAMinisterialExemption(
+      LocalDate storedApprovalDate) {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(
+            Optional.of(
+                exemption("NEW", "M", storedApprovalDate, LocalDate.of(2026, 12, 31))));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 12, 31),
+                "Conditions",
+                "M",
+                "NEW",
+                null,
+                null,
+                List.of()),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionUpdateRecord> updateCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class);
+    verify(repository).updateExemption(updateCaptor.capture());
+    assertThat(updateCaptor.getValue().approvalDate()).isEqualTo(storedApprovalDate);
+  }
+
+  @Test
+  void updateExemptionShouldAcceptTheRequestApprovalDateOfAnOrderInCouncilExemption() {
+    when(repository.findExemptionRecord("EX-205"))
+        .thenReturn(Optional.of(exemption("ACT", "O")));
+    when(repository.updateExemption(any(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class)))
+        .thenReturn(true);
+
+    ExemptionDetailsRpcService.CreateExemptionResult response =
+        service.updateExemption(
+            new ExemptionDetailsRpcService.UpdateExemptionRequest(
+                "EX-205",
+                "EX-205",
+                250.5d,
+                LocalDate.of(2026, 6, 1),
+                LocalDate.of(2026, 12, 31),
+                "Conditions",
+                "O",
+                "ACT",
+                null,
+                null,
+                null),
+            "idir\\jsmith",
+            true);
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<ExemptionDetailsRpcRepository.ExemptionUpdateRecord> updateCaptor =
+        ArgumentCaptor.forClass(ExemptionDetailsRpcRepository.ExemptionUpdateRecord.class);
+    verify(repository).updateExemption(updateCaptor.capture());
+    assertThat(updateCaptor.getValue().approvalDate()).isEqualTo(LocalDate.of(2026, 6, 1));
   }
 
   @Test
@@ -3630,6 +3937,14 @@ class OracleExemptionDetailsRpcServiceTest {
         Arguments.of("00077881", "00", "00099999", "00"));
   }
 
+  private static Stream<Arguments> sameOwnerWithAnotherLocationOrAgent() {
+    return Stream.of(
+        Arguments.of("01", "00055667", "00"),
+        Arguments.of("00", null, null),
+        Arguments.of("00", "00099999", "00"),
+        Arguments.of("09", "00099999", "05"));
+  }
+
   private static Stream<Arguments> nonFiniteApprovedVolumes() {
     return Stream.of(
         Arguments.of(Double.NaN),
@@ -3717,13 +4032,6 @@ class OracleExemptionDetailsRpcServiceTest {
             List.of(
                 new ExemptionDetailsRpcRepository.ApplicationSummaryRow(
                     1000457L, assignedVolume, 0.0d, "00077881", "P", "S")));
-    // Only non-OIC exemptions compare the linked applications' owner and agent.
-    if (!"O".equals(exemptionTypeCode)) {
-      when(repository.findApplicationLinkRecord(1000457L))
-          .thenReturn(
-              Optional.of(
-                  applicationForPreview(1000457L, 120L, assignedVolume, "EXE", "EX-205")));
-    }
   }
 
   private ExemptionDetailsRpcRepository.ApplicationSummaryRow applicationSummary(
@@ -3796,6 +4104,20 @@ class OracleExemptionDetailsRpcServiceTest {
       Double requestedVolume,
       String statusCode,
       String exemptionNumber) {
+    return applicationForPreview(
+        applicationNumber, termDays, requestedVolume, statusCode, exemptionNumber,
+        null, "S", LocalDate.of(2026, 2, 1));
+  }
+
+  private ExemptionDetailsRpcRepository.ApplicationLinkRecord applicationForPreview(
+      long applicationNumber,
+      Long termDays,
+      Double requestedVolume,
+      String statusCode,
+      String exemptionNumber,
+      Long exportScheduleId,
+      String productTypeCode,
+      LocalDate listingDate) {
     return new ExemptionDetailsRpcRepository.ApplicationLinkRecord(
         applicationNumber,
         null,
@@ -3807,7 +4129,7 @@ class OracleExemptionDetailsRpcServiceTest {
         "Campbell River",
         "creator",
         Timestamp.from(Instant.parse("2026-02-20T18:00:00Z")),
-        null,
+        exportScheduleId,
         "00055667",
         "00",
         "00077881",
@@ -3817,13 +4139,13 @@ class OracleExemptionDetailsRpcServiceTest {
         statusCode,
         "A",
         12L,
-        "S",
+        productTypeCode,
         "P",
         "G",
         "Agent Contact",
         "Owner Contact",
         "N",
-        LocalDate.of(2026, 2, 1));
+        listingDate);
   }
 
   private ExemptionDetailsRpcRepository.ApplicationLinkRecord application(

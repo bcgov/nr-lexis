@@ -3,6 +3,7 @@ package ca.bc.gov.mof.lexis.service.upload;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.junit.jupiter.api.Assertions.assertTimeoutPreemptively;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyBoolean;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
@@ -102,7 +103,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportService service = service();
@@ -157,7 +158,10 @@ class ApplicationSubmissionImportServiceTest {
 
     ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
-    verify(applicationDetailsService, times(3)).addScaleToPackage(scaleCaptor.capture(), eq("jsmith"));
+    ArgumentCaptor<Boolean> regionCheckCaptor = ArgumentCaptor.forClass(Boolean.class);
+    verify(applicationDetailsService, times(3))
+        .addScaleToPackage(scaleCaptor.capture(), eq("jsmith"), regionCheckCaptor.capture());
+    assertThat(regionCheckCaptor.getAllValues()).containsExactly(true, false, false);
     assertThat(scaleCaptor.getAllValues())
         .extracting(ScaleMutationRequest::timberMark)
         .containsExactly("NCHWP", "NCHWP", "NCHWP");
@@ -181,7 +185,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result =
@@ -210,7 +214,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "FED26-700123", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     String xml = federalSampleXmlText();
@@ -362,7 +366,7 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, never())
         .addPackage(any(PackageMutationRequest.class), anyString());
     verify(applicationDetailsService, never())
-        .addScaleToPackage(any(ScaleMutationRequest.class), anyString());
+        .addScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
   }
 
   @ParameterizedTest
@@ -464,7 +468,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(application.getValue().exportScheduleId()).isEqualTo(1016L);
     verify(applicationDetailsService, never()).isPackageValid(anyString());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString());
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
   }
 
   @ParameterizedTest
@@ -760,7 +764,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
     when(scheduleRepository.findNextSchedulesRequired())
         .thenReturn(
@@ -1061,7 +1065,7 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, never())
         .addFederalImportedApplication(any(CreateApplicationRequest.class), anyString());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString());
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
   }
 
   @Test
@@ -1074,7 +1078,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "FED26-700123", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result =
@@ -1130,7 +1134,10 @@ class ApplicationSubmissionImportServiceTest {
 
     ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
-    verify(applicationDetailsService, times(3)).addScaleToPackage(scaleCaptor.capture(), eq("federal-user"));
+    ArgumentCaptor<Boolean> regionCheckCaptor = ArgumentCaptor.forClass(Boolean.class);
+    verify(applicationDetailsService, times(3))
+        .addScaleToPackage(scaleCaptor.capture(), eq("federal-user"), regionCheckCaptor.capture());
+    assertThat(regionCheckCaptor.getAllValues()).containsExactly(true, false, false);
     assertThat(scaleCaptor.getAllValues())
         .extracting(ScaleMutationRequest::packageNumber)
         .containsExactly("FED26-700123", "FED26-700123", "FED26-700123");
@@ -1162,7 +1169,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "FED26-700123", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     byte[] soapBytes =
@@ -1196,7 +1203,7 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService)
         .addFederalImportedApplication(any(CreateApplicationRequest.class), eq("federal-user"));
     verify(applicationDetailsService).addPackage(any(PackageMutationRequest.class), eq("federal-user"));
-    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"));
+    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean());
   }
 
   @Test
@@ -1302,7 +1309,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "FED26-700123", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result =
@@ -1341,7 +1348,7 @@ class ApplicationSubmissionImportServiceTest {
 
     ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
-    verify(applicationDetailsService, times(3)).addScaleToPackage(scaleCaptor.capture(), eq("federal-user"));
+    verify(applicationDetailsService, times(3)).addScaleToPackage(scaleCaptor.capture(), eq("federal-user"), anyBoolean());
     assertThat(scaleCaptor.getAllValues())
         .extracting(ScaleMutationRequest::packageNumber)
         .containsExactly("FED26-700123", "FED26-700123", "FED26-700123");
@@ -1388,85 +1395,63 @@ class ApplicationSubmissionImportServiceTest {
   }
 
   @Test
-  void shouldValidateHarvestedTimberWithoutSummaryOfScale() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.isPackageValid("NCHWP"))
-        .thenReturn(new PackageValidityItem(true, null));
-    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
-        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
-
+  void shouldRejectProvincialHarvestedTimberWithoutSummaryOfScaleWhenBoomIsSet() {
     String xml =
         xmlWithProductDetail(
-            """
-            <lexis:productDetail>
-              <lexis:productTypeCode>H</lexis:productTypeCode>
-              <lexis:exemptApplnVol>84.5</lexis:exemptApplnVol>
-              <lexis:averageLogVolume>0.7</lexis:averageLogVolume>
-              <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
-              <lexis:productLocation>Port Alberni c/o Pacific Towing</lexis:productLocation>
-              <lexis:ageClass>S</lexis:ageClass>
-              <lexis:avgLength>6.7</lexis:avgLength>
-              <lexis:avgDiameter>12.8</lexis:avgDiameter>
-              <lexis:harvestedTimberWithoutSummaryOfScale>
-                <lexis:timberMark>NCHWP</lexis:timberMark>
-              </lexis:harvestedTimberWithoutSummaryOfScale>
-            </lexis:productDetail>
-            """);
+            provincialWithoutSummaryProductDetail("<lexis:boomNumber>NCHWP</lexis:boomNumber>"));
 
     ApplicationSubmissionImportResultDto result =
         service().validateApplicationSubmission(xmlFile("without-summary.xml", xml));
 
-    assertThat(result.status()).isEqualTo("validated");
-    assertThat(result.packageNumber()).isEqualTo("NCHWP");
-    assertThat(result.scaleRows()).isZero();
-    assertThat(result.submissionSummary()).isNotNull();
-    assertThat(result.submissionSummary().applicationVolume()).isEqualTo(84.5d);
-    assertThat(result.submissionSummary().averageLogVolume()).isEqualTo(0.7d);
-
-    ArgumentCaptor<CreateApplicationRequest> validationCaptor =
-        ArgumentCaptor.forClass(CreateApplicationRequest.class);
-    verify(applicationDetailsService).validateApplication(validationCaptor.capture());
-    assertThat(validationCaptor.getValue().applicationVolume()).isEqualTo(84.5d);
-    assertThat(validationCaptor.getValue().averageLogVolume()).isEqualTo(0.7d);
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "Boom/package number must not be provided for harvested timber without summary of scale.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
   @Test
-  void shouldValidateStandingTimber() {
-    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
-    when(applicationDetailsService.isPackageValid("STAND1"))
-        .thenReturn(new PackageValidityItem(true, null));
-    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
-        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+  void shouldRejectProvincialHarvestedTimberWithoutSummaryOfScaleAndBoomNumber() {
+    String xml = xmlWithProductDetail(provincialWithoutSummaryProductDetail(""));
 
-    String xml =
-        xmlWithProductDetail(
-            """
-            <lexis:productDetail>
-              <lexis:productTypeCode>S</lexis:productTypeCode>
-              <lexis:exemptApplnVol>42.2</lexis:exemptApplnVol>
-              <lexis:averageLogVolume>0.5</lexis:averageLogVolume>
-              <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
-              <lexis:productLocation>Port Alberni c/o Pacific Towing</lexis:productLocation>
-              <lexis:ageClass>O</lexis:ageClass>
-              <lexis:avgLength>6.7</lexis:avgLength>
-              <lexis:avgDiameter>12.8</lexis:avgDiameter>
-              <lexis:standingTimber>
-                <lexis:timberMark>STAND1</lexis:timberMark>
-              </lexis:standingTimber>
-            </lexis:productDetail>
-            """);
+    ApplicationSubmissionImportResultDto validation =
+        service().validateApplicationSubmission(xmlFile("without-summary.xml", xml));
+    ApplicationSubmissionImportResultDto importResult =
+        service().importApplicationSubmission(xmlFile("without-summary.xml", xml), "jsmith");
+
+    assertThat(validation.status()).isEqualTo("rejected");
+    assertThat(validation.errors()).containsExactly("Boom/package number is required.");
+    assertThat(importResult.status()).isEqualTo("rejected");
+    assertThat(importResult.errors()).containsExactly("Boom/package number is required.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldNotUseTheFirstTimberMarkAsTheBoomNumberForProvincialStandingTimber() {
+    String xml = xmlWithProductDetail(provincialStandingProductDetail(""));
 
     ApplicationSubmissionImportResultDto result =
         service().validateApplicationSubmission(xmlFile("standing.xml", xml));
 
-    assertThat(result.status()).isEqualTo("validated");
-    assertThat(result.packageNumber()).isEqualTo("STAND1");
-    assertThat(result.scaleRows()).isZero();
-    assertThat(result.submissionSummary()).isNotNull();
-    assertThat(result.submissionSummary().productTypeCode()).isEqualTo("S");
-    assertThat(result.submissionSummary().ageClass()).isEqualTo("O");
-    assertThat(result.submissionSummary().applicationVolume()).isEqualTo(42.2d);
-    assertThat(result.submissionSummary().averageLogVolume()).isEqualTo(0.5d);
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.packageNumber()).isNull();
+    assertThat(result.errors()).containsExactly("Boom/package number is required.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRejectProvincialStandingTimberWithABoomBecauseItsScalesHaveNoSpeciesOrGrade() {
+    String xml =
+        xmlWithProductDetail(
+            provincialStandingProductDetail("<lexis:boomNumber>STAND1</lexis:boomNumber>"));
+
+    ApplicationSubmissionImportResultDto result =
+        service().importApplicationSubmission(xmlFile("standing.xml", xml), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly("Scale species is required.", "Scale grade is required.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
   @Test
@@ -1494,6 +1479,7 @@ class ApplicationSubmissionImportServiceTest {
                     + "          <lexis:ownerContact>\n"
                     + "            <lexis:contactSurname>OWNER</lexis:contactSurname>\n"
                     + "            <lexis:contactFirstname>OLIVIA</lexis:contactFirstname>\n"
+                    + "            <lexis:contactTelephoneNumber>2505550100</lexis:contactTelephoneNumber>\n"
                     + "          </lexis:ownerContact>\n"
                     + "        </lexis:owner>\n");
 
@@ -1554,7 +1540,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(validationRequest.speciesCodes()).containsExactly("HE");
     verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), any());
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), any(), anyBoolean());
   }
 
   @Test
@@ -1595,6 +1581,7 @@ class ApplicationSubmissionImportServiceTest {
                     + "          <lexis:ownerContact>\n"
                     + "            <lexis:contactSurname>OWNER</lexis:contactSurname>\n"
                     + "            <lexis:contactFirstname>OLIVIA</lexis:contactFirstname>\n"
+                    + "            <lexis:contactTelephoneNumber>2505550100</lexis:contactTelephoneNumber>\n"
                     + "          </lexis:ownerContact>\n"
                     + "        </lexis:owner>\n");
 
@@ -1676,7 +1663,7 @@ class ApplicationSubmissionImportServiceTest {
         .addApplication(any(CreateApplicationRequest.class), any());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
     verify(applicationDetailsService, never())
-        .addScaleToPackage(any(ScaleMutationRequest.class), any());
+        .addScaleToPackage(any(ScaleMutationRequest.class), any(), anyBoolean());
   }
 
   @Test
@@ -1847,7 +1834,7 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, never())
         .addFederalImportedApplication(any(CreateApplicationRequest.class), anyString());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString());
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
   }
 
   @Test
@@ -1885,7 +1872,7 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, never())
         .addPackage(any(PackageMutationRequest.class), anyString());
     verify(applicationDetailsService, never())
-        .addScaleToPackage(any(ScaleMutationRequest.class), anyString());
+        .addScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
   }
 
   @Test
@@ -2026,6 +2013,14 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(missingBoom.status()).isEqualTo("rejected");
     assertThat(missingBoom.errors()).contains("Boom/package number is required.");
 
+    ApplicationSubmissionImportResultDto retiredRegion =
+        service().validateApplicationSubmission(sampleResourceXml("fail-retired-region.xml"));
+    assertThat(retiredRegion.status()).isEqualTo("rejected");
+    assertThat(retiredRegion.errors())
+        .anyMatch(
+            error ->
+                error.startsWith("Forest region code RSI is not a valid BC forest region code"));
+
     ApplicationSubmissionImportResultDto federalJurisdiction =
         service().validateApplicationSubmission(sampleResourceXml("fail-federal-jurisdiction.xml"));
     assertThat(federalJurisdiction.status()).isEqualTo("rejected");
@@ -2081,7 +2076,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportService service = service();
@@ -2094,7 +2089,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
     assertThat(result.warnings()).isEmpty();
-    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2106,7 +2101,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(bareSampleXml(), "jsmith");
@@ -2116,7 +2111,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
     assertThat(result.warnings()).isEmpty();
-    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2128,7 +2123,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(sampleGeoJson(), "jsmith");
@@ -2148,7 +2143,7 @@ class ApplicationSubmissionImportServiceTest {
 
     ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
-    verify(applicationDetailsService, times(3)).addScaleToPackage(scaleCaptor.capture(), eq("jsmith"));
+    verify(applicationDetailsService, times(3)).addScaleToPackage(scaleCaptor.capture(), eq("jsmith"), anyBoolean());
     assertThat(scaleCaptor.getAllValues())
         .extracting(ScaleMutationRequest::timberMark)
         .containsExactly("NCHWP", "NCHWP", "NCHWP");
@@ -2163,7 +2158,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     MockMultipartFile file =
@@ -2176,7 +2171,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.applicationNumber()).isEqualTo(9001L);
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
-    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2209,7 +2204,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result =
@@ -2220,7 +2215,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
     assertThat(result.warnings()).isEmpty();
-    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2240,7 +2235,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isNull();
     assertThat(result.scaleRows()).isZero();
     assertThat(result.errors()).containsExactly("Package could not be saved.");
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2263,7 +2258,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.scaleRows()).isZero();
     assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
     verify(applicationDetailsService, times(2)).isPackageValid("TEST23-652-7D-2");
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2275,7 +2270,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith")))
+    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(
             new ScalePersistenceResult(true, null, List.of(), List.of()),
             new ScalePersistenceResult(false, null, List.of("Scale could not be saved."), List.of()));
@@ -2287,7 +2282,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isNull();
     assertThat(result.scaleRows()).isZero();
     assertThat(result.errors()).containsExactly("Scale could not be saved.");
-    verify(applicationDetailsService, times(2)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"));
+    verify(applicationDetailsService, times(2)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2384,7 +2379,10 @@ class ApplicationSubmissionImportServiceTest {
             "jsmith");
 
     assertThat(result.status()).isEqualTo("rejected");
-    assertThat(result.errors()).contains("Forest region code BAD is not mapped to a LEXIS region.");
+    assertThat(result.errors())
+        .contains(
+            "Forest region code BAD is not a valid BC forest region code "
+                + "(RCB, RKB, RNO, ROM, RSC, RSK, RTO, RWC).");
   }
 
   @Test
@@ -2780,6 +2778,369 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
+  @Test
+  void shouldRequireApplicantContactSurnameFirstNameAndTelephoneForProvincialXml() {
+    String xml =
+        SAMPLE_XML
+            .replace("<lexis:contactSurname>SERVICE</lexis:contactSurname>", "")
+            .replace("<lexis:contactFirstname>CUSTOMER</lexis:contactFirstname>", "")
+            .replace(
+                "<lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>", "");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("no-contact-details.xml", xml));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactlyInAnyOrder(
+            "Applicant contact surname is required.",
+            "Applicant contact first name is required.",
+            "Applicant contact telephone number is required.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldNotFallBackToTheCompanyNameWhenTheApplicantContactIsMissing() {
+    String xml =
+        SAMPLE_XML.replaceFirst(
+            "(?s)\\s*<lexis:applicantContact>.*?</lexis:applicantContact>", "");
+
+    ApplicationSubmissionImportResultDto result =
+        service().importApplicationSubmission(xmlFile("no-contact.xml", xml), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("Applicant contact is required.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRequireOwnerContactWhenAnOwnerSectionIsPresent() {
+    String xml =
+        SAMPLE_XML
+            .replace("</lexis:applicant>", OWNER_SECTION)
+            .replaceFirst("(?s)\\s*<lexis:ownerContact>.*?</lexis:ownerContact>", "");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("owner-without-contact.xml", xml));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly("Owner contact is required when owner section is present.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRequireOwnerContactSurnameFirstNameAndTelephone() {
+    String xml =
+        SAMPLE_XML
+            .replace("</lexis:applicant>", OWNER_SECTION)
+            .replace("<lexis:contactSurname>OWNER</lexis:contactSurname>", "")
+            .replace("<lexis:contactFirstname>OLIVIA</lexis:contactFirstname>", "")
+            .replace(
+                "<lexis:contactTelephoneNumber>2505550100</lexis:contactTelephoneNumber>", "");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("owner-empty-contact.xml", xml));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactlyInAnyOrder(
+            "Owner contact surname is required.",
+            "Owner contact first name is required.",
+            "Owner contact telephone number is required.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldStillRequireFederalApplicantContactDetails() {
+    String xml =
+        federalSampleXmlText()
+            .replace("<lexis:contactSurname>SERVICE</lexis:contactSurname>", "");
+
+    ApplicationSubmissionImportResultDto result = validateDedicatedFederal(xml);
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Applicant contact surname is required.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRequireContactNamesButNotTelephoneForGeoJson() {
+    String withoutNames =
+        SAMPLE_GEOJSON.replaceFirst("(?s)\"applicantContact\": \\{.*?\\}", "\"applicantContact\": {}");
+    String withoutContact =
+        SAMPLE_GEOJSON.replaceFirst("(?s),\\s*\"applicantContact\": \\{.*?\\}", "");
+
+    ApplicationSubmissionImportResultDto namesResult =
+        service()
+            .validateApplicationSubmission(
+                new MockMultipartFile(
+                    "formFile",
+                    "no-names.geojson",
+                    "application/geo+json",
+                    withoutNames.getBytes(StandardCharsets.UTF_8)));
+    ApplicationSubmissionImportResultDto contactResult =
+        service()
+            .validateApplicationSubmission(
+                new MockMultipartFile(
+                    "formFile",
+                    "no-contact.geojson",
+                    "application/geo+json",
+                    withoutContact.getBytes(StandardCharsets.UTF_8)));
+
+    assertThat(namesResult.status()).isEqualTo("rejected");
+    assertThat(namesResult.errors())
+        .containsExactlyInAnyOrder(
+            "Applicant contact surname is required.",
+            "Applicant contact first name is required.");
+    assertThat(contactResult.status()).isEqualTo("rejected");
+    assertThat(contactResult.errors()).containsExactly("Applicant contact is required.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {"RNI", "RSI", "RCO", "1903", "BAD"})
+  void shouldRejectRetiredAndNumericForestRegionCodes(String regionCode) {
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>",
+            "<lexis:bcForestRegionCode>" + regionCode + "</lexis:bcForestRegionCode>");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("retired-region.xml", xml));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "Forest region code "
+                + regionCode
+                + " is not a valid BC forest region code "
+                + "(RCB, RKB, RNO, ROM, RSC, RSK, RTO, RWC).");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRequireAForestRegionCode() {
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>", "");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("no-region.xml", xml));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("Forest region code is required.");
+  }
+
+  @ParameterizedTest
+  @CsvSource({
+    "RCB, 1903", "rkb, 1904", "RNO, 1905", "rom, 1906", "RTO, 1907", "rsk, 1908", "RSC, 1909",
+    "rwc, 1910"
+  })
+  void shouldMapEachLegacyForestRegionCodeCaseInsensitively(String regionCode, long orgUnit) {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:bcForestRegionCode>RSC</lexis:bcForestRegionCode>",
+            "<lexis:bcForestRegionCode>" + regionCode + "</lexis:bcForestRegionCode>");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("region.xml", xml));
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(orgUnit);
+  }
+
+  @Test
+  void shouldRunTheImportPreflightBeforeCreatingAProvincialApplication() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplicationSubmissionImport(
+            any(CreateApplicationRequest.class), any(PackageMutationRequest.class), any()))
+        .thenReturn(
+            new SubmissionImportValidationResult(
+                false, List.of("Species code FI is not valid for this region."), List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service().importApplicationSubmission(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("Species code FI is not valid for this region.");
+    verify(applicationDetailsService)
+        .validateApplicationSubmissionImport(
+            any(CreateApplicationRequest.class), any(PackageMutationRequest.class), any());
+    verify(applicationDetailsService, never())
+        .addApplication(any(CreateApplicationRequest.class), any());
+    verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
+    verify(applicationDetailsService, never())
+        .addScaleToPackage(any(ScaleMutationRequest.class), any(), anyBoolean());
+  }
+
+  @Test
+  void shouldRejectDeclaredVolumesGivenWithASummaryOfScale() {
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>",
+            """
+            <lexis:boomNumber>TEST23-652-7D-2</lexis:boomNumber>
+            <lexis:exemptApplnVol>525</lexis:exemptApplnVol>
+            <lexis:averageLogVolume>0.3</lexis:averageLogVolume>""");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("declared-with-summary.xml", xml));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "Exemption application volume must not be provided with a summary of scale.",
+            "Average log volume must not be provided with a summary of scale.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRejectDeclaredVolumesGivenWithAFederalSummaryOfScale() {
+    String xml =
+        federalSampleXmlText()
+            .replace(
+                "<lexis:boomNumber>FED26-700123</lexis:boomNumber>",
+                """
+                <lexis:boomNumber>FED26-700123</lexis:boomNumber>
+                <lexis:exemptApplnVol>525</lexis:exemptApplnVol>
+                <lexis:averageLogVolume>0.3</lexis:averageLogVolume>""");
+
+    ApplicationSubmissionImportResultDto result = validateDedicatedFederal(xml);
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .contains(
+            "Exemption application volume must not be provided with a summary of scale.",
+            "Average log volume must not be provided with a summary of scale.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldRejectScaleTotalsWithMoreThanOneDecimalInsteadOfRounding() {
+    String xml = xmlWithScaleVolumes("10.25", "10.3", "0");
+
+    ApplicationSubmissionImportResultDto validation =
+        service().validateApplicationSubmission(xmlFile("rounding.xml", xml));
+    ApplicationSubmissionImportResultDto importResult =
+        service().importApplicationSubmission(xmlFile("rounding.xml", xml), "jsmith");
+
+    assertThat(validation.status()).isEqualTo("rejected");
+    assertThat(validation.errors())
+        .containsExactly(
+            "The total scale volume (20.55) must have no more than one decimal place.");
+    assertThat(importResult.status()).isEqualTo("rejected");
+    assertThat(importResult.errors()).isEqualTo(validation.errors());
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldKeepScaleVolumesAsSentWhenTheTotalHasOneDecimal() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(new CreateApplicationResult(true, "saved", 9001L, List.of(), List.of()));
+    when(applicationDetailsService.addPackage(any(PackageMutationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new PackagePersistenceResult(
+                true, "TEST23-652-7D-2", "60.5", "6.7", "12.8", "ACT", List.of(), List.of()));
+    when(applicationDetailsService.addScaleToPackage(
+            any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
+        .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .importApplicationSubmission(
+                xmlFile("as-sent.xml", xmlWithScaleVolumes("47.75", "12.25", "0.5")), "jsmith");
+
+    assertThat(result.status()).isEqualTo("accepted");
+    ArgumentCaptor<CreateApplicationRequest> applicationCaptor =
+        ArgumentCaptor.forClass(CreateApplicationRequest.class);
+    verify(applicationDetailsService).addApplication(applicationCaptor.capture(), eq("jsmith"));
+    assertThat(applicationCaptor.getValue().applicationVolume()).isEqualTo(60.5d);
+    ArgumentCaptor<PackageMutationRequest> packageCaptor =
+        ArgumentCaptor.forClass(PackageMutationRequest.class);
+    verify(applicationDetailsService).addPackage(packageCaptor.capture(), eq("jsmith"));
+    assertThat(packageCaptor.getValue().volume()).isEqualTo(60.5d);
+    ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
+        ArgumentCaptor.forClass(ScaleMutationRequest.class);
+    verify(applicationDetailsService, times(3))
+        .addScaleToPackage(scaleCaptor.capture(), eq("jsmith"), anyBoolean());
+    assertThat(scaleCaptor.getAllValues())
+        .extracting(ScaleMutationRequest::volume)
+        .containsExactly(47.75d, 12.25d, 0.5d);
+  }
+
+  @Test
+  void shouldIgnoreBinaryNoiseWhenCheckingTheScaleTotalDecimals() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                xmlFile("noise.xml", xmlWithScaleVolumes("10.1", "10.2", "0")));
+
+    assertThat(result.status()).isEqualTo("validated");
+    assertThat(result.submissionSummary().applicationVolume()).isEqualTo(20.3d);
+  }
+
+  @Test
+  void shouldRejectScaleRowsThatHaveVolumeButNoPieces() {
+    String xml =
+        SAMPLE_XML
+            .replace(
+                "<lexis:numberOfPieces>1500</lexis:numberOfPieces>",
+                "<lexis:numberOfPieces>0</lexis:numberOfPieces>")
+            .replace(
+                "<lexis:numberOfPieces>50</lexis:numberOfPieces>",
+                "<lexis:numberOfPieces>0</lexis:numberOfPieces>")
+            .replace(
+                "<lexis:numberOfPieces>1</lexis:numberOfPieces>",
+                "<lexis:numberOfPieces>0</lexis:numberOfPieces>");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("no-pieces.xml", xml));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "The total number of scale pieces must be greater than 0 "
+                + "when the scales have a volume.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldAcceptAZeroPieceScaleRowWhenOtherRowsHavePieces() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.validateApplication(any(CreateApplicationRequest.class)))
+        .thenReturn(new CreateApplicationResult(true, null, null, List.of(), List.of()));
+    String xml =
+        SAMPLE_XML.replace(
+            "<lexis:numberOfPieces>1500</lexis:numberOfPieces>",
+            "<lexis:numberOfPieces>0</lexis:numberOfPieces>");
+
+    ApplicationSubmissionImportResultDto result =
+        service().validateApplicationSubmission(xmlFile("one-zero-row.xml", xml));
+
+    assertThat(result.status()).isEqualTo("validated");
+  }
+
+  @Test
+  void shouldRejectScaleVolumesThatAreNotFiniteNumbers() {
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                xmlFile("not-finite.xml", xmlWithScaleVolumes("NaN", "Infinity", "0")));
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("A valid scale volume is required.");
+    verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
   private ApplicationSubmissionImportService service() {
     return new ApplicationSubmissionImportService(
         applicationDetailsServiceProvider,
@@ -2815,11 +3176,6 @@ class ApplicationSubmissionImportServiceTest {
             <lexis:postalZipCode>V8V8V8</lexis:postalZipCode>
             <lexis:country>CA</lexis:country>
             <lexis:telephoneNumber>2505551212</lexis:telephoneNumber>""")
-        .replace(
-            "<lexis:contactFirstname>CUSTOMER</lexis:contactFirstname>",
-            """
-            <lexis:contactFirstname>CUSTOMER</lexis:contactFirstname>
-            <lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>""")
         .replace(
             "</lexis:applicant>",
             """
@@ -3013,6 +3369,59 @@ class ApplicationSubmissionImportServiceTest {
         "formFile", "6-652-7.geojson", "application/geo+json", SAMPLE_GEOJSON.getBytes(StandardCharsets.UTF_8));
   }
 
+  private static String xmlWithScaleVolumes(String first, String second, String third) {
+    return SAMPLE_XML
+        .replace(
+            "<lexis:quantityVolume>500</lexis:quantityVolume>",
+            "<lexis:quantityVolume>" + first + "</lexis:quantityVolume>")
+        .replace(
+            "<lexis:quantityVolume>24.5</lexis:quantityVolume>",
+            "<lexis:quantityVolume>" + second + "</lexis:quantityVolume>")
+        .replace(
+            "<lexis:quantityVolume>0.5</lexis:quantityVolume>",
+            "<lexis:quantityVolume>" + third + "</lexis:quantityVolume>");
+  }
+
+  private static String provincialWithoutSummaryProductDetail(String boomElement) {
+    return """
+        <lexis:productDetail>
+          <lexis:productTypeCode>H</lexis:productTypeCode>
+          %s
+          <lexis:exemptApplnVol>84.5</lexis:exemptApplnVol>
+          <lexis:averageLogVolume>0.7</lexis:averageLogVolume>
+          <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+          <lexis:productLocation>Port Alberni c/o Pacific Towing</lexis:productLocation>
+          <lexis:ageClass>S</lexis:ageClass>
+          <lexis:avgLength>6.7</lexis:avgLength>
+          <lexis:avgDiameter>12.8</lexis:avgDiameter>
+          <lexis:harvestedTimberWithoutSummaryOfScale>
+            <lexis:timberMark>NCHWP</lexis:timberMark>
+          </lexis:harvestedTimberWithoutSummaryOfScale>
+        </lexis:productDetail>
+        """
+        .formatted(boomElement);
+  }
+
+  private static String provincialStandingProductDetail(String boomElement) {
+    return """
+        <lexis:productDetail>
+          <lexis:productTypeCode>S</lexis:productTypeCode>
+          %s
+          <lexis:exemptApplnVol>42.2</lexis:exemptApplnVol>
+          <lexis:averageLogVolume>0.5</lexis:averageLogVolume>
+          <lexis:speciesEndUseSort>HE/PL</lexis:speciesEndUseSort>
+          <lexis:productLocation>Port Alberni c/o Pacific Towing</lexis:productLocation>
+          <lexis:ageClass>O</lexis:ageClass>
+          <lexis:avgLength>6.7</lexis:avgLength>
+          <lexis:avgDiameter>12.8</lexis:avgDiameter>
+          <lexis:standingTimber>
+            <lexis:timberMark>STAND1</lexis:timberMark>
+          </lexis:standingTimber>
+        </lexis:productDetail>
+        """
+        .formatted(boomElement);
+  }
+
   private static String xmlWithProductDetail(String productDetail) {
     return replaceProductDetail(SAMPLE_XML, productDetail);
   }
@@ -3078,6 +3487,7 @@ class ApplicationSubmissionImportServiceTest {
         <lexis:ownerContact>
           <lexis:contactSurname>OWNER</lexis:contactSurname>
           <lexis:contactFirstname>OLIVIA</lexis:contactFirstname>
+          <lexis:contactTelephoneNumber>2505550100</lexis:contactTelephoneNumber>
         </lexis:ownerContact>
       </lexis:owner>
       """;
@@ -3097,6 +3507,7 @@ class ApplicationSubmissionImportServiceTest {
               <lexis:applicantContact>
                 <lexis:contactSurname>SERVICE</lexis:contactSurname>
                 <lexis:contactFirstname>CUSTOMER</lexis:contactFirstname>
+                <lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>
               </lexis:applicantContact>
             </lexis:applicant>
             <lexis:applicationDetail>

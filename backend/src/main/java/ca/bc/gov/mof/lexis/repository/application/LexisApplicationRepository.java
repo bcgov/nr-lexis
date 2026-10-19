@@ -636,8 +636,7 @@ public class LexisApplicationRepository extends OracleRepositorySupport {
   }
 
   LexisApplicationDetailDto.LexisRemarkDto mapRemarkRow(ResultSet rs) {
-    // No encoding provenance is stored; keep display and edit text identical to the stored value.
-    String remark = getString(rs, "REMARK");
+    String remark = ApplicationDetailsRpcRepository.decodeRemarkText(getString(rs, "REMARK"));
     return new LexisApplicationDetailDto.LexisRemarkDto(
         getLong(rs, EXPORT_EXEMPTION_APPL_REMARK_NUMBER),
         remark,

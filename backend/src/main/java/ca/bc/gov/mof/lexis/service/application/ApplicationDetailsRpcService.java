@@ -83,6 +83,14 @@ public interface ApplicationDetailsRpcService {
     return Optional.empty();
   }
 
+  /**
+   * Returns the permit a scale is linked to. The result is empty when the scale is not linked to a
+   * permit, does not exist, or carries a permit reference that is not a positive number.
+   */
+  default Optional<Long> findPermitNumberForScale(String scaleDetailId) {
+    return Optional.empty();
+  }
+
   default boolean documentBelongsToApplication(Long documentId, Long applicationNumber) {
     return findDocumentForApplication(documentId, applicationNumber).isPresent();
   }
@@ -237,6 +245,13 @@ public interface ApplicationDetailsRpcService {
       String packageNumber, Double volume, String userId);
 
   ScalePersistenceResult addScaleToPackage(ScaleMutationRequest request, String userId);
+
+  /**
+   * Adds a scale to a package. When {@code validateTimberMarkRegion} is false the timber mark must
+   * still be valid, but it is not required to belong to the application's region.
+   */
+  ScalePersistenceResult addScaleToPackage(
+      ScaleMutationRequest request, String userId, boolean validateTimberMarkRegion);
 
   boolean deleteScaleById(String scaleDetailId, String userId);
 

@@ -33,6 +33,11 @@ const mockedReleaseOfferEditLock = vi.mocked(releaseOfferEditLock)
 const mockedSubmitProvincialOfferUpdate = vi.mocked(submitProvincialOfferUpdate)
 const mockedFetchOfferScaleDetails = vi.mocked(fetchOfferScaleDetails)
 
+const NO_CLIENT_EMAIL_WARNING =
+  'As no valid email address is attached to this client, no email notification will be sent and the Region will not be notified, consequently you must notify both the Applicant and the corresponding Regional office of your offer and/or offer withdrawal at this time.'
+const EMAIL_QUEUED_MESSAGE =
+  'The purchase offer was saved successfully. An email notification is queued for the applicant and the regional office.'
+
 const offerDetail: ProvincialOfferDetail = {
   offerNumber: 81001,
   applicationNumber: 1000456,
@@ -229,7 +234,7 @@ describe('Provincial Offer Detail Actions', () => {
       message: 'The purchase offer was updated successfully.',
       createdId: '81001',
       errors: [],
-      warnings: ['Offer saved, but no client email address was found.'],
+      warnings: [NO_CLIENT_EMAIL_WARNING],
     })
     renderPage()
 
@@ -241,9 +246,7 @@ describe('Provincial Offer Detail Actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Save' }))
 
     expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
-    expect(
-      screen.getByText('Offer saved, but no client email address was found.'),
-    ).toBeInTheDocument()
+    expect(screen.getByText(NO_CLIENT_EMAIL_WARNING)).toBeInTheDocument()
   })
 
   it('shows an offer notification warning carried from the create page', async () => {
@@ -254,7 +257,7 @@ describe('Provincial Offer Detail Actions', () => {
             pathname: '/provincial/offers/81001',
             state: {
               offerCreationNotice: {
-                warnings: ['Offer saved, but no client email address was found.'],
+                warnings: [NO_CLIENT_EMAIL_WARNING],
               },
             },
           },
@@ -268,9 +271,114 @@ describe('Provincial Offer Detail Actions', () => {
 
     await screen.findByRole('heading', { name: 'Offer 81001' })
     expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
+    expect(screen.getByText(NO_CLIENT_EMAIL_WARNING)).toBeInTheDocument()
+  })
+
+  it('shows that the notification is queued after an update that emails the applicant', async () => {
+    mockedSubmitProvincialOfferUpdate.mockResolvedValue({
+      success: true,
+      message:
+        'The purchase offer was updated successfully. An email notification is queued for the applicant and the regional office.',
+      createdId: '81001',
+      errors: [],
+      warnings: [],
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit' }))
+    const amountInput = screen.getByLabelText('Offer amount ($/m³)')
+    await userEvent.clear(amountInput)
+    await userEvent.type(amountInput, '13000')
+    await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    expect(await screen.findByText('Offer saved')).toBeInTheDocument()
     expect(
-      screen.getByText('Offer saved, but no client email address was found.'),
+      screen.getByText(
+        'The purchase offer was updated successfully. An email notification is queued for the applicant and the regional office.',
+      ),
     ).toBeInTheDocument()
+  })
+
+  it('shows that the notification is queued after the create page saved the offer', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/offers/81001',
+            state: { offerCreationNotice: { warnings: [], message: EMAIL_QUEUED_MESSAGE } },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/:offerNumber" element={<ProvincialOfferDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(await screen.findByText('Offer saved')).toBeInTheDocument()
+    expect(screen.getByText(EMAIL_QUEUED_MESSAGE)).toBeInTheDocument()
+    expect(screen.queryByText('Offer saved with warning')).not.toBeInTheDocument()
+  })
+
+  it('prefers the warnings over the save message when the create page carried both', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/offers/81001',
+            state: {
+              offerCreationNotice: {
+                warnings: [NO_CLIENT_EMAIL_WARNING],
+                message: 'The purchase offer was saved successfully.',
+              },
+            },
+          },
+        ]}
+      >
+        <Routes>
+          <Route path="/provincial/offers/:offerNumber" element={<ProvincialOfferDetailsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(await screen.findByText('Offer saved with warning')).toBeInTheDocument()
+    expect(screen.getByText(NO_CLIENT_EMAIL_WARNING)).toBeInTheDocument()
+    expect(screen.queryByText('The purchase offer was saved successfully.')).not.toBeInTheDocument()
+  })
+
+  it('hides Edit when the server grants an offering client no rights after the withdrawal day', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      offerWithdrawalDate: '2026-03-10',
+      withdrawReason: 'Buyer withdrew',
+      canEditScheduleDates: false,
+      canEditOfferRemarks: false,
+      canEditOfferDetails: false,
+      canEditWithdrawFields: false,
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+  })
+
+  it('keeps Edit when the server grants an offering client rights on the withdrawal day', async () => {
+    mockedFetchProvincialOfferDetail.mockResolvedValue({
+      ...offerDetail,
+      offerWithdrawalDate: '2026-03-10',
+      withdrawReason: 'Buyer withdrew',
+      canEditScheduleDates: false,
+      canEditOfferRemarks: false,
+      canEditOfferDetails: true,
+      canEditWithdrawFields: false,
+    })
+    renderPage()
+
+    await screen.findByRole('heading', { name: 'Offer 81001' })
+    expect(await screen.findByRole('button', { name: 'Edit' })).toBeInTheDocument()
   })
 
   it('submits an explicitly cleared offer condition', async () => {

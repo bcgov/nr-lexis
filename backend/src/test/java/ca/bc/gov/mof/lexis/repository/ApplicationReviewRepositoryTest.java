@@ -658,16 +658,53 @@ class ApplicationReviewRepositoryTest {
     ApplicationReviewRepository unknownType =
         new ApplicantApplicationReviewRepository(
             "X", "00055667", "02", "00077881", "01");
-    ApplicationReviewRepository incompleteAgent =
-        new ApplicantApplicationReviewRepository(
-            "A", "00055667", null, "00077881", "01");
     ApplicationReviewRepository incompleteOwner =
         new ApplicantApplicationReviewRepository(
             "O", "00055667", "02", null, "01");
+    ApplicationReviewRepository incompleteAgentAndOwner =
+        new ApplicantApplicationReviewRepository(
+            "A", "00055667", null, "00077881", null);
+    ApplicationReviewRepository incompleteMinisterialOwner =
+        new ApplicantApplicationReviewRepository(
+            "M", "00055667", "02", "00077881", null);
 
     assertThat(unknownType.findAuthoritativeApplicantClient(900101L)).isEmpty();
-    assertThat(incompleteAgent.findAuthoritativeApplicantClient(900101L)).isEmpty();
     assertThat(incompleteOwner.findAuthoritativeApplicantClient(900101L)).isEmpty();
+    assertThat(incompleteAgentAndOwner.findAuthoritativeApplicantClient(900101L)).isEmpty();
+    assertThat(incompleteMinisterialOwner.findAuthoritativeApplicantClient(900101L)).isEmpty();
+  }
+
+  @Test
+  void authoritativeApplicantShouldSelectTheOwnerReferenceForMinisterialApplicants() {
+    ApplicationReviewRepository repository =
+        new ApplicantApplicationReviewRepository(
+            "M", "00055667", "02", "00077881", "01");
+
+    assertThat(repository.findAuthoritativeApplicantClient(900101L))
+        .contains(
+            new ApplicationReviewRepository.ApplicantClientReference("00077881", "01"));
+    assertThat(repository.findAuthoritativeApplicantStatusContext(900101L))
+        .contains(
+            new ApplicationReviewRepository.AuthoritativeApplicantStatusContext(
+                "REJ", "M", "00077881", "01", 1835L));
+  }
+
+  @Test
+  void authoritativeApplicantShouldFallBackToTheOwnerWhenAnAgentApplicantHasNoAgentClient() {
+    ApplicationReviewRepository repository =
+        new ApplicantApplicationReviewRepository(
+            "A", null, null, "00077881", "01");
+    ApplicationReviewRepository incompleteAgent =
+        new ApplicantApplicationReviewRepository(
+            "A", "00055667", null, "00077881", "01");
+
+    assertThat(repository.findAuthoritativeApplicantStatusContext(900101L))
+        .contains(
+            new ApplicationReviewRepository.AuthoritativeApplicantStatusContext(
+                "REJ", "O", "00077881", "01", 1835L));
+    assertThat(incompleteAgent.findAuthoritativeApplicantClient(900101L))
+        .contains(
+            new ApplicationReviewRepository.ApplicantClientReference("00077881", "01"));
   }
 
   @Test

@@ -5,6 +5,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.contains;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
+import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.mockingDetails;
 import static org.mockito.Mockito.verify;
 
@@ -103,14 +104,11 @@ class OracleAggregateLockRepositoryTest {
     doReturn(
             List.of(
                 new RowSnapshot(
-                    List.of(new ColumnSnapshot("REMARK", "later child save")),
+                    List.of(new ColumnSnapshot("PACKAGE_NUMBER", "later child save")),
                     Instant.parse("2026-07-15T18:05:00Z"),
                     "IDIR\\SECOND")))
         .when(jdbcTemplate)
-        .query(
-            contains("FROM EXPORT_EXEMPTION_APP_REMARKS"),
-            any(RowMapper.class),
-            eq(10L));
+        .query(contains("SELECT p.* FROM EXPORT_PACKAGE p"), any(RowMapper.class), eq(10L));
     OracleAggregateLockRepository repository =
         new OracleAggregateLockRepository(jdbcTemplate);
 
@@ -121,7 +119,7 @@ class OracleAggregateLockRepositoryTest {
   }
 
   @Test
-  void applicationVersionShouldReadEveryMutableChildSetInStableOrder() {
+  void applicationVersionShouldReadTheRowsTheDetailSaveWritesInStableOrder() {
     stubRoot("EXPORT_EXEMPTION_APPLICATION", 10L);
     OracleAggregateLockRepository repository =
         new OracleAggregateLockRepository(jdbcTemplate);
@@ -130,20 +128,94 @@ class OracleAggregateLockRepositoryTest {
 
     List<String> sql = executedSql();
     assertThat(sql)
-        .anyMatch(value -> value.contains("FROM EXPORT_EXEMPTION_APP_REMARKS"))
         .anyMatch(value -> value.contains("FROM EXPORT_PACKAGE"))
         .anyMatch(value -> value.contains("FROM EXPORT_EXMPTN_APPL_SPCS_ENDUSE"))
         .anyMatch(value -> value.contains("FROM EXPORT_SCALE_DETAIL"))
-        .anyMatch(value -> value.contains("FROM EXPORT_APPL_FILE_ATTCHMNT"))
         .anyMatch(value -> value.contains("FROM EXPORT_FEDERAL_PERMIT_DETAIL"))
         .anyMatch(value -> value.contains("FROM EXPORT_PERMIT_DETAIL"))
-        .anyMatch(value -> value.contains("FROM EXPORT_PURCHASE_OFFER"));
+        .anyMatch(value -> value.contains("FROM EXPORT_PURCHASE_OFFER"))
+        .noneMatch(value -> value.contains("FROM EXPORT_EXEMPTION_APP_REMARKS"))
+        .noneMatch(value -> value.contains("EXPORT_APPL_FILE_ATTCHMNT"))
+        .noneMatch(value -> value.contains("EXPORT_FILE_ATTACHMENT"));
     assertOrderedChildQueries(sql);
     assertBlobQueriesUseLengthOnly(sql);
   }
 
   @Test
-  void exemptionVersionShouldReadEveryMutableChildSetInStableOrder() {
+  void aNewRemarkOrDocumentShouldNotChangeTheApplicationVersion() {
+    stubRoot("EXPORT_EXEMPTION_APPLICATION", 10L);
+    lenient()
+        .doReturn(
+            List.of(row("EXPORT_EXMPTN_APPL_REMARK_NMBR", "1", "REMARK", "first")),
+            List.of(
+                row("EXPORT_EXMPTN_APPL_REMARK_NMBR", "1", "REMARK", "first"),
+                new RowSnapshot(
+                    List.of(new ColumnSnapshot("REMARK", "second")),
+                    Instant.parse("2026-07-15T19:00:00Z"),
+                    "IDIR\\APPROVER")))
+        .when(jdbcTemplate)
+        .query(contains("FROM EXPORT_EXEMPTION_APP_REMARKS"), any(RowMapper.class), eq(10L));
+    lenient()
+        .doReturn(
+            List.of(),
+            List.of(
+                new RowSnapshot(
+                    List.of(new ColumnSnapshot("FILE_NAME", "test-2026-10-18.pdf")),
+                    Instant.parse("2026-07-15T19:05:00Z"),
+                    "IDIR\\UPLOADER")))
+        .when(jdbcTemplate)
+        .query(contains("EXPORT_APPL_FILE_ATTCHMNT"), any(RowMapper.class), eq(10L));
+    OracleAggregateLockRepository repository =
+        new OracleAggregateLockRepository(jdbcTemplate);
+
+    var opened = repository.findApplicationVersion(10L).orElseThrow();
+    var afterRemarkAndUpload = repository.findApplicationVersion(10L).orElseThrow();
+
+    assertThat(afterRemarkAndUpload.fingerprint()).isEqualTo(opened.fingerprint());
+    assertThat(afterRemarkAndUpload.savedAt()).isEqualTo(opened.savedAt());
+    assertThat(afterRemarkAndUpload.updatedBy()).isEqualTo(opened.updatedBy());
+    assertThat(executedSql())
+        .noneMatch(value -> value.contains("EXPORT_EXEMPTION_APP_REMARKS"))
+        .noneMatch(value -> value.contains("EXPORT_APPL_FILE_ATTCHMNT"));
+  }
+
+  @Test
+  void applicationVersionShouldChangeWhenARowTheDetailSaveWritesChanges() {
+    stubRoot("EXPORT_EXEMPTION_APPLICATION", 10L);
+    doReturn(
+            List.of(row("PACKAGE_NUMBER", "1", "VOLUME", "5")),
+            List.of(row("PACKAGE_NUMBER", "1", "VOLUME", "6")))
+        .when(jdbcTemplate)
+        .query(contains("SELECT p.* FROM EXPORT_PACKAGE p"), any(RowMapper.class), eq(10L));
+    OracleAggregateLockRepository repository =
+        new OracleAggregateLockRepository(jdbcTemplate);
+
+    String original = repository.findApplicationVersion(10L).orElseThrow().fingerprint();
+    String changed = repository.findApplicationVersion(10L).orElseThrow().fingerprint();
+
+    assertThat(changed).isNotEqualTo(original);
+  }
+
+  @Test
+  void applicationVersionShouldChangeWhenAScaleRowChanges() {
+    stubRoot("EXPORT_EXEMPTION_APPLICATION", 10L);
+    lenient()
+        .doReturn(
+            List.of(row("EXPORT_SCALE_DETAIL_ID", "7", "VOLUME", "5")),
+            List.of(row("EXPORT_SCALE_DETAIL_ID", "7", "VOLUME", "9")))
+        .when(jdbcTemplate)
+        .query(contains("FROM EXPORT_SCALE_DETAIL"), any(RowMapper.class), eq(10L));
+    OracleAggregateLockRepository repository =
+        new OracleAggregateLockRepository(jdbcTemplate);
+
+    String original = repository.findApplicationVersion(10L).orElseThrow().fingerprint();
+    String changed = repository.findApplicationVersion(10L).orElseThrow().fingerprint();
+
+    assertThat(changed).isNotEqualTo(original);
+  }
+
+  @Test
+  void exemptionVersionShouldReadTheRowsTheDetailSaveWritesInStableOrder() {
     stubRoot("EXPORT_EXEMPTION", "EX-1");
     OracleAggregateLockRepository repository =
         new OracleAggregateLockRepository(jdbcTemplate);
@@ -154,11 +226,54 @@ class OracleAggregateLockRepositoryTest {
     assertThat(sql)
         .anyMatch(value -> value.contains("FROM EXPORT_EXEMPTION_RATE"))
         .anyMatch(value -> value.contains("FROM OIC_EXEMPTION_ORG_UNIT"))
-        .anyMatch(value -> value.contains("FROM EXPORT_EXEMPT_FILE_ATTCHMNT"))
         .anyMatch(value -> value.contains("FROM EXPORT_EXEMPTION_APPLICATION"))
-        .anyMatch(value -> value.contains("FROM EXPORT_PERMIT_DETAIL"));
+        .anyMatch(value -> value.contains("FROM EXPORT_PERMIT_DETAIL"))
+        .noneMatch(value -> value.contains("EXPORT_EXEMPT_FILE_ATTCHMNT"))
+        .noneMatch(value -> value.contains("EXPORT_FILE_ATTACHMENT"));
     assertOrderedChildQueries(sql);
     assertBlobQueriesUseLengthOnly(sql);
+  }
+
+  @Test
+  void aNewDocumentShouldNotChangeTheExemptionVersion() {
+    stubRoot("EXPORT_EXEMPTION", "EX-1");
+    lenient()
+        .doReturn(
+            List.of(),
+            List.of(
+                new RowSnapshot(
+                    List.of(new ColumnSnapshot("FILE_NAME", "test-2026-10-18.pdf")),
+                    Instant.parse("2026-07-15T19:05:00Z"),
+                    "IDIR\\UPLOADER")))
+        .when(jdbcTemplate)
+        .query(contains("EXPORT_EXEMPT_FILE_ATTCHMNT"), any(RowMapper.class), eq("EX-1"));
+    OracleAggregateLockRepository repository =
+        new OracleAggregateLockRepository(jdbcTemplate);
+
+    var opened = repository.findExemptionVersion("EX-1").orElseThrow();
+    var afterUpload = repository.findExemptionVersion("EX-1").orElseThrow();
+
+    assertThat(afterUpload.fingerprint()).isEqualTo(opened.fingerprint());
+    assertThat(afterUpload.savedAt()).isEqualTo(opened.savedAt());
+    assertThat(afterUpload.updatedBy()).isEqualTo(opened.updatedBy());
+    assertThat(executedSql()).noneMatch(value -> value.contains("EXPORT_EXEMPT_FILE_ATTCHMNT"));
+  }
+
+  @Test
+  void exemptionVersionShouldChangeWhenARowTheDetailSaveWritesChanges() {
+    stubRoot("EXPORT_EXEMPTION", "EX-1");
+    doReturn(
+            List.of(row("EXEMPTION_NUMBER", "EX-1", "EXPORT_RATE", "1")),
+            List.of(row("EXEMPTION_NUMBER", "EX-1", "EXPORT_RATE", "2")))
+        .when(jdbcTemplate)
+        .query(contains("FROM EXPORT_EXEMPTION_RATE"), any(RowMapper.class), eq("EX-1"));
+    OracleAggregateLockRepository repository =
+        new OracleAggregateLockRepository(jdbcTemplate);
+
+    String original = repository.findExemptionVersion("EX-1").orElseThrow().fingerprint();
+    String changed = repository.findExemptionVersion("EX-1").orElseThrow().fingerprint();
+
+    assertThat(changed).isNotEqualTo(original);
   }
 
   @Test

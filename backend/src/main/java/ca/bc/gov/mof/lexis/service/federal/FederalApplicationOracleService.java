@@ -42,6 +42,8 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 public class FederalApplicationOracleService implements FederalApplicationService {
 
   private static final int REMARK_MAX_LENGTH = 254;
+  private static final String REMARK_UNSUPPORTED_CHARACTERS_MESSAGE =
+      "Application remarks contain unsupported special characters. Remove them and try again.";
   private static final List<String> APPROVAL_SOURCE_STATUSES = List.of("NEW", "PND");
   private static final List<String> POST_APPROVAL_TARGET_STATUSES = List.of("REJ", "WDN");
 
@@ -249,6 +251,9 @@ public class FederalApplicationOracleService implements FederalApplicationServic
     if (remark == null) {
       return failure(List.of("A remark is required when rejecting or withdrawing a federal application."));
     }
+    if (hasUnsupportedCharacters(remark)) {
+      return failure(List.of(REMARK_UNSUPPORTED_CHARACTERS_MESSAGE));
+    }
     if (remark.length() > REMARK_MAX_LENGTH) {
       return failure(List.of("Remark is too long to save. Shorten it and try again."));
     }
@@ -411,10 +416,16 @@ public class FederalApplicationOracleService implements FederalApplicationServic
     }
     if (remark == null) {
       errors.add("Remark is required.");
-    } else if (remark.length() > 250) {
+    } else if (hasUnsupportedCharacters(remark)) {
+      errors.add(REMARK_UNSUPPORTED_CHARACTERS_MESSAGE);
+    } else if (ApplicationDetailsRpcRepository.encodeRemarkText(remark).length() > 250) {
       errors.add("Remark must not exceed 250 characters.");
     }
     return errors;
+  }
+
+  private static boolean hasUnsupportedCharacters(String remark) {
+    return !remark.chars().allMatch(character -> character <= 0x7f);
   }
 
   private FederalApplicationRemarkDto toFederalRemark(

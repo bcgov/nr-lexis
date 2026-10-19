@@ -314,8 +314,9 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
 
   /**
    * Reloads the application through the required Oracle cursor and selects the client reference
-   * belonging to the recorded applicant type. Unknown applicant types and incomplete references
-   * fail closed.
+   * that receives applicant email: the agent for an agent applicant that has an agent client
+   * reference, otherwise the owner. Unknown applicant types and incomplete references fail
+   * closed.
    */
   public Optional<ApplicantClientReference> findAuthoritativeApplicantClient(
       Long applicationNumber) {
@@ -341,23 +342,42 @@ public class ApplicationReviewRepository extends OracleRepositorySupport {
                 return Optional.empty();
               }
               String applicantTypeCode = trim(record.exportApplicantTypeCode());
-              Optional<ApplicantClientReference> reference =
-                  "A".equalsIgnoreCase(applicantTypeCode)
-                      ? completeClientReference(
-                          record.agentClientNumber(), record.agentClientLocationCode())
-                      : "O".equalsIgnoreCase(applicantTypeCode)
-                          ? completeClientReference(
-                              record.ownerClientNumber(), record.ownerClientLocationCode())
-                          : Optional.empty();
-              return reference.map(
-                  value ->
-                      new AuthoritativeApplicantStatusContext(
-                          currentStatus,
-                          applicantTypeCode,
-                          value.clientNumber(),
-                          value.locationCode(),
-                          record.orgUnitNo()));
+              boolean agentApplicant = "A".equalsIgnoreCase(applicantTypeCode);
+              boolean ownerApplicant =
+                  "O".equalsIgnoreCase(applicantTypeCode)
+                      || "M".equalsIgnoreCase(applicantTypeCode);
+              if (!agentApplicant && !ownerApplicant) {
+                return Optional.empty();
+              }
+              if (agentApplicant) {
+                Optional<ApplicantClientReference> agentReference =
+                    completeClientReference(
+                        record.agentClientNumber(), record.agentClientLocationCode());
+                if (agentReference.isPresent()) {
+                  return Optional.of(
+                      statusContext(currentStatus, "A", agentReference.get(), record.orgUnitNo()));
+                }
+              }
+              // Owner and Ministerial applicants, and agent applicants without an agent client,
+              // are emailed at the owner location.
+              String ownerRole = "M".equalsIgnoreCase(applicantTypeCode) ? "M" : "O";
+              return completeClientReference(
+                      record.ownerClientNumber(), record.ownerClientLocationCode())
+                  .map(value -> statusContext(currentStatus, ownerRole, value, record.orgUnitNo()));
             });
+  }
+
+  private static AuthoritativeApplicantStatusContext statusContext(
+      String statusCode,
+      String applicantTypeCode,
+      ApplicantClientReference reference,
+      Long orgUnitNumber) {
+    return new AuthoritativeApplicantStatusContext(
+        statusCode,
+        applicantTypeCode,
+        reference.clientNumber(),
+        reference.locationCode(),
+        orgUnitNumber);
   }
 
   /**

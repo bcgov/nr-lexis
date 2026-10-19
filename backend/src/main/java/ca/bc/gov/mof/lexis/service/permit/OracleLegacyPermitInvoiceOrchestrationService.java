@@ -45,6 +45,13 @@ public class OracleLegacyPermitInvoiceOrchestrationService
   private static final String CANCELLED = "CAN";
   private static final String COMPLETE = "COM";
   private static final String PAYMENT_PENDING = "PPD";
+  private static final String GBMS_PARTIALLY_PROCESSED_MESSAGE =
+      "The permit invoice was only partly processed in GBMS, so the permit was not changed."
+          + " Contact the LEXIS administrator before trying again.";
+  private static final String PREFLIGHT_MESSAGE =
+      "The permit invoice could not be prepared, so the permit was not changed. Check the permit's"
+          + " submit date, destination country, scales, owner and region, then try again. If it"
+          + " still fails, contact the LEXIS administrator.";
 
   private final OracleInternalPermitInvoiceService internalInvoices;
   private final OracleGbmsPermitInvoiceService gbmsInvoices;
@@ -156,10 +163,13 @@ public class OracleLegacyPermitInvoiceOrchestrationService
           gbmsWriteStarted,
           gbmsInvoiceNumber == null ? "none" : fingerprint(gbmsInvoiceNumber),
           exceptionType(ex));
+      if (gbmsWriteStarted) {
+        return TransitionResult.failed(GBMS_PARTIALLY_PROCESSED_MESSAGE);
+      }
       return TransitionResult.failed(
-          gbmsWriteStarted
-              ? "Permit invoicing failed after GBMS processing began; reconcile before retry."
-              : "Permit invoice preflight failed.");
+          ex instanceof OracleInternalPermitInvoiceService.InvoiceBlockedException
+              ? ex.getMessage()
+              : PREFLIGHT_MESSAGE);
     }
   }
 
@@ -227,8 +237,9 @@ public class OracleLegacyPermitInvoiceOrchestrationService
                         trimToNull(row.invoiceNumber()).toUpperCase(java.util.Locale.ROOT)))
             .toList();
     if (candidates.size() > 1) {
-      throw new DataRetrievalFailureException(
-          "More than one prior GBMS invoice is eligible for replacement.");
+      throw new OracleInternalPermitInvoiceService.InvoiceBlockedException(
+          "More than one earlier GBMS invoice could be replaced by this permit's invoice."
+              + " Contact the LEXIS administrator.");
     }
     return candidates.isEmpty() ? null : candidates.get(0);
   }
@@ -276,14 +287,16 @@ public class OracleLegacyPermitInvoiceOrchestrationService
             .filter(row -> trimToNull(row.cancelledByInvoice()) == null)
             .toList();
     if (activeMatches.size() != 1) {
-      throw new DataRetrievalFailureException(
-          "Exactly one active GBMS invoice is required for cancellation.");
+      throw new OracleInternalPermitInvoiceService.InvoiceBlockedException(
+          "The permit does not have exactly one active GBMS invoice, so its status cannot be"
+              + " changed. Contact the LEXIS administrator.");
     }
     GbmsInvoiceHistoryRow source = activeMatches.get(0);
     if (trimToNull(source.replacedByInvoice()) != null
         || BigDecimal.valueOf(source.invoiceAmount()).compareTo(active.invoiceTotal()) != 0) {
-      throw new DataRetrievalFailureException(
-          "The active GBMS invoice does not match the internal permit invoice.");
+      throw new OracleInternalPermitInvoiceService.InvoiceBlockedException(
+          "The active GBMS invoice does not match the permit's LEXIS invoice, so its status cannot"
+              + " be changed. Contact the LEXIS administrator.");
     }
     return source;
   }

@@ -21,6 +21,8 @@ export type OptimisticConflictRequest = {
   problem: OptimisticConflictProblem
   /** The record open on the page, when the page is a record. */
   recordType?: OptimisticRecordType
+  /** The number of the record open on the page. */
+  recordId?: string
   /** What the rejected save was for, such as "scale"; otherwise the user's changes. */
   saveSubject?: string
   refresh: () => void

@@ -69,6 +69,32 @@ describe('lexis detail service', () => {
     )
   })
 
+  it('reads a fresh permit detail past the 30 second cache and still registers its record version', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({ permitNumber: 777, exemptionNumber: 'EX-9', blanketOic: true }),
+    )
+
+    const result = await fetchProvincialPermitDetail('777', { fresh: true })
+
+    expect(getCachedResponseMock).toHaveBeenCalledTimes(1)
+    expect(getCachedResponseMock).toHaveBeenCalledWith('/lexis/permits/777', undefined, {
+      ttlMs: 0,
+    })
+    expect(result).toMatchObject({ permitNumber: 777, blanketOic: true })
+    expect(registerRecordVersionMock).toHaveBeenCalledWith(
+      'permit',
+      '777',
+      expect.objectContaining({ data: expect.objectContaining({ permitNumber: 777 }) }),
+      '/lexis/permits/777',
+    )
+  })
+
+  it('treats a missing fresh permit as not found', async () => {
+    getCachedResponseMock.mockRejectedValue({ isAxiosError: true, response: { status: 404 } })
+
+    await expect(fetchProvincialPermitDetail('777', { fresh: true })).resolves.toBeNull()
+  })
+
   it('loads permit exemption context separately from the permit detail', async () => {
     getCachedResponseMock.mockResolvedValue(
       response({

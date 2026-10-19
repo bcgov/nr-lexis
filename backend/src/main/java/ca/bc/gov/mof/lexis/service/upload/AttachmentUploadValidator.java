@@ -5,6 +5,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.FilterInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.SequenceInputStream;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.nio.ByteBuffer;
@@ -14,6 +15,7 @@ import java.nio.charset.Charset;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.ArrayDeque;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
@@ -21,6 +23,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Set;
+import java.util.Deque;
+import java.util.regex.Pattern;
 import java.util.zip.CRC32;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
@@ -30,6 +34,8 @@ import javax.xml.stream.XMLStreamConstants;
 import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
+import org.apache.poi.poifs.filesystem.DirectoryEntry;
+import org.apache.poi.poifs.filesystem.Entry;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
 
@@ -48,6 +54,8 @@ public class AttachmentUploadValidator {
   private static final int MAX_ARCHIVE_COMPRESSION_RATIO = 100;
   private static final int ZIP_END_RECORD_MAX_BYTES = 65_557;
   private static final Charset ZIP_LEGACY_CHARSET = Charset.forName("IBM437");
+  private static final Pattern RTF_EMBEDDED_OBJECT =
+      Pattern.compile("\\\\(?:object|objdata)(?![a-z])", Pattern.CASE_INSENSITIVE);
 
   private static final Set<String> SUPPORTED_FILE_TYPES =
       Set.of(
@@ -118,6 +126,8 @@ public class AttachmentUploadValidator {
     }
   }
 
+  // File names and descriptions are stored in US7ASCII VARCHAR2(250 BYTE) columns, which cannot
+  // hold other characters, so only US-ASCII text of at most 250 characters is accepted.
   private String validateFileName(String fileName) {
     if (fileName == null || fileName.isBlank()) {
       return "The uploaded file must have a usable file name.";
@@ -132,10 +142,7 @@ public class AttachmentUploadValidator {
     }
     for (int index = 0; index < fileName.length(); index++) {
       char character = fileName.charAt(index);
-      if (Character.isISOControl(character)
-          || character == '/'
-          || character == '\\'
-          || character == ':') {
+      if (Character.isISOControl(character) || character == '/' || character == '\\') {
         return "File names must not contain a path or control characters.";
       }
     }
@@ -215,16 +222,12 @@ public class AttachmentUploadValidator {
   }
 
   private void validateJpeg(MultipartFile file) throws IOException {
-    ContentEnvelope envelope = inspect(file, 4, 2);
+    ContentEnvelope envelope = inspect(file, 4, 0);
     byte[] prefix = envelope.prefix();
-    byte[] tail = envelope.tail();
     if (prefix.length < 4
         || (prefix[0] & 0xff) != 0xff
         || (prefix[1] & 0xff) != 0xd8
-        || (prefix[2] & 0xff) != 0xff
-        || tail.length < 2
-        || (tail[tail.length - 2] & 0xff) != 0xff
-        || (tail[tail.length - 1] & 0xff) != 0xd9) {
+        || (prefix[2] & 0xff) != 0xff) {
       throw InvalidAttachmentException.mismatch("JPG");
     }
   }
@@ -269,6 +272,12 @@ public class AttachmentUploadValidator {
     if (!startsWith(prefix, signature) || last < 0 || tail[last] != '}') {
       throw InvalidAttachmentException.mismatch("RTF");
     }
+    try (InputStream input = limited(file.getInputStream())) {
+      if (RTF_EMBEDDED_OBJECT.matcher(new String(input.readAllBytes(), StandardCharsets.ISO_8859_1))
+          .find()) {
+        throw InvalidAttachmentException.unsafeLegacyOffice("RTF");
+      }
+    }
   }
 
   private void validateOle(MultipartFile file, boolean expectWordDocument) throws IOException {
@@ -281,6 +290,23 @@ public class AttachmentUploadValidator {
           ? !hasWordDocument || hasWorkbook
           : !hasWorkbook || hasWordDocument) {
         throw InvalidAttachmentException.mismatch(expectWordDocument ? "DOC" : "XLS");
+      }
+      Deque<DirectoryEntry> directories = new ArrayDeque<>();
+      directories.add(fileSystem.getRoot());
+      while (!directories.isEmpty()) {
+        var entries = directories.removeFirst().getEntries();
+        while (entries.hasNext()) {
+          Entry entry = entries.next();
+          String name = entry.getName();
+          if (name.equalsIgnoreCase("Macros")
+              || name.equalsIgnoreCase("_VBA_PROJECT_CUR")
+              || name.equalsIgnoreCase("ObjectPool")) {
+            throw InvalidAttachmentException.unsafeLegacyOffice(expectWordDocument ? "DOC" : "XLS");
+          }
+          if (entry instanceof DirectoryEntry directory) {
+            directories.add(directory);
+          }
+        }
       }
     } catch (InvalidAttachmentException ex) {
       throw ex;
@@ -988,44 +1014,93 @@ public class AttachmentUploadValidator {
   }
 
   private void validateText(MultipartFile file) throws IOException {
+    String fileTypeCode = extension(file.getOriginalFilename());
     try (InputStream input = limited(file.getInputStream())) {
       byte[] prefix = input.readNBytes(4);
       if (isExecutableSignature(prefix)) {
-        throw InvalidAttachmentException.mismatch(extension(file.getOriginalFilename()));
+        throw InvalidAttachmentException.mismatch(fileTypeCode);
       }
-      boolean visibleCharacter = false;
-      for (byte value : prefix) {
-        if (invalidTextByte(value)) {
-          throw InvalidAttachmentException.mismatch(extension(file.getOriginalFilename()));
-        }
-        visibleCharacter |= visibleTextByte(value);
-      }
-      byte[] chunk = new byte[8192];
-      int read;
-      while ((read = input.read(chunk)) != -1) {
-        for (int index = 0; index < read; index++) {
-          if (invalidTextByte(chunk[index])) {
-            throw InvalidAttachmentException.mismatch(extension(file.getOriginalFilename()));
-          }
-          visibleCharacter |= visibleTextByte(chunk[index]);
-        }
-      }
+      boolean visibleCharacter =
+          hasUtf16ByteOrderMark(prefix)
+              ? scanUtf16Text(prefix, input, fileTypeCode)
+              : scanByteText(prefix, input, fileTypeCode);
       if (!visibleCharacter) {
-        throw InvalidAttachmentException.mismatch(extension(file.getOriginalFilename()));
+        throw InvalidAttachmentException.mismatch(fileTypeCode);
       }
     }
   }
 
-  private boolean invalidTextByte(byte value) {
-    int unsigned = value & 0xff;
-    return unsigned == 0
-        || (unsigned < 0x20 && unsigned != '\n' && unsigned != '\r' && unsigned != '\t')
-        || unsigned == 0x7f;
+  private boolean scanByteText(byte[] prefix, InputStream input, String fileTypeCode)
+      throws IOException {
+    boolean visibleCharacter = false;
+    for (byte value : prefix) {
+      if (invalidTextUnit(value & 0xff)) {
+        throw InvalidAttachmentException.mismatch(fileTypeCode);
+      }
+      visibleCharacter |= visibleTextUnit(value & 0xff);
+    }
+    byte[] chunk = new byte[8192];
+    int read;
+    while ((read = input.read(chunk)) != -1) {
+      for (int index = 0; index < read; index++) {
+        int value = chunk[index] & 0xff;
+        if (invalidTextUnit(value)) {
+          throw InvalidAttachmentException.mismatch(fileTypeCode);
+        }
+        visibleCharacter |= visibleTextUnit(value);
+      }
+    }
+    return visibleCharacter;
   }
 
-  private boolean visibleTextByte(byte value) {
-    int unsigned = value & 0xff;
-    return unsigned >= 0x80 || (unsigned >= 0x20 && unsigned != 0x7f);
+  /** Scans UTF-16 text that starts with a byte order mark, two bytes per character. */
+  private boolean scanUtf16Text(byte[] prefix, InputStream input, String fileTypeCode)
+      throws IOException {
+    boolean littleEndian = (prefix[0] & 0xff) == 0xff;
+    InputStream remaining =
+        new SequenceInputStream(new ByteArrayInputStream(prefix, 2, prefix.length - 2), input);
+    boolean visibleCharacter = false;
+    int pendingByte = -1;
+    byte[] chunk = new byte[8192];
+    int read;
+    while ((read = remaining.read(chunk)) != -1) {
+      for (int index = 0; index < read; index++) {
+        int value = chunk[index] & 0xff;
+        if (pendingByte < 0) {
+          pendingByte = value;
+          continue;
+        }
+        int unit = littleEndian ? (value << 8) | pendingByte : (pendingByte << 8) | value;
+        pendingByte = -1;
+        if (invalidTextUnit(unit)) {
+          throw InvalidAttachmentException.mismatch(fileTypeCode);
+        }
+        visibleCharacter |= visibleTextUnit(unit);
+      }
+    }
+    if (pendingByte >= 0) {
+      throw InvalidAttachmentException.mismatch(fileTypeCode);
+    }
+    return visibleCharacter;
+  }
+
+  private boolean hasUtf16ByteOrderMark(byte[] prefix) {
+    if (prefix.length < 2) {
+      return false;
+    }
+    int first = prefix[0] & 0xff;
+    int second = prefix[1] & 0xff;
+    return (first == 0xff && second == 0xfe) || (first == 0xfe && second == 0xff);
+  }
+
+  private boolean invalidTextUnit(int unit) {
+    return unit == 0
+        || (unit < 0x20 && unit != '\n' && unit != '\r' && unit != '\t')
+        || unit == 0x7f;
+  }
+
+  private boolean visibleTextUnit(int unit) {
+    return unit >= 0x80 || (unit >= 0x20 && unit != 0x7f);
   }
 
   private boolean isExecutableSignature(byte[] prefix) {
@@ -1247,6 +1322,11 @@ public class AttachmentUploadValidator {
     static InvalidAttachmentException unsafeOfficePackage(String fileTypeCode) {
       return new InvalidAttachmentException(
           "The uploaded ." + fileTypeCode + " file is not a safe Office document.");
+    }
+
+    static InvalidAttachmentException unsafeLegacyOffice(String fileTypeCode) {
+      return new InvalidAttachmentException(
+          "The uploaded ." + fileTypeCode + " file contains an embedded object or macro.");
     }
 
     String userMessage() {

@@ -37,6 +37,8 @@ type OfferApplicationValidation = {
 type OfferClientData = {
   clientNumber: string
   companyName: string
+  /** The client's legal first and middle names, present only when the client has both. */
+  legalContactName?: string
 }
 
 export const fetchOfferClientData = async (
@@ -68,9 +70,11 @@ export const fetchOfferClientData = async (
     return null
   }
 
+  const legalContactName = asString(source.legalContactName)
   return {
     clientNumber: resolvedClientNumber,
     companyName,
+    ...(legalContactName ? { legalContactName } : {}),
   }
 }
 

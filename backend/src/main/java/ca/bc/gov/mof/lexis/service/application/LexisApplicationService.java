@@ -1,5 +1,8 @@
 package ca.bc.gov.mof.lexis.service.application;
 
+import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
+
+import ca.bc.gov.mof.lexis.dto.CodeNameDto;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationAccessContextDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisApplicationDetailDto;
 import ca.bc.gov.mof.lexis.dto.application.LexisPackageLookupDto;
@@ -14,6 +17,18 @@ import java.util.Optional;
 public interface LexisApplicationService {
 
   LexisApplicationSearchOptionsDto searchOptions();
+
+  /**
+   * Whether an upcoming list date is open for an application to choose. It is true when the list
+   * dates cannot be read.
+   */
+  default boolean hasUpcomingListDate() {
+    LexisApplicationSearchOptionsDto options = searchOptions();
+    List<CodeNameDto> nextSchedules = options == null ? null : options.nextSchedules();
+    return nextSchedules == null
+        || nextSchedules.stream()
+            .anyMatch(option -> option != null && trimToNull(option.code()) != null);
+  }
 
   LexisApplicationSearchResponseDto search(LexisApplicationSearchCriteria criteria);
 

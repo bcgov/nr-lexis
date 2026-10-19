@@ -15,16 +15,19 @@ import static ca.bc.gov.mof.lexis.util.TextUtils.trimToNull;
 import ca.bc.gov.mof.lexis.dto.application.ApplicationEditLockDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailRequestDto;
 import ca.bc.gov.mof.lexis.dto.review.ApplicationReviewStatusEmailResultDto;
+import ca.bc.gov.mof.lexis.repository.application.ApplicationDetailsRpcRepository;
 import ca.bc.gov.mof.lexis.security.LexisPrincipalService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditLockService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationDetailsRpcService;
 import ca.bc.gov.mof.lexis.service.application.ApplicationEditPolicyService;
 import ca.bc.gov.mof.lexis.service.application.EditLockConflictException;
+import ca.bc.gov.mof.lexis.service.application.LexisApplicationService;
 import ca.bc.gov.mof.lexis.service.client.ClientLookupService;
 import ca.bc.gov.mof.lexis.service.permit.ApplicationPermitOperationCoordinator;
 import ca.bc.gov.mof.lexis.service.review.ApplicationReviewService;
 import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
+import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.ApplicationItemMutation;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
 import ca.bc.gov.mof.lexis.util.TextUtils;
@@ -144,6 +147,7 @@ public class ApplicationDetailsRpcController {
   private final ApplicationEditPolicyService applicationEditPolicyService;
   private final ApplicationPermitOperationCoordinator operationCoordinator;
   private LexisPrincipalService principalService;
+  private ObjectProvider<LexisApplicationService> applicationServiceProvider;
 
   public ApplicationDetailsRpcController(
       ObjectProvider<ApplicationDetailsRpcService> serviceProvider,
@@ -169,6 +173,12 @@ public class ApplicationDetailsRpcController {
   @Autowired
   void setLexisPrincipalService(LexisPrincipalService principalService) {
     this.principalService = principalService;
+  }
+
+  @Autowired
+  void setApplicationServiceProvider(
+      ObjectProvider<LexisApplicationService> applicationServiceProvider) {
+    this.applicationServiceProvider = applicationServiceProvider;
   }
 
   @GetMapping("/rpc/application-details/document-details")
@@ -624,7 +634,7 @@ public class ApplicationDetailsRpcController {
     if (namesOwnerAsAgent(createRequest)) {
       return ownerNamedAsAgent(null);
     }
-    if (createRequest.exportScheduleId() == null && requiresListDate(authentication)) {
+    if (createRequest.exportScheduleId() == null && mustChooseListDate(authentication)) {
       return listDateRequired(null);
     }
     if (exemptionNumber == null) {
@@ -762,7 +772,7 @@ public class ApplicationDetailsRpcController {
     if ((saveSource == ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY
             || saveSource == ApplicationDetailsRpcService.ApplicationSummarySaveSource.SUMMARY_ITEMS)
         && request.exportScheduleId() == null
-        && requiresListDate(authentication)) {
+        && mustChooseListDate(authentication)) {
       return listDateRequired(request.applicationNumber());
     }
 
@@ -1349,7 +1359,8 @@ public class ApplicationDetailsRpcController {
     requireApplicationAccess(request.applicationNumber(), authentication);
     applicationEditPolicyService.requirePackageAdd(
         authentication, service, request.applicationNumber());
-    ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
+    ApplicationEditLockDto lock = requireItemEditable(
+        request.applicationNumber(), authentication, ApplicationItemMutation.CREATE_PACKAGE);
     if (lock.locked()) {
       return packagePersistenceLockConflict(lock);
     }
@@ -1361,8 +1372,8 @@ public class ApplicationDetailsRpcController {
           requireApplicationAccess(request.applicationNumber(), authentication);
           applicationEditPolicyService.requirePackageAdd(
               authentication, service, request.applicationNumber());
-          ApplicationEditLockDto currentLock =
-              requireEditable(request.applicationNumber(), authentication);
+          ApplicationEditLockDto currentLock = requireItemEditable(
+              request.applicationNumber(), authentication, ApplicationItemMutation.CREATE_PACKAGE);
           if (currentLock.locked()) {
             return packagePersistenceLockConflict(currentLock);
           }
@@ -1402,7 +1413,8 @@ public class ApplicationDetailsRpcController {
       applicationEditPolicyService.requirePackageNumberUpdate(
           authentication, service, request.applicationNumber());
     }
-    ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
+    ApplicationEditLockDto lock = requireItemEditable(
+        request.applicationNumber(), authentication, ApplicationItemMutation.CHANGE_ITEMS);
     if (lock.locked()) {
       return packagePersistenceLockConflict(lock);
     }
@@ -1420,8 +1432,8 @@ public class ApplicationDetailsRpcController {
             applicationEditPolicyService.requirePackageNumberUpdate(
                 authentication, service, request.applicationNumber());
           }
-          ApplicationEditLockDto currentLock =
-              requireEditable(request.applicationNumber(), authentication);
+          ApplicationEditLockDto currentLock = requireItemEditable(
+              request.applicationNumber(), authentication, ApplicationItemMutation.CHANGE_ITEMS);
           if (currentLock.locked()) {
             return packagePersistenceLockConflict(currentLock);
           }
@@ -1457,7 +1469,8 @@ public class ApplicationDetailsRpcController {
     requirePackageAccess(service, request.packageNumber(), request.applicationNumber());
     applicationEditPolicyService.requireScaleAdd(
         authentication, service, request.applicationNumber());
-    ApplicationEditLockDto lock = requireEditable(request.applicationNumber(), authentication);
+    ApplicationEditLockDto lock = requireItemEditable(
+        request.applicationNumber(), authentication, ApplicationItemMutation.CHANGE_ITEMS);
     if (lock.locked()) {
       return scalePersistenceLockConflict(lock);
     }
@@ -1471,8 +1484,8 @@ public class ApplicationDetailsRpcController {
               service, request.packageNumber(), request.applicationNumber());
           applicationEditPolicyService.requireScaleAdd(
               authentication, service, request.applicationNumber());
-          ApplicationEditLockDto currentLock =
-              requireEditable(request.applicationNumber(), authentication);
+          ApplicationEditLockDto currentLock = requireItemEditable(
+              request.applicationNumber(), authentication, ApplicationItemMutation.CHANGE_ITEMS);
           if (currentLock.locked()) {
             return scalePersistenceLockConflict(currentLock);
           }
@@ -1509,6 +1522,7 @@ public class ApplicationDetailsRpcController {
     requireScaleAccess(service, scaleId, parsedApplicationNumber);
     applicationEditPolicyService.requireScaleDelete(
         authentication, service, parsedApplicationNumber);
+    requireScaleDeleteAccess(service, scaleId, parsedApplicationNumber, authentication);
     ApplicationEditLockDto lock = requireEditable(parsedApplicationNumber, authentication);
     if (lock.locked()) {
       return ResponseEntity.status(HttpStatus.CONFLICT).body(new DeleteResponseDto(false));
@@ -1522,6 +1536,7 @@ public class ApplicationDetailsRpcController {
           requireScaleAccess(service, scaleId, parsedApplicationNumber);
           applicationEditPolicyService.requireScaleDelete(
               authentication, service, parsedApplicationNumber);
+          requireScaleDeleteAccess(service, scaleId, parsedApplicationNumber, authentication);
           ApplicationEditLockDto currentLock =
               requireEditable(parsedApplicationNumber, authentication);
           if (currentLock.locked()) {
@@ -1562,7 +1577,8 @@ public class ApplicationDetailsRpcController {
     requirePackageAccess(service, packageNumber, parsedApplicationNumber);
     applicationEditPolicyService.requirePackageDelete(
         authentication, service, parsedApplicationNumber);
-    ApplicationEditLockDto lock = requireEditable(parsedApplicationNumber, authentication);
+    ApplicationEditLockDto lock = requireItemEditable(
+        parsedApplicationNumber, authentication, ApplicationItemMutation.CHANGE_ITEMS);
     if (lock.locked()) {
       return ResponseEntity.status(HttpStatus.CONFLICT).body(new DeleteResponseDto(false));
     }
@@ -1575,8 +1591,8 @@ public class ApplicationDetailsRpcController {
           requirePackageAccess(service, packageNumber, parsedApplicationNumber);
           applicationEditPolicyService.requirePackageDelete(
               authentication, service, parsedApplicationNumber);
-          ApplicationEditLockDto currentLock =
-              requireEditable(parsedApplicationNumber, authentication);
+          ApplicationEditLockDto currentLock = requireItemEditable(
+              parsedApplicationNumber, authentication, ApplicationItemMutation.CHANGE_ITEMS);
           if (currentLock.locked()) {
             return ResponseEntity.status(HttpStatus.CONFLICT)
                 .body(new DeleteResponseDto(false));
@@ -1620,6 +1636,20 @@ public class ApplicationDetailsRpcController {
                     role.startsWith("LEXIS_PROVINCIAL_SUBMITTER")
                         || role.startsWith("PROVINCIAL_SUBMITTER"))
         && !canPerform(authentication, LEGACY_ACTION_APPLICATIONS_REVIEW);
+  }
+
+  /**
+   * A Provincial Submitter must pick a list date only while an upcoming list date can be chosen;
+   * when none is open the application saves without one.
+   */
+  private boolean mustChooseListDate(Authentication authentication) {
+    return requiresListDate(authentication) && upcomingListDateAvailable();
+  }
+
+  private boolean upcomingListDateAvailable() {
+    LexisApplicationService applications =
+        applicationServiceProvider == null ? null : applicationServiceProvider.getIfAvailable();
+    return applications == null || applications.hasUpcomingListDate();
   }
 
   private ResponseEntity<ApplicationPersistenceResponseDto> listDateRequired(
@@ -1851,7 +1881,9 @@ public class ApplicationDetailsRpcController {
       return new RemarkValidationFailure(
           "unsupported_characters", APPLICATION_REMARK_UNSUPPORTED_CHARACTERS_MESSAGE);
     }
-    if (remarkBody.length() > APPLICATION_REMARK_MAX_BYTES) {
+    // The stored remark is escaped text, so the limit applies to the encoded length.
+    if (ApplicationDetailsRpcRepository.encodeRemarkText(remarkBody).length()
+        > APPLICATION_REMARK_MAX_BYTES) {
       return new RemarkValidationFailure("too_long", APPLICATION_REMARK_TOO_LONG_MESSAGE);
     }
     return null;
@@ -1874,6 +1906,14 @@ public class ApplicationDetailsRpcController {
     return editLockService.requireEditable(applicationNumber, userId(authentication), userId(authentication));
   }
 
+  private ApplicationEditLockDto requireItemEditable(
+      Long applicationNumber, Authentication authentication, ApplicationItemMutation mutation) {
+    provincialAuthorizationService.requireApplicationItemMutation(
+        authentication, applicationNumber, mutation);
+    return editLockService.requireEditable(
+        applicationNumber, userId(authentication), userId(authentication));
+  }
+
   private Authentication currentAuthentication() {
     return SecurityContextHolder.getContext().getAuthentication();
   }
@@ -1888,6 +1928,15 @@ public class ApplicationDetailsRpcController {
 
   private void requirePermitAccess(Long permitNumber, Authentication authentication) {
     provincialAuthorizationService.requirePermit(authentication, permitNumber);
+  }
+
+  private void requireScaleDeleteAccess(
+      ApplicationDetailsRpcService service,
+      String scaleId,
+      Long applicationNumber,
+      Authentication authentication) {
+    provincialAuthorizationService.requireApplicationScaleDeleteAccess(
+        authentication, applicationNumber, service.findPermitNumberForScale(scaleId).orElse(null));
   }
 
   private void requireClientAccess(

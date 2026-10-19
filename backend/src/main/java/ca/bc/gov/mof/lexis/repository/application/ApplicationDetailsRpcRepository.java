@@ -9,6 +9,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.io.UncheckedIOException;
+import java.nio.charset.StandardCharsets;
 import java.sql.CallableStatement;
 import java.sql.Date;
 import java.sql.ResultSet;
@@ -20,6 +21,7 @@ import java.time.LocalDate;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
+import java.util.regex.Pattern;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.context.annotation.Profile;
 import org.springframework.dao.DataAccessException;
@@ -36,6 +38,11 @@ import org.springframework.transaction.interceptor.TransactionAspectSupport;
 @Repository
 @Profile("oracle")
 public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
+
+  /** Size of the stored remark column in bytes. */
+  private static final int REMARK_MAX_BYTES = 254;
+
+  private static final Pattern STORED_REMARK_ENTITY = Pattern.compile("&(amp|lt|gt);");
 
   private static final String FIND_APPLICATION_FILE_DETAILS =
       LEXIS_GROUP_5_PACKAGE + "FIND_APPL_FILE_DETAILS(?,?)";
@@ -594,13 +601,17 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
     Timestamp timestamp = Timestamp.from(remarkDate == null ? Instant.now() : remarkDate);
     String remark = normalizeRemarkBody(remarkBody);
+    String storedRemark = encodeRemarkText(remark);
+    if (!fitsRemarkColumn(storedRemark)) {
+      return Optional.empty();
+    }
 
     Optional<RemarkRow> inserted =
         queryCursorSingleRequired(
             INSERT_REMARK,
             cs -> {
               cs.setTimestamp(1, timestamp);
-              cs.setString(2, remark);
+              cs.setString(2, storedRemark);
               cs.setString(3, auditUserOrDefault(entryUserId));
               cs.setTimestamp(4, Timestamp.from(Instant.now()));
               cs.setLong(5, applicationNumber);
@@ -643,14 +654,17 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
     }
 
     Timestamp timestamp = Timestamp.from(remarkDate == null ? Instant.now() : remarkDate);
-    String remark = normalizeRemarkBody(remarkBody);
+    String storedRemark = encodeRemarkText(normalizeRemarkBody(remarkBody));
+    if (!fitsRemarkColumn(storedRemark)) {
+      return false;
+    }
 
     executeProcedureRequired(
         UPDATE_REMARK,
         cs -> {
           cs.setLong(1, remarkId);
           cs.setTimestamp(2, timestamp);
-          cs.setString(3, remark);
+          cs.setString(3, storedRemark);
           cs.setString(4, auditUserOrDefault(updateUserId));
           cs.setTimestamp(5, Timestamp.from(Instant.now()));
           cs.setLong(6, applicationNumber);
@@ -1356,9 +1370,7 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
   private RemarkRow mapRemarkRow(ResultSet rs) {
     Long remarkId = getLong(rs, "EXPORT_EXMPTN_APPL_REMARK_NMBR");
-    // Legacy writers used both escaped and raw text; modern also stored raw text without a marker.
-    // Preserve the stored value: guessing its encoding would alter literal entities on edit.
-    String remark = getString(rs, "REMARK");
+    String remark = decodeRemarkText(getString(rs, "REMARK"));
     String user = getString(rs, "ENTRY_USERID");
     Instant date = getInstant(rs, "ENTRY_TIMESTAMP");
     return new RemarkRow(
@@ -1494,6 +1506,39 @@ public class ApplicationDetailsRpcRepository extends OracleRepositorySupport {
 
   private String normalizeRemarkBody(String remarkBody) {
     return remarkBody == null ? "" : remarkBody;
+  }
+
+  /**
+   * Escapes the characters the Remarks tab stores as entities: {@code &} as {@code &amp;}, {@code <}
+   * as {@code &lt;} and {@code >} as {@code &gt;}.
+   */
+  public static String encodeRemarkText(String plainText) {
+    return plainText == null
+        ? null
+        : plainText.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;");
+  }
+
+  /**
+   * Decodes one layer of the entities the Remarks tab stores, so a remark entered as a literal
+   * {@code &amp;} reads back the way it was typed. The result is plain text, never markup.
+   */
+  public static String decodeRemarkText(String storedText) {
+    if (storedText == null) {
+      return null;
+    }
+    return STORED_REMARK_ENTITY
+        .matcher(storedText)
+        .replaceAll(
+            match ->
+                switch (match.group(1)) {
+                  case "amp" -> "&";
+                  case "lt" -> "<";
+                  default -> ">";
+                });
+  }
+
+  private static boolean fitsRemarkColumn(String storedRemark) {
+    return storedRemark.getBytes(StandardCharsets.UTF_8).length <= REMARK_MAX_BYTES;
   }
 
   private String safeFileName(String value) {

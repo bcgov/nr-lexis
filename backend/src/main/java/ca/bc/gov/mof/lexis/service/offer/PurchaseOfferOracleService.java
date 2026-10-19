@@ -54,6 +54,13 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
   private static final String MANUFACTURING_FACILITY_DEFAULT = " ";
   private static final String SAVE_SUCCESS_MESSAGE = "The purchase offer was saved successfully.";
   private static final String UPDATE_SUCCESS_MESSAGE = "The purchase offer was updated successfully.";
+  private static final String EMAIL_QUEUED_NOTICE =
+      "An email notification is queued for the applicant and the regional office.";
+  private static final String NO_CLIENT_EMAIL_WARNING =
+      "As no valid email address is attached to this client, no email notification will be sent"
+          + " and the Region will not be notified, consequently you must notify both the"
+          + " Applicant and the corresponding Regional office of your offer and/or offer"
+          + " withdrawal at this time.";
   private static final int COMPANY_NAME_MAX_BYTES = 52;
   private static final int CONTACT_NAME_MAX_BYTES = 120;
   private static final int OFFER_REMARK_MAX_BYTES = 254;
@@ -188,7 +195,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
             normalized.applicationNumber(), offerNumber, normalized.packageNumber(), OfferEmailType.NEW);
     return new CreateOfferResult(
         true,
-        SAVE_SUCCESS_MESSAGE,
+        withEmailNotice(SAVE_SUCCESS_MESSAGE, email),
         normalized.applicationNumber(),
         offerNumber,
         email.hasRecipient(),
@@ -325,7 +332,7 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
             : EmailResult.notRequired();
     return new CreateOfferResult(
         true,
-        UPDATE_SUCCESS_MESSAGE,
+        withEmailNotice(UPDATE_SUCCESS_MESSAGE, email),
         updated.applicationNumber(),
         offerNumber,
         email.hasRecipient(),
@@ -334,6 +341,10 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
         true,
         List.of(),
         withEmailWarning(warnings, email));
+  }
+
+  private static String withEmailNotice(String message, EmailResult email) {
+    return email.queuedWithoutWarning() ? message + " " + EMAIL_QUEUED_NOTICE : message;
   }
 
   private List<String> withEmailWarning(List<String> warnings, EmailResult email) {
@@ -350,10 +361,9 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     try {
       PurchaseOfferRepository.ApplicationRecipientRow context =
           repository.findApplicationRecipient(applicationNumber).orElse(null);
-      String recipient = resolveApplicationRecipient(applicationNumber, context).orElse(null);
+      String recipient = resolveApplicationRecipient(applicationNumber, context, type).orElse(null);
       if (recipient == null) {
-        return new EmailResult(
-            true, false, null, "Offer saved, but no client email address was found.");
+        return new EmailResult(true, false, null, NO_CLIENT_EMAIL_WARNING);
       }
       Long orgUnitNumber = context.orgUnitNumber();
       // The Skeena scale-grade rule applies only when the application has scales; otherwise the
@@ -401,13 +411,27 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
     }
   }
 
+  /**
+   * A new offer is emailed only to owner and agent applicants. An update or withdrawal goes to the
+   * agent for an agent applicant and to the owner for every other applicant type.
+   */
   private Optional<String> resolveApplicationRecipient(
-      Long applicationNumber, PurchaseOfferRepository.ApplicationRecipientRow row) {
+      Long applicationNumber,
+      PurchaseOfferRepository.ApplicationRecipientRow row,
+      OfferEmailType type) {
     if (row == null) {
       return Optional.empty();
     }
-    return notificationRecipientResolver.resolve(
-        applicationNumber,
+    if (type == OfferEmailType.NEW) {
+      return notificationRecipientResolver.resolveOwnerOrAgent(
+          applicationNumber,
+          row.applicantTypeCode(),
+          row.ownerClientNumber(),
+          row.ownerClientLocationCode(),
+          row.agentClientNumber(),
+          row.agentClientLocationCode());
+    }
+    return notificationRecipientResolver.resolveAgentOrOwner(
         row.applicantTypeCode(),
         row.ownerClientNumber(),
         row.ownerClientLocationCode(),
@@ -425,6 +449,10 @@ public class PurchaseOfferOracleService implements PurchaseOfferService {
       boolean required, boolean hasRecipient, String recipient, String warning) {
     private static EmailResult notRequired() {
       return new EmailResult(false, false, null, null);
+    }
+
+    private boolean queuedWithoutWarning() {
+      return required && hasRecipient && warning == null;
     }
   }
 

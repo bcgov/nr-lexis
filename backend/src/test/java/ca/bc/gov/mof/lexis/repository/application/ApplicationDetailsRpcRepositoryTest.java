@@ -366,10 +366,11 @@ class ApplicationDetailsRpcRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void remarkLookupShouldBindLongAndPreserveTheFirstMappedRow() throws Exception {
+  void remarkLookupShouldBindLongAndDecodeTheFirstMappedRow() throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    String expectedText = "first line &amp; literal\n" + "&lt;raw&gt; &#39;\n".repeat(80) + "last line";
-    String storedLiteral = "  " + expectedText + "  ";
+    String storedText = "first line &amp; literal\n" + "&lt;raw&gt; &#39;\n".repeat(80) + "last line";
+    String expectedText = "first line & literal\n" + "<raw> &#39;\n".repeat(80) + "last line";
+    String storedLiteral = "  " + storedText + "  ";
     ResultSet first = remarkRow(44L, 1000456L, storedLiteral, " idir\\jsmith ", Instant.EPOCH);
     ResultSet second = remarkRow(45L, 1000456L, "later", "idir\\other", Instant.now());
     when(jdbcTemplate.query(
@@ -540,11 +541,12 @@ class ApplicationDetailsRpcRepositoryTest {
 
   @Test
   @SuppressWarnings("unchecked")
-  void remarksByApplicationShouldBindStringAndPreserveEncounterOrderDuplicatesAndLiteralText()
+  void remarksByApplicationShouldBindStringAndPreserveEncounterOrderDuplicatesAndDecodeEntities()
       throws Exception {
     JdbcTemplate jdbcTemplate = mock(JdbcTemplate.class);
-    String literal = "first &amp; line\n" + "&lt;raw&gt; &#39;\n".repeat(80) + "last line";
-    ResultSet first = remarkRow(44L, 1000456L, "  " + literal + "  ", " idir\\jsmith ", Instant.EPOCH);
+    String stored = "first &amp; line\n" + "&lt;raw&gt; &#39;\n".repeat(80) + "last line";
+    String literal = "first & line\n" + "<raw> &#39;\n".repeat(80) + "last line";
+    ResultSet first = remarkRow(44L, 1000456L, "  " + stored + "  ", " idir\\jsmith ", Instant.EPOCH);
     ResultSet duplicate = remarkRow(44L, 1000456L, null, null, null);
     Instant laterTimestamp = Instant.parse("2026-09-21T12:00:00Z");
     ResultSet later = remarkRow(45L, 9999L, "later", " idir\\other ", laterTimestamp);
@@ -656,48 +658,99 @@ class ApplicationDetailsRpcRepositoryTest {
     "<b>A & B</b>",
     "Plain modern note"
   })
-  void newRemarksShouldPreserveEnteredTextThroughOracleStorage(String text) {
+  void newRemarksShouldBeStoredEscapedAndReadBackAsEntered(String text) {
     RemarkRoundTripRepository repository = new RemarkRoundTripRepository();
 
     assertThat(repository.insertRemark(1000456L, text, "idir\\jsmith", Instant.EPOCH))
         .get().extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).isEqualTo(text);
-    assertThat(repository.storedRemark).isEqualTo(text);
+    assertThat(repository.storedRemark)
+        .isEqualTo(ApplicationDetailsRpcRepository.encodeRemarkText(text));
     assertThat(repository.findRemarksByApplicationNumber(1000456L))
         .extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).containsExactly(text);
 
     assertThat(repository.updateRemark(44L, 1000456L, text + " updated", "idir\\jsmith", Instant.EPOCH))
         .isTrue();
-    assertThat(repository.storedRemark).isEqualTo(text + " updated");
+    assertThat(repository.storedRemark)
+        .isEqualTo(ApplicationDetailsRpcRepository.encodeRemarkText(text + " updated"));
     assertThat(repository.findRemarkRequired(44L, 1000456L))
         .get().extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).isEqualTo(text + " updated");
   }
 
-  @ParameterizedTest
-  @ValueSource(strings = {
-    "Use &amp; in the document",
-    "Literal &lt; &gt; &amp;amp; &copy; &#39;",
-    "A &amp; B; raw <b>text</b> & more"
-  })
-  void existingRemarksShouldSurviveReadsAndRepeatedEditsWithoutEntityConversion(String storedText) {
+  @Test
+  void remarkTextShouldBeStoredWithAmpersandAndAngleBracketsEscaped() {
     RemarkRoundTripRepository repository = new RemarkRoundTripRepository();
-    // Seed a pre-existing row; a new insert alone cannot exercise mixed historical storage.
+
+    repository.insertRemark(1000456L, "Owner & agent <ok>", "idir\\jsmith", Instant.EPOCH);
+
+    assertThat(repository.storedRemark).isEqualTo("Owner &amp; agent &lt;ok&gt;");
+  }
+
+  @ParameterizedTest
+  @CsvSource(
+      delimiter = '|',
+      value = {
+        "Owner &amp; agent|Owner & agent",
+        "Volume &lt; 10 and &gt; 2|Volume < 10 and > 2",
+        "Literal &amp;amp; and &amp;lt;|Literal &amp; and &lt;",
+        "&lt;b&gt;bold&lt;/b&gt;|<b>bold</b>",
+        "Raw & text|Raw & text",
+        "Copy &copy; and &#39;|Copy &copy; and &#39;",
+        "Plain note|Plain note"
+      })
+  void existingRemarksShouldBeDecodedOneLayerOnReadAndKeepTheirStoredFormOnResave(
+      String storedText, String displayedText) {
+    RemarkRoundTripRepository repository = new RemarkRoundTripRepository();
     repository.storedRemark = storedText;
 
     assertThat(repository.findRemarksByApplicationNumber(1000456L))
-        .extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).containsExactly(storedText);
-    for (int save = 0; save < 3; save++) {
-      String displayedText = repository.findRemarkRequired(44L, 1000456L).orElseThrow().remark();
-      assertThat(displayedText).isEqualTo(storedText);
-      assertThat(repository.updateRemark(44L, 1000456L, displayedText, "idir\\jsmith", Instant.EPOCH))
-          .isTrue();
-      assertThat(repository.storedRemark).isEqualTo(storedText);
-    }
-
-    assertThat(repository.updateRemark(44L, 1000456L, storedText + " updated", "idir\\jsmith", Instant.EPOCH))
-        .isTrue();
+        .extracting(ApplicationDetailsRpcRepository.RemarkRow::remark).containsExactly(displayedText);
     assertThat(repository.findRemarkRequired(44L, 1000456L).orElseThrow().remark())
-        .isEqualTo(storedText + " updated");
-    assertThat(repository.storedRemark).isEqualTo(storedText + " updated");
+        .isEqualTo(displayedText);
+
+    assertThat(repository.updateRemark(44L, 1000456L, displayedText, "idir\\jsmith", Instant.EPOCH))
+        .isTrue();
+    assertThat(repository.storedRemark)
+        .isEqualTo(ApplicationDetailsRpcRepository.encodeRemarkText(displayedText));
+    assertThat(repository.findRemarkRequired(44L, 1000456L).orElseThrow().remark())
+        .isEqualTo(displayedText);
+  }
+
+  @ParameterizedTest
+  @ValueSource(strings = {
+    "A & B",
+    "<>&",
+    "&amp; &lt; &gt;",
+    "&amp;amp;",
+    "plain",
+    ""
+  })
+  void remarkEncodingShouldRoundTripEnteredText(String text) {
+    String stored = ApplicationDetailsRpcRepository.encodeRemarkText(text);
+
+    assertThat(ApplicationDetailsRpcRepository.decodeRemarkText(stored)).isEqualTo(text);
+  }
+
+  @Test
+  void remarkEncodingShouldPassNullThrough() {
+    assertThat(ApplicationDetailsRpcRepository.encodeRemarkText(null)).isNull();
+    assertThat(ApplicationDetailsRpcRepository.decodeRemarkText(null)).isNull();
+  }
+
+  @Test
+  void remarksShouldFitTheStoredColumnAfterEscaping() {
+    RemarkRoundTripRepository repository = new RemarkRoundTripRepository();
+    String fits = "&".repeat(50) + "<";
+    String tooLong = "&".repeat(50) + "<<";
+
+    assertThat(repository.insertRemark(1000456L, fits, "idir\\jsmith", Instant.EPOCH)).isPresent();
+    assertThat(repository.storedRemark).hasSize(254);
+    assertThat(repository.updateRemark(44L, 1000456L, fits, "idir\\jsmith", Instant.EPOCH)).isTrue();
+
+    repository.storedRemark = null;
+    assertThat(repository.insertRemark(1000456L, tooLong, "idir\\jsmith", Instant.EPOCH)).isEmpty();
+    assertThat(repository.updateRemark(44L, 1000456L, tooLong, "idir\\jsmith", Instant.EPOCH))
+        .isFalse();
+    assertThat(repository.storedRemark).isNull();
   }
 
   @Test

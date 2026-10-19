@@ -52,6 +52,7 @@ import java.util.Optional;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import java.util.stream.Collectors;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipException;
 import java.util.zip.ZipInputStream;
@@ -157,9 +158,6 @@ public class ApplicationSubmissionImportService {
 
   private static final Map<String, Long> ORG_UNIT_BY_REGION_CODE =
       Map.ofEntries(
-          Map.entry("RNI", 1833L),
-          Map.entry("RSI", 1834L),
-          Map.entry("RCO", 1835L),
           Map.entry("RCB", 1903L),
           Map.entry("RKB", 1904L),
           Map.entry("RNO", 1905L),
@@ -168,6 +166,8 @@ public class ApplicationSubmissionImportService {
           Map.entry("RSK", 1908L),
           Map.entry("RSC", 1909L),
           Map.entry("RWC", 1910L));
+  private static final String VALID_REGION_CODES =
+      ORG_UNIT_BY_REGION_CODE.keySet().stream().sorted().collect(Collectors.joining(", "));
 
   private final ObjectProvider<ApplicationDetailsRpcService> applicationDetailsServiceProvider;
   private final ObjectProvider<LexisReportScheduleRepository> scheduleRepositoryProvider;
@@ -680,25 +680,23 @@ public class ApplicationSubmissionImportService {
             submission,
             importDate,
             scheduleResolution.exportScheduleId());
-    if (federalOnly) {
-      SubmissionImportValidationResult importValidation =
-          applicationDetailsService.validateApplicationSubmissionImport(
-              createRequest,
-              toPackageMutationRequest(submission, null),
-              toScaleMutationRequests(submission, null));
-      if (importValidation != null) {
-        warnings = mergeWarnings(warnings, importValidation.warnings());
-        if (!importValidation.valid()) {
-          return rejected(
-              fileName,
-              fileSize,
-              resultErrors(
-                  importValidation.errors(),
-                  "The LEXIS application submission could not be validated."),
-              warnings,
-              submissionSummary,
-              normalizedUserReference);
-        }
+    SubmissionImportValidationResult importValidation =
+        applicationDetailsService.validateApplicationSubmissionImport(
+            createRequest,
+            toPackageMutationRequest(submission, null),
+            toScaleMutationRequests(submission, null));
+    if (importValidation != null) {
+      warnings = mergeWarnings(warnings, importValidation.warnings());
+      if (!importValidation.valid()) {
+        return rejected(
+            fileName,
+            fileSize,
+            resultErrors(
+                importValidation.errors(),
+                "The LEXIS application submission could not be validated."),
+            warnings,
+            submissionSummary,
+            normalizedUserReference);
       }
     }
     CreateApplicationResult applicationResult =
@@ -736,9 +734,11 @@ public class ApplicationSubmissionImportService {
     }
 
     int importedScales = 0;
-    for (ScaleMutationRequest scaleRequest : toScaleMutationRequests(submission, applicationNumber)) {
+    List<ScaleMutationRequest> scaleRequests = toScaleMutationRequests(submission, applicationNumber);
+    for (int index = 0; index < scaleRequests.size(); index++) {
+      // Only the first scale row has to belong to the application's region.
       ScalePersistenceResult scaleResult =
-          applicationDetailsService.addScaleToPackage(scaleRequest, userId);
+          applicationDetailsService.addScaleToPackage(scaleRequests.get(index), userId, index == 0);
       if (!scaleResult.valid()) {
         markRollbackOnly();
         return rejected(
@@ -1089,10 +1089,12 @@ public class ApplicationSubmissionImportService {
       throw new ApplicationSubmissionImportException(List.of(formatXmlParseError(ex)));
     }
 
-    return parseDocument(document);
+    return parseDocument(document, true);
   }
 
-  private ParsedSubmission parseDocument(Document document) throws ApplicationSubmissionImportException {
+  // GeoJSON has no telephone fields, so contact telephone numbers are required for XML only.
+  private ParsedSubmission parseDocument(Document document, boolean requireContactTelephone)
+      throws ApplicationSubmissionImportException {
     Element root = document.getDocumentElement();
     List<String> errors = new ArrayList<>();
     Element lexisSubmission = resolveLexisSubmissionPayload(root, errors);
@@ -1121,10 +1123,11 @@ public class ApplicationSubmissionImportService {
     Element applicantContact =
         applicant == null
             ? null
-            : optionalChild(
+            : requiredChild(
                 applicant,
                 LEXIS_NAMESPACE,
                 "applicantContact",
+                "Applicant contact is required.",
                 "Applicant contact must appear only once.",
                 errors);
     Element applicationDetail =
@@ -1188,13 +1191,21 @@ public class ApplicationSubmissionImportService {
             federalStandingWithoutPackage,
             errors);
     ParsedParties parties =
-        parseSubmissionParties(lexisSubmission, applicantDetails, applicantContact, errors);
+        parseSubmissionParties(
+            lexisSubmission, applicantDetails, applicantContact, requireContactTelephone, errors);
     validateApplicantDeclarations(applicant, jurisdictionCode, errors);
-    validateFederalApplicant(applicantDetails, applicantContact, jurisdictionCode, errors);
+    validateFederalApplicant(applicantDetails, jurisdictionCode, errors);
     validateFederalOwner(lexisSubmission, jurisdictionCode, errors);
 
-    if (orgUnitNumber == null) {
-      errors.add("Forest region code " + nullToValue(regionCode) + " is not mapped to a LEXIS region.");
+    if (regionCode == null) {
+      errors.add("Forest region code is required.");
+    } else if (orgUnitNumber == null) {
+      errors.add(
+          "Forest region code "
+              + regionCode
+              + " is not a valid BC forest region code ("
+              + VALID_REGION_CODES
+              + ").");
     }
     if (jurisdictionCode == null) {
       errors.add("Jurisdiction code is required.");
@@ -1343,10 +1354,7 @@ public class ApplicationSubmissionImportService {
   }
 
   private void validateFederalApplicant(
-      Element applicantDetails,
-      Element applicantContact,
-      String jurisdictionCode,
-      List<String> errors) {
+      Element applicantDetails, String jurisdictionCode, List<String> errors) {
     if (!FEDERAL_JURISDICTION.equals(jurisdictionCode)) {
       return;
     }
@@ -1359,11 +1367,6 @@ public class ApplicationSubmissionImportService {
     requireFederalText(applicantDetails, "postalZipCode", "applicant postal/zip code", errors);
     requireFederalText(applicantDetails, "country", "applicant country", errors);
     requireFederalText(applicantDetails, "telephoneNumber", "applicant telephone number", errors);
-    requireFederalText(applicantContact, "contactSurname", "applicant contact surname", errors);
-    requireFederalText(
-        applicantContact, "contactFirstname", "applicant contact first name", errors);
-    requireFederalText(
-        applicantContact, "contactTelephoneNumber", "applicant contact telephone number", errors);
   }
 
   private void requireFederalText(
@@ -1380,8 +1383,7 @@ public class ApplicationSubmissionImportService {
     }
     Element owner = firstElement(children(lexisSubmission, "owner"));
     Element ownerDetails = firstElement(children(owner, "ownerDetails"));
-    Element ownerContact = firstElement(children(owner, "ownerContact"));
-    if (ownerDetails == null || ownerContact == null) {
+    if (ownerDetails == null) {
       return;
     }
 
@@ -1392,10 +1394,6 @@ public class ApplicationSubmissionImportService {
     requireFederalText(ownerDetails, "postalZipCode", "owner postal/zip code", errors);
     requireFederalText(ownerDetails, "country", "owner country", errors);
     requireFederalText(ownerDetails, "telephoneNumber", "owner telephone number", errors);
-    requireFederalText(ownerContact, "contactSurname", "owner contact surname", errors);
-    requireFederalText(ownerContact, "contactFirstname", "owner contact first name", errors);
-    requireFederalText(
-        ownerContact, "contactTelephoneNumber", "owner contact telephone number", errors);
   }
 
   private Element firstElement(List<Element> elements) {
@@ -1522,7 +1520,7 @@ public class ApplicationSubmissionImportService {
       if (!errors.isEmpty()) {
         throw new ApplicationSubmissionImportException(errors);
       }
-      return parseDocument(document);
+      return parseDocument(document, false);
     } catch (ApplicationSubmissionImportException ex) {
       throw ex;
     } catch (Exception ex) {
@@ -2252,8 +2250,10 @@ public class ApplicationSubmissionImportService {
       Element lexisSubmission,
       Element applicantDetails,
       Element applicantContact,
+      boolean requireContactTelephone,
       List<String> errors) {
-    ParsedParty applicantParty = parseParty(applicantDetails, applicantContact, "Applicant", errors);
+    ParsedParty applicantParty =
+        parseParty(applicantDetails, applicantContact, "Applicant", requireContactTelephone, errors);
     Element owner =
         optionalChild(
             lexisSubmission,
@@ -2262,7 +2262,7 @@ public class ApplicationSubmissionImportService {
             "Owner section must appear only once.",
             errors);
     if (owner != null) {
-      ParsedParty ownerParty = parseOwnerParty(owner, errors);
+      ParsedParty ownerParty = parseOwnerParty(owner, requireContactTelephone, errors);
       return new ParsedParties(
           applicantParty.clientNumber(),
           applicantParty.clientLocationCode(),
@@ -2282,7 +2282,8 @@ public class ApplicationSubmissionImportService {
         APPLICANT_TYPE_OWNER);
   }
 
-  private ParsedParty parseOwnerParty(Element owner, List<String> errors) {
+  private ParsedParty parseOwnerParty(
+      Element owner, boolean requireContactTelephone, List<String> errors) {
     Element ownerDetails =
         requiredChild(
             owner,
@@ -2292,31 +2293,32 @@ public class ApplicationSubmissionImportService {
             "Owner details must appear only once.",
             errors);
     Element ownerContact =
-        optionalChild(
+        requiredChild(
             owner,
             LEXIS_NAMESPACE,
             "ownerContact",
+            "Owner contact is required when owner section is present.",
             "Owner contact must appear only once.",
             errors);
-    return parseParty(ownerDetails, ownerContact, "Owner", errors);
+    return parseParty(ownerDetails, ownerContact, "Owner", requireContactTelephone, errors);
   }
 
   private ParsedParty parseParty(
-      Element partyDetails, Element partyContact, String label, List<String> errors) {
+      Element partyDetails,
+      Element partyContact,
+      String label,
+      boolean requireContactTelephone,
+      List<String> errors) {
     String clientNumber =
         normalizeClientNumber(text(partyDetails, "clientNumber", label + " client number", errors));
     String clientLocationCode = clientLocationCode(partyDetails, label, errors);
-    String partyName = text(partyDetails, "name", label + " name", errors);
-    String contactName = contactName(partyContact, partyName, label, errors);
+    String contactName = contactName(partyContact, label, requireContactTelephone, errors);
 
     if (clientNumber == null) {
       errors.add(label + " client number is required.");
     }
     if (clientLocationCode == null) {
       errors.add(label + " client location is required.");
-    }
-    if (contactName == null) {
-      errors.add(label + " contact or name is required.");
     }
     return new ParsedParty(clientNumber, clientLocationCode, contactName);
   }
@@ -2371,40 +2373,69 @@ public class ApplicationSubmissionImportService {
           productDetail,
           harvestedWithoutSummaryRows,
           "Harvested timber without summary",
-          !federal,
           !FederalSubmissionPackagePolicy.allowsWithoutPackage(
               jurisdictionCode, productTypeCode, orgUnitNumber, false),
           federal
               ? "Boom/package number must not be provided for federal harvested timber without summary of scale."
-              : null,
+              : "Boom/package number must not be provided for harvested timber without summary of scale.",
           errors);
     }
     boolean federalStanding =
         FEDERAL_JURISDICTION.equals(jurisdictionCode)
             && PRODUCT_TYPE_STANDING.equals(productTypeCode);
-    return parseDeclaredVolumeProduct(
-        productDetail,
-        standingTimberRows,
-        "Standing timber",
-        !federalStanding,
-        !federalStanding,
-        federalStanding
-            ? "Boom/package number must not be provided for federal standing timber."
-            : null,
-        errors);
+    ParsedProduct standingProduct =
+        parseDeclaredVolumeProduct(
+            productDetail,
+            standingTimberRows,
+            "Standing timber",
+            !federalStanding,
+            federalStanding
+                ? "Boom/package number must not be provided for federal standing timber."
+                : null,
+            errors);
+    if (!federalStanding && standingProduct.packageNumber() != null) {
+      // A package built from standing timber rows would hold scale rows that carry only a timber
+      // mark, with no species or grade.
+      errors.add("Scale species is required.");
+      errors.add("Scale grade is required.");
+    }
+    return standingProduct;
   }
 
+  // The application and package volumes are the scale total, so declared volumes can't also be
+  // given. The total must not need more than one decimal place and the scales must carry pieces.
   private ParsedProduct parseHarvestedSummaryProduct(
       Element productDetail, List<String> errors) {
     String packageNumber = packageNumber(productDetail, errors);
     validatePackageNumber(packageNumber, "Boom/package number", errors);
+    if (text(productDetail, "exemptApplnVol", "Exemption application volume", errors) != null) {
+      errors.add("Exemption application volume must not be provided with a summary of scale.");
+    }
+    if (text(productDetail, "averageLogVolume", "Average log volume", errors) != null) {
+      errors.add("Average log volume must not be provided with a summary of scale.");
+    }
     List<ScaleLine> scaleLines = parseScaleLines(productDetail, errors);
     if (scaleLines.isEmpty() && errors.isEmpty()) {
       errors.add("At least one harvested timber scale row is required.");
     }
 
-    double totalVolume = roundOneDecimal(scaleLines.stream().mapToDouble(ScaleLine::volume).sum());
+    BigDecimal scaleTotal = BigDecimal.ZERO;
+    for (ScaleLine scaleLine : scaleLines) {
+      scaleTotal = scaleTotal.add(BigDecimal.valueOf(scaleLine.volume()));
+    }
+    // Sums of decimal fractions carry binary noise, so the total is compared at two decimals.
+    BigDecimal reportedTotal = scaleTotal.setScale(2, RoundingMode.HALF_EVEN);
+    if (reportedTotal.compareTo(reportedTotal.setScale(1, RoundingMode.HALF_UP)) != 0) {
+      errors.add(
+          "The total scale volume ("
+              + reportedTotal.toPlainString()
+              + ") must have no more than one decimal place.");
+    }
+    double totalVolume = reportedTotal.setScale(1, RoundingMode.HALF_UP).doubleValue();
     long totalPieces = scaleLines.stream().mapToLong(ScaleLine::pieces).sum();
+    if (totalVolume > 0.0d && totalPieces <= 0L) {
+      errors.add("The total number of scale pieces must be greater than 0 when the scales have a volume.");
+    }
     double averageLogVolume =
         totalPieces <= 0L ? 0.0d : roundOneDecimal(totalVolume / (double) totalPieces);
     return new ParsedProduct(packageNumber, totalVolume, averageLogVolume, scaleLines);
@@ -2414,15 +2445,11 @@ public class ApplicationSubmissionImportService {
       Element productDetail,
       List<Element> timberRows,
       String label,
-      boolean derivePackageFromTimberMark,
       boolean requirePackage,
       String providedPackageError,
       List<String> errors) {
     String packageNumber = packageNumber(productDetail, errors);
-    List<String> timberMarks = parseTimberMarks(timberRows, label, errors);
-    if (derivePackageFromTimberMark && packageNumber == null && !timberMarks.isEmpty()) {
-      packageNumber = timberMarks.get(0);
-    }
+    requireTimberMarks(timberRows, label, errors);
     if (providedPackageError != null && packageNumber != null) {
       errors.add(providedPackageError);
     }
@@ -2439,25 +2466,15 @@ public class ApplicationSubmissionImportService {
             text(productDetail, "averageLogVolume", "Average log volume", errors),
             "average log volume",
             errors);
-    return new ParsedProduct(
-        packageNumber,
-        applicationVolume == null ? null : roundOneDecimal(applicationVolume),
-        averageLogVolume == null ? null : roundOneDecimal(averageLogVolume),
-        List.of());
+    return new ParsedProduct(packageNumber, applicationVolume, averageLogVolume, List.of());
   }
 
-  private List<String> parseTimberMarks(
-      List<Element> timberRows, String label, List<String> errors) {
-    List<String> timberMarks = new ArrayList<>();
+  private void requireTimberMarks(List<Element> timberRows, String label, List<String> errors) {
     for (Element timberRow : timberRows) {
-      String timberMark = upper(text(timberRow, "timberMark", label + " timber mark", errors));
-      if (timberMark == null) {
+      if (upper(text(timberRow, "timberMark", label + " timber mark", errors)) == null) {
         errors.add(label + " timber mark is required.");
-      } else {
-        timberMarks.add(timberMark);
       }
     }
-    return timberMarks;
   }
 
   private void validatePackageNumber(String packageNumber, String label, List<String> errors) {
@@ -2494,7 +2511,7 @@ public class ApplicationSubmissionImportService {
         errors.add("Scale grade is required.");
       }
       if (timberMark != null && pieces != null && species != null && grade != null && volume != null) {
-        rows.add(new ScaleLine(timberMark, pieces, species, grade, roundOneDecimal(volume)));
+        rows.add(new ScaleLine(timberMark, pieces, species, grade, volume));
       }
     }
     rejectDuplicateScaleCombinations(rows, errors);
@@ -2715,32 +2732,32 @@ public class ApplicationSubmissionImportService {
   }
 
   private Long resolveOrgUnitNumber(String regionCode) {
-    if (regionCode == null) {
+    return regionCode == null
+        ? null
+        : ORG_UNIT_BY_REGION_CODE.get(regionCode.toUpperCase(Locale.ROOT));
+  }
+
+  // Every submission names a contact person: surname and first name always, and a telephone number
+  // for XML. A missing contact section is reported where the section is read.
+  private String contactName(
+      Element contact, String label, boolean requireTelephone, List<String> errors) {
+    if (contact == null) {
       return null;
     }
-    try {
-      long parsed = Long.parseLong(regionCode);
-      return parsed > 0 ? parsed : null;
-    } catch (NumberFormatException ignored) {
-      return ORG_UNIT_BY_REGION_CODE.get(regionCode.toUpperCase(Locale.ROOT));
-    }
-  }
-
-  private String contactName(Element contact, String fallbackName, String label, List<String> errors) {
     String firstName = text(contact, "contactFirstname", label + " contact first name", errors);
     String surname = text(contact, "contactSurname", label + " contact surname", errors);
-    String fullName = join(firstName, surname);
-    return fullName == null ? fallbackName : fullName;
-  }
-
-  private String join(String left, String right) {
-    if (left == null) {
-      return right;
+    String telephone =
+        text(contact, "contactTelephoneNumber", label + " contact telephone number", errors);
+    if (surname == null) {
+      errors.add(label + " contact surname is required.");
     }
-    if (right == null) {
-      return left;
+    if (firstName == null) {
+      errors.add(label + " contact first name is required.");
     }
-    return left + " " + right;
+    if (requireTelephone && telephone == null) {
+      errors.add(label + " contact telephone number is required.");
+    }
+    return firstName == null || surname == null ? null : firstName + " " + surname;
   }
 
   private ParsedSpeciesEndUseSort parseSpeciesEndUseSort(
@@ -2839,7 +2856,12 @@ public class ApplicationSubmissionImportService {
       return null;
     }
     try {
-      return Double.parseDouble(value);
+      double parsed = Double.parseDouble(value);
+      if (!Double.isFinite(parsed)) {
+        errors.add("A valid " + label + " is required.");
+        return null;
+      }
+      return parsed;
     } catch (NumberFormatException ex) {
       errors.add("A valid " + label + " is required.");
       return null;
@@ -2861,10 +2883,6 @@ public class ApplicationSubmissionImportService {
   private String upper(String value) {
     String normalized = trimToNull(value);
     return normalized == null ? null : normalized.toUpperCase(Locale.ROOT);
-  }
-
-  private String nullToValue(String value) {
-    return value == null ? "(missing)" : value;
   }
 
   private List<String> resultErrors(List<String> errors, String fallbackMessage) {
