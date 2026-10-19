@@ -309,6 +309,102 @@ describe('useEditSections', () => {
     expect(screen.queryByLabelText('Status')).not.toBeInTheDocument()
   })
 
+  it('focuses the destination tab after Discard when a mouse click did not focus the tab', async () => {
+    const TabbedSection = () => {
+      const [tab, setTab] = useState('permit')
+      const sections = useEditSections<Section>({ isDirty: true, onDiscard: vi.fn() })
+      return (
+        <>
+          <div role="tablist">
+            {['permit', 'fees'].map((id) => (
+              <button
+                key={id}
+                role="tab"
+                id={`${id}-tab`}
+                aria-selected={tab === id}
+                onClick={() => sections.confirmLeave(() => setTab(id))}
+              >
+                {id}
+              </button>
+            ))}
+          </div>
+          <div role="tabpanel" aria-labelledby="permit-tab" hidden={tab !== 'permit'}>
+            <section ref={sections.sectionRef('permit')}>
+              {sections.isEditing('permit') ? (
+                <input aria-label="Status" />
+              ) : (
+                <button
+                  ref={sections.editButtonRef('permit')}
+                  onClick={() => sections.startEditing('permit')}
+                >
+                  Edit permit
+                </button>
+              )}
+            </section>
+          </div>
+          {sections.discardModal}
+        </>
+      )
+    }
+    render(<TabbedSection />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Status' })).toHaveFocus())
+
+    fireEvent.click(screen.getByRole('tab', { name: 'fees' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+
+    await waitFor(() => expect(screen.getByRole('tab', { name: 'fees' })).toHaveFocus())
+    expect(screen.getByRole('tab', { name: 'fees' })).toHaveAttribute('aria-selected', 'true')
+  })
+
+  it('leaves focus where the user moved it after Discard on a tab switch', async () => {
+    const TabbedSection = () => {
+      const [tab, setTab] = useState('permit')
+      const sections = useEditSections<Section>({ isDirty: true, onDiscard: vi.fn() })
+      return (
+        <>
+          <div role="tablist">
+            {['permit', 'fees'].map((id) => (
+              <button
+                key={id}
+                role="tab"
+                id={`${id}-tab`}
+                aria-selected={tab === id}
+                onClick={() => sections.confirmLeave(() => setTab(id))}
+              >
+                {id}
+              </button>
+            ))}
+          </div>
+          <div role="tabpanel" aria-labelledby="permit-tab" hidden={tab !== 'permit'}>
+            <section ref={sections.sectionRef('permit')}>
+              {sections.isEditing('permit') ? (
+                <input aria-label="Status" />
+              ) : (
+                <button onClick={() => sections.startEditing('permit')}>Edit permit</button>
+              )}
+            </section>
+          </div>
+          <button>Elsewhere</button>
+          {sections.discardModal}
+        </>
+      )
+    }
+    render(<TabbedSection />)
+    await userEvent.click(screen.getByRole('button', { name: 'Edit permit' }))
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Status' })).toHaveFocus())
+
+    await userEvent.click(screen.getByRole('tab', { name: 'fees' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+    screen.getByRole('button', { name: 'Elsewhere' }).focus()
+    await act(async () => {
+      await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)))
+    })
+
+    expect(screen.getByRole('tab', { name: 'fees' })).toHaveAttribute('aria-selected', 'true')
+    expect(screen.getByRole('button', { name: 'Elsewhere' })).toHaveFocus()
+  })
+
   it('asks before leaving a changed page draft without an active edit section', async () => {
     const user = userEvent.setup()
     const onLeave = vi.fn()

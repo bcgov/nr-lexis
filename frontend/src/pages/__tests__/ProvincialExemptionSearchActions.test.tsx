@@ -147,6 +147,15 @@ const renderPage = (
 // Approval results list each exemption, and an item's text follows its linked number.
 const resultNotification = (title: string | RegExp) =>
   screen.getByText(title).closest('.app-inline-notification') as HTMLElement
+// A single approval's title links the exemption number, so the title text spans two elements.
+const SINGLE_APPROVAL_TITLE = /^Exemption EX-\d+ approved and now Active\.$/
+const singleApprovalTitle = (): HTMLElement => {
+  const titles = Array.from(
+    document.querySelectorAll<HTMLElement>('.cds--actionable-notification__title'),
+  ).filter((title) => SINGLE_APPROVAL_TITLE.test(title.textContent ?? ''))
+  expect(titles).toHaveLength(1)
+  return titles[0]
+}
 const resultItems = (title: string) =>
   within(resultNotification(title))
     .getAllByRole('listitem')
@@ -593,9 +602,17 @@ describe('Provincial Exemption Search Actions', () => {
         { exemptionNumber: 'EX-1001', ownerEmail: 'updated@example.test', agentEmail: '' },
       ]),
     )
-    expect(
-      await screen.findByText(/^Exemption EX-\d+ approved and now Active\.$/),
-    ).toBeInTheDocument()
+    await waitFor(() => expect(singleApprovalTitle()).toBeInTheDocument())
+    // The linked title doesn't take focus from the results region that announces the outcome.
+    await waitFor(() =>
+      expect(
+        singleApprovalTitle().closest('.exemption-search-results-notifications'),
+      ).toHaveFocus(),
+    )
+    expect(within(singleApprovalTitle()).getByRole('link', { name: 'EX-1001' })).toHaveAttribute(
+      'href',
+      expect.stringMatching(/^\/provincial\/exemption\/EX-1001(\?|$)/),
+    )
     expect(
       screen.getByText('Approval email sent to the owner (updated@example.test).'),
     ).toBeInTheDocument()
@@ -728,6 +745,9 @@ describe('Provincial Exemption Search Actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(announcement).toBeEmptyDOMElement()
+    // The batch bar closes with Cancel, so focus moves to the header checkbox.
+    await waitFor(() => expect(selectAll).toHaveFocus())
+    expect(selectAll).not.toBeChecked()
   })
 
   it('shows only the empty state when a search finds no exemptions', async () => {
@@ -785,7 +805,7 @@ describe('Provincial Exemption Search Actions', () => {
     )
     expect(mockedApproveExemptions).toHaveBeenCalledWith(['EX-1001'], 'exemption-EX-1001-version')
     expect(mockedSendExemptionApprovalNotifications).not.toHaveBeenCalled()
-    expect(screen.getByText(/^Exemption EX-\d+ approved and now Active\.$/)).toBeInTheDocument()
+    expect(singleApprovalTitle()).toBeInTheDocument()
     expect(
       screen.getByText('No approval email was sent. Notify the applicant another way.'),
     ).toBeInTheDocument()
@@ -811,8 +831,8 @@ describe('Provincial Exemption Search Actions', () => {
         'Approval email sent to the owner (client@example.test). Refresh the page to see the latest status.',
       ),
     ).toBeVisible()
-    expect(resultNotification(/^Exemption EX-\d+ approved and now Active\.$/)).toHaveClass(
-      'cds--inline-notification--warning',
+    expect(singleApprovalTitle().closest('.app-inline-notification')).toHaveClass(
+      'cds--actionable-notification--warning',
     )
     expect(mockedApproveExemptions).toHaveBeenCalledTimes(1)
     expect(mockedSendExemptionApprovalNotifications).toHaveBeenCalledTimes(1)
@@ -997,7 +1017,7 @@ describe('Provincial Exemption Search Actions', () => {
         warnings: [],
       })
     })
-    expect(await screen.findByText(/^Exemption EX-\d+ approved and now Active\.$/)).toBeVisible()
+    await waitFor(() => expect(singleApprovalTitle()).toBeVisible())
     expect(router.state.location.pathname).toBe('/provincial/exemption')
   })
 
@@ -1066,7 +1086,7 @@ describe('Provincial Exemption Search Actions', () => {
         outcomes: [{ exemptionNumber: 'EX-1001', queued: true, message: 'Queued.' }],
       })
     })
-    expect(await screen.findByText(/^Exemption EX-\d+ approved and now Active\.$/)).toBeVisible()
+    await waitFor(() => expect(singleApprovalTitle()).toBeVisible())
     expect(router.state.location.pathname).toBe('/provincial/exemption')
     expect(mockedApproveExemptions).toHaveBeenCalledTimes(1)
     await act(async () => {

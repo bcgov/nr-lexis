@@ -14,6 +14,15 @@
 }
 
 @media (max-width: 671px) {
+  // The empty state's action spans the card so the button's label wraps inside it.
+  .provincial-exemption-detail .lexis-empty-state__action {
+    align-self: stretch;
+  }
+
+  .provincial-exemption-detail .exemption-permits-empty--after-totals {
+    padding-inline: 0;
+  }
+
   // A narrow card wraps its action's label instead of cutting the button off.
   .provincial-exemption-detail
     :is(.detail-section-card__header, .lexis-empty-state__action)

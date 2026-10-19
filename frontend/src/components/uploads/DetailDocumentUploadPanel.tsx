@@ -177,6 +177,8 @@ const DetailDocumentUploadPanel = ({
   const [uploadStep, setUploadStep] = useState<DetailDocumentUploadStep>('upload')
   const validationRequestsRef = useRef(new Map<string, ValidationRequest>())
   const nextValidationTokenRef = useRef(0)
+  const fileQueueRef = useRef<HTMLUListElement>(null)
+  const removedFileFocusIndexRef = useRef<number | null>(null)
   const invoiceConversionRateBaseline = initialInvoiceConversionRate || '1.00'
   const invoiceConversionRate = invoiceConversionRateOverride ?? invoiceConversionRateBaseline
 
@@ -525,6 +527,9 @@ const DetailDocumentUploadPanel = ({
   }
 
   const removeQueuedFile = (id: string): void => {
+    if (isDrawerPanel) {
+      removedFileFocusIndexRef.current = uploadQueue.findIndex((item) => item.id === id)
+    }
     invalidateValidation(id)
     setUploadQueue((current) => current.filter((item) => item.id !== id))
     setErrorMessage('')
@@ -532,6 +537,21 @@ const DetailDocumentUploadPanel = ({
     // uploadInvalidText checks the final queue length after batched removals.
     setShowFileValidationError(true)
   }
+
+  // After a removal commits, focus moves to the file that took the removed
+  // file's place (or the last one), and to the drop zone once the list is empty.
+  useEffect(() => {
+    const removedIndex = removedFileFocusIndexRef.current
+    if (removedIndex === null) return
+    removedFileFocusIndexRef.current = null
+    const rows = Array.from(fileQueueRef.current?.querySelectorAll('li') ?? [])
+    const nextRow = rows[Math.min(Math.max(removedIndex, 0), rows.length - 1)]
+    const nextButton =
+      nextRow?.querySelector<HTMLButtonElement>('button:not(:disabled)') ??
+      fileQueueRef.current?.querySelector<HTMLButtonElement>('button:not(:disabled)')
+    const target = nextButton ?? document.getElementById(`${inputId}File-drop-zone`)
+    target?.focus()
+  }, [inputId, uploadQueue])
 
   const updateFileDescription = (id: string, fileDescription: string): void => {
     if (disabled || isSubmitting) return
@@ -934,7 +954,7 @@ const DetailDocumentUploadPanel = ({
       )}
 
       {isDrawerPanel && uploadQueue.length > 0 && (
-        <ul className="detail-document-upload-queue" aria-label="Selected files">
+        <ul ref={fileQueueRef} className="detail-document-upload-queue" aria-label="Selected files">
           {uploadQueue.map((item) => {
             const description = item.fileDescription ?? ''
             const descriptionError = validateDocumentUploadDescription(description)

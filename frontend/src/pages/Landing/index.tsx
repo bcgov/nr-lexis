@@ -198,7 +198,9 @@ const LandingPage = ({ loginDestination }: { loginDestination?: string }) => {
                 <li key={region}>
                   {region}:{' '}
                   <Link inline size="lg" href={`mailto:${email}`}>
-                    {email}
+                    {email.slice(0, email.indexOf('@'))}
+                    <wbr />
+                    {email.slice(email.indexOf('@'))}
                   </Link>
                 </li>
               ))}

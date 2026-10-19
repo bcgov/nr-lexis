@@ -395,6 +395,29 @@ export const submitProvincialExemptionCreate = async (
   }
 }
 
+export type ExemptionNumberCheck = {
+  /** False when the number is already assigned to an exemption. */
+  valid: boolean
+  message: string
+}
+
+/** Asks LEXIS whether an exemption number is still free. Rejects when the answer is unusable. */
+export const checkProvincialExemptionNumber = async (
+  exemptionNumber: string,
+): Promise<ExemptionNumberCheck> => {
+  const response = await apiService
+    .getAxiosInstance()
+    .get<unknown>('/lexis/rpc/exemption-details/check-exemption-number', {
+      params: { exemptionNumber: exemptionNumber.trim() },
+    })
+  const payload = response.data
+  const valid = isRecord(payload) ? (payload.valid ?? payload.isValid) : undefined
+  if (!isRecord(payload) || typeof valid !== 'boolean') {
+    throw new Error('LEXIS returned an invalid exemption number check.')
+  }
+  return { valid, message: asString(payload.message) ?? '' }
+}
+
 type ProvincialOfferCreateSubmission = {
   applicationNumber: string
   packageNumber: string

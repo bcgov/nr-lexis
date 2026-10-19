@@ -46,6 +46,11 @@
       text-overflow: ellipsis;
     }
 
+    // The empty state's action spans the card so the button's label wraps inside it.
+    .lexis-empty-state__action {
+      align-self: stretch;
+    }
+
     // A narrow card wraps an action's label instead of cutting the button off.
     :is(
         .detail-section-card__header,

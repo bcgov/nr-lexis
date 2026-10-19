@@ -51,6 +51,7 @@ import {
   fetchProvincialApplicationOptions,
 } from '@/service/search-options-service'
 import { submitAdminUpload, validateAdminUpload } from '@/service/admin-upload-service'
+import { fetchCurrentApplicationRecordVersion } from '@/service/record-version-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
 
 vi.mock('@/context/auth/useAuth', () => ({
@@ -72,6 +73,10 @@ vi.mock('@/service/application-review-search-service', () => ({
 vi.mock('@/service/application-client-lookup-service', () => ({
   fetchApplicationClientData: vi.fn(),
   fetchApplicationClientLocations: vi.fn(),
+}))
+
+vi.mock('@/service/record-version-service', () => ({
+  fetchCurrentApplicationRecordVersion: vi.fn().mockResolvedValue('test-application-version'),
 }))
 
 vi.mock('@/service/provincial-application-documents-service', () => ({
@@ -199,6 +204,7 @@ const mockedUpdateApplicationPackage = vi.mocked(updateApplicationPackage)
 const mockedFetchApplicationReviewOptions = vi.mocked(fetchApplicationReviewOptions)
 const mockedFetchProvincialApplicationOptions = vi.mocked(fetchProvincialApplicationOptions)
 const mockedSubmitAdminUpload = vi.mocked(submitAdminUpload)
+const mockedFetchCurrentApplicationRecordVersion = vi.mocked(fetchCurrentApplicationRecordVersion)
 const mockedValidateAdminUpload = vi.mocked(validateAdminUpload)
 
 const mockApplicationDetailAuth = (
@@ -694,6 +700,7 @@ export {
   mockedFetchApplicationReviewOptions,
   mockedFetchApplicationSpecies,
   mockedFetchApplicationSummarySnapshot,
+  mockedFetchCurrentApplicationRecordVersion,
   mockedFetchProvincialApplicationDetail,
   mockedFetchProvincialApplicationOptions,
   mockedFetchProvincialExemptionDetail,

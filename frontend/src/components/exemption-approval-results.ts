@@ -137,11 +137,13 @@ export const exemptionApprovalResults = (
 
   if (approved.length === 1 && failures.length === 0 && unconfirmedNumbers.length === 0) {
     const [{ exemptionNumber, email }] = approved
+    const link = itemLink(exemptionNumber)
     return [
       {
         kind: notes.length || emailProblem(email) ? 'warning' : 'success',
         title: `Exemption ${exemptionNumber} approved and now Active.`,
         message: joined([emailNotice(email), ...notes]),
+        ...(link.to ? { titleRecord: { id: exemptionNumber, ...link } } : {}),
       },
     ]
   }

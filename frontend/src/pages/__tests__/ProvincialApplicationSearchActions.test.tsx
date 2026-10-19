@@ -1007,6 +1007,48 @@ describe('Provincial Application Search Actions', () => {
     })
   })
 
+  it.each(['List date', 'Next page'])(
+    'returns focus to the %s control after the search reloads',
+    async (controlName) => {
+      const rows = Array.from({ length: 10 }, (_, index) => ({
+        ...searchRowsWithMixedEligibility[0],
+        applicationNumber: String(8000 + index),
+      }))
+      const initialResponse = {
+        content: rows,
+        page: { number: 0, size: 10, totalElements: 30, totalPages: 3 },
+      }
+      let finishSearch!: (response: typeof initialResponse) => void
+      const pendingSearch = new Promise<typeof initialResponse>((resolve) => {
+        finishSearch = resolve
+      })
+      mockedCountProvincialApplications.mockResolvedValue(30)
+      mockedSearchProvincialApplications.mockImplementation((request) =>
+        request.page === 0 && request.sortField === 'applicationNumber'
+          ? Promise.resolve(initialResponse)
+          : pendingSearch,
+      )
+      renderPage()
+      await screen.findByText('8000')
+      const control = await screen.findByRole('button', { name: controlName })
+      act(() => control.focus())
+      await userEvent.keyboard('{Enter}')
+
+      await screen.findByRole('table', { name: 'Searching' })
+      expect(control).not.toBeInTheDocument()
+      expect(document.body).toHaveFocus()
+      await act(async () => {
+        finishSearch({
+          content: rows.map((row, index) => ({ ...row, applicationNumber: String(9000 + index) })),
+          page: { ...initialResponse.page, number: controlName === 'Next page' ? 1 : 0 },
+        })
+      })
+
+      expect(await screen.findByText('9000')).toBeVisible()
+      await waitFor(() => expect(screen.getByRole('button', { name: controlName })).toHaveFocus())
+    },
+  )
+
   it('keeps the selection and focus when selected rows have a different owner or agent', async () => {
     mockedSearchProvincialApplications.mockResolvedValue({
       content: [
@@ -1076,6 +1118,13 @@ describe('Provincial Application Search Actions', () => {
       serverMessage: 'Application 321 listing date has not passed.',
       expected:
         "Application 321 can't be exempted until its list date has passed. Remove it from your selection and try again.",
+      refreshes: false,
+    },
+    {
+      serverMessage:
+        'Application 321 cannot be added to this exemption because its owner or agent client details do not match the other applications.',
+      expected:
+        'The selected applications must have the same owner and agent. Change your selection and try again.',
       refreshes: false,
     },
     {
@@ -1231,6 +1280,54 @@ describe('Provincial Application Search Actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
     expect(announcement).toBeEmptyDOMElement()
+  })
+
+  it('returns batch Cancel focus to the select-all checkbox without searching again', async () => {
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: searchRowsWithMixedEligibility.map((row) => ({
+        ...row,
+        allowCreateExemption: true,
+      })),
+      page: { number: 0, size: 10, totalElements: 2, totalPages: 1 },
+    })
+    renderPage()
+    await screen.findByText('321')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 654' }))
+    expect(batchSummary()).toHaveTextContent('2 applications selected')
+    const searchCalls = mockedSearchProvincialApplications.mock.calls.length
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('checkbox', { name: 'Select all eligible rows on this page' }),
+      ).toHaveFocus(),
+    )
+    expect(batchSummary()).toBeNull()
+    expect(screen.getByRole('checkbox', { name: 'Select application 321' })).not.toBeChecked()
+    expect(mockedSearchProvincialApplications).toHaveBeenCalledTimes(searchCalls)
+  })
+
+  it('moves batch Cancel focus to the results when the select-all checkbox is unavailable', async () => {
+    mockedSearchProvincialApplications.mockResolvedValue({
+      content: searchRowsWithMixedEligibility.map((row) => ({
+        ...row,
+        allowCreateExemption: true,
+      })),
+      page: { number: 0, size: 10, totalElements: 2, totalPages: 1 },
+    })
+    const { container } = renderPage()
+    await screen.findByText('321')
+    await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 321' }))
+    const selectAll = screen.getByRole('checkbox', {
+      name: 'Select all eligible rows on this page',
+    })
+    selectAll.setAttribute('disabled', '')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(container.querySelector('.legacy-search-table-frame')).toHaveFocus())
   })
 
   it('shows only the empty state when a search finds no applications', async () => {

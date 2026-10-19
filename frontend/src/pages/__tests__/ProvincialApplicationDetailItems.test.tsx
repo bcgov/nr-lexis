@@ -1148,7 +1148,7 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
 
   it('lets an exemption approver change existing packages and scales the server allows', async () => {
     mockApplicationDetailAuth(
-      (action: string) => action === '/applicationDetails',
+      (action: string) => action === '/applicationDetails' || action === 'approveExemption',
       ['LEXIS_EXEMPTION_APPROVER'],
     )
     mockedFetchProvincialApplicationDetail.mockResolvedValue({
