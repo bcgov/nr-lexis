@@ -162,6 +162,25 @@ class ProvincialPermitMutationValidatorTest {
   }
 
   @Test
+  void shouldRequireTheShippingDetailsWhenCancellingAPermit() {
+    var result =
+        validator.validate(
+            permit()
+                .permitStatusCode("CAN")
+                .destinationCompanyName(null)
+                .transportName(null)
+                .estimatedShippingDate(null)
+                .build(),
+            ministerialExemption(LocalDate.of(2026, 7, 31)));
+
+    assertThat(result.errors())
+        .containsExactlyInAnyOrder(
+            "A valid company name on the Shipping tab is required.",
+            "A valid transport name on the Shipping tab is required.",
+            "A valid estimated shipping date on the Shipping tab is required.");
+  }
+
+  @Test
   void shouldRejectAnUnknownClientLocation() {
     when(clientLookupService.getClientDataRequired("00077881", "01"))
         .thenReturn(Optional.empty());

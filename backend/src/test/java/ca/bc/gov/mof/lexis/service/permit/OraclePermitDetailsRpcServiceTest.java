@@ -118,6 +118,8 @@ import org.springframework.transaction.support.DefaultTransactionStatus;
 class OraclePermitDetailsRpcServiceTest {
 
   private static final LocalDate FEE_MASK_EFFECTIVE_DATE = LocalDate.of(2024, 6, 27);
+  private static final String INVOICE_DETAILS_LOCKED_MESSAGE =
+      "Invoice-related permit details cannot be changed after permit invoicing. Restore their saved values, or save the permit as Active first.";
 
   @Mock private PermitRpcRepository repository;
   @Mock private LexisApplicationService applicationService;
@@ -3560,9 +3562,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -3701,9 +3701,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -3719,9 +3717,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -4558,9 +4554,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -4630,9 +4624,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
     verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
   }
@@ -4838,9 +4830,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
     verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
   }
@@ -4971,9 +4961,7 @@ class OraclePermitDetailsRpcServiceTest {
             "idir\\jsmith");
 
     assertThat(response.success()).isFalse();
-    assertThat(response.errors())
-        .containsExactly(
-            "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first.");
+    assertThat(response.errors()).containsExactly(INVOICE_DETAILS_LOCKED_MESSAGE);
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 

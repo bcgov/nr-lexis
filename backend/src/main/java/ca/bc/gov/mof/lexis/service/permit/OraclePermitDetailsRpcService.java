@@ -2015,7 +2015,7 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         && hasInvoiceMaterialDelta(current, updated)) {
       return failureMutationResponse(
           List.of(
-              "Invoice-related permit details cannot be changed after permit invoicing. Reactivate or cancel the permit first."),
+              "Invoice-related permit details cannot be changed after permit invoicing. Restore their saved values, or save the permit as Active first."),
           permitNumber);
     }
     if (EXPORT_PERMIT_STATUS_PAYMENT_PENDING.equals(submittedPermitStatusCode)

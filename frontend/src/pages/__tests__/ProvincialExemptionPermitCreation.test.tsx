@@ -603,7 +603,7 @@ describe('permit creation from an exemption', () => {
     expect(within(table).getByRole('cell', { name: '2.0' })).toBeVisible()
   })
 
-  it('renders the legacy permit issue date in words without shifting its day', async () => {
+  it('renders the permit issue date in words without shifting its day', async () => {
     const actualService = await vi.importActual<{
       fetchExemptionPermits: typeof fetchExemptionPermits
     }>('@/service/provincial-exemption-detail-service')
@@ -613,7 +613,7 @@ describe('permit creation from an exemption', () => {
           permitNumber: 900123,
           permitVolume: '2.0',
           permitStatus: 'Complete',
-          permitIssueDate: '03/10/2026',
+          permitIssueDate: '2026-03-10',
           canViewPermit: true,
         },
       ],
@@ -626,7 +626,7 @@ describe('permit creation from an exemption', () => {
       const table = await screen.findByRole('region', { name: 'Related exemption permits' })
       expect(within(table).getByText('Mar 10, 2026')).toBeVisible()
       expect(within(table).queryByText('Mar 9, 2026')).not.toBeInTheDocument()
-      expect(within(table).queryByText('03/10/2026')).not.toBeInTheDocument()
+      expect(within(table).queryByText('2026-03-10')).not.toBeInTheDocument()
     } finally {
       get.mockRestore()
     }

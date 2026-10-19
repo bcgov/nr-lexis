@@ -833,12 +833,78 @@ describe('Exemption and Federal Detail Document Actions', () => {
   })
 
   it.each([
+    ['M', 'Ministerial', 'Approved applications for client 00055566 only.'],
+    ['O', 'Order in Council', 'Approved applications only.'],
+  ])(
+    'words the add application helper for a %s exemption by whether the owner is compared',
+    async (typeCode, typeDescription, helperText) => {
+      mockedFetchProvincialExemptionDetail.mockResolvedValue({
+        ...exemptionDetail,
+        exemptionTypeCode: typeCode,
+        exemptionTypeDescription: typeDescription,
+      })
+      render(
+        <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+          <Routes>
+            <Route
+              path="/provincial/exemption/:exemptionNumber"
+              element={<ProvincialExemptionDetailsPage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+
+      await selectDetailTab('Applications')
+      await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+      expect(await screen.findByLabelText('Application number')).toHaveAccessibleDescription(
+        helperText,
+      )
+    },
+  )
+
+  it('does not name a client when an Order in Council application cannot be added', async () => {
+    mockedFetchProvincialExemptionDetail.mockResolvedValue({
+      ...exemptionDetail,
+      exemptionTypeCode: 'O',
+      exemptionTypeDescription: 'Order in Council',
+    })
+    vi.mocked(addApplicationToExemption).mockResolvedValueOnce({
+      success: false,
+      message: '',
+      exemptionNumber: 'EX-777',
+      errors: [''],
+      warnings: [],
+    })
+    render(
+      <MemoryRouter initialEntries={['/provincial/exemption/EX-777']}>
+        <Routes>
+          <Route
+            path="/provincial/exemption/:exemptionNumber"
+            element={<ProvincialExemptionDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await selectDetailTab('Applications')
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+    await userEvent.type(await screen.findByLabelText('Application number'), '654')
+    await userEvent.click(screen.getByRole('button', { name: 'Save application' }))
+
+    expect(
+      await screen.findByText(
+        "Application 654 can't be added. Check that it's approved and isn't on another exemption.",
+      ),
+    ).toBeVisible()
+  })
+
+  it.each([
     [
       'Application 654 does not exist',
       'No application found with number 654. Check the number and try again.',
     ],
     [
-      'Application cannot be added to this exemption because its owner or agent client details do not match the other applications.',
+      'The application you entered cannot be assigned to this exemption due to the owner client number not matching the other applications.',
       'Application 654 belongs to a different client. This exemption only includes applications from client 00055566.',
     ],
     [

@@ -864,7 +864,7 @@ class OracleExemptionDetailsRpcServiceTest {
 
     assertThat(response).hasSize(1);
     assertThat(response.get(0).permitVolume()).isEqualTo("95.0");
-    assertThat(response.get(0).permitIssueDate()).isEqualTo("03/10/2026");
+    assertThat(response.get(0).permitIssueDate()).isEqualTo("2026-03-10");
     assertThat(response.get(0).canViewPermit()).isTrue();
   }
 
@@ -894,6 +894,9 @@ class OracleExemptionDetailsRpcServiceTest {
         .containsExactly(
             org.assertj.core.groups.Tuple.tuple(7000123L, true),
             org.assertj.core.groups.Tuple.tuple(7000124L, false));
+    assertThat(response)
+        .extracting(ExemptionDetailsRpcService.PermitItem::permitIssueDate)
+        .containsExactly("", "");
   }
 
   @Test
@@ -2005,7 +2008,7 @@ class OracleExemptionDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactly(
-            "Application cannot be added to this exemption because its owner or agent client details do not match the other applications.");
+            "The application you entered cannot be assigned to this exemption due to the owner client number not matching the other applications.");
     verify(repository, never()).updateApplicationExemption(any());
   }
 

@@ -78,7 +78,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
   private static final int MAX_OTHER_CONDITIONS_BYTES = 254;
   private static final long MAX_APPLICATION_TERM_DAYS = 99_999L;
   private static final long LEGACY_DEFAULT_EXEMPTION_TERM_DAYS = 30L;
-  private static final DateTimeFormatter LEGACY_DATE_FORMATTER = DateTimeFormatter.ofPattern("MM/dd/yyyy");
+  private static final DateTimeFormatter DISPLAY_DATE_FORMATTER = DateTimeFormatter.ISO_LOCAL_DATE;
 
   private final ExemptionDetailsRpcRepository repository;
   private final ApplicationNotificationRecipientResolver notificationRecipientResolver;
@@ -231,7 +231,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
                   row.permitNumber(),
                   formatVolume(row.permitVolume()),
                   row.statusDescription(),
-                  formatLegacyDate(row.issueDate()),
+                  formatDisplayDate(row.issueDate()),
                   canViewPermit);
             })
         .toList();
@@ -647,7 +647,7 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
       errors.add("Application listing date has not passed.");
     } else if (!oicExemption && ownerClientMismatch(assignedApplications, application)) {
       errors.add(
-          "Application cannot be added to this exemption because its owner or agent client details do not match the other applications.");
+          "The application you entered cannot be assigned to this exemption due to the owner client number not matching the other applications.");
     } else if (!canViewFederalApplications && JURISDICTION_FEDERAL.equalsIgnoreCase(application.exportJurisdictionCode())) {
       errors.add("Insufficient privileges to add this application.");
     } else if (RETIRED_INDIAN_RESERVE_JURISDICTION_CODE.equalsIgnoreCase(
@@ -1074,11 +1074,11 @@ public class OracleExemptionDetailsRpcService implements ExemptionDetailsRpcServ
     return true;
   }
 
-  private String formatLegacyDate(LocalDate date) {
+  private String formatDisplayDate(LocalDate date) {
     if (date == null) {
       return "";
     }
-    return date.format(LEGACY_DATE_FORMATTER);
+    return date.format(DISPLAY_DATE_FORMATTER);
   }
 
   /**

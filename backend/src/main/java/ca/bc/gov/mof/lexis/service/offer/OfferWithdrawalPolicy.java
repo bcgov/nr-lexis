@@ -21,9 +21,13 @@ public class OfferWithdrawalPolicy {
     this.scheduleRepositoryProvider = scheduleRepositoryProvider;
   }
 
+  /**
+   * An offering client can withdraw until the schedule's offer withdrawal date begins, so the last
+   * day to withdraw is the day before that date.
+   */
   public boolean canWithdraw(Long applicationNumber) {
     return findWithdrawalDeadline(applicationNumber)
-        .map(deadline -> !deadline.isBefore(LexisBusinessTime.today()))
+        .map(deadline -> deadline.isAfter(LexisBusinessTime.today()))
         .orElse(false);
   }
 

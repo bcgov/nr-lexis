@@ -355,7 +355,7 @@ type AddApplicationFailure =
 const addApplicationFailureKind = (message: string): AddApplicationFailure => {
   if (/does not exist/i.test(message)) return 'notFound'
   if (/status of approved/i.test(message)) return 'notApproved'
-  if (/client details do not match/i.test(message)) return 'differentClient'
+  if (/client number not matching the other applications/i.test(message)) return 'differentClient'
   if (/already assigned to (?:an )?exemption/i.test(message)) return 'alreadyAssigned'
   if (/listing date has not passed|valid offers?\b/i.test(message)) return 'advertised'
   return 'other'
@@ -1221,6 +1221,9 @@ const ProvincialExemptionDetailsPage = () => {
     !editing &&
     !isExemptionFormDirty &&
     !documentUploadDirty
+  // The server compares an added application's owner with the exemption's linked applications for
+  // every type except Order in Council, so only those exemptions name the client.
+  const addApplicationClientNumber = persistedTypeCode === 'O' ? '' : exemptionClientNumber
   const applicationNumberToAddError =
     checkedApplicationNumber === applicationNumberToAdd
       ? (fieldErrorText(
@@ -1955,7 +1958,7 @@ const ProvincialExemptionDetailsPage = () => {
         addApplicationFailureMessage(
           kind,
           enteredNumber,
-          exemptionClientNumber,
+          addApplicationClientNumber,
           assignedExemptionNumber,
           serverMessage,
         ),
@@ -2013,11 +2016,11 @@ const ProvincialExemptionDetailsPage = () => {
       setApplicationMutationNumber(null)
     }
   }, [
+    addApplicationClientNumber,
     applicationMutationNumber,
     applicationNumberToAdd,
     applications,
     detail,
-    exemptionClientNumber,
     refreshEditableData,
   ])
 
@@ -2842,8 +2845,8 @@ const ProvincialExemptionDetailsPage = () => {
                                 aria-required="true"
                                 value={applicationNumberToAdd}
                                 helperText={
-                                  exemptionClientNumber
-                                    ? `Approved applications for client ${exemptionClientNumber} only.`
+                                  addApplicationClientNumber
+                                    ? `Approved applications for client ${addApplicationClientNumber} only.`
                                     : 'Approved applications only.'
                                 }
                                 invalid={Boolean(
