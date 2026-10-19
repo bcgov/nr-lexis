@@ -6079,6 +6079,7 @@ $notification-types: 'error', 'info', 'success', 'warning';
 }
 
 .lexis-table-frame {
+  position: relative;
   max-inline-size: 100%;
   overflow-x: auto;
   overscroll-behavior-inline: contain;
