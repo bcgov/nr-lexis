@@ -8,11 +8,6 @@ import { requiredLabel } from '@/utils/required-label'
 const APPLICATION_ACCURACY_DESCRIPTION =
   'Checking "I Agree" confirms that I have submitted accurate application details'
 const APPLICATION_ACCURACY_LABEL = 'I Agree'
-export const APPLICATION_ACCURACY_ACKNOWLEDGEMENT = {
-  description: APPLICATION_ACCURACY_DESCRIPTION,
-  label: APPLICATION_ACCURACY_LABEL,
-} as const
-
 type ApplicationAccuracyConfirmationProps = {
   open: boolean
   confirmed: boolean
