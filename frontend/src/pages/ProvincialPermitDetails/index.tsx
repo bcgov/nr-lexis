@@ -829,6 +829,26 @@ const mergePermitFormSection = (
   )
 }
 
+/**
+ * Values read for an open section, except that a field the user has changed since the section
+ * opened keeps the user's value.
+ */
+const keepFieldsChangedSince = <T extends object>(
+  refreshed: T,
+  current: T | null,
+  opened: T | null,
+  fields: readonly (keyof T)[],
+): T => {
+  if (!current || !opened) return refreshed
+  const merged = { ...refreshed }
+  for (const field of fields) {
+    if (current[field] !== opened[field]) merged[field] = current[field]
+  }
+  return merged
+}
+
+const FEE_OVERRIDE_FORM_FIELDS = ['overrideEnabled', 'overrideFee', 'overrideComment'] as const
+
 const detailValue = (value: string | number | null | undefined): string =>
   value === null || value === undefined ? '' : String(value)
 
@@ -1405,6 +1425,7 @@ const ProvincialPermitDetailsPage = () => {
   const deferredPermitTabLoadsRef = useRef(new Set<DeferredPermitTabId>())
   const loadedDeferredPermitTabsRef = useRef(new Set<DeferredPermitTabId>())
   const permitMutationInFlightRef = useRef<(() => boolean) | null>(null)
+  const permitEditRefreshRef = useRef<(() => boolean) | null>(null)
   const packagePanelLauncherRef = useRef<HTMLButtonElement | null>(null)
   // A permit change writes its results only while it is the latest change and the page still
   // shows its permit; the server write itself still completes.
@@ -3401,13 +3422,33 @@ const ProvincialPermitDetailsPage = () => {
 
   // Opening a section rereads the permit's edit context, which carries the record version its save
   // is checked against, and then the permit itself past the detail cache. The form is rebuilt from
-  // that read, so it is never older than the version. Save waits for the read, and a failed read
-  // closes the section.
+  // that read, so it is never older than the version, and a field the user changed while the read
+  // ran keeps the user's value. Save stays unavailable until the read finishes, a section opened
+  // during the read replaces it with its own, and a failed read closes the section.
   const refreshPermitForEdit = async (section: PermitEditSection): Promise<void> => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
     if (!detail || !resolvedPermitNumber) return
+    if (
+      permitEditRefreshRef.current &&
+      permitMutationInFlightRef.current === permitEditRefreshRef.current
+    ) {
+      permitMutationInFlightRef.current = null
+    }
     const isLatestRequest = tryBeginPermitMutation()
     if (!isLatestRequest) return
+    permitEditRefreshRef.current = isLatestRequest
+    // The form as the section opens it; the fee override section leaves the permit form as it is.
+    const openedSectionBaseline =
+      section === 'feeOverride'
+        ? null
+        : section === 'shipping'
+          ? permitShippingBaselineForm
+          : permitBaselineForm
+    const openedForm = openedSectionBaseline
+      ? mergePermitFormSection(permitForm, openedSectionBaseline, section === 'shipping')
+      : permitForm
+    const openedFeeOverrideForm = feeOverrideForm
+    const openedAgentUsed = Boolean(detail.applicantClientNumber?.trim())
     setIsRefreshingPermitForEdit(true)
     try {
       const editContext = await fetchPermitFeeOverrideContext(resolvedPermitNumber)
@@ -3426,12 +3467,7 @@ const ProvincialPermitDetailsPage = () => {
         blanketOic: detail.blanketOic,
       }
       const refreshedForm = buildPermitDetailForm(refreshedDetail)
-      setDetail(refreshedDetail)
-      setFeeOverrideContext(editContext)
-      setFeeOverrideForm(editContext)
-      setFeeOverrideFieldErrors({})
-      setAgentUsed(Boolean(refreshedDetail.applicantClientNumber?.trim()))
-      setPermitForm(
+      const nextForm =
         section === 'shipping' && usesReviewedPermitFlow && shippingReferences
           ? mergePermitFormSection(
               refreshedForm,
@@ -3440,7 +3476,27 @@ const ProvincialPermitDetailsPage = () => {
               }),
               true,
             )
-          : refreshedForm,
+          : refreshedForm
+      const refreshedAgentUsed = Boolean(refreshedDetail.applicantClientNumber?.trim())
+      setDetail(refreshedDetail)
+      setFeeOverrideContext(editContext)
+      setFeeOverrideForm((current) =>
+        keepFieldsChangedSince(
+          editContext,
+          current,
+          openedFeeOverrideForm,
+          FEE_OVERRIDE_FORM_FIELDS,
+        ),
+      )
+      setFeeOverrideFieldErrors({})
+      setAgentUsed((current) => (current === openedAgentUsed ? refreshedAgentUsed : current))
+      setPermitForm((current) =>
+        keepFieldsChangedSince(
+          nextForm,
+          current,
+          openedForm,
+          Object.keys(nextForm) as PermitDetailFormField[],
+        ),
       )
       if (
         section === 'applicant' &&
@@ -3464,6 +3520,7 @@ const ProvincialPermitDetailsPage = () => {
       })
     } finally {
       endPermitMutation(isLatestRequest)
+      if (permitEditRefreshRef.current === isLatestRequest) permitEditRefreshRef.current = null
       if (isLatestRequest()) setIsRefreshingPermitForEdit(false)
     }
   }
@@ -5502,7 +5559,7 @@ const ProvincialPermitDetailsPage = () => {
       <Button
         kind="primary"
         size="md"
-        disabled={isSavingPermit}
+        disabled={isSavingPermit || isRefreshingPermitForEdit}
         renderIcon={isSavingPermit ? PendingIcon : undefined}
         onClick={() => void onSavePermit()}
       >
@@ -5525,7 +5582,7 @@ const ProvincialPermitDetailsPage = () => {
         <Button
           kind="primary"
           size="md"
-          disabled={isSavingPermit}
+          disabled={isSavingPermit || isRefreshingPermitForEdit}
           renderIcon={isSavingPermit ? PendingIcon : undefined}
           onClick={() => void onSavePermit()}
         >
@@ -6487,7 +6544,7 @@ const ProvincialPermitDetailsPage = () => {
                     <Button
                       kind="primary"
                       size="md"
-                      disabled={isSavingPermit}
+                      disabled={isSavingPermit || isRefreshingPermitForEdit}
                       renderIcon={isSavingPermit ? PendingIcon : undefined}
                       onClick={() => void onSavePermit()}
                     >
@@ -6532,7 +6589,7 @@ const ProvincialPermitDetailsPage = () => {
               <Button
                 kind="primary"
                 size="md"
-                disabled={isSavingFeeOverride}
+                disabled={isSavingFeeOverride || isRefreshingPermitForEdit}
                 renderIcon={isSavingFeeOverride ? PendingIcon : undefined}
                 onClick={() => void onSaveFeeOverride()}
               >
@@ -7719,7 +7776,7 @@ const ProvincialPermitDetailsPage = () => {
                               <Button
                                 kind="primary"
                                 size="md"
-                                disabled={isSavingShippingAction}
+                                disabled={isSavingShippingAction || isRefreshingPermitForEdit}
                                 renderIcon={isSavingShippingAction ? PendingIcon : undefined}
                                 onClick={() =>
                                   void (permitEditSection === 'newPermit'

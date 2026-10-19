@@ -1329,15 +1329,24 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   @Override
   @Transactional
   public ScalePersistenceResult addScaleToPackage(ScaleMutationRequest request, String userId) {
-    return addScaleToPackage(request, userId, true);
+    return addScale(request, userId, true, false);
   }
 
   @Override
   @Transactional
-  public ScalePersistenceResult addScaleToPackage(
+  public ScalePersistenceResult addImportedScaleToPackage(
       ScaleMutationRequest request, String userId, boolean validateTimberMarkRegion) {
+    return addScale(request, userId, validateTimberMarkRegion, true);
+  }
+
+  private ScalePersistenceResult addScale(
+      ScaleMutationRequest request,
+      String userId,
+      boolean validateTimberMarkRegion,
+      boolean exactVolumeSums) {
     ScaleMutationRequest normalized = normalizeScaleMutationRequest(request);
-    List<String> errors = validateScaleMutation(normalized, validateTimberMarkRegion);
+    List<String> errors =
+        validateScaleMutation(normalized, validateTimberMarkRegion, exactVolumeSums);
     if (!errors.isEmpty()) {
       return new ScalePersistenceResult(false, null, errors, List.of());
     }
@@ -2077,7 +2086,7 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
   }
 
   private List<String> validateScaleMutation(
-      ScaleMutationRequest request, boolean validateTimberMarkRegion) {
+      ScaleMutationRequest request, boolean validateTimberMarkRegion, boolean exactVolumeSums) {
     List<String> errors = new ArrayList<>();
     String packageNumber = preservePackageNumber(request.packageNumber());
     Optional<ApplicationDetailsRpcRepository.ApplicationUpdateRecord> application =
@@ -2138,8 +2147,15 @@ public class OracleApplicationDetailsRpcService implements ApplicationDetailsRpc
                 .map(ApplicationDetailsRpcRepository.PackageDetailsRow::packageVolume)
                 .map(this::roundOneDecimal)
                 .orElse(BigDecimal.ZERO);
-        BigDecimal scaleTotal = exactScaleTotal(scaleRows);
-        if (scaleTotal.add(exactScaleVolume(request.volume())).compareTo(packageVolume) > 0) {
+        // Add scale rounds each amount to one decimal before adding them. An imported submission
+        // adds them at their two stored decimals, as its preflight checks the file.
+        BigDecimal scaleTotal =
+            exactVolumeSums ? exactScaleTotal(scaleRows) : totalScaleVolume(scaleRows);
+        BigDecimal newScaleVolume =
+            exactVolumeSums
+                ? exactScaleVolume(request.volume())
+                : roundOneDecimal(request.volume());
+        if (scaleTotal.add(newScaleVolume).compareTo(packageVolume) > 0) {
           BigDecimal allowedVolume = packageVolume.subtract(scaleTotal);
           errors.add(
               allowedVolume.signum() <= 0

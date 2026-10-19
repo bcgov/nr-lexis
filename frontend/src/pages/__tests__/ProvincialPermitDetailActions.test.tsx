@@ -9089,21 +9089,6 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
   })
 
-  // Skipped until useEditSections moves focus to the selected tab (fix/test-round3-uiux).
-  it.skip('moves focus to the selected tab after Discard on a guarded tab switch', async () => {
-    configureActivePermit()
-    renderPermitDetails()
-
-    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
-    await userEvent.clear(screen.getByLabelText('Remarks'))
-    await userEvent.type(screen.getByLabelText('Remarks'), 'Updated permit remarks')
-    await userEvent.click(screen.getByRole('tab', { name: 'Shipping' }))
-    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
-
-    expect(screen.getByRole('tab', { name: 'Shipping' })).toHaveAttribute('aria-selected', 'true')
-    await waitFor(() => expect(screen.getByRole('tab', { name: 'Shipping' })).toHaveFocus())
-  })
-
   it.each([
     {
       section: 'Permit',
@@ -9166,6 +9151,62 @@ describe('Provincial Permit Detail Action Smoke', () => {
 
     await waitFor(() => expect(screen.getByLabelText('Override fee (CAD)')).toHaveValue('99.00'))
     expect(mockedFetchProvincialPermitDetail).toHaveBeenLastCalledWith('777', { fresh: true })
+  })
+
+  const delayFreshPermitRead = () => {
+    const activePermit: ProvincialPermitDetail = {
+      ...permitDetail,
+      permitStatusCode: 'ACT',
+      permitStatusDescription: 'Active',
+    }
+    let resolveFreshRead: (detail: ProvincialPermitDetail) => void = () => undefined
+    mockedFetchProvincialPermitDetail.mockImplementation(async (_permitNumber, options) =>
+      options?.fresh
+        ? new Promise<ProvincialPermitDetail>((resolve) => {
+            resolveFreshRead = resolve
+          })
+        : activePermit,
+    )
+    return {
+      activePermit,
+      resolve: async (detail: ProvincialPermitDetail) => {
+        await act(async () => resolveFreshRead(detail))
+      },
+    }
+  }
+
+  it('keeps text typed while the permit is reread for editing', async () => {
+    const freshRead = delayFreshPermitRead()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    await userEvent.clear(screen.getByLabelText('Remarks'))
+    await userEvent.type(screen.getByLabelText('Remarks'), 'typed during the read')
+    await freshRead.resolve({ ...freshRead.activePermit, remarks: 'changed by another user' })
+
+    await waitFor(() => expect(getActiveSectionSaveButton()).toBeEnabled())
+    expect(screen.getByLabelText('Remarks')).toHaveValue('typed during the read')
+  })
+
+  it('keeps Save unavailable until the permit is reread for editing, then saves', async () => {
+    const freshRead = delayFreshPermitRead()
+    renderPermitDetails()
+
+    await userEvent.click(await screen.findByRole('button', { name: /Edit permit(?: details)?/ }))
+    expect(getActiveSectionSaveButton()).toBeDisabled()
+    await userEvent.click(getActiveSectionSaveButton())
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    await freshRead.resolve(freshRead.activePermit)
+    await waitFor(() => expect(getActiveSectionSaveButton()).toBeEnabled())
+    await userEvent.type(screen.getByLabelText('Remarks'), ' updated')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await waitFor(() =>
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({ permitRemarks: expect.stringMatching(/ updated$/) }),
+      ),
+    )
   })
 
   it('does not open the editor when the fresh permit cannot be read', async () => {
@@ -10463,6 +10504,17 @@ describe('Provincial Permit Detail Action Smoke', () => {
       }),
     )
     mockedFetchProvincialPermitDetail.mockResolvedValue(completedPermitWithoutReceipt)
+    mockedUpdatePermitShipping.mockResolvedValue({
+      success: true,
+      message: 'The permit was saved successfully.',
+      errors: [],
+      warnings: [
+        'Receipt number should not be empty for a complete permit so it will be saved as Payment Pending.',
+      ],
+      source: 'api',
+      permitStatus: 'PPD',
+      permitReceiptNo: '',
+    })
     renderPermitDetails()
 
     await editCompletedPermitShipping()
@@ -10475,6 +10527,9 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(
+      await screen.findByText(/Receipt number should not be empty for a complete permit/),
+    ).toBeInTheDocument()
   })
 
   it.each([

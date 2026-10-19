@@ -738,7 +738,8 @@ public class ApplicationSubmissionImportService {
     for (int index = 0; index < scaleRequests.size(); index++) {
       // Only the first scale row has to belong to the application's region.
       ScalePersistenceResult scaleResult =
-          applicationDetailsService.addScaleToPackage(scaleRequests.get(index), userId, index == 0);
+          applicationDetailsService.addImportedScaleToPackage(
+              scaleRequests.get(index), userId, index == 0);
       if (!scaleResult.valid()) {
         markRollbackOnly();
         return rejected(

@@ -1374,6 +1374,13 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
         }
         attachedScaleCount++;
       }
+      if (attachedScaleCount > 0
+          && !synchronizePermitClientsWithFirstApplication(
+              permit.permitNumber(), normalizedUserId)) {
+        markRollbackOnly();
+        return failureMutationResponse(
+            List.of("Unable to update the permit owner and agent."), permit.permitNumber());
+      }
       if (attachedScaleCount > 0 && !updatePermitTotals(permit.permitNumber(), normalizedUserId)) {
         markRollbackOnly();
         return failureMutationResponse(
@@ -2186,10 +2193,11 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       return validationFailureResponse(validation, permitNumber);
     }
     updated = validation.permit();
-    // Validation moves an Interior Complete permit with a blank receipt to Payment pending. A
-    // shipping save does not change the status, so it is refused instead. The permit page saves
-    // that change through the permit details once the user confirms Payment pending.
-    if (!sameIgnoreCase(current.permitStatusCode(), updated.permitStatusCode())) {
+    // Validation moves an Interior Complete permit with a blank receipt to Payment pending.
+    // Ministry staff save that change through the permit details once they confirm Payment
+    // pending, so their shipping save is refused. A Provincial Submitter can't save the details of
+    // a Completed permit, so their shipping save stores Payment pending and returns the warning.
+    if (ministryUser && !sameIgnoreCase(current.permitStatusCode(), updated.permitStatusCode())) {
       return failureMutationResponse(
           List.of(ProvincialPermitMutationValidator.PAYMENT_PENDING_SHIPPING_MESSAGE),
           permitNumber);

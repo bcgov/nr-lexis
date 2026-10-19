@@ -3437,8 +3437,60 @@ class OracleApplicationDetailsRpcServiceTest {
     }
   }
 
+  @ParameterizedTest
+  @CsvSource({
+    "5.04,5.04,10.0,true,",
+    "4.95,5.05,10.0,false,The scale volume must be less than or equal to 5.0.",
+    "47.75,12.75,60.5,false,The scale volume must be less than or equal to 12.7."
+  })
+  void addScaleToPackageShouldRoundEachScaleToOneDecimalBeforeCheckingThePackageRoom(
+      double existingVolume,
+      double newVolume,
+      double packageVolume,
+      boolean expectedValid,
+      String expectedError) {
+    when(repository.packageExists("PKG-903")).thenReturn(true);
+    when(repository.findTimberMark("TM001")).thenReturn(Optional.of(validTimberMarkRow()));
+    when(repository.findTimberMarkByOrgUnit("TM001", 11L))
+        .thenReturn(Optional.of(validTimberMarkRow()));
+    when(repository.findGradeCodeRequired("1"))
+        .thenReturn(Optional.of(new ApplicationDetailsRpcRepository.CodeRow("1", "Sawlog", 1L, 1L)));
+    when(repository.findScaleDetailsByPackageNumber("PKG-903"))
+        .thenReturn(
+            List.of(
+                new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                    "54", "TM002", "FI", "1", existingVolume, 1L, 1000456L, null, "PKG-903", "")));
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new ApplicationDetailsRpcRepository.PackageDetailsRow(
+                    "PKG-903", packageVolume, 10.0d, 20.0d, "A", "", "N", "O", "H")));
+    if (expectedValid) {
+      when(repository.insertScaleDetail(any()))
+          .thenReturn(
+              Optional.of(
+                  new ApplicationDetailsRpcRepository.ApplicationScaleDetailRow(
+                      "55", "TM001", "FI", "1", newVolume, 1L, 1000456L, null, "PKG-903", "")));
+    }
+
+    ApplicationDetailsRpcService.ScalePersistenceResult response =
+        service.addScaleToPackage(
+            new ApplicationDetailsRpcService.ScaleMutationRequest(
+                "TM001", "PKG-903", "1", "FI", 1000456L, 1L, newVolume),
+            "idir\\jsmith");
+
+    assertThat(response.valid()).isEqualTo(expectedValid);
+    if (expectedValid) {
+      assertThat(response.errors()).isEmpty();
+      verify(repository).insertScaleDetail(any());
+    } else {
+      assertThat(response.errors()).containsExactly(expectedError);
+      verify(repository, never()).insertScaleDetail(any());
+    }
+  }
+
   @Test
-  void addScaleToPackageShouldKeepTwoDecimalScalesWhenTheyFillThePackageExactly() {
+  void addImportedScaleToPackageShouldKeepTwoDecimalScalesWhenTheyFillThePackageExactly() {
     when(repository.packageExists("PKG-903")).thenReturn(true);
     when(repository.findTimberMark("TM001")).thenReturn(Optional.of(validTimberMarkRow()));
     when(repository.findTimberMarkByOrgUnit("TM001", 11L))
@@ -3478,10 +3530,11 @@ class OracleApplicationDetailsRpcServiceTest {
 
     for (double volume : new double[] {47.75d, 12.25d, 0.5d}) {
       ApplicationDetailsRpcService.ScalePersistenceResult response =
-          service.addScaleToPackage(
+          service.addImportedScaleToPackage(
               new ApplicationDetailsRpcService.ScaleMutationRequest(
                   "TM001", "PKG-903", "1", "FI", 1000456L, 1L, volume),
-              "idir\\jsmith");
+              "idir\\jsmith",
+              true);
 
       assertThat(response.errors()).isEmpty();
       assertThat(response.valid()).isTrue();
@@ -3490,7 +3543,7 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void addScaleToPackageShouldReportTheRemainingRoomAtTwoDecimalsWhenTheScalesHaveThem() {
+  void addImportedScaleToPackageShouldReportTheRemainingRoomAtTwoDecimalsWhenTheScalesHaveThem() {
     when(repository.packageExists("PKG-903")).thenReturn(true);
     when(repository.findTimberMark("TM001")).thenReturn(Optional.of(validTimberMarkRow()));
     when(repository.findTimberMarkByOrgUnit("TM001", 11L))
@@ -3509,10 +3562,11 @@ class OracleApplicationDetailsRpcServiceTest {
                     "54", "TM002", "FI", "1", 47.75d, 1L, 1000456L, null, "PKG-903", "")));
 
     ApplicationDetailsRpcService.ScalePersistenceResult response =
-        service.addScaleToPackage(
+        service.addImportedScaleToPackage(
             new ApplicationDetailsRpcService.ScaleMutationRequest(
                 "TM001", "PKG-903", "1", "FI", 1000456L, 1L, 12.76d),
-            "idir\\jsmith");
+            "idir\\jsmith",
+            true);
 
     assertThat(response.valid()).isFalse();
     assertThat(response.errors())
@@ -4213,11 +4267,11 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void addScaleToPackageShouldSkipTheTimberMarkRegionCheckWhenAskedTo() {
+  void addImportedScaleToPackageShouldSkipTheTimberMarkRegionCheckWhenAskedTo() {
     stubScaleInsertWithoutRegionMark();
 
     ApplicationDetailsRpcService.ScalePersistenceResult response =
-        service.addScaleToPackage(
+        service.addImportedScaleToPackage(
             new ApplicationDetailsRpcService.ScaleMutationRequest(
                 "TM001", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
             "idir\\jsmith",
@@ -4230,12 +4284,12 @@ class OracleApplicationDetailsRpcServiceTest {
   }
 
   @Test
-  void addScaleToPackageShouldStillRequireAnExistingTimberMarkWhenSkippingTheRegionCheck() {
+  void addImportedScaleToPackageShouldStillRequireAnExistingTimberMarkWhenSkippingTheRegionCheck() {
     stubScaleInsertWithoutRegionMark();
     when(repository.findTimberMark("TM001")).thenReturn(Optional.empty());
 
     ApplicationDetailsRpcService.ScalePersistenceResult response =
-        service.addScaleToPackage(
+        service.addImportedScaleToPackage(
             new ApplicationDetailsRpcService.ScaleMutationRequest(
                 "TM001", "PKG-903", "1", "FI", 1000456L, 10L, 12.5d),
             "idir\\jsmith",

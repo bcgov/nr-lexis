@@ -2531,6 +2531,15 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('Remark must not exceed 250 characters')).toBeInTheDocument()
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
 
+    fireEvent.change(newRemarkInput, { target: { value: `${'R'.repeat(246)}&` } })
+    await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
+    expect(
+      await screen.findByText(
+        'Remark must not exceed 250 characters once saved. Each & counts as 5 characters, and each < or > as 4.',
+      ),
+    ).toBeInTheDocument()
+    expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
+
     await userEvent.clear(newRemarkInput)
     await userEvent.type(newRemarkInput, 'New note')
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))

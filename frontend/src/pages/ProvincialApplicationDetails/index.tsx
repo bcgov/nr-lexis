@@ -157,6 +157,7 @@ import {
   requiredMaxLengthFieldError,
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
+import { storedRemarkLengthError } from '@/pages/shared/remark-storage'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useEditSections } from '@/pages/shared/useEditSections'
 import { useReloadPreservedTab } from '@/pages/shared/useReloadPreservedTab'
@@ -2687,8 +2688,11 @@ const ProvincialApplicationDetailsPage = () => {
       }
 
       const normalizedRemark = remarkBody.trim()
-      if (!normalizedRemark) {
-        setRemarkValidationMessage(fieldErrorText('Remark is required.'))
+      const remarkError = normalizedRemark
+        ? storedRemarkLengthError(normalizedRemark)
+        : 'Remark is required.'
+      if (remarkError) {
+        setRemarkValidationMessage(fieldErrorText(remarkError))
         focusFirstInvalidFieldAfterRender(() =>
           remarkBodyRef.current?.closest('.detail-side-panel'),
         )

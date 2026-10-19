@@ -103,7 +103,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportService service = service();
@@ -160,7 +160,7 @@ class ApplicationSubmissionImportServiceTest {
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
     ArgumentCaptor<Boolean> regionCheckCaptor = ArgumentCaptor.forClass(Boolean.class);
     verify(applicationDetailsService, times(3))
-        .addScaleToPackage(scaleCaptor.capture(), eq("jsmith"), regionCheckCaptor.capture());
+        .addImportedScaleToPackage(scaleCaptor.capture(), eq("jsmith"), regionCheckCaptor.capture());
     assertThat(regionCheckCaptor.getAllValues()).containsExactly(true, false, false);
     assertThat(scaleCaptor.getAllValues())
         .extracting(ScaleMutationRequest::timberMark)
@@ -185,7 +185,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result =
@@ -214,7 +214,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "FED26-700123", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     String xml = federalSampleXmlText();
@@ -366,7 +366,7 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, never())
         .addPackage(any(PackageMutationRequest.class), anyString());
     verify(applicationDetailsService, never())
-        .addScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
+        .addImportedScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
   }
 
   @ParameterizedTest
@@ -468,7 +468,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(application.getValue().exportScheduleId()).isEqualTo(1016L);
     verify(applicationDetailsService, never()).isPackageValid(anyString());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
+    verify(applicationDetailsService, never()).addImportedScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
   }
 
   @ParameterizedTest
@@ -764,7 +764,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
     when(scheduleRepository.findNextSchedulesRequired())
         .thenReturn(
@@ -1065,7 +1065,7 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, never())
         .addFederalImportedApplication(any(CreateApplicationRequest.class), anyString());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
+    verify(applicationDetailsService, never()).addImportedScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
   }
 
   @Test
@@ -1078,7 +1078,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "FED26-700123", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result =
@@ -1136,7 +1136,7 @@ class ApplicationSubmissionImportServiceTest {
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
     ArgumentCaptor<Boolean> regionCheckCaptor = ArgumentCaptor.forClass(Boolean.class);
     verify(applicationDetailsService, times(3))
-        .addScaleToPackage(scaleCaptor.capture(), eq("federal-user"), regionCheckCaptor.capture());
+        .addImportedScaleToPackage(scaleCaptor.capture(), eq("federal-user"), regionCheckCaptor.capture());
     assertThat(regionCheckCaptor.getAllValues()).containsExactly(true, false, false);
     assertThat(scaleCaptor.getAllValues())
         .extracting(ScaleMutationRequest::packageNumber)
@@ -1169,7 +1169,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "FED26-700123", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     byte[] soapBytes =
@@ -1203,7 +1203,7 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService)
         .addFederalImportedApplication(any(CreateApplicationRequest.class), eq("federal-user"));
     verify(applicationDetailsService).addPackage(any(PackageMutationRequest.class), eq("federal-user"));
-    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean());
+    verify(applicationDetailsService, times(3)).addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean());
   }
 
   @Test
@@ -1309,7 +1309,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "FED26-700123", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("federal-user"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result =
@@ -1348,7 +1348,7 @@ class ApplicationSubmissionImportServiceTest {
 
     ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
-    verify(applicationDetailsService, times(3)).addScaleToPackage(scaleCaptor.capture(), eq("federal-user"), anyBoolean());
+    verify(applicationDetailsService, times(3)).addImportedScaleToPackage(scaleCaptor.capture(), eq("federal-user"), anyBoolean());
     assertThat(scaleCaptor.getAllValues())
         .extracting(ScaleMutationRequest::packageNumber)
         .containsExactly("FED26-700123", "FED26-700123", "FED26-700123");
@@ -1540,7 +1540,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(validationRequest.speciesCodes()).containsExactly("HE");
     verify(applicationDetailsService, never()).addApplication(any(CreateApplicationRequest.class), any());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), any(), anyBoolean());
+    verify(applicationDetailsService, never()).addImportedScaleToPackage(any(ScaleMutationRequest.class), any(), anyBoolean());
   }
 
   @Test
@@ -1663,7 +1663,7 @@ class ApplicationSubmissionImportServiceTest {
         .addApplication(any(CreateApplicationRequest.class), any());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
     verify(applicationDetailsService, never())
-        .addScaleToPackage(any(ScaleMutationRequest.class), any(), anyBoolean());
+        .addImportedScaleToPackage(any(ScaleMutationRequest.class), any(), anyBoolean());
   }
 
   @Test
@@ -1834,7 +1834,7 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, never())
         .addFederalImportedApplication(any(CreateApplicationRequest.class), anyString());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), anyString());
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
+    verify(applicationDetailsService, never()).addImportedScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
   }
 
   @Test
@@ -1872,7 +1872,7 @@ class ApplicationSubmissionImportServiceTest {
     verify(applicationDetailsService, never())
         .addPackage(any(PackageMutationRequest.class), anyString());
     verify(applicationDetailsService, never())
-        .addScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
+        .addImportedScaleToPackage(any(ScaleMutationRequest.class), anyString(), anyBoolean());
   }
 
   @Test
@@ -2076,7 +2076,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportService service = service();
@@ -2089,7 +2089,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
     assertThat(result.warnings()).isEmpty();
-    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
+    verify(applicationDetailsService, times(3)).addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2101,7 +2101,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(bareSampleXml(), "jsmith");
@@ -2111,7 +2111,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
     assertThat(result.warnings()).isEmpty();
-    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
+    verify(applicationDetailsService, times(3)).addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2123,7 +2123,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result = service().importApplicationSubmission(sampleGeoJson(), "jsmith");
@@ -2143,7 +2143,7 @@ class ApplicationSubmissionImportServiceTest {
 
     ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
-    verify(applicationDetailsService, times(3)).addScaleToPackage(scaleCaptor.capture(), eq("jsmith"), anyBoolean());
+    verify(applicationDetailsService, times(3)).addImportedScaleToPackage(scaleCaptor.capture(), eq("jsmith"), anyBoolean());
     assertThat(scaleCaptor.getAllValues())
         .extracting(ScaleMutationRequest::timberMark)
         .containsExactly("NCHWP", "NCHWP", "NCHWP");
@@ -2158,7 +2158,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     MockMultipartFile file =
@@ -2171,7 +2171,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.applicationNumber()).isEqualTo(9001L);
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
-    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
+    verify(applicationDetailsService, times(3)).addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2204,7 +2204,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
     ApplicationSubmissionImportResultDto result =
@@ -2215,7 +2215,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isEqualTo("TEST23-652-7D-2");
     assertThat(result.scaleRows()).isEqualTo(3);
     assertThat(result.warnings()).isEmpty();
-    verify(applicationDetailsService, times(3)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
+    verify(applicationDetailsService, times(3)).addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2235,7 +2235,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isNull();
     assertThat(result.scaleRows()).isZero();
     assertThat(result.errors()).containsExactly("Package could not be saved.");
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
+    verify(applicationDetailsService, never()).addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2258,7 +2258,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.scaleRows()).isZero();
     assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
     verify(applicationDetailsService, times(2)).isPackageValid("TEST23-652-7D-2");
-    verify(applicationDetailsService, never()).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
+    verify(applicationDetailsService, never()).addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2270,7 +2270,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "525.0", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
+    when(applicationDetailsService.addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(
             new ScalePersistenceResult(true, null, List.of(), List.of()),
             new ScalePersistenceResult(false, null, List.of("Scale could not be saved."), List.of()));
@@ -2282,7 +2282,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isNull();
     assertThat(result.scaleRows()).isZero();
     assertThat(result.errors()).containsExactly("Scale could not be saved.");
-    verify(applicationDetailsService, times(2)).addScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
+    verify(applicationDetailsService, times(2)).addImportedScaleToPackage(any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean());
   }
 
   @Test
@@ -2974,7 +2974,7 @@ class ApplicationSubmissionImportServiceTest {
         .addApplication(any(CreateApplicationRequest.class), any());
     verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
     verify(applicationDetailsService, never())
-        .addScaleToPackage(any(ScaleMutationRequest.class), any(), anyBoolean());
+        .addImportedScaleToPackage(any(ScaleMutationRequest.class), any(), anyBoolean());
   }
 
   @Test
@@ -3046,7 +3046,7 @@ class ApplicationSubmissionImportServiceTest {
         .thenReturn(
             new PackagePersistenceResult(
                 true, "TEST23-652-7D-2", "60.5", "6.7", "12.8", "ACT", List.of(), List.of()));
-    when(applicationDetailsService.addScaleToPackage(
+    when(applicationDetailsService.addImportedScaleToPackage(
             any(ScaleMutationRequest.class), eq("jsmith"), anyBoolean()))
         .thenReturn(new ScalePersistenceResult(true, null, List.of(), List.of()));
 
@@ -3067,7 +3067,7 @@ class ApplicationSubmissionImportServiceTest {
     ArgumentCaptor<ScaleMutationRequest> scaleCaptor =
         ArgumentCaptor.forClass(ScaleMutationRequest.class);
     verify(applicationDetailsService, times(3))
-        .addScaleToPackage(scaleCaptor.capture(), eq("jsmith"), anyBoolean());
+        .addImportedScaleToPackage(scaleCaptor.capture(), eq("jsmith"), anyBoolean());
     assertThat(scaleCaptor.getAllValues())
         .extracting(ScaleMutationRequest::volume)
         .containsExactly(47.75d, 12.25d, 0.5d);

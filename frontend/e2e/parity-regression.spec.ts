@@ -263,12 +263,12 @@ test.describe('Frontend parity with mocked API responses', () => {
     await selectTab(page, 'Application')
     await expect(page.getByText('Received date', { exact: true })).toBeVisible()
     await expect(page.getByText('List date', { exact: true })).toBeVisible()
-    await page.getByRole('button', { name: 'Edit federal status' }).click()
-    await expect(page.getByLabel('Status', { exact: true }).locator('option')).toHaveText([
-      'Rejected',
-      'Withdrawn',
-    ])
-    await page.getByLabel('Status', { exact: true }).selectOption('WDN')
+    await page.getByRole('button', { name: 'Withdraw', exact: true }).click()
+    const statusForm = page.locator('.cds--tile', {
+      has: page.getByRole('heading', { name: 'Update federal status', exact: true }),
+    })
+    await expect(statusForm.getByText('Withdrawn', { exact: true })).toBeVisible()
+    await expect(statusForm.getByRole('combobox')).toHaveCount(0)
     await page.getByLabel('Remark', { exact: true }).fill('Pending withdrawal confirmation')
 
     // Only one section edits at a time, so leaving the tab asks before dropping the draft.
@@ -280,7 +280,7 @@ test.describe('Frontend parity with mocked API responses', () => {
       'aria-selected',
       'true',
     )
-    await expect(page.getByLabel('Status', { exact: true })).toHaveValue('WDN')
+    await expect(statusForm.getByText('Withdrawn', { exact: true })).toBeVisible()
     await expect(page.getByLabel('Remark', { exact: true })).toHaveValue(
       'Pending withdrawal confirmation',
     )
@@ -293,8 +293,9 @@ test.describe('Frontend parity with mocked API responses', () => {
     )
 
     await selectTab(page, 'Application')
-    await expect(page.getByRole('button', { name: 'Edit federal status' })).toBeVisible()
-    await expect(page.getByLabel('Status', { exact: true })).toHaveCount(0)
+    await expect(page.getByRole('button', { name: 'Withdraw', exact: true })).toBeVisible()
+    await expect(page.getByRole('button', { name: 'Reject', exact: true })).toBeVisible()
+    await expect(statusForm).toHaveCount(0)
     expect(fixture.writes).toEqual([])
     expect(fixture.unexpectedRequests).toEqual([])
   })
@@ -329,8 +330,7 @@ test.describe('Frontend parity with mocked API responses', () => {
       'aria-selected',
       'true',
     )
-    await page.getByRole('button', { name: 'Edit federal status' }).click()
-    await page.getByLabel('Status', { exact: true }).selectOption('WDN')
+    await page.getByRole('button', { name: 'Withdraw', exact: true }).click()
     await page.getByLabel('Remark', { exact: true }).fill('Withdraw this application')
     await page.getByRole('button', { name: 'Update status' }).click()
     await expect(

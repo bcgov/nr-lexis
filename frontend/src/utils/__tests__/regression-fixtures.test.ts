@@ -64,6 +64,9 @@ describe('regression lifecycle fixtures', () => {
     expect(fixture.xml).toContain(`<lexis:boomNumber>${packageNumber}</lexis:boomNumber>`)
     expect(fixture.xml).toContain('<lexis:bcForestRegionCode>RCB</lexis:bcForestRegionCode>')
     expect(fixture.xml).toContain('<lexis:speciesEndUseSort>HE/SL</lexis:speciesEndUseSort>')
+    expect(fixture.xml).toContain(
+      '<lexis:contactTelephoneNumber>2505551212</lexis:contactTelephoneNumber>',
+    )
     expect(getWithAuth).toHaveBeenCalledWith(
       page,
       '/api/lexis/rpc/application-details/end-uses-for-species-region',

@@ -40,6 +40,8 @@ import javax.xml.stream.XMLStreamException;
 import javax.xml.stream.XMLStreamReader;
 import org.apache.poi.poifs.filesystem.POIFSFileSystem;
 import org.apache.poi.poifs.filesystem.DirectoryEntry;
+import org.apache.poi.poifs.filesystem.DocumentEntry;
+import org.apache.poi.poifs.filesystem.DocumentInputStream;
 import org.apache.poi.poifs.filesystem.Entry;
 import org.springframework.stereotype.Component;
 import org.springframework.web.multipart.MultipartFile;
@@ -68,6 +70,13 @@ public class AttachmentUploadValidator {
       Pattern.compile("\\\\(?:object|objdata)(?![a-z])", Pattern.CASE_INSENSITIVE);
   private static final Pattern LOCAL_DRIVE_PATH = Pattern.compile("[a-z]:/(?!/)");
   private static final Pattern URI_SCHEME = Pattern.compile("([a-z][a-z0-9+.-]*):");
+  private static final int BIFF_BOF_RECORD = 0x0809;
+  private static final int BIFF_EOF_RECORD = 0x000a;
+  private static final int BIFF_FILEPASS_RECORD = 0x002f;
+  private static final int BIFF_BOUNDSHEET_RECORD = 0x0085;
+  private static final int BIFF_BOUNDSHEET_FIXED_BYTES = 6;
+  private static final int BIFF_MACRO_SHEET_TYPE = 0x01;
+  private static final int BIFF_VBA_MODULE_SHEET_TYPE = 0x06;
   private static final byte[] OLE_COMPOUND_FILE_SIGNATURE =
       new byte[] {
         (byte) 0xd0, (byte) 0xcf, 0x11, (byte) 0xe0, (byte) 0xa1, (byte) 0xb1, 0x1a, (byte) 0xe1
@@ -306,6 +315,7 @@ public class AttachmentUploadValidator {
           : !hasWorkbook || hasWordDocument) {
         throw InvalidAttachmentException.mismatch(expectWordDocument ? "DOC" : "XLS");
       }
+      String fileTypeCode = expectWordDocument ? "DOC" : "XLS";
       Deque<DirectoryEntry> directories = new ArrayDeque<>();
       directories.add(fileSystem.getRoot());
       while (!directories.isEmpty()) {
@@ -313,21 +323,73 @@ public class AttachmentUploadValidator {
         while (entries.hasNext()) {
           Entry entry = entries.next();
           String name = entry.getName();
+          // Word keeps macros and embedded objects in Macros, _VBA_PROJECT_CUR and ObjectPool.
+          // Excel keeps macros in _VBA_PROJECT_CUR, embedded objects and ActiveX controls in MBD
+          // storages, and ActiveX control data in the Ctls stream.
           if (name.equalsIgnoreCase("Macros")
               || name.equalsIgnoreCase("_VBA_PROJECT_CUR")
-              || name.equalsIgnoreCase("ObjectPool")) {
-            throw InvalidAttachmentException.unsafeLegacyOffice(expectWordDocument ? "DOC" : "XLS");
+              || name.equalsIgnoreCase("ObjectPool")
+              || (!expectWordDocument
+                  && (name.equalsIgnoreCase("Ctls")
+                      || (entry instanceof DirectoryEntry
+                          && name.regionMatches(true, 0, "MBD", 0, 3))))) {
+            throw InvalidAttachmentException.unsafeLegacyOffice(fileTypeCode);
           }
           if (entry instanceof DirectoryEntry directory) {
             directories.add(directory);
           }
         }
       }
+      if (!expectWordDocument && hasExcelMacroSheet(fileSystem.getRoot())) {
+        throw InvalidAttachmentException.unsafeLegacyOffice(fileTypeCode);
+      }
     } catch (InvalidAttachmentException ex) {
       throw ex;
     } catch (IOException | RuntimeException ex) {
       throw InvalidAttachmentException.mismatch(expectWordDocument ? "DOC" : "XLS");
     }
+  }
+
+  /**
+   * Whether the workbook's sheet list names an Excel 4.0 macro sheet or a VBA module sheet. The
+   * list is read from the workbook globals, and only up to an encryption record, after which the
+   * sheet types are encrypted.
+   */
+  private boolean hasExcelMacroSheet(DirectoryEntry root) throws IOException {
+    Entry workbook = root.getEntry(root.hasEntry("Workbook") ? "Workbook" : "Book");
+    if (!(workbook instanceof DocumentEntry document)) {
+      return false;
+    }
+    try (DocumentInputStream input = new DocumentInputStream(document)) {
+      byte[] header = new byte[4];
+      boolean firstRecord = true;
+      while (input.available() >= header.length) {
+        input.readFully(header);
+        int recordType = (header[0] & 0xff) | (header[1] & 0xff) << 8;
+        int recordLength = (header[2] & 0xff) | (header[3] & 0xff) << 8;
+        if ((firstRecord && recordType != BIFF_BOF_RECORD)
+            || recordType == BIFF_EOF_RECORD
+            || recordType == BIFF_FILEPASS_RECORD
+            || recordLength > input.available()) {
+          return false;
+        }
+        firstRecord = false;
+        int remaining = recordLength;
+        if (recordType == BIFF_BOUNDSHEET_RECORD && recordLength >= BIFF_BOUNDSHEET_FIXED_BYTES) {
+          byte[] sheet = new byte[BIFF_BOUNDSHEET_FIXED_BYTES];
+          input.readFully(sheet);
+          int sheetType = sheet[BIFF_BOUNDSHEET_FIXED_BYTES - 1] & 0xff;
+          if (sheetType == BIFF_MACRO_SHEET_TYPE || sheetType == BIFF_VBA_MODULE_SHEET_TYPE) {
+            return true;
+          }
+          remaining -= BIFF_BOUNDSHEET_FIXED_BYTES;
+        }
+        if (remaining > 0) {
+          input.readFully(new byte[remaining]);
+        }
+      }
+    }
+    return false;
   }
 
   private void validateZip(ContentSource source, OfficePackageType packageType, OfficeScope scope)

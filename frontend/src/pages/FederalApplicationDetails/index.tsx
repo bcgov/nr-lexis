@@ -42,6 +42,7 @@ import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { readDetailReturnTo } from '@/pages/shared/detail-navigation'
+import { storedRemarkLengthError } from '@/pages/shared/remark-storage'
 import { useEditSections } from '@/pages/shared/useEditSections'
 import { hasFieldErrors, useFieldErrors, type FieldErrors } from '@/pages/shared/useFieldErrors'
 import { useLatestRequestGuard } from '@/pages/shared/useLatestRequestGuard'
@@ -460,7 +461,7 @@ const FederalApplicationDetailsPage = () => {
       ? 'Remark is required.'
       : normalizedRemark.length > 250
         ? 'Remark must not exceed 250 characters.'
-        : ''
+        : (storedRemarkLengthError(normalizedRemark) ?? '')
     if (remarkError) {
       setRemarkValidationMessage(remarkError)
       focusFirstInvalidFieldAfterRender(() => remarkFormRef.current)

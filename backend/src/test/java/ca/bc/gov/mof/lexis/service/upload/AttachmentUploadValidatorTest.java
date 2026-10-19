@@ -142,6 +142,38 @@ class AttachmentUploadValidatorTest {
   }
 
   @Test
+  void shouldRejectExcelEmbeddedObjectAndActiveXStorages() throws IOException {
+    byte[] embeddedObject = oleDocumentWithDirectory("Workbook", "MBD00A1B2C3");
+    byte[] activeXControls = oleDocumentWithStreams("Workbook", "Ctls");
+
+    assertThat(validator.validate(file("sheet.xls", embeddedObject), null).accepted())
+        .as("XLS embedded object storage")
+        .isFalse();
+    assertThat(validator.validate(file("sheet.xls", activeXControls), null).accepted())
+        .as("XLS ActiveX control stream")
+        .isFalse();
+  }
+
+  @Test
+  void shouldRejectExcelMacroAndVbaModuleSheets() throws IOException {
+    for (int sheetType : new int[] {0x01, 0x06}) {
+      assertThat(
+              validator
+                  .validate(file("sheet.xls", workbookDocument(biffWorkbook(sheetType))), null)
+                  .accepted())
+          .as("XLS sheet type %d", sheetType)
+          .isFalse();
+    }
+  }
+
+  @Test
+  void shouldAcceptExcelWorksheetsAndCharts() throws IOException {
+    byte[] content = workbookDocument(biffWorkbook(0x00, 0x02));
+
+    assertThat(validator.validate(file("sheet.xls", content), null).accepted()).isTrue();
+  }
+
+  @Test
   void shouldRejectEmbeddedRtfObjects() {
     for (String controlWord : new String[] {"object", "objdata"}) {
       byte[] content =
@@ -1153,6 +1185,56 @@ class AttachmentUploadValidatorTest {
       fileSystem.writeFilesystem(output);
     }
     return output.toByteArray();
+  }
+
+  private static byte[] oleDocumentWithStreams(String... streamNames) throws IOException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    try (POIFSFileSystem fileSystem = new POIFSFileSystem()) {
+      for (String streamName : streamNames) {
+        fileSystem.createDocument(
+            new ByteArrayInputStream("legacy-content".getBytes(StandardCharsets.US_ASCII)),
+            streamName);
+      }
+      fileSystem.writeFilesystem(output);
+    }
+    return output.toByteArray();
+  }
+
+  private static byte[] workbookDocument(byte[] workbookStream) throws IOException {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    try (POIFSFileSystem fileSystem = new POIFSFileSystem()) {
+      fileSystem.createDocument(new ByteArrayInputStream(workbookStream), "Workbook");
+      fileSystem.writeFilesystem(output);
+    }
+    return output.toByteArray();
+  }
+
+  /** A BIFF8 workbook globals stream: BOF, one sheet record per sheet type, then EOF. */
+  private static byte[] biffWorkbook(int... sheetTypes) {
+    ByteArrayOutputStream output = new ByteArrayOutputStream();
+    byte[] beginningOfFile = new byte[16];
+    beginningOfFile[1] = 0x06;
+    beginningOfFile[2] = 0x05;
+    writeBiffRecord(output, 0x0809, beginningOfFile);
+    for (int index = 0; index < sheetTypes.length; index++) {
+      byte[] name = ("Sheet" + (index + 1)).getBytes(StandardCharsets.US_ASCII);
+      ByteArrayOutputStream sheet = new ByteArrayOutputStream();
+      sheet.writeBytes(new byte[] {0, 0, 0, 0, 0, (byte) sheetTypes[index]});
+      sheet.write(name.length);
+      sheet.write(0);
+      sheet.writeBytes(name);
+      writeBiffRecord(output, 0x0085, sheet.toByteArray());
+    }
+    writeBiffRecord(output, 0x000a, new byte[0]);
+    return output.toByteArray();
+  }
+
+  private static void writeBiffRecord(ByteArrayOutputStream output, int type, byte[] data) {
+    output.write(type & 0xff);
+    output.write(type >> 8);
+    output.write(data.length & 0xff);
+    output.write(data.length >> 8);
+    output.writeBytes(data);
   }
 
   private static byte[] randomBytes(int length, long seed) {

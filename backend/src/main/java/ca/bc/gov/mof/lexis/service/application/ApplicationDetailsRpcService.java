@@ -244,13 +244,19 @@ public interface ApplicationDetailsRpcService {
   boolean synchronizePackageVolumeForPermitTransition(
       String packageNumber, Double volume, String userId);
 
+  /**
+   * Adds a scale to a package. The package room check rounds each scale volume, and the new one, to
+   * one decimal before adding them.
+   */
   ScalePersistenceResult addScaleToPackage(ScaleMutationRequest request, String userId);
 
   /**
-   * Adds a scale to a package. When {@code validateTimberMarkRegion} is false the timber mark must
-   * still be valid, but it is not required to belong to the application's region.
+   * Adds a scale from an imported submission to its package. The package room check adds the scale
+   * volumes at their stored two decimals, as the import preflight does. When {@code
+   * validateTimberMarkRegion} is false the timber mark must still be valid, but it is not required
+   * to belong to the application's region.
    */
-  ScalePersistenceResult addScaleToPackage(
+  ScalePersistenceResult addImportedScaleToPackage(
       ScaleMutationRequest request, String userId, boolean validateTimberMarkRegion);
 
   boolean deleteScaleById(String scaleDetailId, String userId);

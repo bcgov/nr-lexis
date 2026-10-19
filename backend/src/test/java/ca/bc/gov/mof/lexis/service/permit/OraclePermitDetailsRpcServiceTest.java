@@ -2119,6 +2119,58 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void createPermitFromExemptionShouldTakeTheOwnerAndAgentFromTheFirstPackageApplication() {
+    stubValidOrderInCouncilPermitCreationContext();
+    Timestamp entryTimestamp = Timestamp.valueOf("2026-01-01 10:00:00");
+    when(repository.findApplicationNumbersByExemptionNumberRequired("EX-700"))
+        .thenReturn(List.of(1000456L, 1000457L));
+    ApplicationInfoRow packageApplication =
+        permitCreationApplication(
+            1000457L, "EX-700", 1908L, "00077999", "05", null, null, "T", "S");
+    when(repository.findApplicationInfoByNumber(1000457L))
+        .thenReturn(Optional.of(packageApplication));
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation ->
+                Optional.of(withPermitNumber(invocation.getArgument(0), 7000123L)));
+    when(repository.findPackagesByExemptionNumberRequired("EX-700"))
+        .thenReturn(
+            List.of(
+                new PackageCandidateRow(1000456L, "PKG-903"),
+                new PackageCandidateRow(1000457L, "PKG-904")));
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000456L)).thenReturn(List.of());
+    when(repository.findScaleMutationDetailsByApplicationNumber(1000457L))
+        .thenReturn(List.of(scaleMutation("201", 1000457L, "PKG-904", null, entryTimestamp)));
+    when(repository.updateScaleDetail(any(ScaleMutationRecord.class), eq("idir\\jsmith")))
+        .thenReturn(true);
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitMutationRow()));
+    when(repository.findFirstPackageApplicationByPermitNumberRequired(7000123L))
+        .thenReturn(Optional.of(new PermitPackageApplicationRow("PKG-904", 1000457L)));
+    when(repository.findScaleDetailsByPermitNumber(7000123L))
+        .thenReturn(List.of(scale("201", "TM1", "HEM", "J", 34.5d, 12L, "7000123", "PKG-904")));
+    permitTotalsUpdateSucceeds();
+
+    PermitMutationRpcResponseDto response =
+        service.createPermitFromExemption("EX-700", "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> insertCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(insertCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(insertCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    ArgumentCaptor<PermitMutationRow> updateCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository, atLeastOnce())
+        .updatePermitDetail(updateCaptor.capture(), eq("idir\\jsmith"), isNull());
+    PermitMutationRow clientUpdate = updateCaptor.getAllValues().get(0);
+    assertThat(clientUpdate.clientNumber()).isEqualTo("00077999");
+    assertThat(clientUpdate.clientLocationCode()).isEqualTo("05");
+    assertThat(clientUpdate.agentNumber()).isNull();
+    assertThat(clientUpdate.agentLocationCode()).isNull();
+  }
+
+  @Test
   void createPermitFromExemptionShouldRollBackWhenScaleAttachmentFails() {
     stubValidOrderInCouncilPermitCreationContext();
     when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
@@ -6812,7 +6864,7 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
-  void updateShippingShouldRefuseAnInteriorCompletePermitThatWouldBecomePaymentPending() {
+  void updateShippingShouldRefuseMinistryStaffWhenAnInteriorCompletePermitWouldBecomePaymentPending() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(
             Optional.of(
@@ -6823,13 +6875,41 @@ class OraclePermitDetailsRpcServiceTest {
 
     PermitMutationRpcResponseDto response =
         service.updateShipping(
-            updateShippingRequest("2026-06-10", "Updated destination"), "idir\\jsmith");
+            updateShippingRequest("2026-06-10", "Updated destination"), "idir\\jsmith", true);
 
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactly(
             "Fee Receipt Number should not be empty for a complete Permit so it will be saved as Payment Pending.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
+  }
+
+  @Test
+  void updateShippingShouldSaveASubmitterChangeToAnInteriorCompletePermitAsPaymentPending() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                withOrgUnit(
+                    permitMutationRowWithIssueAndReceipt("COM", LocalDate.of(2026, 3, 16), null),
+                    1903L)));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("bceid\\submitter"), isNull()))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updateShipping(
+            updateShippingRequest("2026-06-10", "Updated destination"), "bceid\\submitter", false);
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.permitStatus()).isEqualTo("PPD");
+    assertThat(response.warnings())
+        .containsExactly(
+            "Receipt number should not be empty for a complete permit so it will be saved as Payment Pending.");
+    ArgumentCaptor<PermitMutationRow> captor = ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).updatePermitDetail(captor.capture(), eq("bceid\\submitter"), isNull());
+    assertThat(captor.getValue().permitStatusCode()).isEqualTo("PPD");
+    assertThat(captor.getValue().destinationCompanyName()).isEqualTo("Updated destination");
   }
 
   @Test
