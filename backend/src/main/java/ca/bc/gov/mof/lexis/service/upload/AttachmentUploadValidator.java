@@ -14,11 +14,16 @@ import java.nio.charset.CharacterCodingException;
 import java.nio.charset.Charset;
 import java.nio.charset.CodingErrorAction;
 import java.nio.charset.StandardCharsets;
+import java.text.Normalizer;
 import java.util.ArrayList;
 import java.util.ArrayDeque;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.Comparator;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
@@ -53,9 +58,20 @@ public class AttachmentUploadValidator {
   private static final int MAX_ARCHIVE_ENTRY_NAME_LENGTH = 512;
   private static final int MAX_ARCHIVE_COMPRESSION_RATIO = 100;
   private static final int ZIP_END_RECORD_MAX_BYTES = 65_557;
+  private static final int MAX_EMBEDDED_PACKAGE_DEPTH = 2;
+  // Embedded documents are held in memory while they are checked, and every nesting level shares
+  // this limit.
+  private static final long MAX_RETAINED_EMBEDDED_BYTES = MAX_UPLOAD_BYTES;
+  private static final int MAX_PERCENT_DECODING_ROUNDS = 4;
   private static final Charset ZIP_LEGACY_CHARSET = Charset.forName("IBM437");
   private static final Pattern RTF_EMBEDDED_OBJECT =
       Pattern.compile("\\\\(?:object|objdata)(?![a-z])", Pattern.CASE_INSENSITIVE);
+  private static final Pattern LOCAL_DRIVE_PATH = Pattern.compile("[a-z]:/(?!/)");
+  private static final Pattern URI_SCHEME = Pattern.compile("([a-z][a-z0-9+.-]*):");
+  private static final byte[] OLE_COMPOUND_FILE_SIGNATURE =
+      new byte[] {
+        (byte) 0xd0, (byte) 0xcf, 0x11, (byte) 0xe0, (byte) 0xa1, (byte) 0xb1, 0x1a, (byte) 0xe1
+      };
 
   private static final Set<String> SUPPORTED_FILE_TYPES =
       Set.of(
@@ -66,6 +82,7 @@ public class AttachmentUploadValidator {
   private static final String PACKAGE_RELATIONSHIPS_ENTRY = "_rels/.rels";
   private static final String WORD_DOCUMENT_ENTRY = "word/document.xml";
   private static final String EXCEL_WORKBOOK_ENTRY = "xl/workbook.xml";
+  private static final String POWERPOINT_PRESENTATION_ENTRY = "ppt/presentation.xml";
   private static final String CONTENT_TYPES_NAMESPACE =
       "http://schemas.openxmlformats.org/package/2006/content-types";
   private static final String RELATIONSHIPS_NAMESPACE =
@@ -76,6 +93,11 @@ public class AttachmentUploadValidator {
       "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
   private static final String EXCEL_WORKBOOK_CONTENT_TYPE =
       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
+  private static final String POWERPOINT_PRESENTATION_CONTENT_TYPE =
+      "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml";
+  private static final List<String> OFFICE_PART_FOLDERS = List.of("word/", "xl/", "ppt/");
+  private static final Set<String> MACRO_ENABLED_PACKAGE_EXTENSIONS =
+      Set.of("docm", "dotm", "xlsm", "xltm", "xlam", "pptm", "potm", "ppsm", "ppam", "sldm");
   private static final Set<String> OFFICE_DOCUMENT_RELATIONSHIP_TYPES =
       Set.of(
           "http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument",
@@ -84,6 +106,10 @@ public class AttachmentUploadValidator {
       Set.of(
           "http://schemas.openxmlformats.org/officeDocument/2006/relationships/hyperlink",
           "http://purl.oclc.org/ooxml/officeDocument/relationships/hyperlink");
+  private static final Set<String> ATTACHED_TEMPLATE_RELATIONSHIP_TYPES =
+      Set.of(
+          "http://schemas.openxmlformats.org/officedocument/2006/relationships/attachedtemplate",
+          "http://purl.oclc.org/ooxml/officedocument/relationships/attachedtemplate");
 
   public ValidationResult validate(MultipartFile file, String description) {
     if (file == null || file.isEmpty()) {
@@ -194,35 +220,29 @@ public class AttachmentUploadValidator {
       case "RTF" -> validateRtf(file);
       case "DOC" -> validateOle(file, true);
       case "XLS" -> validateOle(file, false);
-      case "DOCX" -> validateZip(file, OfficePackageType.WORD);
-      case "XLSX" -> validateZip(file, OfficePackageType.EXCEL);
-      case "ZIP" -> validateZip(file, OfficePackageType.NONE);
+      case "DOCX" ->
+          validateZip(file::getInputStream, OfficePackageType.WORD, OfficeScope.upload("DOCX"));
+      case "XLSX" ->
+          validateZip(file::getInputStream, OfficePackageType.EXCEL, OfficeScope.upload("XLSX"));
+      case "ZIP" ->
+          validateZip(file::getInputStream, OfficePackageType.NONE, OfficeScope.upload("ZIP"));
       case "XML" -> validateXml(file);
       case "CSV", "TXT" -> validateText(file);
       default -> throw InvalidAttachmentException.mismatch(fileTypeCode);
     }
   }
 
+  // Image and PDF files are recognized by the signature at the start of the file, so data after
+  // the image or document end is accepted.
   private void validateBmp(MultipartFile file) throws IOException {
-    ContentEnvelope envelope = inspect(file, 64, 0);
-    byte[] prefix = envelope.prefix();
-    if (prefix.length < 26 || prefix[0] != 'B' || prefix[1] != 'M') {
-      throw InvalidAttachmentException.mismatch("BMP");
-    }
-    long declaredSize = unsignedLittleEndianInt(prefix, 2);
-    long pixelOffset = unsignedLittleEndianInt(prefix, 10);
-    long dibHeaderSize = unsignedLittleEndianInt(prefix, 14);
-    if (declaredSize != envelope.size()
-        || dibHeaderSize < 12
-        || 14 + dibHeaderSize > envelope.size()
-        || pixelOffset < 14 + dibHeaderSize
-        || pixelOffset >= envelope.size()) {
+    byte[] prefix = inspect(file::getInputStream, 2, 0).prefix();
+    if (prefix.length < 2 || prefix[0] != 'B' || prefix[1] != 'M') {
       throw InvalidAttachmentException.mismatch("BMP");
     }
   }
 
   private void validateJpeg(MultipartFile file) throws IOException {
-    ContentEnvelope envelope = inspect(file, 4, 0);
+    ContentEnvelope envelope = inspect(file::getInputStream, 4, 0);
     byte[] prefix = envelope.prefix();
     if (prefix.length < 4
         || (prefix[0] & 0xff) != 0xff
@@ -233,8 +253,7 @@ public class AttachmentUploadValidator {
   }
 
   private void validatePdf(MultipartFile file) throws IOException {
-    ContentEnvelope envelope = inspect(file, 8, 8192);
-    byte[] prefix = envelope.prefix();
+    byte[] prefix = inspect(file::getInputStream, 8, 0).prefix();
     if (prefix.length < 8
         || prefix[0] != '%'
         || prefix[1] != 'P'
@@ -243,8 +262,7 @@ public class AttachmentUploadValidator {
         || prefix[4] != '-'
         || !asciiDigit(prefix[5])
         || prefix[6] != '.'
-        || !asciiDigit(prefix[7])
-        || !endsWithPdfEof(envelope.tail())) {
+        || !asciiDigit(prefix[7])) {
       throw InvalidAttachmentException.mismatch("PDF");
     }
   }
@@ -252,16 +270,13 @@ public class AttachmentUploadValidator {
   private void validatePng(MultipartFile file) throws IOException {
     byte[] signature =
         new byte[] {(byte) 0x89, 'P', 'N', 'G', 0x0d, 0x0a, 0x1a, 0x0a};
-    byte[] iend =
-        new byte[] {0, 0, 0, 0, 'I', 'E', 'N', 'D', (byte) 0xae, 0x42, 0x60, (byte) 0x82};
-    ContentEnvelope envelope = inspect(file, signature.length, iend.length);
-    if (!startsWith(envelope.prefix(), signature) || !endsWith(envelope.tail(), iend)) {
+    if (!startsWith(inspect(file::getInputStream, signature.length, 0).prefix(), signature)) {
       throw InvalidAttachmentException.mismatch("PNG");
     }
   }
 
   private void validateRtf(MultipartFile file) throws IOException {
-    ContentEnvelope envelope = inspect(file, 8, 64);
+    ContentEnvelope envelope = inspect(file::getInputStream, 8, 64);
     byte[] prefix = envelope.prefix();
     byte[] tail = envelope.tail();
     byte[] signature = "{\\rtf".getBytes(StandardCharsets.US_ASCII);
@@ -315,33 +330,39 @@ public class AttachmentUploadValidator {
     }
   }
 
-  private void validateZip(MultipartFile file, OfficePackageType packageType) throws IOException {
-    ContentEnvelope envelope = inspect(file, 4, ZIP_END_RECORD_MAX_BYTES);
+  private void validateZip(ContentSource source, OfficePackageType packageType, OfficeScope scope)
+      throws IOException {
+    ContentEnvelope envelope = inspect(source, 4, ZIP_END_RECORD_MAX_BYTES);
     ZipEndRecord endRecord = validateZipEnvelope(envelope);
-    Set<String> entryNames = new HashSet<>();
+    Set<String> entryNames = new LinkedHashSet<>();
     Set<String> caseInsensitiveEntryNames = new HashSet<>();
     Map<String, LocalZipEntry> localEntries = new HashMap<>();
     ContentTypeManifest contentTypes = null;
     String officeDocumentTarget = null;
     int entryCount = 0;
-    long totalExpandedBytes = 0;
 
-    try (InputStream input = limited(file.getInputStream());
+    try (InputStream input = limited(source.open());
         ZipInputStream zip = new ZipInputStream(input, ZIP_LEGACY_CHARSET)) {
       ZipEntry entry;
       while ((entry = zip.getNextEntry()) != null) {
         entryCount++;
-        if (entryCount > MAX_ARCHIVE_ENTRIES) {
-          throw InvalidAttachmentException.unsafeArchive();
-        }
+        scope.budget().countEntry();
         String entryName = entry.getName();
         if (!safeArchiveEntryName(entryName)
             || !entryNames.add(entryName)
             || !caseInsensitiveEntryNames.add(entryName.toLowerCase(Locale.ROOT))) {
           throw InvalidAttachmentException.unsafeArchive();
         }
-        if (packageType != OfficePackageType.NONE && unsafeOfficePart(entryName)) {
-          throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+        OfficePackageType embeddedType = null;
+        if (packageType != OfficePackageType.NONE) {
+          OfficeFinding finding = unsafeOfficePart(entryName);
+          if (finding != null) {
+            throw scope.refusal(finding, entryName);
+          }
+          // Folder entries, which ordinary ZIP tools add, are not parts.
+          if (embeddingPart(entryName) && !entryName.endsWith("/")) {
+            embeddedType = embeddedPackageType(entryName, scope);
+          }
         }
         if (entry.getSize() > MAX_ARCHIVE_ENTRY_BYTES) {
           throw InvalidAttachmentException.unsafeArchive();
@@ -349,23 +370,26 @@ public class AttachmentUploadValidator {
 
         boolean capture =
             packageType != OfficePackageType.NONE
-                && (CONTENT_TYPES_ENTRY.equals(entryName) || entryName.endsWith(".rels"));
+                && (CONTENT_TYPES_ENTRY.equals(entryName) || relationshipsPart(entryName));
         ByteArrayOutputStream captured = capture ? new ByteArrayOutputStream() : null;
+        EmbeddedPart embedded = embeddedType != null ? new EmbeddedPart() : null;
         byte[] chunk = new byte[8192];
         long entryExpandedBytes = 0;
         int read;
         while ((read = zip.read(chunk)) != -1) {
           entryExpandedBytes += read;
-          totalExpandedBytes += read;
-          if (entryExpandedBytes > MAX_ARCHIVE_ENTRY_BYTES
-              || totalExpandedBytes > MAX_ARCHIVE_EXPANDED_BYTES) {
+          scope.budget().countExpandedBytes(read);
+          if (entryExpandedBytes > MAX_ARCHIVE_ENTRY_BYTES) {
             throw InvalidAttachmentException.unsafeArchive();
           }
           if (captured != null) {
             if (entryExpandedBytes > MAX_CAPTURED_PACKAGE_PART_BYTES) {
-              throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+              throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, entryName);
             }
             captured.write(chunk, 0, read);
+          }
+          if (embedded != null && !embedded.append(chunk, read, scope.budget())) {
+            throw scope.refusal(OfficeFinding.INVALID_EMBEDDED_DOCUMENT, entryName);
           }
         }
         rejectCompressionBomb(entry, entryExpandedBytes);
@@ -387,17 +411,25 @@ public class AttachmentUploadValidator {
         if (captured != null) {
           if (CONTENT_TYPES_ENTRY.equals(entryName)) {
             if (contentTypes != null) {
-              throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+              throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, entryName);
             }
-            contentTypes = parseContentTypes(captured.toByteArray(), packageType);
+            contentTypes = parseContentTypes(captured.toByteArray(), scope);
           } else {
-            String target = parseRelationships(captured.toByteArray(), packageType);
+            String target = parseRelationships(captured.toByteArray(), entryName, scope);
             if (PACKAGE_RELATIONSHIPS_ENTRY.equals(entryName)) {
               if (officeDocumentTarget != null || target == null) {
-                throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+                throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, entryName);
               }
               officeDocumentTarget = target;
             }
+          }
+        }
+        if (embedded != null) {
+          try {
+            embedded.trim(scope.budget());
+            validateEmbeddedPackage(embedded, entryName, embeddedType, scope);
+          } finally {
+            embedded.release(scope.budget());
           }
         }
       }
@@ -410,21 +442,103 @@ public class AttachmentUploadValidator {
     if (entryCount != endRecord.entryCount()) {
       throw InvalidAttachmentException.unsafeArchive();
     }
-    validateCentralDirectory(file, endRecord, localEntries);
+    validateCentralDirectory(source, endRecord, localEntries);
     if (packageType == OfficePackageType.NONE) {
       return;
+    }
+    if (contentTypes != null) {
+      rejectRefusedDefaultContentTypes(contentTypes, entryNames, scope);
     }
 
     String expectedPart = packageType.mainPart();
     if (!entryNames.contains(CONTENT_TYPES_ENTRY)
         || !entryNames.contains(PACKAGE_RELATIONSHIPS_ENTRY)
         || !entryNames.contains(expectedPart)
-        || entryNames.contains(packageType.otherMainPart())
+        || containsOtherMainPart(entryNames, packageType)
         || !expectedPart.equals(normalizePackageTarget(officeDocumentTarget))
         || contentTypes == null
         || !packageType.mainContentType().equals(resolveContentType(contentTypes, expectedPart))) {
       throw InvalidAttachmentException.mismatch(packageType.extension());
     }
+  }
+
+  private boolean containsOtherMainPart(Set<String> entryNames, OfficePackageType packageType) {
+    for (OfficePackageType otherType : OfficePackageType.values()) {
+      if (otherType != OfficePackageType.NONE
+          && otherType != packageType
+          && entryNames.contains(otherType.mainPart())) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // A Default content type applies to every part with its extension that has no Override, so a
+  // refused Default names the first such part, or [Content_Types].xml when no part uses it.
+  private void rejectRefusedDefaultContentTypes(
+      ContentTypeManifest contentTypes, Set<String> entryNames, OfficeScope scope) {
+    Map<String, OfficeFinding> refusedDefaults = contentTypes.refusedDefaults();
+    if (refusedDefaults.isEmpty()) {
+      return;
+    }
+    for (String entryName : entryNames) {
+      OfficeFinding finding = refusedDefaults.get(partExtension(entryName));
+      if (finding != null
+          && !CONTENT_TYPES_ENTRY.equals(entryName)
+          && !contentTypes.overrides().containsKey(entryName)) {
+        throw scope.refusal(finding, entryName);
+      }
+    }
+    throw scope.refusal(refusedDefaults.values().iterator().next(), CONTENT_TYPES_ENTRY);
+  }
+
+  // Embedded DOCX, XLSX and PPTX parts (embedded documents and chart data) must pass the same
+  // checks as an uploaded Office file, nested at most MAX_EMBEDDED_PACKAGE_DEPTH levels deep.
+  // Other embeddings, such as OLE objects, are refused.
+  private OfficePackageType embeddedPackageType(String entryName, OfficeScope scope) {
+    String extension = partExtension(entryName);
+    OfficePackageType packageType =
+        switch (extension) {
+          case "docx" -> OfficePackageType.WORD;
+          case "xlsx" -> OfficePackageType.EXCEL;
+          case "pptx" -> OfficePackageType.POWERPOINT;
+          default -> null;
+        };
+    if (packageType == null) {
+      throw scope.refusal(
+          MACRO_ENABLED_PACKAGE_EXTENSIONS.contains(extension)
+              ? OfficeFinding.MACRO
+              : OfficeFinding.EMBEDDED_OBJECT,
+          entryName);
+    }
+    if (scope.depth() >= MAX_EMBEDDED_PACKAGE_DEPTH) {
+      throw scope.refusal(OfficeFinding.NESTED_TOO_DEEP, entryName);
+    }
+    return packageType;
+  }
+
+  private void validateEmbeddedPackage(
+      EmbeddedPart content, String entryName, OfficePackageType packageType, OfficeScope scope)
+      throws IOException {
+    if (content.startsWith(OLE_COMPOUND_FILE_SIGNATURE)) {
+      throw scope.refusal(OfficeFinding.EMBEDDED_OBJECT, entryName);
+    }
+    try {
+      validateZip(content::open, packageType, scope.enter(entryName));
+    } catch (InvalidAttachmentException ex) {
+      if (ex.namesOfficePart()) {
+        throw ex;
+      }
+      throw scope.refusal(OfficeFinding.INVALID_EMBEDDED_DOCUMENT, entryName);
+    }
+  }
+
+  private String partExtension(String partName) {
+    String fileName = partName.substring(partName.lastIndexOf('/') + 1);
+    int extensionIndex = fileName.lastIndexOf('.');
+    return extensionIndex < 0
+        ? ""
+        : fileName.substring(extensionIndex + 1).toLowerCase(Locale.ROOT);
   }
 
   private ZipEndRecord validateZipEnvelope(ContentEnvelope envelope) {
@@ -472,14 +586,14 @@ public class AttachmentUploadValidator {
   }
 
   private void validateCentralDirectory(
-      MultipartFile file, ZipEndRecord endRecord, Map<String, LocalZipEntry> localEntries)
+      ContentSource source, ZipEndRecord endRecord, Map<String, LocalZipEntry> localEntries)
       throws IOException {
     List<CentralZipEntry> centralEntries = new ArrayList<>(endRecord.entryCount());
     Set<String> names = new HashSet<>();
     Set<String> caseInsensitiveNames = new HashSet<>();
     long remaining = endRecord.centralDirectorySize();
 
-    try (InputStream input = limited(file.getInputStream())) {
+    try (InputStream input = limited(source.open())) {
       discardExactly(input, endRecord.centralDirectoryOffset());
       for (int entryIndex = 0; entryIndex < endRecord.entryCount(); entryIndex++) {
         byte[] header = readExactly(input, 46);
@@ -555,11 +669,11 @@ public class AttachmentUploadValidator {
       }
     }
 
-    validateLocalHeaders(file, endRecord.centralDirectoryOffset(), centralEntries);
+    validateLocalHeaders(source, endRecord.centralDirectoryOffset(), centralEntries);
   }
 
   private void validateLocalHeaders(
-      MultipartFile file, long centralDirectoryOffset, List<CentralZipEntry> centralEntries)
+      ContentSource source, long centralDirectoryOffset, List<CentralZipEntry> centralEntries)
       throws IOException {
     List<CentralZipEntry> sortedEntries =
         centralEntries.stream()
@@ -572,7 +686,7 @@ public class AttachmentUploadValidator {
       throw InvalidAttachmentException.unsafeArchive();
     }
 
-    try (InputStream input = limited(file.getInputStream())) {
+    try (InputStream input = limited(source.open())) {
       for (CentralZipEntry entry : sortedEntries) {
         if (!offsets.add(entry.localHeaderOffset())
             || entry.localHeaderOffset() < minimumNextOffset
@@ -749,25 +863,50 @@ public class AttachmentUploadValidator {
     return true;
   }
 
-  private boolean unsafeOfficePart(String entryName) {
+  private OfficeFinding unsafeOfficePart(String entryName) {
     String normalized = entryName.toLowerCase(Locale.ROOT);
-    return normalized.contains("vbaproject")
-        || normalized.startsWith("word/activex/")
-        || normalized.startsWith("word/embeddings/")
-        || normalized.startsWith("word/externallinks/")
-        || normalized.startsWith("word/customui/")
-        || normalized.startsWith("word/afchunk")
-        || normalized.startsWith("xl/activex/")
-        || normalized.startsWith("xl/embeddings/")
-        || normalized.startsWith("xl/externallinks/")
-        || normalized.startsWith("xl/customui/")
-        || normalized.startsWith("xl/querytables/")
-        || normalized.equals("xl/connections.xml");
+    if (normalized.contains("vbaproject")) {
+      return OfficeFinding.MACRO;
+    }
+    for (String folder : OFFICE_PART_FOLDERS) {
+      if (normalized.startsWith(folder + "activex/")) {
+        return OfficeFinding.ACTIVEX;
+      }
+      if (normalized.startsWith(folder + "externallinks/")) {
+        return OfficeFinding.EXTERNAL_LINK;
+      }
+      if (normalized.startsWith(folder + "customui/")) {
+        return OfficeFinding.UNSUPPORTED_CONTENT;
+      }
+    }
+    if (normalized.startsWith("word/afchunk")) {
+      return OfficeFinding.EMBEDDED_OBJECT;
+    }
+    if (normalized.startsWith("xl/querytables/") || normalized.equals("xl/connections.xml")) {
+      return OfficeFinding.DATA_CONNECTION;
+    }
+    return null;
   }
 
-  private ContentTypeManifest parseContentTypes(byte[] bytes, OfficePackageType packageType) {
+  private boolean embeddingPart(String partName) {
+    String normalized = partName.toLowerCase(Locale.ROOT);
+    for (String folder : OFFICE_PART_FOLDERS) {
+      if (normalized.startsWith(folder + "embeddings/")) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  // Package part names are compared without regard to case, so relationship parts are too.
+  private boolean relationshipsPart(String partName) {
+    return partName.regionMatches(true, partName.length() - 5, ".rels", 0, 5);
+  }
+
+  private ContentTypeManifest parseContentTypes(byte[] bytes, OfficeScope scope) {
     Map<String, String> defaults = new HashMap<>();
     Map<String, String> overrides = new HashMap<>();
+    Map<String, OfficeFinding> refusedDefaults = new LinkedHashMap<>();
     XMLInputFactory factory = secureXmlInputFactory();
     try {
       XMLStreamReader reader = factory.createXMLStreamReader(new ByteArrayInputStream(bytes));
@@ -775,7 +914,7 @@ public class AttachmentUploadValidator {
       while (reader.hasNext()) {
         int event = reader.next();
         if (event == XMLStreamConstants.DTD) {
-          throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+          throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, CONTENT_TYPES_ENTRY);
         }
         if (event != XMLStreamConstants.START_ELEMENT) {
           continue;
@@ -784,7 +923,7 @@ public class AttachmentUploadValidator {
           rootSeen = true;
           if (!"Types".equals(reader.getLocalName())
               || !CONTENT_TYPES_NAMESPACE.equals(reader.getNamespaceURI())) {
-            throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+            throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, CONTENT_TYPES_ENTRY);
           }
           continue;
         }
@@ -792,38 +931,55 @@ public class AttachmentUploadValidator {
           continue;
         }
         String contentType = reader.getAttributeValue(null, "ContentType");
-        if (contentType == null || unsafeOfficeContentType(contentType)) {
-          throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+        if (contentType == null) {
+          throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, CONTENT_TYPES_ENTRY);
         }
-        if ("Default".equals(reader.getLocalName())) {
+        String partName = reader.getAttributeValue(null, "PartName");
+        OfficeFinding finding = unsafeOfficeContentType(contentType);
+        boolean defaultElement = "Default".equals(reader.getLocalName());
+        if (finding != null && !defaultElement) {
+          boolean namedPart =
+              "Override".equals(reader.getLocalName())
+                  && partName != null
+                  && partName.startsWith("/")
+                  && safeArchiveEntryName(partName.substring(1));
+          throw scope.refusal(finding, namedPart ? partName.substring(1) : CONTENT_TYPES_ENTRY);
+        }
+        if (defaultElement) {
           String extension = reader.getAttributeValue(null, "Extension");
           if (extension == null
               || extension.isBlank()
               || defaults.putIfAbsent(extension.toLowerCase(Locale.ROOT), contentType) != null) {
-            throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+            throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, CONTENT_TYPES_ENTRY);
+          }
+          if (finding != null) {
+            refusedDefaults.put(extension.toLowerCase(Locale.ROOT), finding);
           }
         } else if ("Override".equals(reader.getLocalName())) {
-          String partName = reader.getAttributeValue(null, "PartName");
           if (partName == null
               || !partName.startsWith("/")
               || !safeArchiveEntryName(partName.substring(1))
               || overrides.putIfAbsent(partName.substring(1), contentType) != null) {
-            throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+            throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, CONTENT_TYPES_ENTRY);
           }
         }
       }
       reader.close();
       if (!rootSeen
           || !RELATIONSHIPS_CONTENT_TYPE.equals(defaults.get("rels"))) {
-        throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+        throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, CONTENT_TYPES_ENTRY);
       }
-      return new ContentTypeManifest(Map.copyOf(defaults), Map.copyOf(overrides));
+      return new ContentTypeManifest(
+          Map.copyOf(defaults),
+          Map.copyOf(overrides),
+          Collections.unmodifiableMap(refusedDefaults));
     } catch (XMLStreamException ex) {
-      throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+      throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, CONTENT_TYPES_ENTRY);
     }
   }
 
-  private String parseRelationships(byte[] bytes, OfficePackageType packageType) {
+  private String parseRelationships(byte[] bytes, String relationshipsPart, OfficeScope scope) {
+    String sourceFolder = relationshipSourceFolder(relationshipsPart);
     String officeDocumentTarget = null;
     XMLInputFactory factory = secureXmlInputFactory();
     try {
@@ -832,7 +988,7 @@ public class AttachmentUploadValidator {
       while (reader.hasNext()) {
         int event = reader.next();
         if (event == XMLStreamConstants.DTD) {
-          throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+          throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, relationshipsPart);
         }
         if (event != XMLStreamConstants.START_ELEMENT) {
           continue;
@@ -841,7 +997,7 @@ public class AttachmentUploadValidator {
           rootSeen = true;
           if (!"Relationships".equals(reader.getLocalName())
               || !RELATIONSHIPS_NAMESPACE.equals(reader.getNamespaceURI())) {
-            throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+            throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, relationshipsPart);
           }
           continue;
         }
@@ -852,62 +1008,267 @@ public class AttachmentUploadValidator {
         String targetMode = reader.getAttributeValue(null, "TargetMode");
         String type = reader.getAttributeValue(null, "Type");
         String target = reader.getAttributeValue(null, "Target");
-        if (type == null
-            || target == null
-            || unsafeRelationshipType(type)) {
-          throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+        if (type == null || target == null) {
+          throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, relationshipsPart);
         }
-        if ("external".equalsIgnoreCase(targetMode)) {
-          if (!HYPERLINK_RELATIONSHIP_TYPES.contains(type) || !safeExternalHyperlink(target)) {
-            throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+        boolean external = "external".equalsIgnoreCase(targetMode);
+        if (!external && targetMode != null && !targetMode.isBlank()) {
+          throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, relationshipsPart);
+        }
+        if (ATTACHED_TEMPLATE_RELATIONSHIP_TYPES.contains(type.toLowerCase(Locale.ROOT))) {
+          if (remoteTemplateTarget(target)) {
+            throw scope.refusal(OfficeFinding.REMOTE_TEMPLATE, relationshipsPart);
           }
           continue;
         }
-        if (targetMode != null && !targetMode.isBlank()) {
-          throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+        if (external) {
+          if (!HYPERLINK_RELATIONSHIP_TYPES.contains(type) || !safeExternalHyperlink(target)) {
+            throw scope.refusal(OfficeFinding.EXTERNAL_LINK, relationshipsPart);
+          }
+          continue;
         }
-        if (unsafeInternalRelationshipTarget(target)) {
-          throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+        OfficeFinding finding = unsafeRelationshipType(type);
+        String resolvedTarget =
+            unsafeInternalRelationshipTarget(target)
+                ? null
+                : resolvePartTarget(sourceFolder, target);
+        if (finding != null) {
+          // The refusal names the part the relationship points to when it is a usable part name.
+          throw scope.refusal(
+              finding,
+              resolvedTarget != null && safeArchiveEntryName(resolvedTarget)
+                  ? resolvedTarget
+                  : relationshipsPart);
+        }
+        if (resolvedTarget == null) {
+          throw scope.refusal(OfficeFinding.EXTERNAL_LINK, relationshipsPart);
+        }
+        if (type.toLowerCase(Locale.ROOT).endsWith("/package") && !embeddingPart(resolvedTarget)) {
+          throw scope.refusal(OfficeFinding.EMBEDDED_OBJECT, relationshipsPart);
         }
         if (OFFICE_DOCUMENT_RELATIONSHIP_TYPES.contains(type)) {
           if (officeDocumentTarget != null) {
-            throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+            throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, relationshipsPart);
           }
           officeDocumentTarget = target;
         }
       }
       reader.close();
       if (!rootSeen) {
-        throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+        throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, relationshipsPart);
       }
       return officeDocumentTarget;
     } catch (XMLStreamException ex) {
-      throw InvalidAttachmentException.unsafeOfficePackage(packageType.extension());
+      throw scope.refusal(OfficeFinding.UNSUPPORTED_CONTENT, relationshipsPart);
     }
   }
 
-  private boolean unsafeOfficeContentType(String contentType) {
+  private OfficeFinding unsafeOfficeContentType(String contentType) {
     String normalized = contentType.toLowerCase(Locale.ROOT);
-    return normalized.contains("macroenabled")
+    if (normalized.contains("macroenabled")
         || normalized.contains("macrosheet")
-        || normalized.contains("vbaproject")
-        || normalized.contains("oleobject")
-        || normalized.contains("activex")
-        || normalized.contains("externallink")
-        || normalized.contains("querytable")
-        || normalized.contains("connections");
+        || normalized.contains("vbaproject")) {
+      return OfficeFinding.MACRO;
+    }
+    if (normalized.contains("oleobject")) {
+      return OfficeFinding.EMBEDDED_OBJECT;
+    }
+    if (normalized.contains("activex")) {
+      return OfficeFinding.ACTIVEX;
+    }
+    if (normalized.contains("externallink")) {
+      return OfficeFinding.EXTERNAL_LINK;
+    }
+    if (normalized.contains("querytable") || normalized.contains("connections")) {
+      return OfficeFinding.DATA_CONNECTION;
+    }
+    return null;
   }
 
-  private boolean unsafeRelationshipType(String type) {
+  private OfficeFinding unsafeRelationshipType(String type) {
     String normalized = type.toLowerCase(Locale.ROOT);
-    return normalized.contains("vbaproject")
-        || normalized.endsWith("/oleobject")
-        || normalized.endsWith("/activexcontrol")
-        || normalized.endsWith("/externallink")
-        || normalized.endsWith("/attachedtemplate")
-        || normalized.endsWith("/afchunk")
-        || normalized.endsWith("/connections")
-        || normalized.endsWith("/querytable");
+    if (normalized.contains("vbaproject")) {
+      return OfficeFinding.MACRO;
+    }
+    if (normalized.endsWith("/oleobject") || normalized.endsWith("/afchunk")) {
+      return OfficeFinding.EMBEDDED_OBJECT;
+    }
+    if (normalized.endsWith("/activexcontrol")) {
+      return OfficeFinding.ACTIVEX;
+    }
+    if (normalized.endsWith("/externallink")) {
+      return OfficeFinding.EXTERNAL_LINK;
+    }
+    if (normalized.endsWith("/connections") || normalized.endsWith("/querytable")) {
+      return OfficeFinding.DATA_CONNECTION;
+    }
+    return null;
+  }
+
+  // An attached template is fetched from its target when the document opens, so a template on
+  // another host (a UNC or NT device path, a file URL with a host other than localhost, or any
+  // other URL scheme) is refused. Local, rooted and relative paths are accepted. The target is
+  // decoded and its separators, case and whitespace are normalized first so a remote target
+  // cannot be disguised as a local one.
+  private boolean remoteTemplateTarget(String target) {
+    String location = canonicalTemplateLocation(target);
+    if (location == null
+        || location.isEmpty()
+        || location.startsWith("//")
+        || location.indexOf('?') >= 0) {
+      return true;
+    }
+    if (LOCAL_DRIVE_PATH.matcher(location).lookingAt()) {
+      return false;
+    }
+    var scheme = URI_SCHEME.matcher(location);
+    if (!scheme.lookingAt()) {
+      return false;
+    }
+    if (!"file".equals(scheme.group(1))) {
+      return true;
+    }
+    String path = location.substring(scheme.end());
+    int slashes = 0;
+    while (slashes < path.length() && path.charAt(slashes) == '/') {
+      slashes++;
+    }
+    String afterSlashes = path.substring(slashes);
+    return switch (slashes) {
+      case 0, 1, 3 -> false;
+      case 2 -> !afterSlashes.startsWith("localhost/") || afterSlashes.startsWith("localhost//");
+      default -> true;
+    };
+  }
+
+  private String canonicalTemplateLocation(String target) {
+    String decoded = percentDecoded(Normalizer.normalize(target, Normalizer.Form.NFKC));
+    if (decoded == null) {
+      return null;
+    }
+    String normalized = Normalizer.normalize(decoded, Normalizer.Form.NFKC);
+    StringBuilder location = new StringBuilder(normalized.length());
+    for (int index = 0; index < normalized.length(); ) {
+      int codePoint = normalized.codePointAt(index);
+      index += Character.charCount(codePoint);
+      if (Character.isWhitespace(codePoint)
+          || Character.isSpaceChar(codePoint)
+          || Character.isISOControl(codePoint)
+          || Character.getType(codePoint) == Character.FORMAT) {
+        continue;
+      }
+      location.appendCodePoint(codePoint == '\\' ? '/' : Character.toLowerCase(codePoint));
+    }
+    return location.toString();
+  }
+
+  // Decodes %XX escapes until the value stops changing, returning null for values that are still
+  // encoded after MAX_PERCENT_DECODING_ROUNDS rounds or whose escapes are not valid UTF-8.
+  private String percentDecoded(String value) {
+    String decoded = value;
+    for (int round = 0; round <= MAX_PERCENT_DECODING_ROUNDS; round++) {
+      String next = percentDecodeOnce(decoded);
+      if (next == null) {
+        return null;
+      }
+      if (next.equals(decoded)) {
+        return decoded;
+      }
+      decoded = next;
+    }
+    return null;
+  }
+
+  // Each run of %XX escapes is read as UTF-8, as package consumers decode relationship targets.
+  private String percentDecodeOnce(String value) {
+    StringBuilder decoded = new StringBuilder(value.length());
+    ByteArrayOutputStream escapedBytes = new ByteArrayOutputStream();
+    for (int index = 0; index < value.length(); index++) {
+      char character = value.charAt(index);
+      if (character == '%' && index + 2 < value.length()) {
+        int high = hexValue(value.charAt(index + 1));
+        int low = hexValue(value.charAt(index + 2));
+        if (high >= 0 && low >= 0) {
+          escapedBytes.write((high << 4) | low);
+          index += 2;
+          continue;
+        }
+      }
+      if (!appendUtf8(decoded, escapedBytes)) {
+        return null;
+      }
+      decoded.append(character);
+    }
+    return appendUtf8(decoded, escapedBytes) ? decoded.toString() : null;
+  }
+
+  private boolean appendUtf8(StringBuilder decoded, ByteArrayOutputStream escapedBytes) {
+    if (escapedBytes.size() == 0) {
+      return true;
+    }
+    try {
+      decoded.append(
+          StandardCharsets.UTF_8
+              .newDecoder()
+              .onMalformedInput(CodingErrorAction.REPORT)
+              .onUnmappableCharacter(CodingErrorAction.REPORT)
+              .decode(ByteBuffer.wrap(escapedBytes.toByteArray())));
+      escapedBytes.reset();
+      return true;
+    } catch (CharacterCodingException ex) {
+      return false;
+    }
+  }
+
+  private int hexValue(char character) {
+    if (character >= '0' && character <= '9') {
+      return character - '0';
+    }
+    if (character >= 'a' && character <= 'f') {
+      return character - 'a' + 10;
+    }
+    if (character >= 'A' && character <= 'F') {
+      return character - 'A' + 10;
+    }
+    return -1;
+  }
+
+  private String relationshipSourceFolder(String relationshipsPart) {
+    if (relationshipsPart.regionMatches(true, 0, "_rels/", 0, 6)) {
+      return "";
+    }
+    for (int index = relationshipsPart.length() - 7; index >= 0; index--) {
+      if (relationshipsPart.regionMatches(true, index, "/_rels/", 0, 7)) {
+        return relationshipsPart.substring(0, index + 1);
+      }
+    }
+    return relationshipsPart.substring(0, relationshipsPart.lastIndexOf('/') + 1);
+  }
+
+  // Resolves an internal relationship target against the folder of its source part, returning
+  // null when the target climbs above the package root.
+  private String resolvePartTarget(String sourceFolder, String target) {
+    String decoded = percentDecoded(target);
+    if (decoded == null) {
+      return null;
+    }
+    String path = decoded.replace('\\', '/');
+    path = path.startsWith("/") ? path.substring(1) : sourceFolder + path;
+    Deque<String> segments = new ArrayDeque<>();
+    for (String segment : path.split("/", -1)) {
+      if (segment.isEmpty() || ".".equals(segment)) {
+        continue;
+      }
+      if ("..".equals(segment)) {
+        if (segments.isEmpty()) {
+          return null;
+        }
+        segments.removeLast();
+        continue;
+      }
+      segments.addLast(segment);
+    }
+    return String.join("/", segments);
   }
 
   private boolean safeExternalHyperlink(String target) {
@@ -1125,13 +1486,13 @@ public class AttachmentUploadValidator {
         || signature == 0xcafebabe;
   }
 
-  private ContentEnvelope inspect(MultipartFile file, int prefixCapacity, int tailCapacity)
+  private ContentEnvelope inspect(ContentSource source, int prefixCapacity, int tailCapacity)
       throws IOException {
     ByteArrayOutputStream prefix = new ByteArrayOutputStream(prefixCapacity);
     byte[] tail = new byte[tailCapacity];
     int tailLength = 0;
     long total = 0;
-    try (InputStream input = limited(file.getInputStream())) {
+    try (InputStream input = limited(source.open())) {
       byte[] chunk = new byte[8192];
       int read;
       while ((read = input.read(chunk)) != -1) {
@@ -1192,42 +1553,6 @@ public class AttachmentUploadValidator {
     return true;
   }
 
-  private boolean endsWith(byte[] value, byte[] suffix) {
-    if (value.length < suffix.length) {
-      return false;
-    }
-    int offset = value.length - suffix.length;
-    for (int index = 0; index < suffix.length; index++) {
-      if (value[offset + index] != suffix[index]) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  private boolean endsWithPdfEof(byte[] tail) {
-    byte[] marker = "%%EOF".getBytes(StandardCharsets.US_ASCII);
-    for (int index = tail.length - marker.length; index >= 0; index--) {
-      boolean matches = true;
-      for (int markerIndex = 0; markerIndex < marker.length; markerIndex++) {
-        if (tail[index + markerIndex] != marker[markerIndex]) {
-          matches = false;
-          break;
-        }
-      }
-      if (!matches) {
-        continue;
-      }
-      for (int suffixIndex = index + marker.length; suffixIndex < tail.length; suffixIndex++) {
-        if (!isAsciiWhitespace(tail[suffixIndex])) {
-          return false;
-        }
-      }
-      return true;
-    }
-    return false;
-  }
-
   private boolean isAsciiWhitespace(byte value) {
     return value == ' ' || value == '\t' || value == '\r' || value == '\n' || value == '\f';
   }
@@ -1247,20 +1572,18 @@ public class AttachmentUploadValidator {
   }
 
   private enum OfficePackageType {
-    NONE(null, null, null, null),
-    WORD("DOCX", WORD_DOCUMENT_ENTRY, EXCEL_WORKBOOK_ENTRY, WORD_DOCUMENT_CONTENT_TYPE),
-    EXCEL("XLSX", EXCEL_WORKBOOK_ENTRY, WORD_DOCUMENT_ENTRY, EXCEL_WORKBOOK_CONTENT_TYPE);
+    NONE(null, null, null),
+    WORD("DOCX", WORD_DOCUMENT_ENTRY, WORD_DOCUMENT_CONTENT_TYPE),
+    EXCEL("XLSX", EXCEL_WORKBOOK_ENTRY, EXCEL_WORKBOOK_CONTENT_TYPE),
+    POWERPOINT("PPTX", POWERPOINT_PRESENTATION_ENTRY, POWERPOINT_PRESENTATION_CONTENT_TYPE);
 
     private final String extension;
     private final String mainPart;
-    private final String otherMainPart;
     private final String mainContentType;
 
-    OfficePackageType(
-        String extension, String mainPart, String otherMainPart, String mainContentType) {
+    OfficePackageType(String extension, String mainPart, String mainContentType) {
       this.extension = extension;
       this.mainPart = mainPart;
-      this.otherMainPart = otherMainPart;
       this.mainContentType = mainContentType;
     }
 
@@ -1272,12 +1595,145 @@ public class AttachmentUploadValidator {
       return mainPart;
     }
 
-    String otherMainPart() {
-      return otherMainPart;
-    }
-
     String mainContentType() {
       return mainContentType;
+    }
+  }
+
+  private enum OfficeFinding {
+    MACRO("a macro"),
+    ACTIVEX("an ActiveX control"),
+    EMBEDDED_OBJECT("an embedded object"),
+    EXTERNAL_LINK("an external link"),
+    REMOTE_TEMPLATE("a link to a remote template"),
+    DATA_CONNECTION("a data connection"),
+    UNSUPPORTED_CONTENT("unsupported content"),
+    INVALID_EMBEDDED_DOCUMENT("an embedded document that is not a safe, valid Office file"),
+    NESTED_TOO_DEEP(
+        "embedded documents nested more than " + MAX_EMBEDDED_PACKAGE_DEPTH + " levels deep");
+
+    private final String description;
+
+    OfficeFinding(String description) {
+      this.description = description;
+    }
+
+    String description() {
+      return description;
+    }
+  }
+
+  @FunctionalInterface
+  private interface ContentSource {
+    InputStream open() throws IOException;
+  }
+
+  /**
+   * Where an Office check runs: the uploaded file's extension, the chain of embedded parts that
+   * leads to the package being checked, and the archive limits shared by every nested package.
+   */
+  private record OfficeScope(
+      String uploadExtension, List<String> embeddedParts, ArchiveBudget budget) {
+    static OfficeScope upload(String uploadExtension) {
+      return new OfficeScope(uploadExtension, List.of(), new ArchiveBudget());
+    }
+
+    int depth() {
+      return embeddedParts.size();
+    }
+
+    OfficeScope enter(String embeddedPart) {
+      List<String> parts = new ArrayList<>(embeddedParts);
+      parts.add(embeddedPart);
+      return new OfficeScope(uploadExtension, List.copyOf(parts), budget);
+    }
+
+    InvalidAttachmentException refusal(OfficeFinding finding, String part) {
+      String location =
+          embeddedParts.isEmpty() ? part : String.join(" > ", embeddedParts) + " (" + part + ")";
+      return InvalidAttachmentException.unsafeOfficeContent(
+          uploadExtension, finding.description(), location);
+    }
+  }
+
+  private static final class ArchiveBudget {
+    private int entries;
+    private long expandedBytes;
+    private long retainedBytes;
+
+    void countEntry() {
+      entries++;
+      if (entries > MAX_ARCHIVE_ENTRIES) {
+        throw InvalidAttachmentException.unsafeArchive();
+      }
+    }
+
+    void countExpandedBytes(int bytes) {
+      expandedBytes += bytes;
+      if (expandedBytes > MAX_ARCHIVE_EXPANDED_BYTES) {
+        throw InvalidAttachmentException.unsafeArchive();
+      }
+    }
+
+    long retainableBytes() {
+      return MAX_RETAINED_EMBEDDED_BYTES - retainedBytes;
+    }
+
+    void retain(long bytes) {
+      retainedBytes += bytes;
+    }
+
+    void release(long bytes) {
+      retainedBytes -= bytes;
+    }
+  }
+
+  /**
+   * An embedded part held in memory while it is checked. Its buffer counts against the limit that
+   * every nesting level shares, and never grows past what that limit has left.
+   */
+  private static final class EmbeddedPart {
+    private byte[] bytes = new byte[0];
+    private int length;
+
+    boolean append(byte[] chunk, int count, ArchiveBudget budget) {
+      int required = length + count;
+      if (required > bytes.length) {
+        long capacity =
+            Math.min(
+                Math.max(required, 2L * bytes.length), bytes.length + budget.retainableBytes());
+        if (capacity < required) {
+          return false;
+        }
+        budget.retain(capacity - bytes.length);
+        bytes = Arrays.copyOf(bytes, (int) capacity);
+      }
+      System.arraycopy(chunk, 0, bytes, length, count);
+      length = required;
+      return true;
+    }
+
+    // Returns the unused part of the buffer to the shared limit once the part has been read.
+    void trim(ArchiveBudget budget) {
+      if (bytes.length > length) {
+        budget.release(bytes.length - length);
+        bytes = Arrays.copyOf(bytes, length);
+      }
+    }
+
+    void release(ArchiveBudget budget) {
+      budget.release(bytes.length);
+      bytes = new byte[0];
+      length = 0;
+    }
+
+    boolean startsWith(byte[] prefix) {
+      return length >= prefix.length
+          && Arrays.equals(bytes, 0, prefix.length, prefix, 0, prefix.length);
+    }
+
+    InputStream open() {
+      return new ByteArrayInputStream(bytes, 0, length);
     }
   }
 
@@ -1298,15 +1754,24 @@ public class AttachmentUploadValidator {
       long uncompressedSize,
       long localHeaderOffset) {}
 
+  /** Content types by extension and by part, and the refused Default content types. */
   private record ContentTypeManifest(
-      Map<String, String> defaults, Map<String, String> overrides) {}
+      Map<String, String> defaults,
+      Map<String, String> overrides,
+      Map<String, OfficeFinding> refusedDefaults) {}
 
   private static final class InvalidAttachmentException extends RuntimeException {
     private final String userMessage;
+    private final boolean namesOfficePart;
 
     private InvalidAttachmentException(String userMessage) {
+      this(userMessage, false);
+    }
+
+    private InvalidAttachmentException(String userMessage, boolean namesOfficePart) {
       super(userMessage);
       this.userMessage = userMessage;
+      this.namesOfficePart = namesOfficePart;
     }
 
     static InvalidAttachmentException mismatch(String fileTypeCode) {
@@ -1319,9 +1784,11 @@ public class AttachmentUploadValidator {
           "The uploaded ZIP file is not a safe, valid ZIP archive.");
     }
 
-    static InvalidAttachmentException unsafeOfficePackage(String fileTypeCode) {
+    static InvalidAttachmentException unsafeOfficeContent(
+        String fileTypeCode, String finding, String location) {
       return new InvalidAttachmentException(
-          "The uploaded ." + fileTypeCode + " file is not a safe Office document.");
+          "The uploaded ." + fileTypeCode + " file contains " + finding + " in " + location + ".",
+          true);
     }
 
     static InvalidAttachmentException unsafeLegacyOffice(String fileTypeCode) {
@@ -1331,6 +1798,10 @@ public class AttachmentUploadValidator {
 
     String userMessage() {
       return userMessage;
+    }
+
+    boolean namesOfficePart() {
+      return namesOfficePart;
     }
   }
 

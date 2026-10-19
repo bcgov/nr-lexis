@@ -34,6 +34,13 @@ import org.springframework.web.multipart.MultipartFile;
 @DisplayName("Unit Test | AttachmentUploadValidator")
 class AttachmentUploadValidatorTest {
 
+  private static final String OFFICE_RELATIONSHIPS =
+      "http://schemas.openxmlformats.org/officeDocument/2006/relationships/";
+  private static final String[] ATTACHED_TEMPLATE_TYPES = {
+    OFFICE_RELATIONSHIPS + "attachedTemplate",
+    "http://purl.oclc.org/ooxml/officeDocument/relationships/attachedTemplate"
+  };
+
   private final AttachmentUploadValidator validator = new AttachmentUploadValidator();
 
   @ParameterizedTest(name = "accepts active legacy format {0}")
@@ -212,8 +219,7 @@ class AttachmentUploadValidatorTest {
 
   @ParameterizedTest(name = "rejects relationship type {0}")
   @MethodSource("activeOoxmlRelationshipTypes")
-  void shouldRejectMacroActiveXEmbeddedTemplateAndExternalDataRelationships(
-      String relationshipType)
+  void shouldRejectMacroActiveXEmbeddedAndExternalDataRelationships(String relationshipType)
       throws IOException {
     byte[] content =
         officePackage(
@@ -254,39 +260,84 @@ class AttachmentUploadValidatorTest {
     }
   }
 
-  @ParameterizedTest(name = "rejects attached template target {0}")
+  @ParameterizedTest(name = "accepts local attached template target {0}")
   @ValueSource(
       strings = {
         "Letter.dotx",
         "../Templates/Letter.dotx",
-        "file:///C:/Users/analyst/Templates/Letter.dotx",
+        "Templates\\Letter.dotx",
+        "\\Templates\\Letter.dotx",
         "C:\\Users\\analyst\\Templates\\Letter.dotx",
-        "https://example.gov.bc.ca/templates/Letter.dotm",
-        "\\\\ministry.invalid\\templates\\Letter.dotx",
-        "file://ministry.invalid/templates/Letter.dotx"
+        "C:/Users/analyst/Templates/Letter.dotx",
+        "file:///C:/Users/analyst/Templates/Letter.dotx",
+        "file:///C:\\Users\\analyst\\AppData\\Roaming\\Microsoft\\Templates\\Normal.dotm",
+        "FILE:///c:/Program%20Files/Microsoft%20Office/Templates/Letter.dotx",
+        " file:///C:/Users/analyst/My Templates/Letter.dotx ",
+        "/Users/analyst/Templates/Letter.dotx",
+        "file:///Users/analyst/Library/Group%20Containers/UBF8T346G9.Office/User%20Content.localized"
+            + "/Templates.localized/Letter.dotx",
+        "file://localhost/C:/Users/analyst/Templates/Letter.dotx",
+        "FILE://LOCALHOST/Users/analyst/Templates/Letter.dotx",
+        "file:///C:/Users/Jos%C3%A9/Templates/Letter.dotx",
+        "C:\\Users\\José\\Templates\\Letter.dotx"
       })
-  void shouldRejectDocumentsWithAnAttachedTemplate(String templateTarget) throws IOException {
-    for (String type :
-        new String[] {
-          "http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate",
-          "http://purl.oclc.org/ooxml/officeDocument/relationships/attachedTemplate"
-        }) {
+  void shouldAcceptDocumentsWithALocalAttachedTemplate(String templateTarget) throws IOException {
+    for (String type : ATTACHED_TEMPLATE_TYPES) {
       for (String targetMode : new String[] {" TargetMode=\"External\"", ""}) {
-        assertThat(
-                validator
-                    .validate(
-                        documentWithSettingsRelationship(
-                            "<Relationship Id=\"rId1\" Type=\""
-                                + type
-                                + "\" Target=\""
-                                + templateTarget
-                                + "\""
-                                + targetMode
-                                + "/>"),
-                        null)
-                    .accepted())
-            .as("%s %s%s", type, templateTarget, targetMode)
-            .isFalse();
+        String relationship = attachedTemplate(type, templateTarget, targetMode);
+        ValidationResult result =
+            validator.validate(documentWithSettingsRelationship(relationship), null);
+
+        assertThat(result.accepted())
+            .as("%s %s%s: %s", type, templateTarget, targetMode, result.rejectionMessage())
+            .isTrue();
+      }
+    }
+  }
+
+  @ParameterizedTest(name = "rejects remote attached template target {0}")
+  @ValueSource(
+      strings = {
+        "\\\\ministry.invalid\\templates\\Letter.dotx",
+        "//ministry.invalid/templates/Letter.dotx",
+        "\\/ministry.invalid/templates/Letter.dotx",
+        "/\\ministry.invalid\\templates\\Letter.dotx",
+        "file://ministry.invalid/templates/Letter.dotx",
+        "FILE://Ministry.invalid/templates/Letter.dotx",
+        "file:////ministry.invalid/templates/Letter.dotx",
+        "file:///\\\\ministry.invalid\\templates\\Letter.dotx",
+        "file:/\\ministry.invalid\\templates\\Letter.dotx",
+        "file: //ministry.invalid/templates/Letter.dotx",
+        "http://ministry.invalid/templates/Letter.dotx",
+        "https://example.gov.bc.ca/templates/Letter.dotm",
+        "HTTPS://example.invalid/Letter.dotx",
+        "ftp://ministry.invalid/Letter.dotx",
+        "%5C%5Cministry.invalid%5Ctemplates%5CLetter.dotx",
+        "%255C%255Cministry.invalid%255Ctemplates%255CLetter.dotx",
+        "file:%2F%2Fministry.invalid/templates/Letter.dotx",
+        "http%3A//ministry.invalid/Letter.dotx",
+        "  \\\\ministry.invalid\\templates\\Letter.dotx",
+        "\uFF3C\uFF3Cministry.invalid\uFF3CLetter.dotx",
+        "%EF%BC%BC%EF%BC%BCministry.invalid%EF%BC%BCLetter.dotx",
+        "%C0%AF%C0%AFministry.invalid/Letter.dotx",
+        "file://localhost//ministry.invalid/templates/Letter.dotx",
+        "file://localhost.ministry.invalid/templates/Letter.dotx",
+        "\\??\\UNC\\ministry.invalid\\templates\\Letter.dotx",
+        "file:///%3F%3F/UNC/ministry.invalid/templates/Letter.dotx"
+      })
+  void shouldRejectDocumentsWithARemoteAttachedTemplate(String templateTarget)
+      throws IOException {
+    for (String type : ATTACHED_TEMPLATE_TYPES) {
+      for (String targetMode : new String[] {" TargetMode=\"External\"", ""}) {
+        String relationship = attachedTemplate(type, templateTarget, targetMode);
+        ValidationResult result =
+            validator.validate(documentWithSettingsRelationship(relationship), null);
+
+        assertThat(result.accepted()).as("%s %s%s", type, templateTarget, targetMode).isFalse();
+        assertThat(result.rejectionMessage())
+            .isEqualTo(
+                "The uploaded .DOCX file contains a link to a remote template in"
+                    + " word/_rels/settings.xml.rels.");
       }
     }
   }
@@ -301,6 +352,55 @@ class AttachmentUploadValidatorTest {
         .isTrue();
   }
 
+  @Test
+  void shouldCheckRelationshipPartsWhateverTheCaseOfTheirName() throws IOException {
+    String remoteTemplate =
+        attachedTemplate(
+            ATTACHED_TEMPLATE_TYPES[0],
+            "\\\\ministry.invalid\\templates\\Letter.dotx",
+            " TargetMode=\"External\"");
+    String remoteObject =
+        "<Relationship Id=\"rId2\" Type=\""
+            + OFFICE_RELATIONSHIPS
+            + "oleObject\" Target=\"https://attacker.invalid/payload.bin\" TargetMode=\"External\"/>";
+    byte[] upperCaseExtension =
+        officePackage(
+            true,
+            Map.of(
+                "word/_rels/settings.xml.RELS",
+                relationships(remoteTemplate).getBytes(StandardCharsets.UTF_8)));
+    byte[] upperCaseFolder =
+        officePackage(
+            true,
+            Map.of(
+                "word/_RELS/document.xml.rels",
+                relationships(remoteObject).getBytes(StandardCharsets.UTF_8)));
+    byte[] embeddedWorkbook =
+        officePackage(
+            "word",
+            new LinkedHashMap<>(
+                Map.of(
+                    "word/_RELS/document.xml.rels",
+                    relationships(
+                            packageRelationship(
+                                "rId5", "embeddings/Microsoft_Excel_Worksheet1.xlsx"))
+                        .getBytes(StandardCharsets.UTF_8),
+                    "word/embeddings/Microsoft_Excel_Worksheet1.xlsx",
+                    officePackage(false, Map.of()))),
+            false,
+            false,
+            "");
+
+    assertThat(rejection("template.docx", upperCaseExtension))
+        .isEqualTo(
+            "The uploaded .DOCX file contains a link to a remote template in"
+                + " word/_rels/settings.xml.RELS.");
+    assertThat(rejection("object.docx", upperCaseFolder))
+        .isEqualTo(
+            "The uploaded .DOCX file contains an external link in word/_RELS/document.xml.rels.");
+    assertAccepted("embedded-workbook.docx", embeddedWorkbook);
+  }
+
   private MultipartFile documentWithSettingsRelationship(String relationship) throws IOException {
     byte[] content =
         officePackage(
@@ -311,50 +411,281 @@ class AttachmentUploadValidatorTest {
     return file("letter.docx", content);
   }
 
-  @ParameterizedTest(name = "rejects a chart that embeds a workbook in {0}")
-  @ValueSource(booleans = {true, false})
-  void shouldRejectChartsThatEmbedAWorkbook(boolean word) throws IOException {
-    String folder = word ? "word/" : "xl/";
-    String officeRelationships = "http://schemas.openxmlformats.org/officeDocument/2006/relationships/";
-    Map<String, byte[]> chartOnly = new LinkedHashMap<>();
-    chartOnly.put(
-        folder + "_rels/" + (word ? "document" : "workbook") + ".xml.rels",
-        relationships(
-                "<Relationship Id=\"rId1\" Type=\""
-                    + officeRelationships
-                    + "chart\" Target=\"charts/chart1.xml\"/>")
-            .getBytes(StandardCharsets.UTF_8));
-    chartOnly.put(
-        folder + "charts/chart1.xml",
-        "<?xml version=\"1.0\"?><chart/>".getBytes(StandardCharsets.UTF_8));
-    Map<String, byte[]> withEmbeddedWorkbook = new LinkedHashMap<>(chartOnly);
-    withEmbeddedWorkbook.put(
-        folder + "charts/_rels/chart1.xml.rels",
-        relationships(
-                "<Relationship Id=\"rId1\" Type=\""
-                    + officeRelationships
-                    + "package\" Target=\"../embeddings/Microsoft_Excel_Sheet1.xlsx\"/>")
-            .getBytes(StandardCharsets.UTF_8));
-    withEmbeddedWorkbook.put(
-        folder + "embeddings/Microsoft_Excel_Sheet1.xlsx", new byte[] {'P', 'K', 3, 4});
-    String contentTypes =
-        "<Default Extension=\"xlsx\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"/>"
-            + "<Override PartName=\"/"
-            + folder
-            + "charts/chart1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawingml.chart+xml\"/>";
-    String fileName = word ? "chart.docx" : "chart.xlsx";
+  @Test
+  void shouldAcceptChartsWithTheirEmbeddedWorkbook() throws IOException {
+    byte[] documentChart =
+        packageWithChart(
+            "word",
+            packageRelationship("rId1", "../embeddings/Microsoft_Excel_Worksheet1.xlsx")
+                + "<Relationship Id=\"rId2\" Type=\"http://schemas.microsoft.com/office/2011/relationships/chartStyle\""
+                + " Target=\"style1.xml\"/>",
+            Map.of(
+                "word/charts/style1.xml",
+                "<?xml version=\"1.0\"?><chartStyle/>".getBytes(StandardCharsets.UTF_8),
+                "word/embeddings/Microsoft_Excel_Worksheet1.xlsx",
+                officePackage(false, Map.of())));
+    byte[] workbookChart = packageWithChart("xl", null, Map.of());
+
+    assertAccepted("chart.docx", documentChart);
+    assertAccepted("chart.xlsx", workbookChart);
+  }
+
+  @ParameterizedTest(name = "rejects chart data relationship {0}")
+  @MethodSource("chartDataOutsideThePackage")
+  void shouldRejectChartDataOutsideThePackage(String relationship, String expectedFinding)
+      throws IOException {
+    byte[] content =
+        packageWithChart(
+            "word",
+            relationship,
+            Map.of(
+                "word/media/Book1.xlsx",
+                officePackage(false, Map.of()),
+                "word/embeddings/Microsoft_Excel_Worksheet1.xlsx",
+                officePackage(false, Map.of())));
+
+    assertThat(rejection("chart.docx", content))
+        .isEqualTo(
+            "The uploaded .DOCX file contains "
+                + expectedFinding
+                + " in word/charts/_rels/chart1.xml.rels.");
+  }
+
+  @Test
+  void shouldRejectChartsWhoseEmbeddedWorkbookIsNotAValidWorkbook() throws IOException {
+    byte[] content =
+        packageWithChart(
+            "word",
+            packageRelationship("rId1", "../embeddings/Microsoft_Excel_Worksheet1.xlsx"),
+            Map.of(
+                "word/embeddings/Microsoft_Excel_Worksheet1.xlsx", new byte[] {'P', 'K', 3, 4}));
+
+    assertThat(rejection("chart.docx", content))
+        .isEqualTo(
+            "The uploaded .DOCX file contains an embedded document that is not a safe, valid"
+                + " Office file in word/embeddings/Microsoft_Excel_Worksheet1.xlsx.");
+  }
+
+  @Test
+  void shouldAcceptEmbeddedOfficeDocumentsThatPassTheSameChecks() throws IOException {
+    byte[] workbookInDocument =
+        packageWithEmbeddedPart(
+            "word", "Microsoft_Excel_Worksheet1.xlsx", officePackage(false, Map.of()));
+    byte[] documentInWorkbook =
+        packageWithEmbeddedPart(
+            "xl", "Microsoft_Word_Document1.docx", officePackage(true, Map.of()));
+    byte[] presentationWithChart =
+        packageWithChart(
+            "ppt",
+            packageRelationship("rId1", "../embeddings/Microsoft_Excel_Worksheet1.xlsx"),
+            Map.of(
+                "ppt/embeddings/Microsoft_Excel_Worksheet1.xlsx", officePackage(false, Map.of())));
+    byte[] presentationInDocument =
+        packageWithEmbeddedPart(
+            "word", "Microsoft_PowerPoint_Presentation1.pptx", presentationWithChart);
+
+    assertAccepted("embedded-workbook.docx", workbookInDocument);
+    assertAccepted("embedded-document.xlsx", documentInWorkbook);
+    assertAccepted("embedded-presentation.docx", presentationInDocument);
+  }
+
+  @Test
+  void shouldRejectAnEmbeddedWorkbookWithAMacroAndNameThePart() throws IOException {
+    byte[] workbookWithMacro =
+        officePackage(false, Map.of("xl/vbaProject.bin", new byte[] {1, 2, 3}));
+    byte[] content =
+        packageWithEmbeddedPart("word", "Microsoft_Excel_Worksheet1.xlsx", workbookWithMacro);
+
+    assertThat(rejection("embedded-macro.docx", content))
+        .isEqualTo(
+            "The uploaded .DOCX file contains a macro in"
+                + " word/embeddings/Microsoft_Excel_Worksheet1.xlsx (xl/vbaProject.bin).");
+  }
+
+  @Test
+  void shouldRejectOleObjectAndMacroEnabledEmbeddings() throws IOException {
+    byte[] oleObject = oleDocument("Workbook");
+    byte[] workbookWithOleObject =
+        packageWithEmbeddedPart("xl", "oleObject1.bin", new byte[] {1, 2, 3});
 
     assertThat(
-            validator
-                .validate(file(fileName, officePackage(word, chartOnly, contentTypes)), null)
-                .accepted())
-        .isTrue();
+            rejection(
+                "ole.docx",
+                packageWithEmbeddedPart("word", "oleObject1.bin", new byte[] {1, 2, 3})))
+        .isEqualTo(
+            "The uploaded .DOCX file contains an embedded object in"
+                + " word/embeddings/oleObject1.bin.");
     assertThat(
-            validator
-                .validate(
-                    file(fileName, officePackage(word, withEmbeddedWorkbook, contentTypes)), null)
-                .accepted())
-        .isFalse();
+            rejection(
+                "ole.docx",
+                packageWithEmbeddedPart("word", "Microsoft_Excel_Worksheet1.xlsx", oleObject)))
+        .isEqualTo(
+            "The uploaded .DOCX file contains an embedded object in"
+                + " word/embeddings/Microsoft_Excel_Worksheet1.xlsx.");
+    assertThat(
+            rejection(
+                "ole.docx",
+                packageWithEmbeddedPart(
+                    "word", "Microsoft_Excel_Worksheet1.xlsx", workbookWithOleObject)))
+        .isEqualTo(
+            "The uploaded .DOCX file contains an embedded object in"
+                + " word/embeddings/Microsoft_Excel_Worksheet1.xlsx"
+                + " (xl/embeddings/oleObject1.bin).");
+    assertThat(
+            rejection(
+                "macro.xlsx",
+                packageWithEmbeddedPart(
+                    "xl",
+                    "Microsoft_Word_Macro-Enabled_Document1.docm",
+                    officePackage(true, Map.of()))))
+        .isEqualTo(
+            "The uploaded .XLSX file contains a macro in"
+                + " xl/embeddings/Microsoft_Word_Macro-Enabled_Document1.docm.");
+  }
+
+  @Test
+  void shouldNameTheRefusedPartRatherThanTheContentTypesPart() throws IOException {
+    String oleObjectDefault =
+        "<Default Extension=\"bin\" ContentType=\"application/vnd.openxmlformats-officedocument.oleObject\"/>";
+    String macroDefault =
+        "<Default Extension=\"bin\" ContentType=\"application/vnd.ms-office.vbaProject\"/>";
+    String dataDefault =
+        "<Default Extension=\"dat\" ContentType=\"application/vnd.openxmlformats-officedocument.oleObject\"/>";
+    Map<String, byte[]> oleObjectEntries = new LinkedHashMap<>();
+    oleObjectEntries.put(
+        "word/_rels/document.xml.rels",
+        relationships(
+                "<Relationship Id=\"rId5\" Type=\""
+                    + OFFICE_RELATIONSHIPS
+                    + "oleObject\" Target=\"embeddings/oleObject1.bin\"/>")
+            .getBytes(StandardCharsets.UTF_8));
+    oleObjectEntries.put("word/embeddings/oleObject1.bin", new byte[] {1, 2, 3});
+    Map<String, byte[]> macroEntries = new LinkedHashMap<>();
+    macroEntries.put(
+        "word/_rels/document.xml.rels",
+        relationships(
+                "<Relationship Id=\"rId6\" Type=\"http://schemas.microsoft.com/office/2006/relationships/vbaProject\""
+                    + " Target=\"vbaProject.bin\"/>")
+            .getBytes(StandardCharsets.UTF_8));
+    macroEntries.put("word/vbaProject.bin", new byte[] {1});
+    byte[] oleObject = officePackage("word", oleObjectEntries, false, false, oleObjectDefault);
+    byte[] macro = officePackage("word", macroEntries, false, false, macroDefault);
+    byte[] oleObjectWithoutRelationship =
+        officePackage(
+            "word",
+            Map.of("word/embeddings/oleObject1.bin", new byte[] {1, 2, 3}),
+            false,
+            false,
+            oleObjectDefault);
+    byte[] dataPart =
+        officePackage(
+            "word", Map.of("word/media/object1.dat", new byte[] {1}), false, false, dataDefault);
+    byte[] overriddenDataPart =
+        officePackage(
+            "word",
+            Map.of("word/media/object1.dat", new byte[] {1}),
+            false,
+            false,
+            dataDefault
+                + "<Override PartName=\"/word/media/object1.dat\" ContentType=\"image/png\"/>");
+
+    assertThat(rejection("ole.docx", oleObject))
+        .isEqualTo(
+            "The uploaded .DOCX file contains an embedded object in"
+                + " word/embeddings/oleObject1.bin.");
+    assertThat(rejection("macro.docx", macro))
+        .isEqualTo("The uploaded .DOCX file contains a macro in word/vbaProject.bin.");
+    assertThat(rejection("ole.docx", oleObjectWithoutRelationship))
+        .isEqualTo(
+            "The uploaded .DOCX file contains an embedded object in"
+                + " word/embeddings/oleObject1.bin.");
+    assertThat(rejection("object.docx", dataPart))
+        .isEqualTo("The uploaded .DOCX file contains an embedded object in word/media/object1.dat.");
+    assertThat(rejection("object.docx", overriddenDataPart))
+        .isEqualTo("The uploaded .DOCX file contains an embedded object in [Content_Types].xml.");
+  }
+
+  @Test
+  void shouldAcceptEmbeddedDocumentsInArchivesWithFolderEntries() throws IOException {
+    Map<String, byte[]> entries = new LinkedHashMap<>();
+    entries.put("word/", new byte[0]);
+    entries.put("word/_rels/", new byte[0]);
+    entries.put(
+        "word/_rels/document.xml.rels",
+        relationships(packageRelationship("rId5", "embeddings/Microsoft_Excel_Worksheet1.xlsx"))
+            .getBytes(StandardCharsets.UTF_8));
+    entries.put("word/embeddings/", new byte[0]);
+    entries.put("word/embeddings/Microsoft_Excel_Worksheet1.xlsx", officePackage(false, Map.of()));
+
+    assertAccepted(
+        "repacked.docx",
+        officePackage(
+            "word",
+            entries,
+            false,
+            false,
+            "<Default Extension=\"xlsx\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"/>"));
+  }
+
+  @Test
+  void shouldShareOneInMemoryLimitAcrossNestedEmbeddedDocuments() throws IOException {
+    byte[] withinLimit =
+        packageWithEmbeddedPart(
+            "word",
+            "level1.xlsx",
+            packageWithEmbeddedPart(
+                "xl",
+                "level2.docx",
+                officePackage(
+                    true, Map.of("word/media/image1.bin", randomBytes(9 * 1024 * 1024, 1)))));
+    byte[] overLimit =
+        packageWithEmbeddedPart(
+            "word",
+            "level1.xlsx",
+            packageWithEmbeddedPart(
+                "xl",
+                "level2.docx",
+                officePackage(
+                    true,
+                    Map.of("word/media/image1.bin", randomBytes(21 * 512 * 1024, 2)))));
+
+    assertThat(overLimit.length).isLessThan((int) AttachmentUploadValidator.MAX_UPLOAD_BYTES);
+    assertAccepted("nested.docx", withinLimit);
+    assertThat(rejection("nested.docx", overLimit))
+        .isEqualTo(
+            "The uploaded .DOCX file contains an embedded document that is not a safe, valid"
+                + " Office file in word/embeddings/level1.xlsx (xl/embeddings/level2.docx).");
+  }
+
+  @Test
+  void shouldLimitHowDeeplyEmbeddedDocumentsAreNested() throws IOException {
+    byte[] levelTwo = packageWithEmbeddedPart("xl", "level2.docx", officePackage(true, Map.of()));
+    byte[] tooDeep =
+        packageWithEmbeddedPart(
+            "xl",
+            "level2.docx",
+            packageWithEmbeddedPart("word", "level3.xlsx", officePackage(false, Map.of())));
+
+    assertAccepted("nested.docx", packageWithEmbeddedPart("word", "level1.xlsx", levelTwo));
+    assertThat(rejection("nested.docx", packageWithEmbeddedPart("word", "level1.xlsx", tooDeep)))
+        .isEqualTo(
+            "The uploaded .DOCX file contains embedded documents nested more than 2 levels deep in"
+                + " word/embeddings/level1.xlsx > xl/embeddings/level2.docx"
+                + " (word/embeddings/level3.xlsx).");
+  }
+
+  @Test
+  void shouldApplyArchiveLimitsToEmbeddedDocuments() throws IOException {
+    byte[] compressionBomb =
+        officePackage(false, Map.of("xl/worksheets/sheet1.xml", new byte[2 * 1024 * 1024]));
+    byte[] content =
+        packageWithEmbeddedPart("word", "Microsoft_Excel_Worksheet1.xlsx", compressionBomb);
+
+    assertThat(content.length).isLessThan(64 * 1024);
+    assertThat(rejection("bomb.docx", content))
+        .isEqualTo(
+            "The uploaded .DOCX file contains an embedded document that is not a safe, valid"
+                + " Office file in word/embeddings/Microsoft_Excel_Worksheet1.xlsx.");
   }
 
   @Test
@@ -362,7 +693,28 @@ class AttachmentUploadValidatorTest {
     byte[] content =
         officePackage(true, Map.of("word/embeddings/vbaProject.bin", new byte[] {1, 2, 3}));
 
-    assertThat(validator.validate(file("embedded-macro.docx", content), null).accepted()).isFalse();
+    assertThat(rejection("embedded-macro.docx", content))
+        .isEqualTo(
+            "The uploaded .DOCX file contains a macro in word/embeddings/vbaProject.bin.");
+  }
+
+  @Test
+  void shouldNameTheOfficePartThatWasRefused() throws IOException {
+    assertThat(
+            rejection(
+                "macro.docx", officePackage(true, Map.of("word/vbaProject.bin", new byte[] {1}))))
+        .isEqualTo("The uploaded .DOCX file contains a macro in word/vbaProject.bin.");
+    assertThat(
+            rejection(
+                "connection.xlsx",
+                officePackage(false, Map.of("xl/connections.xml", new byte[] {1}))))
+        .isEqualTo("The uploaded .XLSX file contains a data connection in xl/connections.xml.");
+    assertThat(
+            rejection(
+                "control.docx",
+                officePackage(true, Map.of("word/activeX/activeX1.xml", new byte[] {1}))))
+        .isEqualTo(
+            "The uploaded .DOCX file contains an ActiveX control in word/activeX/activeX1.xml.");
   }
 
   @Test
@@ -493,6 +845,40 @@ class AttachmentUploadValidatorTest {
   }
 
   @Test
+  void shouldCheckOnlyTheSignatureOfPngBmpAndPdfFiles() throws IOException {
+    byte[] trailer = "trailing-data-test-2026-10-19".getBytes(StandardCharsets.US_ASCII);
+    byte[] bmpWithoutDeclaredSize = validBmp();
+    java.util.Arrays.fill(bmpWithoutDeclaredSize, 2, 6, (byte) 0);
+    byte[] bmpWithoutPixelOffset = validBmp();
+    java.util.Arrays.fill(bmpWithoutPixelOffset, 10, 14, (byte) 0);
+    byte[] pdfWithTrailingData = new byte[9000];
+    java.util.Arrays.fill(pdfWithTrailingData, (byte) 'x');
+    byte[] pdfWithoutEndMarker =
+        "%PDF-1.4\n1 0 obj\n<<>>\nendobj\n".getBytes(StandardCharsets.US_ASCII);
+
+    assertAccepted("image.png", concat(image("png"), trailer));
+    assertAccepted("image.bmp", concat(validBmp(), trailer));
+    assertAccepted("image.bmp", bmpWithoutDeclaredSize);
+    assertAccepted("image.bmp", bmpWithoutPixelOffset);
+    assertAccepted("image.bmp", concat(new byte[] {'B', 'M'}, new byte[32]));
+    assertAccepted("document.pdf", concat(validPdf(), pdfWithTrailingData));
+    assertAccepted("document.pdf", pdfWithoutEndMarker);
+
+    assertThat(rejection("image.png", image("jpg")))
+        .isEqualTo("The uploaded file content does not match the .PNG file extension.");
+    assertThat(rejection("image.bmp", image("png")))
+        .isEqualTo("The uploaded file content does not match the .BMP file extension.");
+    assertThat(rejection("image.bmp", concat(new byte[] {'B', 'A'}, new byte[32])))
+        .isEqualTo("The uploaded file content does not match the .BMP file extension.");
+    assertThat(rejection("image.bmp", new byte[] {'B'}))
+        .isEqualTo("The uploaded file content does not match the .BMP file extension.");
+    assertThat(rejection("document.pdf", "PDF-1.7 report".getBytes(StandardCharsets.US_ASCII)))
+        .isEqualTo("The uploaded file content does not match the .PDF file extension.");
+    assertThat(rejection("document.pdf", image("png")))
+        .isEqualTo("The uploaded file content does not match the .PDF file extension.");
+  }
+
+  @Test
   void shouldRejectJpegNamedContentThatIsNotAJpeg() throws IOException {
     assertThat(validator.validate(file("document.jpg", validPdf()), null).accepted()).isFalse();
     assertThat(validator.validate(file("image.jpg", image("png")), null).accepted()).isFalse();
@@ -615,14 +1001,12 @@ class AttachmentUploadValidatorTest {
         Arguments.of(true, "word/vbaProject.bin"),
         Arguments.of(true, "word/activeX/activeX1.xml"),
         Arguments.of(true, "word/embeddings/oleObject1.bin"),
-        Arguments.of(true, "word/embeddings/Microsoft_Excel_Sheet1.xlsx"),
         Arguments.of(true, "word/externalLinks/externalLink1.xml"),
         Arguments.of(true, "word/customUI/customUI.xml"),
         Arguments.of(true, "word/afchunk.htm"),
         Arguments.of(false, "xl/vbaProject.bin"),
         Arguments.of(false, "xl/activeX/activeX1.xml"),
         Arguments.of(false, "xl/embeddings/oleObject1.bin"),
-        Arguments.of(false, "xl/embeddings/Microsoft_Word_Document1.docx"),
         Arguments.of(false, "xl/externalLinks/externalLink1.xml"),
         Arguments.of(false, "xl/connections.xml"),
         Arguments.of(false, "xl/queryTables/queryTable1.xml"),
@@ -652,12 +1036,29 @@ class AttachmentUploadValidatorTest {
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/activeXControl",
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/oleObject",
         "http://purl.oclc.org/ooxml/officeDocument/relationships/oleObject",
-        "http://schemas.openxmlformats.org/officeDocument/2006/relationships/attachedTemplate",
-        "http://purl.oclc.org/ooxml/officeDocument/relationships/attachedTemplate",
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/externalLink",
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/connections",
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/queryTable",
         "http://schemas.openxmlformats.org/officeDocument/2006/relationships/aFChunk");
+  }
+
+  private static Stream<Arguments> chartDataOutsideThePackage() {
+    return Stream.of(
+        Arguments.of(
+            "<Relationship Id=\"rId1\" Type=\""
+                + OFFICE_RELATIONSHIPS
+                + "package\" Target=\"file:///C:/Data/Book1.xlsx\" TargetMode=\"External\"/>",
+            "an external link"),
+        Arguments.of(
+            "<Relationship Id=\"rId1\" Type=\""
+                + OFFICE_RELATIONSHIPS
+                + "oleObject\" Target=\"\\\\ministry.invalid\\share\\Book1.xlsx\""
+                + " TargetMode=\"External\"/>",
+            "an external link"),
+        Arguments.of(packageRelationship("rId1", "../../../Book1.xlsx"), "an external link"),
+        Arguments.of(
+            packageRelationship("rId1", "%2E%2E/%2E%2E/%2E%2E/Book1.xlsx"), "an external link"),
+        Arguments.of(packageRelationship("rId1", "../media/Book1.xlsx"), "an embedded object"));
   }
 
   private static Stream<String> unsafeFileNames() {
@@ -685,6 +1086,19 @@ class AttachmentUploadValidatorTest {
 
   private static MockMultipartFile file(String fileName, byte[] content) {
     return new MockMultipartFile("formFile", fileName, "application/octet-stream", content);
+  }
+
+  private void assertAccepted(String fileName, byte[] content) {
+    ValidationResult result = validator.validate(file(fileName, content), null);
+
+    assertThat(result.accepted()).as("%s: %s", fileName, result.rejectionMessage()).isTrue();
+  }
+
+  private String rejection(String fileName, byte[] content) {
+    ValidationResult result = validator.validate(file(fileName, content), null);
+
+    assertThat(result.accepted()).as(fileName).isFalse();
+    return result.rejectionMessage();
   }
 
   private static byte[] validPdf() {
@@ -741,6 +1155,12 @@ class AttachmentUploadValidatorTest {
     return output.toByteArray();
   }
 
+  private static byte[] randomBytes(int length, long seed) {
+    byte[] bytes = new byte[length];
+    new java.util.Random(seed).nextBytes(bytes);
+    return bytes;
+  }
+
   private static byte[] concat(byte[] first, byte[] second) {
     byte[] combined = java.util.Arrays.copyOf(first, first.length + second.length);
     System.arraycopy(second, 0, combined, first.length, second.length);
@@ -774,11 +1194,30 @@ class AttachmentUploadValidatorTest {
       boolean strictRelationship,
       String extraContentTypes)
       throws IOException {
-    String mainPart = word ? "word/document.xml" : "xl/workbook.xml";
+    return officePackage(
+        word ? "word" : "xl",
+        extraEntries,
+        defaultMainContentType,
+        strictRelationship,
+        extraContentTypes);
+  }
+
+  private static byte[] officePackage(
+      String folder,
+      Map<String, byte[]> extraEntries,
+      boolean defaultMainContentType,
+      boolean strictRelationship,
+      String extraContentTypes)
+      throws IOException {
+    String mainPart = mainPart(folder);
     String mainType =
-        word
-            ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml"
-            : "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
+        switch (folder) {
+          case "word" ->
+              "application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml";
+          case "xl" -> "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml";
+          default ->
+              "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml";
+        };
     String xmlDefaultType = defaultMainContentType ? mainType : "application/xml";
     String mainOverride =
         defaultMainContentType
@@ -815,6 +1254,87 @@ class AttachmentUploadValidatorTest {
     entries.put(mainPart, "<?xml version=\"1.0\"?><root/>".getBytes(StandardCharsets.UTF_8));
     entries.putAll(extraEntries);
     return zip(entries);
+  }
+
+  private static String mainPart(String folder) {
+    return switch (folder) {
+      case "word" -> "word/document.xml";
+      case "xl" -> "xl/workbook.xml";
+      default -> "ppt/presentation.xml";
+    };
+  }
+
+  private static String mainPartRelationships(String folder) {
+    String mainPart = mainPart(folder);
+    return folder + "/_rels/" + mainPart.substring(folder.length() + 1) + ".rels";
+  }
+
+  private static String packageRelationship(String id, String target) {
+    return "<Relationship Id=\""
+        + id
+        + "\" Type=\""
+        + OFFICE_RELATIONSHIPS
+        + "package\" Target=\""
+        + target
+        + "\"/>";
+  }
+
+  private static String attachedTemplate(String type, String target, String targetMode) {
+    return "<Relationship Id=\"rId1\" Type=\""
+        + type
+        + "\" Target=\""
+        + target
+        + "\""
+        + targetMode
+        + "/>";
+  }
+
+  private static byte[] packageWithEmbeddedPart(String folder, String partName, byte[] content)
+      throws IOException {
+    Map<String, byte[]> entries = new LinkedHashMap<>();
+    entries.put(
+        mainPartRelationships(folder),
+        relationships(packageRelationship("rId5", "embeddings/" + partName))
+            .getBytes(StandardCharsets.UTF_8));
+    entries.put(folder + "/embeddings/" + partName, content);
+    return officePackage(
+        folder,
+        entries,
+        false,
+        false,
+        "<Default Extension=\"xlsx\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"/>"
+            + "<Default Extension=\"docx\" ContentType=\"application/vnd.openxmlformats-officedocument.wordprocessingml.document\"/>");
+  }
+
+  private static byte[] packageWithChart(
+      String folder, String chartRelationships, Map<String, byte[]> extraEntries)
+      throws IOException {
+    Map<String, byte[]> entries = new LinkedHashMap<>();
+    entries.put(
+        mainPartRelationships(folder),
+        relationships(
+                "<Relationship Id=\"rId1\" Type=\""
+                    + OFFICE_RELATIONSHIPS
+                    + "chart\" Target=\"charts/chart1.xml\"/>")
+            .getBytes(StandardCharsets.UTF_8));
+    entries.put(
+        folder + "/charts/chart1.xml",
+        "<?xml version=\"1.0\"?><chartSpace/>".getBytes(StandardCharsets.UTF_8));
+    if (chartRelationships != null) {
+      entries.put(
+          folder + "/charts/_rels/chart1.xml.rels",
+          relationships(chartRelationships).getBytes(StandardCharsets.UTF_8));
+    }
+    entries.putAll(extraEntries);
+    return officePackage(
+        folder,
+        entries,
+        false,
+        false,
+        "<Default Extension=\"xlsx\" ContentType=\"application/vnd.openxmlformats-officedocument.spreadsheetml.sheet\"/>"
+            + "<Override PartName=\"/"
+            + folder
+            + "/charts/chart1.xml\" ContentType=\"application/vnd.openxmlformats-officedocument.drawingml.chart+xml\"/>");
   }
 
   private static String relationships(String relationships) {

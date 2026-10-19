@@ -10,6 +10,8 @@ import {
   useNavigate,
 } from 'react-router-dom'
 import { beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
+import type * as SearchOptionsConstants from '@/constants/search-options'
+import { SEARCH_OPTIONS_UNAVAILABLE_MESSAGE } from '@/constants/search-options'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialPermitDetail } from '@/interfaces/LexisDetails'
 import ProvincialPermitDetailsPage from '@/pages/ProvincialPermitDetails'
@@ -142,7 +144,10 @@ vi.mock('@/service/report-service', () => ({
   runReport: vi.fn(),
 }))
 
-vi.mock('@/service/search-options-service', () => ({
+vi.mock('@/service/search-options-service', async () => ({
+  SEARCH_OPTIONS_UNAVAILABLE_MESSAGE: (
+    await vi.importActual<typeof SearchOptionsConstants>('@/constants/search-options')
+  ).SEARCH_OPTIONS_UNAVAILABLE_MESSAGE,
   fetchProvincialPermitOptions: vi.fn(),
   fetchProvincialApplicationOptions: vi.fn(),
 }))
@@ -10268,6 +10273,208 @@ describe('Provincial Permit Detail Action Smoke', () => {
     await waitFor(() =>
       expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull(),
     )
+  })
+
+  const completedPermitWithoutReceipt = {
+    ...permitDetail,
+    permitStatusCode: 'COM',
+    permitStatusDescription: 'Completed',
+    receiptNumber: null,
+  }
+
+  const editCompletedPermitShipping = async () => {
+    await selectPermitDetailTab('Shipping')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
+    await userEvent.clear(screen.getByLabelText('Purchaser'))
+    await userEvent.type(screen.getByLabelText('Purchaser'), 'test-2026-10-19')
+  }
+
+  it('asks before saving the shipping of a completed Interior permit without a receipt and sends nothing on Discard', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue(completedPermitWithoutReceipt)
+    renderPermitDetails()
+
+    await editCompletedPermitShipping()
+    await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
+
+    const warning = await screen.findByRole('dialog', { name: 'Save as Payment pending?' })
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+
+    await userEvent.click(within(warning).getByRole('button', { name: 'Discard' }))
+    await waitFor(() =>
+      expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull(),
+    )
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Purchaser')).toHaveValue('test-2026-10-19')
+    expect(screen.getByRole('button', { name: 'Save shipping' })).toBeEnabled()
+  })
+
+  it('saves the shipping of a completed Interior permit without a receipt as Payment pending once the warning is accepted', async () => {
+    let storedPermit: ProvincialPermitDetail = completedPermitWithoutReceipt
+    mockedFetchProvincialPermitDetail.mockImplementation(async () => storedPermit)
+    mockedUpdatePermitDetail.mockImplementation(async () => {
+      storedPermit = {
+        ...completedPermitWithoutReceipt,
+        permitStatusCode: 'PPD',
+        permitStatusDescription: 'Payment pending',
+        destinationCompanyName: 'test-2026-10-19',
+      }
+      return {
+        success: true,
+        message: 'The permit was updated successfully.',
+        errors: [],
+        warnings: [
+          'Receipt number should not be empty for a complete permit so it will be saved as Payment Pending.',
+        ],
+        source: 'api',
+        permitStatus: 'PPD',
+        permitReceiptNo: '',
+      }
+    })
+    renderPermitDetails()
+
+    await editCompletedPermitShipping()
+    await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
+    const warning = await screen.findByRole('dialog', { name: 'Save as Payment pending?' })
+    await userEvent.click(within(warning).getByRole('button', { name: 'Save' }))
+
+    await waitFor(() =>
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitNumber: '777',
+          permitStatus: 'COM',
+          permitReceiptNo: '',
+          destinationCompanyName: 'test-2026-10-19',
+        }),
+      ),
+    )
+    expect(mockedUpdatePermitDetail).toHaveBeenCalledTimes(1)
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+    expect(await screen.findByText('Permit and shipping details saved.')).toBeInTheDocument()
+    expect(
+      screen.getByText(/Receipt number should not be empty for a complete permit/),
+    ).toBeInTheDocument()
+    expect(screen.getAllByText('Payment pending').length).toBeGreaterThan(0)
+    expect(screen.getByText('test-2026-10-19')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Edit shipping' })).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+  })
+
+  it('keeps the shipping edit open when saving the completed permit as Payment pending fails', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue(completedPermitWithoutReceipt)
+    mockedUpdatePermitDetail.mockResolvedValue({
+      success: false,
+      message: 'Unable to update permit.',
+      errors: ['The test-2026-10-19 change was rejected.'],
+      warnings: [],
+      source: 'api',
+    })
+    renderPermitDetails()
+
+    await editCompletedPermitShipping()
+    await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
+    await userEvent.click(
+      within(await screen.findByRole('dialog', { name: 'Save as Payment pending?' })).getByRole(
+        'button',
+        { name: 'Save' },
+      ),
+    )
+
+    expect(await screen.findByText('Permit and shipping details not saved.')).toBeInTheDocument()
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Purchaser')).toHaveValue('test-2026-10-19')
+  })
+
+  it('explains why the shipping of a completed Interior permit without a receipt cannot be saved while permit options are unavailable', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue(completedPermitWithoutReceipt)
+    mockedFetchProvincialPermitOptions.mockRejectedValue(new Error('options unavailable'))
+    renderPermitDetails()
+
+    await editCompletedPermitShipping()
+    await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
+
+    expect(await screen.findByText('Permit and shipping details not saved.')).toBeInTheDocument()
+    expect(screen.getAllByText(SEARCH_OPTIONS_UNAVAILABLE_MESSAGE).length).toBeGreaterThan(0)
+    expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(screen.getByLabelText('Purchaser')).toHaveValue('test-2026-10-19')
+  })
+
+  it('shows a permit details error before asking to save the shipping of a completed Interior permit without a receipt', async () => {
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...completedPermitWithoutReceipt,
+      remarks: 'Café test-2026-10-19',
+    })
+    renderPermitDetails()
+
+    await editCompletedPermitShipping()
+    await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
+
+    expect(
+      await screen.findByText(
+        'Permit remarks contain unsupported characters. Use unaccented letters, numbers, spaces, or standard punctuation.',
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+    expect(mockedUpdatePermitShipping).not.toHaveBeenCalled()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { description: 'a permit that is not Interior', interior: false, receiptNumber: null },
+    { description: 'an Interior permit with a receipt', interior: true, receiptNumber: 'R-9' },
+  ])(
+    'saves the shipping of a completed permit straight away for $description',
+    async ({ interior, receiptNumber }) => {
+      mockedFetchProvincialPermitDetail.mockResolvedValue({
+        ...completedPermitWithoutReceipt,
+        receiptNumber,
+      })
+      mockedFetchPermitFeeOverrideContext.mockResolvedValue({
+        overrideEnabled: false,
+        overrideFee: '',
+        overrideComment: '',
+        locked: false,
+        lockMessage: '',
+        interior,
+      })
+      renderPermitDetails()
+
+      await editCompletedPermitShipping()
+      await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
+
+      await waitFor(() =>
+        expect(mockedUpdatePermitShipping).toHaveBeenCalledWith(
+          expect.objectContaining({ destinationCompanyName: 'test-2026-10-19' }),
+        ),
+      )
+      expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+      expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    },
+  )
+
+  it('sends the shipping of a completed Interior permit without a receipt to the shipping save for a Provincial Submitter', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_PROVINCIAL_SUBMITTER'] }),
+        canPerform: (action: string) => action !== '/permitsReview',
+      }),
+    )
+    mockedFetchProvincialPermitDetail.mockResolvedValue(completedPermitWithoutReceipt)
+    renderPermitDetails()
+
+    await editCompletedPermitShipping()
+    await userEvent.click(screen.getByRole('button', { name: 'Save shipping' }))
+
+    await waitFor(() =>
+      expect(mockedUpdatePermitShipping).toHaveBeenCalledWith(
+        expect.objectContaining({ destinationCompanyName: 'test-2026-10-19' }),
+      ),
+    )
+    expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
   it.each([

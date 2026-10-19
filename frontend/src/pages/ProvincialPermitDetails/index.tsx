@@ -2157,6 +2157,18 @@ const ProvincialPermitDetailsPage = () => {
       (blanketOicPermit &&
         !blanketOicRegionOptionsLoading &&
         (permitRegionOptions.length === 0 || !!blanketOicRegionError)))
+  // Why the permit details can't be saved until their options are ready, or '' when they can.
+  const permitOptionsSaveError =
+    isPermitOptionsLoading ||
+    permitOptionsUnavailable ||
+    blanketOicRegionSelectionUnavailable ||
+    requiredPermitOptionsMissing
+      ? permitOptionsUnavailable
+        ? SEARCH_OPTIONS_UNAVAILABLE_MESSAGE
+        : blanketOicRegionOptionsLoading
+          ? 'Blanket OIC region options are still loading.'
+          : 'Required permit status or region options are not configured.'
+      : ''
   const editablePermitStatusOptions = useMemo(() => {
     const currentStatusCode = permitStatusCode ?? ''
     const options = permitStatusOptions
@@ -3863,124 +3875,159 @@ const ProvincialPermitDetailsPage = () => {
     ],
   )
 
-  const onSaveShipping = useCallback(async (): Promise<boolean> => {
-    setActionResult(null)
-    const resultSource = permitSaveResultSource(activePermitTabId)
-    const request: PermitDetailMutationRequest | null =
-      detail && permitForm
-        ? mergePermitFormSection(buildPermitDetailForm(detail), permitForm, true)
-        : null
-    if (!detail || !request || !canEditShipping || !shippingReferences || isSavingShipping) {
-      if (canEditShipping && !shippingReferences) {
-        setActionResult(
-          sectionSaveError(
-            'Shipping details',
-            resultSource,
-            isShippingReferencesLoading
-              ? 'Shipping reference options are still loading. Try saving again when they are ready.'
-              : 'Shipping reference options are unavailable. Reload the page before saving shipping.',
-          ),
-        )
-      }
-      return false
-    }
-
-    if (isPermitBusy) return false
-    if (isEditingShipping && !permitShippingUnsaved) {
+  const onSaveShipping = useCallback(
+    async (receiptWarningConfirmed = false): Promise<boolean> => {
       setActionResult(null)
-      permitEditSections.finishEditing()
-      return true
-    }
-
-    if (hasShippingValidationError) {
-      showPermitFieldErrors(
-        Object.values(permitFieldErrors).find((error): error is string => !!error) ??
-          'Please fix validation errors before saving shipping.',
-      )
-      return false
-    }
-
-    const isLatestRequest = tryBeginPermitMutation()
-    if (!isLatestRequest) {
-      setActionResult(
-        sectionSaveError(
-          'Shipping details',
-          resultSource,
-          'Wait for the current permit change to finish before saving again.',
-        ),
-      )
-      return false
-    }
-    setActionResult(null)
-    setIsSavingShipping(true)
-    try {
-      const result = await updatePermitShipping(request)
-      if (!isLatestRequest()) {
+      const resultSource = permitSaveResultSource(activePermitTabId)
+      const request: PermitDetailMutationRequest | null =
+        detail && permitForm
+          ? mergePermitFormSection(buildPermitDetailForm(detail), permitForm, true)
+          : null
+      if (!detail || !request || !canEditShipping || !shippingReferences || isSavingShipping) {
+        if (canEditShipping && !shippingReferences) {
+          setActionResult(
+            sectionSaveError(
+              'Shipping details',
+              resultSource,
+              isShippingReferencesLoading
+                ? 'Shipping reference options are still loading. Try saving again when they are ready.'
+                : 'Shipping reference options are unavailable. Reload the page before saving shipping.',
+            ),
+          )
+        }
         return false
       }
-      if (!result.success) {
+
+      if (isPermitBusy) return false
+      if (isEditingShipping && !permitShippingUnsaved) {
+        setActionResult(null)
+        permitEditSections.finishEditing()
+        return true
+      }
+
+      if (hasShippingValidationError) {
+        showPermitFieldErrors(
+          Object.values(permitFieldErrors).find((error): error is string => !!error) ??
+            'Please fix validation errors before saving shipping.',
+        )
+        return false
+      }
+
+      // A completed Interior permit with no receipt is saved as Payment pending, so the user
+      // confirms first and the shipping change is saved with the permit details.
+      if (permitEditSection === 'shipping' && canSavePermit && interiorCompleteWithoutReceipt) {
+        if (permitOptionsSaveError) {
+          setActionResult(
+            sectionSaveError(permitSaveSubject(true), resultSource, permitOptionsSaveError),
+          )
+          return false
+        }
+        if (hasPermitValidationError) {
+          showPermitFieldErrors(
+            Object.values(permitFieldErrors).find((error): error is string => !!error) ??
+              'Please fix validation errors before saving the permit.',
+          )
+          return false
+        }
+        if (!receiptWarningConfirmed) {
+          setPermitReceiptWarningOpen(true)
+          return false
+        }
+        const saved = await savePermitMutation(true)
+        if (saved) setPermitEditSection((current) => (current === 'shipping' ? null : current))
+        return saved
+      }
+
+      const isLatestRequest = tryBeginPermitMutation()
+      if (!isLatestRequest) {
         setActionResult(
           sectionSaveError(
             'Shipping details',
             resultSource,
-            serverErrorText(result.errors, result.message, 'Unable to save shipping.'),
+            'Wait for the current permit change to finish before saving again.',
           ),
         )
         return false
       }
+      setActionResult(null)
+      setIsSavingShipping(true)
+      try {
+        const result = await updatePermitShipping(request)
+        if (!isLatestRequest()) {
+          return false
+        }
+        if (!result.success) {
+          setActionResult(
+            sectionSaveError(
+              'Shipping details',
+              resultSource,
+              serverErrorText(result.errors, result.message, 'Unable to save shipping.'),
+            ),
+          )
+          return false
+        }
 
-      const updatedDetail = withPermitMutationResult(
-        withUpdatedPermitShipping(detail, request),
-        result,
-      )
-      setDetail((current) =>
-        current
-          ? withPermitMutationResult(withUpdatedPermitShipping(current, request), result)
-          : current,
-      )
-      setPermitForm((current) =>
-        mergePermitFormSection(current, buildPermitDetailForm(updatedDetail), true),
-      )
-      // A new permit's Save permit saves shipping first and stays in edit mode for the rest.
-      setPermitEditSection((current) => (current === 'shipping' ? null : current))
-
-      setShowPermitValidationErrors(false)
-      setActionResult(
-        sectionSaveResult('Shipping details', resultSource, result.warnings.join(' ')),
-      )
-      refreshLoadedPermitFees()
-      return true
-    } catch (error) {
-      if (isLatestRequest()) {
-        console.error(error)
-        setActionResult(
-          sectionSaveError('Shipping details', resultSource, 'Unable to save shipping.'),
+        const updatedDetail = withPermitMutationResult(
+          withUpdatedPermitShipping(detail, request),
+          result,
         )
+        setDetail((current) =>
+          current
+            ? withPermitMutationResult(withUpdatedPermitShipping(current, request), result)
+            : current,
+        )
+        setPermitForm((current) =>
+          mergePermitFormSection(current, buildPermitDetailForm(updatedDetail), true),
+        )
+        // A new permit's Save permit saves shipping first and stays in edit mode for the rest.
+        setPermitEditSection((current) => (current === 'shipping' ? null : current))
+
+        setShowPermitValidationErrors(false)
+        setActionResult(
+          sectionSaveResult('Shipping details', resultSource, result.warnings.join(' ')),
+        )
+        refreshLoadedPermitFees()
+        return true
+      } catch (error) {
+        if (isLatestRequest()) {
+          console.error(error)
+          setActionResult(
+            sectionSaveError('Shipping details', resultSource, 'Unable to save shipping.'),
+          )
+        }
+        return false
+      } finally {
+        endPermitMutation(isLatestRequest)
+        if (isLatestRequest()) setIsSavingShipping(false)
       }
-      return false
-    } finally {
-      endPermitMutation(isLatestRequest)
-      if (isLatestRequest()) setIsSavingShipping(false)
-    }
-  }, [
-    activePermitTabId,
-    isEditingShipping,
-    isPermitBusy,
-    permitShippingUnsaved,
-    permitEditSections,
-    showPermitFieldErrors,
-    isShippingReferencesLoading,
-    canEditShipping,
-    detail,
-    endPermitMutation,
-    hasShippingValidationError,
-    isSavingShipping,
-    permitFieldErrors,
-    permitForm,
-    refreshLoadedPermitFees,
-    shippingReferences,
-    tryBeginPermitMutation,
-  ])
+    },
+    [
+      activePermitTabId,
+      canSavePermit,
+      hasPermitValidationError,
+      interiorCompleteWithoutReceipt,
+      isEditingShipping,
+      isPermitBusy,
+      permitEditSection,
+      permitOptionsSaveError,
+      permitSaveSubject,
+      permitShippingUnsaved,
+      permitEditSections,
+      savePermitMutation,
+      showPermitFieldErrors,
+      isShippingReferencesLoading,
+      canEditShipping,
+      detail,
+      endPermitMutation,
+      hasShippingValidationError,
+      isSavingShipping,
+      permitFieldErrors,
+      permitForm,
+      refreshLoadedPermitFees,
+      shippingReferences,
+      tryBeginPermitMutation,
+    ],
+  )
 
   const onSaveScaleSelection = useCallback(async (): Promise<boolean> => {
     if (isSavingScaleSelection) return false
@@ -4076,23 +4123,8 @@ const ProvincialPermitDetailsPage = () => {
       setActionResult(null)
       const resultSubject = permitSaveSubject(permitShippingUnsaved)
       const resultSource = permitSaveResultSource(activePermitTabId)
-      if (
-        isPermitOptionsLoading ||
-        permitOptionsUnavailable ||
-        blanketOicRegionSelectionUnavailable ||
-        requiredPermitOptionsMissing
-      ) {
-        setActionResult(
-          sectionSaveError(
-            resultSubject,
-            resultSource,
-            permitOptionsUnavailable
-              ? SEARCH_OPTIONS_UNAVAILABLE_MESSAGE
-              : blanketOicRegionOptionsLoading
-                ? 'Blanket OIC region options are still loading.'
-                : 'Required permit status or region options are not configured.',
-          ),
-        )
+      if (permitOptionsSaveError) {
+        setActionResult(sectionSaveError(resultSubject, resultSource, permitOptionsSaveError))
         return false
       }
       // A new permit's first save also checks Shipping fields nobody has touched yet, and opens the
@@ -4133,16 +4165,12 @@ const ProvincialPermitDetailsPage = () => {
     [
       activePermitTabId,
       permitSaveSubject,
-      blanketOicRegionOptionsLoading,
-      blanketOicRegionSelectionUnavailable,
       onSaveShipping,
       onSaveScaleSelection,
       ministerialScaleSelectionDirty,
-      isPermitOptionsLoading,
-      permitOptionsUnavailable,
+      permitOptionsSaveError,
       interiorCompleteWithoutReceipt,
       permitDetailDirty,
-      requiredPermitOptionsMissing,
       permitEditSection,
       hasPermitValidationError,
       hasShippingValidationError,
@@ -8369,7 +8397,7 @@ const ProvincialPermitDetailsPage = () => {
           pendingLabel="Saving…"
           onClose={() => setPermitReceiptWarningOpen(false)}
           onConfirm={async () => {
-            await onSavePermit(true)
+            await (permitEditSection === 'shipping' ? onSaveShipping(true) : onSavePermit(true))
           }}
         />
       )}

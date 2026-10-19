@@ -4131,33 +4131,8 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
-  @CsvSource({
-    "0,1.0,The total scale pieces exceed the permit request pieces.",
-    "2,0.5,The total scale volume exceeds the permit request volume."
-  })
-  void updatePermitShouldRejectRequestLimitsBelowIncludedScales(
-      String pieces, String volume, String expectedError) {
-    when(repository.findPermitMutationByPermitNumber(7000123L))
-        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
-    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
-    when(exemptionService.findByExemptionNumber("EX-700"))
-        .thenReturn(
-            Optional.of(
-                exemptionDetailWithClients("EX-700", "B", "00077881", "00077880")));
-    when(repository.findScaleDetailsByPermitNumber(7000123L))
-        .thenReturn(List.of(scale("101", "TM-1", "HE", "A", 1.0d, 1L, "7000123", "PKG-1")));
-    stubOicApplicationBinding("EX-700");
-
-    PermitMutationRpcResponseDto response =
-        service.updatePermit(oicRequestLimitsRequest("ACT", pieces, volume), "idir\\jsmith");
-
-    assertThat(response.success()).isFalse();
-    assertThat(response.errors()).containsExactly(expectedError);
-    verify(repository, never()).updatePermitDetail(any(), any(), any());
-  }
-
-  @Test
-  void updatePermitShouldAllowRequestLimitsEqualToIncludedScalesWithoutRoundingError() {
+  @CsvSource({"0,1.0", "2,0.5", "1,0.2"})
+  void updatePermitShouldSaveRequestLimitsBelowIncludedScales(String pieces, String volume) {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(Optional.of(blanketOicPermitMutationRow()));
     when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
@@ -4168,21 +4143,24 @@ class OraclePermitDetailsRpcServiceTest {
     when(repository.findScaleDetailsByPermitNumber(7000123L))
         .thenReturn(
             List.of(
-                scale("101", "TM-1", "HE", "A", 0.1d, 1L, "7000123", "PKG-1"),
-                scale("102", "TM-2", "FI", "B", 0.2d, 2L, "7000123", "PKG-2")));
+                scale("101", "TM-1", "HE", "A", 0.5d, 1L, "7000123", "PKG-1"),
+                scale("102", "TM-2", "FI", "B", 0.5d, 1L, "7000123", "PKG-2")));
     stubOicApplicationBinding("EX-700");
     when(repository.updatePermitDetail(
             any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
         .thenReturn(true);
 
     PermitMutationRpcResponseDto response =
-        service.updatePermit(oicRequestLimitsRequest("ACT", "3", "0.3"), "idir\\jsmith");
+        service.updatePermit(oicRequestLimitsRequest("ACT", pieces, volume), "idir\\jsmith");
 
     assertThat(response.success()).isTrue();
+    assertThat(response.errors()).isEmpty();
     ArgumentCaptor<PermitMutationRow> permit = ArgumentCaptor.forClass(PermitMutationRow.class);
     verify(repository).updatePermitDetail(permit.capture(), any(), any());
-    assertThat(permit.getValue().oicRequestPieces()).isEqualTo(3L);
-    assertThat(permit.getValue().oicRequestVolume()).isEqualTo(0.3d);
+    assertThat(permit.getValue().oicRequestPieces()).isEqualTo(Long.parseLong(pieces));
+    assertThat(permit.getValue().oicRequestVolume()).isEqualTo(Double.parseDouble(volume));
+    assertThat(permit.getValue().numberOfPieces()).isEqualTo(2L);
+    assertThat(permit.getValue().permitVolume()).isEqualTo(1.0d);
   }
 
   @Test
@@ -6855,6 +6833,46 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void updatePermitShouldSaveShippingChangesAndPaymentPendingForACompleteInteriorPermitWithoutAReceipt() {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(
+            Optional.of(
+                withOrgUnit(
+                    permitMutationRowWithIssueAndReceipt("COM", LocalDate.of(2026, 3, 16), null),
+                    1903L)));
+    stubTargetMinisterialExemption("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermit(
+            withShipping(
+                formCheckRequest("COM", "42", "Legacy notes", "", "1903"),
+                "test-2026-10-19",
+                "CA",
+                "MV South"),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    assertThat(response.permitStatus()).isEqualTo("PPD");
+    assertThat(response.warnings())
+        .containsExactly(ProvincialPermitMutationValidator.PAYMENT_PENDING_WARNING);
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().permitStatusCode()).isEqualTo("PPD");
+    assertThat(permitCaptor.getValue().receiptNumber()).isNull();
+    assertThat(permitCaptor.getValue().destinationCompanyName()).isEqualTo("test-2026-10-19");
+    assertThat(permitCaptor.getValue().countryCode()).isEqualTo("CA");
+    assertThat(permitCaptor.getValue().transportName()).isEqualTo("MV South");
+    // Both statuses are invoiced, so the move between them leaves the invoice alone.
+    verify(permitInvoiceOrchestrationServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
   void updateShippingShouldSaveACompletePermitWithoutAReceiptOutsideTheInterior() {
     when(repository.findPermitMutationByPermitNumber(7000123L))
         .thenReturn(
@@ -9486,6 +9504,47 @@ class OraclePermitDetailsRpcServiceTest {
         request.transportName(),
         request.estimatedShippingDate(),
         portOfExport,
+        request.otherPortOfExport(),
+        request.permitReceiptNo(),
+        request.permitRemarks(),
+        request.permitGrowthType(),
+        request.permitTotalVolume(),
+        request.permitNumberOfPieces(),
+        request.orgUnitNumber(),
+        request.ownerClientNumber(),
+        request.ownerClientLocation(),
+        request.agentClientNumber(),
+        request.agentClientLocation(),
+        request.oicApplicationNumber(),
+        request.oicRegion(),
+        request.oicPermitTotalPieces(),
+        request.oicPermitTotalVolume(),
+        request.packageAgeClass(),
+        request.packageProductType(),
+        request.overrideInd(),
+        request.overrideFee(),
+        request.overrideComment());
+  }
+
+  private PermitMutationRequestDto withShipping(
+      PermitMutationRequestDto request,
+      String destinationCompanyName,
+      String destinationCountry,
+      String transportName) {
+    return new PermitMutationRequestDto(
+        request.permitNumber(),
+        request.permitStatus(),
+        request.permitSubmitDate(),
+        request.permitIssueDate(),
+        request.permitExpiryDate(),
+        request.permitRequestDate(),
+        request.exemptionNumber(),
+        destinationCompanyName,
+        destinationCountry,
+        request.transportType(),
+        transportName,
+        request.estimatedShippingDate(),
+        request.portOfExport(),
         request.otherPortOfExport(),
         request.permitReceiptNo(),
         request.permitRemarks(),

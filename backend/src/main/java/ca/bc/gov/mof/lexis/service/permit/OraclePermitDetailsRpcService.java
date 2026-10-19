@@ -1984,21 +1984,6 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     if (!validation.valid()) {
       return validationFailureResponse(validation, permitNumber);
     }
-    if (targetBlanketOic) {
-      List<ScaleValues> permitScales = linkedScales.stream().map(this::toScaleValues).toList();
-      Long submittedOicRequestPieces = parseNonNegativeLong(request.oicPermitTotalPieces());
-      if (submittedOicRequestPieces != null
-          && ScaleDomainValidator.exceedsPieces(permitScales, 0L, submittedOicRequestPieces)) {
-        numericErrors.add("The total scale pieces exceed the permit request pieces.");
-      }
-      if (submittedOicRequestVolume != null
-          && ScaleDomainValidator.exceedsVolume(permitScales, 0.0d, submittedOicRequestVolume)) {
-        numericErrors.add("The total scale volume exceeds the permit request volume.");
-      }
-      if (!numericErrors.isEmpty()) {
-        return failureMutationResponse(numericErrors, permitNumber);
-      }
-    }
     updated = validation.permit();
     if (!java.util.Objects.equals(current.orgUnitNo(), updated.orgUnitNo())
         && !targetOrganizationMatchesLinkedApplications(updated)) {
@@ -2202,7 +2187,8 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
     }
     updated = validation.permit();
     // Validation moves an Interior Complete permit with a blank receipt to Payment pending. A
-    // shipping save does not change the status, so it is refused instead.
+    // shipping save does not change the status, so it is refused instead. The permit page saves
+    // that change through the permit details once the user confirms Payment pending.
     if (!sameIgnoreCase(current.permitStatusCode(), updated.permitStatusCode())) {
       return failureMutationResponse(
           List.of(ProvincialPermitMutationValidator.PAYMENT_PENDING_SHIPPING_MESSAGE),
