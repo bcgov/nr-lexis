@@ -1,8 +1,9 @@
 name: Regression
 
 on:
-  # Weekly runs are paused while the FAM team fixes the TEST IDIR regression account.
-  # Restore the schedule after a successful manual run; see frontend/e2e/README.md.
+  # Disabled in GitHub until a TEST IDIR regression account signs in through modern FAM (Keycloak).
+  # Keep the regression specs current meanwhile. To resume, enable this workflow, complete a
+  # successful manual run, then restore the schedule; see frontend/e2e/README.md.
   workflow_dispatch:
 
 concurrency:

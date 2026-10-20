@@ -28,6 +28,9 @@ const regionCodeByOrgUnit: Record<string, string> = {
   '1910': 'RWC',
 }
 const referenceSearchLimit = 25
+// The species and grades of the synthetic scale rows in regressionSubmissionXml. Import checks
+// each row against the species and grades the region lists.
+const syntheticScaleGrades: Record<string, string[]> = { HE: ['H', 'J'], FI: ['J'] }
 
 const escapeXml = (value: string): string =>
   value.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
@@ -102,9 +105,91 @@ const readReferenceJson = async <T>(response: APIResponse): Promise<T> => {
 const isUnavailableReference = (error: unknown): boolean =>
   typeof error === 'string' &&
   (/^Application (?:owner location|region) does not exist\.$/.test(error) ||
+    /^Species code .+ is not valid for this region\.$/.test(error) ||
+    /^Grade code .+ is not valid for species .+ in this region\.$/.test(error) ||
     /^Timber mark .+ (?:does not exist\.|is not valid for this region\.|is not valid for provincial applications\.|is not valid for this scale(?: due to a status of .+)?\.)$/.test(
       error,
     ))
+
+const regionListsSyntheticScaleGrades = async (
+  page: Page,
+  orgUnitNumber: string,
+): Promise<boolean> => {
+  for (const [speciesCode, grades] of Object.entries(syntheticScaleGrades)) {
+    const listed = await readReferenceJson<{ code?: string }[]>(
+      await getWithAuth(page, '/api/lexis/rpc/application-details/grade-codes', {
+        params: { orgUnitNumber, speciesCode },
+      }),
+    )
+    const listedCodes = new Set(listed.map((item) => item.code?.trim()))
+    if (!grades.every((grade) => listedCodes.has(grade))) return false
+  }
+  return true
+}
+
+export type RegressionSubmissionVariant = {
+  label: string
+  xml: string
+  expectedErrors: string[]
+  match: 'exact' | 'contains'
+}
+
+const editSubmissionXml = (xml: string, pattern: RegExp, replacement: string): string => {
+  if (!pattern.test(xml)) {
+    throw new Error('Regression submission XML no longer has the element to edit.')
+  }
+  return xml.replace(pattern, replacement)
+}
+
+// Edited copies of a resolved submission that provincial preflight refuses while parsing the
+// file, before any reference lookup, so nothing is written. The edits touch only values the
+// template already sends.
+export const regressionSubmissionVariants = (xml: string): RegressionSubmissionVariant[] => [
+  {
+    label: 'a scale total with two decimals',
+    xml: editSubmissionXml(
+      xml,
+      /<lexis:quantityVolume>0\.5<\/lexis:quantityVolume>/,
+      '<lexis:quantityVolume>0.55</lexis:quantityVolume>',
+    ),
+    expectedErrors: ['The total scale volume (525.05) must have no more than one decimal place.'],
+    match: 'exact',
+  },
+  {
+    label: 'scale volume without pieces',
+    xml: editSubmissionXml(
+      xml,
+      /<lexis:numberOfPieces>\d+<\/lexis:numberOfPieces>/g,
+      '<lexis:numberOfPieces>0</lexis:numberOfPieces>',
+    ),
+    expectedErrors: [
+      'The total number of scale pieces must be greater than 0 when the scales have a volume.',
+    ],
+    match: 'exact',
+  },
+  {
+    label: 'no contact telephone number',
+    xml: editSubmissionXml(
+      xml,
+      /\s*<lexis:contactTelephoneNumber>[^<]*<\/lexis:contactTelephoneNumber>/,
+      '',
+    ),
+    expectedErrors: ['Applicant contact telephone number is required.'],
+    match: 'exact',
+  },
+  {
+    label: 'a retired region code',
+    xml: editSubmissionXml(
+      xml,
+      /<lexis:bcForestRegionCode>[^<]*<\/lexis:bcForestRegionCode>/,
+      '<lexis:bcForestRegionCode>RSI</lexis:bcForestRegionCode>',
+    ),
+    expectedErrors: [
+      'Forest region code RSI is not a valid BC forest region code (RCB, RKB, RNO, ROM, RSC, RSK, RTO, RWC).',
+    ],
+    match: 'contains',
+  },
+]
 
 export const regressionSubmissionFile = (packageNumber: string, xml: string) => ({
   userReference: `E2E regression ${packageNumber}`,
@@ -144,6 +229,7 @@ export const resolveRegressionSubmission = async (
   )
   const checked = new Set<string>()
   const endUseByRegion = new Map<string, string>()
+  const scaleGradesByRegion = new Map<string, boolean>()
   for (const row of search.results.slice(0, referenceSearchLimit)) {
     const params = { applicationNumber: String(row.application) }
     const summary = await readReferenceJson<{
@@ -168,6 +254,14 @@ export const resolveRegressionSubmission = async (
     }
     const endUseCode = endUseByRegion.get(regionCode)!
     if (!endUseCode) continue
+    if (!scaleGradesByRegion.has(regionCode)) {
+      // Import checks every scale row against the region's species and grades.
+      scaleGradesByRegion.set(
+        regionCode,
+        await regionListsSyntheticScaleGrades(page, String(summary.orgUnitNumber)),
+      )
+    }
+    if (!scaleGradesByRegion.get(regionCode)) continue
     const scales = await readReferenceJson<{ timberMark: string }[]>(
       await getWithAuth(page, '/api/lexis/rpc/application-details/unique-scales', { params }),
     )
