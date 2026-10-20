@@ -16,6 +16,7 @@ import {
   fetchExemptionPermits,
 } from '@/service/provincial-exemption-detail-service'
 import { createTestAuthContext } from '@/test-utils/auth'
+import type * as ExemptionDetailService from '@/service/provincial-exemption-detail-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -36,7 +37,8 @@ vi.mock('@/service/provincial-exemption-documents-service', () => ({
   removeExemptionDocument: vi.fn(),
 }))
 
-vi.mock('@/service/provincial-exemption-detail-service', () => ({
+vi.mock('@/service/provincial-exemption-detail-service', async (importOriginal) => ({
+  formatFeeRate: (await importOriginal<typeof ExemptionDetailService>()).formatFeeRate,
   addApplicationToExemption: vi.fn(),
   approveExemptions: vi.fn(),
   fetchExemptionApplications: vi.fn(),
@@ -292,6 +294,9 @@ describe('Provincial exemption client parity', () => {
       ),
     ).toBeInTheDocument()
     expect(within(ownerTile as HTMLElement).getAllByText('Agent')).not.toHaveLength(0)
+    expect(within(ownerTile as HTMLElement).getByText('(604) 654-4521')).toBeInTheDocument()
+    expect(within(ownerTile as HTMLElement).getByText('(604) 654-4571')).toBeInTheDocument()
+    expect(within(ownerTile as HTMLElement).queryByText('6046544521')).not.toBeInTheDocument()
 
     // The agent section has the application page's title.
     const agentTile = (
@@ -310,6 +315,8 @@ describe('Provincial exemption client parity', () => {
         'C/O ACCOUNTS MANAGER PO BOX 49114 TOWER 4 BENTALL CENTRE 3500 1055 DUNSMUIR STREET',
       ),
     ).toBeInTheDocument()
+    expect(within(agentTile as HTMLElement).getByText('(604) 689-6800')).toBeInTheDocument()
+    expect(within(agentTile as HTMLElement).getByText('(604) 681-6892')).toBeInTheDocument()
 
     // Both parties are looked up through the linked application.
     await waitFor(() => {

@@ -15,6 +15,7 @@ import {
   updateExemption,
 } from '@/service/provincial-exemption-detail-service'
 import { createTestAuthContext, createTestCapabilities } from '@/test-utils/auth'
+import type * as ExemptionDetailService from '@/service/provincial-exemption-detail-service'
 
 vi.mock('@/context/auth/useAuth', () => ({
   useAuth: vi.fn(),
@@ -35,7 +36,8 @@ vi.mock('@/service/search-options-service', () => ({
   fetchProvincialExemptionOptions: vi.fn(),
 }))
 
-vi.mock('@/service/provincial-exemption-detail-service', () => ({
+vi.mock('@/service/provincial-exemption-detail-service', async (importOriginal) => ({
+  formatFeeRate: (await importOriginal<typeof ExemptionDetailService>()).formatFeeRate,
   addApplicationToExemption: vi.fn(),
   approveExemptions: vi.fn(),
   fetchExemptionApplications: vi.fn(),

@@ -248,6 +248,14 @@ export const fetchExemptionRegionContext = async (
   }
 }
 
+/** A fee rate to two decimal places ("1" becomes "1.00"); a blank or non-numeric value is returned as given. */
+export const formatFeeRate = (value: string): string => {
+  const trimmed = value.trim()
+  if (!trimmed) return value
+  const rate = Number(trimmed)
+  return Number.isFinite(rate) ? rate.toFixed(2) : value
+}
+
 export const fetchExemptionEditContext = async (
   exemptionNumber: string,
 ): Promise<ExemptionEditContext> => {
@@ -268,7 +276,7 @@ export const fetchExemptionEditContext = async (
   const regionNumbers = asStringArray(payload.regionNumbers)
   return {
     rateOverrideEnabled: asBoolean(payload.rateOverrideEnabled),
-    fixedFeeRate: asString(payload.fixedFeeRate),
+    fixedFeeRate: formatFeeRate(asString(payload.fixedFeeRate)),
     regionNumbers,
     accessRegionNumbers: Array.isArray(payload.accessRegionNumbers)
       ? asStringArray(payload.accessRegionNumbers)
