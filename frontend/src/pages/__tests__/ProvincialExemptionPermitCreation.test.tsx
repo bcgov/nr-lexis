@@ -612,6 +612,64 @@ describe('permit creation from an exemption', () => {
     expect(within(table).getByRole('cell', { name: '2.0' })).toBeVisible()
   })
 
+  it('says permits wait for approval above the table while the exemption is New', async () => {
+    vi.mocked(fetchExemptionPermits).mockResolvedValue([
+      {
+        permitNumber: '9020937',
+        permitVolume: '0.0',
+        permitStatus: 'Cancelled',
+        permitIssueDate: '2026-03-19',
+        canViewPermit: true,
+      },
+    ])
+    renderPage({
+      ...activeMinisterialExemption,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    await openPermitsTab()
+
+    const table = await screen.findByRole('region', { name: 'Related exemption permits' })
+    const note = screen.getByText('Permits can be requested once the exemption is approved.')
+    expect(note.compareDocumentPosition(table) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+    expect(screen.queryByRole('heading', { name: 'No permits for this exemption' })).toBeNull()
+  })
+
+  it('says the same once when a New exemption has no permits', async () => {
+    renderPage({
+      ...activeMinisterialExemption,
+      exemptionStatusCode: 'NEW',
+      exemptionStatusDescription: 'New',
+    })
+    await openPermitsTab()
+
+    expect(
+      await screen.findByRole('heading', { name: 'No permits for this exemption' }),
+    ).toBeInTheDocument()
+    expect(
+      screen.getAllByText('Permits can be requested once the exemption is approved.'),
+    ).toHaveLength(1)
+  })
+
+  it('leaves out the approval line once the exemption is no longer New', async () => {
+    vi.mocked(fetchExemptionPermits).mockResolvedValue([
+      {
+        permitNumber: '9020938',
+        permitVolume: '2.0',
+        permitStatus: 'Complete',
+        permitIssueDate: '2026-03-19',
+        canViewPermit: true,
+      },
+    ])
+    renderPage(activeMinisterialExemption)
+    await openPermitsTab()
+
+    await screen.findByRole('region', { name: 'Related exemption permits' })
+    expect(
+      screen.queryByText('Permits can be requested once the exemption is approved.'),
+    ).not.toBeInTheDocument()
+  })
+
   it('renders the permit issue date in words without shifting its day', async () => {
     const actualService = await vi.importActual<{
       fetchExemptionPermits: typeof fetchExemptionPermits

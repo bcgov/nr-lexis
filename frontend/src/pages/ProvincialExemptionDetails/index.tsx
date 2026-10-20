@@ -294,6 +294,7 @@ const normalizeServerMessage = (message: string): string =>
     .trim()
 
 const APPROVAL_FAILED_MESSAGE = 'The exemption could not be approved.'
+const PERMITS_AFTER_APPROVAL_MESSAGE = 'Permits can be requested once the exemption is approved.'
 
 // The create page hands over the number it saved so this page confirms that save once.
 type ExemptionCreationNavigationState = Record<string, unknown> & {
@@ -3039,6 +3040,13 @@ const ProvincialExemptionDetailsPage = () => {
                             edit exemption values.
                           </p>
                         )}
+                        {persistedStatusCode === 'NEW' &&
+                          visiblePermitRows.length > 0 &&
+                          !permitsErrorMessage && (
+                            <p className="detail-read-only-note">
+                              {PERMITS_AFTER_APPROVAL_MESSAGE}
+                            </p>
+                          )}
                         {!detail.blanketOic && (
                           <RecordFieldGrid
                             className="exemption-table-totals"
@@ -3144,7 +3152,7 @@ const ProvincialExemptionDetailsPage = () => {
                               permitRows.length > 0
                                 ? 'No associated permits are available to your account.'
                                 : persistedStatusCode === 'NEW'
-                                  ? 'Permits can be requested once the exemption is approved.'
+                                  ? PERMITS_AFTER_APPROVAL_MESSAGE
                                   : 'Permits requested against this exemption will appear here.'
                             }
                             icon={<DocumentSecurity_02 width={48} height={48} />}
