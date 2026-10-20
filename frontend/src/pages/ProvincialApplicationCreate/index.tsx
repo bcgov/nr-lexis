@@ -99,7 +99,7 @@ import IsoDatePicker from '../../components/IsoDatePicker'
 import PendingIcon from '../../components/PendingIcon'
 import { formatBusinessIsoDate, formatIsoDateLabel } from '@/utils/date'
 import { requiredLabel } from '@/utils/required-label'
-import { displayValue } from '@/utils/text'
+import { displayValue, formatPhoneNumber } from '@/utils/text'
 import './ApplicationCreate.scss'
 import RequiredFieldsLegend from '@/components/RequiredFieldsLegend'
 
@@ -456,8 +456,11 @@ const ApplicationCreateClientSummary = ({
           <RecordField label="Postal code" value={displayValue(clientData.postalCode)} />
         </RecordFieldRow>
         <RecordFieldRow>
-          <RecordField label="Phone number" value={displayValue(clientData.phone)} />
-          <RecordField label="Fax number" value={displayValue(clientData.fax)} />
+          <RecordField
+            label="Phone number"
+            value={displayValue(formatPhoneNumber(clientData.phone))}
+          />
+          <RecordField label="Fax number" value={displayValue(formatPhoneNumber(clientData.fax))} />
           <RecordField label="Email address" value={displayValue(clientData.email)} />
         </RecordFieldRow>
       </RecordFieldGrid>
@@ -1352,10 +1355,10 @@ const ProvincialApplicationCreatePage = () => {
         () => isoDateFieldError(form.applicationDate),
       ),
       applicationTermDays: firstValidationError(
-        () => requiredFieldError(form.applicationTermDays, 'Exemption term days'),
-        () => nonNegativeWholeNumberFieldError(form.applicationTermDays, 'Exemption term days'),
-        () => greaterThanFieldError(form.applicationTermDays, 'Exemption term days', 0),
-        () => maxNumericValueFieldError(form.applicationTermDays, 99999, 'Exemption term days'),
+        () => requiredFieldError(form.applicationTermDays, 'Exemption term'),
+        () => nonNegativeWholeNumberFieldError(form.applicationTermDays, 'Exemption term'),
+        () => greaterThanFieldError(form.applicationTermDays, 'Exemption term', 0),
+        () => maxNumericValueFieldError(form.applicationTermDays, 99999, 'Exemption term'),
       ),
       // A blank list date is allowed for approvers and while no schedule is open.
       exportScheduleId:
@@ -1496,24 +1499,15 @@ const ProvincialApplicationCreatePage = () => {
   const fieldError = (field: ProvincialApplicationCreateField): string | undefined =>
     getVisibleFieldError(field, fieldErrors, touchedFields, showAllValidationErrors)
   const speciesCodesError = fieldError('speciesCodes')
-  const speciesHelperText = isApplicationSpeciesSelectDisabled
-    ? (speciesCodesError ??
-      getVisibleFieldError(
-        'speciesCodes',
-        { speciesCodes: speciesPrerequisiteText },
-        touchedFields,
-        showAllValidationErrors,
-      ))
-    : undefined
-  const firstInvalidField = (Object.keys(fieldErrors) as ProvincialApplicationCreateField[]).find(
-    (field) => !!fieldErrors[field],
-  )
-  const invalidTabLabels = APPLICATION_CREATE_REQUIRED_FIELD_TABS.filter((tab) =>
+  const speciesHelperText = isApplicationSpeciesSelectDisabled ? speciesCodesError : undefined
+  const invalidTabs = APPLICATION_CREATE_REQUIRED_FIELD_TABS.filter((tab) =>
     (Object.keys(fieldErrors) as ProvincialApplicationCreateField[]).some(
       (field) =>
         !!fieldErrors[field] && (APPLICATION_CREATE_FIELD_TAB[field] ?? 'application') === tab,
     ),
-  ).map((tab) => APPLICATION_CREATE_TAB_LABELS[tab])
+  )
+  const firstInvalidTab = invalidTabs[0]
+  const invalidTabLabels = invalidTabs.map((tab) => APPLICATION_CREATE_TAB_LABELS[tab])
   const invalidTabsText = joinTabLabels(invalidTabLabels)
   const requiredTabsMessage =
     invalidTabLabels.length === 1
@@ -1528,9 +1522,11 @@ const ProvincialApplicationCreatePage = () => {
           isLoadingOwnerClientData ||
           isLoadingAgentClientData
         ? 'Client details must finish loading before this application can be saved.'
-        : provincialSubmitterScopeUnavailable
-          ? 'An authenticated forest client is required before this application can be saved.'
-          : undefined
+        : form.speciesCodes.length > 0 && isLoadingApplicationEndUses
+          ? 'End uses must finish loading before this application can be saved.'
+          : provincialSubmitterScopeUnavailable
+            ? 'An authenticated forest client is required before this application can be saved.'
+            : undefined
 
   const showSaveUnavailable = (): boolean => {
     if (!saveUnavailableReason) return false
@@ -1540,8 +1536,8 @@ const ProvincialApplicationCreatePage = () => {
 
   const showValidationErrors = (): boolean => {
     if (!hasValidationError) return false
-    if (firstInvalidField) {
-      setSelectedApplicationTab(APPLICATION_CREATE_FIELD_TAB[firstInvalidField] ?? 'application')
+    if (firstInvalidTab) {
+      setSelectedApplicationTab(firstInvalidTab)
     }
     setShowAllValidationErrors(true)
     setStatus({
@@ -1890,7 +1886,7 @@ const ProvincialApplicationCreatePage = () => {
                           id="ownerClientNumber"
                           labelText={requiredLabel('Client')}
                           aria-required="true"
-                          value={form.ownerClientNumber}
+                          value={clientDisplayName(ownerClientData, form.ownerClientNumber)}
                           readOnly
                           helperText="Loaded from your authenticated forest client access."
                           invalid={!!fieldError('ownerClientNumber')}
@@ -2040,7 +2036,7 @@ const ProvincialApplicationCreatePage = () => {
                               id="agentClientNumber"
                               labelText={requiredLabel('Agent client')}
                               aria-required="true"
-                              value={form.agentClientNumber}
+                              value={clientDisplayName(agentClientData, form.agentClientNumber)}
                               readOnly
                               helperText="Loaded from your authenticated forest client access."
                               invalid={!!fieldError('agentClientNumber')}
