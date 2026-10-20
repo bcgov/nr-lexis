@@ -91,6 +91,28 @@ describe('SearchableSelect', () => {
     expect(document.querySelector('.searchable-select--all')).not.toBeNull()
   })
 
+  it('marks a select that is not clearable and keeps the default clearable', () => {
+    const select = (clearable?: boolean) => (
+      <SearchableSelect
+        id="region"
+        labelText="Region"
+        value="11"
+        options={[{ value: '11', label: 'Cariboo' }]}
+        clearable={clearable}
+        onChange={vi.fn()}
+      />
+    )
+    const { rerender } = render(select())
+    expect(document.querySelector('.lexis-combobox--no-clear')).toBeNull()
+    expect(screen.getByRole('button', { name: 'Clear selected item' })).toBeInTheDocument()
+
+    rerender(select(true))
+    expect(document.querySelector('.lexis-combobox--no-clear')).toBeNull()
+
+    rerender(select(false))
+    expect(document.querySelector('.lexis-combobox--no-clear')).not.toBeNull()
+  })
+
   it('keeps a list’s own All option instead of adding a second, and treats it as All', async () => {
     const options = [
       { value: 'ALL', label: 'All' },

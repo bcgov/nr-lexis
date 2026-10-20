@@ -6,6 +6,7 @@ import {
   displayValue,
   displayValueText,
   formatPackageNumberLabel,
+  formatPhoneNumber,
   isValidEmail,
   joinNonBlankText,
   leadingDigits,
@@ -111,5 +112,18 @@ describe('text utilities', () => {
   it('validates trimmed email addresses', () => {
     expect(isValidEmail(' user@example.ca ')).toBe(true)
     expect(isValidEmail('user')).toBe(false)
+  })
+
+  it('formats a trimmed ten-digit phone number and returns anything else as stored', () => {
+    expect(formatPhoneNumber('2505551234')).toBe('(250) 555-1234')
+    expect(formatPhoneNumber(' 2505551234 ')).toBe('(250) 555-1234')
+    expect(formatPhoneNumber('250-555-1234')).toBe('250-555-1234')
+    expect(formatPhoneNumber('(250) 555-1234')).toBe('(250) 555-1234')
+    expect(formatPhoneNumber('250555123')).toBe('250555123')
+    expect(formatPhoneNumber('25055512345')).toBe('25055512345')
+    expect(formatPhoneNumber('250555123a')).toBe('250555123a')
+    expect(formatPhoneNumber('')).toBe('')
+    expect(formatPhoneNumber(null)).toBe('')
+    expect(formatPhoneNumber(undefined)).toBe('')
   })
 })
