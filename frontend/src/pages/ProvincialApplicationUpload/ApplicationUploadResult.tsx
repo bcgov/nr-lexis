@@ -60,8 +60,10 @@ function ApplicationUploadResult({
   const notCreated = outcomes.filter((outcome) => !outcome.applicationNumber)
   const ResultIcon = RESULT_ICONS[summary.kind]
 
+  // The result opens at the top of the page, with its title read out.
   useEffect(() => {
-    titleRef.current?.focus()
+    window.scrollTo({ top: 0 })
+    titleRef.current?.focus({ preventScroll: true })
   }, [])
 
   return (

@@ -3872,6 +3872,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   outline-offset: 2px;
 }
 
+.admin-upload-drop-zone.is-invalid {
+  border-color: var(--cds-support-error);
+}
+
 .admin-upload-drop-zone.is-dragging {
   border-color: var(--fds-interactive, var(--cds-border-interactive));
   background: var(--fds-interactive-light, var(--cds-layer-selected));

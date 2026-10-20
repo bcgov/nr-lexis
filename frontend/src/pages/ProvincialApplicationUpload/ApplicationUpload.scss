@@ -4,11 +4,21 @@
 .application-upload-page {
   --application-upload-success-text: #007b00;
   --application-upload-error-text: #b32001;
+  --application-upload-row-bg: #ffffff;
+  --application-upload-row-alt-bg: #f3f3f5;
 }
 
 :root[data-carbon-theme='g100'] .application-upload-page {
   --application-upload-success-text: var(--cds-support-success);
   --application-upload-error-text: var(--cds-text-error);
+  --application-upload-row-bg: var(--csp-layer-01);
+  --application-upload-row-alt-bg: var(--csp-table-row-alt-bg);
+}
+
+// The page's actions are 15rem wide with their icon at the far end.
+.application-upload-page .admin-upload-fspts-button-row .cds--btn {
+  min-inline-size: 15rem;
+  justify-content: space-between;
 }
 
 // The helper text holds two sentences on their own lines.
@@ -103,6 +113,13 @@
   max-inline-size: 100%;
 }
 
+// The notice's title sits above its text.
+.application-upload-notice .cds--inline-notification__text-wrapper {
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+}
+
 .application-upload-page .application-upload-table {
   margin-block-start: 2rem;
 }
@@ -122,6 +139,42 @@
 // Collapsed details stay in the table for its stripes but take no space.
 .application-upload-review-table tr[data-child-row][hidden] {
   display: none;
+}
+
+// Each application row and its details row share one stripe.
+.application-upload-review-table.cds--data-table--zebra
+  tbody
+  tr[data-parent-row]:nth-child(4n + 1)
+  td,
+.application-upload-review-table.cds--data-table--zebra
+  tbody
+  tr[data-child-row]:nth-child(4n + 2)
+  td {
+  background-color: var(--application-upload-row-bg);
+  border-block-color: var(--application-upload-row-bg);
+}
+
+.application-upload-review-table.cds--data-table--zebra
+  tbody
+  tr[data-parent-row]:nth-child(4n + 3)
+  td,
+.application-upload-review-table.cds--data-table--zebra
+  tbody
+  tr[data-child-row]:nth-child(4n + 4)
+  td {
+  background-color: var(--application-upload-row-alt-bg);
+  border-block-color: var(--application-upload-row-alt-bg);
+}
+
+.application-upload-review-table.cds--data-table--zebra tbody tr[data-parent-row]:hover td,
+.application-upload-review-table.cds--data-table--zebra
+  tbody
+  tr[data-parent-row]:hover
+  + tr[data-child-row]
+  td,
+.application-upload-review-table.cds--data-table--zebra tbody tr[data-child-row]:hover td {
+  background-color: var(--cds-layer-hover);
+  border-block-color: var(--cds-layer-hover);
 }
 
 .application-upload-review__details {
@@ -154,12 +207,7 @@
   margin-block-start: 0;
 }
 
-.application-upload-review__actions .cds--btn {
-  min-inline-size: 13.5rem;
-  justify-content: space-between;
-}
-
-.application-upload-review__actions .cds--btn--tertiary {
+.application-upload-review__actions .cds--btn--tertiary:not(:disabled) {
   background: transparent;
   border: 1px solid var(--fds-interactive);
   color: var(--fds-interactive);
@@ -220,6 +268,8 @@
 
 .application-upload-result__reason {
   margin: 0;
+  font: inherit;
+  letter-spacing: inherit;
 }
 
 .application-upload-result .application-upload-table {

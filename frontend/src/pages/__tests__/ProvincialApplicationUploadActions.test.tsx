@@ -127,6 +127,7 @@ const goToReview = async () => {
 describe('Upload applications', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.spyOn(window, 'scrollTo').mockImplementation(() => {})
     mockAccess(...SUBMITTER_ACTIONS)
     mockedFetchProvincialApplicationOptions.mockResolvedValue({
       exemptionTypes: [],
@@ -168,7 +169,9 @@ describe('Upload applications', () => {
     await userEvent.click(reviewButton())
 
     expect(screen.getByText('Add at least one file to review')).toBeVisible()
-    expect(screen.getByRole('button', { name: 'Choose files for Application files' })).toHaveFocus()
+    const dropZone = screen.getByRole('button', { name: 'Choose files for Application files' })
+    expect(dropZone).toHaveFocus()
+    expect(dropZone).toHaveClass('is-invalid')
     expect(screen.getByRole('heading', { level: 2, name: 'Upload' })).toBeVisible()
   })
 
@@ -255,6 +258,15 @@ describe('Upload applications', () => {
 
     expect(screen.getByText('1 of 2 files failed validation')).toBeVisible()
     expect(screen.getByRole('table', { name: 'Validation issues (1)' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Remove test-2026-10-20-03.xml' })).toHaveFocus()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove test-2026-10-20-03.xml' }))
+
+    expect(screen.getByRole('button', { name: 'Remove test-2026-10-20-01.xml' })).toHaveFocus()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Remove test-2026-10-20-01.xml' }))
+
+    expect(screen.getByRole('button', { name: 'Choose files for Application files' })).toHaveFocus()
   })
 
   it('explains that no files are ready when every file failed', async () => {
@@ -418,6 +430,7 @@ describe('Upload applications', () => {
 
     const title = await screen.findByRole('heading', { level: 1, name: '2 applications created' })
     expect(title).toHaveFocus()
+    expect(window.scrollTo).toHaveBeenCalledWith({ top: 0 })
     expect(mockedSubmitAdminUpload).toHaveBeenCalledTimes(2)
     expect(screen.queryByRole('list', { name: 'Upload applications progress' })).toBeNull()
     expect(

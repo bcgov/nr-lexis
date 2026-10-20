@@ -346,7 +346,11 @@ function ProvincialApplicationUploadPage() {
                 />
 
                 {files.length > 0 && (
-                  <ApplicationUploadFileList files={files} onRemove={removeFile} />
+                  <ApplicationUploadFileList
+                    files={files}
+                    onRemove={removeFile}
+                    emptyFocusTargetId="uploadFile-drop-zone"
+                  />
                 )}
 
                 {notice && (
