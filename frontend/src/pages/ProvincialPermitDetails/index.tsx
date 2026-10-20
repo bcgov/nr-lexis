@@ -238,15 +238,18 @@ const gbmsInvoiceAmountLabel = (amount: string) => {
 
 /**
  * Where a result shows: Documents results in the Documents tab, package results at the top of the
- * Scale tab, scale results in the package's Summary of scale, and a section's save, or an
- * application added to or removed from the permit, inside that section's card below its title.
- * Every other result stays at page level, where an email action's result also takes focus.
+ * Scale tab, scale results in the package's Summary of scale, and a section's save inside that
+ * section's card below its title. An application added to or removed from the permit shows in the
+ * card that lists the applications: Permit details for a Ministerial permit, Associated
+ * applications for any other. Every other result stays at page level, where an email action's
+ * result also takes focus.
  */
 type PermitActionResultSource =
   | 'documents'
   | 'scale'
   | 'scale-summary'
   | 'permit'
+  | 'applications'
   | 'applicant'
   | 'agent'
   | 'shipping'
@@ -259,6 +262,7 @@ type PermitActionResult = ActionResult & {
 }
 const SECTION_SAVE_RESULT_SOURCES = new Set<PermitActionResultSource>([
   'permit',
+  'applications',
   'applicant',
   'agent',
   'shipping',
@@ -1176,6 +1180,10 @@ const withPermitMutationResult = (
       : currentDetail.numberOfPieces,
   }
 }
+
+/** The card an application added to or removed from the permit reports in. */
+const permitApplicationResultSource = (ministerialPermit: boolean): PermitActionResultSource =>
+  ministerialPermit ? 'permit' : 'applications'
 
 /** The tab a section's save reports in: the one it was saved from. */
 const permitSaveResultSource = (tab: PermitDetailTabId): PermitActionResultSource =>
@@ -4434,6 +4442,7 @@ const ProvincialPermitDetailsPage = () => {
 
   const onAddPermitApplication = useCallback(async () => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    const resultSource = permitApplicationResultSource(ministerialPermit)
     const selectedApplications = ministerialPermit
       ? ministerialPermitApplicationsToAdd
       : selectedPermitApplicationToAdd
@@ -4449,7 +4458,7 @@ const ProvincialPermitDetailsPage = () => {
         kind: 'error',
         title: 'Application not added.',
         message: 'Wait for the current permit change to finish before saving again.',
-        source: 'permit',
+        source: resultSource,
       })
       return
     }
@@ -4471,7 +4480,7 @@ const ProvincialPermitDetailsPage = () => {
           kind: 'error',
           title: 'Application not added.',
           message: result.errors[0] || result.message || 'Unable to add application to the permit.',
-          source: 'permit',
+          source: resultSource,
         })
         return
       }
@@ -4497,7 +4506,7 @@ const ProvincialPermitDetailsPage = () => {
           kind: 'success',
           title: addedTitle,
           message: result.message || 'Application was added to the permit.',
-          source: 'permit',
+          source: resultSource,
           focusOnReveal: true,
         })
       } catch (refreshError) {
@@ -4510,7 +4519,7 @@ const ProvincialPermitDetailsPage = () => {
           kind: 'warning',
           title: addedTitle,
           message: `${result.message || 'Application was added to the permit.'} Reload before changing application links again.`,
-          source: 'permit',
+          source: resultSource,
           focusOnReveal: true,
         })
       }
@@ -4521,7 +4530,7 @@ const ProvincialPermitDetailsPage = () => {
           kind: 'error',
           title: 'Application not added.',
           message: 'Unable to add application to the permit.',
-          source: 'permit',
+          source: resultSource,
         })
       }
     } finally {
@@ -4543,6 +4552,7 @@ const ProvincialPermitDetailsPage = () => {
   const onRemovePermitApplication = useCallback(
     async (applicationNumber: string) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+      const resultSource = permitApplicationResultSource(ministerialPermit)
       if (!canRemovePermitApplications || !resolvedPermitNumber || !applicationNumber) {
         throw new Error('This application cannot be removed from the current permit.')
       }
@@ -4554,7 +4564,7 @@ const ProvincialPermitDetailsPage = () => {
           kind: 'error',
           title: 'Application not removed.',
           message,
-          source: 'permit',
+          source: resultSource,
         })
         throw new Error(message)
       }
@@ -4596,7 +4606,7 @@ const ProvincialPermitDetailsPage = () => {
             kind: 'success',
             title: 'Application removed.',
             message: result.message || 'Application was removed from the permit.',
-            source: 'permit',
+            source: resultSource,
             focusOnReveal: true,
           })
         } catch (refreshError) {
@@ -4609,7 +4619,7 @@ const ProvincialPermitDetailsPage = () => {
             kind: 'warning',
             title: 'Application removed.',
             message: `${result.message || 'Application was removed from the permit.'} Reload before changing application links again.`,
-            source: 'permit',
+            source: resultSource,
             focusOnReveal: true,
           })
         }
@@ -4629,6 +4639,7 @@ const ProvincialPermitDetailsPage = () => {
       canRemovePermitApplications,
       detail?.permitNumber,
       endPermitMutation,
+      ministerialPermit,
       permitNumber,
       reloadPermitScaleState,
       tryBeginPermitMutation,
@@ -7500,6 +7511,7 @@ const ProvincialPermitDetailsPage = () => {
                           <DetailCardTitle icon={Certificate}>
                             {ministerialPermit ? 'Applications' : 'Associated applications'}
                           </DetailCardTitle>
+                          {renderSectionSaveResult('applications')}
                           {ministerialPermit ? (
                             renderMinisterialPermitApplications()
                           ) : isPermitTablesLoading ? (

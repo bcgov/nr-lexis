@@ -5049,6 +5049,98 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
+  describe('application results on an editable permit', () => {
+    const configureEditablePermitWithApplication = () => {
+      configureActivePermit()
+      mockedFetchAvailablePermitApplications.mockResolvedValue({
+        applicationList: ['1000457'],
+        errorMessage: '',
+      })
+      mockedFetchProvincialPermitDetailTabs.mockResolvedValue({
+        ...tabsResult,
+        applications: ['1000456'],
+      })
+    }
+
+    const findAssociatedApplicationsTile = async () =>
+      (await screen.findByRole('heading', { name: 'Associated applications' })).closest(
+        '.cds--tile',
+      ) as HTMLElement
+
+    const addAvailableApplication = async (applicationsTile: HTMLElement) => {
+      const combobox = within(applicationsTile).getByRole('combobox', {
+        name: 'Available application',
+      })
+      await userEvent.click(combobox)
+      await chooseComboBoxOption(combobox, '1000457')
+      const addButton = within(applicationsTile).getByRole('button', { name: 'Add application' })
+      await waitFor(() => expect(addButton).toBeEnabled())
+      await userEvent.click(addButton)
+    }
+
+    it('focuses the added notice inside the Associated applications card', async () => {
+      const visibleRects = vi
+        .spyOn(HTMLElement.prototype, 'getClientRects')
+        .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+      onTestFinished(() => visibleRects.mockRestore())
+      configureEditablePermitWithApplication()
+      renderPermitDetails()
+
+      await addAvailableApplication(await findAssociatedApplicationsTile())
+
+      const notice = (await screen.findByText('Application was added to the permit.')).closest(
+        '.app-inline-notification',
+      )
+      await waitFor(() => expect(notice).toHaveFocus())
+      expect(within(notice as HTMLElement).getByText('Application added.')).toBeVisible()
+      expectResultInCard('Application was added to the permit.', 'Associated applications')
+    })
+
+    it('shows a refused application add inside the Associated applications card', async () => {
+      configureEditablePermitWithApplication()
+      mockedAddApplicationsToPermit.mockResolvedValueOnce({
+        success: false,
+        message: '',
+        errors: ['test-2026-10-20 application refused.'],
+        warnings: [],
+      })
+      renderPermitDetails()
+
+      await addAvailableApplication(await findAssociatedApplicationsTile())
+
+      const notice = (await screen.findByText('Application not added.')).closest(
+        '.cds--inline-notification',
+      )
+      expect(notice).toHaveClass('cds--inline-notification--error')
+      expect(notice).toHaveTextContent('test-2026-10-20 application refused.')
+      expectResultInCard('Application not added.', 'Associated applications')
+      expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
+    })
+
+    it('focuses the removed notice inside the Associated applications card', async () => {
+      const visibleRects = vi
+        .spyOn(HTMLElement.prototype, 'getClientRects')
+        .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+      onTestFinished(() => visibleRects.mockRestore())
+      configureEditablePermitWithApplication()
+      renderPermitDetails()
+
+      const applicationsTile = await findAssociatedApplicationsTile()
+      await userEvent.click(
+        within(applicationsTile).getByRole('button', { name: 'Remove application 1000456' }),
+      )
+      const removal = await screen.findByRole('dialog', { name: 'Remove associated application?' })
+      await userEvent.click(within(removal).getByRole('button', { name: 'Remove' }))
+
+      const notice = (await screen.findByText('Application was removed from the permit.')).closest(
+        '.app-inline-notification',
+      )
+      await waitFor(() => expect(notice).toHaveFocus())
+      expect(within(notice as HTMLElement).getByText('Application removed.')).toBeVisible()
+      expectResultInCard('Application was removed from the permit.', 'Associated applications')
+    })
+  })
+
   it('keeps table-dependent permit actions unavailable while application links reload', async () => {
     const submitterAuth = createTestAuthContext()
     mockedUseAuth.mockReturnValue({
