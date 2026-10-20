@@ -241,19 +241,19 @@ test.describe('frontend smoke coverage', () => {
     await expect(page).toHaveURL(/\/provincial\/application\?packageNumber=TEST#results$/)
     await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
     await expect(page.getByRole('button', { name: /log in with idir/i })).toBeVisible()
-    await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Page not found' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: 'Search', exact: true })).toHaveCount(0)
   })
 
   test('unknown routes still show not found', async ({ page }) => {
     await gotoSyntheticRoute(page, '/unknown-parity-route', {
       waitUntil: 'domcontentloaded',
-      ready: page.getByRole('heading', { level: 1, name: '404', exact: true }),
+      ready: page.getByRole('heading', { level: 1, name: 'Page not found', exact: true }),
     })
-    await expect(page.getByRole('heading', { name: '404' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible()
     await expect(page.getByText(/does not exist/i)).toBeVisible()
 
-    await page.getByRole('button', { name: /back home/i }).click()
+    await page.getByRole('button', { name: 'Go to my landing page', exact: true }).click()
     await expect(page).toHaveURL(/\/$/)
     await expect(page.getByRole('heading', { level: 1, name: 'LEXIS' })).toBeVisible()
     await expect(page.getByRole('button', { name: /log in with idir/i })).toBeVisible()

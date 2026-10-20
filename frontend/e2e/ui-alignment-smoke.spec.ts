@@ -3055,9 +3055,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
         })
       })
       await gotoSyntheticRoute(page, '/admin/policies/fee', {
-        ready: page.getByRole('button', { name: 'Delete', exact: true }),
+        ready: page.getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true }),
       })
-      await page.getByRole('button', { name: 'Delete', exact: true }).click()
+      await page
+        .getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true })
+        .click()
       const dialog = page.getByRole('dialog', { name: 'Delete fee policy?' })
       await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
       const failure = dialog.locator('.app-inline-notification')
@@ -3113,9 +3115,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       await route.fulfill({ json: { success: false, errors: [longError] } })
     })
     await gotoSyntheticRoute(page, '/admin/policies/fee', {
-      ready: page.getByRole('button', { name: 'Delete', exact: true }),
+      ready: page.getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true }),
     })
-    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await page
+      .getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true })
+      .click()
     const dialog = page.getByRole('dialog', { name: 'Delete fee policy?' })
     await dialog.getByRole('button', { name: 'Delete', exact: true }).click()
     const failure = dialog.locator('.app-inline-notification')
@@ -3138,7 +3142,9 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       )
       .toBe(true)
     await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
-    await page.getByRole('button', { name: 'Delete', exact: true }).click()
+    await page
+      .getByRole('button', { name: 'Delete fee policy RCO 2099-01-01', exact: true })
+      .click()
     await expect(dialog.locator('.app-inline-notification')).toHaveCount(0)
   })
 

@@ -2512,7 +2512,7 @@ test.describe('TEST IDIR admin regression', () => {
     )
     expect(response?.status(), 'client summary should load through the frontend route').toBe(200)
     await expect(deniedHeading).toBeVisible()
-    await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Page not found' })).toHaveCount(0)
     await expect(page.getByRole('button', { name: /log in with idir/i })).toHaveCount(0)
 
     // Logging out here would end the shared session, so the button is only checked.
