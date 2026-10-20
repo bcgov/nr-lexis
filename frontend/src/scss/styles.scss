@@ -2450,6 +2450,46 @@ $notification-types: 'error', 'info', 'success', 'warning';
   }
 }
 
+// Above the phone layout, the batch bar fills the toolbar at its resting height, so selecting
+// rows doesn't move the table.
+@media (min-width: 672px) {
+  .legacy-search-table-toolbar--with-actions:has(.cds--batch-actions) {
+    .cds--table-toolbar,
+    .cds--toolbar-content {
+      block-size: 2.5rem;
+      min-block-size: 2.5rem;
+      padding-block: 0;
+    }
+
+    .cds--batch-summary {
+      min-block-size: 2.5rem;
+    }
+
+    .cds--action-list .cds--btn {
+      block-size: 2.5rem;
+      min-block-size: 2.5rem;
+      padding-block: 0.625rem;
+    }
+
+    .cds--btn--primary.cds--batch-summary__cancel::before {
+      inset-block-start: 0.75rem;
+    }
+  }
+}
+
+// The md row actions fill the row, so their labels sit on the same line as the row's text.
+.provincial-review-search-page .legacy-search-table-frame .cds--data-table tbody td {
+  vertical-align: middle;
+}
+
+.provincial-review-search-page
+  .legacy-search-table-frame
+  .cds--data-table
+  tbody
+  td:has(> .provincial-review-row-actions) {
+  padding-block: 0;
+}
+
 .provincial-review-row-actions {
   display: flex;
   flex-wrap: wrap;
