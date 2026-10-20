@@ -2396,14 +2396,27 @@ const ProvincialPermitDetailsPage = () => {
   const canEditShipping = canMutatePermit
   const canEditPermitClients =
     canSavePermit && !invoiceMaterialLocked && (detail?.blanketOic === true || ministerialPermit)
+  // A submitter whose client is neither the saved owner nor the saved agent reaches the permit only
+  // through a linked application.
+  const submitterClientNumber = provincialSubmitter
+    ? (capabilities.forestClientNumber?.trim() ?? '')
+    : ''
+  const submitterClientIsPermitParty =
+    submitterClientNumber !== '' &&
+    [detail?.ownerClientNumber, detail?.applicantClientNumber].some(
+      (clientNumber) =>
+        !!clientNumber && clientLookupNumbersMatch(submitterClientNumber, clientNumber),
+    )
   // A saved agent's client stays read-only; it can only be removed, and an agent added when there
-  // is none. Both stay available while the permit is Payment pending, to Provincial Submitters as
-  // well as the staff who can change an applicant type.
+  // is none. Both stay available while the permit is Payment pending, to the staff who can change
+  // an applicant type and to Provincial Submitters whose client is the permit's owner or agent.
   const canChangePermitAgent =
     canSavePermit &&
     blanketOicPermit &&
     (!invoiceMaterialLocked || permitStatusCode === SERVER_ASSIGNED_PAYMENT_PENDING_STATUS) &&
-    (provincialSubmitter || canPerform('/changeApplicantType', permitOrgUnit))
+    (provincialSubmitter
+      ? submitterClientIsPermitParty
+      : canPerform('/changeApplicantType', permitOrgUnit))
   const canEditPermitApplicant = canEditPermitClients || canChangePermitAgent
   const addingPermitAgent = canChangePermitAgent && !detail?.applicantClientNumber?.trim()
   const ownerEditMode = canEditPermitApplicant && isEditingPermitClients

@@ -705,7 +705,7 @@ public class PermitDetailsRpcController {
                   service, permitNumber, applicationNumber, authentication));
       applicationLocksToRelease =
           acquireApplicationLocksForMutation(linkedApplicationNumbers, authentication);
-      return canChangePermitAgent(authentication)
+      return canChangePermitAgent(service, permitNumber, authentication)
           ? service.updatePermitWithAgentChange(mutationRequest, userId(authentication))
           : service.updatePermit(mutationRequest, userId(authentication));
     } finally {
@@ -1537,12 +1537,21 @@ public class PermitDetailsRpcController {
         sessionService.parseRolesFromPrincipal(authentication), LEGACY_ACTION_REVIEW_PERMITS);
   }
 
-  // Ministry users who can change an application's applicant type, and Provincial Submitters acting
-  // for their forest client, can add or remove a Blanket OIC permit's agent. A submitter reaches
-  // the permit only as its owner or agent, which the permit access check has already required.
-  private boolean canChangePermitAgent(Authentication authentication) {
+  // Ministry users who can change an application's applicant type, and Provincial Submitters whose
+  // forest client is the permit's saved owner or agent, can add or remove a Blanket OIC permit's
+  // agent. A submitter can reach a permit through an application linked to it without being its
+  // owner or agent, and that does not allow the change.
+  private boolean canChangePermitAgent(
+      PermitDetailsRpcService service, Long permitNumber, Authentication authentication) {
     if (!isMinistryUser(authentication)) {
-      return authorization().hasClientScope(authentication);
+      if (!authorization().hasClientScope(authentication)) {
+        return false;
+      }
+      PermitDetailsRpcService.PermitMutationClientScope clients =
+          service.getClientScopeForPermitMutation(permitNumber);
+      return authorization()
+          .canCreateForClient(
+              authentication, clients.ownerClientNumber(), clients.agentClientNumber());
     }
     return authorizationService.canPerformAction(
         sessionService.parseRolesFromPrincipal(authentication),

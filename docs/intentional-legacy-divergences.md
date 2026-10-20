@@ -142,11 +142,12 @@ Visual alignment preserves existing role, lifecycle and transaction contracts:
   in Council permits keep Add application and Remove in their Associated applications card.
 - A saved permit's owner and agent clients stay read-only. Application Approvers,
   Administrators and Provincial Submitters can remove a Blanket OIC permit's agent, or add one when
-  it has none, while the permit is Active or Payment pending. A submitter reaches the permit only
-  as its owner or agent, and one whose client is the saved agent can remove it, which ends that
-  submitter's access to the permit. A Ministerial permit's agent follows its first linked
-  application and is changed there. Editable fields are not enabled merely because a design
-  depicts an input.
+  it has none, while the permit is Active or Payment pending. A submitter can do so only while its
+  client is the permit's saved owner or agent; a submitter that reaches the permit through a linked
+  application cannot. One whose client is the saved agent can remove itself, and then reaches the
+  permit only through an application of its client that is linked to it. A Ministerial permit's
+  agent follows its first linked application and is changed there. Editable fields are not enabled
+  merely because a design depicts an input.
 - BOIC Add scale uses a drawer with Cancel and Save, matching the legacy dialog's separate save
   boundary. It captures the selected package and retains validation, record-version and in-flight
   guards. Cancel discards only the unsaved scale draft, asking first when it has values.

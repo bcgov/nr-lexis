@@ -8971,6 +8971,21 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
+  it('keeps the agent of a Blanket OIC permit locked for a Provincial Submitter whose client is neither its owner nor its agent', async () => {
+    configureEditableBlanketOicPackage()
+    configureBlanketOicSubmitter('00099999')
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Owner')
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
+    )
+
+    const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
+    expect(agentUsedCheckbox).toBeChecked()
+    expect(agentUsedCheckbox).toBeDisabled()
+  })
+
   it('lets an Application Approver remove a saved Blanket OIC agent but not change it', async () => {
     configureEditableBlanketOicPackage()
     mockedUseAuth.mockReturnValue(

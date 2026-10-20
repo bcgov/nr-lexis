@@ -1497,6 +1497,11 @@ class PermitDetailsRpcControllerTest {
     allowApplicationMutationLocksForUser("bceid\\submitter");
     TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
     when(provincialAuthorizationService.hasClientScope(authentication)).thenReturn(true);
+    when(service.getClientScopeForPermitMutation(7000123L))
+        .thenReturn(new PermitDetailsRpcService.PermitMutationClientScope("00077881", "00077880"));
+    when(provincialAuthorizationService.canCreateForClient(
+            authentication, "00077881", "00077880"))
+        .thenReturn(true);
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
         controller.updatePermit(request, authentication);
@@ -1563,6 +1568,32 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void updatePermitShouldNotLetASubmitterWhoseClientIsNeitherTheOwnerNorTheAgentChangeTheAgent() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(request.getParameterMap())
+        .thenReturn(
+            Map.of(
+                "permitNumber", new String[] {"7000123"},
+                "agentClientNumber", new String[] {"00012345"}));
+    when(service.getClientScopeForPermitMutation(7000123L))
+        .thenReturn(new PermitDetailsRpcService.PermitMutationClientScope("00077881", null));
+    when(service.updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter")))
+        .thenReturn(successfulPermitUpdate());
+    allowApplicationMutationLocksForUser("bceid\\submitter");
+    TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
+    when(provincialAuthorizationService.hasClientScope(authentication)).thenReturn(true);
+    when(provincialAuthorizationService.canCreateForClient(authentication, "00077881", null))
+        .thenReturn(false);
+
+    ResponseEntity<PermitMutationRpcResponseDto> response =
+        controller.updatePermit(request, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    verify(service).updatePermit(any(PermitMutationRequestDto.class), eq("bceid\\submitter"));
+    verify(service, never()).updatePermitWithAgentChange(any(), any());
+  }
+
+  @Test
   void updatePermitShouldNotLetAnIndustryUserWithoutAClientScopeAddOrRemoveThePermitAgent() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     when(request.getParameterMap())
@@ -1603,11 +1634,11 @@ class PermitDetailsRpcControllerTest {
         .thenReturn(successfulPermitUpdate());
     TestingAuthenticationToken authentication = scopedSubmitterWithSavePermit();
     when(provincialAuthorizationService.hasClientScope(authentication)).thenReturn(true);
-    lenient()
-        .when(
-            provincialAuthorizationService.canCreateForClient(
-                authentication, "STALE-OWNER", "STALE-AGENT"))
-        .thenReturn(false);
+    when(service.getClientScopeForPermitMutation(7000123L))
+        .thenReturn(new PermitDetailsRpcService.PermitMutationClientScope("00077881", "00077880"));
+    when(provincialAuthorizationService.canCreateForClient(
+            authentication, "00077881", "00077880"))
+        .thenReturn(true);
     allowApplicationMutationLocksForUser("bceid\\submitter", 1000456L);
 
     ResponseEntity<PermitMutationRpcResponseDto> response =
@@ -1615,7 +1646,7 @@ class PermitDetailsRpcControllerTest {
 
     assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
     verify(provincialAuthorizationService, never())
-        .canCreateForClient(eq(authentication), any(), any());
+        .canCreateForClient(authentication, "STALE-OWNER", "STALE-AGENT");
     verify(provincialAuthorizationService, times(2))
         .requirePermit(authentication, 7000123L);
     verify(provincialAuthorizationService)

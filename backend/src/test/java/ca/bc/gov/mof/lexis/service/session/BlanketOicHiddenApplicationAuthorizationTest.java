@@ -165,6 +165,29 @@ class BlanketOicHiddenApplicationAuthorizationTest {
   }
 
   @ParameterizedTest
+  @ValueSource(strings = {OWNER, CURRENT})
+  void theSavedOwnerAndAgentCanAddOrRemoveThePermitAgent(String client) {
+    var response = controller.updatePermit(saveRequest(), submitter(client));
+
+    assertThat(response.getStatusCode().value()).isEqualTo(200);
+    verify(service).updatePermitWithAgentChange(any(), any());
+    verify(service, never()).updatePermit(any(), any());
+  }
+
+  @Test
+  void linkedFormerAgentKeepsPermitAccessButCannotChangeThePermitAgent() {
+    when(permits.hasLinkedProvincialApplicationForClient(PERMIT, FORMER)).thenReturn(true);
+    var request = saveRequest();
+    request.setParameter("agentClientNumber", FORMER);
+
+    var response = controller.updatePermit(request, submitter(FORMER));
+
+    assertThat(response.getStatusCode().value()).isEqualTo(200);
+    verify(service).updatePermit(any(), any());
+    verify(service, never()).updatePermitWithAgentChange(any(), any());
+  }
+
+  @ParameterizedTest
   @EnumSource(Action.class)
   void formerAgentWithoutAnAssignedScaleDoesNotGainPermitAccess(Action action) {
     assertThat(access.canAccessPermit(submitter(FORMER), PERMIT)).isFalse();
