@@ -17,7 +17,11 @@ type AppNotificationProps = Omit<
   /** Text, or content with a record link; content other than text needs a revealKey. */
   title?: ReactNode
   onCloseButtonClick?: () => void
-  /** Change for a new action attempt that produces the same feedback text. */
+  /**
+   * Change for a new action attempt that produces the same feedback text. When set, it replaces
+   * the subtitle in deciding when feedback is revealed again, so a subtitle that keeps updating
+   * does not move focus.
+   */
   revealKey?: unknown
   /** Move focus to feedback after a caller's explicit validation attempt. */
   focusOnReveal?: boolean
@@ -40,6 +44,7 @@ export function AppNotification({
   const notificationRef = useRef<HTMLDivElement>(null)
   const isActionFeedback = Boolean(onCloseButtonClick)
   const titleText = typeof title === 'string' ? title : undefined
+  const revealIdentity = revealKey ?? subtitle
 
   useEffect(() => {
     const frame = requestAnimationFrame(() => {
@@ -79,7 +84,7 @@ export function AppNotification({
       }
     })
     return () => cancelAnimationFrame(frame)
-  }, [focusOnReveal, isActionFeedback, kind, revealKey, subtitle, titleText])
+  }, [focusOnReveal, isActionFeedback, kind, revealIdentity, titleText])
 
   return (
     <div className="app-notification-container" ref={notificationRef}>

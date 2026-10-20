@@ -42,6 +42,7 @@ import {
   mockedUpdateApplicationPackage,
   mockedUpdateApplicationSummary,
   mockApplicationDetailAuth,
+  runFramesBeforeNextRender,
   selectApplicationDetailTab,
   selectApplicationItemDetailsTile,
   selectApplicationItemsForEditing,
@@ -3519,6 +3520,88 @@ describe.sequential('Provincial Application Detail Actions - items', () => {
     expect(drawer.getByText('Package PKG-NEW already exists')).toBeInTheDocument()
     expect(drawer.queryByText('Package creation failed')).not.toBeInTheDocument()
     await waitFor(() => expect(packageNumber).toHaveFocus())
+  })
+
+  it('focuses the Create package number once the saving state clears after a server duplicate', async () => {
+    mockedAddApplicationPackage.mockResolvedValueOnce({
+      valid: false,
+      packageNumber: 'PKG-NEW',
+      errors: ['Package PKG-NEW already exists.'],
+      warnings: [],
+    })
+    renderApplicationItems()
+    const drawer = await openCreatePackageControls()
+    fillNewPackage(drawer, 'PKG-NEW')
+    const save = drawer.getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
+    runFramesBeforeNextRender()
+    await userEvent.click(save)
+
+    const packageNumber = drawer.getByLabelText('Package number')
+    await waitFor(() => expect(packageNumber).toHaveAttribute('aria-invalid', 'true'))
+    await waitFor(() => expect(packageNumber).toHaveFocus())
+  })
+
+  it('focuses the Add scale field once the saving state clears after a server refusal', async () => {
+    mockedAddApplicationScaleToPackage.mockResolvedValueOnce({
+      valid: false,
+      errors: ['A scale with this timber mark, species, and grade already exists.'],
+      warnings: [],
+      result: null,
+    })
+    renderApplicationItems()
+    const drawer = await openScaleControls()
+    await fillNewScale(drawer)
+    runFramesBeforeNextRender()
+    await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
+
+    const timberMark = drawer.getByLabelText('Timber mark')
+    await waitFor(() => expect(timberMark).toHaveAttribute('aria-invalid', 'true'))
+    await waitFor(() => expect(timberMark).toHaveFocus())
+  })
+
+  it('focuses the Create package failure notice once the saving state clears after a save error', async () => {
+    mockedAddApplicationPackage.mockRejectedValueOnce(new Error('Package service unavailable'))
+    renderApplicationItems()
+    const drawer = await openCreatePackageControls()
+    fillNewPackage(drawer, 'PKG-NEW')
+    const save = drawer.getByRole('button', { name: 'Save package' })
+    await waitFor(() => expect(save).toBeEnabled())
+    runFramesBeforeNextRender()
+    await userEvent.click(save)
+
+    const notice = (await drawer.findByText('Unable to create package.')).closest(
+      '[data-drawer-error]',
+    )
+    await waitFor(() => expect(notice).toHaveFocus())
+  })
+
+  it('focuses the Edit package failure notice once the saving state clears after a save error', async () => {
+    mockedUpdateApplicationPackage.mockRejectedValueOnce(new Error('Package service unavailable'))
+    renderApplicationItems()
+    await selectApplicationItemsForEditing()
+    const comments = await screen.findByLabelText('Comments')
+    const drawer = within(comments.closest('.application-items-drawer') as HTMLElement)
+    fireEvent.change(comments, { target: { value: 'Updated comment' } })
+    runFramesBeforeNextRender()
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+
+    const notice = (await drawer.findByText('Unable to save package details.')).closest(
+      '[data-drawer-error]',
+    )
+    await waitFor(() => expect(notice).toHaveFocus())
+  })
+
+  it('focuses the Add scale failure notice once the saving state clears after a save error', async () => {
+    mockedAddApplicationScaleToPackage.mockRejectedValueOnce(new Error('Scale service unavailable'))
+    renderApplicationItems()
+    const drawer = await openScaleControls()
+    await fillNewScale(drawer)
+    runFramesBeforeNextRender()
+    await userEvent.click(drawer.getByRole('button', { name: 'Save scale' }))
+
+    const notice = (await drawer.findByText('Unable to add scale.')).closest('[data-drawer-error]')
+    await waitFor(() => expect(notice).toHaveFocus())
   })
 
   it('shows the scale-volume floor rejection on the Edit package Volume field', async () => {

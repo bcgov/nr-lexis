@@ -1142,6 +1142,55 @@ describe('Create Page Core Flows', () => {
     }
   })
 
+  it('keeps every typed character and focus in a field while the failed-save notice updates', async () => {
+    const visibleRects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+    try {
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          capabilities: createTestCapabilities({
+            principal: 'bceid\\submitter',
+            roles: ['PROVINCIAL_SUBMITTER_00077881'],
+            forestClientNumber: '00077881',
+            orgUnitNo: '11',
+          }),
+        }),
+      )
+      render(
+        <MemoryRouter initialEntries={['/provincial/application/create']}>
+          <Routes>
+            <Route
+              path="/provincial/application/create"
+              element={<ProvincialApplicationCreatePage />}
+            />
+          </Routes>
+        </MemoryRouter>,
+      )
+      const saveButton = await screen.findByRole('button', { name: 'Save application' })
+      await waitForApplicationCreateLoads('Applicant client details')
+      await userEvent.click(saveButton)
+      const feedback = await screen.findByRole('status')
+      expect(feedback).toHaveTextContent('Applicant, Application and Scale tabs')
+      await waitFor(() => expect(feedback).toHaveFocus())
+
+      const contact = screen.getByRole('textbox', { name: 'Contact name' })
+      await userEvent.click(contact)
+      for (const [index, character] of [...'test'].entries()) {
+        await userEvent.type(contact, character, { skipClick: true })
+        await act(async () => {
+          await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+        })
+        expect(contact).toHaveValue('test'.slice(0, index + 1))
+        expect(contact).toHaveFocus()
+      }
+      expect(feedback).toHaveTextContent('Application and Scale tabs')
+      expect(feedback).not.toHaveTextContent('Applicant')
+    } finally {
+      visibleRects.mockRestore()
+    }
+  })
+
   it('submits a ministerial applicant type without agent fields', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('904'))
 

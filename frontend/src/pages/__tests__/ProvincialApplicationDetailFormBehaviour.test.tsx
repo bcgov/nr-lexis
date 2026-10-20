@@ -24,6 +24,7 @@ import {
   mockedSubmitAdminUpload,
   mockedUpdateApplicationPackage,
   mockedUpdateApplicationSummary,
+  runFramesBeforeNextRender,
   selectApplicationDetailTab,
   selectApplicationReviewTile,
 } from './ProvincialApplicationDetailActions.support'
@@ -363,11 +364,13 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     await waitFor(() => expect(packageNumber).toBeEnabled())
     await userEvent.clear(packageNumber)
     await userEvent.type(packageNumber, 'PKG-9')
+    runFramesBeforeNextRender()
 
     await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
 
     expect(await drawer.findByText('Package PKG-9 already exists')).toBeInTheDocument()
     expect(packageNumber).toHaveAttribute('aria-invalid', 'true')
+    await waitFor(() => expect(packageNumber).toHaveFocus())
     expect(drawer.queryByText('Package save failed')).not.toBeInTheDocument()
   })
 
