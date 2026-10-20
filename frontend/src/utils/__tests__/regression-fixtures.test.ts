@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { getWithAuth, postWithCsrf } from '../../../e2e/utils/regression-auth'
 import {
   regressionSubmissionFile,
+  regressionSubmissionVariants,
   resolveRegressionSubmission,
 } from '../../../e2e/utils/regression-fixtures'
 
@@ -29,6 +30,7 @@ const record = (id: number) => ({
   },
   scales: [{ timberMark: `REF${id}` }],
   endUses: [{ code: 'SL', description: 'Sawlog' }],
+  grades: { HE: ['H', 'J'], FI: ['J'] } as Record<string, string[]>,
 })
 
 const stubRecords = (records: ReturnType<typeof record>[]) => {
@@ -39,6 +41,17 @@ const stubRecords = (records: ReturnType<typeof record>[]) => {
       return response(
         records.find((item) => String(item.summary.orgUnitNumber) === params.orgUnitNumber)
           ?.endUses ?? [],
+      )
+    }
+    if (path.endsWith('/grade-codes')) {
+      const regionRecord = records.find(
+        (item) => String(item.summary.orgUnitNumber) === params.orgUnitNumber,
+      )
+      return response(
+        (regionRecord?.grades[params.speciesCode] ?? []).map((code) => ({
+          code,
+          description: code,
+        })),
       )
     }
     const candidate = records.find((item) => String(item.application) === params.applicationNumber)
@@ -73,6 +86,16 @@ describe('regression lifecycle fixtures', () => {
       {
         params: { orgUnitNumber: '1903', speciesJSON: '["HE"]' },
       },
+    )
+    expect(getWithAuth).toHaveBeenCalledWith(
+      page,
+      '/api/lexis/rpc/application-details/grade-codes',
+      { params: { orgUnitNumber: '1903', speciesCode: 'HE' } },
+    )
+    expect(getWithAuth).toHaveBeenCalledWith(
+      page,
+      '/api/lexis/rpc/application-details/grade-codes',
+      { params: { orgUnitNumber: '1903', speciesCode: 'FI' } },
     )
     expect(fixture.xml).toContain('<lexis:timberMark>REF&amp;&lt;1&gt;</lexis:timberMark>')
     expect(fixture.xml.match(/<lexis:harvestedTimber>/g)).toHaveLength(3)
@@ -123,6 +146,54 @@ describe('regression lifecycle fixtures', () => {
     expect(postWithCsrf).toHaveBeenCalledTimes(1)
   })
 
+  it.each([
+    { label: 'hemlock grade J', grades: { HE: ['H'], FI: ['J'] } },
+    { label: 'hemlock grade H', grades: { HE: ['J'], FI: ['J'] } },
+    { label: 'fir grade J', grades: { HE: ['H', 'J'], FI: ['H'] } },
+    { label: 'fir', grades: { HE: ['H', 'J'], FI: [] } },
+  ])('skips a region that does not list $label', async ({ grades }) => {
+    const unsupported = record(1)
+    unsupported.grades = grades
+    const supported = record(2)
+    supported.summary.orgUnitNumber = 1910
+    stubRecords([unsupported, supported])
+    const fixture = await resolveRegressionSubmission(page, packageNumber)
+    expect(fixture.ownerClientNumber).toBe(supported.summary.ownerClientNumber)
+    expect(fixture.xml).toContain('<lexis:bcForestRegionCode>RWC</lexis:bcForestRegionCode>')
+    expect(postWithCsrf).toHaveBeenCalledTimes(1)
+    expect(getWithAuth).not.toHaveBeenCalledWith(
+      page,
+      '/api/lexis/rpc/application-details/unique-scales',
+      { params: { applicationNumber: '1' } },
+    )
+  })
+
+  it('looks up the grades of a region once for all of its applications', async () => {
+    stubRecords([record(1), record(2)])
+    vi.mocked(postWithCsrf).mockResolvedValueOnce(
+      rejected(['Application owner location does not exist.']),
+    )
+    await resolveRegressionSubmission(page, packageNumber)
+    const gradeLookups = vi
+      .mocked(getWithAuth)
+      .mock.calls.filter(([, path]) => path.endsWith('/grade-codes'))
+    expect(gradeLookups).toHaveLength(2)
+  })
+
+  it('fails a grade lookup outage before validation instead of guessing the grades', async () => {
+    stubRecords([record(1)])
+    const lookup = vi.mocked(getWithAuth).getMockImplementation()!
+    vi.mocked(getWithAuth).mockImplementation((...args) =>
+      args[1].endsWith('/grade-codes')
+        ? Promise.resolve(response({ message: 'PRIVATE BODY' }, 503))
+        : lookup(...args),
+    )
+    await expect(resolveRegressionSubmission(page, packageNumber)).rejects.toThrow(
+      'Regression reference lookup failed.',
+    )
+    expect(postWithCsrf).not.toHaveBeenCalled()
+  })
+
   it('fails an end-use lookup outage before validation instead of using a guessed code', async () => {
     stubRecords([record(1)])
     const lookup = vi.mocked(getWithAuth).getMockImplementation()!
@@ -144,6 +215,8 @@ describe('regression lifecycle fixtures', () => {
     'Timber mark REF1 is not valid for this region.',
     'Timber mark REF1 is not valid for provincial applications.',
     'Timber mark REF1 is not valid for this scale due to a status of X.',
+    'Species code HE is not valid for this region.',
+    'Grade code H is not valid for species HE in this region.',
   ])('tries another reference only after the explicit rejection: %s', async (error) => {
     stubRecords([record(1), record(2)])
     vi.mocked(postWithCsrf).mockResolvedValueOnce(rejected([error]))
@@ -221,6 +294,76 @@ describe('regression lifecycle fixtures', () => {
       'Regression reference data unavailable',
     )
     expect(postWithCsrf).toHaveBeenCalledTimes(25)
-    expect(getWithAuth).toHaveBeenCalledTimes(52)
+    expect(getWithAuth).toHaveBeenCalledTimes(54)
+  })
+})
+
+describe('regression submission variants', () => {
+  const baseXml = async () => {
+    stubRecords([record(1)])
+    vi.mocked(postWithCsrf).mockResolvedValue(validated())
+    return (await resolveRegressionSubmission(page, packageNumber)).xml
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks()
+  })
+
+  it('edits only the values each refusal depends on', async () => {
+    const xml = await baseXml()
+    const [decimals, pieces, telephone, region] = regressionSubmissionVariants(xml)
+
+    expect(decimals.xml).toBe(
+      xml.replace('<lexis:quantityVolume>0.5<', '<lexis:quantityVolume>0.55<'),
+    )
+    expect(pieces.xml.match(/<lexis:numberOfPieces>0<\/lexis:numberOfPieces>/g)).toHaveLength(3)
+    expect(pieces.xml).not.toMatch(/<lexis:numberOfPieces>[1-9]/)
+    expect(telephone.xml).not.toContain('contactTelephoneNumber')
+    expect(telephone.xml).toContain('<lexis:contactFirstname>E2E</lexis:contactFirstname>')
+    expect(region.xml).toBe(
+      xml.replace('<lexis:bcForestRegionCode>RCB<', '<lexis:bcForestRegionCode>RSI<'),
+    )
+    expect(regressionSubmissionVariants(xml).map(({ xml: edited }) => edited)).not.toContain(xml)
+  })
+
+  it('names the refusal each variant must produce', async () => {
+    const variants = regressionSubmissionVariants(await baseXml())
+
+    expect(
+      variants.map(({ label, expectedErrors, match }) => ({ label, expectedErrors, match })),
+    ).toEqual([
+      {
+        label: 'a scale total with two decimals',
+        expectedErrors: [
+          'The total scale volume (525.05) must have no more than one decimal place.',
+        ],
+        match: 'exact',
+      },
+      {
+        label: 'scale volume without pieces',
+        expectedErrors: [
+          'The total number of scale pieces must be greater than 0 when the scales have a volume.',
+        ],
+        match: 'exact',
+      },
+      {
+        label: 'no contact telephone number',
+        expectedErrors: ['Applicant contact telephone number is required.'],
+        match: 'exact',
+      },
+      {
+        label: 'a retired region code',
+        expectedErrors: [
+          'Forest region code RSI is not a valid BC forest region code (RCB, RKB, RNO, ROM, RSC, RSK, RTO, RWC).',
+        ],
+        match: 'contains',
+      },
+    ])
+  })
+
+  it('fails instead of returning a copy that was not edited', () => {
+    expect(() => regressionSubmissionVariants('<empty/>')).toThrow(
+      'Regression submission XML no longer has the element to edit.',
+    )
   })
 })

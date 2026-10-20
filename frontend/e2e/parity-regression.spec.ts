@@ -7,6 +7,7 @@ const installParityFixtures = async (page: Page) => {
   await installSyntheticOidcSession(page, { username: 'PARITY.TESTER', orgUnitNo: '1903' })
   const writes: Array<{ method: string; path: string; body: Record<string, unknown> }> = []
   const unexpectedRequests: string[] = []
+  const numberChecks: string[] = []
   let version = 1
   const federal = {
     applicationNumber: 888,
@@ -136,7 +137,10 @@ const installParityFixtures = async (page: Page) => {
           break
         case '/api/lexis/exemptions/search/options':
           body = {
-            exemptionTypes: [{ code: 'B', name: 'Blanket Order in Council' }],
+            exemptionTypes: [
+              { code: 'O', name: 'Order in Council' },
+              { code: 'B', name: 'Blanket Order in Council' },
+            ],
             exemptionStatuses: [
               { code: 'NEW', name: 'New' },
               { code: 'ACT', name: 'Active' },
@@ -157,6 +161,12 @@ const installParityFixtures = async (page: Page) => {
         case '/api/lexis/rpc/exemption-details/applications':
           body = { applications: [], containsUnmanu: false, ownerNumber: '' }
           break
+        case '/api/lexis/rpc/exemption-details/check-exemption-number': {
+          const exemptionNumber = new URL(request.url()).searchParams.get('exemptionNumber') ?? ''
+          numberChecks.push(exemptionNumber)
+          body = { valid: exemptionNumber !== 'PARITY01', message: '' }
+          break
+        }
         case '/api/lexis/notifications':
         case '/api/lexis/federal/applications/888/remarks':
         case '/api/lexis/rpc/application-details/document-details':
@@ -210,7 +220,7 @@ const installParityFixtures = async (page: Page) => {
       body: JSON.stringify(body),
     })
   })
-  return { writes, unexpectedRequests }
+  return { writes, unexpectedRequests, numberChecks }
 }
 
 const selectTab = async (page: Page, name: string) => {
@@ -291,6 +301,7 @@ test.describe('Frontend parity with mocked API responses', () => {
       'aria-selected',
       'true',
     )
+    await expect(page.getByRole('tab', { name: 'Items', exact: true })).toBeFocused()
 
     await selectTab(page, 'Application')
     await expect(page.getByRole('button', { name: 'Withdraw', exact: true })).toBeVisible()
@@ -346,6 +357,90 @@ test.describe('Frontend parity with mocked API responses', () => {
         body: { statusCode: 'WDN', remark: 'Withdraw this application' },
       },
     ])
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  test('requires a remark before rejecting a federal application', async ({ page }) => {
+    const fixture = await installParityFixtures(page)
+    await gotoSyntheticRoute(page, '/federal/application/888', {
+      ready: page.getByRole('heading', {
+        level: 1,
+        name: 'Federal application FED-888',
+        exact: true,
+      }),
+    })
+    await selectTab(page, 'Application')
+    const reject = page.getByRole('button', { name: 'Reject', exact: true })
+    await reject.click()
+    const statusForm = page.locator('.cds--tile', {
+      has: page.getByRole('heading', { name: 'Update federal status', exact: true }),
+    })
+    await expect(statusForm.getByText('Rejected', { exact: true })).toBeVisible()
+    await expect(statusForm.getByRole('combobox')).toHaveCount(0)
+
+    // An empty remark is refused on the field without sending anything.
+    await page.getByRole('button', { name: 'Update status', exact: true }).click()
+    await expect(page.getByText('Remark is required', { exact: true })).toBeVisible()
+    await expect(page.getByLabel('Remark', { exact: true })).toBeFocused()
+
+    await statusForm.getByRole('button', { name: 'Cancel', exact: true }).click()
+    await expect(statusForm).toHaveCount(0)
+    await expect(reject).toBeFocused()
+    expect(fixture.writes).toEqual([])
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  test('refuses a federal remark that is too long once saved without sending it', async ({
+    page,
+  }) => {
+    const fixture = await installParityFixtures(page)
+    await gotoSyntheticRoute(page, '/federal/application/888', {
+      ready: page.getByRole('heading', {
+        level: 1,
+        name: 'Federal application FED-888',
+        exact: true,
+      }),
+    })
+    await selectTab(page, 'Remarks')
+    await page.getByRole('button', { name: 'Add remark', exact: true }).click()
+    const remark = page.getByLabel('New remark', { exact: true })
+
+    // 100 typed characters become 300 once each & is saved as five.
+    await remark.fill('A&'.repeat(50))
+    await page.getByRole('button', { name: 'Save remark', exact: true }).click()
+    await expect(
+      page.getByText(
+        'Remark must not exceed 250 characters once saved. Each & counts as 5 characters, and each < or > as 4.',
+        { exact: true },
+      ),
+    ).toBeVisible()
+    await expect(remark).toBeFocused()
+    expect(fixture.writes).toEqual([])
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  test('flags a taken exemption number when the number field loses focus', async ({ page }) => {
+    const fixture = await installParityFixtures(page)
+    await gotoSyntheticRoute(page, '/provincial/exemption/create', {
+      ready: page.getByRole('heading', { level: 1, name: 'Create new exemption', exact: true }),
+    })
+    const number = page.getByLabel('Exemption number', { exact: true })
+    const taken = page.getByText('This exemption number has already been assigned', {
+      exact: true,
+    })
+
+    await number.fill('parity01')
+    await expect(number).toHaveValue('PARITY01')
+    await number.press('Tab')
+    await expect(taken).toBeVisible()
+
+    // Changing the number clears the message until the new number is checked.
+    await number.fill('PARITY02')
+    await expect(taken).toHaveCount(0)
+    await number.press('Tab')
+    await expect.poll(() => fixture.numberChecks).toEqual(['PARITY01', 'PARITY02'])
+    await expect(taken).toHaveCount(0)
+    expect(fixture.writes).toEqual([])
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
