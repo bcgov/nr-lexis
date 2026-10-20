@@ -815,7 +815,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       '.legacy-search-table-toolbar--with-actions .cds--toolbar-content',
     )
     await expect(resultActionToolbar).toHaveCSS('align-items', 'center')
-    await expect(resultActionToolbar).toHaveCSS('height', '56px')
+    await expect(resultActionToolbar).toHaveCSS('height', '40px')
     await expect(resultActionToolbar).toHaveCSS('padding-left', '16px')
     const batchActions = page.locator('.cds--batch-actions--active')
     await expect(batchActions).toContainText('1 application selected')
