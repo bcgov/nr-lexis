@@ -42,6 +42,7 @@ import type { FederalApplicationDetail } from '@/interfaces/LexisDetails'
 import { DetailFieldTile } from '../shared/DetailSections'
 import { displayValue } from '@/pages/shared/detail-page-utils'
 import { readDetailReturnTo } from '@/pages/shared/detail-navigation'
+import { RemarkTextArea } from '@/pages/shared/RemarkTextArea'
 import { storedRemarkLengthError } from '@/pages/shared/remark-storage'
 import { useEditSections } from '@/pages/shared/useEditSections'
 import { hasFieldErrors, useFieldErrors, type FieldErrors } from '@/pages/shared/useFieldErrors'
@@ -65,7 +66,7 @@ import {
 import { formatBusinessDateTimeLabel, formatBusinessIsoDate } from '@/utils/date'
 import { fieldErrorText } from '@/utils/field-error'
 import { focusFirstInvalidFieldAfterRender } from '@/utils/focus'
-import { displayAuditIdentity, displayTableValue } from '@/utils/text'
+import { displayAuditIdentity, displayTableValue, formatPhoneNumber } from '@/utils/text'
 import { requiredLabel } from '@/utils/required-label'
 import { requiredFieldError } from '@/pages/shared/create-form-utils'
 import { allowedFederalStatusTransitions, type FederalStatusTransition } from './status-transitions'
@@ -602,7 +603,10 @@ const FederalApplicationDetailsPage = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={`Federal application ${federalApplicationDisplayNumber}`.trim()}
-          subtitle="Check and manage this federal application"
+          focusTitle="whenFocusLost"
+          subtitle={
+            currentDetail ? `Author: ${displayAuditIdentity(currentDetail.author)}` : undefined
+          }
           status={
             currentDetail ? (
               <StatusTag
@@ -756,11 +760,15 @@ const FederalApplicationDetailsPage = () => {
                           [
                             {
                               label: 'Phone number',
-                              value: displayValue(detail.ownerClientContext?.phone),
+                              value: displayValue(
+                                formatPhoneNumber(detail.ownerClientContext?.phone),
+                              ),
                             },
                             {
                               label: 'Fax number',
-                              value: displayValue(detail.ownerClientContext?.fax),
+                              value: displayValue(
+                                formatPhoneNumber(detail.ownerClientContext?.fax),
+                              ),
                             },
                             {
                               label: 'Email address',
@@ -833,11 +841,15 @@ const FederalApplicationDetailsPage = () => {
                             [
                               {
                                 label: 'Phone number',
-                                value: displayValue(detail.agentClientContext?.phone),
+                                value: displayValue(
+                                  formatPhoneNumber(detail.agentClientContext?.phone),
+                                ),
                               },
                               {
                                 label: 'Fax number',
-                                value: displayValue(detail.agentClientContext?.fax),
+                                value: displayValue(
+                                  formatPhoneNumber(detail.agentClientContext?.fax),
+                                ),
                               },
                               {
                                 label: 'Email address',
@@ -1127,7 +1139,7 @@ const FederalApplicationDetailsPage = () => {
                             </div>
                             {canManageFederalRemarks && isEditingFederalRemarks && (
                               <div ref={remarkFormRef} className="legacy-search-actions">
-                                <TextArea
+                                <RemarkTextArea
                                   id="federalApplicationRemark"
                                   labelText={requiredLabel(
                                     editingRemarkId
@@ -1135,8 +1147,6 @@ const FederalApplicationDetailsPage = () => {
                                       : 'New remark',
                                   )}
                                   aria-required="true"
-                                  enableCounter
-                                  maxCount={250}
                                   value={remarkDraft}
                                   invalid={!!remarkValidationMessage}
                                   invalidText={fieldErrorText(remarkValidationMessage)}
@@ -1206,6 +1216,7 @@ const FederalApplicationDetailsPage = () => {
                                               )}
                                               kind="ghost"
                                               size="md"
+                                              aria-label={`Edit remark ${item.remarkId}`}
                                               onClick={() =>
                                                 sections.startEditing(
                                                   `remark-${item.remarkId}`,

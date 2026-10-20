@@ -620,6 +620,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const [successTitle, setSuccessTitle] = useState(() => defaultSuccessTitle(initialWorkflow))
   const uploadResultsRef = useRef<HTMLDivElement>(null)
   const [uploadResultsFocusRequest, setUploadResultsFocusRequest] = useState(0)
+  const stepHeadingRef = useRef<HTMLHeadingElement>(null)
+  const [stepFocusRequest, setStepFocusRequest] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<UploadField>>({})
   const [showValidationErrors, setShowValidationErrors] = useState(false)
@@ -1134,6 +1136,17 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     return () => cancelAnimationFrame(frame)
   }, [uploadResultsFocusRequest])
 
+  // Review and Back remove the button that was pressed, so focus moves to the new step's heading.
+  useEffect(() => {
+    if (stepFocusRequest === 0) {
+      return
+    }
+    const frame = requestAnimationFrame(() =>
+      stepHeadingRef.current?.focus({ preventScroll: true }),
+    )
+    return () => cancelAnimationFrame(frame)
+  }, [stepFocusRequest])
+
   const createdApplicationResultItem = (
     fileName: string,
     result: QueuedUploadResult,
@@ -1240,6 +1253,12 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     }
 
     setApplicationSubmissionStep('review')
+    setStepFocusRequest((current) => current + 1)
+  }
+
+  const onReviewDocumentUpload = (): void => {
+    setDocumentUploadStep('review')
+    setStepFocusRequest((current) => current + 1)
   }
 
   const onSubmitUpload = async (): Promise<void> => {
@@ -1579,6 +1598,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         <PageHeader
           title={resolvedPageTitle}
           subtitle={pageSubtitle}
+          focusTitle="whenFocusLost"
           style={{ marginBlockEnd: '1.5rem' }}
         />
         <UploadWorkflowProgress
@@ -1603,7 +1623,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           {activeUploadStep === 'upload' ? (
             <>
               <div className="admin-upload-section-heading">
-                <h2 id="admin-upload-step-title">Upload</h2>
+                <h2 id="admin-upload-step-title" ref={stepHeadingRef} tabIndex={-1}>
+                  Upload
+                </h2>
                 <p>{uploadStepDescription}</p>
               </div>
 
@@ -1629,7 +1651,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                   currentStepId={documentUploadStep}
                   actionsPlacement="footer"
                   emptyDescription="Upload files to validate before review."
-                  onReview={() => setDocumentUploadStep('review')}
+                  onReview={onReviewDocumentUpload}
                   onSubmit={() => void onSubmitUpload()}
                   onReset={onReset}
                   onClear={clearQueuedFiles}
@@ -1641,14 +1663,16 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                 <UploadStepReviewButton
                   label="Review upload"
                   disabled
-                  onReview={() => setDocumentUploadStep('review')}
+                  onReview={onReviewDocumentUpload}
                 />
               )}
             </>
           ) : (
             <>
               <div className="admin-upload-section-heading">
-                <h2 id="admin-upload-review-title">Review</h2>
+                <h2 id="admin-upload-review-title" ref={stepHeadingRef} tabIndex={-1}>
+                  Review
+                </h2>
                 <p>
                   {selectedWorkflowType === 'applicationSubmission'
                     ? 'Review validated submission data before submitting.'
@@ -1715,6 +1739,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                   } else {
                     setDocumentUploadStep('upload')
                   }
+                  setStepFocusRequest((current) => current + 1)
                 }}
                 onSubmit={() => void onSubmitUpload()}
                 onReset={onReset}

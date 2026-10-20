@@ -202,8 +202,8 @@ const federalDetail: FederalApplicationDetail = {
     province: 'BC',
     postalCode: 'V8V 1V1',
     country: 'Canada',
-    phone: '250-555-0101',
-    fax: '250-555-0102',
+    phone: '2505550101',
+    fax: '2505550102',
     email: 'owner@example.test',
   },
   agentClientNumber: '00011234',
@@ -217,7 +217,7 @@ const federalDetail: FederalApplicationDetail = {
     province: 'BC',
     postalCode: 'V9R 1R1',
     country: 'Canada',
-    phone: '250-555-0201',
+    phone: '2505550201',
     fax: '250-555-0202',
     email: 'agent@example.test',
   },
@@ -532,9 +532,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByRole('button', { name: 'Edit exemption details' })).not.toBeInTheDocument()
 
     await selectDetailTab('Documents')
-    expect(await screen.findByRole('button', { name: 'Open' })).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: 'Download' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(await screen.findByRole('button', { name: /^Open / })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /^Download / })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Delete / })).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
   })
 
@@ -727,7 +727,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
       // The panel and its launcher leave the page while the list reloads, so the notice takes focus.
       await waitFor(() => expect(added).toHaveFocus())
 
-      await userEvent.click(within(applications).getByRole('button', { name: 'Remove' }))
+      await userEvent.click(
+        within(applications).getByRole('button', { name: /^Remove application / }),
+      )
       const confirmation = await screen.findByRole('dialog', {
         name: 'Are you sure you want to remove this application?',
       })
@@ -1182,7 +1184,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Permits')
     expect(await screen.findByText('P1 (Pending)')).toBeInTheDocument()
     expect(screen.queryByRole('link', { name: 'P1 (Pending)' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Open / })).not.toBeInTheDocument()
   })
 
   it('omits placeholder totals and their lookup for Blanket OIC permits', async () => {
@@ -1355,7 +1357,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
     const openDocumentButton = within(documentRow as HTMLElement).getByRole('button', {
-      name: 'Open',
+      name: /^Open /,
     })
     await userEvent.click(openDocumentButton)
 
@@ -1393,7 +1395,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Documents')
     const documentRow = (await screen.findByText('download.pdf')).closest('tr') as HTMLElement
-    await userEvent.click(within(documentRow).getByRole('button', { name: 'Download' }))
+    await userEvent.click(within(documentRow).getByRole('button', { name: /^Download / }))
     await waitFor(() =>
       expect(mockedOpenExemptionDocument).toHaveBeenCalledWith('701', 'download.pdf', 'EX-777'),
     )
@@ -1436,7 +1438,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
     const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
-      name: 'Delete',
+      name: /^Delete /,
     })
     await userEvent.click(deleteButton)
     const confirmation = await screen.findByRole('dialog', {
@@ -1477,7 +1479,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     await selectDetailTab('Documents')
     const documentRow = (await screen.findByText('exemption-doc.pdf')).closest('tr')
     await userEvent.click(
-      within(documentRow as HTMLElement).getByRole('button', { name: 'Delete' }),
+      within(documentRow as HTMLElement).getByRole('button', { name: /^Delete / }),
     )
     const confirmation = await screen.findByRole('dialog', {
       name: 'Are you sure you want to delete this document?',
@@ -1524,7 +1526,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(documentRow).toBeTruthy()
     expect(within(documentRow as HTMLElement).getByText('Application')).toBeInTheDocument()
     expect(
-      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+      within(documentRow as HTMLElement).queryByRole('button', { name: /^Delete / }),
     ).not.toBeInTheDocument()
     expect(mockedRemoveExemptionDocument).not.toHaveBeenCalled()
   })
@@ -1565,7 +1567,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
     const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
-      name: 'Delete',
+      name: /^Delete /,
     })
     expect(deleteButton).toBeEnabled()
     expect(mockedRemoveExemptionDocument).not.toHaveBeenCalled()
@@ -1605,7 +1607,9 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const documentRow = (await screen.findByText('approver-exemption-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Add documents' })).not.toBeInTheDocument()
-    await userEvent.click(within(documentRow as HTMLElement).getByRole('button', { name: 'Open' }))
+    await userEvent.click(
+      within(documentRow as HTMLElement).getByRole('button', { name: /^Open / }),
+    )
     await waitFor(() => {
       expect(mockedOpenExemptionDocument).toHaveBeenCalledWith(
         '702',
@@ -1614,7 +1618,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       )
     })
     expect(
-      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+      within(documentRow as HTMLElement).queryByRole('button', { name: /^Delete / }),
     ).not.toBeInTheDocument()
   })
 
@@ -1652,7 +1656,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     const documentRow = (await screen.findByText('expired-exemption-doc.pdf')).closest('tr')
     expect(documentRow).toBeTruthy()
     expect(
-      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+      within(documentRow as HTMLElement).queryByRole('button', { name: /^Delete / }),
     ).not.toBeInTheDocument()
   })
 
@@ -1767,6 +1771,16 @@ describe('Exemption and Federal Detail Document Actions', () => {
     ).toBeTruthy()
   })
 
+  it('focuses the federal heading when the record opens with focus lost', async () => {
+    renderFederalDataRouter()
+
+    const heading = await screen.findByRole('heading', {
+      name: 'Federal application FED-888',
+      level: 1,
+    })
+    await waitFor(() => expect(heading).toHaveFocus())
+  })
+
   it('renders federal application details with the federal tab structure', async () => {
     render(
       <MemoryRouter initialEntries={['/federal/888']}>
@@ -1796,7 +1810,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getAllByRole('heading', { level: 1 })).toHaveLength(1)
     expect(federalHeader).toBeTruthy()
     expect(
-      within(federalHeader as HTMLElement).getByText('Check and manage this federal application'),
+      within(federalHeader as HTMLElement).getByText('Author: IDIR\\TESTER'),
     ).toBeInTheDocument()
     expect(
       screen.getByRole('link', { name: 'Back to Federal application search' }),
@@ -1809,8 +1823,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.queryByText('Read only')).not.toBeInTheDocument()
     expect(await screen.findByText('Owner Contact')).toBeInTheDocument()
     expect(screen.getByText('1 Owner Road')).toBeInTheDocument()
-    expect(screen.getByText('250-555-0101')).toBeInTheDocument()
-    expect(screen.getByText('250-555-0102')).toBeInTheDocument()
+    expect(screen.getByText('(250) 555-0101')).toBeInTheDocument()
+    expect(screen.getByText('(250) 555-0102')).toBeInTheDocument()
     expect(screen.getByText('owner@example.test')).toBeInTheDocument()
     const ownerTile = screen
       .getByRole('heading', { name: 'Applicant', level: 2 })
@@ -1829,7 +1843,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
 
     await selectDetailTab('Agent')
     expect(await screen.findByText('2 Agent Avenue')).toBeInTheDocument()
-    expect(screen.getByText('250-555-0201')).toBeInTheDocument()
+    expect(screen.getByText('(250) 555-0201')).toBeInTheDocument()
     expect(screen.getByText('250-555-0202')).toBeInTheDocument()
     expect(screen.getByText('agent@example.test')).toBeInTheDocument()
     const agentTile = screen.getByRole('heading', { name: 'Agent', level: 2 }).closest('.cds--tile')
@@ -2032,7 +2046,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(await screen.findByText('Review note')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('New remark')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Edit remark / })).not.toBeInTheDocument()
     expect(mockedUpdateFederalApplicationStatus).not.toHaveBeenCalled()
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
   })
@@ -2532,6 +2546,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
 
     fireEvent.change(newRemarkInput, { target: { value: `${'R'.repeat(246)}&` } })
+    expect(screen.getByText('251/250')).toBeVisible()
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
     expect(
       await screen.findByText(
@@ -2549,8 +2564,8 @@ describe('Exemption and Federal Detail Document Actions', () => {
       expect(mockedFetchFederalApplicationRemarks).toHaveBeenCalledTimes(2)
     })
 
-    await userEvent.click(screen.getByRole('button', { name: 'Edit' }))
-    const remarkInput = screen.getByLabelText('Edit remark 44')
+    await userEvent.click(screen.getByRole('button', { name: 'Edit remark 44' }))
+    const remarkInput = screen.getByRole('textbox', { name: /^Edit remark 44/ })
     await userEvent.clear(remarkInput)
     await userEvent.type(remarkInput, 'Updated note')
     await userEvent.click(screen.getByRole('button', { name: 'Update remark' }))
@@ -2608,7 +2623,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
     expect(screen.getByText('idir\\reviewer')).toBeInTheDocument()
     expect(mockedFetchFederalApplicationRemarks).toHaveBeenCalledWith('888')
     expect(screen.queryByLabelText('New remark')).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Edit remark / })).not.toBeInTheDocument()
     expect(mockedSaveFederalApplicationRemark).not.toHaveBeenCalled()
   })
 
@@ -2634,7 +2649,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
       expectNoFederalStatusActions()
       await selectDetailTab('Remarks')
       expect(await screen.findByText('Review note')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Edit remark 44' })).toBeInTheDocument()
       await enterFederalRemarkEditMode()
       await userEvent.type(screen.getByLabelText('New remark'), 'Expired note')
       await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
@@ -2710,7 +2725,7 @@ describe('Exemption and Federal Detail Document Actions', () => {
         await selectDetailTab('Remarks')
         expect(await screen.findByText('Review note')).toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
-        expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: /^Edit remark / })).not.toBeInTheDocument()
       }
     },
   )
