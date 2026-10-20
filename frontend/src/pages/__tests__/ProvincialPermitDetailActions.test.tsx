@@ -373,6 +373,15 @@ const gbmsHistoryRow = {
 // The Fee column is the last cell of a fee row.
 const feeAmountCell = (row: HTMLElement) => within(row).getAllByRole('cell').at(-1) as HTMLElement
 
+// A section's result shows inside that section's card, after the card title.
+const expectResultInCard = (message: string, cardTitle: string) => {
+  const notice = screen.getByText(message).closest('.app-notification-container') as HTMLElement
+  const card = notice.closest<HTMLElement>('.cds--tile')
+  expect(card).not.toBeNull()
+  const title = within(card as HTMLElement).getByRole('heading', { name: cardTitle })
+  expect(title.compareDocumentPosition(notice) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
+}
+
 const selectPermitDetailTab = async (name: string) => {
   await screen.findByRole('tab', { name: 'Permit' })
   const reviewedFlowTabName =
@@ -607,6 +616,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ) as HTMLElement
     expect(notice).toHaveClass('cds--inline-notification--success')
     expect(notice.closest('[role="tabpanel"]')).toBe(screen.getByRole('tabpanel', { name: 'Fees' }))
+    expectResultInCard('Receipt number saved.', 'Permit fees')
     expect(screen.queryByText('Permit details saved.')).not.toBeInTheDocument()
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Edit receipt number' })).toHaveFocus(),
@@ -617,6 +627,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     {
       section: 'Permit details',
       tab: 'Permit',
+      card: 'Permit summary',
       ministerial: false,
       change: async () => {
         await userEvent.click(
@@ -629,6 +640,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     {
       section: 'Applicant details',
       tab: 'Applicant',
+      card: 'Applicant details',
       ministerial: true,
       change: async () => {
         await userEvent.click(
@@ -644,6 +656,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     {
       section: 'Shipping details',
       tab: 'Shipping',
+      card: 'Shipping',
       ministerial: false,
       change: async () => {
         await userEvent.click(await screen.findByRole('button', { name: 'Edit shipping' }))
@@ -654,6 +667,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     {
       section: 'Receipt number',
       tab: 'Fees',
+      card: 'Permit fees',
       ministerial: true,
       change: async () => {
         await userEvent.click(await screen.findByRole('button', { name: 'Edit receipt number' }))
@@ -664,6 +678,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     {
       section: 'Fee override',
       tab: 'Fees',
+      card: 'Fee calculation details',
       ministerial: false,
       change: async () => {
         await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
@@ -673,7 +688,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     },
   ])(
     'shows a rejected $section save in the $tab tab and keeps the form open',
-    async ({ section, tab, ministerial, change }) => {
+    async ({ section, tab, card, ministerial, change }) => {
       if (ministerial) configureMinisterialActivePermit()
       else configureActivePermit()
       const rejection = {
@@ -702,6 +717,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       expect(notice).toHaveTextContent('The test-2026-10-14 change was rejected.')
       expect(notice).toHaveTextContent('Check the saved details before trying again.')
       expect(notice.closest('[role="tabpanel"]')).toBe(screen.getByRole('tabpanel', { name: tab }))
+      expectResultInCard(`${section} not saved.`, card)
       expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
       expect(
         screen.getByRole('button', { name: /^Save (?:changes|permit|shipping|fee override)$/ }),
@@ -1599,6 +1615,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
       )
     })
     expect(await screen.findByText('Applicant details saved.')).toBeInTheDocument()
+    expectResultInCard('Applicant details saved.', 'Applicant details')
   })
 
   it.each([
@@ -2095,6 +2112,56 @@ describe('Provincial Permit Detail Action Smoke', () => {
       '.app-inline-notification',
     )
     await waitFor(() => expect(notice).toHaveFocus())
+    expect(within(notice as HTMLElement).getByText('Application added.')).toBeVisible()
+    expectResultInCard('Application was added to the permit.', 'Permit details')
+  })
+
+  it('names the added notice for every application added at once', async () => {
+    configureMinisterialActivePermit()
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: ['APP-ELIGIBLE', 'APP-SECOND'],
+      errorMessage: '',
+    })
+    renderPermitDetails()
+
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: 'Include application APP-ELIGIBLE in permit' }),
+    )
+    await userEvent.click(
+      screen.getByRole('checkbox', { name: 'Include application APP-SECOND in permit' }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+
+    expect(await screen.findByText('Applications added.')).toBeVisible()
+    expectResultInCard('Applications added.', 'Permit details')
+  })
+
+  it('shows a refused application add inside the permit card', async () => {
+    configureMinisterialActivePermit()
+    mockedFetchAvailablePermitApplications.mockResolvedValue({
+      applicationList: ['APP-ELIGIBLE'],
+      errorMessage: '',
+    })
+    mockedAddApplicationsToPermit.mockResolvedValueOnce({
+      success: false,
+      message: '',
+      errors: ['test-2026-10-20 application refused.'],
+      warnings: [],
+    })
+    renderPermitDetails()
+
+    await userEvent.click(
+      await screen.findByRole('checkbox', { name: 'Include application APP-ELIGIBLE in permit' }),
+    )
+    await userEvent.click(screen.getByRole('button', { name: 'Add application' }))
+
+    const notice = (await screen.findByText('Application not added.')).closest(
+      '.cds--inline-notification',
+    )
+    expect(notice).toHaveClass('cds--inline-notification--error')
+    expect(notice).toHaveTextContent('test-2026-10-20 application refused.')
+    expectResultInCard('Application not added.', 'Permit details')
+    expect(screen.queryByText('Action failed')).not.toBeInTheDocument()
   })
 
   it('focuses the result after an application is removed from the permit', async () => {
@@ -2122,6 +2189,8 @@ describe('Provincial Permit Detail Action Smoke', () => {
       '.app-inline-notification',
     )
     await waitFor(() => expect(notice).toHaveFocus())
+    expect(within(notice as HTMLElement).getByText('Application removed.')).toBeVisible()
+    expectResultInCard('Application was removed from the permit.', 'Permit details')
   })
 
   it('shows saved permit client values when client enrichment is unavailable', async () => {
@@ -3238,6 +3307,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(savedNotice.closest('[role="tabpanel"]')).toBe(
       screen.getByRole('tabpanel', { name: 'Permit' }),
     )
+    expectResultInCard('Permit details saved.', 'Permit summary')
     expect(screen.queryByText('The permit was updated successfully.')).not.toBeInTheDocument()
     expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
       expect.objectContaining({ permitSubmitDate: '2026-04-11', permitStatus: 'ACT' }),
@@ -3335,6 +3405,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(savedNotice.closest('[role="tabpanel"]')).toBe(
       screen.getByRole('tabpanel', { name: 'Shipping' }),
     )
+    expectResultInCard('Shipping details saved.', 'Shipping')
     expect(screen.queryByText('The permit was saved successfully.')).not.toBeInTheDocument()
     expect(mockedFetchProvincialPermitFees).toHaveBeenCalledTimes(2)
     await selectPermitDetailTab('Fees')
@@ -3396,6 +3467,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(savedNotice.closest('[role="tabpanel"]')).toBe(
       screen.getByRole('tabpanel', { name: 'Fees' }),
     )
+    expectResultInCard('Fee override saved.', 'Fee calculation details')
     expect(screen.getByLabelText('Total fees (CAD)')).toHaveValue('$45.25')
     await userEvent.click(await screen.findByRole('button', { name: 'Edit fee override' }))
     await userEvent.click(screen.getByRole('radio', { name: 'No' }))
@@ -10622,6 +10694,10 @@ describe('Provincial Permit Detail Action Smoke', () => {
   })
 
   it('saves a receipt on a Payment pending permit and leaves its status Payment pending', async () => {
+    const visibleRects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+    onTestFinished(() => visibleRects.mockRestore())
     mockedFetchProvincialPermitDetail.mockResolvedValue({
       ...permitDetail,
       permitStatusCode: 'PPD',
@@ -10647,6 +10723,11 @@ describe('Provincial Permit Detail Action Smoke', () => {
       ),
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('dialog', { name: 'Save as Payment pending?' })).toBeNull()
+    // The receipt locks and its Edit button goes, so the saved notice takes focus.
+    const notice = (await screen.findByText('Receipt number saved.')).closest(
+      '.app-inline-notification',
+    )
+    await waitFor(() => expect(notice).toHaveFocus())
   })
 
   it('labels a current PPD permit and retains its current-only status option when options omit it', async () => {

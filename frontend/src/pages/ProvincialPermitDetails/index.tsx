@@ -226,9 +226,9 @@ const gbmsInvoiceAmountLabel = (amount: string) => {
 
 /**
  * Where a result shows: Documents results in the Documents tab, package results at the top of the
- * Scale tab, scale results in the package's Summary of scale, and a section's save at the top of
- * the tab it was saved from. Every other result stays at page level, where an email action's
- * result also takes focus.
+ * Scale tab, scale results in the package's Summary of scale, and a section's save, or an
+ * application added to or removed from the permit, inside that section's card below its title.
+ * Every other result stays at page level, where an email action's result also takes focus.
  */
 type PermitActionResultSource =
   | 'documents'
@@ -693,6 +693,8 @@ type PermitClientTileProps = {
   errorMessage: string
   icon?: ReactNode
   headerAction?: ReactNode
+  /** A save result, shown in the card below its title. */
+  result?: ReactNode
   reviewedLayout?: boolean
 }
 
@@ -725,6 +727,7 @@ const PermitClientTile = ({
   errorMessage,
   icon,
   headerAction,
+  result,
   reviewedLayout = false,
 }: PermitClientTileProps) => {
   const labels = permitClientLabels(kind)
@@ -758,6 +761,7 @@ const PermitClientTile = ({
         </section>
       ) : (
         <DetailFieldTile title={title} icon={icon} headerAction={headerAction} fields={[]}>
+          {result}
           {fields}
         </DetailFieldTile>
       )}
@@ -3868,13 +3872,12 @@ const ProvincialPermitDetailsPage = () => {
             .join(' '),
         )
         const savedPermitStatus = persistedUpdatedDetail.permitStatusCode?.trim().toUpperCase()
-        // A status that leaves the permit read-only removes its Edit button, so the notice takes
-        // focus.
-        setActionResult(
-          permitDetailsEditableInStatus(savedPermitStatus, provincialSubmitter)
-            ? savedResult
-            : { ...savedResult, focusOnReveal: true },
-        )
+        // A status that leaves the permit read-only removes its Edit button, and so does a receipt
+        // saved on a Payment pending or complete permit, so the notice takes focus.
+        const editButtonRemoved =
+          !permitDetailsEditableInStatus(savedPermitStatus, provincialSubmitter) ||
+          (resultSource === 'fees' && (savedPermitStatus === 'PPD' || savedPermitStatus === 'COM'))
+        setActionResult(editButtonRemoved ? { ...savedResult, focusOnReveal: true } : savedResult)
         refreshLoadedPermitFees()
         if (canReviewPermits && !permitDetailRefreshFailed && savedPermitStatus === 'COM') {
           void onOpenPermitApprovalEmail(
@@ -4425,11 +4428,15 @@ const ProvincialPermitDetailsPage = () => {
     if (!isLatestRequest) {
       setActionResult({
         kind: 'error',
+        title: 'Application not added.',
         message: 'Wait for the current permit change to finish before saving again.',
+        source: 'permit',
       })
       return
     }
 
+    const addedTitle =
+      selectedApplications.length > 1 ? 'Applications added.' : 'Application added.'
     setActionResult(null)
     setIsSavingPermitApplication(true)
     try {
@@ -4443,7 +4450,9 @@ const ProvincialPermitDetailsPage = () => {
       if (!result.success) {
         setActionResult({
           kind: 'error',
+          title: 'Application not added.',
           message: result.errors[0] || result.message || 'Unable to add application to the permit.',
+          source: 'permit',
         })
         return
       }
@@ -4467,7 +4476,9 @@ const ProvincialPermitDetailsPage = () => {
         if (!isLatestRequest()) return
         setActionResult({
           kind: 'success',
+          title: addedTitle,
           message: result.message || 'Application was added to the permit.',
+          source: 'permit',
           focusOnReveal: true,
         })
       } catch (refreshError) {
@@ -4478,14 +4489,21 @@ const ProvincialPermitDetailsPage = () => {
         )
         setActionResult({
           kind: 'warning',
+          title: addedTitle,
           message: `${result.message || 'Application was added to the permit.'} Reload before changing application links again.`,
+          source: 'permit',
           focusOnReveal: true,
         })
       }
     } catch (error) {
       if (isLatestRequest()) {
         console.error(error)
-        setActionResult({ kind: 'error', message: 'Unable to add application to the permit.' })
+        setActionResult({
+          kind: 'error',
+          title: 'Application not added.',
+          message: 'Unable to add application to the permit.',
+          source: 'permit',
+        })
       }
     } finally {
       endPermitMutation(isLatestRequest)
@@ -4513,7 +4531,12 @@ const ProvincialPermitDetailsPage = () => {
       const isLatestRequest = tryBeginPermitMutation()
       if (!isLatestRequest) {
         const message = 'Wait for the current permit change to finish before saving again.'
-        setActionResult({ kind: 'error', message })
+        setActionResult({
+          kind: 'error',
+          title: 'Application not removed.',
+          message,
+          source: 'permit',
+        })
         throw new Error(message)
       }
 
@@ -4552,7 +4575,9 @@ const ProvincialPermitDetailsPage = () => {
           if (!isLatestRequest()) return
           setActionResult({
             kind: 'success',
+            title: 'Application removed.',
             message: result.message || 'Application was removed from the permit.',
+            source: 'permit',
             focusOnReveal: true,
           })
         } catch (refreshError) {
@@ -4563,7 +4588,9 @@ const ProvincialPermitDetailsPage = () => {
           )
           setActionResult({
             kind: 'warning',
+            title: 'Application removed.',
             message: `${result.message || 'Application was removed from the permit.'} Reload before changing application links again.`,
+            source: 'permit',
             focusOnReveal: true,
           })
         }
@@ -7312,10 +7339,10 @@ const ProvincialPermitDetailsPage = () => {
                     className="application-detail-tab-grid"
                   >
                     <Column sm={4} md={8} lg={16}>
-                      {renderSectionSaveResult('permit')}
                       {isReviewedPermitEdit ? (
                         <Tile className="ministerial-permit-details">
                           <DetailCardTitle icon={Certificate}>Permit details</DetailCardTitle>
+                          {renderSectionSaveResult('permit')}
                           <RequiredFieldsLegend />
                           {renderReviewedPermitFields()}
                           {renderPermitEditActions()}
@@ -7327,6 +7354,7 @@ const ProvincialPermitDetailsPage = () => {
                           <DetailCardTitle icon={Certificate}>
                             {usesReviewedPermitFlow ? 'Permit details' : 'Permit summary'}
                           </DetailCardTitle>
+                          {renderSectionSaveResult('permit')}
                           <RequiredFieldsLegend />
                           {renderPermitSummaryFields()}
                         </Tile>
@@ -7346,6 +7374,7 @@ const ProvincialPermitDetailsPage = () => {
                               </Button>
                             )}
                           </div>
+                          {renderSectionSaveResult('permit')}
                           {renderReviewedPermitFields()}
                         </Tile>
                       ) : detail.blanketOic ? (
@@ -7364,6 +7393,7 @@ const ProvincialPermitDetailsPage = () => {
                               </Button>
                             )}
                           </div>
+                          {renderSectionSaveResult('permit')}
                           {renderReviewedPermitFields()}
                         </Tile>
                       ) : (
@@ -7384,6 +7414,7 @@ const ProvincialPermitDetailsPage = () => {
                           }
                           fields={[]}
                         >
+                          {renderSectionSaveResult('permit')}
                           {renderPermitSummaryFields()}
                         </DetailFieldTile>
                       )}
@@ -7560,7 +7591,6 @@ const ProvincialPermitDetailsPage = () => {
                   >
                     {!ownerEditMode && (
                       <Column sm={4} md={8} lg={16}>
-                        {renderSectionSaveResult('applicant')}
                         {usesReviewedPermitFlow ? (
                           <Tile className="detail-section-card permit-applicant-card">
                             <div className="detail-section-card__header">
@@ -7577,6 +7607,7 @@ const ProvincialPermitDetailsPage = () => {
                                 </Button>
                               )}
                             </div>
+                            {renderSectionSaveResult('applicant')}
                             <PermitClientTile
                               title="Owner"
                               kind="owner"
@@ -7636,6 +7667,7 @@ const ProvincialPermitDetailsPage = () => {
                                   </Button>
                                 ) : undefined
                               }
+                              result={renderSectionSaveResult('applicant')}
                               clientNumber={detail.ownerClientNumber}
                               locationCode={detail.ownerClientLocationCode}
                               clientData={ownerClientData}
@@ -7656,9 +7688,9 @@ const ProvincialPermitDetailsPage = () => {
                     )}
                     {ownerEditMode && permitForm && (
                       <Column sm={4} md={8} lg={16}>
-                        {renderSectionSaveResult('applicant')}
                         <Tile>
                           <DetailCardTitle icon={Enterprise}>Applicant details</DetailCardTitle>
+                          {renderSectionSaveResult('applicant')}
                           <RequiredFieldsLegend className="permit-client-editor__required-hint" />
                           {usesReviewedPermitFlow && (
                             <h3 className="permit-client-subheading">Owner</h3>
@@ -7704,9 +7736,9 @@ const ProvincialPermitDetailsPage = () => {
                     >
                       {ownerEditMode && permitForm ? (
                         <Column sm={4} md={8} lg={16}>
-                          {renderSectionSaveResult('agent')}
                           <Tile>
                             <DetailCardTitle>Edit agent</DetailCardTitle>
+                            {renderSectionSaveResult('agent')}
                             <RequiredFieldsLegend />
                             {renderPermitClientEditor('agent', invoiceMaterialLocked)}
                             {renderPermitClientEditActions()}
@@ -7714,7 +7746,6 @@ const ProvincialPermitDetailsPage = () => {
                         </Column>
                       ) : (
                         <Column sm={4} md={8} lg={16}>
-                          {renderSectionSaveResult('agent')}
                           <PermitClientTile
                             title="Agent"
                             kind="agent"
@@ -7725,6 +7756,7 @@ const ProvincialPermitDetailsPage = () => {
                                 </Button>
                               ) : undefined
                             }
+                            result={renderSectionSaveResult('agent')}
                             clientNumber={detail.applicantClientNumber}
                             locationCode={detail.agentClientLocationCode}
                             clientData={agentClientData}
@@ -7745,12 +7777,12 @@ const ProvincialPermitDetailsPage = () => {
                     className="application-detail-tab-grid"
                   >
                     <Column sm={4} md={8} lg={16}>
-                      {renderSectionSaveResult('shipping')}
                       {isEditingShipping && permitForm ? (
                         <Tile>
                           <DetailCardTitle icon={EarthFilled}>
                             {usesReviewedPermitFlow ? 'Shipping details' : 'Shipping'}
                           </DetailCardTitle>
+                          {renderSectionSaveResult('shipping')}
                           <RequiredFieldsLegend />
                           {shippingReferencesErrorMessage && (
                             <InlineNotification
@@ -7826,6 +7858,7 @@ const ProvincialPermitDetailsPage = () => {
                             }
                             fields={[]}
                           >
+                            {renderSectionSaveResult('shipping')}
                             {renderShippingFields()}
                           </DetailFieldTile>
                         </>
@@ -8222,7 +8255,6 @@ const ProvincialPermitDetailsPage = () => {
                     ) : usesReviewedPermitFlow ? (
                       <>
                         <Column sm={4} md={8} lg={16}>
-                          {renderSectionSaveResult('fees')}
                           <Tile>
                             <div className="detail-section-card__header">
                               <DetailCardTitle icon={Currency}>Permit fees</DetailCardTitle>
@@ -8261,6 +8293,7 @@ const ProvincialPermitDetailsPage = () => {
                                   </div>
                                 )}
                             </div>
+                            {renderSectionSaveResult('fees')}
                             {renderPermitFeeSummary()}
                           </Tile>
                         </Column>
@@ -8273,9 +8306,9 @@ const ProvincialPermitDetailsPage = () => {
                       </>
                     ) : (
                       <Column sm={4} md={8} lg={16}>
-                        {renderSectionSaveResult('fees')}
                         <Tile>
                           <DetailCardTitle icon={Currency}>Fee calculation details</DetailCardTitle>
+                          {renderSectionSaveResult('fees')}
                           {renderPermitFeeSummary()}
                           {renderPackageFees()}
                         </Tile>

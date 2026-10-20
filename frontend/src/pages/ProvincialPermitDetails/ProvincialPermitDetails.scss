@@ -63,6 +63,19 @@
   outline-offset: 2px;
 }
 
+// The page-level result sits 40px above the tabs, as on the create pages. The grid's row gap
+// supplies the space, so the notification adds no margin of its own; below the wide layout the
+// row gap is 32px and the wrapper adds the other 8px.
+.permit-page-result .app-inline-notification {
+  margin-block-end: 0;
+}
+
+@media (max-width: 1311px) {
+  .permit-page-result {
+    margin-block-end: 0.5rem;
+  }
+}
+
 // The package fee rows sit 24px from the package selector above and the fee table below.
 .permit-package-fee-fields.record-field-grid {
   margin-block: 1.5rem;
