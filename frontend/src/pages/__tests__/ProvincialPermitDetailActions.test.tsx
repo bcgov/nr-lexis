@@ -2403,7 +2403,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     ).toBeChecked()
   })
 
-  it('keeps saved application changes when the exemption totals cannot refresh', async () => {
+  it('closes the edit card without an unsaved-changes prompt when saved application changes cannot refresh', async () => {
     const consoleError = vi.spyOn(console, 'error').mockImplementation(() => undefined)
     configureMinisterialActivePermit({ receiptNumber: null, remarks: '' })
     mockedFetchProvincialPermitExemptionContext.mockRejectedValueOnce(
@@ -2416,7 +2416,14 @@ describe('Provincial Permit Detail Action Smoke', () => {
         unassignedVolume: 12.5,
       }),
     )
-    renderPermitDetails()
+    const router = createMemoryRouter(
+      [
+        { path: '/provincial/permit/:permitNumber', element: <ProvincialPermitDetailsPage /> },
+        { path: '/provincial/exemption/:exemptionNumber', element: <h1>Exemption</h1> },
+      ],
+      { initialEntries: ['/provincial/permit/777'] },
+    )
+    render(<RouterProvider router={router} />)
 
     await userEvent.click(await screen.findByRole('button', { name: 'Edit permit details' }))
     await userEvent.type(screen.getByLabelText('Remarks'), 'Keep this draft remark')
@@ -2425,14 +2432,29 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     await userEvent.click(getActiveSectionSaveButton())
 
-    expect(
-      await screen.findByText(
-        'Application changes were saved, but the current totals could not be refreshed. Reload before making another change.',
-      ),
-    ).toBeInTheDocument()
+    const notice = await screen.findByText(
+      'The current totals could not be refreshed. Other changes were not saved. Reload before making another change.',
+    )
+    expect(notice.closest('.cds--inline-notification')).toHaveClass(
+      'cds--inline-notification--warning',
+    )
+    expect(notice.closest('.cds--inline-notification')).toHaveTextContent(
+      'Application changes saved.',
+    )
     expect(mockedUpdatePermitApplications).toHaveBeenCalledTimes(1)
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
-    expect(screen.getByLabelText('Remarks')).toHaveValue('Keep this draft remark')
+    expect(screen.queryByLabelText('Remarks')).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Cancel' })).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /^Save (?:changes|permit|shipping)$/ }),
+    ).not.toBeInTheDocument()
+
+    const unload = new Event('beforeunload', { cancelable: true })
+    window.dispatchEvent(unload)
+    expect(unload.defaultPrevented).toBe(false)
+    await userEvent.click(screen.getByRole('link', { name: 'EX-9' }))
+    expect(screen.queryByRole('dialog', { name: 'Discard changes?' })).not.toBeInTheDocument()
+    expect(router.state.location.pathname).toBe('/provincial/exemption/EX-9')
     consoleError.mockRestore()
   })
 

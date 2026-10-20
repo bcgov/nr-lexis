@@ -4387,7 +4387,11 @@ const ProvincialPermitDetailsPage = () => {
     setPermitDetailRefreshRequired(false)
     setActionResult(null)
     setIsSavingPermitApplication(true)
+    // The rest of the permit is saved after the applications, so it is unsaved if they fail.
+    const otherChangesUnsaved =
+      permitDetailDirty || permitShippingUnsaved || ministerialScaleSelectionDirty
     let saved = false
+    let savedWarnings: string[] = []
     try {
       const result = await updatePermitApplications({
         permitNumber: resolvedPermitNumber,
@@ -4414,6 +4418,7 @@ const ProvincialPermitDetailsPage = () => {
         return null
       }
       saved = true
+      savedWarnings = result.warnings
       const refreshedDetail = await reloadPermitScaleState()
       if (!isLatestRequest() || !refreshedDetail) return null
       setMinisterialApplicationDraft({})
@@ -4461,15 +4466,35 @@ const ProvincialPermitDetailsPage = () => {
         console.error(error)
         setPermitDetailRefreshRequired(true)
         setEditContextLoaded(false)
-        setActionResult(
-          sectionSaveError(
-            'Permit details',
-            resultSource,
-            saved
-              ? 'Application changes were saved, but the current totals could not be refreshed. Reload before making another change.'
-              : 'Unable to confirm whether the application changes were saved. Reload before making another change.',
-          ),
-        )
+        if (saved) {
+          // The changes are saved, so the ticks are no longer unsaved. Save and Cancel are gone
+          // until the permit is reloaded, so the section closes.
+          setMinisterialApplicationDraft({})
+          setPermitEditSection(null)
+          setActionResult({
+            ...sectionSaveResult(
+              'Application changes',
+              resultSource,
+              [
+                ...savedWarnings,
+                'The current totals could not be refreshed.',
+                otherChangesUnsaved ? 'Other changes were not saved.' : '',
+                'Reload before making another change.',
+              ]
+                .filter(Boolean)
+                .join(' '),
+            ),
+            focusOnReveal: true,
+          })
+        } else {
+          setActionResult(
+            sectionSaveError(
+              'Permit details',
+              resultSource,
+              'Unable to confirm whether the application changes were saved. Reload before making another change.',
+            ),
+          )
+        }
       }
       return null
     } finally {
@@ -4487,7 +4512,10 @@ const ProvincialPermitDetailsPage = () => {
     isEditingPermitClients,
     loadPermitClientLocations,
     ministerialApplicationChanges,
+    ministerialScaleSelectionDirty,
+    permitDetailDirty,
     permitNumber,
+    permitShippingUnsaved,
     reloadPermitScaleState,
     tryBeginPermitMutation,
   ])
