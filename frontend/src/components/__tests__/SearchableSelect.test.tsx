@@ -113,6 +113,38 @@ describe('SearchableSelect', () => {
     expect(document.querySelector('.lexis-combobox--no-clear')).not.toBeNull()
   })
 
+  it.each([
+    {
+      name: 'a required select with a value',
+      props: { required: true, value: '11' },
+      hidden: true,
+    },
+    {
+      name: 'a required select without a value',
+      props: { required: true, value: '' },
+      hidden: false,
+    },
+    { name: 'an optional select with a value', props: { value: '11' }, hidden: false },
+    { name: 'a read-only select', props: { readOnly: true, value: '11' }, hidden: true },
+    {
+      name: 'a select that is not clearable',
+      props: { clearable: false, value: '11' },
+      hidden: true,
+    },
+  ])('hides the clear button: $hidden for $name', ({ props, hidden }) => {
+    render(
+      <SearchableSelect
+        id="region"
+        labelText="Region"
+        options={[{ value: '11', label: 'Cariboo' }]}
+        onChange={vi.fn()}
+        {...props}
+      />,
+    )
+
+    expect(document.querySelector('.lexis-combobox--no-clear') !== null).toBe(hidden)
+  })
+
   it('keeps a list’s own All option instead of adding a second, and treats it as All', async () => {
     const options = [
       { value: 'ALL', label: 'All' },
@@ -197,7 +229,8 @@ describe('SearchableSelect', () => {
     }
   })
 
-  it('keeps filtering longer lists by the current input value', async () => {
+  it('opens a prefilled longer list in full and filters as the user types', async () => {
+    const user = userEvent.setup()
     const options = Array.from({ length: 10 }, (_, index) => ({
       value: `OPT-${index + 1}`,
       label: `Option ${index + 1}`,
@@ -214,16 +247,46 @@ describe('SearchableSelect', () => {
     )
 
     const combobox = screen.getByRole('combobox', { name: 'Application status' })
-    await userEvent.click(combobox)
+    await user.click(combobox)
 
-    const listboxId = combobox.getAttribute('aria-controls')
-    const listbox = listboxId ? document.getElementById(listboxId) : null
+    expect(screen.getAllByRole('option')).toHaveLength(10)
 
-    expect(listbox).not.toBeNull()
-    expect(within(listbox as HTMLElement).getByRole('option', { name: 'Option 1' })).toBeVisible()
-    expect(
-      within(listbox as HTMLElement).queryByRole('option', { name: 'Option 2' }),
-    ).not.toBeInTheDocument()
+    await user.clear(combobox)
+    await user.type(combobox, 'Option 2')
+
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Option 2'])
+  })
+
+  it('filters a short list as the user types and selects the match with the keyboard', async () => {
+    const user = userEvent.setup()
+    const onChange = vi.fn()
+    const regions = [
+      { value: '11', label: 'Cariboo' },
+      { value: '12', label: 'Kootenay Boundary' },
+      { value: '13', label: 'Omineca' },
+      { value: '14', label: 'Skeena' },
+    ]
+
+    render(
+      <SearchableSelect
+        id="region"
+        labelText="Region"
+        value="14"
+        options={regions}
+        onChange={onChange}
+      />,
+    )
+
+    const combobox = screen.getByRole('combobox', { name: 'Region' })
+    await user.click(combobox)
+    expect(screen.getAllByRole('option')).toHaveLength(4)
+
+    await user.clear(combobox)
+    await user.type(combobox, 'Cari')
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Cariboo'])
+
+    await user.keyboard('{ArrowDown}{Enter}')
+    expect(onChange).toHaveBeenLastCalledWith('11')
   })
 
   it('does not emit a change when the selected option is chosen again', async () => {

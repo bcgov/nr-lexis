@@ -6380,9 +6380,10 @@ $notification-types: 'error', 'info', 'success', 'warning';
   margin-block-start: 2rem;
 }
 
-// A disabled combo box can't be cleared, so it shows no clear button. Nor does a filter on All,
-// or a select that isn't clearable.
+// A disabled or read-only combo box can't be cleared, so it shows no clear button. Nor does a
+// filter on All, a required select with a value, or a select that isn't clearable.
 .cds--list-box--disabled .cds--list-box__selection,
+.cds--combo-box--readonly .cds--list-box__selection,
 .searchable-select--all .cds--list-box__selection,
 .lexis-combobox--no-clear .cds--list-box__selection {
   display: none;

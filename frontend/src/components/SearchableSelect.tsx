@@ -68,13 +68,15 @@ export default function SearchableSelect({
     items.find((option) => option.value === value) ??
     (value ? { value, label: value } : (allOption ?? null))
   const allSelected = !!allOption && (value === '' || value === allOption.value)
+  // Clearing a required value only leaves it empty, and a read-only value can't change.
+  const hideClear = !clearable || (required && value !== '') || readOnly
 
   return (
     <ComboBox
       id={id}
       // With All selected there's nothing to clear.
       className={
-        [allSelected && 'searchable-select--all', !clearable && 'lexis-combobox--no-clear']
+        [allSelected && 'searchable-select--all', hideClear && 'lexis-combobox--no-clear']
           .filter(Boolean)
           .join(' ') || undefined
       }
@@ -83,7 +85,12 @@ export default function SearchableSelect({
       selectedItem={selectedItem}
       itemToString={itemToString}
       shouldFilterItem={({ item, inputValue }) =>
-        shouldFilterSearchableDropdownItem({ item, inputValue, optionCount: items.length })
+        shouldFilterSearchableDropdownItem({
+          item,
+          inputValue,
+          optionCount: items.length,
+          selectedLabel: itemToString(selectedItem),
+        })
       }
       placeholder={placeholder}
       helperText={helperText}
