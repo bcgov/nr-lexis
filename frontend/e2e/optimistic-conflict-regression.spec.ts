@@ -3,10 +3,24 @@ import { gotoSyntheticRoute, installSyntheticOidcSession } from './utils'
 
 // Real Carbon dialogs and API interception exercise browser stacking/focus and refresh recovery.
 // These synthetic responses do not verify Oracle concurrency or deployed TEST persistence.
-const installConflictFixture = async (page: Page, code: string) => {
+type ConflictSaveDetails = {
+  /** When the page opened the record, as the server's clock reports it. */
+  openedAt: string
+  /** The user and server time of the newest save the conflict reports. */
+  updatedBy: string
+  savedAt: string
+}
+
+const installConflictFixture = async (
+  page: Page,
+  code: string,
+  saveDetails?: ConflictSaveDetails,
+) => {
   await installSyntheticOidcSession(page, { username: 'CONFLICT.TESTER', orgUnitNo: '1903' })
   let writes = 0
   let reads = 0
+  let recordVersionReads = 0
+  const statusVersions: Array<string | undefined> = []
   const application = {
     applicationNumber: 321,
     applicationStatusCode: 'APP',
@@ -41,15 +55,23 @@ const installConflictFixture = async (page: Page, code: string) => {
   await page.route('**/api/**', async (route) => {
     const request = route.request()
     const path = new URL(request.url()).pathname
+    const isStatusUpdate =
+      request.method() === 'POST' && path === '/api/lexis/application-reviews/321/status'
     if (
       (request.method() === 'POST' && path === '/api/lexis/rpc/application-details/remark') ||
-      (request.method() === 'DELETE' && path === '/api/lexis/rpc/application-details/document')
+      (request.method() === 'DELETE' && path === '/api/lexis/rpc/application-details/document') ||
+      isStatusUpdate
     ) {
       writes += 1
+      if (isStatusUpdate) statusVersions.push(request.headers()['x-lexis-record-version'])
       await route.fulfill({
         status: code === 'STALE_RECORD' ? 409 : 428,
         contentType: 'application/problem+json',
-        body: JSON.stringify({ code, detail: 'Refresh application 321 before saving.' }),
+        body: JSON.stringify({
+          code,
+          detail: 'Refresh application 321 before saving.',
+          ...(saveDetails && { updatedBy: saveDetails.updatedBy, savedAt: saveDetails.savedAt }),
+        }),
       })
       return
     }
@@ -84,6 +106,19 @@ const installConflictFixture = async (page: Page, code: string) => {
       case '/api/lexis/rpc/application-details/document-details':
         body = [{ id: '625', name: 'synthetic-conflict.txt', uploadDate: '2026-09-09' }]
         break
+      case '/api/lexis/record-versions/application':
+        recordVersionReads += 1
+        break
+      case '/api/lexis/application-reviews/search/options':
+        body = {
+          productTypes: [],
+          regions: [],
+          reviewStatuses: [
+            { code: 'REJ', name: 'Rejected' },
+            { code: 'WDN', name: 'Withdrawn' },
+          ],
+        }
+        break
       case '/api/lexis/applications/search/options':
         body = {
           exemptionTypes: [],
@@ -98,12 +133,21 @@ const installConflictFixture = async (page: Page, code: string) => {
     }
     await route.fulfill({
       status: 200,
-      headers: { 'X-Lexis-Record-Version': writes ? 'v2' : 'v1' },
+      headers: {
+        'X-Lexis-Record-Version': writes ? 'v2' : 'v1',
+        ...(saveDetails && { Date: new Date(saveDetails.openedAt).toUTCString() }),
+      },
       contentType: 'application/json',
       body: JSON.stringify(body),
     })
   })
-  return { writes: () => writes, reads: () => reads, application }
+  return {
+    writes: () => writes,
+    reads: () => reads,
+    recordVersionReads: () => recordVersionReads,
+    statusVersions,
+    application,
+  }
 }
 
 for (const mode of ['add', 'edit'] as const) {
@@ -365,3 +409,150 @@ for (const { code, heading, recovery } of [
     await expect(page.getByText('Unsaved synthetic remark', { exact: true })).toHaveCount(0)
   })
 }
+
+for (const { description, savedAt, namesUser } of [
+  {
+    description: 'leaves out a save from before the application was opened',
+    savedAt: '2026-09-10T17:00:00Z',
+    namesUser: false,
+  },
+  {
+    description: 'names who saved after the application was opened',
+    savedAt: '2026-09-10T19:00:00Z',
+    namesUser: true,
+  },
+]) {
+  test(`conflict message ${description}`, async ({ page }) => {
+    await installConflictFixture(page, 'STALE_RECORD', {
+      openedAt: '2026-09-10T18:00:00Z',
+      updatedBy: 'SYNTHETIC.EDITOR',
+      savedAt,
+    })
+    await gotoSyntheticRoute(page, '/provincial/application/321', {
+      ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
+    })
+    await page.getByRole('tab', { name: 'Remarks', exact: true }).click()
+    await page.getByRole('button', { name: 'Add remark', exact: true }).click()
+    const form = page.getByRole('complementary', { name: 'Add remark', includeHidden: true })
+    await form.getByRole('textbox', { name: /Remark/ }).fill('Unsaved synthetic remark')
+    await form.getByRole('button', { name: 'Save remark', exact: true }).click()
+
+    const conflict = page.getByRole('dialog', { name: 'This application was updated' })
+    await expect(conflict).toBeVisible()
+    if (namesUser) {
+      await expect(conflict).toContainText('SYNTHETIC.EDITOR saved changes on ')
+      await expect(conflict).toContainText(
+        'after you opened this application. Your remark was not saved.',
+      )
+    } else {
+      await expect(conflict).toContainText(
+        'Changes were saved after you opened this application. Your remark was not saved.',
+      )
+      await expect(conflict).not.toContainText('SYNTHETIC.EDITOR')
+    }
+  })
+}
+
+test('explains a remark that is too long once saved without sending it', async ({ page }) => {
+  const fixture = await installConflictFixture(page, 'STALE_RECORD')
+  await gotoSyntheticRoute(page, '/provincial/application/321', {
+    ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
+  })
+  await page.getByRole('tab', { name: 'Remarks', exact: true }).click()
+  await page.getByRole('button', { name: 'Add remark', exact: true }).click()
+  const form = page.getByRole('complementary', { name: 'Add remark', includeHidden: true })
+  const field = form.getByRole('textbox', { name: /Remark/ })
+
+  // 100 typed characters become 300 once each & is saved as five.
+  await field.fill('A&'.repeat(50))
+  await form.getByRole('button', { name: 'Save remark', exact: true }).click()
+
+  await expect(
+    form.getByText(
+      'Remark must not exceed 250 characters once saved. Each & counts as 5 characters, and each < or > as 4.',
+      { exact: true },
+    ),
+  ).toBeVisible()
+  await expect(field).toBeFocused()
+  await expect(form).toBeVisible()
+  expect(fixture.writes()).toBe(0)
+})
+
+test('opens the disapproval dialog from Update status and checks the version the page loaded', async ({
+  page,
+}) => {
+  const fixture = await installConflictFixture(page, 'STALE_RECORD')
+  await gotoSyntheticRoute(page, '/provincial/application/321', {
+    ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
+  })
+  await page.getByRole('tab', { name: 'Review', exact: true }).click()
+  const review = page.getByRole('region', { name: 'Application review', exact: true })
+  const updateStatus = review.getByRole('button', { name: 'Update status', exact: true })
+  await updateStatus.click()
+  await page.locator('label[for="applicationDetailReviewStatus-REJ"]').click()
+  await review.getByLabel('Remarks', { exact: true }).fill('Synthetic rejection remark')
+  await updateStatus.click()
+
+  // Rejecting continues in the dialog, which carries the chosen status and remark.
+  const dialog = page.getByRole('dialog', { name: 'Disapprove application 321', exact: true })
+  const sendEmail = dialog.getByRole('checkbox', { name: 'Send disapproval email', exact: true })
+  await expect(
+    dialog.getByRole('combobox', { name: 'Application status', exact: true }),
+  ).toHaveValue('Rejected')
+  await expect(dialog.getByLabel('Remark', { exact: true })).toHaveValue(
+    'Synthetic rejection remark',
+  )
+  await expect(sendEmail).toBeChecked()
+
+  await dialog.getByRole('button', { name: 'Cancel', exact: true }).click()
+  await expect(dialog).toHaveCount(0)
+  await expect(review.getByRole('radio', { name: 'Rejected', exact: true })).toBeChecked()
+  await expect(review.getByLabel('Remarks', { exact: true })).toHaveValue(
+    'Synthetic rejection remark',
+  )
+  expect(fixture.writes()).toBe(0)
+
+  await updateStatus.click()
+  await dialog.getByText('Send disapproval email', { exact: true }).click()
+  await expect(sendEmail).not.toBeChecked()
+  await dialog.getByRole('button', { name: 'Disapprove application', exact: true }).click()
+
+  // The save carries the version the page loaded, so a record changed since ends in the conflict.
+  const conflict = page.getByRole('dialog', { name: 'This application was updated' })
+  await expect(conflict).toContainText('Your changes were not saved.')
+  expect(fixture.statusVersions).toEqual(['v1'])
+  expect(fixture.recordVersionReads()).toBe(0)
+  expect(fixture.writes()).toBe(1)
+
+  const readsBeforeRefresh = fixture.reads()
+  await conflict.getByRole('button', { name: 'Refresh', exact: true }).click()
+  await expect.poll(fixture.reads).toBeGreaterThan(readsBeforeRefresh)
+  await expect(conflict).not.toBeVisible()
+  await expect(dialog).not.toBeVisible()
+})
+
+test('keeps application editing off until the saved summary loads', async ({ page }) => {
+  const fixture = await installConflictFixture(page, 'STALE_RECORD')
+  await page.route('**/api/lexis/rpc/application-details/application-summary?*', (route) =>
+    route.fulfill({ status: 500, body: '' }),
+  )
+  await gotoSyntheticRoute(page, '/provincial/application/321', {
+    ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
+  })
+  await expect(
+    page.getByText(
+      "Unable to retrieve complete application summary fields. Application details can't be edited until they load.",
+      { exact: true },
+    ),
+  ).toBeVisible()
+  await expect(page.getByText('Application data unavailable', { exact: true })).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Edit applicant details' })).toHaveCount(0)
+  await page.getByRole('tab', { name: 'Application', exact: true }).click()
+  await expect(page.locator('#application-summary')).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Edit application details' })).toHaveCount(0)
+
+  // Remarks do not depend on the summary, so they can still be added.
+  await page.getByRole('tab', { name: 'Remarks', exact: true }).click()
+  await expect(page.getByRole('button', { name: 'Add remark', exact: true })).toBeEnabled()
+  expect(fixture.writes()).toBe(0)
+})

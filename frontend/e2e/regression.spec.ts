@@ -25,7 +25,12 @@ import {
 } from './utils/regression-auth'
 import { E2E_BASE_URL } from './utils'
 import { gotoWithRecovery } from './utils/navigation'
-import { regressionSubmissionFile, resolveRegressionSubmission } from './utils/regression-fixtures'
+import {
+  regressionSubmissionFile,
+  regressionSubmissionVariants,
+  resolveRegressionSubmission,
+  type RegressionSubmissionVariant,
+} from './utils/regression-fixtures'
 import {
   businessDateParts,
   formatBusinessIsoDate,
@@ -86,6 +91,35 @@ const expectOnlyEmptySearchState = async (page: Page, resultName: string): Promi
     `the ${resultName} count toolbar should not take visible space`,
   ).toBe(true)
   await expect(results.locator('.cds--pagination, .cds--pagination-skeleton')).toHaveCount(0)
+}
+
+// Aborts writes to the matching API paths, so a UI check that only validates or opens a dialog
+// cannot save or send anything. Reads pass through; release the routes when the check is done.
+const blockRegressionWrites = async (
+  page: Page,
+  patterns: string[],
+): Promise<{ attemptedWrites: string[]; release: () => Promise<void> }> => {
+  const attemptedWrites: string[] = []
+  const blockWrites = async (route: Route): Promise<void> => {
+    const request = route.request()
+    if (['GET', 'HEAD', 'OPTIONS'].includes(request.method())) {
+      await route.fallback()
+      return
+    }
+    attemptedWrites.push(`${request.method()} ${new URL(request.url()).pathname}`)
+    await route.abort()
+  }
+  for (const pattern of patterns) {
+    await page.route(pattern, blockWrites)
+  }
+  return {
+    attemptedWrites,
+    release: async () => {
+      for (const pattern of patterns) {
+        await page.unroute(pattern, blockWrites)
+      }
+    },
+  }
 }
 
 const expectFsptsUploadLayout = async (page: Page): Promise<void> => {
@@ -342,6 +376,15 @@ type DeleteResponse = {
   success?: boolean
 }
 
+type RemoveDocumentResponse = {
+  success?: string
+}
+
+type RemarkPersistenceResponse = {
+  status?: string
+  message?: string | null
+}
+
 type ApplicationReviewSearchOptionsResponse = {
   productTypes?: unknown
   regions?: unknown
@@ -475,6 +518,16 @@ const landingSubtitle = 'Log Exemption Information System'
 const advertisingListReportEndpoint = '/api/lexis/reports/biweeklyListing'
 const recordVersionHeader = 'X-Lexis-Record-Version'
 const regressionSpeciesCode = 'HE'
+const offerSavedMessage = 'The purchase offer was saved successfully.'
+const offerUpdatedMessage = 'The purchase offer was updated successfully.'
+const offerEmailQueuedNotice =
+  'An email notification is queued for the applicant and the regional office.'
+
+// A save that queues an email without a warning says so after the save message.
+const expectedOfferMessage = (result: OfferPersistenceResponse, message: string): string =>
+  result.sendEmail && asStringArray(result.warnings).length === 0
+    ? `${message} ${offerEmailQueuedNotice}`
+    : message
 
 const uniqueRegressionFutureDate = (salt = 0): string => {
   const rawSeed = process.env.GITHUB_RUN_ID ?? Date.now().toString()
@@ -708,6 +761,31 @@ const infectedApplicationDocumentPdf = (): RegressionUploadFile => ({
   mimeType: 'application/pdf',
   buffer: antivirusTestPdfPayload(),
 })
+
+// A valid 1x1 PNG.
+const regressionPngBase64 =
+  'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAIAAACQd1PeAAAADElEQVR4nGP4//8/AAX+Av4N70a4AAAAAElFTkSuQmCC'
+
+const acceptedApplicationDocuments = (date: string): RegressionUploadFile[] => [
+  {
+    // A PNG may carry data after its last chunk, and a file name may contain a colon.
+    name: `test-${date} 10:30.png`,
+    mimeType: 'image/png',
+    buffer: Buffer.concat([
+      Buffer.from(regressionPngBase64, 'base64'),
+      Buffer.from(`trailing-data-test-${date}`, 'ascii'),
+    ]),
+  },
+  {
+    // Text saved as UTF-16 starts with a byte order mark.
+    name: `test-${date}.csv`,
+    mimeType: 'text/csv',
+    buffer: Buffer.concat([
+      Buffer.from([0xff, 0xfe]),
+      Buffer.from('id,name\r\n1,test\r\n', 'utf16le'),
+    ]),
+  },
+]
 
 const adminNavigationSections: Array<{
   section: string
@@ -1061,6 +1139,19 @@ const currentOfferSchedule = async (page: Page): Promise<{ scheduleId: string }>
   }
 }
 
+// An exemption number the create page can check, read from an existing record without changing it.
+const assignedExemptionNumber = async (page: Page): Promise<string> => {
+  const search = await readJsonResponse<GenericSearchResponse>(
+    await getWithAuth(page, '/api/lexis/exemptions/search', {
+      params: { page: '0', size: '25' },
+    }),
+  )
+  const exemptionNumber = asRecordArray(search.results)
+    .map((row) => String(row.exemptionNumber ?? '').trim())
+    .find((value) => /^[\x21-\x7e]{1,8}$/.test(value) && value === value.toUpperCase())
+  return requiredString(exemptionNumber, 'Existing exemption number of 8 characters or fewer')
+}
+
 const fetchApplicationSummary = async (
   page: Page,
   applicationNumber: number,
@@ -1188,6 +1279,7 @@ const withdrawRegressionOffer = async (
   )
   expect(result.success).toBe(true)
   expect(result.sendEmail).toBe(true)
+  expect(result.message).toBe(expectedOfferMessage(result, offerUpdatedMessage))
   expect(asStringArray(result.errors)).toEqual([])
 }
 
@@ -1416,6 +1508,28 @@ const permitContainsApplication = async (
   return asStringArray(response.applicationList).includes(String(applicationNumber))
 }
 
+const attachRegressionPermitApplication = async (
+  page: Page,
+  permitNumber: number,
+  applicationNumber: number,
+): Promise<void> => {
+  if (await permitContainsApplication(page, permitNumber, applicationNumber)) {
+    return
+  }
+  const current = await readPermitVersionedJson<Record<string, unknown>>(page, permitNumber)
+  const result = await readJsonResponse<RelationshipMutationResponse>(
+    await postWithCsrf(page, '/api/lexis/rpc/permit-details/add-applications-to-permit', {
+      headers: versionHeaders(current.version),
+      form: {
+        permitNumber: String(permitNumber),
+        selectedApplications: String(applicationNumber),
+      },
+    }),
+  )
+  expect(result.success).toBe(true)
+  expect(asStringArray(result.errors)).toEqual([])
+}
+
 const detachRegressionPermitApplication = async (
   page: Page,
   permitNumber: number,
@@ -1577,6 +1691,64 @@ const cleanupRegressionPackage = async (
     }),
   )
   expect(deletePackage.success, `Expected package ${packageNumber} cleanup to succeed`).toBe(true)
+}
+
+const listRegressionApplicationDocuments = async (
+  page: Page,
+  applicationNumber: number,
+): Promise<Record<string, unknown>[]> =>
+  asRecordArray(
+    await readJsonResponse<unknown>(
+      await getWithAuth(page, '/api/lexis/rpc/application-details/document-details', {
+        params: { applicationNumber: String(applicationNumber) },
+      }),
+    ),
+  )
+
+const removeRegressionApplicationDocuments = async (
+  page: Page,
+  applicationNumber: number,
+  fileName: string,
+): Promise<void> => {
+  const documents = (await listRegressionApplicationDocuments(page, applicationNumber)).filter(
+    (document) => document.name === fileName,
+  )
+
+  for (const document of documents) {
+    const application = await readVersionedJson<Record<string, unknown>>(
+      page,
+      `/api/lexis/applications/${applicationNumber}`,
+    )
+    const removed = await readJsonResponse<RemoveDocumentResponse>(
+      await deleteWithCsrf(page, '/api/lexis/rpc/application-details/document', {
+        headers: versionHeaders(application.version),
+        params: {
+          documentId: String(document.id),
+          applicationNumber: String(applicationNumber),
+        },
+      }),
+    )
+    expect(removed.success, `Expected document ${String(document.id)} cleanup to succeed`).toBe(
+      'true',
+    )
+  }
+}
+
+const expectApplicationSubmissionRefusal = (
+  response: JsonWithStatus<ApplicationSubmissionResponse>,
+  variant: RegressionSubmissionVariant,
+): void => {
+  const errors = asStringArray(response.payload.errors)
+  expect(response.status, `${variant.label} should be refused`).toBe(422)
+  expect(response.payload.status, `${variant.label} should be rejected`).toBe('rejected')
+  expect(response.payload.applicationNumber ?? null).toBeNull()
+  if (variant.match === 'exact') {
+    expect(errors, variant.label).toEqual(variant.expectedErrors)
+  } else {
+    for (const expectedError of variant.expectedErrors) {
+      expect(errors, variant.label).toContain(expectedError)
+    }
+  }
 }
 
 const expectLowercasePackageSearch = async (
@@ -2693,6 +2865,8 @@ test.describe('TEST IDIR admin regression', () => {
     await page.getByRole('tab', { name: 'Scale' }).click()
     const paragraphField = page.getByLabel('Location of logs')
     const normalField = page.getByLabel('Application volume (m³)')
+    await expect(normalField).toHaveValue('0.0')
+    await expect(page.getByLabel('Average log volume (m³)')).toHaveValue('0.0')
     const [paragraphMetrics, normalFieldMetrics] = await Promise.all([
       paragraphField.evaluate((element) => ({
         fontSize: getComputedStyle(element).fontSize,
@@ -2918,6 +3092,21 @@ test.describe('TEST IDIR admin regression', () => {
       .getByRole('textbox', { name: 'Exemption number', exact: true })
     const status = fieldRows.nth(1).getByRole('combobox', { name: 'Status', exact: true })
     await expect(exemptionNumber).toBeEditable()
+
+    // The number is upper-cased as it is typed. One that is already assigned is flagged when the
+    // field loses focus, and the message goes once the number changes.
+    await exemptionNumber.fill('e2e')
+    await expect(exemptionNumber).toHaveValue('E2E')
+    await exemptionNumber.fill((await assignedExemptionNumber(page)).toLowerCase())
+    await exemptionNumber.blur()
+    const assignedNumberError = detailsPanel.getByText(
+      'This exemption number has already been assigned',
+      { exact: true },
+    )
+    await expect(assignedNumberError).toBeVisible()
+    await exemptionNumber.fill('E2E')
+    await expect(assignedNumberError).toHaveCount(0)
+
     await expect(status).toBeDisabled()
     await expect(status).toHaveValue('Active')
     const statusField = detailsPanel.locator('.cds--list-box__wrapper').filter({ has: status })
@@ -4018,7 +4207,7 @@ test.describe('TEST IDIR admin regression', () => {
   })
 
   test('creates, edits, emails, terminalizes, and cleans up provincial records', async () => {
-    test.setTimeout(300_000)
+    test.setTimeout(420_000)
     test.skip(
       !isSharedTestRegressionBaseUrl(E2E_BASE_URL),
       'Persistent provincial CRUD regression runs only against shared TEST.',
@@ -4051,6 +4240,20 @@ test.describe('TEST IDIR admin regression', () => {
       expect(submission.validation.packageNumber).toBe(packageNumber)
       expect(submission.validation.scaleRows).toBe(3)
       expect(asStringArray(submission.validation.errors)).toEqual([])
+
+      await test.step('refuse submission files that fail the parse checks', async () => {
+        for (const variant of regressionSubmissionVariants(submission.xml)) {
+          expectApplicationSubmissionRefusal(
+            await readJsonResponseWithStatuses<ApplicationSubmissionResponse>(
+              await postWithCsrf(page, '/api/lexis/application-submissions/validation', {
+                multipart: regressionSubmissionFile(packageNumber, variant.xml),
+              }),
+              [422],
+            ),
+            variant,
+          )
+        }
+      })
 
       const submissionResult = await test.step('import the lifecycle application', async () =>
         readJsonResponse<ApplicationSubmissionResponse>(
@@ -4092,6 +4295,57 @@ test.describe('TEST IDIR admin regression', () => {
             infectedApplicationDocumentPdf(),
           ),
         )
+      })
+
+      await test.step('accept a PNG with trailing data and UTF-16 text without changing the application version', async () => {
+        const versionBeforeUploads = await readVersionedJson<Record<string, unknown>>(
+          page,
+          `/api/lexis/applications/${lifecycleApplicationNumber}`,
+        )
+        const uploads = acceptedApplicationDocuments(formatBusinessIsoDate())
+        const uploadCleanups = uploads.map((upload) =>
+          cleanup.defer('delete uploaded application document', () =>
+            removeRegressionApplicationDocuments(page, lifecycleApplicationNumber, upload.name),
+          ),
+        )
+        for (const upload of uploads) {
+          const uploaded = await readJsonResponse<LexisUploadResponse>(
+            await postWithCsrf(page, '/api/lexis/fileApplicationUpload', {
+              multipart: {
+                applicationNumber: String(lifecycleApplicationNumber),
+                fileDescription: 'E2E attachment acceptance regression',
+                file: upload,
+              },
+            }),
+          )
+          expect(uploaded.uploadType).toBe('application')
+          expect(uploaded.fileName).toBe(upload.name)
+          expect(uploaded.status).toBe('accepted')
+        }
+
+        const uploadedNames = (
+          await listRegressionApplicationDocuments(page, lifecycleApplicationNumber)
+        ).map((document) => document.name)
+        for (const upload of uploads) {
+          expect(uploadedNames).toContain(upload.name)
+        }
+        // Documents are not part of the record an open page saves against.
+        const versionAfterUploads = await readVersionedJson<Record<string, unknown>>(
+          page,
+          `/api/lexis/applications/${lifecycleApplicationNumber}`,
+        )
+        expect(versionAfterUploads.version).toBe(versionBeforeUploads.version)
+
+        for (const [index, upload] of uploads.entries()) {
+          await removeRegressionApplicationDocuments(page, lifecycleApplicationNumber, upload.name)
+          uploadCleanups[index].complete()
+        }
+        const remainingNames = (
+          await listRegressionApplicationDocuments(page, lifecycleApplicationNumber)
+        ).map((document) => document.name)
+        for (const upload of uploads) {
+          expect(remainingNames).not.toContain(upload.name)
+        }
       })
 
       await expectAccessiblePage(
@@ -4194,6 +4448,7 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expect(createdOffer.success).toBe(true)
       expect(createdOffer.sendEmail).toBe(true)
+      expect(createdOffer.message).toBe(expectedOfferMessage(createdOffer, offerSavedMessage))
       expect(asStringArray(createdOffer.errors)).toEqual([])
 
       await expectAccessiblePage(
@@ -4217,6 +4472,7 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expect(editedOffer.success).toBe(true)
       expect(editedOffer.sendEmail).toBe(false)
+      expect(editedOffer.message).toBe(offerUpdatedMessage)
       expect(asStringArray(editedOffer.errors)).toEqual([])
 
       const staleOfferUpdate = await readJsonResponseWithStatuses<Record<string, unknown>>(
@@ -4242,6 +4498,119 @@ test.describe('TEST IDIR admin regression', () => {
         `/api/lexis/purchase-offers/${offerNumber}`,
       )
       expect(String(withdrawnOffer.payload.offerWithdrawalDate ?? '')).toBe(formatBusinessIsoDate())
+
+      await test.step('refuse a remark that is too long once saved', async () => {
+        const applicationBeforeRemark = await readVersionedJson<Record<string, unknown>>(
+          page,
+          `/api/lexis/applications/${offerApplicationNumber}`,
+        )
+        // Each & is saved as five characters, so 51 of them are 255 once saved.
+        const refusedRemark = await readJsonResponse<RemarkPersistenceResponse>(
+          await postWithCsrf(page, '/api/lexis/rpc/application-details/remark', {
+            headers: versionHeaders(applicationBeforeRemark.version),
+            form: {
+              applicationNumber: String(offerApplicationNumber),
+              remarkBody: '&'.repeat(51),
+            },
+          }),
+        )
+        expect(refusedRemark.status).toBe('validation_error')
+        expect(refusedRemark.message).toBe('Application remarks must not exceed 254 characters.')
+      })
+
+      await test.step('explain a long remark and open the disapproval dialog without saving', async () => {
+        const reviewOptions = await readJsonResponse<ApplicationReviewSearchOptionsResponse>(
+          await getWithAuth(page, '/api/lexis/application-reviews/search/options'),
+        )
+        const reviewStatuses = asRecordArray(reviewOptions.reviewStatuses)
+        const statusLabel = (code: string): string =>
+          requiredString(
+            optionName(reviewStatuses.find((status) => optionCode(status) === code) ?? {}),
+            `Application status ${code} label`,
+          )
+        const rejectedLabel = statusLabel('REJ')
+        const withdrawnLabel = statusLabel('WDN')
+
+        await expectAccessiblePage(
+          page,
+          `/provincial/application/${offerApplicationNumber}`,
+          new RegExp(`application ${offerApplicationNumber}`, 'i'),
+        )
+        const blockedWrites = await blockRegressionWrites(page, [
+          '**/api/lexis/rpc/application-details/remark',
+          '**/api/lexis/application-reviews/**',
+        ])
+        try {
+          await page.getByRole('tab', { name: 'Remarks', exact: true }).click()
+          await page.getByRole('button', { name: 'Add remark', exact: true }).click()
+          const remarkPanel = page.getByRole('complementary', {
+            name: 'Add remark',
+            includeHidden: true,
+          })
+          await remarkPanel.getByRole('textbox', { name: /Remark/ }).fill('&'.repeat(51))
+          await remarkPanel.getByRole('button', { name: 'Save remark', exact: true }).click()
+          await expect(
+            remarkPanel.getByText(
+              'Remark must not exceed 250 characters once saved. Each & counts as 5 characters, and each < or > as 4.',
+              { exact: true },
+            ),
+          ).toBeVisible()
+          await remarkPanel.getByRole('button', { name: 'Cancel', exact: true }).click()
+          await page
+            .getByRole('dialog', { name: 'Discard changes?', exact: true })
+            .getByRole('button', { name: 'Discard changes', exact: true })
+            .click()
+
+          // Rejected and Withdrawn continue in the disapproval dialog, with its email checked.
+          await page.getByRole('tab', { name: 'Review', exact: true }).click()
+          const review = page.getByRole('region', { name: 'Application review', exact: true })
+          const updateStatus = review.getByRole('button', { name: 'Update status', exact: true })
+          await updateStatus.click()
+          const statusOptions = review.getByRole('group', { name: 'Application status' })
+          await expect(
+            statusOptions.getByRole('radio', { name: rejectedLabel, exact: true }),
+          ).toBeVisible()
+          await expect(
+            statusOptions.getByRole('radio', { name: withdrawnLabel, exact: true }),
+          ).toBeVisible()
+          await expect(
+            statusOptions.getByRole('radio', { name: 'Expired', exact: true }),
+          ).toHaveCount(0)
+          const disapproval = page.getByRole('dialog', {
+            name: `Disapprove application ${offerApplicationNumber}`,
+            exact: true,
+          })
+          for (const [statusCode, statusName] of [
+            ['REJ', rejectedLabel],
+            ['WDN', withdrawnLabel],
+          ] as const) {
+            await review.locator(`label[for="applicationDetailReviewStatus-${statusCode}"]`).click()
+            await review.locator('#applicationDetailReviewRemark').fill(regressionEmailRemark)
+            await updateStatus.click()
+
+            await expect(
+              disapproval.getByRole('checkbox', { name: 'Send disapproval email', exact: true }),
+            ).toBeChecked()
+            await expect(
+              disapproval.getByRole('combobox', { name: 'Application status', exact: true }),
+            ).toHaveValue(statusName)
+            await expect(disapproval.getByLabel('Remark', { exact: true })).toHaveValue(
+              regressionEmailRemark,
+            )
+            await disapproval.getByRole('button', { name: 'Cancel', exact: true }).click()
+            await expect(disapproval).toHaveCount(0)
+            await expect(review.getByRole('radio', { name: statusName, exact: true })).toBeChecked()
+          }
+          await review.getByRole('button', { name: 'Cancel', exact: true }).click()
+          await page
+            .getByRole('dialog', { name: 'Discard changes?', exact: true })
+            .getByRole('button', { name: 'Discard changes', exact: true })
+            .click()
+          expect(blockedWrites.attemptedWrites).toEqual([])
+        } finally {
+          await blockedWrites.release()
+        }
+      })
 
       await rejectRegressionApplication(page, offerApplicationNumber, regressionEmailRemark)
       offerApplicationCleanup.complete()
@@ -4533,15 +4902,36 @@ test.describe('TEST IDIR admin regression', () => {
       const permitNumber = Number(createdPermit.permitNumber)
       expect(Number.isSafeInteger(permitNumber)).toBe(true)
       expect(permitNumber).toBeGreaterThan(0)
-      const permitCleanup = cleanup.defer('cancel provincial permit', () =>
-        cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping),
-      )
-      const detachCleanup = cleanup.defer('detach lifecycle application from permit', async () => {
-        if (!(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber))) {
-          return
+      const permitCleanup = cleanup.defer('cancel provincial permit', async () => {
+        // Cancelling returns only the applications on an active or completed permit to exempted,
+        // so a Payment pending permit is made active first, and a permitted application removed
+        // from an active permit is added back. The permit is cancelled even if these steps fail.
+        try {
+          const current = await readPermitVersionedJson<Record<string, unknown>>(page, permitNumber)
+          const status = String(current.payload.permitStatusCode ?? '').toUpperCase()
+          const onPermit = await permitContainsApplication(
+            page,
+            permitNumber,
+            lifecycleApplicationNumber,
+          )
+          if (status === 'PPD' && onPermit) {
+            await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
+          } else if (status === 'ACT' && !onPermit) {
+            const application = await readVersionedJson<Record<string, unknown>>(
+              page,
+              `/api/lexis/applications/${lifecycleApplicationNumber}`,
+            )
+            if (String(application.payload.applicationStatusCode ?? '').toUpperCase() === 'PMT') {
+              await attachRegressionPermitApplication(
+                page,
+                permitNumber,
+                lifecycleApplicationNumber,
+              )
+            }
+          }
+        } finally {
+          await cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
         }
-        await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
-        await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
       })
       expect(createdPermit.success).toBe(true)
       expect(createdPermit.permitStatus).toBe('ACT')
@@ -4597,21 +4987,7 @@ test.describe('TEST IDIR admin regression', () => {
       )
       expect(applicationBeforeAttach.payload.applicationStatusCode).toBe('EXE')
 
-      const permitBeforeAttach = await readPermitVersionedJson<Record<string, unknown>>(
-        page,
-        permitNumber,
-      )
-      const attachedApplication = await readJsonResponse<RelationshipMutationResponse>(
-        await postWithCsrf(page, '/api/lexis/rpc/permit-details/add-applications-to-permit', {
-          headers: versionHeaders(permitBeforeAttach.version),
-          form: {
-            permitNumber: String(permitNumber),
-            selectedApplications: String(lifecycleApplicationNumber),
-          },
-        }),
-      )
-      expect(attachedApplication.success).toBe(true)
-      expect(asStringArray(attachedApplication.errors)).toEqual([])
+      await attachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
       expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
         true,
       )
@@ -4620,6 +4996,50 @@ test.describe('TEST IDIR admin regression', () => {
         `/api/lexis/applications/${lifecycleApplicationNumber}`,
       )
       expect(permittedApplication.payload.applicationStatusCode).toBe('PMT')
+
+      await test.step('refuse to remove a permitted application from its exemption', async () => {
+        const relinkPermittedCleanup = cleanup.defer(
+          'relink permitted lifecycle application to exemption',
+          () =>
+            linkRegressionExemptionApplication(page, exemptionNumber, lifecycleApplicationNumber),
+        )
+        const exemptionBeforeRemoval = await readVersionedJson<Record<string, unknown>>(
+          page,
+          `/api/lexis/exemptions/${encodeURIComponent(exemptionNumber)}`,
+        )
+        const refusedRemoval = await readJsonResponse<RelationshipMutationResponse>(
+          await deleteWithCsrf(page, '/api/lexis/rpc/exemption-details/application', {
+            headers: versionHeaders(exemptionBeforeRemoval.version),
+            params: {
+              applicationNumber: String(lifecycleApplicationNumber),
+              exemptionNumber,
+            },
+          }),
+        )
+        expect(refusedRemoval.success).toBe(false)
+        expect(asStringArray(refusedRemoval.errors)).toEqual([
+          'Application cannot be removed from the exemption while it is linked to a permit.',
+        ])
+        expect(
+          await exemptionContainsApplication(page, exemptionNumber, lifecycleApplicationNumber),
+        ).toBe(true)
+        relinkPermittedCleanup.complete()
+      })
+
+      await test.step('show the permit package on the Scale tab', async () => {
+        await expectAccessiblePage(
+          page,
+          `/provincial/permit/${permitNumber}`,
+          new RegExp(`permit ${permitNumber}`, 'i'),
+        )
+        await expect(page.getByRole('tab', { name: 'Items', exact: true })).toHaveCount(0)
+        await page.getByRole('tab', { name: 'Scale', exact: true }).click()
+        const scalePanel = page.getByRole('tabpanel', { name: 'Scale', exact: true })
+        await expect(scalePanel.locator('.permit-package-selector dd')).toHaveText(packageNumber)
+        await expect(
+          scalePanel.getByRole('region', { name: 'Scale rows', exact: true }),
+        ).toBeVisible()
+      })
 
       await test.step('find the linked permit by uppercase and lowercase package number', () =>
         expectLowercasePackageSearch(page, packageNumber, {
@@ -4656,6 +5076,95 @@ test.describe('TEST IDIR admin regression', () => {
       expect(['COM', 'PPD']).toContain(completedPermit.permitStatus)
       expect(asStringArray(completedPermit.errors)).toEqual([])
 
+      const completedPermitDetail = await readPermitVersionedJson<Record<string, unknown>>(
+        page,
+        permitNumber,
+      )
+      await test.step('list the permit issue date in ISO format on the exemption', async () => {
+        const exemptionPermits = asRecordArray(
+          await readJsonResponse<unknown>(
+            await getWithAuth(page, '/api/lexis/rpc/exemption-details/permits', {
+              params: { exemptionNumber },
+            }),
+          ),
+        )
+        const listedIssueDate = requiredString(
+          exemptionPermits.find((permit) => Number(permit.permitNumber) === permitNumber)
+            ?.permitIssueDate,
+          'Listed permit issue date',
+        )
+        expect(listedIssueDate).toMatch(isoDatePattern)
+        expect(listedIssueDate).toBe(String(completedPermitDetail.payload.issueDate ?? ''))
+      })
+
+      await test.step('refuse invoice-related changes to an invoiced permit', async () => {
+        const refusedChange = await readJsonResponse<PermitMutationResponse>(
+          await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
+            headers: versionHeaders(completedPermitDetail.version),
+            form: {
+              ...permitMutationForm(
+                completedPermitDetail.payload,
+                lifecycleMarker,
+                schedule.shipping,
+              ),
+              permitExpiryDate: uniqueRegressionFutureDate(),
+            },
+          }),
+        )
+        expect(refusedChange.success).toBe(false)
+        expect(asStringArray(refusedChange.errors)).toEqual([
+          'Invoice-related permit details cannot be changed after permit invoicing. Restore their saved values, or save the permit as Active first.',
+        ])
+        const afterRefusedChange = await readPermitVersionedJson<Record<string, unknown>>(
+          page,
+          permitNumber,
+        )
+        for (const key of ['expiryDate', 'permitStatusCode', 'permitVolume', 'numberOfPieces']) {
+          expect(afterRefusedChange.payload[key], `A refused change must keep ${key}`).toEqual(
+            completedPermitDetail.payload[key],
+          )
+        }
+      })
+
+      if (completedPermit.permitStatus === 'COM') {
+        // The scales of a Payment pending permit can still be deleted, so this runs only when
+        // the permit is Completed.
+        await test.step('keep the scales of a completed permit', async () => {
+          const scalesOfPackage = async () =>
+            readJsonResponse<PackageScaleResponse[]>(
+              await getWithAuth(page, '/api/lexis/rpc/application-details/package-scales', {
+                params: { packageNumber },
+              }),
+            )
+          const scalesBeforeDelete = await scalesOfPackage()
+          const [firstScale] = scalesBeforeDelete
+          const application = await readVersionedJson<Record<string, unknown>>(
+            page,
+            `/api/lexis/applications/${lifecycleApplicationNumber}`,
+          )
+          const refusedDelete = await deleteWithCsrf(
+            page,
+            '/api/lexis/rpc/application-details/scale',
+            {
+              headers: versionHeaders(application.version),
+              params: {
+                scaleId: requiredString(
+                  firstScale?.id ?? firstScale?.scaleId ?? firstScale?.scaleDetailId,
+                  'Lifecycle scale ID',
+                ),
+                applicationNumber: String(lifecycleApplicationNumber),
+              },
+            },
+          )
+          // The edit policy refuses the request. One that gets past it is refused with
+          // success false.
+          if (refusedDelete.status() !== 403) {
+            expect((await readJsonResponse<DeleteResponse>(refusedDelete)).success).toBe(false)
+          }
+          expect(await scalesOfPackage()).toHaveLength(scalesBeforeDelete.length)
+        })
+      }
+
       const permitBeforeApprovalEmail = await readPermitVersionedJson<Record<string, unknown>>(
         page,
         permitNumber,
@@ -4682,6 +5191,44 @@ test.describe('TEST IDIR admin regression', () => {
             },
       )
 
+      if (completedPermit.permitStatus === 'PPD') {
+        await test.step('keep a Payment pending permit pending when only its receipt is saved', async () => {
+          const pendingPermit = await readPermitVersionedJson<Record<string, unknown>>(
+            page,
+            permitNumber,
+          )
+          const receiptSave = await readJsonResponse<PermitMutationResponse>(
+            await postWithCsrf(page, '/api/lexis/rpc/permit-details/update-permit', {
+              headers: versionHeaders(pendingPermit.version),
+              form: {
+                ...permitMutationForm(
+                  pendingPermit.payload,
+                  lifecycleMarker,
+                  schedule.shipping,
+                  'PPD',
+                ),
+                permitReceiptNo: packageNumber,
+              },
+            }),
+          )
+          expect(
+            receiptSave.success,
+            permitMutationFailure(
+              receiptSave,
+              `Permit ${permitNumber} receipt save returned success=false.`,
+            ),
+          ).toBe(true)
+          expect(receiptSave.permitStatus).toBe('PPD')
+          expect(asStringArray(receiptSave.errors)).toEqual([])
+          const receiptPermit = await readPermitVersionedJson<Record<string, unknown>>(
+            page,
+            permitNumber,
+          )
+          expect(receiptPermit.payload.receiptNumber).toBe(packageNumber)
+          expect(receiptPermit.payload.permitStatusCode).toBe('PPD')
+        })
+      }
+
       await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
       const reactivatedPermit = await readPermitVersionedJson<Record<string, unknown>>(
         page,
@@ -4690,7 +5237,6 @@ test.describe('TEST IDIR admin regression', () => {
       expect(reactivatedPermit.payload.permitStatusCode).toBe('ACT')
 
       await detachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
-      detachCleanup.complete()
       expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
         false,
       )
@@ -4698,8 +5244,20 @@ test.describe('TEST IDIR admin regression', () => {
         page,
         `/api/lexis/applications/${lifecycleApplicationNumber}`,
       )
-      expect(detachedApplication.payload.applicationStatusCode).toBe('EXE')
+      // Removing an application from a permit leaves its status as it was.
+      expect(detachedApplication.payload.applicationStatusCode).toBe('PMT')
 
+      await attachRegressionPermitApplication(page, permitNumber, lifecycleApplicationNumber)
+      expect(await permitContainsApplication(page, permitNumber, lifecycleApplicationNumber)).toBe(
+        true,
+      )
+      const reattachedApplication = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      expect(reattachedApplication.payload.applicationStatusCode).toBe('PMT')
+
+      // Cancelling an active permit returns the applications on it to exempted.
       await cancelRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
       permitCleanup.complete()
       const cancelledPermit = await readPermitVersionedJson<Record<string, unknown>>(
@@ -4707,6 +5265,11 @@ test.describe('TEST IDIR admin regression', () => {
         permitNumber,
       )
       expect(cancelledPermit.payload.permitStatusCode).toBe('CAN')
+      const cancelledPermitApplication = await readVersionedJson<Record<string, unknown>>(
+        page,
+        `/api/lexis/applications/${lifecycleApplicationNumber}`,
+      )
+      expect(cancelledPermitApplication.payload.applicationStatusCode).toBe('EXE')
 
       await cancelRegressionExemption(page, exemptionNumber, orgUnitNumber)
       exemptionCleanup.complete()

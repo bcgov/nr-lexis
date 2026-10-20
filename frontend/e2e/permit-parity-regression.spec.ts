@@ -9,11 +9,26 @@ type CapturedWrite = {
   body: Record<string, unknown>
 }
 
+type PermitParityFixtureOptions = {
+  /** Answers every permit update with this response instead of saving. */
+  updatePermitResponse?: { success: boolean; message: string; errors: string[]; warnings: string[] }
+  /** Marks the permit as an Interior permit. */
+  interior?: boolean
+  /** The permit's saved receipt number. */
+  receiptNumber?: string | null
+  /** Permit statuses offered besides Active. */
+  extraPermitStatuses?: Array<{ code: string; name: string }>
+}
+
 type PermitParityFixture = {
   writes: CapturedWrite[]
   unexpectedRequests: string[]
   resolveDelayedGrade: (options: Array<{ code: string; description: string }>) => void
   resolveDelayedShipping: () => void
+  /** Holds the next read of the permit until the returned function is called. */
+  holdNextPermitRead: () => () => void
+  permitReads: () => number
+  editContextReads: () => number
 }
 
 const ownerClientData = (locationCode: string) =>
@@ -51,6 +66,7 @@ const installPermitParityFixtures = async (
   delayedGrade = false,
   delayedShipping = false,
   role: 'ADMIN' | 'PROVINCIAL_SUBMITTER' = 'ADMIN',
+  options: PermitParityFixtureOptions = {},
 ): Promise<PermitParityFixture> => {
   await installSyntheticOidcSession(page, {
     username: 'PERMIT.PARITY.TESTER',
@@ -62,6 +78,9 @@ const installPermitParityFixtures = async (
   let ownerLocationCode = '03'
   let createdPayload: Record<string, string> | null = null
   let version = 1
+  let permitReads = 0
+  let editContextReads = 0
+  let permitReadGate: Promise<void> | null = null
   const writes: CapturedWrite[] = []
   const unexpectedRequests: string[] = []
   let resolveGradeOptions:
@@ -130,7 +149,12 @@ const installPermitParityFixtures = async (
         : 'Standard exemption',
     blanketOic,
     numberOfPieces: scenario === 'blanket-oic-empty' ? 0 : 3,
-    receiptNumber: scenario === 'blanket-oic-empty' ? null : 'R-91002',
+    receiptNumber:
+      options.receiptNumber !== undefined
+        ? options.receiptNumber
+        : scenario === 'blanket-oic-empty'
+          ? null
+          : 'R-91002',
     federalPermitNumber: null,
     invoiceNumber: null,
     remarks: 'Synthetic parity fixture',
@@ -275,9 +299,16 @@ const installPermitParityFixtures = async (
         case '/api/lexis/session/preferences':
           body = { defaultRegion: '1903' }
           break
-        case `/api/lexis/permits/${permitNumber}`:
+        case `/api/lexis/permits/${permitNumber}`: {
+          permitReads += 1
+          if (permitReadGate) {
+            const gate = permitReadGate
+            permitReadGate = null
+            await gate
+          }
           body = permit()
           break
+        }
         case '/api/lexis/exemptions/EX-BOIC-91002':
           body = exemption
           break
@@ -310,7 +341,10 @@ const installPermitParityFixtures = async (
           break
         case '/api/lexis/permits/search/options':
           body = {
-            permitStatuses: [{ code: 'ACT', name: 'Active' }],
+            permitStatuses: [
+              { code: 'ACT', name: 'Active' },
+              ...(options.extraPermitStatuses ?? []),
+            ],
             regions: [{ code: '1903', name: 'Cariboo Natural Resource Region' }],
           }
           break
@@ -344,12 +378,14 @@ const installPermitParityFixtures = async (
           }
           break
         case '/api/lexis/rpc/permit-details/edit-context':
+          editContextReads += 1
           body = {
             overrideEnabled: false,
             overrideFee: '',
             overrideComment: '',
             locked: false,
             lockMessage: '',
+            ...(options.interior ? { interior: true } : {}),
           }
           break
         case '/api/lexis/rpc/permit-details/core-tabs':
@@ -481,13 +517,17 @@ const installPermitParityFixtures = async (
           string
         >
         writes.push({ method: request.method(), path, body: payload })
-        ownerLocationCode = payload.ownerClientLocation || ownerLocationCode
-        version += 1
-        body = {
-          success: true,
-          message: 'The permit was updated successfully.',
-          errors: [],
-          warnings: [],
+        if (options.updatePermitResponse) {
+          body = options.updatePermitResponse
+        } else {
+          ownerLocationCode = payload.ownerClientLocation || ownerLocationCode
+          version += 1
+          body = {
+            success: true,
+            message: 'The permit was updated successfully.',
+            errors: [],
+            warnings: [],
+          }
         }
       } else if (path === '/api/lexis/rpc/permit-details/boic-package') {
         const payload = request.postDataJSON() as Record<string, unknown>
@@ -545,8 +585,17 @@ const installPermitParityFixtures = async (
   return {
     writes,
     unexpectedRequests,
-    resolveDelayedGrade: (options) => resolveGradeOptions?.(options),
+    resolveDelayedGrade: (gradeOptions) => resolveGradeOptions?.(gradeOptions),
     resolveDelayedShipping: () => resolveShipping?.(),
+    holdNextPermitRead: () => {
+      let release!: () => void
+      permitReadGate = new Promise<void>((resolve) => {
+        release = resolve
+      })
+      return release
+    },
+    permitReads: () => permitReads,
+    editContextReads: () => editContextReads,
   }
 }
 
@@ -673,7 +722,7 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(page.getByRole('heading', { name: 'Package fees', exact: true })).toBeVisible()
     await expect(page.getByRole('region', { name: 'Permit fee rows', exact: true })).toHaveCount(0)
     await expect(
-      page.locator('.detail-field-item').filter({ hasText: 'Total volume (m³)' }),
+      page.locator('dl.record-field').filter({ hasText: 'Total volume (m³)' }),
     ).toHaveText('Total volume (m³)0.0')
     await selectTab(page, 'Documents')
     await page.getByRole('button', { name: 'Add documents', exact: true }).click()
@@ -795,6 +844,20 @@ test.describe('Provincial permit parity regressions', () => {
     await page.getByRole('option', { name: 'PKG-B', exact: true }).click()
     await expect(packageBRow.getByRole('cell', { name: 'PKG-B', exact: true })).toBeVisible()
     await expect(packageARow).toHaveCount(0)
+    await expect(page.getByRole('heading', { name: 'Scale', exact: true })).toBeVisible()
+    await expect(page.getByRole('tab', { name: 'Items' })).toHaveCount(0)
+    await expect(
+      page.locator('dl.record-field').filter({ hasText: 'Current package volume (m³)' }),
+    ).toHaveText('Current package volume (m³)2.0')
+
+    // The Fees tab follows the package chosen on the Scale tab.
+    await selectTab(page, 'Fees')
+    await expect(page.getByRole('combobox', { name: 'Package number', exact: true })).toHaveText(
+      /PKG-B/,
+    )
+    await expect(
+      page.getByText('No fee rows are available for the selected package.', { exact: true }),
+    ).toBeVisible()
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
@@ -854,7 +917,7 @@ test.describe('Provincial permit parity regressions', () => {
     expect(fixture.unexpectedRequests).toEqual([])
   })
 
-  test('keeps the BOIC scale grade disabled until its options load and submits selected codes', async ({
+  test('keeps the BOIC scale grade disabled until its options load and submits upper-cased codes with zero pieces', async ({
     page,
   }) => {
     const fixture = await installPermitParityFixtures(page, 'blanket-oic', true)
@@ -887,8 +950,10 @@ test.describe('Provincial permit parity regressions', () => {
     await expect(grade).toBeEnabled()
     await grade.click()
     await page.getByRole('option', { name: 'Utility', exact: true }).click()
-    await panel.getByLabel('Timber mark', { exact: true }).fill('TM-NEW')
-    await panel.getByLabel('Pieces', { exact: true }).fill('1')
+    const timberMark = panel.getByLabel('Timber mark', { exact: true })
+    await timberMark.fill('tm-new')
+    await expect(timberMark).toHaveValue('TM-NEW')
+    await panel.getByLabel('Pieces', { exact: true }).fill('0')
     await panel.getByLabel('Volume (m³)', { exact: true }).fill('1.0')
     await panel.getByRole('button', { name: 'Save scale', exact: true }).click()
 
@@ -903,7 +968,7 @@ test.describe('Provincial permit parity regressions', () => {
           timberMark: 'TM-NEW',
           speciesCode: 'AL',
           gradeCode: 'W',
-          scalePieces: '1',
+          scalePieces: '0',
           scaleVolume: '1.0',
         }),
       }),
@@ -949,6 +1014,122 @@ test.describe('Provincial permit parity regressions', () => {
       }),
     ])
     expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  test('shows every error a failed permit section save returns', async ({ page }) => {
+    const fixture = await installPermitParityFixtures(page, 'blanket-oic', false, false, 'ADMIN', {
+      updatePermitResponse: {
+        success: false,
+        message: '',
+        errors: [
+          'Invoice-related permit details cannot be changed after permit invoicing. Restore their saved values, or save the permit as Active first.',
+          'Unable to update the permit owner and agent.',
+        ],
+        warnings: [],
+      },
+    })
+    await gotoSyntheticRoute(page, '/provincial/permit/91002', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
+    })
+    await selectTab(page, 'Applicant')
+    await page.getByRole('button', { name: 'Edit applicant details', exact: true }).click()
+    const ownerLocation = page.getByLabel('Client location', { exact: true })
+    await expect(ownerLocation).toHaveValue('03')
+    await ownerLocation.selectOption('04')
+    await expect(page.getByText('Owner Mill Ltd. · 00067890', { exact: true })).toBeVisible()
+    await page.getByRole('button', { name: 'Save changes', exact: true }).click()
+
+    const errorNotice = page.locator('.app-inline-notification.cds--inline-notification--error')
+    await expect(errorNotice).toContainText('Applicant details not saved.')
+    await expect(errorNotice).toContainText(
+      'Invoice-related permit details cannot be changed after permit invoicing. Restore their saved values, or save the permit as Active first.',
+    )
+    await expect(errorNotice).toContainText('Unable to update the permit owner and agent.')
+    // The form stays open so the values can be corrected.
+    await expect(ownerLocation).toBeVisible()
+    expect(fixture.writes).toHaveLength(1)
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  test('rereads the permit when editing starts and keeps a request volume typed during the read', async ({
+    page,
+  }) => {
+    const fixture = await installPermitParityFixtures(page, 'blanket-oic')
+    await gotoSyntheticRoute(page, '/provincial/permit/91002', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91002 (Pending)', exact: true }),
+    })
+    const editPermit = page.getByRole('button', { name: 'Edit permit details', exact: true })
+    await expect(editPermit).toBeVisible()
+    const permitReadsBefore = fixture.permitReads()
+    const editContextReadsBefore = fixture.editContextReads()
+    const releasePermitRead = fixture.holdNextPermitRead()
+    await editPermit.click()
+
+    // Save waits for the read, while a value typed meanwhile is kept.
+    const save = page.getByRole('button', { name: 'Save changes', exact: true })
+    await expect(save).toBeDisabled()
+    const requestVolume = page.getByLabel('Permit request volume (m³)', { exact: true })
+    await requestVolume.fill('10.125')
+    releasePermitRead()
+    await expect(save).toBeEnabled()
+    await expect(requestVolume).toHaveValue('10.125')
+    expect(fixture.editContextReads()).toBeGreaterThan(editContextReadsBefore)
+    expect(fixture.permitReads()).toBeGreaterThan(permitReadsBefore)
+
+    await save.click()
+    await expect(
+      page.locator('.app-inline-notification.cds--inline-notification--success'),
+    ).toContainText('Permit details saved.')
+    await expect(
+      page.getByText('Permit request volume must be numeric', { exact: true }),
+    ).toHaveCount(0)
+    expect(fixture.writes).toEqual([
+      expect.objectContaining({
+        method: 'POST',
+        path: '/api/lexis/rpc/permit-details/update-permit',
+        body: expect.objectContaining({ oicPermitTotalVolume: '10.125' }),
+      }),
+    ])
+    expect(fixture.unexpectedRequests).toEqual([])
+  })
+
+  test('asks before saving a completed Interior permit without a receipt as Payment pending', async ({
+    page,
+  }) => {
+    const fixture = await installPermitParityFixtures(page, 'normal', false, false, 'ADMIN', {
+      interior: true,
+      receiptNumber: null,
+      extraPermitStatuses: [{ code: 'COM', name: 'Completed' }],
+    })
+    await gotoSyntheticRoute(page, '/provincial/permit/91001', {
+      ready: page.getByRole('heading', { level: 1, name: 'Permit 91001 (Pending)', exact: true }),
+    })
+    await page.getByRole('button', { name: 'Edit permit', exact: true }).click()
+    await page.getByLabel('Status', { exact: true }).selectOption('COM')
+    const save = page.getByRole('button', { name: 'Save permit', exact: true })
+    await save.click()
+
+    const confirmation = page.getByRole('dialog', { name: 'Save as Payment pending?', exact: true })
+    await expect(confirmation).toContainText(
+      'Fee Receipt Number should not be empty for a complete Permit so it will be saved as Payment Pending.',
+    )
+    await confirmation.getByRole('button', { name: 'Discard', exact: true }).click()
+    await expect(confirmation).toHaveCount(0)
+    expect(fixture.writes).toEqual([])
+    expect(fixture.unexpectedRequests).toEqual([])
+
+    await save.click()
+    await confirmation.getByRole('button', { name: 'Save', exact: true }).click()
+    await expect.poll(() => fixture.writes.length).toBe(1)
+    expect(fixture.writes[0]).toEqual(
+      expect.objectContaining({
+        method: 'POST',
+        path: '/api/lexis/rpc/permit-details/update-permit',
+        body: expect.objectContaining({ permitStatus: 'COM' }),
+      }),
+    )
+    // The blank receipt is left out of the request, so the server saves it as Payment pending.
+    expect(fixture.writes[0]?.body).not.toHaveProperty('permitReceiptNo')
   })
 
   test('opens the Blanket OIC package form as a right panel without hiding the package card', async ({
