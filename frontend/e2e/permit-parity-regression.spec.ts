@@ -1111,7 +1111,7 @@ test.describe('Provincial permit parity regressions', () => {
 
     const confirmation = page.getByRole('dialog', { name: 'Save as Payment pending?', exact: true })
     await expect(confirmation).toContainText(
-      'Fee Receipt Number should not be empty for a complete Permit so it will be saved as Payment Pending.',
+      'Receipt number should not be empty for a complete permit so it will be saved as Payment pending.',
     )
     await confirmation.getByRole('button', { name: 'Discard', exact: true }).click()
     await expect(confirmation).toHaveCount(0)

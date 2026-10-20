@@ -16,6 +16,7 @@ import {
   EarthFilled,
   Edit,
   Enterprise,
+  Receipt,
   TrashCan,
 } from '@carbon/icons-react'
 import { Cardboard, Invoice } from '@carbon/pictograms-react'
@@ -51,6 +52,7 @@ import { useAuth } from '@/context/auth/useAuth'
 import { allowedRegions, withinRegions } from '@/context/auth/region-utils'
 import { useAllowedRegionOptions } from '@/context/auth/useAllowedRegionOptions'
 import { hasProvincialSubmitterRole, hasRole, isPureReadOnlyRole } from '@/context/auth/role-utils'
+import { AppNotification } from '@/components/AppNotification'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
@@ -217,6 +219,16 @@ const formatAmount = (value: number): string => {
   })
 }
 
+/** A scale row's Delete button name: the visible word, then the scale it acts on. */
+const scaleDeleteLabel = (
+  verb: string,
+  { timberMark, species, grade }: Pick<ProvincialPermitItemRow, 'timberMark' | 'species' | 'grade'>,
+) =>
+  `${verb} scale ${[timberMark, species, grade.trim() ? `grade ${grade}` : '']
+    .map((part) => part.trim())
+    .filter(Boolean)
+    .join(', ')}`
+
 /** A GBMS invoice amount as dollars, as the fee rows show them; blank shows "—". */
 const gbmsInvoiceAmountLabel = (amount: string) => {
   const text = amount.trim()
@@ -380,7 +392,7 @@ const PERMIT_DETAIL_TABS = [
   { id: 'items', label: 'Scale', icon: Box },
   { id: 'documents', label: 'Documents', icon: DocumentAttachment },
   { id: 'fees', label: 'Fees', icon: Currency },
-  { id: 'gbms', label: 'GBMS', icon: undefined },
+  { id: 'gbms', label: 'GBMS', icon: Receipt },
 ] as const
 
 type PermitDetailTabId = (typeof PERMIT_DETAIL_TABS)[number]['id']
@@ -1346,6 +1358,8 @@ const ProvincialPermitDetailsPage = () => {
   const [boicPackageErrorMessage, setBoicPackageErrorMessage] = useState('')
   const [editingBoicPackageNumber, setEditingBoicPackageNumber] = useState<string | null>(null)
   const [isCreatingBoicPackage, setIsCreatingBoicPackage] = useState(false)
+  // After a package create, focus goes to the new package's Edit package until a panel opens again.
+  const [boicPackageJustCreated, setBoicPackageJustCreated] = useState(false)
   const [boicCodeOptionsStatus, setBoicCodeOptionsStatus] =
     useState<BlanketOicPackageOptionsStatus>('loading')
   const [boicScaleCodeOptionsStatus, setBoicScaleCodeOptionsStatus] =
@@ -2444,16 +2458,16 @@ const ProvincialPermitDetailsPage = () => {
     !!permitForm &&
     !!permitBaselineForm &&
     (permitFormSectionChanged(permitForm, permitBaselineForm, false) || permitAgentToggleDirty)
-  // Shipping edits start an empty country, transport type and port on the usual defaults, as a new
-  // Blanket OIC permit does. The defaults count as the starting values; saved values are kept.
+  // Shipping edits start an empty country, transport type and port on the usual defaults. The
+  // defaults count as the starting values; saved values are kept.
   const permitShippingBaselineForm = useMemo(
     () =>
-      permitBaselineForm && usesReviewedPermitFlow && shippingReferences
+      permitBaselineForm && shippingReferences
         ? withShippingDefaults(permitBaselineForm, shippingReferences, {
             portLocked: portOfExportLocked,
           })
         : permitBaselineForm,
-    [permitBaselineForm, portOfExportLocked, shippingReferences, usesReviewedPermitFlow],
+    [permitBaselineForm, portOfExportLocked, shippingReferences],
   )
   const permitShippingDirty =
     isEditingShipping &&
@@ -2578,6 +2592,10 @@ const ProvincialPermitDetailsPage = () => {
     (detail?.blanketOic ? !!detail.oicApplicationNumber : tabsData.applications.length > 0) &&
     tabsData.packages.length > 0 &&
     tabsData.items.length > 0
+  // A Blanket OIC permit has no application to select; its application comes with its package.
+  const permitReviewNotReadyMessage = detail?.blanketOic
+    ? 'An active permit requires a package and scale detail before review can be requested.'
+    : 'An active permit requires an application, package, and scale detail before review can be requested.'
   const totalFeeVolume = tabsData?.totalFeeVolume
   const calculatedPermitFee = (tabsData?.fees ?? []).reduce((total, row) => total + row.amount, 0)
   // A fee row without an amount means the permit's calculated fee has no amount either.
@@ -3346,6 +3364,7 @@ const ProvincialPermitDetailsPage = () => {
     setIsLoadingBoicPackage(false)
     setBoicCodeOptionsStatus('loading')
     setIsCreatingBoicPackage(false)
+    setBoicPackageJustCreated(false)
     setEditingBoicPackageNumber(null)
     setBoicPackageForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
     setBoicPackageBaselineForm(EMPTY_BLANKET_OIC_PACKAGE_FORM)
@@ -3472,7 +3491,7 @@ const ProvincialPermitDetailsPage = () => {
       }
       const refreshedForm = buildPermitDetailForm(refreshedDetail)
       const nextForm =
-        section === 'shipping' && usesReviewedPermitFlow && shippingReferences
+        section === 'shipping' && shippingReferences
           ? mergePermitFormSection(
               refreshedForm,
               withShippingDefaults(refreshedForm, shippingReferences, {
@@ -4810,7 +4829,13 @@ const ProvincialPermitDetailsPage = () => {
       if (savedPackageNumber) {
         setSelectedBlanketOicPackageNumberState(savedPackageNumber)
       }
+      const createdPackage = editingBoicPackageNumber === null
       resetBlanketOicPackageForm()
+      if (createdPackage) {
+        // The Create package button that opened the panel is not where the new package is.
+        packagePanelLauncherRef.current = null
+        setBoicPackageJustCreated(true)
+      }
       try {
         await reloadPermitTabs()
         if (!onSamePermit()) return true
@@ -5160,6 +5185,9 @@ const ProvincialPermitDetailsPage = () => {
       if (result.blob) {
         triggerBrowserDownload(result.blob, result.filename)
       }
+      if (!result.cancelled) {
+        setActionResult({ kind: 'success', title: 'Permit report downloaded.', message: '' })
+      }
     } catch (error) {
       console.error(error)
       setActionResult({
@@ -5250,9 +5278,7 @@ const ProvincialPermitDetailsPage = () => {
     setPermitReviewRequestErrorMessage('')
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
     if (!resolvedPermitNumber || !permitReviewReady) {
-      setPermitReviewRequestErrorMessage(
-        'An active permit requires an application, package, and scale detail before review can be requested.',
-      )
+      setPermitReviewRequestErrorMessage(permitReviewNotReadyMessage)
       return false
     }
     const copyTo = normalizeTrimmedText(permitReviewRequestCopyTo)
@@ -5310,6 +5336,7 @@ const ProvincialPermitDetailsPage = () => {
     beginPermitRouteWork,
     detail?.permitNumber,
     permitNumber,
+    permitReviewNotReadyMessage,
     permitReviewReady,
     permitReviewRequestCopyTo,
   ])
@@ -5618,20 +5645,28 @@ const ProvincialPermitDetailsPage = () => {
       </div>
     ) : null
 
+  // The link is interactive content, which Carbon's plain InlineNotification rejects, so the notice
+  // uses the app notification's rich-content form with the same look.
   const renderFederalPermitNotice = () => (
-    <Tile className="detail-federal-permit-notice">
-      <p>
-        If this provincial permit requires a federal permit, apply through the{' '}
+    <AppNotification
+      className="detail-federal-permit-notice"
+      kind="info"
+      lowContrast
+      revealKey="federal-permit-notice"
+    >
+      <span>
+        If this provincial permit also requires a federal permit, apply through{' '}
         <a
+          className="cds--link"
           href="https://www.nexcol-nceel.canada.ca/en/Home-Accueil"
           target="_blank"
           rel="noopener noreferrer"
         >
-          New Export Controls Online System (New EXCOL)
+          Export Controls Online System (EXCOL)
         </a>
         .
-      </p>
-    </Tile>
+      </span>
+    </AppNotification>
   )
 
   const renderMinisterialPermitApplications = () => {
@@ -5827,6 +5862,11 @@ const ProvincialPermitDetailsPage = () => {
                             size="md"
                             disabled={isUpdatingPermitApplications}
                             renderIcon={TrashCan}
+                            aria-label={`${
+                              isRemovingPermitApplication === applicationNumber
+                                ? 'Removing'
+                                : 'Remove'
+                            } application ${applicationNumber}`}
                             onClick={() => {
                               clearActionNotifications()
                               setPermitApplicationPendingRemoval(applicationNumber)
@@ -6862,6 +6902,10 @@ const ProvincialPermitDetailsPage = () => {
                               size="md"
                               disabled={blanketOicScaleActionsDisabled}
                               renderIcon={TrashCan}
+                              aria-label={scaleDeleteLabel(
+                                isDeletingBoicScaleId === row.id ? 'Deleting' : 'Delete',
+                                row,
+                              )}
                               onClick={() => {
                                 clearActionNotifications()
                                 setBoicScalePendingRemoval(row)
@@ -7149,7 +7193,7 @@ const ProvincialPermitDetailsPage = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={permitPageTitle}
-          focusTitle={focusCreatedPermitTitle}
+          focusTitle={focusCreatedPermitTitle || 'whenFocusLost'}
           subtitle={detailMatchesRoute ? `Author: ${displayValueText(detail.author)}` : undefined}
           status={
             detail && detailMatchesRoute ? (
@@ -7168,7 +7212,7 @@ const ProvincialPermitDetailsPage = () => {
                     description={
                       isPermitTablesLoading
                         ? 'Checking permit review readiness…'
-                        : 'An active permit requires an application, package, and scale detail before review can be requested.'
+                        : permitReviewNotReadyMessage
                     }
                   >
                     <Button
@@ -7345,6 +7389,7 @@ const ProvincialPermitDetailsPage = () => {
                           {renderSectionSaveResult('permit')}
                           <RequiredFieldsLegend />
                           {renderReviewedPermitFields()}
+                          {isMinisterialPermitEdit && renderFederalPermitNotice()}
                           {renderPermitEditActions()}
                         </Tile>
                       ) : isEditingPermit && permitForm ? (
@@ -7504,6 +7549,11 @@ const ProvincialPermitDetailsPage = () => {
                                               isRemovingPermitApplication === applicationNumber
                                             }
                                             renderIcon={TrashCan}
+                                            aria-label={`${
+                                              isRemovingPermitApplication === applicationNumber
+                                                ? 'Removing'
+                                                : 'Remove'
+                                            } application ${applicationNumber}`}
                                             onClick={() => {
                                               clearActionNotifications()
                                               setPermitApplicationPendingRemoval(applicationNumber)
@@ -7576,7 +7626,7 @@ const ProvincialPermitDetailsPage = () => {
                         </Tile>
                       </Column>
                     )}
-                    {(!detail.blanketOic || isMinisterialPermitEdit) && (
+                    {!detail.blanketOic && !isMinisterialPermitEdit && (
                       <Column sm={4} md={8} lg={16}>
                         {renderFederalPermitNotice()}
                       </Column>
@@ -7890,19 +7940,24 @@ const ProvincialPermitDetailsPage = () => {
                         )}
                         {ministerialScaleEmpty && (
                           <EmptyState
+                            className="permit-empty-state--sentences"
                             title="No scale yet"
                             description={
                               <>
-                                Scale comes from the applications selected for this permit. Select
-                                an application on the{' '}
-                                <button
-                                  type="button"
-                                  className="cds--link"
-                                  onClick={showPermitTabFromLink}
-                                >
-                                  Permit tab
-                                </button>
-                                .
+                                <span className="permit-empty-state__sentence">
+                                  Scale comes from the applications selected for this permit.
+                                </span>{' '}
+                                <span className="permit-empty-state__sentence">
+                                  Select an application on the{' '}
+                                  <button
+                                    type="button"
+                                    className="cds--link"
+                                    onClick={showPermitTabFromLink}
+                                  >
+                                    Permit tab
+                                  </button>
+                                  .
+                                </span>
                               </>
                             }
                             icon={<Cardboard width={48} height={48} />}
@@ -8010,6 +8065,7 @@ const ProvincialPermitDetailsPage = () => {
                                         </Button>
                                       )}
                                       <Button
+                                        id="boic-edit-package"
                                         type="button"
                                         kind="tertiary"
                                         size="md"
@@ -8233,21 +8289,26 @@ const ProvincialPermitDetailsPage = () => {
                     {ministerialFeeShellEmpty ? (
                       <Column sm={4} md={8} lg={16}>
                         <EmptyState
+                          className="permit-empty-state--sentences"
                           variant="tab"
                           icon={<Invoice width={48} height={48} />}
                           title="No fees yet"
                           description={
                             <>
-                              Fees are calculated from the permit&apos;s Summary of scale. They
-                              appear once an application is selected on the{' '}
-                              <button
-                                type="button"
-                                className="cds--link"
-                                onClick={showPermitTabFromLink}
-                              >
-                                Permit tab
-                              </button>
-                              .
+                              <span className="permit-empty-state__sentence">
+                                Fees are calculated from the permit&apos;s Summary of scale.
+                              </span>{' '}
+                              <span className="permit-empty-state__sentence">
+                                They appear once an application is selected on the{' '}
+                                <button
+                                  type="button"
+                                  className="cds--link"
+                                  onClick={showPermitTabFromLink}
+                                >
+                                  Permit tab
+                                </button>
+                                .
+                              </span>
                             </>
                           }
                         />
@@ -8321,7 +8382,7 @@ const ProvincialPermitDetailsPage = () => {
                     <Grid fullWidth className="application-detail-tab-grid">
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
-                          <DetailCardTitle>GBMS invoice history</DetailCardTitle>
+                          <DetailCardTitle icon={Receipt}>GBMS invoice history</DetailCardTitle>
                           {gbmsErrorMessage ? (
                             <EmptyState
                               title="GBMS history unavailable"
@@ -8481,7 +8542,7 @@ const ProvincialPermitDetailsPage = () => {
         <ConfirmationModal
           open
           title="Save as Payment pending?"
-          description="Fee Receipt Number should not be empty for a complete Permit so it will be saved as Payment Pending."
+          description="Receipt number should not be empty for a complete permit so it will be saved as Payment pending."
           confirmLabel="Save"
           cancelLabel="Discard"
           pendingLabel="Saving…"
@@ -8711,7 +8772,9 @@ const ProvincialPermitDetailsPage = () => {
           contentSelector="#permit-detail-content"
           initialFocusSelector="#boicPackageNumber"
           launcherRef={packagePanelLauncherRef}
-          fallbackFocusSelector="#create-boic-package"
+          fallbackFocusSelector={
+            boicPackageJustCreated ? '#boic-edit-package:not(:disabled)' : '#create-boic-package'
+          }
           loading={isLoadingBoicPackage}
           busy={isSavingBoicPackage}
           onClose={closeBlanketOicPackage}

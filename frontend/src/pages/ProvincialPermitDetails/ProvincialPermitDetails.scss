@@ -247,6 +247,21 @@
   margin-block-start: 1.5rem;
 }
 
+// The federal permit notice adds no margin of its own: the card or grid around it spaces it.
+.app-inline-notification.detail-federal-permit-notice {
+  margin-block: 0;
+}
+
+// Each sentence of these tab empty states starts its own line, and the wider description keeps
+// the first one on a single line.
+.lexis-empty-state.permit-empty-state--sentences .lexis-empty-state__description {
+  max-inline-size: 31rem;
+}
+
+.permit-empty-state__sentence {
+  display: block;
+}
+
 // An empty Scale tab has no padding, so its result keeps the tab's own inset.
 @media (min-width: 672px) {
   .permit-detail-empty-section > .app-notification-container {
