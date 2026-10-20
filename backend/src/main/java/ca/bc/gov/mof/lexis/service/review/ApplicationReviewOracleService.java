@@ -265,7 +265,7 @@ public class ApplicationReviewOracleService implements ApplicationReviewService 
           request == null ? null : trimToNull(request.clientEmailAddress()),
           null,
           null,
-          "Remark is required when rejecting, withdrawing, or expiring an application.");
+          "Remark is required.");
     }
     if (remark != null && remark.length() > REMARK_MAX_LENGTH) {
       return statusUpdateResult(

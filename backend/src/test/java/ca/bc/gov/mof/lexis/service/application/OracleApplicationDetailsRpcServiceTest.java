@@ -1175,7 +1175,7 @@ class OracleApplicationDetailsRpcServiceTest {
 
     assertThat(response.valid()).isFalse();
     assertThat(response.errors())
-        .containsExactly("The application term days must be no more than 99999.");
+        .containsExactly("The exemption term must be no more than 99999.");
     verifyNoInteractions(repository);
     verifyNoInteractions(clientRepository);
   }
@@ -6261,7 +6261,7 @@ class OracleApplicationDetailsRpcServiceTest {
         service.updateApplicationSummary(request, "idir\\jsmith");
 
     assertThat(response.valid()).isFalse();
-    assertThat(response.errors()).contains("The application term days must be greater than 0.");
+    assertThat(response.errors()).contains("The exemption term must be greater than 0.");
     verify(repository, never()).updateApplication(any());
   }
 
@@ -6504,7 +6504,7 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.valid()).isFalse();
     assertThat(response.errors())
         .contains(
-            "The application term days must be greater than 0.",
+            "The exemption term must be greater than 0.",
             "The application exemption reason code must be 1 character or fewer.");
     verify(repository).findApplicationUpdateRecord(1000456L);
   }
@@ -6623,7 +6623,7 @@ class OracleApplicationDetailsRpcServiceTest {
     assertThat(response.valid()).isFalse();
     assertThat(response.errors())
         .contains(
-            "The application term days must be greater than 0.",
+            "The exemption term must be greater than 0.",
             "The application exemption reason code must be 1 character or fewer.");
     verify(repository, never()).updateApplication(any());
   }
