@@ -1,7 +1,7 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useNavigate } from 'react-router-dom'
-import { expect, vi } from 'vitest'
+import { expect, onTestFinished, vi } from 'vitest'
 import { useAuth } from '@/context/auth/useAuth'
 import type { ProvincialApplicationDetail } from '@/interfaces/LexisDetails'
 import {
@@ -673,6 +673,18 @@ export const setupApplicationDetailTests = (): void => {
   })
 }
 
+/**
+ * Runs each animation-frame callback as soon as the current task ends, before React renders the
+ * state that task set, as when a frame fires ahead of the render. Restored when the test ends.
+ */
+const runFramesBeforeNextRender = () => {
+  const spy = vi.spyOn(window, 'requestAnimationFrame').mockImplementation((callback) => {
+    queueMicrotask(() => callback(performance.now()))
+    return 0
+  })
+  onTestFinished(() => spy.mockRestore())
+}
+
 export {
   NavigateButton,
   applicationDetail,
@@ -713,6 +725,7 @@ export {
   mockedUpdateApplicationReviewStatus,
   mockedUpdateApplicationSummary,
   mockedValidateAdminUpload,
+  runFramesBeforeNextRender,
   selectApplicationDetailTab,
   selectApplicationDocumentsForEditing,
   selectApplicationItemsForEditing,

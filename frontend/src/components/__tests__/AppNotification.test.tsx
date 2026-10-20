@@ -213,6 +213,79 @@ describe('AppNotification scrolling', () => {
     expect(screen.getByRole('status')).toHaveFocus()
   })
 
+  it('keeps focus in a field while an updating subtitle shares one reveal key', () => {
+    const notification = (attempt: number, subtitle: string) => (
+      <>
+        <input aria-label="Contact name" />
+        <AppNotification
+          kind="error"
+          title="Validation error"
+          subtitle={subtitle}
+          focusOnReveal
+          revealKey={attempt}
+        />
+      </>
+    )
+    const { rerender } = render(notification(1, 'Applicant and Scale tabs'))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(screen.getByRole('status')).toHaveFocus()
+
+    const field = screen.getByRole('textbox', { name: 'Contact name' })
+    field.focus()
+    rerender(notification(1, 'Scale tab'))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(screen.getByRole('status')).toHaveTextContent('Scale tab')
+    expect(field).toHaveFocus()
+
+    rerender(notification(2, 'Scale tab'))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(screen.getByRole('status')).toHaveFocus()
+  })
+
+  it('moves focus for a new reveal key even when the subtitle also changes', () => {
+    const notification = (attempt: number, subtitle: string) => (
+      <>
+        <input aria-label="Contact name" />
+        <AppNotification
+          kind="error"
+          title="Validation error"
+          subtitle={subtitle}
+          focusOnReveal
+          revealKey={attempt}
+        />
+      </>
+    )
+    const { rerender } = render(notification(1, 'Applicant and Scale tabs'))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    const field = screen.getByRole('textbox', { name: 'Contact name' })
+    field.focus()
+
+    rerender(notification(2, 'Scale tab'))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(screen.getByRole('status')).toHaveFocus()
+  })
+
+  it('moves focus for a new subtitle when there is no reveal key', () => {
+    const notification = (subtitle: string) => (
+      <>
+        <input aria-label="Contact name" />
+        <AppNotification kind="error" title="Validation error" subtitle={subtitle} focusOnReveal />
+      </>
+    )
+    const { rerender } = render(notification('Applicant tab'))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    const field = screen.getByRole('textbox', { name: 'Contact name' })
+    field.focus()
+
+    rerender(notification('Applicant tab'))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(field).toHaveFocus()
+
+    rerender(notification('Scale tab'))
+    act(() => frames.splice(0).forEach((callback) => callback(0)))
+    expect(screen.getByRole('status')).toHaveFocus()
+  })
+
   it('does not move focus to page validation behind an open dialog', () => {
     render(
       <>

@@ -518,19 +518,27 @@ function ProvincialApplicationItemsPanel({
   const scaleLauncherRef = useRef<HTMLElement>(null)
   const drawerFormRef = useRef<HTMLDivElement>(null)
   const [serverFieldErrors, setServerFieldErrors] = useState<FieldErrors<ApplicationItemField>>({})
-  const focusFirstDrawerError = () =>
-    requestAnimationFrame(() => {
-      const form = drawerFormRef.current
-      const invalid = form?.querySelector<HTMLElement>(
-        '[aria-invalid="true"], [data-invalid="true"]',
-      )
-      const control = invalid?.matches('input, textarea, button')
-        ? invalid
-        : invalid?.querySelector<HTMLElement>('input, textarea, button')
-      const target = control ?? form?.querySelector<HTMLElement>('[data-drawer-error]')
-      target?.focus()
-      target?.scrollIntoView({ block: 'nearest' })
-    })
+  const focusFirstDrawerError = useCallback(
+    () =>
+      requestAnimationFrame(() => {
+        const form = drawerFormRef.current
+        const invalid = form?.querySelector<HTMLElement>(
+          '[aria-invalid="true"], [data-invalid="true"]',
+        )
+        const control = invalid?.matches('input, textarea, button')
+          ? invalid
+          : invalid?.querySelector<HTMLElement>('input, textarea, button')
+        const target = control ?? form?.querySelector<HTMLElement>('[data-drawer-error]')
+        target?.focus()
+        target?.scrollIntoView({ block: 'nearest' })
+      }),
+    [],
+  )
+  const [drawerErrorFocusRequest, setDrawerErrorFocusRequest] = useState(0)
+  const lastHandledDrawerErrorFocusRequestRef = useRef(0)
+  // The drawer's fields stay disabled while a save runs, so a refused or failed save asks for focus
+  // here and the effect below moves it once the saving state has cleared.
+  const requestDrawerErrorFocus = () => setDrawerErrorFocusRequest((current) => current + 1)
   const [packageBaselineForm, setPackageBaselineForm] = useState<PackageFormState>(() =>
     emptyPackageForm(productTypeCode, applicationGrowthTypeCode, applicationEndUseCode),
   )
@@ -661,6 +669,14 @@ function ProvincialApplicationItemsPanel({
     packageDataAvailability.scales
   const packageScalesUnavailable =
     packageDataAvailability.details && !packageDataAvailability.scales && !itemsLoading
+
+  useEffect(() => {
+    if (itemsBusy || drawerErrorFocusRequest === lastHandledDrawerErrorFocusRequestRef.current) {
+      return
+    }
+    lastHandledDrawerErrorFocusRequestRef.current = drawerErrorFocusRequest
+    focusFirstDrawerError()
+  }, [drawerErrorFocusRequest, focusFirstDrawerError, itemsBusy])
 
   useEffect(() => {
     onDirtyChange?.(itemsDirty)
@@ -1416,7 +1432,7 @@ function ProvincialApplicationItemsPanel({
         )
         setServerFieldErrors(fieldErrors)
         showItemActionError(otherMessages.join(' '), 'Package not saved')
-        focusFirstDrawerError()
+        requestDrawerErrorFocus()
         return
       }
 
@@ -1442,7 +1458,7 @@ function ProvincialApplicationItemsPanel({
       }
     } catch {
       showItemActionError('Unable to save package details.', 'Package not saved')
-      focusFirstDrawerError()
+      requestDrawerErrorFocus()
     } finally {
       setIsSavingPackage(false)
     }
@@ -1504,7 +1520,7 @@ function ProvincialApplicationItemsPanel({
         )
         setServerFieldErrors(fieldErrors)
         showItemActionError(otherMessages.join(' '), 'Package not created')
-        focusFirstDrawerError()
+        requestDrawerErrorFocus()
         return
       }
 
@@ -1528,7 +1544,7 @@ function ProvincialApplicationItemsPanel({
       }
     } catch {
       showItemActionError('Unable to create package.', 'Package not created')
-      focusFirstDrawerError()
+      requestDrawerErrorFocus()
     } finally {
       setIsSavingPackage(false)
     }
@@ -1627,7 +1643,7 @@ function ProvincialApplicationItemsPanel({
         )
         setServerFieldErrors(fieldErrors)
         showItemActionError(otherMessages.join(' '), 'Scale not saved')
-        focusFirstDrawerError()
+        requestDrawerErrorFocus()
         return
       }
 
@@ -1650,7 +1666,7 @@ function ProvincialApplicationItemsPanel({
       }
     } catch {
       setScaleActionErrorMessage('Unable to add scale.')
-      focusFirstDrawerError()
+      requestDrawerErrorFocus()
     } finally {
       setIsSavingScale(false)
     }
