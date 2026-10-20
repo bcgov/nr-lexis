@@ -4576,28 +4576,31 @@ test.describe('TEST IDIR admin regression', () => {
           await expect(
             statusOptions.getByRole('radio', { name: 'Expired', exact: true }),
           ).toHaveCount(0)
-          await review.locator('label[for="applicationDetailReviewStatus-REJ"]').click()
-          await review.locator('#applicationDetailReviewRemark').fill(regressionEmailRemark)
-          await updateStatus.click()
-
           const disapproval = page.getByRole('dialog', {
             name: `Disapprove application ${offerApplicationNumber}`,
             exact: true,
           })
-          await expect(
-            disapproval.getByRole('checkbox', { name: 'Send disapproval email', exact: true }),
-          ).toBeChecked()
-          await expect(
-            disapproval.getByRole('combobox', { name: 'Application status', exact: true }),
-          ).toHaveValue(rejectedLabel)
-          await expect(disapproval.getByLabel('Remark', { exact: true })).toHaveValue(
-            regressionEmailRemark,
-          )
-          await disapproval.getByRole('button', { name: 'Cancel', exact: true }).click()
-          await expect(disapproval).toHaveCount(0)
-          await expect(
-            review.getByRole('radio', { name: rejectedLabel, exact: true }),
-          ).toBeChecked()
+          for (const [statusCode, statusName] of [
+            ['REJ', rejectedLabel],
+            ['WDN', withdrawnLabel],
+          ] as const) {
+            await review.locator(`label[for="applicationDetailReviewStatus-${statusCode}"]`).click()
+            await review.locator('#applicationDetailReviewRemark').fill(regressionEmailRemark)
+            await updateStatus.click()
+
+            await expect(
+              disapproval.getByRole('checkbox', { name: 'Send disapproval email', exact: true }),
+            ).toBeChecked()
+            await expect(
+              disapproval.getByRole('combobox', { name: 'Application status', exact: true }),
+            ).toHaveValue(statusName)
+            await expect(disapproval.getByLabel('Remark', { exact: true })).toHaveValue(
+              regressionEmailRemark,
+            )
+            await disapproval.getByRole('button', { name: 'Cancel', exact: true }).click()
+            await expect(disapproval).toHaveCount(0)
+            await expect(review.getByRole('radio', { name: statusName, exact: true })).toBeChecked()
+          }
           await review.getByRole('button', { name: 'Cancel', exact: true }).click()
           await page
             .getByRole('dialog', { name: 'Discard changes?', exact: true })
@@ -4902,15 +4905,15 @@ test.describe('TEST IDIR admin regression', () => {
       const permitCleanup = cleanup.defer('cancel provincial permit', async () => {
         // Cancelling returns only the applications on an active or completed permit to exempted,
         // so a Payment pending permit is made active first, and a permitted application removed
-        // from an active permit is added back.
-        const current = await readPermitVersionedJson<Record<string, unknown>>(page, permitNumber)
-        const status = String(current.payload.permitStatusCode ?? '').toUpperCase()
-        const onPermit = await permitContainsApplication(
-          page,
-          permitNumber,
-          lifecycleApplicationNumber,
-        )
+        // from an active permit is added back. The permit is cancelled even if these steps fail.
         try {
+          const current = await readPermitVersionedJson<Record<string, unknown>>(page, permitNumber)
+          const status = String(current.payload.permitStatusCode ?? '').toUpperCase()
+          const onPermit = await permitContainsApplication(
+            page,
+            permitNumber,
+            lifecycleApplicationNumber,
+          )
           if (status === 'PPD' && onPermit) {
             await reactivateRegressionPermit(page, permitNumber, lifecycleMarker, schedule.shipping)
           } else if (status === 'ACT' && !onPermit) {
