@@ -1728,6 +1728,7 @@ const RtmEmsLogAmvUploadPage = () => {
         <ConfirmationModal
           open
           launcherButtonRef={discardConfirmation === 'file' ? removeFileButtonRef : cancelButtonRef}
+          restoreFocusAfterAction={discardConfirmation !== 'saved-changes'}
           title={
             discardConfirmation === 'file'
               ? 'Are you sure you want to remove this file?'

@@ -24,6 +24,11 @@ type ConfirmationModalProps = {
   size?: 'xs' | 'sm' | 'md' | 'lg'
   className?: string
   launcherButtonRef?: RefObject<HTMLElement | null>
+  /**
+   * False when confirming or cancelling moves focus itself, so the dialog leaves focus alone.
+   * Closing with the X button or Escape still returns focus.
+   */
+  restoreFocusAfterAction?: boolean
   errorTitle?: string
   errorMessage?: string
   onConfirm: () => Promise<void> | void
@@ -51,6 +56,7 @@ const ConfirmationModal = ({
   size = 'sm',
   className,
   launcherButtonRef,
+  restoreFocusAfterAction = true,
   errorTitle = 'Action failed',
   errorMessage,
   onConfirm,
@@ -90,12 +96,11 @@ const ConfirmationModal = ({
   }, [description, descriptionId, open])
 
   // Without a launcherButtonRef, dismissing the dialog returns focus to the control that opened it.
-  const closeAndRestoreFocus = (dismissed: boolean) => {
-    const launcherButton = launcherButtonRef
-      ? launcherButtonRef.current
-      : dismissed
-        ? openerRef.current
-        : null
+  const returnTarget = (dismissed: boolean) =>
+    launcherButtonRef ? launcherButtonRef.current : dismissed ? openerRef.current : null
+
+  const closeAndRestoreFocus = (dismissed: boolean, byAction = false) => {
+    const launcherButton = byAction && !restoreFocusAfterAction ? null : returnTarget(dismissed)
     onClose()
     if (launcherButton) {
       window.setTimeout(() => launcherButton.focus())
@@ -117,7 +122,7 @@ const ConfirmationModal = ({
     if (pending) return
     clearFailure()
     onCancel?.()
-    closeAndRestoreFocus(true)
+    closeAndRestoreFocus(true, true)
   }
 
   const confirm = async () => {
@@ -130,7 +135,7 @@ const ConfirmationModal = ({
     try {
       await onConfirm()
       setFailedAttempts(0)
-      closeAndRestoreFocus(false)
+      closeAndRestoreFocus(false, true)
     } catch (error) {
       setFailedAttempts((attempts) => attempts + 1)
       if (onError) {

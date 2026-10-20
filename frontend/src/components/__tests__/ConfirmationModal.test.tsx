@@ -1,6 +1,6 @@
 import { within, act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { afterEach, beforeEach, vi } from 'vitest'
 
 import ConfirmationModal from '@/components/ConfirmationModal'
@@ -274,6 +274,62 @@ describe('ConfirmationModal', () => {
       )
     },
   )
+
+  describe('when confirming or cancelling moves focus itself', () => {
+    const settleTimers = () => act(() => new Promise((resolve) => setTimeout(resolve, 30)))
+
+    const EditValues = () => {
+      const launcherRef = useRef<HTMLButtonElement>(null)
+      const [open, setOpen] = useState(false)
+      return (
+        <>
+          <button ref={launcherRef} type="button" onClick={() => setOpen(true)}>
+            Edit values
+          </button>
+          {open && (
+            <ConfirmationModal
+              open
+              title="Discard values?"
+              launcherButtonRef={launcherRef}
+              restoreFocusAfterAction={false}
+              onConfirm={vi.fn()}
+              onClose={() => setOpen(false)}
+            />
+          )}
+        </>
+      )
+    }
+
+    const openDialog = async () => {
+      await userEvent.click(screen.getByRole('button', { name: 'Edit values' }))
+      await screen.findByRole('dialog', { name: 'Discard values?' })
+    }
+
+    it.each(['Cancel', 'Confirm'])('leaves focus alone after %s', async (action) => {
+      render(<EditValues />)
+      await openDialog()
+
+      await userEvent.click(screen.getByRole('button', { name: action }))
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Discard values?' })).not.toBeInTheDocument(),
+      )
+      await settleTimers()
+
+      expect(screen.getByRole('button', { name: 'Edit values' })).not.toHaveFocus()
+    })
+
+    it('still returns focus to the launcher after Escape', async () => {
+      render(<EditValues />)
+      await openDialog()
+
+      await userEvent.keyboard('{Escape}')
+
+      await waitFor(() =>
+        expect(screen.queryByRole('dialog', { name: 'Discard values?' })).not.toBeInTheDocument(),
+      )
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Edit values' })).toHaveFocus())
+    })
+  })
 
   describe('focus', () => {
     beforeEach(() => {

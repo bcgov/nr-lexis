@@ -1831,33 +1831,74 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       expect(orderOf()).toEqual(['Save values', 'Cancel'])
     })
 
-    it('moves focus to the result notice after Save changes in the saved-changes dialog', async () => {
-      const visibleRects = vi
-        .spyOn(HTMLElement.prototype, 'getClientRects')
-        .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
-      onTestFinished(() => visibleRects.mockRestore())
-      const { nextMonth } = mockSavedValues()
-      await renderUploadPage()
-      const value = screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
-      await userEvent.clear(value)
-      await userEvent.type(value, '80.10')
+    describe.each([
+      ['after the dialog timers', false],
+      ['before the dialog timers', true],
+    ])('when the next frame runs %s', (_order, framesFirst) => {
+      beforeEach(() => {
+        const visibleRects = vi
+          .spyOn(HTMLElement.prototype, 'getClientRects')
+          .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+        onTestFinished(() => visibleRects.mockRestore())
+        if (framesFirst) {
+          let frameId = 0
+          const frames = vi
+            .spyOn(window, 'requestAnimationFrame')
+            .mockImplementation((callback) => {
+              queueMicrotask(() => callback(performance.now()))
+              return ++frameId
+            })
+          onTestFinished(() => frames.mockRestore())
+        }
+      })
 
-      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-      await userEvent.click(
-        within(screen.getByRole('dialog', { name: 'Discard these values?' })).getByRole('button', {
-          name: 'Save changes',
-        }),
-      )
+      const settleDialogTimers = () => act(() => new Promise((resolve) => setTimeout(resolve, 50)))
 
-      const saved = await screen.findByText('Values saved')
-      await waitFor(() => expect(saved.closest('.app-inline-notification')).toHaveFocus())
+      it('moves focus to the result notice after Save changes in the saved-changes dialog', async () => {
+        const { nextMonth } = mockSavedValues()
+        await renderUploadPage()
+        const value = screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
+        await userEvent.clear(value)
+        await userEvent.type(value, '80.10')
+
+        await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+        await userEvent.click(
+          within(screen.getByRole('dialog', { name: 'Discard these values?' })).getByRole(
+            'button',
+            { name: 'Save changes' },
+          ),
+        )
+
+        const saved = await screen.findByText('Values saved')
+        await waitFor(() => expect(saved.closest('.app-inline-notification')).toHaveFocus())
+        await settleDialogTimers()
+        expect(saved.closest('.app-inline-notification')).toHaveFocus()
+      })
+
+      it('moves focus to the Changes discarded notice after Discard values', async () => {
+        const { nextMonth } = mockSavedValues()
+        await renderUploadPage()
+        const value = screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
+        await userEvent.clear(value)
+        await userEvent.type(value, '80.10')
+
+        await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+        await userEvent.click(
+          within(screen.getByRole('dialog', { name: 'Discard these values?' })).getByRole(
+            'button',
+            { name: 'Discard values' },
+          ),
+        )
+
+        const discarded = await screen.findByText('Changes discarded')
+        await waitFor(() => expect(discarded.closest('.app-inline-notification')).toHaveFocus())
+        await settleDialogTimers()
+        expect(discarded.closest('.app-inline-notification')).toHaveFocus()
+        expect(value).toHaveValue('78.14')
+      })
     })
 
-    it('moves focus to the Changes discarded notice after Discard values', async () => {
-      const visibleRects = vi
-        .spyOn(HTMLElement.prototype, 'getClientRects')
-        .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
-      onTestFinished(() => visibleRects.mockRestore())
+    it('returns focus to Cancel when the saved-changes dialog is closed with Escape', async () => {
       const { nextMonth } = mockSavedValues()
       await renderUploadPage()
       const value = screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
@@ -1865,15 +1906,15 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       await userEvent.type(value, '80.10')
 
       await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-      await userEvent.click(
-        within(screen.getByRole('dialog', { name: 'Discard these values?' })).getByRole('button', {
-          name: 'Discard values',
-        }),
-      )
+      await screen.findByRole('dialog', { name: 'Discard these values?' })
+      await userEvent.keyboard('{Escape}')
 
-      const discarded = await screen.findByText('Changes discarded')
-      await waitFor(() => expect(discarded.closest('.app-inline-notification')).toHaveFocus())
-      expect(value).toHaveValue('78.14')
+      await waitFor(() =>
+        expect(
+          screen.queryByRole('dialog', { name: 'Discard these values?' }),
+        ).not.toBeInTheDocument(),
+      )
+      await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus())
     })
   })
 })
