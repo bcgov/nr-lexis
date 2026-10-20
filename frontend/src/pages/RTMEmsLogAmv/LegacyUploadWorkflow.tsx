@@ -516,6 +516,18 @@ const reviewValueWarning = (
   return null
 }
 
+// The species and grade cells on screen that hold a value, blank cells excluded.
+const enteredReviewValues = (
+  previewResult: RtmEmsLogAmvUploadPreview,
+  reviewValues: Record<string, string>,
+) =>
+  RTM_REVIEW_SPECIES_COLUMNS.flatMap((column) =>
+    buildSpeciesReviewRows(previewResult.rows, column).flatMap((row) => {
+      const value = parseReviewValue(reviewValues[row.key] ?? '')
+      return typeof value === 'number' ? [{ species: column.key, grade: row.grade, value }] : []
+    }),
+  )
+
 const buildReviewedSaveRequests = (
   previewResult: RtmEmsLogAmvUploadPreview,
   reviewValues: Record<string, string>,
@@ -532,11 +544,8 @@ const buildReviewedSaveRequests = (
     saveMode: 'update',
   })
 
-  const visibleValues = RTM_REVIEW_SPECIES_COLUMNS.flatMap((column) =>
-    buildSpeciesReviewRows(previewResult.rows, column).flatMap((row) => {
-      const value = parseReviewValue(reviewValues[row.key] ?? '')
-      return typeof value === 'number' ? [request(column.key, row.grade, value)] : []
-    }),
+  const visibleValues = enteredReviewValues(previewResult, reviewValues).map(
+    ({ species, grade, value }) => request(species, grade, value),
   )
   const fixedValues = RTM_REVIEW_SPECIES_COLUMNS.flatMap((column) =>
     RTM_FIXED_GRADES.map((grade) => request(column.key, grade, 1)),
@@ -544,6 +553,9 @@ const buildReviewedSaveRequests = (
 
   return [...visibleValues, ...fixedValues]
 }
+
+const savedValuesMessage = (valueCount: number, effectiveStartDate: string) =>
+  `${valueCount === 1 ? '1 value will' : `${valueCount} values will`} take effect on ${effectiveStartDate}.`
 
 const RejectedUploadFile = ({
   fileName,
@@ -819,7 +831,7 @@ const ReviewUploadContent = ({
         lowContrast
         hideCloseButton
         title="Fixed values are not shown here"
-        subtitle="Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit Fees tab."
+        subtitle="Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit invoice."
       />
     </section>
   )
@@ -1156,7 +1168,7 @@ const RtmEmsLogAmvUploadPage = () => {
         setSavedPreviewResult(savedPreview)
         setReviewValues(savedValues)
         setSavedReviewValues(savedValues)
-        setSavedUploadState({ valueCount: savedRows.length })
+        setSavedUploadState({ valueCount: enteredReviewValues(savedPreview, savedValues).length })
         setLastSaved(savedAudit)
         setUploadStep('review')
         setIsCheckingSavedValues(false)
@@ -1258,7 +1270,7 @@ const RtmEmsLogAmvUploadPage = () => {
         setSavedReviewValues({ ...reviewValues })
         setSavedPreviewResult(previewResult)
         setSavedUploadState({
-          valueCount: saveRequests.length,
+          valueCount: enteredReviewValues(previewResult, reviewValues).length,
         })
         setLastSaved(result.lastSaved ?? null)
         setSavedNotification('saved')
@@ -1575,7 +1587,10 @@ const RtmEmsLogAmvUploadPage = () => {
             subtitle={
               savedNotification === 'discarded'
                 ? 'Values are back to your last save.'
-                : `They take effect on ${formatEffectiveStartDate(effectiveMonth)}.`
+                : savedValuesMessage(
+                    savedUploadState.valueCount,
+                    formatEffectiveStartDate(effectiveMonth),
+                  )
             }
             onCloseButtonClick={() => setSavedNotification(null)}
           />

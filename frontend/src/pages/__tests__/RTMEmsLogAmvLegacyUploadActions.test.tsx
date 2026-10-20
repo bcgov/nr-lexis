@@ -1,4 +1,4 @@
-import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest'
@@ -312,6 +312,69 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       ]),
     )
     expect(screen.getByText('Values saved')).toBeVisible()
+    expect(screen.getByText(/^1 value will take effect on [A-Z][a-z]+ 1, \d{4}\.$/)).toBeVisible()
+  })
+
+  it('counts the cells on screen the same after a save and after a reload', async () => {
+    const nextMonth = monthOffset(`${formatBusinessIsoDate().slice(0, 7)}-01`, 1)
+    const comparisonMonth = monthOffset(nextMonth, -1)
+    const row = (
+      species: string,
+      grade: string,
+      currentValue: number | null,
+      newValue: number | null,
+      growthIndicator = 'O',
+    ) => ({
+      species,
+      grade,
+      growthIndicator,
+      retrievalDate: comparisonMonth,
+      updateDate: nextMonth,
+      currentValue,
+      newValue,
+      returnCode: '0',
+    })
+    mockedPreviewUpload.mockResolvedValue({
+      status: 'accepted',
+      fileName: 'test-2026-10-20.xlsx',
+      fileSize: 1,
+      message: 'Spreadsheet is valid.',
+      rowCount: 3,
+      retrievalDate: comparisonMonth,
+      updateDate: nextMonth,
+      errors: [],
+      warnings: [],
+      rows: [row('BA', 'D', 75.29, 78.14), row('HE', 'B', null, 120), row('CE', 'B', 200, null)],
+    })
+    await renderUploadPage()
+    await userEvent.upload(
+      screen.getByLabelText('Average market values spreadsheet'),
+      spreadsheetFile('test-2026-10-20.xlsx'),
+    )
+    await userEvent.click(await screen.findByRole('button', { name: 'Save values' }))
+
+    const afterSave = /^2 values will take effect on [A-Z][a-z]+ 1, \d{4}\.$/
+    expect(await screen.findByText(afterSave)).toBeVisible()
+    expect(mockedSaveBatch.mock.calls[0][0].values.length).toBeGreaterThan(2)
+    cleanup()
+
+    mockedSearch.mockReset()
+    mockedSearch.mockResolvedValueOnce([
+      row('BA', 'D', 78.14, 78.14),
+      row('BA', 'D', 78.14, 78.14, 'S'),
+      row('BA', 'Z', 1, 1),
+      row('BA', 'BLANK', 1, 1),
+      row('HE', 'B', 120, 120),
+      row('HE', 'Z', 1, 1),
+    ])
+    mockedSearch.mockResolvedValueOnce([row('BA', 'D', 75.29, 75.29)])
+    await renderUploadPage()
+    const value = await screen.findByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
+    await userEvent.clear(value)
+    await userEvent.type(value, '79.25')
+    await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
+
+    expect(await screen.findByText(afterSave)).toBeVisible()
   })
 
   it('asks before leaving the page with edited saved values', async () => {
@@ -1157,7 +1220,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByText('Fixed values are not shown here')).toBeVisible()
     expect(
       screen.getByText(
-        'Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit Fees tab.',
+        'Grades Z, BLANK and 1 to 6 are always $1.00 per cubic metre. They are saved automatically and appear on the permit invoice.',
       ),
     ).toBeVisible()
     expect(screen.getByRole('button', { name: 'Save values' })).toBeEnabled()
@@ -1207,7 +1270,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const savedBanner = savedBannerTitle.closest('.cds--inline-notification') as HTMLElement
     expect(savedBanner).toHaveClass('cds--inline-notification--success')
     expect(document.querySelector('.rtm-amv-values-content')).toContainElement(savedBanner)
-    expect(screen.getByText(/They take effect on [A-Z][a-z]+ 1, \d{4}\./)).toBeVisible()
+    expect(screen.getByText(/^3 values will take effect on [A-Z][a-z]+ 1, \d{4}\.$/)).toBeVisible()
     expect(screen.getByText('Last saved')).toBeVisible()
     expect(screen.getByText('August 11, 2026, 6:21 PM by IDIR\\MGURJAOD')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()
