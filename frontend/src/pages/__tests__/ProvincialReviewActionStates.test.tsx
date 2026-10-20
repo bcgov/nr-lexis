@@ -520,9 +520,25 @@ describe('Application review', () => {
 
       expect(screen.getByText('Searching')).toBeInTheDocument()
       const skeleton = screen.getByRole('table', { name: 'Searching' })
-      // Application, Status, volume, species, List date and Region; no selection or actions.
-      expect(within(skeleton).getAllByRole('columnheader')).toHaveLength(6)
+      // Application, Status, volume, species, List date, Region and Actions; no selection column.
+      expect(within(skeleton).getAllByRole('columnheader')).toHaveLength(7)
       expect(container.querySelectorAll('.legacy-search-table-toolbar')).toHaveLength(1)
+    })
+
+    it('leaves the Actions column out of the skeleton for a user who cannot approve', async () => {
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          canPerform: (action: string) =>
+            action === '/applicationSearch' || action === '/applicationDetails',
+        }),
+      )
+      mockedSearchApplicationReviews.mockReturnValueOnce(new Promise(() => {}))
+
+      renderPage()
+      await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1))
+
+      const skeleton = screen.getByRole('table', { name: 'Searching' })
+      expect(within(skeleton).getAllByRole('columnheader')).toHaveLength(6)
     })
 
     it('shows the count in the toolbar and the pagination only', async () => {

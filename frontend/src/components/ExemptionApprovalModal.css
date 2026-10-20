@@ -29,6 +29,10 @@
   display: grid;
   gap: 1rem;
 }
+.exemption-approval-modal__recipient--loading {
+  min-block-size: 4.625rem;
+  align-content: center;
+}
 .exemption-approval-modal__recipient--batch {
   grid-template-columns: 5rem minmax(0, 1fr);
   align-items: start;
@@ -49,6 +53,10 @@
   grid-template-columns: minmax(0, 1fr) 9rem;
   gap: 1rem;
   align-items: start;
+}
+/* The ghost button's label sits on the first email line instead of the middle of its height. */
+.exemption-approval-modal__recipient-summary > .cds--btn {
+  margin-block-start: calc((1.375rem - 2.5rem) / 2);
 }
 .exemption-approval-modal__recipient dl {
   display: grid;
@@ -93,6 +101,13 @@
   .exemption-approval-modal__recipient-summary {
     grid-template-columns: minmax(0, 1fr);
   }
+  .exemption-approval-modal__recipient-summary > .cds--btn {
+    margin-block-start: 0;
+  }
+}
+
+.lexis-record-number {
+  white-space: nowrap;
 }
 
 .exemption-approval-modal .exemption-approval-modal__actions {

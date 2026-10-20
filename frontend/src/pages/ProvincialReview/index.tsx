@@ -973,7 +973,7 @@ const ProvincialReviewPage = () => {
             resultName="application"
             loading={resultsLoading}
             loadingDescription="Searching"
-            columnCount={RESULT_COLUMNS.length}
+            columnCount={RESULT_COLUMNS.length + (canApproveApplications ? 1 : 0)}
             totalItems={
               errorMessage || (resultsLoading && results.content.length === 0)
                 ? undefined

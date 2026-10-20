@@ -503,6 +503,136 @@ describe('ExemptionApprovalModal', () => {
     expect(onApprove).not.toHaveBeenCalled()
   })
 
+  it("links a single approval's recipient inputs to the missing-address error", async () => {
+    const user = userEvent.setup()
+    vi.mocked(fetchExemptionApprovalRecipients).mockResolvedValue([
+      preview({ ownerEmail: '', agentEmail: '' }),
+    ])
+    render(
+      <ExemptionApprovalModal
+        exemptionNumbers={['EX-205']}
+        onApprove={vi.fn()}
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    const owner = await screen.findByRole('textbox', { name: 'Owner email' })
+    const agent = screen.getByRole('textbox', { name: 'Agent email' })
+    expect(owner).not.toHaveAttribute('aria-invalid')
+    await user.click(screen.getByRole('checkbox', { name: /I certify/ }))
+    await user.click(screen.getByRole('button', { name: 'Approve and send email' }))
+
+    const error = screen
+      .getByText(
+        'Enter at least one email, or clear “Send approval email” to notify the applicant another way.',
+      )
+      .closest('[role="alert"]') as HTMLElement
+    for (const input of [owner, agent]) {
+      expect(input).toHaveAttribute('aria-invalid', 'true')
+      const describedBy = (input.getAttribute('aria-describedby') ?? '').split(' ')
+      expect(describedBy).toContain(error.id)
+      const helper = describedBy.find((id) => id.endsWith('-helper-text'))
+      expect(document.getElementById(helper ?? '')).toHaveTextContent(
+        'No email on file. The email you enter applies to this approval only.',
+      )
+    }
+
+    // The failed submit moves focus to the first address once the frame is drawn.
+    await waitFor(() => expect(owner).toHaveFocus())
+    await user.type(agent, 'agent@example.com')
+    await waitFor(() => expect(error).not.toBeInTheDocument())
+    for (const input of [owner, agent]) {
+      expect(input).not.toHaveAttribute('aria-invalid')
+      expect(input.getAttribute('aria-describedby') ?? '').not.toContain(error.id)
+    }
+  })
+
+  it("links a batch row's recipient inputs to that row's error only", async () => {
+    const user = userEvent.setup()
+    vi.mocked(fetchExemptionApprovalRecipients).mockResolvedValue([
+      preview(),
+      preview({ exemptionNumber: 'EX-206', ownerEmail: '', agentEmail: '' }),
+    ])
+    render(
+      <ExemptionApprovalModal
+        exemptionNumbers={['EX-205', 'EX-206']}
+        onApprove={vi.fn()}
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    const emptyRow = await screen.findByRole('region', { name: 'Recipients for exemption EX-206' })
+    await user.click(screen.getByRole('checkbox', { name: /I certify/ }))
+    await user.click(screen.getByRole('button', { name: 'Approve and send emails' }))
+
+    const error = within(emptyRow)
+      .getByText('Enter at least one email address, or clear “Send approval emails”.')
+      .closest('[role="alert"]') as HTMLElement
+    const owner = within(emptyRow).getByRole('textbox', { name: 'Owner email' })
+    expect(owner).toHaveAttribute('aria-invalid', 'true')
+    expect(owner.getAttribute('aria-describedby')).toContain(error.id)
+    const filledRow = screen.getByRole('region', { name: 'Recipients for exemption EX-205' })
+    expect(within(filledRow).queryByRole('textbox')).not.toBeInTheDocument()
+
+    await waitFor(() => expect(owner).toHaveFocus())
+    await user.type(owner, 'owner@example.com')
+    expect(owner).not.toHaveAttribute('aria-invalid')
+    expect(owner.getAttribute('aria-describedby') ?? '').not.toContain(error.id)
+    expect(error).not.toBeInTheDocument()
+  })
+
+  it('holds the recipient section open while the recipients load', async () => {
+    let finishLoad: (value: ExemptionApprovalRecipientPreview[]) => void = () => undefined
+    vi.mocked(fetchExemptionApprovalRecipients).mockReturnValueOnce(
+      new Promise((resolve) => {
+        finishLoad = resolve
+      }),
+    )
+    render(
+      <ExemptionApprovalModal
+        exemptionNumbers={['EX-205']}
+        onApprove={vi.fn()}
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'Approve exemption EX-205' })
+    const placeholder = dialog.querySelector('.exemption-approval-modal__recipient--loading')
+    expect(placeholder).not.toBeNull()
+    expect(placeholder).toHaveAttribute('aria-busy', 'true')
+    expect(
+      within(placeholder as HTMLElement).getByText('Loading approval recipients…'),
+    ).toBeInTheDocument()
+
+    finishLoad(contacts)
+    expect(await screen.findByText('owner@example.com')).toBeInTheDocument()
+    expect(dialog.querySelector('.exemption-approval-modal__recipient--loading')).toBeNull()
+  })
+
+  it('keeps a single exemption number together in the visible title', async () => {
+    vi.mocked(fetchExemptionApprovalRecipients).mockResolvedValue([
+      preview({ exemptionNumber: '26-8874' }),
+    ])
+    render(
+      <ExemptionApprovalModal
+        exemptionNumbers={['26-8874']}
+        onApprove={vi.fn()}
+        onComplete={vi.fn()}
+        onClose={vi.fn()}
+      />,
+    )
+
+    const dialog = screen.getByRole('dialog', { name: 'Approve exemption 26-8874' })
+    const heading = within(dialog).getByRole('heading', { name: 'Approve exemption 26-8874' })
+    const number = heading.querySelector('.lexis-record-number')
+    expect(number).toHaveTextContent('26-8874')
+    expect(heading).toHaveTextContent(/^Approve exemption 26-8874$/)
+    await screen.findByText('owner@example.com')
+  })
+
   it('retries only failed notifications and shows why they were not queued', async () => {
     const user = userEvent.setup()
     const rows = [
