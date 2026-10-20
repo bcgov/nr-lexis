@@ -84,6 +84,7 @@ vi.mock('@/service/lexis-detail-service', () => ({
 vi.mock('@/service/provincial-permit-detail-tabs-service', () => ({
   EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS: {
     applications: [],
+    applicationTotals: [],
     packages: [],
     items: [],
     fees: [],
@@ -309,6 +310,7 @@ const permitDetail: ProvincialPermitDetail = {
 
 const tabsResult: ProvincialPermitDetailTabsData = {
   applications: [],
+  applicationTotals: [],
   packages: [],
   items: [],
   fees: [],
