@@ -1,0 +1,12 @@
+.remark-text-area {
+  position: relative;
+  min-inline-size: 0;
+}
+
+// The counter sits opposite the label, where the text area's own counter would.
+.remark-text-area__counter {
+  position: absolute;
+  inset-block-start: 0;
+  inset-inline-end: 0;
+  margin-block-end: 0;
+}

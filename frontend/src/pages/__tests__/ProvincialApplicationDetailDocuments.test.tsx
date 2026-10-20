@@ -595,7 +595,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
     const openDocumentButton = within(documentRow as HTMLElement).getByRole('button', {
-      name: 'Open',
+      name: /^Open /,
     })
     await userEvent.click(openDocumentButton)
 
@@ -608,7 +608,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(triggerBrowserDownload).not.toHaveBeenCalled()
 
     await userEvent.click(
-      within(documentRow as HTMLElement).getByRole('button', { name: 'Download' }),
+      within(documentRow as HTMLElement).getByRole('button', { name: /^Download / }),
     )
     await waitFor(() =>
       expect(triggerBrowserDownload).toHaveBeenCalledWith(expect.any(Blob), 'app-doc.pdf'),
@@ -648,7 +648,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
     await selectApplicationDetailTab('Documents')
-    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Open / }))
     await userEvent.click(screen.getByRole('button', { name: 'Navigate application' }))
     await waitFor(() => expect(previewTarget.close).toHaveBeenCalledTimes(1))
     await act(async () => {
@@ -677,7 +677,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
       </MemoryRouter>,
     )
     await selectApplicationDetailTab('Documents')
-    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    await userEvent.click(await screen.findByRole('button', { name: /^Open / }))
     expect(await screen.findByText('Unable to open the selected document.')).toBeInTheDocument()
     expect(previewTarget.close).toHaveBeenCalledTimes(1)
     expect(openDocumentPreview).not.toHaveBeenCalled()
@@ -717,7 +717,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
     const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
-      name: 'Delete',
+      name: /^Delete /,
     })
     expect(deleteButton).toBeEnabled()
     await userEvent.click(deleteButton)
@@ -774,7 +774,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(documentRow).toBeTruthy()
     await userEvent.click(
       within(documentRow as HTMLElement).getByRole('button', {
-        name: 'Delete',
+        name: /^Delete /,
       }),
     )
 
@@ -823,7 +823,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(documentRow).toBeTruthy()
     expect(within(documentRow as HTMLElement).getByText('Permit')).toBeInTheDocument()
     expect(
-      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+      within(documentRow as HTMLElement).queryByRole('button', { name: /^Delete / }),
     ).not.toBeInTheDocument()
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
   })
@@ -865,7 +865,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
     const deleteButton = within(documentRow as HTMLElement).getByRole('button', {
-      name: 'Delete',
+      name: /^Delete /,
     })
     expect(deleteButton).toBeEnabled()
   })
@@ -910,7 +910,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(documentRow).toBeTruthy()
     expect(
       within(documentRow as HTMLElement).getByRole('button', {
-        name: 'Delete',
+        name: /^Delete /,
       }),
     ).toBeEnabled()
   })
@@ -979,7 +979,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(documentRow).toBeTruthy()
     await userEvent.click(
       within(documentRow as HTMLElement).getByRole('button', {
-        name: 'Delete',
+        name: /^Delete /,
       }),
     )
     const deleteDialog = await screen.findByRole('dialog', {
@@ -1049,7 +1049,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(documentRow).toBeTruthy()
     expect(
       within(documentRow as HTMLElement).queryByRole('button', {
-        name: 'Delete',
+        name: /^Delete /,
       }),
     ).not.toBeInTheDocument()
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
@@ -1089,7 +1089,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(documentRow).toBeTruthy()
     expect(
       within(documentRow as HTMLElement).getByRole('button', {
-        name: 'Delete',
+        name: /^Delete /,
       }),
     ).toBeEnabled()
   })
@@ -1132,7 +1132,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     expect(documentRow).toBeTruthy()
     expect(
       within(documentRow as HTMLElement).queryByRole('button', {
-        name: 'Delete',
+        name: /^Delete /,
       }),
     ).not.toBeInTheDocument()
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
@@ -1171,7 +1171,7 @@ describe.sequential('Provincial Application Detail Actions - documents', () => {
     const documentRow = documentName.closest('tr')
     expect(documentRow).toBeTruthy()
     expect(
-      within(documentRow as HTMLElement).queryByRole('button', { name: 'Delete' }),
+      within(documentRow as HTMLElement).queryByRole('button', { name: /^Delete / }),
     ).not.toBeInTheDocument()
     expect(mockedRemoveApplicationDocument).not.toHaveBeenCalled()
   })

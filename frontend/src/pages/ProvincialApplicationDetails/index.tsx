@@ -154,6 +154,7 @@ import {
   requiredMaxLengthFieldError,
   type FieldErrors,
 } from '@/pages/shared/create-form-utils'
+import { RemarkTextArea } from '@/pages/shared/RemarkTextArea'
 import { storedRemarkLengthError } from '@/pages/shared/remark-storage'
 import { useDebouncedValue } from '@/pages/shared/useDebouncedValue'
 import { useEditSections } from '@/pages/shared/useEditSections'
@@ -167,6 +168,7 @@ import { requiredLabel } from '@/utils/required-label'
 import {
   displayTableValue,
   displayValueText,
+  formatPhoneNumber,
   normalizeUpperText as normalizeReviewStatus,
 } from '@/utils/text'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
@@ -228,6 +230,20 @@ const withoutVolumeWarning = (
 const withoutDraftResult = (
   current: ApplicationActionResult | null,
 ): ApplicationActionResult | null => withoutVolumeWarning(withoutActionError(current))
+
+/**
+ * Opening a section editor also retires the last save's success notice for the page or an edit
+ * section; the creation notice and the items, documents and remarks results stay.
+ */
+const withoutSavedSectionResult = (
+  current: ApplicationActionResult | null,
+): ApplicationActionResult | null =>
+  current?.kind === 'success' &&
+  !current.createdFor &&
+  (!current.source || current.source in APPLICATION_EDIT_SECTION_CARD_IDS)
+    ? null
+    : withoutDraftResult(current)
+
 type ApplicationDetailTabKey =
   | 'owner'
   | 'application'
@@ -369,8 +385,8 @@ function ClientDataSummary({
                 : [],
               clientData
                 ? ([
-                    ['Phone number', displayValue(clientData.phone)],
-                    ['Fax number', displayValue(clientData.fax)],
+                    ['Phone number', displayValue(formatPhoneNumber(clientData.phone))],
+                    ['Fax number', displayValue(formatPhoneNumber(clientData.fax))],
                     ['Email address', displayValue(clientData.email)],
                   ] as Array<[string, string]>)
                 : [],
@@ -1770,14 +1786,14 @@ const ProvincialApplicationDetailsPage = () => {
         () => isoDateFieldError(summaryForm.applicationDate),
       ),
       termDays: firstValidationError(
-        () => requiredFieldError(summaryForm.termDays, 'Exemption term days'),
-        () => nonNegativeWholeNumberFieldError(summaryForm.termDays, 'Exemption term days'),
-        () => greaterThanFieldError(summaryForm.termDays, 'Exemption term days', 0),
+        () => requiredFieldError(summaryForm.termDays, 'Exemption term'),
+        () => nonNegativeWholeNumberFieldError(summaryForm.termDays, 'Exemption term'),
+        () => greaterThanFieldError(summaryForm.termDays, 'Exemption term', 0),
         () =>
           maxNumericValueFieldError(
             summaryForm.termDays,
             MAX_APPLICATION_TERM_DAYS,
-            'Exemption term days',
+            'Exemption term',
           ),
       ),
       // Without an open list date to pick, the application saves with none.
@@ -3827,6 +3843,7 @@ const ProvincialApplicationDetailsPage = () => {
 
   const openReviewEditor = () =>
     sections.startEditing('review', () => {
+      setActionResult(withoutSavedSectionResult)
       setReviewValidationMessage('')
       setReviewStatusCode(reviewFormDefaultStatusCode)
       setReviewStatusRemark('')
@@ -4099,7 +4116,7 @@ const ProvincialApplicationDetailsPage = () => {
           title={`Application ${
             detailMatchesRoute ? (detail?.applicationNumber ?? '') : (applicationNumber ?? '')
           }`.trim()}
-          focusTitle={createdTitleFocusLatchedRef.current}
+          focusTitle={createdTitleFocusLatchedRef.current || 'whenFocusLost'}
           subtitle={
             detail && detailMatchesRoute ? `Author: ${displayValueText(detail.author)}` : undefined
           }
@@ -4254,7 +4271,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 ref={sections.editButtonRef('owner')}
                                 onClick={() =>
                                   sections.startEditing('owner', () =>
-                                    setActionResult(withoutDraftResult),
+                                    setActionResult(withoutSavedSectionResult),
                                   )
                                 }
                               >
@@ -4564,7 +4581,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 ref={sections.editButtonRef('summary')}
                                 onClick={() =>
                                   sections.startEditing('summary', () =>
-                                    setActionResult(withoutDraftResult),
+                                    setActionResult(withoutSavedSectionResult),
                                   )
                                 }
                               >
@@ -4820,7 +4837,7 @@ const ProvincialApplicationDetailsPage = () => {
                                 ref={sections.editButtonRef('scale')}
                                 onClick={() =>
                                   sections.startEditing('scale', () =>
-                                    setActionResult(withoutDraftResult),
+                                    setActionResult(withoutSavedSectionResult),
                                   )
                                 }
                               >
@@ -5081,6 +5098,11 @@ const ProvincialApplicationDetailsPage = () => {
                                               size="md"
                                               renderIcon={Edit}
                                               disabled={!item.remarkId || isSavingRemark}
+                                              aria-label={
+                                                item.remarkId
+                                                  ? `Edit remark ${item.remarkId}`
+                                                  : 'Edit remark'
+                                              }
                                               onClick={(event) =>
                                                 startRemarkEditing(event.currentTarget, item)
                                               }
@@ -5126,14 +5148,12 @@ const ProvincialApplicationDetailsPage = () => {
                                 },
                               ]}
                             >
-                              <TextArea
+                              <RemarkTextArea
                                 ref={remarkBodyRef}
                                 id="applicationRemarkBody"
                                 labelText={requiredLabel('Remark')}
                                 aria-required="true"
                                 rows={6}
-                                enableCounter
-                                maxCount={APPLICATION_REMARK_MAX_LENGTH}
                                 maxLength={APPLICATION_REMARK_MAX_LENGTH}
                                 value={remarkBody}
                                 disabled={isSavingRemark}
