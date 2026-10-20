@@ -1,5 +1,5 @@
 import { DatePicker, DatePickerInput } from '@carbon/react'
-import { useCallback, useEffect, useMemo, useRef } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { isValidIsoDate, isoDateRangeEndError } from '@/pages/shared/create-form-utils'
 import { parseIsoDate } from './IsoDatePicker'
 
@@ -31,6 +31,20 @@ export default function IsoDateRangePicker({
   const keyboardFocusRef = useRef(false)
   const calendarSelectionRef = useRef(false)
   const removeCalendarListenersRef = useRef<(() => void) | null>(null)
+  const [pickerKey, setPickerKey] = useState(0)
+  const [previousValues, setPreviousValues] = useState<[string, string]>([fromValue, toValue])
+  // Clearing both bounds from outside the range makes Carbon clear the calendar, and the range
+  // plugin then refocuses To if it was the last field used. A new calendar starts empty, so
+  // focus stays on the control that cleared the range.
+  if (previousValues[0] !== fromValue || previousValues[1] !== toValue) {
+    setPreviousValues([fromValue, toValue])
+    const clearedFromOutside =
+      !fromValue &&
+      !toValue &&
+      Boolean(previousValues[0] || previousValues[1]) &&
+      !rangeRef.current?.contains(document.activeElement)
+    if (clearedFromOutside) setPickerKey((key) => key + 1)
+  }
   const toError = isoDateRangeEndError(fromValue, toValue, fromLabel)
   const calendarValues = useMemo(
     // Local Date objects avoid a UTC day shift in Carbon's range-input formatting.
@@ -104,6 +118,7 @@ export default function IsoDateRangePicker({
   return (
     <div ref={rangeRef} className="search-date-range">
       <DatePicker
+        key={pickerKey}
         datePickerType="range"
         dateFormat="Y-m-d"
         allowInput

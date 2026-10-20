@@ -25,6 +25,16 @@ function Range({ initial = ['', ''] as [string, string] }) {
 }
 
 describe('IsoDateRangePicker', () => {
+  const calendarDay = (number: number) =>
+    Array.from(
+      document.querySelectorAll<HTMLElement>('.flatpickr-calendar.open .flatpickr-day'),
+    ).find(
+      (day) =>
+        day.textContent === String(number) &&
+        !day.classList.contains('prevMonthDay') &&
+        !day.classList.contains('nextMonthDay'),
+    )!
+
   it('marks only To invalid for a reversed range and keeps both values available to correct', async () => {
     render(<Range initial={['2026-10-12', '2026-10-01']} />)
     const from = screen.getByLabelText('List date from')
@@ -70,6 +80,36 @@ describe('IsoDateRangePicker', () => {
     expect(from).toHaveValue('')
     expect(screen.getByLabelText('List date to')).toHaveValue('')
     expect(screen.getByLabelText('Search bounds')).toHaveTextContent('["",""]')
+  })
+
+  it('keeps focus on the control that clears both bounds after To was last used', async () => {
+    render(<Range initial={['2026-01-10', '2026-01-20']} />)
+    const to = screen.getByLabelText('List date to')
+    await userEvent.click(to)
+    await userEvent.click(screen.getByRole('button', { name: 'Outside' }))
+    const clear = screen.getByRole('button', { name: 'Clear range' })
+
+    await userEvent.click(clear)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(screen.getByLabelText('Search bounds')).toHaveTextContent('["",""]')
+    expect(screen.getByLabelText('List date from')).toHaveValue('')
+    expect(to).toHaveValue('')
+    expect(clear).toHaveFocus()
+    expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+  })
+
+  it('starts the next calendar pick without the bounds that were cleared from outside', async () => {
+    render(<Range initial={['2026-01-10', '2026-01-20']} />)
+    await userEvent.click(screen.getByLabelText('List date to'))
+    await userEvent.click(screen.getByRole('button', { name: 'Clear range' }))
+    await userEvent.click(screen.getByLabelText('List date from'))
+    await userEvent.click(calendarDay(12))
+    await userEvent.click(screen.getByRole('button', { name: 'Outside' }))
+
+    await waitFor(() =>
+      expect(screen.getByLabelText('Search bounds')).toHaveTextContent(/\["\d{4}-\d{2}-12",""\]/),
+    )
   })
 
   it('updates both search bounds from a single range calendar', async () => {
@@ -119,16 +159,6 @@ describe('IsoDateRangePicker', () => {
       expect(screen.getByLabelText('Search bounds')).toHaveTextContent('["","2026-01-31"]')
     })
   })
-
-  const calendarDay = (number: number) =>
-    Array.from(
-      document.querySelectorAll<HTMLElement>('.flatpickr-calendar.open .flatpickr-day'),
-    ).find(
-      (day) =>
-        day.textContent === String(number) &&
-        !day.classList.contains('prevMonthDay') &&
-        !day.classList.contains('nextMonthDay'),
-    )!
 
   it.each([
     [10, 20],

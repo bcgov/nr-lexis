@@ -102,6 +102,20 @@ describe('DetailSidePanel', () => {
     await waitFor(() => expect(launcher).toHaveFocus())
   })
 
+  it('disables the × while the panel is busy and enables it again afterwards', async () => {
+    const { rerender } = render(<RemarkPanel busy />)
+
+    await userEvent.click(screen.getByRole('button', { name: 'Add remark' }))
+    const close = await screen.findByRole('button', { name: 'Close' })
+    expect(close).toBeDisabled()
+
+    rerender(<RemarkPanel busy={false} />)
+    expect(close).toBeEnabled()
+
+    rerender(<RemarkPanel busy />)
+    expect(close).toBeDisabled()
+  })
+
   it('lets Escape close an open menu before it closes the panel', async () => {
     const onClose = vi.fn()
     render(
