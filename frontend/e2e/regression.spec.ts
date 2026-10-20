@@ -2608,7 +2608,7 @@ test.describe('TEST IDIR admin regression', () => {
     await expect(page.getByRole('heading', { name: 'Upload' })).toHaveCount(0)
     await expect(page.getByRole('link', { name: 'Download template' })).toHaveCount(0)
     await expect(
-      page.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' }),
+      page.getByRole('button', { name: 'Choose an average market values spreadsheet' }),
     ).toHaveCount(0)
     await expect(page.getByLabel('Effective month')).toBeVisible()
     await expect(page.getByRole('radio')).toHaveCount(0)

@@ -118,7 +118,8 @@ when outside the viewport. While a save is pending, the Save values button shows
 and changes its label to Saving values. Replace file first
 reveals a warning and the upload area together in one card above the unchanged saved review;
 opening it does not select a file or change any values.
-Keep current values closes that temporary state. An accepted replacement removes the warning,
+Keep current values closes that temporary state; Escape leaves the warning open. An accepted
+replacement removes the warning,
 shows the selected filename, and previews the workbook over the values on screen without changing
 the database. A rejected replacement remains visible in the upload area and leaves the review
 intact; Cancel restores the last-saved preview, while Save values applies the replacement through
@@ -132,7 +133,8 @@ clears the saved confirmation. Cancel then offers to save the changes or return 
 last saved values; Discard values uses the danger-tertiary style. Restoring the saved values shows
 a dismissible confirmation that also clears on the next edit. Leaving the page or closing the tab
 with edited values, or with an accepted workbook that is not saved, asks "Discard changes?" first.
-Confirmation dialogs return focus to the action that opened them. The page header does not show
+Dismissing a confirmation dialog returns focus to the action that opened it; Discard values and
+Save changes move focus to their result notice. The page header does not show
 save time or user until the upcoming month has saved rows and complete audit metadata. After an
 accepted save, and again on navigation or refresh, the page queries the immediately upcoming
 effective month. It displays `Last saved` using the newest `UPDATE_TIMESTAMP` for that month, with

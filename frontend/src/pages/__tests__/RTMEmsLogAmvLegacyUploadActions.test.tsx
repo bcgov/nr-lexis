@@ -47,10 +47,10 @@ const renderUploadPage = async () => {
 }
 
 const uploadDropZone = () =>
-  screen.getByRole('button', { name: 'Choose an average monthly values upload spreadsheet' })
+  screen.getByRole('button', { name: 'Choose an average market values spreadsheet' })
 
 const replacementDropZone = () =>
-  screen.getByRole('button', { name: 'Choose a replacement average monthly values spreadsheet' })
+  screen.getByRole('button', { name: 'Choose a replacement average market values spreadsheet' })
 
 const spreadsheetFile = (name: string) =>
   new File([new Uint8Array([1])], name, {
@@ -140,7 +140,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByRole('heading', { name: 'Average market values' })).toBeVisible()
     expect(screen.getByText('Upload spreadsheet')).toBeVisible()
     expect(document.querySelector('#rtm-upload-title .required-label__marker')).toBeNull()
-    expect(screen.getByLabelText('Average monthly values upload spreadsheet')).toHaveAttribute(
+    expect(screen.getByLabelText('Average market values spreadsheet')).toHaveAttribute(
       'aria-required',
       'true',
     )
@@ -427,7 +427,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const savedValue = screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
     expect(savedValue).toHaveValue('78.14')
     expect(
-      screen.queryByLabelText('Replacement average monthly values spreadsheet'),
+      screen.queryByLabelText('Replacement average market values spreadsheet'),
     ).not.toBeInTheDocument()
 
     await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
@@ -447,7 +447,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Keep current values' }))
     expect(
-      screen.queryByLabelText('Replacement average monthly values spreadsheet'),
+      screen.queryByLabelText('Replacement average market values spreadsheet'),
     ).not.toBeInTheDocument()
     expect(savedValue).toHaveValue('78.14')
     await waitFor(() => expect(screen.getByRole('button', { name: 'Replace file' })).toHaveFocus())
@@ -455,7 +455,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
 
     await userEvent.upload(
-      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      screen.getByLabelText('Replacement average market values spreadsheet'),
       replacement,
     )
 
@@ -468,11 +468,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       screen.queryByText('Selecting a file will replace the values on screen'),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByLabelText('Uploaded replacement average monthly values file'),
+      screen.getByLabelText('Uploaded replacement average market values file'),
     ).toHaveTextContent('replacement.xlsx')
     expect(
       screen.queryByRole('button', {
-        name: 'Choose a replacement average monthly values spreadsheet',
+        name: 'Choose a replacement average market values spreadsheet',
       }),
     ).not.toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Save values' })).not.toHaveAttribute(
@@ -490,7 +490,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     )
 
     await userEvent.upload(
-      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      screen.getByLabelText('Replacement average market values spreadsheet'),
       replacement,
     )
     const editedReplacementValue = await screen.findByLabelText(
@@ -519,7 +519,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(mockedSaveBatch).not.toHaveBeenCalled()
 
     await userEvent.upload(
-      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      screen.getByLabelText('Replacement average market values spreadsheet'),
       replacement,
     )
     expect(
@@ -537,7 +537,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
     await userEvent.upload(
-      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      screen.getByLabelText('Replacement average market values spreadsheet'),
       replacement,
     )
     await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
@@ -611,7 +611,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
     await userEvent.upload(
-      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      screen.getByLabelText('Replacement average market values spreadsheet'),
       replacement,
     )
 
@@ -624,7 +624,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByRole('button', { name: 'Keep current values' })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Cancel' })).toHaveAttribute('aria-disabled', 'true')
     expect(screen.queryByRole('button', { name: 'Replace file' })).not.toBeInTheDocument()
-    expect(screen.getByLabelText('Replacement average monthly values spreadsheet')).toBeVisible()
+    expect(screen.getByLabelText('Replacement average market values spreadsheet')).toBeVisible()
     expect(mockedSaveBatch).not.toHaveBeenCalled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Keep current values' }))
@@ -669,14 +669,14 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await renderUploadPage()
     await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
     await userEvent.upload(
-      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      screen.getByLabelText('Replacement average market values spreadsheet'),
       new File([new Uint8Array([1])], 'replacement.xlsx', {
         type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
       }),
     )
 
     const rejectedFile = await screen.findByRole('alert', {
-      name: 'Rejected average monthly values upload file',
+      name: 'Rejected average market values file',
     })
     expect(
       within(rejectedFile).getByText("This file couldn't be used — 12 problems found"),
@@ -696,7 +696,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Keep current values' }))
     expect(
-      screen.queryByRole('alert', { name: 'Rejected average monthly values upload file' }),
+      screen.queryByRole('alert', { name: 'Rejected average market values file' }),
     ).not.toBeInTheDocument()
     expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
       '78.14',
@@ -757,7 +757,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
     await userEvent.upload(
-      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      screen.getByLabelText('Replacement average market values spreadsheet'),
       replacement,
     )
     expect(await screen.findByText(/The file has no numeric values/)).toBeVisible()
@@ -785,7 +785,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
     await userEvent.upload(
-      screen.getByLabelText('Replacement average monthly values spreadsheet'),
+      screen.getByLabelText('Replacement average market values spreadsheet'),
       spreadsheetFile('test-2026-10-19.xlsx'),
     )
     expect(await screen.findByLabelText(savedValueLabel)).toHaveValue('91.25')
@@ -841,7 +841,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const workbook = new File([new Uint8Array([1])], 'Filename.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
-    fireEvent.change(screen.getByLabelText('Average monthly values upload spreadsheet'), {
+    fireEvent.change(screen.getByLabelText('Average market values spreadsheet'), {
       target: { files: [workbook] },
     })
     await act(async () => {
@@ -874,10 +874,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       },
     )
 
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      oversized,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), oversized)
 
     expect(await screen.findByText('File must be 20 MB or smaller.')).toBeVisible()
     expect(mockedPreviewUpload).not.toHaveBeenCalled()
@@ -899,13 +896,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      workbook,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
 
     const rejectedFile = await screen.findByRole('alert', {
-      name: 'Rejected average monthly values upload file',
+      name: 'Rejected average market values file',
     })
     expect(within(rejectedFile).getByText('Filename.xlsx')).toBeVisible()
     expect(
@@ -923,7 +917,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     await userEvent.click(within(rejectedFile).getByRole('button', { name: 'Clear selected file' }))
 
     expect(
-      screen.queryByRole('alert', { name: 'Rejected average monthly values upload file' }),
+      screen.queryByRole('alert', { name: 'Rejected average market values file' }),
     ).not.toBeInTheDocument()
     expect(screen.getByText('Drag and drop your file here or click to upload')).toBeVisible()
     await waitFor(() => expect(uploadDropZone()).toHaveFocus())
@@ -950,13 +944,10 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      workbook,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
 
     const rejectedFile = await screen.findByRole('alert', {
-      name: 'Rejected average monthly values upload file',
+      name: 'Rejected average market values file',
     })
     expect(
       within(rejectedFile).getByText("This file couldn't be used — 12 problems found"),
@@ -996,28 +987,25 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      workbook,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
 
     expect(await screen.findByText('Upload could not be completed')).toBeVisible()
-    expect(screen.getByText('Something went wrong on our end. Please try again.')).toBeVisible()
+    expect(
+      screen.getByText(
+        'Something went wrong on our end. Please try again. If the problem persists, contact support.',
+      ),
+    ).toBeVisible()
     expect(screen.queryByText('Filename.xlsx')).not.toBeInTheDocument()
     expect(
-      screen.queryByRole('alert', { name: 'Rejected average monthly values upload file' }),
+      screen.queryByRole('alert', { name: 'Rejected average market values file' }),
     ).not.toBeInTheDocument()
     expect(screen.getByText('Drag and drop your file here or click to upload')).toBeVisible()
     expect(screen.getByRole('link', { name: 'Download template' })).toBeVisible()
     expect(
-      (screen.getByLabelText('Average monthly values upload spreadsheet') as HTMLInputElement)
-        .value,
+      (screen.getByLabelText('Average market values spreadsheet') as HTMLInputElement).value,
     ).toBe('')
 
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      workbook,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
 
     expect(mockedPreviewUpload).toHaveBeenCalledTimes(2)
     expect(await screen.findByText('The file has no numeric values.')).toBeVisible()
@@ -1032,20 +1020,20 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      workbook,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
 
     expect(screen.getByText('Filename.xlsx')).toBeVisible()
     expect(screen.getByText('Validating Filename.xlsx')).toBeInTheDocument()
-    expect(
-      screen.queryByLabelText('Selected average monthly values upload file'),
-    ).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Selected average market values file')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Review' })).not.toBeInTheDocument()
   })
 
   it('shows species tabs and highlights uploaded values with warnings', async () => {
+    // Notices take focus only once they are laid out.
+    const visibleRects = vi
+      .spyOn(HTMLElement.prototype, 'getClientRects')
+      .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+    onTestFinished(() => visibleRects.mockRestore())
     mockedPreviewUpload.mockResolvedValue({
       status: 'accepted',
       fileName: 'Filename.xlsx',
@@ -1114,16 +1102,13 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      workbook,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
 
     expect(await screen.findByText('3 cells need a look before you save')).toBeVisible()
     expect(
       screen.getByText('In Hemlock and Cedar, highlighted below. You can save either way.'),
     ).toBeVisible()
-    expect(screen.getByLabelText('Uploaded average monthly values file')).toHaveTextContent(
+    expect(screen.getByLabelText('Uploaded average market values file')).toHaveTextContent(
       'Filename.xlsx',
     )
     expect(screen.getAllByRole('tab')).toHaveLength(7)
@@ -1216,7 +1201,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByText('August 11, 2026, 6:21 PM by IDIR\\MGURJAOD')).toBeVisible()
     expect(screen.getByRole('heading', { name: 'Values', level: 2 })).toBeVisible()
     expect(screen.getByRole('button', { name: 'Replace file' })).toBeVisible()
-    expect(screen.queryByLabelText('Uploaded average monthly values file')).not.toBeInTheDocument()
+    expect(screen.queryByLabelText('Uploaded average market values file')).not.toBeInTheDocument()
     expect(screen.getByText('Edit a value to save again.')).toBeVisible()
     const savedSaveButton = screen.getByRole('button', { name: 'Save values' })
     const savedCancelButton = screen.getByRole('button', { name: 'Cancel' })
@@ -1258,7 +1243,11 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByText('Changes discarded')).toBeVisible()
     expect(screen.getByText('Values are back to your last save.')).toBeVisible()
     expect(screen.getByText('Edit a value to save again.')).toBeVisible()
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Cancel' })).toHaveFocus())
+    await waitFor(() =>
+      expect(
+        screen.getByText('Changes discarded').closest('.app-inline-notification'),
+      ).toHaveFocus(),
+    )
 
     await userEvent.clear(missingHemlockValue)
     await userEvent.type(missingHemlockValue, '82.15')
@@ -1283,6 +1272,9 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       'true',
     )
     expect(screen.getByText('Values saved')).toBeVisible()
+    await waitFor(() =>
+      expect(screen.getByText('Values saved').closest('.app-inline-notification')).toHaveFocus(),
+    )
   })
 
   it('blocks malformed or out-of-range review values without misreading commas', async () => {
@@ -1313,10 +1305,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     const workbook = new File([new Uint8Array([1, 2, 3])], 'Filename.xlsx', {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      workbook,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
     const valueInput = await screen.findByLabelText('Balsam grade D September 2026 value')
     const saveButton = screen.getByRole('button', { name: 'Save values' })
 
@@ -1371,10 +1360,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      workbook,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
 
     expect(await screen.findByRole('tab', { name: /Cedar/ })).toBeVisible()
     expect(screen.queryByText(/cells? need a look before you save/)).not.toBeInTheDocument()
@@ -1428,10 +1414,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByText('Drag and drop your file here or click to upload')).toBeVisible()
     expect(mockedSaveBatch).not.toHaveBeenCalled()
 
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      workbook,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
     await userEvent.click(await screen.findByRole('tab', { name: /Cedar/ }))
     const reuploadedCedarTable = screen.getByRole('table', {
       name: 'Cedar average market value review',
@@ -1558,10 +1541,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      workbook,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
     expect(mockedPreviewUpload).toHaveBeenCalledWith(
       workbook,
       expect.stringMatching(/^\d{4}-\d{2}-01$/),
@@ -1631,10 +1611,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     })
 
-    await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
-      workbook,
-    )
+    await userEvent.upload(screen.getByLabelText('Average market values spreadsheet'), workbook)
     const reviewTable = await screen.findByRole('table', {
       name: 'Balsam average market value review',
     })
@@ -1650,11 +1627,15 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     consoleError.mockRestore()
 
     expect(
-      await screen.findByText('Something went wrong on our end. Please try again.'),
+      await screen.findByText(
+        'Something went wrong on our end. Please try again. If the problem persists, contact support.',
+      ),
     ).toBeVisible()
-    expect(screen.getAllByText('Something went wrong on our end. Please try again.')).toHaveLength(
-      1,
-    )
+    expect(
+      screen.getAllByText(
+        'Something went wrong on our end. Please try again. If the problem persists, contact support.',
+      ),
+    ).toHaveLength(1)
     expect(screen.getByText('Average market values could not be saved')).toBeVisible()
     expect(document.querySelector('.admin-upload-result')).toBeNull()
     expect(screen.queryByText(/Attempted rows/)).not.toBeInTheDocument()
@@ -1674,7 +1655,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     })
     await renderUploadPage()
     await userEvent.upload(
-      screen.getByLabelText('Average monthly values upload spreadsheet'),
+      screen.getByLabelText('Average market values spreadsheet'),
       spreadsheetFile('test-2026-10-18.xlsx'),
     )
     await screen.findByRole('table', { name: 'Balsam average market value review' })
@@ -1702,13 +1683,13 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       await renderUploadPage()
       await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
       await userEvent.upload(
-        screen.getByLabelText('Replacement average monthly values spreadsheet'),
+        screen.getByLabelText('Replacement average market values spreadsheet'),
         spreadsheetFile('test-2026-10-18.xlsx'),
       )
-      await screen.findByLabelText('Uploaded replacement average monthly values file')
+      await screen.findByLabelText('Uploaded replacement average market values file')
       expect(
         screen.queryByRole('button', {
-          name: 'Choose a replacement average monthly values spreadsheet',
+          name: 'Choose a replacement average market values spreadsheet',
         }),
       ).not.toBeInTheDocument()
 
@@ -1719,7 +1700,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       await waitFor(() => expect(replacementDropZone()).toHaveFocus())
 
       await userEvent.upload(
-        screen.getByLabelText('Replacement average monthly values spreadsheet'),
+        screen.getByLabelText('Replacement average market values spreadsheet'),
         spreadsheetFile('test-2026-10-18.xlsx'),
       )
       const editedValue = await screen.findByLabelText(
@@ -1737,7 +1718,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       mockAcceptedPreview('2026-06-01', '2026-07-01', 78.14)
       await renderUploadPage()
       await userEvent.upload(
-        screen.getByLabelText('Average monthly values upload spreadsheet'),
+        screen.getByLabelText('Average market values spreadsheet'),
         spreadsheetFile('test-2026-10-18.xlsx'),
       )
       await screen.findByRole('table', { name: 'Balsam average market value review' })
@@ -1751,7 +1732,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       await waitFor(() => expect(uploadDropZone()).toHaveFocus())
 
       await userEvent.upload(
-        screen.getByLabelText('Average monthly values upload spreadsheet'),
+        screen.getByLabelText('Average market values spreadsheet'),
         spreadsheetFile('test-2026-10-18.xlsx'),
       )
       await screen.findByRole('table', { name: 'Balsam average market value review' })
@@ -1774,20 +1755,107 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       mockedSaveBatch.mockRejectedValueOnce(new Error('unavailable'))
       await renderUploadPage()
       await userEvent.upload(
-        screen.getByLabelText('Average monthly values upload spreadsheet'),
+        screen.getByLabelText('Average market values spreadsheet'),
         spreadsheetFile('test-2026-10-18.xlsx'),
       )
       await screen.findByRole('table', { name: 'Balsam average market value review' })
 
       await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
 
-      const failure = await screen.findByText('Something went wrong on our end. Please try again.')
+      const failure = await screen.findByText(
+        'Something went wrong on our end. Please try again. If the problem persists, contact support.',
+      )
       await waitFor(() => expect(failure.closest('.app-inline-notification')).toHaveFocus())
 
       await userEvent.click(screen.getByRole('button', { name: 'Save values' }))
 
       const saved = await screen.findByText('Values saved')
       await waitFor(() => expect(saved.closest('.app-inline-notification')).toHaveFocus())
+    })
+  })
+
+  describe('replacement warning and review actions', () => {
+    it('keeps the replacement warning free of focus sentinels and open after Escape', async () => {
+      mockSavedValues()
+      await renderUploadPage()
+
+      await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
+
+      const warning = screen
+        .getByText('Selecting a file will replace the values on screen')
+        .closest('.rtm-amv-replacement-warning') as HTMLElement
+      expect(warning).not.toBeNull()
+      expect(within(warning).queryByText('Focus sentinel')).not.toBeInTheDocument()
+      expect(warning.querySelector('[role="link"]')).toBeNull()
+
+      screen.getByRole('button', { name: 'Keep current values' }).focus()
+      await userEvent.keyboard('{Escape}')
+      expect(screen.getByText('Selecting a file will replace the values on screen')).toBeVisible()
+      expect(screen.getByRole('button', { name: 'Keep current values' })).toBeVisible()
+    })
+
+    it('lists Save values before Cancel in every review state', async () => {
+      mockSavedValues()
+      await renderUploadPage()
+      const orderOf = () =>
+        within(document.querySelector('.rtm-amv-upload-review-actions') as HTMLElement)
+          .getAllByRole('button')
+          .map((button) => button.textContent)
+
+      expect(orderOf()).toEqual(['Save values', 'Cancel'])
+
+      await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
+      await userEvent.upload(
+        screen.getByLabelText('Replacement average market values spreadsheet'),
+        spreadsheetFile('test-2026-10-18.xlsx'),
+      )
+      await screen.findByLabelText('Uploaded replacement average market values file')
+      expect(orderOf()).toEqual(['Save values', 'Cancel'])
+    })
+
+    it('moves focus to the result notice after Save changes in the saved-changes dialog', async () => {
+      const visibleRects = vi
+        .spyOn(HTMLElement.prototype, 'getClientRects')
+        .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+      onTestFinished(() => visibleRects.mockRestore())
+      const { nextMonth } = mockSavedValues()
+      await renderUploadPage()
+      const value = screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
+      await userEvent.clear(value)
+      await userEvent.type(value, '80.10')
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      await userEvent.click(
+        within(screen.getByRole('dialog', { name: 'Discard these values?' })).getByRole('button', {
+          name: 'Save changes',
+        }),
+      )
+
+      const saved = await screen.findByText('Values saved')
+      await waitFor(() => expect(saved.closest('.app-inline-notification')).toHaveFocus())
+    })
+
+    it('moves focus to the Changes discarded notice after Discard values', async () => {
+      const visibleRects = vi
+        .spyOn(HTMLElement.prototype, 'getClientRects')
+        .mockReturnValue([new DOMRect(0, 0, 400, 100)] as unknown as DOMRectList)
+      onTestFinished(() => visibleRects.mockRestore())
+      const { nextMonth } = mockSavedValues()
+      await renderUploadPage()
+      const value = screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)
+      await userEvent.clear(value)
+      await userEvent.type(value, '80.10')
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+      await userEvent.click(
+        within(screen.getByRole('dialog', { name: 'Discard these values?' })).getByRole('button', {
+          name: 'Discard values',
+        }),
+      )
+
+      const discarded = await screen.findByText('Changes discarded')
+      await waitFor(() => expect(discarded.closest('.app-inline-notification')).toHaveFocus())
+      expect(value).toHaveValue('78.14')
     })
   })
 })
