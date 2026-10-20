@@ -8878,7 +8878,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
   })
 
-  it('does not offer Provincial Submitters removal of a saved Blanket OIC agent', async () => {
+  it('lets a Provincial Submitter remove a saved Blanket OIC agent but not change it', async () => {
     configureEditableBlanketOicPackage()
     configureBlanketOicSubmitter('00067890')
     renderPermitDetails()
@@ -8889,12 +8889,64 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
     expect(agentUsedCheckbox).toBeChecked()
-    expect(agentUsedCheckbox).toBeDisabled()
+    expect(agentUsedCheckbox).toBeEnabled()
+    expect(document.getElementById('permit-agentClientNumber')).toBeNull()
+
     await userEvent.click(agentUsedCheckbox)
-    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Agent' })).not.toBeInTheDocument()
+    await userEvent.click(agentUsedCheckbox)
     expect(screen.getByRole('heading', { name: 'Agent' })).toBeInTheDocument()
-    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
-    expect(mockedUpdatePermitDetail).not.toHaveBeenCalled()
+    expect(document.getElementById('permit-agentClientNumber')).toBeNull()
+
+    await userEvent.click(agentUsedCheckbox)
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText('Client location', { selector: '#permit-ownerClientLocation' }),
+      ).toBeEnabled(),
+    )
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerClientNumber: '00067890',
+          agentClientNumber: '',
+          agentClientLocation: '',
+        }),
+      )
+    })
+  })
+
+  it('lets a Provincial Submitter whose client is the saved Blanket OIC agent remove it', async () => {
+    configureEditableBlanketOicPackage()
+    configureBlanketOicSubmitter('00012345')
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Owner')
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
+    )
+    const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
+    expect(agentUsedCheckbox).toBeChecked()
+    expect(agentUsedCheckbox).toBeEnabled()
+
+    await userEvent.click(agentUsedCheckbox)
+    await waitFor(() =>
+      expect(
+        screen.getByLabelText('Client location', { selector: '#permit-ownerClientLocation' }),
+      ).toBeEnabled(),
+    )
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerClientNumber: '00067890',
+          agentClientNumber: '',
+          agentClientLocation: '',
+        }),
+      )
+    })
   })
 
   it('lets an Application Approver remove a saved Blanket OIC agent but not change it', async () => {
@@ -9005,7 +9057,7 @@ describe('Provincial Permit Detail Action Smoke', () => {
     })
   })
 
-  it('does not offer Provincial Submitters addition of a Blanket OIC agent', async () => {
+  it('lets a Provincial Submitter add an agent to a Blanket OIC permit without one', async () => {
     configureEditableBlanketOicPackage()
     configureBlanketOicSubmitter('00067890')
     mockedFetchProvincialPermitDetail.mockResolvedValue({
@@ -9028,11 +9080,111 @@ describe('Provincial Permit Detail Action Smoke', () => {
     )
     const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
     expect(agentUsedCheckbox).not.toBeChecked()
-    expect(agentUsedCheckbox).toBeDisabled()
+    expect(agentUsedCheckbox).toBeEnabled()
     await userEvent.click(agentUsedCheckbox)
-    expect(screen.queryByRole('tab', { name: 'Agent' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Agent information' })).not.toBeInTheDocument()
-    expect(screen.queryByLabelText('Agent client number')).not.toBeInTheDocument()
+    expect(screen.getByRole('heading', { name: 'Agent' })).toBeInTheDocument()
+    const agentClient = screen.getByLabelText('Agent client', {
+      selector: '#permit-agentClientNumber',
+    })
+    expect(agentClient).toBeEnabled()
+    fireEvent.change(agentClient, { target: { value: '00012345' } })
+    const agentLocation = screen.getByLabelText('Agent client location', {
+      selector: '#permit-agentClientLocation',
+    })
+    await waitFor(() => expect(agentLocation).toBeEnabled())
+    expect(mockedFetchApplicationClientLocations).toHaveBeenCalledWith(
+      '00012345',
+      'agent',
+      '',
+      '00067890',
+    )
+    await userEvent.selectOptions(agentLocation, '01')
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          ownerClientNumber: '00067890',
+          agentClientNumber: '00012345',
+          agentClientLocation: '01',
+        }),
+      )
+    })
+  })
+
+  it('lets a Provincial Submitter change the agent of a Payment pending Blanket OIC permit', async () => {
+    configureEditableBlanketOicPackage()
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'PPD',
+      permitStatusDescription: 'Payment pending',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+      oicApplicationNumber: 1000999,
+      oicRequestPieces: 200,
+      oicRequestVolume: 120.5,
+      receiptNumber: null,
+    })
+    configureBlanketOicSubmitter('00067890')
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Owner')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit applicant details' }))
+    const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
+    expect(agentUsedCheckbox).toBeChecked()
+    expect(agentUsedCheckbox).toBeEnabled()
+
+    await userEvent.click(agentUsedCheckbox)
+    await userEvent.click(getActiveSectionSaveButton())
+
+    await waitFor(() => {
+      expect(mockedUpdatePermitDetail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          permitStatus: 'PPD',
+          ownerClientNumber: '00067890',
+          agentClientNumber: '',
+          agentClientLocation: '',
+        }),
+      )
+    })
+  })
+
+  it('keeps the agent of a Completed Blanket OIC permit locked for Provincial Submitters', async () => {
+    configureEditableBlanketOicPackage()
+    mockedFetchProvincialPermitDetail.mockResolvedValue({
+      ...permitDetail,
+      permitStatusCode: 'COM',
+      permitStatusDescription: 'Completed',
+      exemptionTypeDescription: 'Blanket OIC',
+      blanketOic: true,
+      oicApplicationNumber: 1000999,
+      oicRequestPieces: 200,
+      oicRequestVolume: 120.5,
+    })
+    configureBlanketOicSubmitter('00067890')
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Owner')
+    expect(await screen.findByText('Agent Co · 00012345')).toBeInTheDocument()
+    expect(screen.getByRole('checkbox', { name: "I'm an agent" })).toBeDisabled()
+    expect(
+      screen.queryByRole('button', { name: /Edit applicant(?: details)?/ }),
+    ).not.toBeInTheDocument()
+  })
+
+  it("keeps a Ministerial permit's agent locked for Provincial Submitters", async () => {
+    configureMinisterialActivePermit()
+    configureBlanketOicSubmitter('00067890')
+    renderPermitDetails()
+
+    await selectPermitDetailTab('Applicant')
+    await userEvent.click(
+      await screen.findByRole('button', { name: /Edit applicant(?: details)?/ }),
+    )
+
+    const agentUsedCheckbox = screen.getByRole('checkbox', { name: "I'm an agent" })
+    expect(agentUsedCheckbox).toBeChecked()
+    expect(agentUsedCheckbox).toBeDisabled()
   })
 
   const configureBlanketOicApproverPermit = (

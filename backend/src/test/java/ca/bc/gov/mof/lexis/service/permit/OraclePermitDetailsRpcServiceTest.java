@@ -3671,6 +3671,46 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @ParameterizedTest
+  @CsvSource({"true,,", "false,00099998,04"})
+  void updatePermitWithAgentChangeShouldKeepTheSavedBlanketOicOwnerWhenTheAgentChanges(
+      boolean savedAgent, String agentNumber, String agentLocationCode) {
+    PermitMutationRow current = blanketOicPermitMutationRow();
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(savedAgent ? current : withoutAgent(current)));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(exemptionService.findByExemptionNumber("EX-700"))
+        .thenReturn(
+            Optional.of(exemptionDetailWithClients("EX-700", "B", "00077881", "00077880")));
+    stubOicApplicationBinding("EX-700");
+    when(repository.updatePermitDetail(
+            any(PermitMutationRow.class), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE)))
+        .thenReturn(true);
+
+    PermitMutationRpcResponseDto response =
+        service.updatePermitWithAgentChange(
+            updatePermitRequest(
+                null,
+                "00055555",
+                "01",
+                agentNumber == null ? "" : agentNumber,
+                agentLocationCode == null ? "" : agentLocationCode,
+                null),
+            "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository)
+        .updatePermitDetail(
+            permitCaptor.capture(), eq("idir\\jsmith"), eq(FEE_MASK_EFFECTIVE_DATE));
+    assertThat(permitCaptor.getValue().clientNumber()).isEqualTo("00077881");
+    assertThat(permitCaptor.getValue().agentNumber()).isEqualTo(agentNumber);
+    assertThat(permitCaptor.getValue().agentLocationCode()).isEqualTo(agentLocationCode);
+    verify(applicationDetailsRpcService, never())
+        .synchronizeApplicationOwner(any(), any(), any(), any());
+  }
+
+  @ParameterizedTest
   @ValueSource(booleans = {true, false})
   void updatePermitWithAgentChangeShouldRefuseAddingOrRemovingACompletedBlanketOicPermitAgent(
       boolean savedAgent) {

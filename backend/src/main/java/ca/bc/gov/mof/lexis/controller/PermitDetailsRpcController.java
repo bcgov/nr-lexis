@@ -1537,13 +1537,16 @@ public class PermitDetailsRpcController {
         sessionService.parseRolesFromPrincipal(authentication), LEGACY_ACTION_REVIEW_PERMITS);
   }
 
-  // Ministry users who can change an application's applicant type can also add or remove a
-  // Blanket OIC permit's agent.
+  // Ministry users who can change an application's applicant type, and Provincial Submitters acting
+  // for their forest client, can add or remove a Blanket OIC permit's agent. A submitter reaches
+  // the permit only as its owner or agent, which the permit access check has already required.
   private boolean canChangePermitAgent(Authentication authentication) {
-    return isMinistryUser(authentication)
-        && authorizationService.canPerformAction(
-            sessionService.parseRolesFromPrincipal(authentication),
-            LEGACY_ACTION_CHANGE_APPLICANT_TYPE);
+    if (!isMinistryUser(authentication)) {
+      return authorization().hasClientScope(authentication);
+    }
+    return authorizationService.canPerformAction(
+        sessionService.parseRolesFromPrincipal(authentication),
+        LEGACY_ACTION_CHANGE_APPLICANT_TYPE);
   }
 
   private boolean requestsFeeOverrideMutation(PermitMutationRequestDto request) {

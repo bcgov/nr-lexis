@@ -140,9 +140,11 @@ Visual alignment preserves existing role, lifecycle and transaction contracts:
   permit and Save says so. View mode lists the included applications with their pieces and volume on
   this permit. Legacy added applications from a pop-up and removed each one at once. Ordinary Order
   in Council permits keep Add application and Remove in their Associated applications card.
-- A saved permit's owner and agent clients stay read-only. Application Approvers and
-  Administrators can remove a Blanket OIC permit's agent, or add one when it has none, while the
-  permit is Active or Payment pending. A Ministerial permit's agent follows its first linked
+- A saved permit's owner and agent clients stay read-only. Application Approvers,
+  Administrators and Provincial Submitters can remove a Blanket OIC permit's agent, or add one when
+  it has none, while the permit is Active or Payment pending. A submitter reaches the permit only
+  as its owner or agent, and one whose client is the saved agent can remove it, which ends that
+  submitter's access to the permit. A Ministerial permit's agent follows its first linked
   application and is changed there. Editable fields are not enabled merely because a design
   depicts an input.
 - BOIC Add scale uses a drawer with Cancel and Save, matching the legacy dialog's separate save
