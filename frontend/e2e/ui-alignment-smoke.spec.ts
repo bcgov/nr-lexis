@@ -331,6 +331,7 @@ const installSyntheticLexisApi = async (page: Page) => {
               exemptionReasonCode: 'U',
               applicantTypeCode: 'O',
               productTypeCode: 'H',
+              packageNumber: 'UI-TEST-100',
               productLocation: 'Synthetic location',
               ageClass: 'M',
               applicationVolume: 525,
@@ -339,6 +340,7 @@ const installSyntheticLexisApi = async (page: Page) => {
               averageDiameter: 12.8,
               speciesCodes: ['HE', 'FI'],
               endUseCode: 'PL',
+              scaleRows: 2,
             },
           }
         }
