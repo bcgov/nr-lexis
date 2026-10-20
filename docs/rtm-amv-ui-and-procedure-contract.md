@@ -123,9 +123,9 @@ replacement removes the warning,
 shows the selected filename, and previews the workbook over the values on screen without changing
 the database. A rejected replacement remains visible in the upload area and leaves the review
 intact; Cancel restores the last-saved preview, while Save values applies the replacement through
-the same batch update used for manual edits. Removing a replacement file restores the review from
-before that file was selected; if a file-derived value was then edited by hand, removal first shows
-the confirmation because re-uploading cannot recover that edit. The expanded replacement area is
+the same batch update used for manual edits. Removing an accepted replacement file always asks
+first, then restores the review from before that file was selected; a rejected or still-validating
+file is removed without asking. The expanded replacement area is
 browser-only state, so refresh returns to the compact saved review. Save and Cancel remain
 keyboard-focusable but are announced as unavailable until a value changes or a replacement
 workbook has been accepted; the helper text is linked through `aria-describedby`. Editing a value

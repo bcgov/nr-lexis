@@ -1310,11 +1310,13 @@ const RtmEmsLogAmvUploadPage = () => {
     pendingUploadValidation.fileName === selectedUploadFile.name &&
     pendingUploadValidation.fileSize === selectedUploadFile.size
   const requestReplacementFileRemoval = () => {
-    const replacementFileValues =
-      hasValidatedUpload && previewResult?.status === 'accepted'
-        ? buildInitialReviewValues(previewResult.rows)
-        : replacementReviewValuesRef.current
+    // An accepted replacement is on screen, so removing it always asks first.
+    if (hasValidatedUpload && previewResult?.status === 'accepted') {
+      setDiscardConfirmation('file')
+      return
+    }
 
+    const replacementFileValues = replacementReviewValuesRef.current
     if (replacementFileValues && !reviewValuesMatch(reviewValues, replacementFileValues)) {
       setDiscardConfirmation('file')
       return

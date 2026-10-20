@@ -482,9 +482,19 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(mockedSaveBatch).not.toHaveBeenCalled()
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
-    expect(
-      screen.queryByRole('dialog', { name: 'Are you sure you want to remove this file?' }),
-    ).not.toBeInTheDocument()
+    const removeUneditedDialog = screen.getByRole('dialog', {
+      name: 'Are you sure you want to remove this file?',
+    })
+    expect(removeUneditedDialog).toHaveAccessibleDescription(
+      'The values on screen will go back to your last save.',
+    )
+    await userEvent.click(within(removeUneditedDialog).getByRole('button', { name: 'Keep file' }))
+    expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
+      '91.25',
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove file' }))
     expect(screen.getByLabelText(`Balsam grade D ${monthLabel(nextMonth)} value`)).toHaveValue(
       '78.14',
     )
@@ -796,6 +806,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
     expect(screen.getByLabelText(savedValueLabel)).toHaveValue('91.25')
 
     await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Remove file' }))
     await userEvent.click(screen.getByRole('button', { name: 'Keep current values' }))
 
     expect(screen.queryByText('Average market values could not be saved')).not.toBeInTheDocument()
@@ -1678,7 +1689,7 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       await waitFor(() => expect(replacementDropZone()).toHaveFocus())
     })
 
-    it('returns focus to the replacement drop zone after removing a replacement file', async () => {
+    it('asks before removing a replacement file and returns focus to the control that applies', async () => {
       const { nextMonth } = mockSavedValues()
       await renderUploadPage()
       await userEvent.click(screen.getByRole('button', { name: 'Replace file' }))
@@ -1694,9 +1705,16 @@ describe('RTM EMS Log AMV spreadsheet upload actions', () => {
       ).not.toBeInTheDocument()
 
       await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
-      expect(
-        screen.queryByRole('dialog', { name: 'Are you sure you want to remove this file?' }),
-      ).not.toBeInTheDocument()
+      const removeDialog = screen.getByRole('dialog', {
+        name: 'Are you sure you want to remove this file?',
+      })
+      await userEvent.click(within(removeDialog).getByRole('button', { name: 'Keep file' }))
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Clear selected file' })).toHaveFocus(),
+      )
+
+      await userEvent.click(screen.getByRole('button', { name: 'Clear selected file' }))
+      await userEvent.click(screen.getByRole('button', { name: 'Remove file' }))
       await waitFor(() => expect(replacementDropZone()).toHaveFocus())
 
       await userEvent.upload(
