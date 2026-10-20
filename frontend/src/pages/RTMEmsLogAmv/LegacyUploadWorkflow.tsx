@@ -870,15 +870,6 @@ const RtmEmsLogAmvUploadPage = () => {
   const [focusRequest, setFocusRequest] = useState<{ target: FocusTarget } | null>(null)
   const [saveFeedbackFocusKey, setSaveFeedbackFocusKey] = useState<number | null>(null)
 
-  useEffect(() => {
-    const previousTitle = document.title
-    document.title = 'Average market values'
-
-    return () => {
-      document.title = previousTitle
-    }
-  }, [])
-
   const validateUploadFile = async (
     nextFile: File | null,
     uploadIntent: UploadIntent = 'initial',

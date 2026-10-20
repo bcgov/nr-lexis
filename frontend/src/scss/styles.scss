@@ -5944,24 +5944,6 @@ $notification-types: 'error', 'info', 'success', 'warning';
   padding: 0;
 }
 
-.application-items-package-edit-panel {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  min-width: 0;
-}
-
-.application-items-form {
-  display: grid;
-  gap: 0.75rem 1rem;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  margin-bottom: 0.75rem;
-}
-
-.application-items-section--create-package .application-items-form {
-  grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
-}
-
 .exemption-application-add-form {
   align-items: start;
   display: grid;
