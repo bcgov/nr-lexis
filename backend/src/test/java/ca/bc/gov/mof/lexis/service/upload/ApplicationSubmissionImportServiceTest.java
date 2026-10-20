@@ -427,6 +427,7 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(result.packageNumber()).isNull();
     assertThat(result.scaleRows()).isZero();
     assertThat(result.submissionSummary().orgUnitNumber()).isEqualTo(orgUnitNumber);
+    assertThat(result.submissionSummary().regionCode()).isEqualTo(regionCode);
     assertThat(result.submissionSummary().productTypeCode()).isEqualTo("H");
     assertThat(result.submissionSummary().applicationVolume()).isEqualTo(42.2d);
     verify(applicationDetailsService, never()).isPackageValid(anyString());
@@ -829,6 +830,8 @@ class ApplicationSubmissionImportServiceTest {
     assertThat(request.agentClientNumber()).isEqualTo("00001074");
     assertThat(request.ownerClientNumber()).isEqualTo("00002000");
     assertThat(request.ownerContactName()).isEqualTo("OLIVIA OWNER");
+    assertThat(result.submissionSummary().agentClientNumber()).isEqualTo("00001074");
+    assertThat(result.submissionSummary().ownerClientNumber()).isEqualTo("00002000");
   }
 
   @Test
@@ -1367,10 +1370,11 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .containsExactly("Federal applications must use the dedicated federal submission endpoint.");
+        .containsExactly("Federal applications can't be uploaded here.");
     assertThat(result.submissionSummary()).isNotNull();
     assertThat(result.submissionSummary().jurisdictionCode()).isEqualTo("F");
     assertThat(result.submissionSummary().federalApplicationNumber()).isEqualTo(700123L);
+    assertThat(result.warnings()).isEmpty();
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
   }
 
@@ -1388,10 +1392,81 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .containsExactly("Federal applications must use the dedicated federal submission endpoint.");
+        .containsExactly("Federal applications can't be uploaded here.");
     assertThat(result.submissionSummary()).isNotNull();
     assertThat(result.submissionSummary().jurisdictionCode()).isEqualTo("F");
     verify(applicationDetailsServiceProvider, never()).getIfAvailable();
+  }
+
+  @Test
+  void shouldGiveFederalFileWithFederalFieldErrorsOneMessageAtProvincialValidationIngress() {
+    String xml =
+        federalSampleXmlText().replace("<lexis:eicbNumber>123456</lexis:eicbNumber>", "");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateApplicationSubmission(
+                new MockMultipartFile(
+                    "formFile",
+                    "federal-submission.xml",
+                    "application/xml",
+                    xml.getBytes(StandardCharsets.UTF_8)),
+                "FED-REF-1");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("Federal applications can't be uploaded here.");
+    assertThat(result.warnings()).isEmpty();
+  }
+
+  @Test
+  void shouldKeepFederalFieldErrorsAtFederalValidationIngress() {
+    String xml =
+        federalSampleXmlText().replace("<lexis:eicbNumber>123456</lexis:eicbNumber>", "");
+
+    ApplicationSubmissionImportResultDto result =
+        service()
+            .validateDedicatedFederalApplicationSubmission(
+                xml.getBytes(StandardCharsets.UTF_8), "federal-submission.xml", "FED-REF-1");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).contains("Federal applicant EICB number is required.");
+  }
+
+  @Test
+  void shouldAskToReportAnIssueWhenProvincialApplicationSaveFailsWithoutAnError() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new CreateApplicationResult(
+                false,
+                "We were unable to save this application. Please note the time this error occurred and report to someone.",
+                null,
+                List.of(),
+                List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service().importApplicationSubmission(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors())
+        .containsExactly(
+            "We couldn't save this application. Try again later. If it keeps happening, report an issue.");
+    verify(applicationDetailsService, never()).addPackage(any(PackageMutationRequest.class), any());
+  }
+
+  @Test
+  void shouldKeepSaveValidationErrorsWhenProvincialApplicationIsRefused() {
+    when(applicationDetailsServiceProvider.getIfAvailable()).thenReturn(applicationDetailsService);
+    when(applicationDetailsService.addApplication(any(CreateApplicationRequest.class), eq("jsmith")))
+        .thenReturn(
+            new CreateApplicationResult(
+                false, null, null, List.of("Package TEST23-652-7D-2 already exists."), List.of()));
+
+    ApplicationSubmissionImportResultDto result =
+        service().importApplicationSubmission(sampleXml(), "jsmith");
+
+    assertThat(result.status()).isEqualTo("rejected");
+    assertThat(result.errors()).containsExactly("Package TEST23-652-7D-2 already exists.");
   }
 
   @Test
@@ -2025,7 +2100,7 @@ class ApplicationSubmissionImportServiceTest {
         service().validateApplicationSubmission(sampleResourceXml("fail-federal-jurisdiction.xml"));
     assertThat(federalJurisdiction.status()).isEqualTo("rejected");
     assertThat(federalJurisdiction.errors())
-        .contains("Federal office use details are required.");
+        .containsExactly("Federal applications can't be uploaded here.");
   }
 
   @Test
@@ -2312,8 +2387,7 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .contains(
-            "The ZIP file must contain exactly one LEXIS XML or GeoJSON application submission file.");
+        .containsExactly("A ZIP file can contain only one application file.");
   }
 
   @Test
@@ -2348,7 +2422,7 @@ class ApplicationSubmissionImportServiceTest {
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors())
-        .contains("The ZIP file must contain one LEXIS XML or GeoJSON application submission file.");
+        .containsExactly("A ZIP file can contain only one application file.");
   }
 
   @Test
@@ -2633,10 +2707,8 @@ class ApplicationSubmissionImportServiceTest {
             "<lexis:jurisdictionCode>F</lexis:jurisdictionCode>");
 
     ApplicationSubmissionImportResultDto result =
-        service.importApplicationSubmission(
-            new MockMultipartFile(
-                "formFile", "submission.xml", "application/xml", xml.getBytes(StandardCharsets.UTF_8)),
-            "jsmith");
+        service.validateDedicatedFederalApplicationSubmission(
+            xml.getBytes(StandardCharsets.UTF_8), "submission.xml", "FED-REF-1");
 
     assertThat(result.status()).isEqualTo("rejected");
     assertThat(result.errors()).contains("Federal office use details are required.");

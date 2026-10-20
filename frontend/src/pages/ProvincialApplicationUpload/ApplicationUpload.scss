@@ -1,0 +1,244 @@
+@use '@carbon/styles/scss/type' as carbon-type;
+
+// Status text meets 4.5:1 on the file row; Carbon's support colours are lighter.
+.application-upload-page {
+  --application-upload-success-text: #007b00;
+  --application-upload-error-text: #b32001;
+}
+
+:root[data-carbon-theme='g100'] .application-upload-page {
+  --application-upload-success-text: var(--cds-support-success);
+  --application-upload-error-text: var(--cds-text-error);
+}
+
+// The helper text holds two sentences on their own lines.
+.application-upload-page .admin-upload-field-helper {
+  white-space: pre-line;
+}
+
+.application-upload-files {
+  display: grid;
+  gap: 0.5rem;
+  max-inline-size: 50%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.application-upload-file {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  min-block-size: 3rem;
+  padding: 0 1rem;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  background: var(--fds-background, var(--cds-layer-02));
+  border: 1px solid transparent;
+}
+
+.application-upload-file--failed {
+  border-color: var(--application-upload-error-text);
+}
+
+.application-upload-file__name {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.application-upload-file__status {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.application-upload-file--validated .application-upload-file__status {
+  color: var(--application-upload-success-text);
+}
+
+.application-upload-file--failed .application-upload-file__status {
+  color: var(--application-upload-error-text);
+}
+
+.application-upload-file__status path[data-icon-path='inner-path'],
+.application-upload-result__icon path[data-icon-path='inner-path'] {
+  fill: var(--cds-icon-on-color, #ffffff);
+  opacity: 1;
+}
+
+.application-upload-file__remove {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  inline-size: 1.5rem;
+  block-size: 1.5rem;
+  padding: 0;
+  color: var(--cds-icon-primary);
+  background: transparent;
+  border: 0;
+  cursor: pointer;
+}
+
+.application-upload-file__remove:hover {
+  background: var(--cds-layer-hover);
+}
+
+.application-upload-file__remove:focus-visible {
+  outline: 2px solid var(--cds-focus);
+  outline-offset: -2px;
+}
+
+.application-upload-notice {
+  max-inline-size: 50%;
+  margin-block-start: 1rem;
+}
+
+.application-upload-notice .cds--inline-notification {
+  max-inline-size: 100%;
+}
+
+.application-upload-page .application-upload-table {
+  margin-block-start: 2rem;
+}
+
+.application-upload-table__title {
+  margin: 0;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  @include carbon-type.type-style('body-compact-01');
+}
+
+// The card draws the table's border.
+.application-upload-table .lexis-table-frame {
+  border: 0;
+  border-radius: 0;
+}
+
+// Collapsed details stay in the table for its stripes but take no space.
+.application-upload-review-table tr[data-child-row][hidden] {
+  display: none;
+}
+
+.application-upload-review__details {
+  display: grid;
+  gap: 1.5rem;
+  padding-block: 0.5rem;
+}
+
+.application-upload-review__group-title {
+  margin: 0 0 0.75rem;
+  @include carbon-type.type-style('heading-compact-01');
+}
+
+.application-upload-review__fields {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1rem 2rem;
+  margin: 0;
+}
+
+.application-upload-review__field {
+  min-inline-size: 0;
+}
+
+.application-upload-review__field dd {
+  margin: 0;
+}
+
+.application-upload-page .admin-upload-workflow > .application-upload-table {
+  margin-block-start: 0;
+}
+
+.application-upload-review__actions .cds--btn {
+  min-inline-size: 13.5rem;
+  justify-content: space-between;
+}
+
+.application-upload-review__actions .cds--btn--tertiary {
+  background: transparent;
+  border: 1px solid var(--fds-interactive);
+  color: var(--fds-interactive);
+}
+
+.application-upload-review__actions .cds--btn--tertiary:hover:not(:disabled) {
+  background: var(--fds-interactive-light);
+}
+
+.application-upload-result {
+  display: grid;
+  gap: 2rem;
+}
+
+.application-upload-result__summary {
+  display: grid;
+  justify-items: center;
+  gap: 1rem;
+  padding-block-start: 1rem;
+  text-align: center;
+}
+
+.application-upload-result__icon--success {
+  color: var(--cds-support-success);
+}
+
+.application-upload-result__icon--warning {
+  color: var(--cds-support-warning);
+}
+
+.application-upload-result__icon--warning path[data-icon-path='inner-path'] {
+  fill: var(--cds-black-100, #000000);
+}
+
+.application-upload-result__icon--error {
+  color: var(--cds-support-error);
+}
+
+.application-upload-result__title {
+  margin: 0;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  @include carbon-type.type-style('heading-05');
+}
+
+.application-upload-result__title:focus {
+  outline: none;
+}
+
+.application-upload-result__text {
+  max-inline-size: 40rem;
+  color: var(--fds-text-primary, var(--cds-text-primary));
+  @include carbon-type.type-style('body-02');
+}
+
+.application-upload-result__text p {
+  margin: 0;
+}
+
+.application-upload-result__reason {
+  margin: 0;
+}
+
+.application-upload-result .application-upload-table {
+  margin-block-start: 0;
+}
+
+@media (max-width: 42rem) {
+  .application-upload-files,
+  .application-upload-notice {
+    max-inline-size: 100%;
+  }
+
+  .application-upload-review__fields {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+@media (min-width: 42rem) and (max-width: 66rem) {
+  .application-upload-review__fields {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}

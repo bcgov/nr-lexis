@@ -9,20 +9,6 @@ export type UploadQueueStatus =
   | 'complete'
   | 'failed'
 
-/** Reference descriptions for submission summary codes; a code without one is shown as is. */
-export type LexisXmlSubmissionSummaryLabels = Partial<
-  Record<
-    | 'orgUnitNumber'
-    | 'jurisdictionCode'
-    | 'exemptionReasonCode'
-    | 'applicantTypeCode'
-    | 'productTypeCode'
-    | 'ageClass'
-    | 'endUseCode',
-    string
-  >
->
-
 export type UploadQueueReviewDetails = {
   summary?: string
   errors?: string[]
@@ -32,7 +18,6 @@ export type UploadQueueReviewDetails = {
   scaleRows?: number
   userReference?: string
   submissionSummary?: LexisXmlSubmissionSummary
-  submissionSummaryLabels?: LexisXmlSubmissionSummaryLabels
 }
 
 export type UploadQueueItem = {

@@ -1,15 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Button, Column, ComboBox, Grid, TextArea } from '@carbon/react'
-import {
-  ArrowRight,
-  CheckmarkFilled,
-  Close,
-  Document,
-  Download,
-  ErrorFilled,
-  InformationFilled,
-} from '@carbon/icons-react'
-import { Link, useLocation, useSearchParams } from 'react-router-dom'
+import { ArrowRight } from '@carbon/icons-react'
+import { useSearchParams } from 'react-router-dom'
 import { ActionResultNotifications } from '../../components/ActionResultNotification'
 import PageHeader from '@/components/PageHeader'
 import ApplicationNumberSelect from '../../components/ApplicationNumberSelect'
@@ -18,7 +10,6 @@ import SearchableSelect from '../../components/SearchableSelect'
 import MultiFileDropZone from '../../components/uploads/MultiFileDropZone'
 import UploadQueuePreview from '../../components/uploads/UploadQueuePreview'
 import UploadWorkflowProgress from '../../components/uploads/UploadWorkflowProgress'
-import { buildLexisXmlPreviewMessage } from '@/components/uploads/lexisXmlPreview'
 import {
   buildUploadResultMessage,
   buildUploadReviewDetails,
@@ -26,14 +17,11 @@ import {
   DOCUMENT_UPLOAD_GUIDANCE,
   DOCUMENT_UPLOAD_READY_MESSAGE,
   extractUploadErrorDetails,
-  formatScaleRows,
-  GENERIC_SUBMISSION_FAILURE_MESSAGE,
   GENERIC_UPLOAD_FAILURE_MESSAGE,
   validateDocumentUploadDescription,
   validateDocumentUploadFile,
   validateUploadFileSize,
   uploadQueueFileKey,
-  uploadQueueStatusLabel,
 } from '@/components/uploads/uploadQueueHelpers'
 import type {
   UploadQueueItem,
@@ -49,19 +37,13 @@ import {
   type FieldErrors,
   type TouchedFields,
 } from '@/pages/shared/create-form-utils'
-import {
-  submitAdminUpload,
-  validateApplicationSubmissionUpload,
-  type AdminUploadResult,
-  type UploadWorkflowType,
-} from '@/service/admin-upload-service'
+import { submitAdminUpload, type UploadWorkflowType } from '@/service/admin-upload-service'
 import { searchProvincialExemptionNumberOptions } from '@/service/provincial-exemption-search-service'
 import { searchProvincialPermitNumberOptions } from '@/service/provincial-permit-search-service'
-import type { ActionResult, ActionResultItem } from '@/utils/action-result'
+import type { ActionResult } from '@/utils/action-result'
 import { fieldErrorText } from '@/utils/field-error'
-import { useSubmissionSummaryLabels } from './useSubmissionSummaryLabels'
 
-type DataUploadWorkflowType = Exclude<UploadWorkflowType, 'invoice'>
+type DataUploadWorkflowType = Exclude<UploadWorkflowType, 'invoice' | 'applicationSubmission'>
 
 type UploadWorkflowDefinition = {
   type: DataUploadWorkflowType
@@ -71,19 +53,7 @@ type UploadWorkflowDefinition = {
   numberFieldPlaceholder: string
 }
 
-type AdminUploadsPageProps = {
-  lockedWorkflowType?: DataUploadWorkflowType
-  pageTitle?: string
-}
-
 const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
-  {
-    type: 'applicationSubmission',
-    label: 'Application submission upload',
-    requiredAction: 'uploadApplicationSubmission',
-    numberFieldLabel: '',
-    numberFieldPlaceholder: '',
-  },
   {
     type: 'application',
     label: 'Application upload',
@@ -107,15 +77,6 @@ const UPLOAD_WORKFLOW_DEFINITIONS: UploadWorkflowDefinition[] = [
   },
 ]
 
-const DOCUMENT_UPLOAD_WORKFLOW_DEFINITIONS = UPLOAD_WORKFLOW_DEFINITIONS.filter(
-  (workflow) => workflow.type !== 'applicationSubmission',
-)
-
-const APPLICATION_SUBMISSION_UPLOAD_STEPS = [
-  { id: 'upload', label: 'Upload' },
-  { id: 'review', label: 'Review' },
-]
-
 const DOCUMENT_UPLOAD_STEPS = [
   { id: 'upload', label: 'Upload' },
   { id: 'review', label: 'Review' },
@@ -132,20 +93,7 @@ type UploadWizardStep = 'upload' | 'review'
 
 type QueuedUploadResult = {
   message: string
-  applicationNumber?: number
   details?: UploadQueueReviewDetails
-  failed?: boolean
-}
-
-const isApplicationSubmissionValidationFailure = (result: AdminUploadResult): boolean => {
-  const status = result.status?.trim().toLowerCase()
-  if (status === 'rejected' || status === 'failed' || status === 'invalid') {
-    return true
-  }
-  if (status && status !== 'validated') {
-    return true
-  }
-  return Array.isArray(result.errors) && result.errors.length > 0
 }
 
 type UploadTargetNumberOption = {
@@ -176,13 +124,8 @@ const INITIAL_FORM_STATE: UploadFormState = {
 const getWorkflowFromQuery = (
   value: string | null,
   fallback: DataUploadWorkflowType = 'application',
-  allowApplicationSubmission = true,
 ): DataUploadWorkflowType => {
   if (value === 'application' || value === 'exemption' || value === 'permit') {
-    return value
-  }
-
-  if (allowApplicationSubmission && value === 'applicationSubmission') {
     return value
   }
 
@@ -306,7 +249,7 @@ function UploadTargetNumberSelect({
   )
 }
 
-const validateQueuedFile = (file: File, workflowType: DataUploadWorkflowType): string => {
+const validateQueuedFile = (file: File): string => {
   if (!file.name.trim()) {
     return 'File name is required.'
   }
@@ -320,17 +263,10 @@ const validateQueuedFile = (file: File, workflowType: DataUploadWorkflowType): s
     return sizeError
   }
 
-  if (workflowType === 'applicationSubmission') {
-    return ''
-  }
-
   return validateDocumentUploadFile(file)
 }
 
 const workflowDescription = (workflowType: DataUploadWorkflowType): string => {
-  if (workflowType === 'applicationSubmission') {
-    return 'Upload ESF LEXIS XML or GeoJSON application submissions, including package, species, and scale rows.'
-  }
   if (workflowType === 'application') {
     return 'Attach one or more documents to an existing provincial application.'
   }
@@ -344,9 +280,6 @@ const uploadTargetSummary = (
   workflowType: DataUploadWorkflowType,
   formState: UploadFormState,
 ): string => {
-  if (workflowType === 'applicationSubmission') {
-    return 'Creates a new application'
-  }
   if (workflowType === 'application') {
     return formState.applicationNumber
       ? `Application ${formState.applicationNumber}`
@@ -360,214 +293,7 @@ const uploadTargetSummary = (
   return formState.permitNumber ? `Permit ${formState.permitNumber}` : 'Permit not selected'
 }
 
-const defaultSuccessTitle = (workflowType: DataUploadWorkflowType): string =>
-  workflowType === 'applicationSubmission' ? 'Application submission complete' : 'Upload submitted'
-
-const createdApplicationResultText = (details: UploadQueueReviewDetails | undefined): string => {
-  const contents = [
-    details?.packageNumber ? `package ${details.packageNumber}` : '',
-    typeof details?.scaleRows === 'number' ? formatScaleRows(details.scaleRows) : '',
-  ].filter(Boolean)
-  return ` created${contents.length > 0 ? ` with ${contents.join(' and ')}` : ''}.`
-}
-
-type ApplicationSubmissionValidationContentProps = {
-  items: UploadQueueItem[]
-  isSubmitting: boolean
-  onRemove: (id: string) => void
-}
-
-type ApplicationSubmissionValidationIssue = {
-  key: string
-  issue: 'Error' | 'Warning'
-  fileName: string
-  detail: string
-}
-
-const applicationSubmissionValidationIssues = (
-  items: UploadQueueItem[],
-): ApplicationSubmissionValidationIssue[] =>
-  items.flatMap((item) => {
-    const errors = item.details?.errors?.filter(Boolean) ?? []
-    const warnings = item.details?.warnings?.filter(Boolean) ?? []
-    const resolvedErrors =
-      errors.length === 0 && (item.status === 'failed' || item.status === 'invalid') && item.message
-        ? [item.message]
-        : errors
-
-    return [
-      ...resolvedErrors.map((detail, index) => ({
-        key: `${item.id}-error-${index}`,
-        issue: 'Error' as const,
-        fileName: item.file.name,
-        detail,
-      })),
-      ...warnings.map((detail, index) => ({
-        key: `${item.id}-warning-${index}`,
-        issue: 'Warning' as const,
-        fileName: item.file.name,
-        detail,
-      })),
-    ]
-  })
-
-const buildApplicationSubmissionIssuesCsv = (
-  issues: ApplicationSubmissionValidationIssue[],
-): string => {
-  const escape = (value: string): string => `"${value.replace(/"/g, '""')}"`
-  const rows = [
-    ['Issue', 'Submission file', 'Detail'],
-    ...issues.map((issue) => [issue.issue, issue.fileName, issue.detail]),
-  ]
-  const csv = rows.map((row) => row.map(escape).join(',')).join('\r\n')
-  return `data:text/csv;charset=utf-8,${encodeURIComponent(csv)}`
-}
-
-function ApplicationSubmissionValidationContent({
-  items,
-  isSubmitting,
-  onRemove,
-}: ApplicationSubmissionValidationContentProps) {
-  const validatingCount = items.filter((item) => item.status === 'validating').length
-  const queuedCount = items.filter((item) => item.status === 'queued').length
-  const validatedCount = items.filter((item) => item.status === 'validated').length
-  const validationIssues = applicationSubmissionValidationIssues(items)
-  const errorCount = validationIssues.filter((issue) => issue.issue === 'Error').length
-  const warningCount = validationIssues.length - errorCount
-  const isValidating = validatingCount > 0 || queuedCount > 0
-
-  return (
-    <div className="admin-upload-application-validation-content">
-      <div className="admin-upload-application-file-list" aria-label="Selected submission files">
-        {items.map((item) => (
-          <div className="admin-upload-application-file-list__item" key={item.id}>
-            <div className="admin-upload-file-chip">
-              <Document size={16} aria-hidden="true" />
-              <span className="admin-upload-file-chip__name">{item.file.name}</span>
-              <span className={`admin-upload-status-text admin-upload-status-text--${item.status}`}>
-                {uploadQueueStatusLabel(item.status)}
-              </span>
-              <button
-                type="button"
-                className="admin-upload-file-chip__remove"
-                aria-label={`Remove ${item.file.name}`}
-                onClick={() => onRemove(item.id)}
-                disabled={isSubmitting}
-              >
-                <Close size={16} aria-hidden="true" />
-              </button>
-            </div>
-            {item.message && (
-              <p className="admin-upload-application-file-list__message">{item.message}</p>
-            )}
-          </div>
-        ))}
-      </div>
-
-      {items.length > 0 &&
-        (isValidating ? (
-          <div className="admin-upload-validation admin-upload-validation--info" role="status">
-            <InformationFilled
-              className="admin-upload-validation__icon"
-              size={20}
-              aria-hidden="true"
-            />
-            <div className="admin-upload-validation__content">
-              <h3>{items.length === 1 ? 'Validating file' : 'Validating files'}</h3>
-              <p>Running application submission checks.</p>
-            </div>
-          </div>
-        ) : errorCount > 0 ? (
-          <div
-            className="admin-upload-validation admin-upload-validation--error"
-            role="alert"
-            aria-live="assertive"
-          >
-            <ErrorFilled className="admin-upload-validation__icon" size={20} aria-hidden="true" />
-            <div className="admin-upload-validation__content">
-              <h3>
-                {validationIssues.length} issue{validationIssues.length === 1 ? '' : 's'} found in
-                application {items.length === 1 ? 'submission' : 'submissions'}
-              </h3>
-              <p>Correct or replace the failed source files. Validated submissions can continue.</p>
-            </div>
-          </div>
-        ) : warningCount > 0 ? (
-          <div className="admin-upload-validation admin-upload-validation--info" role="status">
-            <InformationFilled
-              className="admin-upload-validation__icon"
-              size={20}
-              aria-hidden="true"
-            />
-            <div className="admin-upload-validation__content">
-              <h3>
-                {items.length === 1 ? 'Submission validated' : 'Submissions validated'} with
-                warnings
-              </h3>
-              <p>Review the validation warnings before continuing.</p>
-            </div>
-          </div>
-        ) : validatedCount > 0 ? (
-          <div className="admin-upload-validation admin-upload-validation--success" role="status">
-            <CheckmarkFilled
-              className="admin-upload-validation__icon"
-              size={20}
-              aria-hidden="true"
-            />
-            <div className="admin-upload-validation__content">
-              <h3>{items.length === 1 ? 'Submission validated' : 'Submissions validated'}</h3>
-              <p>
-                {items.length === 1
-                  ? `"${items[0].file.name}" was uploaded with no issues found.`
-                  : `${validatedCount} application submissions were uploaded with no issues found.`}
-              </p>
-            </div>
-          </div>
-        ) : null)}
-
-      {validationIssues.length > 0 && (
-        <div className="admin-upload-validation-table-wrap">
-          <div className="admin-upload-validation-table-header">
-            <span>Validation issues ({validationIssues.length})</span>
-            <a
-              className="admin-upload-validation-table-download"
-              href={buildApplicationSubmissionIssuesCsv(validationIssues)}
-              download="lexis-validation-issues.csv"
-              aria-label="Download issues as CSV"
-            >
-              Download issues (.csv)
-              <Download size={16} aria-hidden="true" />
-            </a>
-          </div>
-          <div className="admin-upload-validation-table-scroll">
-            <table className="admin-upload-validation-table" aria-label="Validation issues">
-              <thead>
-                <tr>
-                  <th scope="col" className="admin-upload-validation-table__issue">
-                    Issue
-                  </th>
-                  <th scope="col" className="admin-upload-validation-table__location">
-                    Submission file
-                  </th>
-                  <th scope="col">Detail</th>
-                </tr>
-              </thead>
-              <tbody>
-                {validationIssues.map((issue) => (
-                  <tr key={issue.key}>
-                    <td className="admin-upload-validation-table__issue">{issue.issue}</td>
-                    <td className="admin-upload-validation-table__location">{issue.fileName}</td>
-                    <td>{issue.detail}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      )}
-    </div>
-  )
-}
+const SUCCESS_TITLE = 'Upload submitted'
 
 function UploadStepReviewButton({
   label,
@@ -594,12 +320,10 @@ function UploadStepReviewButton({
   )
 }
 
-function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPageProps) {
+function AdminUploadsPage() {
   const { canPerform } = useAuth()
-  const location = useLocation()
   const [searchParams, setSearchParams] = useSearchParams()
-  const initialWorkflow =
-    lockedWorkflowType ?? getWorkflowFromQuery(searchParams.get('type'), 'application', false)
+  const initialWorkflow = getWorkflowFromQuery(searchParams.get('type'), 'application')
   const [selectedWorkflowType, setSelectedWorkflowType] =
     useState<DataUploadWorkflowType>(initialWorkflow)
   const [formState, setFormState] = useState<UploadFormState>(() =>
@@ -608,23 +332,12 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const [uploadQueue, setUploadQueue] = useState<UploadQueueItem[]>([])
   const [fileInputKey, setFileInputKey] = useState(0)
   const [errorMessage, setErrorMessage] = useState('')
-  const [successResult, setSuccessResult] = useState<{
-    message: string
-    items: ActionResultItem[]
-  }>({ message: '', items: [] })
-  const { message: successMessage, items: successItems } = successResult
-  const setSuccessMessage = useCallback(
-    (message: string, items: ActionResultItem[] = []) => setSuccessResult({ message, items }),
-    [],
-  )
-  const [successTitle, setSuccessTitle] = useState(() => defaultSuccessTitle(initialWorkflow))
+  const [successMessage, setSuccessMessage] = useState('')
   const uploadResultsRef = useRef<HTMLDivElement>(null)
   const [uploadResultsFocusRequest, setUploadResultsFocusRequest] = useState(0)
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [touchedFields, setTouchedFields] = useState<TouchedFields<UploadField>>({})
   const [showValidationErrors, setShowValidationErrors] = useState(false)
-  const [applicationSubmissionStep, setApplicationSubmissionStep] =
-    useState<UploadWizardStep>('upload')
   const [documentUploadStep, setDocumentUploadStep] = useState<UploadWizardStep>('upload')
 
   const selectedWorkflow = useMemo(() => {
@@ -649,63 +362,13 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       ).length,
     [uploadQueue],
   )
-  const uploadInputLabel =
-    selectedWorkflowType === 'applicationSubmission'
-      ? 'Application submission file'
-      : 'Document File'
-  const uploadAccept =
-    selectedWorkflowType === 'applicationSubmission'
-      ? '.xml,.zip,.geojson,.json,application/xml,text/xml,application/zip,application/json,application/geo+json'
-      : DOCUMENT_UPLOAD_ACCEPT
-  const uploadFormatText =
-    selectedWorkflowType === 'applicationSubmission'
-      ? 'Accepted file types: XML, ZIP, GeoJSON, and JSON. Maximum file size: 20 MB.'
-      : DOCUMENT_UPLOAD_GUIDANCE
   const currentUploadTargetSummary = uploadTargetSummary(selectedWorkflowType, formState)
-  const resolvedPageTitle =
-    pageTitle ??
-    (selectedWorkflowType === 'applicationSubmission'
-      ? 'Upload application submission'
-      : 'Data Upload')
-  const hasQueuedLexisSubmissions =
-    selectedWorkflowType === 'applicationSubmission' &&
-    uploadQueue.some((item) => item.status === 'queued')
-  const hasValidatingLexisSubmissions =
-    selectedWorkflowType === 'applicationSubmission' &&
-    uploadQueue.some((item) => item.status === 'validating')
-  const hasValidatedLexisSubmissions =
-    selectedWorkflowType === 'applicationSubmission' &&
-    uploadQueue.some((item) => item.status === 'validated')
-  const canReviewLexisSubmissions =
-    selectedWorkflowType === 'applicationSubmission' &&
-    hasValidatedLexisSubmissions &&
-    !hasValidatingLexisSubmissions
-  const applicationSubmissionActionNoun =
-    selectedWorkflowType === 'applicationSubmission' && uploadQueue.length === 1
-      ? 'submission'
-      : 'submissions'
   const isUploadInputLocked = !hasUploadAccess || isSubmitting
-  const submitButtonLabel =
-    selectedWorkflowType === 'applicationSubmission'
-      ? hasValidatingLexisSubmissions
-        ? `Validating ${applicationSubmissionActionNoun}…`
-        : hasQueuedLexisSubmissions || !hasValidatedLexisSubmissions
-          ? `Validate ${applicationSubmissionActionNoun}`
-          : `Submit ${applicationSubmissionActionNoun}`
-      : 'Submit upload'
-  const submittingButtonLabel =
-    selectedWorkflowType === 'applicationSubmission' && hasQueuedLexisSubmissions
-      ? `Validating ${applicationSubmissionActionNoun}…`
-      : selectedWorkflowType === 'applicationSubmission'
-        ? `Submitting ${applicationSubmissionActionNoun}…`
-        : 'Submitting upload…'
 
   const fieldErrors = useMemo<FieldErrors<UploadField>>(
     () => ({
-      // Application submissions review only validated files; rejected files stay in the issues list.
       uploadFile:
-        invalidUploadCount > 0 &&
-        (selectedWorkflowType !== 'applicationSubmission' || !hasValidatedLexisSubmissions)
+        invalidUploadCount > 0
           ? `${invalidUploadCount} queued file${invalidUploadCount === 1 ? ' needs' : 's need'} attention before upload.`
           : invalidDescriptionCount > 0
             ? invalidDescriptionCount === 1
@@ -713,9 +376,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
               : `${invalidDescriptionCount} queued files have invalid document descriptions.`
             : uploadQueue.length > 0
               ? undefined
-              : selectedWorkflowType === 'applicationSubmission'
-                ? 'Submission file is required.'
-                : 'Choose at least one file to upload.',
+              : 'Choose at least one file to upload.',
       applicationNumber:
         selectedWorkflowType === 'application'
           ? (provincialApplicationNumberFieldError(
@@ -738,7 +399,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       formState,
       invalidDescriptionCount,
       invalidUploadCount,
-      hasValidatedLexisSubmissions,
       uploadQueue.length,
       selectedWorkflowType,
     ],
@@ -757,7 +417,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     getVisibleFieldError(field, fieldErrors, touchedFields, showValidationErrors)
 
   const setWorkflowType = (workflowType: DataUploadWorkflowType): void => {
-    if (lockedWorkflowType || isSubmitting) {
+    if (isSubmitting) {
       return
     }
     setSelectedWorkflowType(workflowType)
@@ -765,10 +425,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     setFileInputKey((current) => current + 1)
     setErrorMessage('')
     setSuccessMessage('')
-    setSuccessTitle(defaultSuccessTitle(workflowType))
     setTouchedFields({})
     setShowValidationErrors(false)
-    setApplicationSubmissionStep('upload')
     setDocumentUploadStep('upload')
     setSearchParams({ type: workflowType }, { replace: true })
   }
@@ -777,37 +435,25 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     if (isSubmitting || !files || files.length === 0) {
       return
     }
-    if (selectedWorkflowType === 'applicationSubmission') {
-      setApplicationSubmissionStep('upload')
-    } else {
-      setDocumentUploadStep('upload')
-      setShowValidationErrors(true)
-    }
+    setDocumentUploadStep('upload')
+    setShowValidationErrors(true)
 
     const queuedAt = Date.now()
     const nextItemsByFileName = new Map<string, UploadQueueItem>()
     Array.from(files).forEach((file, index) => {
-      const validationMessage = validateQueuedFile(file, selectedWorkflowType)
-      const isApplicationSubmission = selectedWorkflowType === 'applicationSubmission'
-      const validDocumentMessage = isApplicationSubmission ? '' : DOCUMENT_UPLOAD_READY_MESSAGE
+      const validationMessage = validateQueuedFile(file)
 
       nextItemsByFileName.set(uploadQueueFileKey(file), {
         id: `${queuedAt}-${index}-${file.name}-${file.size}`,
         file,
-        fileDescription: isApplicationSubmission ? undefined : '',
+        fileDescription: '',
         workflowLabel: selectedWorkflow.label,
         queuedAt,
-        status: validationMessage
-          ? ('invalid' as const)
-          : isApplicationSubmission
-            ? ('queued' as const)
-            : ('queued' as const),
-        message: validationMessage || validDocumentMessage,
+        status: validationMessage ? ('invalid' as const) : ('queued' as const),
+        message: validationMessage || DOCUMENT_UPLOAD_READY_MESSAGE,
         details: validationMessage
           ? { summary: validationMessage, errors: [validationMessage] }
-          : validDocumentMessage
-            ? { summary: validDocumentMessage }
-            : undefined,
+          : { summary: DOCUMENT_UPLOAD_READY_MESSAGE },
       })
     })
     const nextItems = Array.from(nextItemsByFileName.values())
@@ -817,33 +463,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       ...current.filter((item) => !replacementFileNames.has(uploadQueueFileKey(item.file))),
       ...nextItems,
     ])
-    if (selectedWorkflowType === 'applicationSubmission') {
-      nextItems
-        .filter((item) => item.status === 'queued')
-        .forEach((item) => {
-          void buildLexisXmlPreviewMessage(item.file).then((message) => {
-            if (!message) {
-              return
-            }
-            setUploadQueue((current) =>
-              current.map((currentItem) =>
-                currentItem.id === item.id &&
-                (currentItem.status === 'queued' || currentItem.status === 'validating') &&
-                !currentItem.message
-                  ? {
-                      ...currentItem,
-                      message,
-                      details: { ...currentItem.details, summary: message },
-                    }
-                  : currentItem,
-              ),
-            )
-          })
-        })
-    }
     setErrorMessage('')
     setSuccessMessage('')
-    setSuccessTitle(defaultSuccessTitle(selectedWorkflowType))
     markFieldTouched('uploadFile')
     setFileInputKey((current) => current + 1)
   }
@@ -851,17 +472,13 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const clearUploadFeedback = (): void => {
     setErrorMessage('')
     setSuccessMessage('')
-    setSuccessTitle(defaultSuccessTitle(selectedWorkflowType))
   }
 
   const removeQueuedFile = (id: string): void => {
     if (isSubmitting) return
     const nextLength = uploadQueue.filter((item) => item.id !== id).length
     setUploadQueue((current) => current.filter((item) => item.id !== id))
-    if (selectedWorkflowType === 'applicationSubmission' && nextLength === 0) {
-      setApplicationSubmissionStep('upload')
-    }
-    if (selectedWorkflowType !== 'applicationSubmission' && nextLength === 0) {
+    if (nextLength === 0) {
       setDocumentUploadStep('upload')
     }
     clearUploadFeedback()
@@ -883,7 +500,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   const clearQueuedFiles = (): void => {
     setUploadQueue([])
     setFileInputKey((current) => current + 1)
-    setApplicationSubmissionStep('upload')
     setDocumentUploadStep('upload')
     clearUploadFeedback()
   }
@@ -893,7 +509,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     setFileInputKey((current) => current + 1)
     setTouchedFields({})
     setShowValidationErrors(false)
-    setApplicationSubmissionStep('upload')
     setDocumentUploadStep('upload')
   }
 
@@ -902,10 +517,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       id: string,
       status: UploadQueueStatus,
       message = '',
-      resultApplicationNumber?: number,
       targetSummary?: string,
       details?: UploadQueueReviewDetails,
-      submitted?: boolean,
     ): void => {
       setUploadQueue((current) =>
         current.map((item) =>
@@ -915,9 +528,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
                 status,
                 message,
                 details: details ?? item.details,
-                resultApplicationNumber,
                 targetSummary: targetSummary ?? item.targetSummary,
-                submitted: submitted ?? item.submitted,
               }
             : item,
         ),
@@ -928,22 +539,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
 
   const submitQueuedFile = async (item: UploadQueueItem): Promise<QueuedUploadResult> => {
     const file = item.file
-    if (selectedWorkflowType === 'applicationSubmission') {
-      const result = await submitAdminUpload('applicationSubmission', {
-        file,
-      })
-      const message = buildUploadResultMessage(
-        'applicationSubmission',
-        'LEXIS application submission created. Verify the created application and package details.',
-        result,
-      )
-      return {
-        message,
-        applicationNumber: result.applicationNumber,
-        details: buildUploadReviewDetails(message, result),
-      }
-    }
-
     if (selectedWorkflowType === 'application') {
       const result = await submitAdminUpload('application', {
         applicationNumber: normalizeProvincialApplicationNumber(formState.applicationNumber),
@@ -990,139 +585,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     }
   }
 
-  const validateQueuedLexisFile = useCallback(async (file: File): Promise<QueuedUploadResult> => {
-    const result = await validateApplicationSubmissionUpload({ file })
-    if (isApplicationSubmissionValidationFailure(result)) {
-      const uploadError = extractUploadErrorDetails(
-        { response: { data: result } },
-        'Submission validation failed. Please try again. If the problem persists, contact your administrator.',
-      )
-      return {
-        message: uploadError.message,
-        details: uploadError.details,
-        failed: true,
-      }
-    }
-
-    const message = buildUploadResultMessage(
-      'applicationSubmission',
-      'LEXIS application submission validated. Review the summary before submitting application submissions.',
-      result,
-    )
-    return {
-      message,
-      details: buildUploadReviewDetails(message, result),
-    }
-  }, [])
-
-  const validateLexisQueue = useCallback(async (): Promise<void> => {
-    const queuedItems = uploadQueue.filter((item) => item.status === 'queued')
-    if (queuedItems.length === 0) {
-      return
-    }
-
-    const queuedItemIds = new Set(queuedItems.map((item) => item.id))
-    let successCount = 0
-    let failureCount = 0
-    let lastSuccessMessage = ''
-
-    setUploadQueue((current) =>
-      current.map((item) =>
-        queuedItemIds.has(item.id)
-          ? {
-              ...item,
-              status: 'validating',
-              message: '',
-              targetSummary: currentUploadTargetSummary,
-            }
-          : item,
-      ),
-    )
-
-    for (const item of queuedItems) {
-      try {
-        const result = await validateQueuedLexisFile(item.file)
-        if (result.failed) {
-          failureCount += 1
-          setQueueItemStatus(
-            item.id,
-            'failed',
-            result.message,
-            undefined,
-            currentUploadTargetSummary,
-            result.details,
-          )
-          continue
-        }
-
-        successCount += 1
-        lastSuccessMessage = result.message
-        setQueueItemStatus(
-          item.id,
-          'validated',
-          result.message,
-          undefined,
-          currentUploadTargetSummary,
-          result.details,
-        )
-      } catch (error) {
-        failureCount += 1
-        const uploadError = extractUploadErrorDetails(
-          error,
-          'Submission validation failed. Please try again. If the problem persists, contact your administrator.',
-        )
-        setQueueItemStatus(
-          item.id,
-          'failed',
-          uploadError.message,
-          undefined,
-          currentUploadTargetSummary,
-          uploadError.details,
-        )
-      }
-    }
-
-    if (successCount > 0) {
-      setSuccessTitle(successCount === 1 ? 'Submission validated' : 'Submissions validated')
-      setSuccessMessage(
-        successCount === 1
-          ? lastSuccessMessage
-          : `${successCount} application submissions validated. Review the submission summary and submit submissions.`,
-      )
-    }
-
-    if (failureCount > 0) {
-      setErrorMessage(
-        `${failureCount} submission${failureCount === 1 ? '' : 's'} failed validation. Review the queue for details.`,
-      )
-    }
-  }, [
-    currentUploadTargetSummary,
-    setQueueItemStatus,
-    setSuccessMessage,
-    uploadQueue,
-    validateQueuedLexisFile,
-  ])
-
-  useEffect(() => {
-    if (
-      selectedWorkflowType !== 'applicationSubmission' ||
-      !hasUploadAccess ||
-      isSubmitting ||
-      !hasQueuedLexisSubmissions
-    ) {
-      return
-    }
-
-    void validateLexisQueue()
-  }, [
-    hasQueuedLexisSubmissions,
-    hasUploadAccess,
-    isSubmitting,
-    selectedWorkflowType,
-    validateLexisQueue,
-  ])
-
   // Focus follows a submit to its result; a fully submitted queue no longer has a Submit button.
   useEffect(() => {
     if (uploadResultsFocusRequest === 0) {
@@ -1134,118 +596,9 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     return () => cancelAnimationFrame(frame)
   }, [uploadResultsFocusRequest])
 
-  const createdApplicationResultItem = (
-    fileName: string,
-    result: QueuedUploadResult,
-  ): ActionResultItem => ({
-    id: result.applicationNumber ? `Application ${result.applicationNumber}` : fileName,
-    text: createdApplicationResultText(result.details),
-    ...(result.applicationNumber && canPerform('/applicationDetails')
-      ? {
-          to: `/provincial/application/${result.applicationNumber}`,
-          state: {
-            returnTo: { label: resolvedPageTitle, to: `${location.pathname}${location.search}` },
-          },
-        }
-      : {}),
-    details: result.details?.warnings?.map((warning) => `Warning: ${warning}`),
-  })
-
-  const submitValidatedLexisQueue = async (): Promise<void> => {
-    let successCount = 0
-    let failureCount = 0
-    const createdApplications: ActionResultItem[] = []
-
-    for (const item of uploadQueue) {
-      if (item.status !== 'validated') {
-        continue
-      }
-
-      setQueueItemStatus(
-        item.id,
-        'uploading',
-        '',
-        undefined,
-        currentUploadTargetSummary,
-        undefined,
-        true,
-      )
-
-      try {
-        const result = await submitQueuedFile(item)
-        successCount += 1
-        createdApplications.push(createdApplicationResultItem(item.file.name, result))
-        setQueueItemStatus(
-          item.id,
-          'complete',
-          result.message,
-          result.applicationNumber,
-          currentUploadTargetSummary,
-          result.details,
-        )
-      } catch (error) {
-        failureCount += 1
-        const uploadError = extractUploadErrorDetails(error, GENERIC_SUBMISSION_FAILURE_MESSAGE)
-        setQueueItemStatus(
-          item.id,
-          'failed',
-          uploadError.message,
-          undefined,
-          currentUploadTargetSummary,
-          uploadError.details,
-        )
-      }
-    }
-
-    if (successCount > 0) {
-      setSuccessTitle(
-        successCount === 1 ? 'Application submission complete' : 'Application submissions complete',
-      )
-      setSuccessMessage('', createdApplications)
-      setUploadResultsFocusRequest((current) => current + 1)
-      if (failureCount === 0) {
-        resetUploadQueueAfterSuccess()
-      }
-    }
-
-    if (failureCount > 0) {
-      setErrorMessage(
-        `${failureCount} submission${failureCount === 1 ? '' : 's'} failed. Review the queue for details.`,
-      )
-    }
-  }
-
-  const onReviewApplicationSubmissions = (): void => {
-    setErrorMessage('')
-    setSuccessMessage('')
-
-    if (validationErrors.length > 0) {
-      setShowValidationErrors(true)
-      if (selectedWorkflowType !== 'applicationSubmission') {
-        setErrorMessage(validationErrors.join(' '))
-      } else if (fieldErrors.uploadFile) {
-        document.getElementById('uploadFile-drop-zone')?.focus()
-      }
-      return
-    }
-
-    if (hasValidatingLexisSubmissions) {
-      setErrorMessage('Wait for validation to finish before reviewing submissions.')
-      return
-    }
-
-    if (!hasValidatedLexisSubmissions) {
-      setErrorMessage('No validated application submissions are ready for review.')
-      return
-    }
-
-    setApplicationSubmissionStep('review')
-  }
-
   const onSubmitUpload = async (): Promise<void> => {
     setErrorMessage('')
     setSuccessMessage('')
-    setSuccessTitle(defaultSuccessTitle(selectedWorkflowType))
 
     if (!hasUploadAccess) {
       setErrorMessage('Your session does not include the required upload permission.')
@@ -1259,31 +612,11 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     }
 
     if (uploadQueue.length === 0) {
-      setErrorMessage(
-        selectedWorkflowType === 'applicationSubmission'
-          ? 'Choose at least one application submission file.'
-          : 'Choose at least one file to upload.',
-      )
+      setErrorMessage('Choose at least one file to upload.')
       return
     }
 
     setIsSubmitting(true)
-
-    if (selectedWorkflowType === 'applicationSubmission') {
-      if (uploadQueue.some((item) => item.status === 'validating')) {
-        setErrorMessage('Wait for validation to finish before submitting.')
-      } else if (uploadQueue.some((item) => item.status === 'queued')) {
-        await validateLexisQueue()
-      } else if (applicationSubmissionStep !== 'review') {
-        onReviewApplicationSubmissions()
-      } else if (uploadQueue.some((item) => item.status === 'validated')) {
-        await submitValidatedLexisQueue()
-      } else {
-        setErrorMessage('No application submissions are ready to validate or submit.')
-      }
-      setIsSubmitting(false)
-      return
-    }
 
     let successCount = 0
     let failureCount = 0
@@ -1294,7 +627,7 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         continue
       }
 
-      setQueueItemStatus(item.id, 'uploading', '', undefined, currentUploadTargetSummary)
+      setQueueItemStatus(item.id, 'uploading', '', currentUploadTargetSummary)
 
       try {
         const result = await submitQueuedFile(item)
@@ -1304,7 +637,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           item.id,
           'complete',
           result.message,
-          result.applicationNumber,
           currentUploadTargetSummary,
           result.details,
         )
@@ -1315,7 +647,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
           item.id,
           'failed',
           uploadError.message,
-          undefined,
           currentUploadTargetSummary,
           uploadError.details,
         )
@@ -1348,32 +679,15 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     clearQueuedFiles()
     setErrorMessage('')
     setSuccessMessage('')
-    setSuccessTitle(defaultSuccessTitle(selectedWorkflowType))
     setTouchedFields({})
     setShowValidationErrors(false)
-    setApplicationSubmissionStep('upload')
     setDocumentUploadStep('upload')
   }
 
-  const activeUploadStep =
-    selectedWorkflowType === 'applicationSubmission'
-      ? applicationSubmissionStep
-      : documentUploadStep
-  const activeUploadSteps =
-    selectedWorkflowType === 'applicationSubmission'
-      ? APPLICATION_SUBMISSION_UPLOAD_STEPS
-      : DOCUMENT_UPLOAD_STEPS
-  const activeCompletedSteps = activeUploadStep === 'review' ? ['upload'] : []
+  const activeCompletedSteps = documentUploadStep === 'review' ? ['upload'] : []
   const uploadActionResults: ActionResult[] = [
-    ...(successMessage || successItems.length > 0
-      ? [
-          {
-            kind: 'success' as const,
-            title: successTitle,
-            message: successMessage,
-            items: successItems,
-          },
-        ]
+    ...(successMessage
+      ? [{ kind: 'success' as const, title: SUCCESS_TITLE, message: successMessage }]
       : []),
     ...(errorMessage
       ? [{ kind: 'error' as const, title: 'Upload error', message: errorMessage }]
@@ -1381,41 +695,6 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
   ]
   const dismissUploadResult = ({ kind }: ActionResult) =>
     kind === 'error' ? setErrorMessage('') : setSuccessMessage('')
-  const showGlobalUploadFeedback =
-    selectedWorkflowType !== 'applicationSubmission' ||
-    activeUploadStep !== 'upload' ||
-    uploadQueue.length === 0
-  const applicationSubmissionReviewItems = useMemo(
-    () =>
-      uploadQueue.filter(
-        (item) =>
-          item.status === 'validated' ||
-          item.status === 'uploading' ||
-          item.status === 'complete' ||
-          item.submitted,
-      ),
-    [uploadQueue],
-  )
-  const labelledApplicationSubmissionReviewItems = useSubmissionSummaryLabels(
-    applicationSubmissionReviewItems,
-    {
-      applicationOptions: canPerform('/applicationSearch') || canPerform('/applicationDetails'),
-      endUses: canPerform('/applicationDetails'),
-      jurisdictions: canPerform('/applicationReport'),
-    },
-  )
-  const workflowProgressLabel =
-    selectedWorkflowType === 'applicationSubmission'
-      ? 'Application submission upload workflow progress'
-      : 'Upload queue workflow progress'
-  const pageSubtitle =
-    selectedWorkflowType === 'applicationSubmission'
-      ? 'Upload an XML, ZIP, GeoJSON, or JSON file to create a LEXIS application.'
-      : 'Upload documents and review selected files before submitting.'
-  const uploadStepDescription =
-    selectedWorkflowType === 'applicationSubmission'
-      ? 'The submission type will be detected automatically from your file.'
-      : 'Select documents to prepare before reviewing and submitting the upload.'
   const canSubmitDocumentUpload = hasUploadAccess && validationErrors.length === 0
   const renderQueuedFileDescription = (item: UploadQueueItem): ReactNode => {
     const description = item.fileDescription ?? ''
@@ -1439,44 +718,26 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     )
   }
   const uploadSettingsPanel = (
-    <section
-      className={`admin-upload-panel${
-        selectedWorkflowType === 'applicationSubmission'
-          ? ' admin-upload-panel--application-submission'
-          : ''
-      }`}
-      aria-labelledby={
-        selectedWorkflowType === 'applicationSubmission'
-          ? 'uploadFile-panel-title'
-          : 'admin-upload-settings-title'
-      }
-    >
-      {selectedWorkflowType !== 'applicationSubmission' && (
-        <div className="admin-upload-panel__header">
-          <div>
-            <h2 id="admin-upload-settings-title">{selectedWorkflow.label}</h2>
-            <p>{workflowDescription(selectedWorkflowType)}</p>
-          </div>
+    <section className="admin-upload-panel" aria-labelledby="admin-upload-settings-title">
+      <div className="admin-upload-panel__header">
+        <div>
+          <h2 id="admin-upload-settings-title">{selectedWorkflow.label}</h2>
+          <p>{workflowDescription(selectedWorkflowType)}</p>
         </div>
-      )}
+      </div>
 
-      <div
-        className="legacy-search-grid admin-upload-settings-grid"
-        hidden={selectedWorkflowType === 'applicationSubmission'}
-      >
-        {!lockedWorkflowType && (
-          <SearchableSelect
-            id="uploadWorkflowType"
-            labelText="Upload type"
-            disabled={isSubmitting}
-            value={selectedWorkflowType}
-            options={DOCUMENT_UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
-              value: workflow.type,
-              label: workflow.label,
-            }))}
-            onChange={(value) => setWorkflowType(getWorkflowFromQuery(value, 'application', false))}
-          />
-        )}
+      <div className="legacy-search-grid admin-upload-settings-grid">
+        <SearchableSelect
+          id="uploadWorkflowType"
+          labelText="Upload type"
+          disabled={isSubmitting}
+          value={selectedWorkflowType}
+          options={UPLOAD_WORKFLOW_DEFINITIONS.map((workflow) => ({
+            value: workflow.type,
+            label: workflow.label,
+          }))}
+          onChange={(value) => setWorkflowType(getWorkflowFromQuery(value, 'application'))}
+        />
 
         {selectedWorkflowType === 'application' && (
           <ApplicationNumberSelect
@@ -1541,15 +802,13 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
       </div>
 
       <MultiFileDropZone
-        title={
-          selectedWorkflowType === 'applicationSubmission' ? 'Submission file' : 'Upload documents'
-        }
-        description={uploadFormatText}
+        title="Upload documents"
+        description={DOCUMENT_UPLOAD_GUIDANCE}
         inputId="uploadFile"
         inputKey={fileInputKey}
-        inputLabel={uploadInputLabel}
+        inputLabel="Document File"
         required
-        accept={uploadAccept}
+        accept={DOCUMENT_UPLOAD_ACCEPT}
         invalidText={fieldError('uploadFile')}
         disabled={isUploadInputLocked}
         disabledDescription={
@@ -1559,17 +818,8 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
         }
         renderAsPanel={false}
         variant="fspts"
-        showMultipleFileGuidance={selectedWorkflowType !== 'applicationSubmission'}
         onFilesSelected={addFilesToQueue}
       />
-
-      {selectedWorkflowType === 'applicationSubmission' && uploadQueue.length > 0 && (
-        <ApplicationSubmissionValidationContent
-          items={uploadQueue}
-          isSubmitting={isSubmitting}
-          onRemove={removeQueuedFile}
-        />
-      )}
     </section>
   )
 
@@ -1577,49 +827,37 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
     <Grid fullWidth className="default-grid admin-upload-fspts-page">
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-header">
         <PageHeader
-          title={resolvedPageTitle}
-          subtitle={pageSubtitle}
+          title="Data Upload"
+          subtitle="Upload documents and review selected files before submitting."
           style={{ marginBlockEnd: '1.5rem' }}
         />
         <UploadWorkflowProgress
-          steps={activeUploadSteps}
-          currentStepId={activeUploadStep}
+          steps={DOCUMENT_UPLOAD_STEPS}
+          currentStepId={documentUploadStep}
           completedStepIds={activeCompletedSteps}
-          ariaLabel={workflowProgressLabel}
+          ariaLabel="Upload queue workflow progress"
         />
       </Column>
 
       <Column sm={4} md={8} lg={16} className="admin-upload-fspts-content">
         <div className="admin-upload-workflow">
-          {showGlobalUploadFeedback && (
-            <div ref={uploadResultsRef} tabIndex={-1}>
-              <ActionResultNotifications
-                results={uploadActionResults}
-                onClose={dismissUploadResult}
-              />
-            </div>
-          )}
+          <div ref={uploadResultsRef} tabIndex={-1}>
+            <ActionResultNotifications
+              results={uploadActionResults}
+              onClose={dismissUploadResult}
+            />
+          </div>
 
-          {activeUploadStep === 'upload' ? (
+          {documentUploadStep === 'upload' ? (
             <>
               <div className="admin-upload-section-heading">
                 <h2 id="admin-upload-step-title">Upload</h2>
-                <p>{uploadStepDescription}</p>
+                <p>Select documents to prepare before reviewing and submitting the upload.</p>
               </div>
 
               {uploadSettingsPanel}
 
-              {selectedWorkflowType === 'applicationSubmission' ? (
-                <UploadStepReviewButton
-                  label="Review"
-                  disabled={
-                    !hasUploadAccess ||
-                    isSubmitting ||
-                    (uploadQueue.length > 0 && !canReviewLexisSubmissions)
-                  }
-                  onReview={onReviewApplicationSubmissions}
-                />
-              ) : uploadQueue.length > 0 ? (
+              {uploadQueue.length > 0 ? (
                 <UploadQueuePreview
                   items={uploadQueue}
                   targetSummary={currentUploadTargetSummary}
@@ -1649,92 +887,26 @@ function AdminUploadsPage({ lockedWorkflowType, pageTitle }: AdminUploadsPagePro
             <>
               <div className="admin-upload-section-heading">
                 <h2 id="admin-upload-review-title">Review</h2>
-                <p>
-                  {selectedWorkflowType === 'applicationSubmission'
-                    ? 'Review validated submission data before submitting.'
-                    : 'Review selected files and target details before submitting.'}
-                </p>
+                <p>Review selected files and target details before submitting.</p>
               </div>
 
-              {selectedWorkflowType !== 'applicationSubmission' && uploadSettingsPanel}
+              {uploadSettingsPanel}
 
               <UploadQueuePreview
-                items={
-                  selectedWorkflowType === 'applicationSubmission'
-                    ? labelledApplicationSubmissionReviewItems
-                    : uploadQueue
-                }
+                items={uploadQueue}
                 targetSummary={currentUploadTargetSummary}
-                canSubmit={
-                  selectedWorkflowType === 'applicationSubmission'
-                    ? hasUploadAccess && hasValidatedLexisSubmissions
-                    : canSubmitDocumentUpload
-                }
+                canSubmit={canSubmitDocumentUpload}
                 isSubmitting={isSubmitting}
                 currentStepId="review"
                 actionsPlacement="footer"
-                previewTitle={
-                  selectedWorkflowType === 'applicationSubmission'
-                    ? 'Submission review'
-                    : 'Data preview'
-                }
-                emptyDescription={
-                  selectedWorkflowType === 'applicationSubmission'
-                    ? 'Choose application submission files to validate.'
-                    : undefined
-                }
-                emptyStateTitle={
-                  selectedWorkflowType === 'applicationSubmission'
-                    ? 'No application submissions selected'
-                    : undefined
-                }
-                emptyStateDescription={
-                  selectedWorkflowType === 'applicationSubmission'
-                    ? 'Application submission files will appear here after selection.'
-                    : undefined
-                }
-                itemNoun={
-                  selectedWorkflowType === 'applicationSubmission' ? 'submission' : undefined
-                }
-                submitLabel={submitButtonLabel}
-                submittingLabel={submittingButtonLabel}
-                removeLabel={
-                  selectedWorkflowType === 'applicationSubmission' ? 'Cancel submission' : undefined
-                }
-                pendingMessage={
-                  selectedWorkflowType === 'applicationSubmission'
-                    ? 'Not validated yet.'
-                    : undefined
-                }
-                canRemoveItem={(item) =>
-                  selectedWorkflowType !== 'applicationSubmission' || item.status !== 'complete'
-                }
-                onBack={() => {
-                  if (selectedWorkflowType === 'applicationSubmission') {
-                    setApplicationSubmissionStep('upload')
-                  } else {
-                    setDocumentUploadStep('upload')
-                  }
-                }}
+                previewTitle="Data preview"
+                onBack={() => setDocumentUploadStep('upload')}
                 onSubmit={() => void onSubmitUpload()}
                 onReset={onReset}
                 onClear={clearQueuedFiles}
                 onRemove={removeQueuedFile}
-                renderFileDescription={
-                  selectedWorkflowType === 'applicationSubmission'
-                    ? undefined
-                    : renderQueuedFileDescription
-                }
-                renderCompleteAction={(item) =>
-                  item.status === 'complete' && item.resultApplicationNumber ? (
-                    <Link to={`/provincial/application/${item.resultApplicationNumber}`}>
-                      Open Application {item.resultApplicationNumber}
-                    </Link>
-                  ) : null
-                }
+                renderFileDescription={renderQueuedFileDescription}
                 showWorkflowProgress={false}
-                showReviewQueueTable={selectedWorkflowType !== 'applicationSubmission'}
-                showReviewAccordionHeader={selectedWorkflowType !== 'applicationSubmission'}
               />
             </>
           )}

@@ -831,7 +831,7 @@ const adminAccessiblePages: Array<[path: string, heading: RegExp]> = [
   ['/admin/policies/fil', /non-appraised sec\.3 fil%/i],
   ['/provincial/review', /^Application review$/],
   ['/provincial/application/create', /create new application/i],
-  ['/provincial/application/upload', /upload application submission/i],
+  ['/provincial/application/upload', /^upload applications$/i],
   ['/provincial/application', /^Application search$/],
   ['/federal', /federal application search/i],
   ['/reports', /offers report/i],
@@ -1899,9 +1899,7 @@ test.describe('TEST IDIR admin regression', () => {
 
     await expectAdminNavigation(page)
     await expect(page.getByRole('link', { name: /^Summary$/ })).toHaveCount(0)
-    await expect(page.getByRole('link', { name: /^Upload application submission$/i })).toHaveCount(
-      0,
-    )
+    await expect(page.getByRole('link', { name: /^Upload applications$/i })).toHaveCount(0)
     await expect(page.getByRole('link', { name: /^Data upload$/i })).toHaveCount(0)
     await expect(page.locator(sideNavSection('Federal')).getByRole('link')).toHaveCount(1)
     await expect(
@@ -2022,25 +2020,17 @@ test.describe('TEST IDIR admin regression', () => {
     await expandSideNavSection(page, 'Federal')
     await expandSideNavSection(page, 'Admin')
 
-    await expect(provincialSection.getByRole('link', { name: 'Upload' })).toHaveAttribute(
-      'href',
-      '/provincial/application/upload',
-    )
-    await expectAccessiblePage(
-      page,
-      '/provincial/application/upload',
-      /upload application submission/i,
-    )
+    await expect(
+      provincialSection.getByRole('link', { name: 'Upload applications' }),
+    ).toHaveAttribute('href', '/provincial/application/upload')
+    await expectAccessiblePage(page, '/provincial/application/upload', /^upload applications$/i)
     await expectFsptsUploadLayout(page)
-    await expect(page.getByText('Submission file', { exact: true })).toBeVisible()
-    await expect(page.getByLabel('Upload batch summary')).toHaveCount(0)
-    const applicationSubmissionProgress = page.getByRole('list', {
-      name: 'Application submission upload workflow progress',
+    await expect(page.getByText('Application files', { exact: true })).toBeVisible()
+    const applicationUploadProgress = page.getByRole('list', {
+      name: 'Upload applications progress',
     })
-    await expect(applicationSubmissionProgress.getByText('1. Upload')).toBeVisible()
-    await expect(applicationSubmissionProgress.getByText('2. Review')).toBeVisible()
-    await expect(page.getByRole('heading', { name: 'Validation status' })).toHaveCount(0)
-    await expect(page.getByRole('heading', { name: 'Submission summary' })).toHaveCount(0)
+    await expect(applicationUploadProgress.getByText('1. Upload')).toBeVisible()
+    await expect(applicationUploadProgress.getByText('2. Review')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Review' })).toBeEnabled()
 
     await expectAccessiblePage(page, '/provincial/review', /^Application review$/)

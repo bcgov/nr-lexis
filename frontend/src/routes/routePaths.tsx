@@ -15,6 +15,7 @@ import type { RouteActionMatch, RouteRoleScope } from '@/routes/routeAccessTypes
 
 const AdminPoliciesPage = lazy(() => import('@/pages/AdminPolicies'))
 const AdminUploadsPage = lazy(() => import('@/pages/AdminUploads'))
+const ProvincialApplicationUploadPage = lazy(() => import('@/pages/ProvincialApplicationUpload'))
 const FederalPage = lazy(() => import('@/pages/Federal'))
 const FederalApplicationDetailsPage = lazy(() => import('@/pages/FederalApplicationDetails'))
 const NotificationsPage = lazy(() => import('@/pages/Notifications'))
@@ -497,15 +498,12 @@ export const PROTECTED_ROUTES: RouteDescription[] = [
   },
   {
     path: '/provincial/application/upload',
-    id: 'Upload Application Submission',
+    id: 'Upload Applications',
     roleScope: 'provincialApplicationSubmission',
     requiredActions: ['uploadApplicationSubmission'],
     element: (
       <Layout>
-        <AdminUploadsPage
-          lockedWorkflowType="applicationSubmission"
-          pageTitle="Upload application submission"
-        />
+        <ProvincialApplicationUploadPage />
       </Layout>
     ),
     isNavigation: false,

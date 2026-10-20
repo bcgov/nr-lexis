@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react'
-import { Document, Folder, Package, Product, WarningAltFilled } from '@carbon/icons-react'
 import EmptyValue from '@/components/EmptyValue'
 import { displayValue, displayValueText } from '@/utils/display-value'
 import {
@@ -24,8 +23,6 @@ const asList = (value: string[] | undefined): string[] => value?.filter(Boolean)
 const formatDecimal = (value: number | undefined): ReactNode =>
   typeof value === 'number' ? value.toFixed(1) : <EmptyValue />
 
-const formatSubmissionDecimal = formatDecimal
-
 type ReviewTableRow = {
   label: string
   value: ReactNode
@@ -37,296 +34,6 @@ const clientLocationValue = (
 ): string => {
   const client = displayValueText(clientNumber)
   return locationCode ? `${client}-${locationCode}` : client
-}
-
-const submissionClientLocationValue = (
-  clientNumber: string | undefined,
-  locationCode: string | undefined,
-): ReactNode => {
-  const client = clientNumber?.trim()
-  if (!client) {
-    return displayValue(client)
-  }
-  return locationCode ? `${client}-${locationCode}` : client
-}
-
-const submissionValue = (value: string | number | null | undefined): ReactNode => {
-  return displayValue(value)
-}
-
-type SubmissionReviewSectionProps = {
-  title: string
-  icon: ReactNode
-  children: ReactNode
-}
-
-function SubmissionReviewSection({ title, icon, children }: SubmissionReviewSectionProps) {
-  return (
-    <section className="admin-upload-submission-review__section">
-      <h3 className="admin-upload-submission-review__section-title">
-        {icon}
-        {title}
-      </h3>
-      {children}
-    </section>
-  )
-}
-
-function SubmissionReviewList({ title, rows }: { title: string; rows: ReviewTableRow[] }) {
-  return (
-    <table className="admin-upload-submission-review__list" aria-label={`${title} review`}>
-      <tbody>
-        {rows.map((row) => (
-          <tr key={row.label}>
-            <th scope="row">{row.label}</th>
-            <td>{row.value || <EmptyValue />}</td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-  )
-}
-
-function SubmissionReview({
-  items,
-  targetSummary,
-}: {
-  items: UploadQueueItem[]
-  targetSummary: string
-}) {
-  const showFileHeadings = items.length > 1
-
-  return (
-    <div className="admin-upload-submission-review">
-      {items.map((item) => {
-        const details = item.details
-        const errors = asList(details?.errors)
-        const warnings = asList(details?.warnings)
-        const applicationNumber = details?.applicationNumber ?? item.resultApplicationNumber
-        const target = item.targetSummary ?? targetSummary
-        const submissionSummary = details?.submissionSummary
-        const summaryLabels = details?.submissionSummaryLabels
-        const packageRows: ReviewTableRow[] = [
-          ...(applicationNumber
-            ? [{ label: 'Application', value: `Application ${applicationNumber}` }]
-            : []),
-          { label: 'Package', value: submissionValue(details?.packageNumber) },
-          {
-            label: 'Scale rows',
-            value:
-              typeof details?.scaleRows === 'number'
-                ? formatScaleRows(details.scaleRows)
-                : displayValue(''),
-          },
-          ...(details?.userReference
-            ? [{ label: 'User reference', value: details.userReference }]
-            : []),
-        ]
-        const hasPackageDetails =
-          !!applicationNumber ||
-          !!details?.packageNumber ||
-          !!details?.userReference ||
-          typeof details?.scaleRows === 'number'
-        const validationIssues = [
-          ...errors.map((detail, index) => ({
-            key: `${item.id}-error-${index}`,
-            issue: 'Error',
-            detail,
-          })),
-          ...warnings.map((detail, index) => ({
-            key: `${item.id}-warning-${index}`,
-            issue: 'Warning',
-            detail,
-          })),
-        ]
-
-        return (
-          <article
-            key={item.id}
-            className={`admin-upload-submission-review__item admin-upload-submission-review__item--${item.status}`}
-            aria-label={showFileHeadings ? `Submission ${item.file.name}` : undefined}
-          >
-            {showFileHeadings && (
-              <div className="admin-upload-submission-review__item-heading">
-                <h3>{item.file.name}</h3>
-                <span
-                  className={`admin-upload-status-text admin-upload-status-text--${item.status}`}
-                >
-                  {uploadQueueStatusLabel(item.status)}
-                </span>
-              </div>
-            )}
-
-            <SubmissionReviewSection
-              title="Submission metadata"
-              icon={<Document size={20} aria-hidden="true" />}
-            >
-              <SubmissionReviewList
-                title="Submission metadata"
-                rows={[
-                  { label: 'Submission type', value: item.workflowLabel },
-                  { label: 'File name', value: item.file.name },
-                  { label: 'File size', value: formatUploadFileSize(item.file.size) },
-                  { label: 'Submission timestamp', value: formatUploadQueuedAt(item.queuedAt) },
-                  { label: 'Target', value: target },
-                  { label: 'Status', value: uploadQueueStatusLabel(item.status) },
-                ]}
-              />
-            </SubmissionReviewSection>
-
-            {submissionSummary && (
-              <SubmissionReviewSection
-                title="Application details"
-                icon={<Folder size={20} aria-hidden="true" />}
-              >
-                <SubmissionReviewList
-                  title="Application details"
-                  rows={[
-                    {
-                      label: 'Owner client',
-                      value: submissionClientLocationValue(
-                        submissionSummary.ownerClientNumber,
-                        submissionSummary.ownerClientLocationCode,
-                      ),
-                    },
-                    {
-                      label: 'Owner contact',
-                      value: submissionValue(submissionSummary.ownerContactName),
-                    },
-                    {
-                      label: 'Region',
-                      value: submissionValue(
-                        summaryLabels?.orgUnitNumber ?? submissionSummary.orgUnitNumber,
-                      ),
-                    },
-                    {
-                      label: 'Jurisdiction',
-                      value: submissionValue(
-                        summaryLabels?.jurisdictionCode ?? submissionSummary.jurisdictionCode,
-                      ),
-                    },
-                    {
-                      label: 'Federal application',
-                      value: submissionValue(submissionSummary.federalApplicationNumber),
-                    },
-                    {
-                      label: 'Source status',
-                      value: submissionValue(submissionSummary.sourceApplicationStatusCode),
-                    },
-                    {
-                      label: 'Exemption reason',
-                      value: submissionValue(
-                        summaryLabels?.exemptionReasonCode ?? submissionSummary.exemptionReasonCode,
-                      ),
-                    },
-                    {
-                      label: 'Applicant type',
-                      value: submissionValue(
-                        summaryLabels?.applicantTypeCode ?? submissionSummary.applicantTypeCode,
-                      ),
-                    },
-                  ]}
-                />
-              </SubmissionReviewSection>
-            )}
-
-            {hasPackageDetails && (
-              <SubmissionReviewSection
-                title="Package details"
-                icon={<Package size={20} aria-hidden="true" />}
-              >
-                <SubmissionReviewList title="Package details" rows={packageRows} />
-              </SubmissionReviewSection>
-            )}
-
-            {submissionSummary && (
-              <SubmissionReviewSection
-                title="Product details"
-                icon={<Product size={20} aria-hidden="true" />}
-              >
-                <div className="admin-upload-submission-review__table-wrap">
-                  <table
-                    className="admin-upload-submission-review__table"
-                    aria-label="Product details review"
-                  >
-                    <thead>
-                      <tr>
-                        <th scope="col">Product type</th>
-                        <th scope="col">Age class</th>
-                        <th scope="col">Product location</th>
-                        <th scope="col">Application volume</th>
-                        <th scope="col">Average log volume</th>
-                        <th scope="col">Average length</th>
-                        <th scope="col">Average diameter</th>
-                        <th scope="col">Species</th>
-                        <th scope="col">End use</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      <tr>
-                        <td>
-                          {submissionValue(
-                            summaryLabels?.productTypeCode ?? submissionSummary.productTypeCode,
-                          )}
-                        </td>
-                        <td>
-                          {submissionValue(summaryLabels?.ageClass ?? submissionSummary.ageClass)}
-                        </td>
-                        <td>{submissionValue(submissionSummary.productLocation)}</td>
-                        <td>{formatSubmissionDecimal(submissionSummary.applicationVolume)}</td>
-                        <td>{formatSubmissionDecimal(submissionSummary.averageLogVolume)}</td>
-                        <td>{formatSubmissionDecimal(submissionSummary.averageLength)}</td>
-                        <td>{formatSubmissionDecimal(submissionSummary.averageDiameter)}</td>
-                        <td>
-                          {submissionSummary.speciesCodes?.length
-                            ? submissionSummary.speciesCodes.join(', ')
-                            : displayValue('')}
-                        </td>
-                        <td>
-                          {submissionValue(
-                            summaryLabels?.endUseCode ?? submissionSummary.endUseCode,
-                          )}
-                        </td>
-                      </tr>
-                    </tbody>
-                  </table>
-                </div>
-              </SubmissionReviewSection>
-            )}
-
-            {validationIssues.length > 0 && (
-              <SubmissionReviewSection
-                title={`Validation issues (${validationIssues.length})`}
-                icon={<WarningAltFilled size={20} aria-hidden="true" />}
-              >
-                <div className="admin-upload-submission-review__table-wrap">
-                  <table
-                    className="admin-upload-submission-review__table admin-upload-submission-review__table--issues"
-                    aria-label={`Validation issues for ${item.file.name}`}
-                  >
-                    <thead>
-                      <tr>
-                        <th scope="col">Issue</th>
-                        <th scope="col">Detail</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {validationIssues.map((issue) => (
-                        <tr key={issue.key}>
-                          <td>{issue.issue}</td>
-                          <td>{issue.detail}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              </SubmissionReviewSection>
-            )}
-          </article>
-        )
-      })}
-    </div>
-  )
 }
 
 const renderFieldValueTable = (title: string, rows: ReviewTableRow[]) => (
@@ -356,18 +63,8 @@ const renderFieldValueTable = (title: string, rows: ReviewTableRow[]) => (
   </div>
 )
 
-const reviewEmptyResultMessage = (
-  item: UploadQueueItem,
-  itemNoun: string,
-  hasMetadata: boolean,
-  summary: string,
-): string => {
-  if (itemNoun === 'submission' && item.status === 'complete') {
-    return 'Application submission submitted successfully.'
-  }
-
-  return hasMetadata ? 'No validation issues returned.' : summary
-}
+const reviewEmptyResultMessage = (hasMetadata: boolean, summary: string): string =>
+  hasMetadata ? 'No validation issues returned.' : summary
 
 function UploadQueueReviewAccordion({
   items,
@@ -381,14 +78,9 @@ function UploadQueueReviewAccordion({
     return null
   }
 
-  if (itemNoun === 'submission') {
-    return <SubmissionReview items={items} targetSummary={targetSummary} />
-  }
-
   const titleId = `${idPrefix}Title`
   const itemNounTitle = `${itemNoun.charAt(0).toUpperCase()}${itemNoun.slice(1)}`
   const itemNounPlural = `${itemNoun}s`
-  const typeLabel = itemNoun === 'submission' ? 'Submission type' : 'Upload type'
 
   return (
     <section
@@ -486,7 +178,7 @@ function UploadQueueReviewAccordion({
                 {renderFileDescription?.(item)}
                 <dl className="admin-upload-review__meta">
                   <div>
-                    <dt>{typeLabel}</dt>
+                    <dt>Upload type</dt>
                     <dd>{item.workflowLabel}</dd>
                   </div>
                   <div>
@@ -608,7 +300,7 @@ function UploadQueueReviewAccordion({
                   errors.length === 0 &&
                   warnings.length === 0 && (
                     <p className="admin-upload-review__empty-result">
-                      {reviewEmptyResultMessage(item, itemNoun, hasMetadata, summary)}
+                      {reviewEmptyResultMessage(hasMetadata, summary)}
                     </p>
                   )}
               </div>
