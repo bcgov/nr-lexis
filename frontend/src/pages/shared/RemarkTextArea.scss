@@ -10,3 +10,8 @@
   inset-inline-end: 0;
   margin-block-end: 0;
 }
+
+// The helper text only carries the visually hidden character limit, so it takes no space.
+.remark-text-area .cds--form__helper-text {
+  margin-block-start: 0;
+}
