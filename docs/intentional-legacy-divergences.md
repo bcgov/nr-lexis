@@ -129,8 +129,17 @@ Visual alignment preserves existing role, lifecycle and transaction contracts:
   Ministerial exemption's approved volume must still be at least the total requested volume.
   Approval dates are established by approval; switching a new draft to Ministerial clears a date
   entered for OIC or Blanket OIC.
-- Ministerial permit application attachments retain their separate explicit Add operation. A general
-  section Save does not silently attach selected applications or bypass its relationship checks.
+- A Ministerial permit's applications are chosen in Permit details edit mode, in one Application
+  number(s) table: ticking an application includes it, unticking one excludes it, and Current permit
+  pieces and volume follow the ticks until Save. Save applies the whole selection in one
+  transaction, before any other permit change, with the same relationship checks as before: an added
+  application must belong to the permit's exemption, applications are added only to an Active permit
+  and removed only from an Active or Payment pending permit, and the scale volume added, less the
+  volume removed, must fit the exemption's Balance remaining. An added application becomes Permitted
+  and a removed one keeps its status; an application with no unassigned scale rows stays off the
+  permit and Save says so. View mode lists the included applications with their pieces and volume on
+  this permit. Legacy added applications from a pop-up and removed each one at once. Ordinary Order
+  in Council permits keep Add application and Remove in their Associated applications card.
 - A saved permit's owner and agent clients stay read-only. Application Approvers and
   Administrators can remove a Blanket OIC permit's agent, or add one when it has none, while the
   permit is Active or Payment pending. A Ministerial permit's agent follows its first linked
