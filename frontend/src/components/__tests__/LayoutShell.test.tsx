@@ -600,6 +600,12 @@ describe('Layout shell', () => {
     expect(collapsedReportIssue).toHaveAttribute('aria-describedby', tooltip.id)
   })
 
+  it('names the application header landmark after the product', () => {
+    renderLayout('/admin/rtm/emslogamv')
+
+    expect(screen.getByRole('banner', { name: 'LEXIS' })).toBeVisible()
+  })
+
   it('navigates the app name to the resolved default route', async () => {
     renderLayout('/admin/rtm/emslogamv')
 

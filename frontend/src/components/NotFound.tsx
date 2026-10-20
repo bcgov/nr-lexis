@@ -11,7 +11,7 @@ const NotFound = () => {
     <div className="not-found-page">
       <EmptyState
         headingLevel={1}
-        title="404"
+        title="Page not found"
         description="The page you're looking for does not exist."
         action={
           <Button
@@ -21,7 +21,7 @@ const NotFound = () => {
             id="homeBtn"
             onClick={() => buttonClicked()}
           >
-            Back Home
+            Go to my landing page
           </Button>
         }
       />

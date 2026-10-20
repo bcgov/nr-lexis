@@ -611,7 +611,7 @@ function Layout({ children }: LayoutProps) {
         inert={isConflictOpen}
       >
         <SkipToContent />
-        <header className="cds--header csp-app-header" aria-label="NR LEXIS">
+        <header className="cds--header csp-app-header" aria-label="LEXIS">
           <HeaderMenuButton
             id="navigation-toggle"
             className="csp-navigation-toggle"
