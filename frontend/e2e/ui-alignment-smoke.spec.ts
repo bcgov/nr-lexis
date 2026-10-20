@@ -902,12 +902,12 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       ),
     ).toEqual([])
     for (const retiredReport of [
-      'Application Report',
-      'TEAC Package',
-      'Exemptions Report',
-      'Fees Report',
+      /^application report$/i,
+      /^teac package$/i,
+      /^exemptions report$/i,
+      /^fees report$/i,
     ]) {
-      await expect(page.getByRole('link', { name: retiredReport, exact: true })).toHaveCount(0)
+      await expect(page.getByRole('link', { name: retiredReport })).toHaveCount(0)
     }
     await expect(page.getByRole('link', { name: 'Advertising list', exact: true })).toBeVisible()
 
