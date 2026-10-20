@@ -14,7 +14,7 @@ const regionOptions = [
 
 describe('resolveBlanketOicRegionContext', () => {
   it('uses the first recognized exemption region and limits choices to its group', () => {
-    const context = resolveBlanketOicRegionContext(regionOptions, ['1910', '1905'])
+    const context = resolveBlanketOicRegionContext(regionOptions, ['1910'])
 
     expect(context).toEqual({
       defaultRegionNumber: '1910',
@@ -24,6 +24,33 @@ describe('resolveBlanketOicRegionContext', () => {
       ],
       errorMessage: '',
     })
+  })
+
+  it('offers every group that holds one of the exemption regions and defaults to the first', () => {
+    const context = resolveBlanketOicRegionContext(regionOptions, ['1903', '1909'])
+
+    expect(context.defaultRegionNumber).toBe('1903')
+    expect(context.options.map((option) => option.id)).toEqual([
+      '1903',
+      '1904',
+      '1907',
+      '1909',
+      '1910',
+    ])
+    expect(context.errorMessage).toBe('')
+  })
+
+  it('skips unrecognized exemption regions when choosing the default and the groups', () => {
+    const context = resolveBlanketOicRegionContext(regionOptions, ['1999', '1905', ' 1910 '])
+
+    expect(context.defaultRegionNumber).toBe('1905')
+    expect(context.options.map((option) => option.id)).toEqual([
+      '1905',
+      '1906',
+      '1908',
+      '1909',
+      '1910',
+    ])
   })
 
   it('does not provide a fallback when the exemption region is missing or unavailable', () => {
