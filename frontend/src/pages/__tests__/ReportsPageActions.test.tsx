@@ -1828,6 +1828,60 @@ describe('Reports Page Actions', () => {
     expect(mockedTriggerBrowserDownload).toHaveBeenCalledWith(expect.any(Blob), 'report.pdf')
   })
 
+  it('announces a completed download and clears the notice on the next Generate', async () => {
+    mockReportPermissions()
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Application Report' })
+    await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
+    const generate = screen.getByRole('button', { name: 'Generate report' })
+    await userEvent.click(generate)
+
+    expect(await screen.findByText('Application Report downloaded.')).toBeVisible()
+    expect(generate).toHaveFocus()
+
+    mockedRunReport.mockRejectedValueOnce(new ReportRequestError('No report data matched.'))
+    await userEvent.click(generate)
+
+    expect(await screen.findByText('No report data matched.')).toBeVisible()
+    expect(screen.queryByText('Application Report downloaded.')).not.toBeInTheDocument()
+  })
+
+  it('stays silent when the save picker is cancelled', async () => {
+    mockReportPermissions()
+    mockedRunReport.mockResolvedValue({
+      source: 'api',
+      filename: 'report.pdf',
+      contentType: 'application/octet-stream',
+      downloaded: false,
+      cancelled: true,
+    })
+    render(
+      <MemoryRouter initialEntries={['/reports']}>
+        <Routes>
+          <Route path="/reports" element={<ReportsPage />} />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    await screen.findByRole('heading', { name: 'Application Report' })
+    await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
+    await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
+
+    await waitFor(() => expect(mockedRunReport).toHaveBeenCalledTimes(1))
+    await waitFor(() =>
+      expect(screen.getByRole('button', { name: 'Generate report' })).toBeEnabled(),
+    )
+    expect(screen.queryByText(/downloaded\./)).not.toBeInTheDocument()
+    expect(mockedTriggerBrowserDownload).not.toHaveBeenCalled()
+  })
+
   it('downloads PDF reports with the response filename', async () => {
     mockReportPermissions()
     render(

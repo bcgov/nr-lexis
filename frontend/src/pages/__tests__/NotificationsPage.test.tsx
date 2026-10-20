@@ -87,6 +87,22 @@ const mockedFetchNotificationAudienceRoles = vi.mocked(fetchNotificationAudience
 const mockedFetchNotifications = vi.mocked(fetchNotifications)
 
 describe('Notifications page', () => {
+  it('names each administrator row action after its notification', async () => {
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({ roles: ['LEXIS_ADMIN'] }),
+      }),
+    )
+    render(<NotificationsPage />)
+
+    expect(
+      await screen.findByRole('button', { name: 'Edit notification Winter service update' }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole('button', { name: 'Delete notification Winter service update' }),
+    ).toBeVisible()
+  })
+
   it('closes unchanged notification editing without a write or feedback', async () => {
     mockedUseAuth.mockReturnValue(
       createTestAuthContext({
@@ -94,7 +110,7 @@ describe('Notifications page', () => {
       }),
     )
     render(<NotificationsPage />)
-    const edit = await screen.findByRole('button', { name: 'Edit' })
+    const edit = await screen.findByRole('button', { name: /^Edit notification / })
     await userEvent.click(edit)
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
     await waitFor(() =>
@@ -183,8 +199,8 @@ describe('Notifications page', () => {
     expect(mockedFetchNotifications).toHaveBeenCalledOnce()
     expect(mockedFetchAdminNotifications).not.toHaveBeenCalled()
     expect(screen.queryByRole('button', { name: 'New notification' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Edit notification / })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Delete notification / })).not.toBeInTheDocument()
     expect(screen.queryByText(/IDIR\\ADMIN/)).not.toBeInTheDocument()
     expect(document.querySelector('.notifications-page')?.tagName).toBe('DIV')
   })
@@ -401,7 +417,7 @@ describe('Notifications page', () => {
     })
     await waitFor(() => expect(launcher).toHaveFocus())
     expect(screen.getByText('Notification published')).toBeVisible()
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: /^Delete notification / }))
     expect(await screen.findByRole('dialog', { name: 'Delete this notification?' })).toBeVisible()
     expect(screen.queryByText('Notification published')).not.toBeInTheDocument()
     expect(mockedDeleteNotification).not.toHaveBeenCalled()
@@ -500,7 +516,7 @@ describe('Notifications page', () => {
     render(<NotificationsPage />)
 
     await screen.findByText('Winter service update')
-    await user.click(screen.getByRole('button', { name: 'Edit' }))
+    await user.click(screen.getByRole('button', { name: /^Edit notification / }))
 
     expect(screen.getByRole('complementary', { name: 'Edit notification' })).toBeVisible()
     expect(screen.getByLabelText(/^Start date/)).toHaveAttribute('readonly')
@@ -531,8 +547,8 @@ describe('Notifications page', () => {
     await waitFor(() => expect(within(panel).getByLabelText(/^Title/)).toHaveFocus())
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(launcher).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Edit' })).toBeDisabled()
-    expect(screen.getByRole('button', { name: 'Delete' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Edit notification / })).toBeDisabled()
+    expect(screen.getByRole('button', { name: /^Delete notification / })).toBeDisabled()
     await user.click(within(panel).getByRole('button', { name: 'Cancel' }))
 
     await waitFor(() => expect(launcher).toHaveFocus())
@@ -632,7 +648,7 @@ describe('Notifications page', () => {
     render(<NotificationsPage />)
 
     await screen.findByText('Winter service update')
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: /^Delete notification / }))
 
     const dialog = await screen.findByRole('dialog', { name: 'Delete this notification?' })
     expect(dialog).toHaveTextContent('Winter service update will be removed from everyone’s view')
@@ -654,7 +670,7 @@ describe('Notifications page', () => {
     render(<NotificationsPage />)
 
     await screen.findByText('Winter service update')
-    await user.click(screen.getByRole('button', { name: 'Delete' }))
+    await user.click(screen.getByRole('button', { name: /^Delete notification / }))
     const dialog = await screen.findByRole('dialog', { name: 'Delete this notification?' })
     await user.click(within(dialog).getByRole('button', { name: 'Delete' }))
 

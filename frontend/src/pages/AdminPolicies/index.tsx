@@ -1349,6 +1349,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                   Boolean(feeRegionOptionsError) ||
                                   feeRegionOptions.length === 0
                                 }
+                                aria-label={`Edit fee policy ${row.orgUnitCode || row.orgUnitNo} ${row.effectiveDate}`}
                               >
                                 Edit
                               </Button>
@@ -1368,6 +1369,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                 disabled={
                                   isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
                                 }
+                                aria-label={`Delete fee policy ${row.orgUnitCode || row.orgUnitNo} ${row.effectiveDate}`}
                               >
                                 Delete
                               </Button>
@@ -1477,6 +1479,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                 disabled={
                                   isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
                                 }
+                                aria-label={`Edit fee in lieu policy ${row.effectiveDate}`}
                               >
                                 Edit
                               </Button>
@@ -1495,6 +1498,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                 disabled={
                                   isLoadingPolicies || isMutatingPolicies || isPolicyEditorOpen
                                 }
+                                aria-label={`Delete fee in lieu policy ${row.effectiveDate}`}
                               >
                                 Delete
                               </Button>
@@ -1694,6 +1698,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                   requestEditExportSchedule(row, event.currentTarget)
                                 }
                                 disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
+                                aria-label={`Edit export schedule ${row.exportScheduleId}`}
                               >
                                 Edit
                               </Button>
@@ -1703,6 +1708,7 @@ const AdminPoliciesPage = ({ area }: AdminPoliciesPageProps) => {
                                 renderIcon={TrashCan}
                                 onClick={() => requestDelete({ area: 'schedule', row })}
                                 disabled={isLoadingPolicies || isMutatingPolicies || !row.mutable}
+                                aria-label={`Delete export schedule ${row.exportScheduleId}`}
                               >
                                 Delete
                               </Button>

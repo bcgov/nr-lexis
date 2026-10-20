@@ -1005,6 +1005,7 @@ export const ReportsPageContent = () => {
     Record<string, boolean>
   >({})
   const [launchErrorMessage, setLaunchErrorMessage] = useState('')
+  const [downloadedMessage, setDownloadedMessage] = useState('')
   const [isGenerating, setIsGenerating] = useState(false)
   const beginReportOptionsRequest = useLatestRequestGuard()
 
@@ -1226,6 +1227,7 @@ export const ReportsPageContent = () => {
         }
       })
       setLaunchErrorMessage('')
+      setDownloadedMessage('')
     })
 
     return () => {
@@ -1336,6 +1338,7 @@ export const ReportsPageContent = () => {
       [selectedReport.id]: {},
     }))
     setLaunchErrorMessage('')
+    setDownloadedMessage('')
   }
 
   const onUseCurrentAdvertisingPeriod = (): void => {
@@ -1350,10 +1353,12 @@ export const ReportsPageContent = () => {
       },
     }))
     setLaunchErrorMessage('')
+    setDownloadedMessage('')
   }
 
   const onOpenReportRequest = async (): Promise<void> => {
     setLaunchErrorMessage('')
+    setDownloadedMessage('')
 
     if (reportGenerationDisabled) {
       setLaunchErrorMessage(REPORT_OPTIONS_UNAVAILABLE_MESSAGE)
@@ -1383,6 +1388,10 @@ export const ReportsPageContent = () => {
 
       if (runResult.blob) {
         triggerBrowserDownload(runResult.blob, runResult.filename)
+      }
+      // A cancelled save picker produced no file, so it stays silent.
+      if (!runResult.cancelled) {
+        setDownloadedMessage(`${selectedReport.title} downloaded.`)
       }
     } catch (error) {
       console.error(error)
@@ -1672,6 +1681,15 @@ export const ReportsPageContent = () => {
                   subtitle={launchErrorMessage}
                   lowContrast
                   onCloseButtonClick={() => setLaunchErrorMessage('')}
+                />
+              )}
+              {downloadedMessage && (
+                <AppNotification
+                  kind="success"
+                  title="Action completed"
+                  subtitle={downloadedMessage}
+                  lowContrast
+                  onCloseButtonClick={() => setDownloadedMessage('')}
                 />
               )}
             </>
