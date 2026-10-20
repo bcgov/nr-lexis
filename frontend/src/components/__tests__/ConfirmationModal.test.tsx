@@ -1,7 +1,7 @@
 import { within, act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { useState } from 'react'
-import { afterEach, vi } from 'vitest'
+import { afterEach, beforeEach, vi } from 'vitest'
 
 import ConfirmationModal from '@/components/ConfirmationModal'
 
@@ -274,4 +274,95 @@ describe('ConfirmationModal', () => {
       )
     },
   )
+
+  describe('focus', () => {
+    beforeEach(() => {
+      // jsdom has no layout, so report the notification as rendered.
+      vi.spyOn(HTMLElement.prototype, 'getClientRects').mockReturnValue([
+        new DOMRect(0, 0, 400, 100),
+      ] as unknown as DOMRectList)
+    })
+
+    const nextFrame = () => new Promise((resolve) => requestAnimationFrame(resolve))
+
+    it('moves focus to the error when a confirmation fails', async () => {
+      const user = userEvent.setup()
+      render(
+        <ConfirmationModal
+          open
+          title="Delete scale?"
+          onConfirm={() => Promise.reject(new Error('Scale not deleted.'))}
+          onClose={vi.fn()}
+        />,
+      )
+
+      await user.click(screen.getByRole('button', { name: 'Confirm' }))
+
+      const dialog = screen.getByRole('dialog', { name: 'Delete scale?' })
+      expect(await within(dialog).findByText('Scale not deleted.')).toBeVisible()
+      await waitFor(() => expect(within(dialog).getByRole('status')).toHaveFocus())
+    })
+
+    it('moves focus to the error again when a retry fails with the same message', async () => {
+      const user = userEvent.setup()
+      render(
+        <ConfirmationModal
+          open
+          title="Delete scale?"
+          onConfirm={() => Promise.reject(new Error('Scale not deleted.'))}
+          onClose={vi.fn()}
+        />,
+      )
+      const dialog = screen.getByRole('dialog', { name: 'Delete scale?' })
+
+      await user.click(screen.getByRole('button', { name: 'Confirm' }))
+      await waitFor(() => expect(within(dialog).getByRole('status')).toHaveFocus())
+
+      await user.click(screen.getByRole('button', { name: 'Confirm' }))
+      expect(within(dialog).getByRole('status')).not.toHaveFocus()
+      await waitFor(() => expect(within(dialog).getByRole('status')).toHaveFocus())
+    })
+
+    it('keeps initial focus on Cancel when an error is already shown at open', async () => {
+      render(
+        <ConfirmationModal
+          open
+          title="Delete policy?"
+          errorMessage="The policy changed. Refresh and try again."
+          onConfirm={vi.fn()}
+          onClose={vi.fn()}
+        />,
+      )
+
+      const cancel = screen.getByRole('button', { name: 'Cancel' })
+      await waitFor(() => expect(cancel).toHaveFocus())
+      await act(async () => {
+        await nextFrame()
+        await nextFrame()
+      })
+      expect(cancel).toHaveFocus()
+    })
+
+    it('keeps focus inside the dialog while the confirmation is pending', async () => {
+      const user = userEvent.setup()
+      const pendingConfirmation = deferred()
+      render(
+        <ConfirmationModal
+          open
+          title="Delete scale?"
+          confirmLabel="Delete"
+          onConfirm={() => pendingConfirmation.promise}
+          onClose={vi.fn()}
+        />,
+      )
+
+      await user.click(screen.getByRole('button', { name: 'Delete' }))
+
+      const dialog = screen.getByRole('dialog', { name: 'Delete scale?' })
+      expect(screen.getByRole('button', { name: 'Delete…' })).toBeDisabled()
+      expect(dialog).toHaveFocus()
+
+      await act(async () => pendingConfirmation.resolve())
+    })
+  })
 })
