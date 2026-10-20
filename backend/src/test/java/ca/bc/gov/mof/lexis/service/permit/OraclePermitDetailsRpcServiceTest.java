@@ -2573,6 +2573,40 @@ class OraclePermitDetailsRpcServiceTest {
   }
 
   @Test
+  void addPermitShouldAllowBlanketOicRegionFromAnyAreaGroupOfTheExemption() {
+    stubPermitCreationExemption("BOIC-1", "B", "ACT", null, null);
+    when(exemptionDetailsRpcRepository.findExemptionOrgUnitNumbers("BOIC-1"))
+        .thenReturn(List.of(1903L, 1909L));
+    when(repository.insertPermitDetail(any(PermitMutationRow.class), eq("idir\\jsmith")))
+        .thenAnswer(
+            invocation -> Optional.of(withPermitNumber(invocation.getArgument(0), 7000123L)));
+
+    PermitMutationRpcResponseDto response =
+        service.addPermit(blanketOicCreateRequest("0", "0", "1909"), "idir\\jsmith");
+
+    assertThat(response.success()).isTrue();
+    ArgumentCaptor<PermitMutationRow> permitCaptor =
+        ArgumentCaptor.forClass(PermitMutationRow.class);
+    verify(repository).insertPermitDetail(permitCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(permitCaptor.getValue().orgUnitNo()).isEqualTo(1909L);
+  }
+
+  @Test
+  void addPermitShouldRejectBlanketOicRegionInNoAreaGroupOfTheExemption() {
+    stubPermitCreationExemption("BOIC-1", "B", "ACT", null, null);
+    when(exemptionDetailsRpcRepository.findExemptionOrgUnitNumbers("BOIC-1"))
+        .thenReturn(List.of(1903L, 1909L));
+
+    PermitMutationRpcResponseDto response =
+        service.addPermit(blanketOicCreateRequest("0", "0", "1905"), "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors())
+        .containsExactly("The selected region is not available for this exemption.");
+    verify(repository, never()).insertPermitDetail(any(), any());
+  }
+
+  @Test
   void addPermitShouldFailClosedWhenBlanketOicRegionContextIsUnrecognized() {
     stubPermitCreationExemption("BOIC-1", "B", "ACT", null, null);
     when(exemptionDetailsRpcRepository.findExemptionOrgUnitNumbers("BOIC-1"))
@@ -6880,7 +6914,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactly(
-            "Fee Receipt Number should not be empty for a complete Permit so it will be saved as Payment Pending.");
+            "Receipt number should not be empty for a complete permit so it will be saved as Payment pending.");
     verify(repository, never()).updatePermitDetail(any(), any(), any());
   }
 
@@ -6905,7 +6939,7 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.permitStatus()).isEqualTo("PPD");
     assertThat(response.warnings())
         .containsExactly(
-            "Receipt number should not be empty for a complete permit so it will be saved as Payment Pending.");
+            "Receipt number should not be empty for a complete permit so it will be saved as Payment pending.");
     ArgumentCaptor<PermitMutationRow> captor = ArgumentCaptor.forClass(PermitMutationRow.class);
     verify(repository).updatePermitDetail(captor.capture(), eq("bceid\\submitter"), isNull());
     assertThat(captor.getValue().permitStatusCode()).isEqualTo("PPD");
@@ -8721,6 +8755,44 @@ class OraclePermitDetailsRpcServiceTest {
     assertThat(response.success()).isFalse();
     assertThat(response.errors())
         .containsExactly("Timber mark TM3 is not valid for exemption EX-700.");
+    verify(repository, never())
+        .insertBoicScaleDetail(org.mockito.ArgumentMatchers.any(BoicScaleMutationRecord.class));
+  }
+
+  @ParameterizedTest(name = "mark status {0} with file type {1}")
+  @CsvSource(
+      delimiter = '|',
+      value = {
+        "ACT|B08|Timber mark TM3 is not valid for provincial applications.",
+        "ACT|B14|Timber mark TM3 is not valid for provincial applications.",
+        "PI|B01|Timber mark TM3 is not valid for this scale due to a status of PI.",
+        "PI|B08|Timber mark TM3 is not valid for provincial applications."
+      })
+  void addBlanketOicScaleShouldRefuseATimberMarkByFileTypeBeforeStatus(
+      String markStatus, String fileTypeCode, String expectedError) {
+    when(repository.findPermitMutationByPermitNumber(7000123L))
+        .thenReturn(Optional.of(blanketOicPermitMutationRow()));
+    when(repository.findExemptionTypeCode("EX-700")).thenReturn(Optional.of("B"));
+    when(repository.findPackageNumbersByOicPermitNumber(7000123L))
+        .thenReturn(List.of("PKG-903"));
+    when(repository.findValidBoicTimberMarkRequired("TM3", "EX-700"))
+        .thenReturn(Optional.of(boicTimberMark(markStatus, fileTypeCode)));
+    when(repository.isSpeciesCodeValidRequired("HE")).thenReturn(true);
+    when(repository.isGradeCodeValidRequired("A")).thenReturn(true);
+    when(repository.findScaleDetailsByPackageNumber("PKG-903")).thenReturn(List.of());
+    when(repository.findScaleDetailsByPermitNumber(7000123L)).thenReturn(List.of());
+    when(repository.findPackageDetailsByPackageNumberRequired("PKG-903"))
+        .thenReturn(
+            Optional.of(
+                new PackageDetailsRow(
+                    "PKG-903", 100.0d, 10.0d, 20.0d, "ACT", null, "N", "S")));
+
+    PermitPersistenceRpcResponseDto response =
+        service.addBlanketOicScale(
+            7000123L, "PKG-903", "TM3", "12.5", 7L, "HE", "A", "idir\\jsmith");
+
+    assertThat(response.success()).isFalse();
+    assertThat(response.errors()).containsExactly(expectedError);
     verify(repository, never())
         .insertBoicScaleDetail(org.mockito.ArgumentMatchers.any(BoicScaleMutationRecord.class));
   }

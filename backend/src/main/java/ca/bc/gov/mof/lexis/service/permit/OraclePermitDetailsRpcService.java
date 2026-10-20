@@ -5050,22 +5050,19 @@ public class OraclePermitDetailsRpcService implements PermitDetailsRpcService {
       String exemptionNumber, Long regionNumber, List<String> errors) {
     List<Long> exemptionRegions =
         exemptionDetailsRpcRepository.findExemptionOrgUnitNumbers(exemptionNumber);
-    Set<Long> allowedRegions = null;
+    // Every area group that holds one of the exemption's regions is open to the permit.
+    Set<Long> allowedRegions = new HashSet<>();
     if (exemptionRegions != null) {
       for (Long exemptionRegion : exemptionRegions) {
         for (Set<Long> regionGroup : BLANKET_OIC_REGION_GROUPS) {
           if (regionGroup.contains(exemptionRegion)) {
-            allowedRegions = regionGroup;
-            break;
+            allowedRegions.addAll(regionGroup);
           }
-        }
-        if (allowedRegions != null) {
-          break;
         }
       }
     }
 
-    if (allowedRegions == null) {
+    if (allowedRegions.isEmpty()) {
       errors.add("No recognized region is available for this exemption.");
     } else if (regionNumber == null || !allowedRegions.contains(regionNumber)) {
       errors.add("The selected region is not available for this exemption.");
