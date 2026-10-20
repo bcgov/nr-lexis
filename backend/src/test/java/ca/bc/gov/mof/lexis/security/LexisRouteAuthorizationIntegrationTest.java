@@ -1821,6 +1821,25 @@ class LexisRouteAuthorizationIntegrationTest {
   }
 
   @Test
+  void modernPermitApplicationSelectionShouldUseSavePermitAuthorization() throws Exception {
+    for (String role : List.of("LEXIS_APPLICATION_APPROVER", "LEXIS_PROVINCIAL_SUBMITTER_00077881")) {
+      mockMvc.perform(
+          post("/api/lexis/rpc/permit-details/update-permit-applications")
+              .param("permitNumber", "7000123")
+              .param("addedApplications", "1000457")
+              .param("removedApplications", "1000456")
+              .with(jwt().authorities(new SimpleGrantedAuthority(role))))
+          .andExpect(status().isNoContent());
+    }
+    mockMvc.perform(
+        post("/api/lexis/rpc/permit-details/update-permit-applications")
+            .param("permitNumber", "7000123")
+            .param("addedApplications", "1000457")
+            .with(jwt().authorities(new SimpleGrantedAuthority("LEXIS_READ_ONLY"))))
+        .andExpect(status().isForbidden());
+  }
+
+  @Test
   void modernPermitApplicationAddShouldAllowCanonicalApproverRole() throws Exception {
     mockMvc.perform(
             post("/api/lexis/rpc/permit-details/add-applications-to-permit")

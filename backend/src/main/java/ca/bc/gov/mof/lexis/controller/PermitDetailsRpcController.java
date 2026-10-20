@@ -1029,6 +1029,55 @@ public class PermitDetailsRpcController {
         });
   }
 
+  /** Adds and removes the permit's applications together, as one save. */
+  @PostMapping("/update-permit-applications")
+  public ResponseEntity<PermitPersistenceRpcResponseDto> updatePermitApplications(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      @RequestParam(name = "addedApplications", required = false) String addedApplications,
+      @RequestParam(name = "removedApplications", required = false) String removedApplications,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for update permit applications");
+      return ResponseEntity.noContent().build();
+    }
+    requirePermitAccess(permitNumber, authentication);
+    List<Long> applicationNumbers =
+        java.util.stream.Stream.concat(
+                parseApplicationNumbers(addedApplications).stream(),
+                parseApplicationNumbers(removedApplications).stream())
+            .distinct()
+            .sorted()
+            .toList();
+    applicationNumbers.forEach(
+        applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+    return permitOperationMutex.executeAggregate(
+        applicationNumbers,
+        List.of(permitNumber),
+        () -> {
+          requirePermitAccess(permitNumber, authentication);
+          requirePermitEditable(permitNumber, authentication);
+          applicationNumbers.forEach(
+              applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+          List<Long> applicationLocksToRelease =
+              acquireApplicationLocksForMutation(applicationNumbers, authentication);
+          try {
+            return ResponseEntity.ok(
+                service.updatePermitApplications(
+                    permitNumber,
+                    addedApplications,
+                    removedApplications,
+                    userId(authentication)));
+          } finally {
+            releaseApplicationLocks(applicationLocksToRelease, authentication);
+          }
+        });
+  }
+
   @PostMapping("/add-boic-scale")
   public ResponseEntity<PermitPersistenceRpcResponseDto> addBlanketOicScale(
       @RequestParam(name = "permitNumber", required = false) Long permitNumber,

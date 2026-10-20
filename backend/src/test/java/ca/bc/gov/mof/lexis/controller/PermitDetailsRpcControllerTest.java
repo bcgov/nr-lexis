@@ -2886,6 +2886,97 @@ class PermitDetailsRpcControllerTest {
   }
 
   @Test
+  void updatePermitApplicationsShouldForwardBothListsInsideTheMutexWithLocksOnEveryApplication() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    PermitPersistenceRpcResponseDto dto =
+        new PermitPersistenceRpcResponseDto(
+            true, "Application changes were saved.", List.of(), List.of(), 7000123L);
+    when(service.updatePermitApplications(7000123L, "1000457", "1000456", "idir\\jsmith"))
+        .thenReturn(dto);
+    allowApplicationMutationLocks(1000456L, 1000457L);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.updatePermitApplications(7000123L, "1000457", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody()).isEqualTo(dto);
+    var order = org.mockito.Mockito.inOrder(provincialAuthorizationService, editLockService, service);
+    order.verify(provincialAuthorizationService).requireApplication(authentication, 1000456L);
+    order.verify(provincialAuthorizationService).requireApplication(authentication, 1000457L);
+    order.verify(editLockService).acquirePermit(7000123L, "idir\\jsmith", "idir\\jsmith", false);
+    order.verify(provincialAuthorizationService).requireApplication(authentication, 1000456L);
+    order.verify(provincialAuthorizationService).requireApplication(authentication, 1000457L);
+    order.verify(editLockService).acquire(1000456L, "idir\\jsmith", "idir\\jsmith", false);
+    order.verify(editLockService).acquire(1000457L, "idir\\jsmith", "idir\\jsmith", false);
+    order.verify(service)
+        .updatePermitApplications(7000123L, "1000457", "1000456", "idir\\jsmith");
+    order.verify(editLockService).release(1000456L, "idir\\jsmith");
+    order.verify(editLockService).release(1000457L, "idir\\jsmith");
+  }
+
+  @Test
+  void updatePermitApplicationsShouldRejectWithoutSavePermitAction() {
+    TestingAuthenticationToken authentication = unauthorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.updatePermitApplications(7000123L, "1000457", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.FORBIDDEN);
+    verifyNoInteractions(service);
+  }
+
+  @ParameterizedTest
+  @ValueSource(longs = {1000456L, 1000457L})
+  void updatePermitApplicationsShouldCheckAddedAndRemovedApplicationAccessBeforeTheService(
+      long deniedApplication) {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+    lenient()
+        .doThrow(new org.springframework.security.access.AccessDeniedException("denied"))
+        .when(provincialAuthorizationService)
+        .requireApplication(authentication, deniedApplication);
+
+    assertThatThrownBy(
+            () ->
+                controller.updatePermitApplications(
+                    7000123L, "1000457", "1000456", authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class);
+
+    verify(service, never()).updatePermitApplications(any(), any(), any(), any());
+  }
+
+  @Test
+  void updatePermitApplicationsShouldRejectAnExpiredPermitBeforeTheService() {
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(permitService.findByPermitNumber(7000123L))
+        .thenReturn(Optional.of(permitDetail("EXP")));
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    assertThatThrownBy(
+            () ->
+                controller.updatePermitApplications(
+                    7000123L, "1000457", "1000456", authentication))
+        .isInstanceOf(org.springframework.security.access.AccessDeniedException.class)
+        .hasMessage("Expired permits are read-only.");
+
+    verifyNoInteractions(editLockService);
+    verify(service, never()).updatePermitApplications(any(), any(), any(), any());
+  }
+
+  @Test
+  void updatePermitApplicationsShouldReturnNoContentWhenServiceMissing() {
+    when(serviceProvider.getIfAvailable()).thenReturn(null);
+    TestingAuthenticationToken authentication = authorizedSavePermit();
+
+    ResponseEntity<PermitPersistenceRpcResponseDto> response =
+        controller.updatePermitApplications(7000123L, "1000457", "1000456", authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
+    verifyNoInteractions(service);
+  }
+
+  @Test
   void addBlanketOicScaleShouldForwardRequestToService() {
     when(serviceProvider.getIfAvailable()).thenReturn(service);
     PermitPersistenceRpcResponseDto dto =
