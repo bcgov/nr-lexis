@@ -4807,7 +4807,12 @@ test.describe('TEST IDIR admin regression', () => {
           .filter({
             has: page.getByRole('link', { name: String(lifecycleApplicationNumber), exact: true }),
           })
-        await applicationRow.getByRole('button', { name: 'Remove', exact: true }).click()
+        await applicationRow
+          .getByRole('button', {
+            name: `Remove application ${lifecycleApplicationNumber}`,
+            exact: true,
+          })
+          .click()
         const removeDialog = page.getByRole('dialog', {
           name: 'Are you sure you want to remove this application?',
         })
