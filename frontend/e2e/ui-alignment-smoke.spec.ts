@@ -602,7 +602,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       }),
     })
 
-    await expect(page).toHaveTitle('Log Exemption Information System')
+    await expect(page).toHaveTitle('Application search')
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('type', 'image/png')
     await expect(page.locator('link[rel="icon"]')).toHaveAttribute('href', '/bcid-192x192.png')
     await expect(page.getByRole('heading', { level: 1, name: 'Application search' })).toBeVisible()
