@@ -20,6 +20,7 @@ import MultiFileDropZone from '@/components/uploads/MultiFileDropZone'
 import UploadWorkflowProgress from '@/components/uploads/UploadWorkflowProgress'
 import {
   extractUploadErrorDetails,
+  GENERIC_SUBMISSION_FAILURE_MESSAGE,
   uploadQueueFileKey,
   validateUploadFileSize,
 } from '@/components/uploads/uploadQueueHelpers'
@@ -29,6 +30,7 @@ import {
   validateApplicationSubmissionUpload,
   type AdminUploadResult,
 } from '@/service/admin-upload-service'
+import { getResponseStatus } from '@/utils/http-error'
 import ApplicationUploadFileList from './ApplicationUploadFileList'
 import ApplicationUploadResult from './ApplicationUploadResult'
 import ApplicationUploadReviewTable from './ApplicationUploadReviewTable'
@@ -60,8 +62,6 @@ const NO_VALID_FILES_ERROR =
   'No files are ready for review. Correct the failed files and add them again.'
 const VALIDATION_FAILURE_MESSAGE =
   'Submission validation failed. Please try again. If the problem persists, contact your administrator.'
-const SAVE_FAILURE_MESSAGE =
-  "We couldn't save this application. Try again later. If it keeps happening, report an issue."
 
 const localFileError = (file: File): string => {
   if (!file.name.trim()) {
@@ -71,6 +71,15 @@ const localFileError = (file: File): string => {
     return 'File is empty.'
   }
   return validateUploadFileSize(file)
+}
+
+// A server or database failure shows the generic message, never what its response carries.
+const failureReasons = (error: unknown, fallbackMessage: string): string[] => {
+  if ((getResponseStatus(error) ?? 0) >= 500) {
+    return [fallbackMessage]
+  }
+  const { details } = extractUploadErrorDetails(error, fallbackMessage)
+  return details.errors?.length ? details.errors : [fallbackMessage]
 }
 
 const isValidationFailure = (result: AdminUploadResult): boolean => {
@@ -89,14 +98,12 @@ const validateFile = async (
     if (!isValidationFailure(result)) {
       return { status: 'validated', errors: [], summary: result.submissionSummary }
     }
-    const { details } = extractUploadErrorDetails(
-      { response: { data: result } },
-      VALIDATION_FAILURE_MESSAGE,
-    )
-    return { status: 'failed', errors: details.errors ?? [VALIDATION_FAILURE_MESSAGE] }
+    return {
+      status: 'failed',
+      errors: failureReasons({ response: { data: result } }, VALIDATION_FAILURE_MESSAGE),
+    }
   } catch (error) {
-    const { details } = extractUploadErrorDetails(error, VALIDATION_FAILURE_MESSAGE)
-    return { status: 'failed', errors: details.errors ?? [VALIDATION_FAILURE_MESSAGE] }
+    return { status: 'failed', errors: failureReasons(error, VALIDATION_FAILURE_MESSAGE) }
   }
 }
 
@@ -118,14 +125,12 @@ const createApplication = async (
         errors: [],
       }
     }
-    const { details } = extractUploadErrorDetails(
-      { response: { data: result } },
-      SAVE_FAILURE_MESSAGE,
-    )
-    return { ...outcome, errors: details.errors?.length ? details.errors : [SAVE_FAILURE_MESSAGE] }
+    return {
+      ...outcome,
+      errors: failureReasons({ response: { data: result } }, GENERIC_SUBMISSION_FAILURE_MESSAGE),
+    }
   } catch (error) {
-    const { details } = extractUploadErrorDetails(error, SAVE_FAILURE_MESSAGE)
-    return { ...outcome, errors: details.errors?.length ? details.errors : [SAVE_FAILURE_MESSAGE] }
+    return { ...outcome, errors: failureReasons(error, GENERIC_SUBMISSION_FAILURE_MESSAGE) }
   }
 }
 

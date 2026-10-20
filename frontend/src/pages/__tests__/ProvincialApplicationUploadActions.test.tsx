@@ -488,9 +488,11 @@ describe('Upload applications', () => {
     )
   })
 
-  it('offers to report an issue when no application could be saved', async () => {
+  it('shows the generic failure when the server fails without a reason', async () => {
     mockedValidateApplicationSubmissionUpload.mockResolvedValue(validated('TEST1020-V01'))
-    mockedSubmitAdminUpload.mockRejectedValue({ response: { status: 500 } })
+    mockedSubmitAdminUpload.mockRejectedValue({
+      response: { status: 500, data: { message: 'Database connection refused' } },
+    })
     renderPage()
     await addFiles(xmlFile('test-2026-10-20.xml'))
     await goToReview()
@@ -507,15 +509,66 @@ describe('Upload applications', () => {
     expect(screen.queryByRole('table', { name: /^Created/ })).not.toBeInTheDocument()
     const notCreated = screen.getByRole('table', { name: 'Not created (1)' })
     expect(
+      within(notCreated).getByText(
+        'Submission failed. Please try again. If the problem persists, contact your administrator.',
+      ),
+    ).toBeVisible()
+    expect(within(notCreated).queryByText(/Database/)).not.toBeInTheDocument()
+    expect(within(notCreated).queryByRole('link')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Upload applications' })).toHaveClass(
+      'cds--btn--primary',
+    )
+  })
+
+  it('links the report an issue request in a reason that asks for it', async () => {
+    mockedValidateApplicationSubmissionUpload.mockResolvedValue(validated('TEST1020-V01'))
+    mockedSubmitAdminUpload.mockRejectedValue({
+      response: {
+        status: 422,
+        data: {
+          status: 'rejected',
+          errors: [
+            "We couldn't save this application. Try again later. If it keeps happening, report an issue.",
+          ],
+        },
+      },
+    })
+    renderPage()
+    await addFiles(xmlFile('test-2026-10-20.xml'))
+    await goToReview()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Create 1 application' }))
+
+    const notCreated = await screen.findByRole('table', { name: 'Not created (1)' })
+    expect(
       within(notCreated).getByText(/We couldn't save this application\. Try again later\./),
     ).toBeVisible()
     expect(within(notCreated).getByRole('link', { name: 'report an issue' })).toHaveAttribute(
       'href',
       'mailto:Heartwood@gov.bc.ca',
     )
-    expect(screen.getByRole('button', { name: 'Upload applications' })).toHaveClass(
-      'cds--btn--primary',
-    )
+  })
+
+  it('shows the generic validation failure when the server is unavailable', async () => {
+    mockedValidateApplicationSubmissionUpload.mockRejectedValue({
+      response: {
+        status: 503,
+        data: {
+          title: 'Service temporarily unavailable',
+          detail: 'LEXIS could not complete the request. Please try again later.',
+        },
+      },
+    })
+    renderPage()
+
+    await addFiles(xmlFile('test-2026-10-20.xml'))
+
+    const issuesTable = await screen.findByRole('table', { name: 'Validation issues (1)' })
+    expect(
+      within(issuesTable).getByText(
+        'Submission validation failed. Please try again. If the problem persists, contact your administrator.',
+      ),
+    ).toBeVisible()
   })
 
   it('asks before leaving while files are on the page', async () => {
