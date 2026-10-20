@@ -137,20 +137,33 @@
   margin-block-start: 1.5rem;
 }
 
+// The Application number(s) label sits above its table, as a field label sits above its value.
 .ministerial-permit-details__applications {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  gap: 0.5rem;
   min-inline-size: 0;
+
+  > .detail-field-label {
+    margin: 0;
+  }
 }
 
-.ministerial-permit-details__applications .detail-section-subtitle {
-  margin-block-end: 0;
+// The table is as wide as its columns, and takes the full width on small screens.
+.ministerial-permit-details__application-table {
+  inline-size: max-content;
+  min-inline-size: min(22rem, 100%);
 }
 
-.ministerial-permit-details__application-help {
-  margin: 0;
-  color: var(--cds-text-secondary);
+@media (max-width: 671px) {
+  .ministerial-permit-details__application-table {
+    inline-size: 100%;
+  }
+}
+
+// A row that can't be included shows its pieces and volume greyed; its link stays active.
+.ministerial-permit-details__application-row--disabled td:nth-last-child(-n + 2) {
+  color: var(--cds-text-disabled);
 }
 
 // Create package and Add scale panel forms.

@@ -257,6 +257,7 @@ const installPermitParityFixtures = async (
 
   const coreTabs = {
     applicationList: blanketOic ? [] : ['111'],
+    applicationTotals: blanketOic ? [] : [{ applicationNumber: '111', pieces: 3, volume: 3 }],
     packageList: scenario === 'blanket-oic-empty' ? [] : packageList,
   }
 
@@ -869,6 +870,11 @@ test.describe('Provincial permit parity regressions', () => {
     await gotoSyntheticRoute(page, '/provincial/permit/91001', {
       ready: page.getByRole('heading', { level: 1, name: 'Permit 91001 (Pending)', exact: true }),
     })
+
+    const applications = page.getByRole('region', { name: 'Application number(s)', exact: true })
+    await expect(applications.getByRole('link', { name: '111', exact: true })).toBeVisible()
+    await expect(applications).toContainText('3.0')
+    await expect(applications.getByRole('checkbox')).toHaveCount(0)
 
     await selectTab(page, 'Scale')
     const scaleRows = page.getByRole('region', { name: 'Scale rows', exact: true })

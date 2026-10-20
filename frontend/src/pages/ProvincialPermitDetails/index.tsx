@@ -68,6 +68,7 @@ import PendingIcon from '@/components/PendingIcon'
 import PermitCountrySelect from '@/components/PermitCountrySelect'
 import StatusTag from '@/components/StatusTag'
 import TableFrame from '@/components/TableFrame'
+import EmptyValue from '@/components/EmptyValue'
 import { useDiscardPrompt } from '@/components/DiscardChangesModal'
 import UnsavedChangesGuard, { formValuesEqual } from '@/components/UnsavedChangesGuard'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
@@ -183,6 +184,7 @@ import {
   fetchProvincialPermitFees,
   removeApplicationFromPermit,
   updateBlanketOicPackage,
+  updatePermitApplications,
   updatePermitScaleAttachment,
   updatePermitScaleSelection,
   type BlanketOicPackageMutationRequest,
@@ -239,10 +241,10 @@ const gbmsInvoiceAmountLabel = (amount: string) => {
 /**
  * Where a result shows: Documents results in the Documents tab, package results at the top of the
  * Scale tab, scale results in the package's Summary of scale, and a section's save inside that
- * section's card below its title. An application added to or removed from the permit shows in the
- * card that lists the applications: Permit details for a Ministerial permit, Associated
- * applications for any other. Every other result stays at page level, where an email action's
- * result also takes focus.
+ * section's card below its title. An application added to or removed from a permit other than a
+ * Ministerial permit shows in its Associated applications card; a Ministerial permit's
+ * applications save with its Permit details. Every other result stays at page level, where an
+ * email action's result also takes focus.
  */
 type PermitActionResultSource =
   | 'documents'
@@ -1181,10 +1183,6 @@ const withPermitMutationResult = (
   }
 }
 
-/** The card an application added to or removed from the permit reports in. */
-const permitApplicationResultSource = (ministerialPermit: boolean): PermitActionResultSource =>
-  ministerialPermit ? 'permit' : 'applications'
-
 /** The tab a section's save reports in: the one it was saved from. */
 const permitSaveResultSource = (tab: PermitDetailTabId): PermitActionResultSource =>
   tab === 'owner'
@@ -1226,6 +1224,61 @@ const onlyReceiptNumberChanged = (form: PermitDetailForm, baseline: PermitDetail
   (Object.keys(form) as PermitDetailFormField[]).every(
     (field) => field === 'permitReceiptNo' || form[field] === baseline[field],
   )
+
+/**
+ * One row of a Ministerial permit's Application number(s) table: an application on the permit,
+ * with its pieces and volume on the permit, or one that can be added, with the unassigned pieces
+ * and volume adding it attaches. A row's values stay the same whether it is ticked or not.
+ */
+type MinisterialApplicationRow = {
+  applicationNumber: string
+  /** Whether the application is on the saved permit. */
+  included: boolean
+  /** Whether the row is ticked in the table. */
+  checked: boolean
+  pieces: number | null
+  volume: number | null
+  disabled: boolean
+  disabledReason: string
+}
+
+const compareApplicationNumbers = (first: string, second: string): number =>
+  first.localeCompare(second, undefined, { numeric: true })
+
+/** The ticks that differ from the saved permit, keeping only rows that are still listed. */
+const withListedApplicationDraft = (
+  draft: Record<string, boolean>,
+  listedApplicationNumbers: ReadonlySet<string>,
+): Record<string, boolean> => {
+  const entries = Object.entries(draft).filter(([applicationNumber]) =>
+    listedApplicationNumbers.has(applicationNumber),
+  )
+  return entries.length === Object.keys(draft).length ? draft : Object.fromEntries(entries)
+}
+
+type PermitClientFormFields = Pick<
+  PermitDetailForm,
+  'ownerClientNumber' | 'ownerClientLocation' | 'agentClientNumber' | 'agentClientLocation'
+>
+
+/**
+ * The owner and agent after the permit's applications change: the server takes them from the
+ * permit's first application, and a client that stays the same keeps the location in the form.
+ */
+const refreshedPermitClientFields = (
+  form: PermitClientFormFields,
+  refreshedDetail: ProvincialPermitDetail,
+): PermitClientFormFields => {
+  const saved = buildPermitDetailForm(refreshedDetail)
+  const sameOwner = clientLookupNumbersMatch(form.ownerClientNumber, saved.ownerClientNumber)
+  const sameAgent = clientLookupNumbersMatch(form.agentClientNumber, saved.agentClientNumber)
+  return {
+    ownerClientNumber: saved.ownerClientNumber,
+    ownerClientLocation: sameOwner ? form.ownerClientLocation : saved.ownerClientLocation,
+    agentClientNumber: saved.agentClientNumber,
+    agentClientLocation: sameAgent ? form.agentClientLocation : saved.agentClientLocation,
+  }
+}
 
 const ProvincialPermitDetailsPage = () => {
   const { capabilities, canPerform, defaultRoute } = useAuth()
@@ -1385,9 +1438,11 @@ const ProvincialPermitDetailsPage = () => {
     PermitAvailableApplicationItem[] | null
   >(null)
   const [permitApplicationToAdd, setPermitApplicationToAdd] = useState('')
-  const [ministerialPermitApplicationsToAdd, setMinisterialPermitApplicationsToAdd] = useState<
-    string[]
-  >([])
+  // A Ministerial permit's ticks that differ from the saved permit, by application number. They
+  // stay local until Save.
+  const [ministerialApplicationDraft, setMinisterialApplicationDraft] = useState<
+    Record<string, boolean>
+  >({})
   const [hasLoadedAvailablePermitApplications, setHasLoadedAvailablePermitApplications] =
     useState(false)
   const [isLoadingAvailableApplications, setIsLoadingAvailableApplications] = useState(false)
@@ -1550,7 +1605,7 @@ const ProvincialPermitDetailsPage = () => {
     setAvailablePermitApplications([])
     setAvailablePermitApplicationItems(null)
     setPermitApplicationToAdd('')
-    setMinisterialPermitApplicationsToAdd([])
+    setMinisterialApplicationDraft({})
     setHasLoadedAvailablePermitApplications(false)
     setIsLoadingAvailableApplications(false)
     setAvailablePermitApplicationsError('')
@@ -1862,6 +1917,7 @@ const ProvincialPermitDetailsPage = () => {
 
   const hasPermitAgent = agentUsed
   const ministerialPermit = isMinisterialPermit(detail)
+  const isMinisterialPermitEdit = ministerialPermit && isEditingPermit && !!permitForm
   const blanketOicPermit = detail?.blanketOic === true
   const blanketOicRegionBoundToApplication =
     blanketOicPermit && detail?.oicApplicationNumber != null
@@ -2114,18 +2170,20 @@ const ProvincialPermitDetailsPage = () => {
       })),
     [availablePermitApplications],
   )
-  const ministerialAvailablePermitApplicationItems =
-    availablePermitApplicationItems ??
-    availablePermitApplications.map((applicationNumber) => ({
-      applicationNumber,
-      disabled: false,
-      disabledReason: '',
-      unassignedPieces: null,
-      unassignedVolume: null,
-    }))
+  const ministerialAvailablePermitApplicationItems = useMemo(
+    (): PermitAvailableApplicationItem[] =>
+      availablePermitApplicationItems ??
+      availablePermitApplications.map((applicationNumber) => ({
+        applicationNumber,
+        disabled: false,
+        disabledReason: '',
+        unassignedPieces: null,
+        unassignedVolume: null,
+      })),
+    [availablePermitApplicationItems, availablePermitApplications],
+  )
   const selectedPermitApplicationToAdd =
-    permitApplicationToAdd ||
-    (ministerialPermit ? '' : (availablePermitApplicationOptions[0]?.value ?? ''))
+    permitApplicationToAdd || (availablePermitApplicationOptions[0]?.value ?? '')
   const associatedPermitApplications =
     tabsData?.applications ?? EMPTY_PROVINCIAL_PERMIT_DETAIL_TABS.applications
   const permitApplicationNumberSummary =
@@ -2423,6 +2481,76 @@ const ProvincialPermitDetailsPage = () => {
     !scaleAttachmentLockedStatuses.has(permitStatusCode ?? '')
   // Applications are added only while the permit is Active.
   const canAddPermitApplications = canRemovePermitApplications && permitStatusCode !== 'PPD'
+  // A Ministerial permit's applications are ticked in Permit details edit mode and saved with it.
+  // The table lists the applications on the permit and, while applications can be added, the ones
+  // that can be.
+  const ministerialApplicationRows = useMemo((): MinisterialApplicationRow[] => {
+    if (!ministerialPermit) return []
+    const totalsByApplication = new Map(
+      (tabsData?.applicationTotals ?? []).map((totals) => [totals.applicationNumber, totals]),
+    )
+    const includedApplications = new Set(associatedPermitApplications)
+    const includedRows = associatedPermitApplications.map((applicationNumber) => ({
+      applicationNumber,
+      included: true,
+      pieces: totalsByApplication.get(applicationNumber)?.pieces ?? null,
+      volume: totalsByApplication.get(applicationNumber)?.volume ?? null,
+      disabled: false,
+      disabledReason: '',
+    }))
+    const candidateRows =
+      isMinisterialPermitEdit && canAddPermitApplications
+        ? ministerialAvailablePermitApplicationItems
+            .filter((item) => !includedApplications.has(item.applicationNumber))
+            .map((item) => ({
+              applicationNumber: item.applicationNumber,
+              included: false,
+              pieces: item.unassignedPieces,
+              volume: item.unassignedVolume,
+              disabled: item.disabled,
+              disabledReason: item.disabledReason,
+            }))
+        : []
+    return [...includedRows, ...candidateRows]
+      .sort((first, second) =>
+        compareApplicationNumbers(first.applicationNumber, second.applicationNumber),
+      )
+      .map((row) => ({
+        ...row,
+        checked: row.disabled
+          ? row.included
+          : (ministerialApplicationDraft[row.applicationNumber] ?? row.included),
+      }))
+  }, [
+    associatedPermitApplications,
+    canAddPermitApplications,
+    isMinisterialPermitEdit,
+    ministerialApplicationDraft,
+    ministerialAvailablePermitApplicationItems,
+    ministerialPermit,
+    tabsData?.applicationTotals,
+  ])
+  const ministerialApplicationChanges = useMemo(
+    () =>
+      isMinisterialPermitEdit
+        ? ministerialApplicationRows.filter((row) => row.checked !== row.included)
+        : [],
+    [isMinisterialPermitEdit, ministerialApplicationRows],
+  )
+  const ministerialApplicationSelectionDirty = ministerialApplicationChanges.length > 0
+  // Current permit pieces and volume follow the ticks from the saved totals until Save. Total
+  // volume remaining keeps its saved value until then.
+  const ministerialDraftPermitTotals = useMemo(() => {
+    if (!detail || ministerialApplicationChanges.length === 0) return null
+    let pieces = detail.numberOfPieces ?? 0
+    let volume = detail.permitVolume ?? 0
+    for (const row of ministerialApplicationChanges) {
+      const direction = row.checked ? 1 : -1
+      pieces += direction * (row.pieces ?? 0)
+      volume += direction * (row.volume ?? 0)
+    }
+    return { pieces, volume: Math.round(volume * 100) / 100 }
+  }, [detail, ministerialApplicationChanges])
   const canEditNormalPermitScaleRows =
     permitTablesAvailable &&
     canSavePermit &&
@@ -2539,6 +2667,7 @@ const ProvincialPermitDetailsPage = () => {
     isEditingPermitDocuments
   const isPermitDirty =
     ministerialScaleSelectionDirty ||
+    ministerialApplicationSelectionDirty ||
     permitDetailDirty ||
     permitShippingDirty ||
     permitFeeOverrideDirty ||
@@ -2558,6 +2687,8 @@ const ProvincialPermitDetailsPage = () => {
     isRemovingPermitApplication !== null ||
     isRemovingDocumentId !== null ||
     permitDocumentUploadBusy
+  // A Ministerial permit's Save first saves its application changes.
+  const isSavingPermitDetails = isSavingPermit || isSavingPermitApplication
   const blanketOicPackageEditorOpen = isCreatingBoicPackage || editingBoicPackageNumber !== null
   const blanketOicPackageActionsDisabled =
     isSavingBoicScale ||
@@ -2680,10 +2811,11 @@ const ProvincialPermitDetailsPage = () => {
     permitNumber,
   ])
 
-  const reloadPermitScaleState = useCallback(async () => {
+  // Returns the permit as it was read again, or null when the page has moved to another permit.
+  const reloadPermitScaleState = useCallback(async (): Promise<ProvincialPermitDetail | null> => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
     if (!resolvedPermitNumber) {
-      return
+      return null
     }
 
     const exemptionNumber = detail?.exemptionNumber
@@ -2695,7 +2827,7 @@ const ProvincialPermitDetailsPage = () => {
         ? fetchProvincialPermitExemptionContext(exemptionNumber)
         : Promise.resolve(null),
     ])
-    if (!onSamePermit()) return
+    if (!onSamePermit()) return null
     if (!refreshedDetail) {
       throw new Error(`No provincial permit found for ${resolvedPermitNumber}.`)
     }
@@ -2723,6 +2855,7 @@ const ProvincialPermitDetailsPage = () => {
           }
         : buildPermitDetailForm(refreshedDetail),
     )
+    return refreshedDetail
   }, [
     beginPermitRouteWork,
     detail?.exemptionNumber,
@@ -2733,12 +2866,17 @@ const ProvincialPermitDetailsPage = () => {
 
   const reloadAvailablePermitApplications = useCallback(async () => {
     const isLatestRequest = beginAvailablePermitApplicationsRequest()
+    // A Ministerial draft keeps the ticks of rows that are still listed: the applications on the
+    // permit and the candidates that can still be ticked.
+    const includedApplications = new Set(associatedPermitApplications)
     if (!canAddPermitApplications || !detail?.exemptionNumber) {
       if (isLatestRequest()) {
         setAvailablePermitApplications([])
         setAvailablePermitApplicationItems(null)
         setPermitApplicationToAdd('')
-        setMinisterialPermitApplicationsToAdd([])
+        setMinisterialApplicationDraft((current) =>
+          withListedApplicationDraft(current, includedApplications),
+        )
         setHasLoadedAvailablePermitApplications(false)
         setIsLoadingAvailableApplications(false)
         setAvailablePermitApplicationsError('')
@@ -2759,19 +2897,16 @@ const ProvincialPermitDetailsPage = () => {
       setPermitApplicationToAdd((current) =>
         result.applicationList.includes(current) ? current : '',
       )
-      const selectableApplicationNumbers = new Set(
-        (
-          result.applicationItems ??
-          result.applicationList.map((applicationNumber) => ({
-            applicationNumber,
-            disabled: false,
-          }))
-        )
-          .filter((item) => !item.disabled)
-          .map((item) => item.applicationNumber),
-      )
-      setMinisterialPermitApplicationsToAdd((current) =>
-        current.filter((applicationNumber) => selectableApplicationNumbers.has(applicationNumber)),
+      const listedApplications = new Set([
+        ...includedApplications,
+        ...(result.applicationItems
+          ? result.applicationItems
+              .filter((item) => !item.disabled)
+              .map((item) => item.applicationNumber)
+          : result.applicationList),
+      ])
+      setMinisterialApplicationDraft((current) =>
+        withListedApplicationDraft(current, listedApplications),
       )
       setHasLoadedAvailablePermitApplications(true)
     } catch (error) {
@@ -2779,7 +2914,9 @@ const ProvincialPermitDetailsPage = () => {
       console.error(error)
       setAvailablePermitApplications([])
       setAvailablePermitApplicationItems(null)
-      setMinisterialPermitApplicationsToAdd([])
+      setMinisterialApplicationDraft((current) =>
+        withListedApplicationDraft(current, includedApplications),
+      )
       setHasLoadedAvailablePermitApplications(false)
       setAvailablePermitApplicationsError('Applications could not be loaded. Try again.')
     } finally {
@@ -2794,6 +2931,19 @@ const ProvincialPermitDetailsPage = () => {
     detail?.exemptionNumber,
   ])
 
+  // Each time a Ministerial permit's details open for editing, its ticks start from the saved
+  // permit and its candidates are listed afresh. Outside edit mode the draft and candidates are
+  // not shown or saved.
+  const resetMinisterialApplicationSelection = () => {
+    beginAvailablePermitApplicationsRequest()
+    setMinisterialApplicationDraft({})
+    setAvailablePermitApplications([])
+    setAvailablePermitApplicationItems(null)
+    setHasLoadedAvailablePermitApplications(false)
+    setIsLoadingAvailableApplications(false)
+    setAvailablePermitApplicationsError('')
+  }
+
   const loadAvailablePermitApplicationsOnFocus = useCallback(() => {
     if (hasLoadedAvailablePermitApplications || isLoadingAvailableApplications) {
       return
@@ -2806,8 +2956,7 @@ const ProvincialPermitDetailsPage = () => {
   ])
   useEffect(() => {
     if (
-      ministerialPermit &&
-      activePermitTabId === 'permit' &&
+      isMinisterialPermitEdit &&
       canAddPermitApplications &&
       !hasLoadedAvailablePermitApplications &&
       !isLoadingAvailableApplications &&
@@ -2816,12 +2965,11 @@ const ProvincialPermitDetailsPage = () => {
       void reloadAvailablePermitApplications()
     }
   }, [
-    activePermitTabId,
     availablePermitApplicationsError,
     canAddPermitApplications,
     hasLoadedAvailablePermitApplications,
     isLoadingAvailableApplications,
-    ministerialPermit,
+    isMinisterialPermitEdit,
     reloadAvailablePermitApplications,
   ])
   const completingPermit = permitForm?.permitStatus.trim().toUpperCase() === 'COM'
@@ -3362,6 +3510,7 @@ const ProvincialPermitDetailsPage = () => {
       setMinisterialScaleSelectionDraft(null)
       return
     }
+    if (section === 'permit' || section === 'newPermit') setMinisterialApplicationDraft({})
     if (section === 'shipping' || section === 'newPermit') resetPermitFormSection(true)
     if (section !== 'shipping') discardPermitClientEdit()
   }
@@ -3434,7 +3583,8 @@ const ProvincialPermitDetailsPage = () => {
       permitDetailDirty ||
       permitShippingDirty ||
       permitFeeOverrideDirty ||
-      ministerialScaleSelectionDirty,
+      ministerialScaleSelectionDirty ||
+      ministerialApplicationSelectionDirty,
     onDiscard: discardPermitEditSection,
     state: [permitEditSection, setPermitEditSection],
     leaveGuard: {
@@ -3559,6 +3709,7 @@ const ProvincialPermitDetailsPage = () => {
     permitEditSections.startEditing('permit', () => {
       clearSectionSaveResult()
       resetPermitFormSection(false)
+      if (ministerialPermit) resetMinisterialApplicationSelection()
       void refreshPermitForEdit('permit')
     })
   const startPermitClientEdit = () =>
@@ -3649,16 +3800,23 @@ const ProvincialPermitDetailsPage = () => {
     [permitBaselineForm, permitEditSection, permitForm],
   )
 
+  // Values the server set since Save was chosen, such as the owner and totals that follow a
+  // Ministerial permit's applications, replace the form's values in the request.
   const savePermitMutation = useCallback(
-    async (includeShipping = false, deferStatusTransition = false): Promise<boolean> => {
+    async (
+      includeShipping = false,
+      deferStatusTransition = false,
+      serverValues: Partial<PermitDetailForm> = {},
+    ): Promise<boolean> => {
       setActionResult(null)
       const targetPermitStatus = permitForm?.permitStatus ?? ''
-      const baseRequest: PermitDetailMutationRequest | null =
+      const formRequest: PermitDetailMutationRequest | null =
         detail && permitForm
           ? includeShipping
             ? permitForm
             : mergePermitFormSection(buildPermitDetailForm(detail), permitForm, false)
           : null
+      const baseRequest = formRequest ? { ...formRequest, ...serverValues } : null
       const request =
         baseRequest && deferStatusTransition
           ? { ...baseRequest, permitStatus: detailValue(detail?.permitStatusCode) }
@@ -4205,6 +4363,135 @@ const ProvincialPermitDetailsPage = () => {
     tryBeginPermitMutation,
   ])
 
+  // Saves a Ministerial permit's ticked and unticked applications in one request, then reads the
+  // permit again: its totals, owner and agent follow its applications. Returns the warnings the
+  // save gave and the permit as read again, or null when the changes weren't saved or confirmed.
+  const onSaveMinisterialApplications = useCallback(async (): Promise<{
+    warnings: string[]
+    refreshedDetail: ProvincialPermitDetail
+  } | null> => {
+    const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
+    const resultSource = permitSaveResultSource(activePermitTabId)
+    if (!canRemovePermitApplications || !resolvedPermitNumber) return null
+    const isLatestRequest = tryBeginPermitMutation()
+    if (!isLatestRequest) {
+      setActionResult(
+        sectionSaveError(
+          'Permit details',
+          resultSource,
+          'Wait for the current permit change to finish before saving again.',
+        ),
+      )
+      return null
+    }
+    setPermitDetailRefreshRequired(false)
+    setActionResult(null)
+    setIsSavingPermitApplication(true)
+    let saved = false
+    try {
+      const result = await updatePermitApplications({
+        permitNumber: resolvedPermitNumber,
+        addedApplications: ministerialApplicationChanges
+          .filter((row) => row.checked)
+          .map((row) => row.applicationNumber),
+        removedApplications: ministerialApplicationChanges
+          .filter((row) => !row.checked)
+          .map((row) => row.applicationNumber),
+      })
+      if (!isLatestRequest()) return null
+      if (!result.success) {
+        setActionResult(
+          sectionSaveError(
+            'Permit details',
+            resultSource,
+            serverErrorText(
+              result.errors,
+              result.message,
+              'Unable to save the application changes.',
+            ),
+          ),
+        )
+        return null
+      }
+      saved = true
+      const refreshedDetail = await reloadPermitScaleState()
+      if (!isLatestRequest() || !refreshedDetail) return null
+      setMinisterialApplicationDraft({})
+      // The candidates are listed again for the applications now on the permit.
+      beginAvailablePermitApplicationsRequest()
+      setAvailablePermitApplications([])
+      setAvailablePermitApplicationItems(null)
+      setHasLoadedAvailablePermitApplications(false)
+      setAvailablePermitApplicationsError('')
+      // The server takes the owner and agent from the permit's first application.
+      const clientsChanged =
+        !clientLookupNumbersMatch(
+          detail?.ownerClientNumber ?? '',
+          refreshedDetail.ownerClientNumber ?? '',
+        ) ||
+        !clientLookupNumbersMatch(
+          detail?.applicantClientNumber ?? '',
+          refreshedDetail.applicantClientNumber ?? '',
+        )
+      setDetail((current) =>
+        current
+          ? {
+              ...current,
+              ownerClientNumber: refreshedDetail.ownerClientNumber,
+              ownerClientLocationCode: refreshedDetail.ownerClientLocationCode,
+              applicantClientNumber: refreshedDetail.applicantClientNumber,
+              agentClientLocationCode: refreshedDetail.agentClientLocationCode,
+            }
+          : current,
+      )
+      setPermitForm((current) =>
+        current
+          ? { ...current, ...refreshedPermitClientFields(current, refreshedDetail) }
+          : current,
+      )
+      if (clientsChanged) {
+        setAgentUsed(Boolean(refreshedDetail.applicantClientNumber?.trim()))
+        if (isEditingPermitClients) {
+          loadSavedPermitClientLocations(refreshedDetail, loadPermitClientLocations)
+        }
+      }
+      return { warnings: result.warnings, refreshedDetail }
+    } catch (error) {
+      if (isLatestRequest()) {
+        console.error(error)
+        setPermitDetailRefreshRequired(true)
+        setEditContextLoaded(false)
+        setActionResult(
+          sectionSaveError(
+            'Permit details',
+            resultSource,
+            saved
+              ? 'Application changes were saved, but the current totals could not be refreshed. Reload before making another change.'
+              : 'Unable to confirm whether the application changes were saved. Reload before making another change.',
+          ),
+        )
+      }
+      return null
+    } finally {
+      endPermitMutation(isLatestRequest)
+      if (isLatestRequest()) setIsSavingPermitApplication(false)
+    }
+  }, [
+    activePermitTabId,
+    beginAvailablePermitApplicationsRequest,
+    canRemovePermitApplications,
+    detail?.applicantClientNumber,
+    detail?.ownerClientNumber,
+    detail?.permitNumber,
+    endPermitMutation,
+    isEditingPermitClients,
+    loadPermitClientLocations,
+    ministerialApplicationChanges,
+    permitNumber,
+    reloadPermitScaleState,
+    tryBeginPermitMutation,
+  ])
+
   const onSavePermit = useCallback(
     async (receiptWarningConfirmed = false): Promise<boolean> => {
       setActionResult(null)
@@ -4239,22 +4526,100 @@ const ProvincialPermitDetailsPage = () => {
         setPermitReceiptWarningOpen(true)
         return false
       }
-      if (ministerialScaleSelectionDirty && !(await onSaveScaleSelection())) return false
-      const shippingSaved = permitShippingUnsaved ? await onSaveShipping() : true
-      if (!shippingSaved) return false
 
-      const includeShipping = permitShippingUnsaved
-      if (permitStatusTransitionDraft && permitInvoicePolicyDirty) {
-        if (!(await savePermitMutation(includeShipping, true))) return false
+      // A Ministerial permit's application changes save first, as their own request, so the
+      // permit's other fields are checked before anything is sent.
+      let savedApplications: Awaited<ReturnType<typeof onSaveMinisterialApplications>> = null
+      if (ministerialApplicationSelectionDirty) {
+        if (permitDetailDirty && hasPermitValidationError) {
+          showPermitFieldErrors(
+            Object.values(permitFieldErrors).find((error): error is string => !!error) ??
+              'Please fix validation errors before saving the permit.',
+          )
+          return false
+        }
+        if (
+          isEditingPermitClients &&
+          (isOwnerClientLookupLoading || (agentUsed && isAgentClientLookupLoading))
+        )
+          return false
+        if (isEditingPermitClients && !permitClientLookupCanSave) {
+          setShowPermitValidationErrors(true)
+          focusFirstInvalidFieldAfterRender(() => document.getElementById('permit-detail-content'))
+          return false
+        }
+        savedApplications = await onSaveMinisterialApplications()
+        if (!savedApplications) return false
+        if (permitEditSection === 'permit' && !permitDetailDirty && !permitShippingUnsaved) {
+          permitEditSections.finishEditing()
+          setActionResult(
+            sectionSaveResult('Permit details', resultSource, savedApplications.warnings.join(' ')),
+          )
+          return true
+        }
       }
-      return savePermitMutation(includeShipping)
+      const applicationWarnings = savedApplications?.warnings ?? []
+      // The rest of the permit saves with the owner, agent and totals its applications now give it.
+      const serverValues: Partial<PermitDetailForm> =
+        savedApplications && permitForm
+          ? {
+              ...refreshedPermitClientFields(permitForm, savedApplications.refreshedDetail),
+              permitTotalVolume: formatVolumeInput(savedApplications.refreshedDetail.permitVolume),
+              permitNumberOfPieces: numericDetailValue(
+                savedApplications.refreshedDetail.numberOfPieces,
+              ),
+            }
+          : {}
+      const saveRest = async (): Promise<boolean> => {
+        if (ministerialScaleSelectionDirty && !(await onSaveScaleSelection())) return false
+        const shippingSaved = permitShippingUnsaved ? await onSaveShipping() : true
+        if (!shippingSaved) return false
+
+        const includeShipping = permitShippingUnsaved
+        if (permitStatusTransitionDraft && permitInvoicePolicyDirty) {
+          if (!(await savePermitMutation(includeShipping, true, serverValues))) return false
+        }
+        return savePermitMutation(includeShipping, false, serverValues)
+      }
+      const saved = await saveRest()
+      if (savedApplications) {
+        // The application changes stay saved whatever happens to the rest of the permit.
+        setActionResult((current) =>
+          !current
+            ? current
+            : current.kind === 'error'
+              ? {
+                  ...current,
+                  message: ['Application changes were saved.', current.message]
+                    .filter(Boolean)
+                    .join(' '),
+                }
+              : applicationWarnings.length > 0
+                ? {
+                    ...current,
+                    kind: 'warning',
+                    message: [current.message, ...applicationWarnings].filter(Boolean).join(' '),
+                  }
+                : current,
+        )
+      }
+      return saved
     },
     [
       activePermitTabId,
+      agentUsed,
+      isAgentClientLookupLoading,
+      isEditingPermitClients,
+      isOwnerClientLookupLoading,
       permitSaveSubject,
+      onSaveMinisterialApplications,
       onSaveShipping,
       onSaveScaleSelection,
+      ministerialApplicationSelectionDirty,
       ministerialScaleSelectionDirty,
+      permitClientLookupCanSave,
+      permitEditSections,
+      permitForm,
       permitOptionsSaveError,
       interiorCompleteWithoutReceipt,
       permitDetailDirty,
@@ -4440,14 +4805,14 @@ const ProvincialPermitDetailsPage = () => {
     ],
   )
 
+  // A permit other than a Ministerial or Blanket OIC permit adds and removes its applications one
+  // at a time, from its Associated applications card.
   const onAddPermitApplication = useCallback(async () => {
     const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-    const resultSource = permitApplicationResultSource(ministerialPermit)
-    const selectedApplications = ministerialPermit
-      ? ministerialPermitApplicationsToAdd
-      : selectedPermitApplicationToAdd
-        ? [selectedPermitApplicationToAdd]
-        : []
+    const resultSource: PermitActionResultSource = 'applications'
+    const selectedApplications = selectedPermitApplicationToAdd
+      ? [selectedPermitApplicationToAdd]
+      : []
     if (!canAddPermitApplications || !resolvedPermitNumber || selectedApplications.length === 0) {
       return
     }
@@ -4486,7 +4851,6 @@ const ProvincialPermitDetailsPage = () => {
       }
 
       setPermitApplicationToAdd('')
-      setMinisterialPermitApplicationsToAdd([])
       setAvailablePermitApplications([])
       setAvailablePermitApplicationItems(null)
       setHasLoadedAvailablePermitApplications(false)
@@ -4541,8 +4905,6 @@ const ProvincialPermitDetailsPage = () => {
     canAddPermitApplications,
     detail?.permitNumber,
     endPermitMutation,
-    ministerialPermit,
-    ministerialPermitApplicationsToAdd,
     permitNumber,
     reloadPermitScaleState,
     selectedPermitApplicationToAdd,
@@ -4552,7 +4914,7 @@ const ProvincialPermitDetailsPage = () => {
   const onRemovePermitApplication = useCallback(
     async (applicationNumber: string) => {
       const resolvedPermitNumber = String(detail?.permitNumber ?? permitNumber ?? '').trim()
-      const resultSource = permitApplicationResultSource(ministerialPermit)
+      const resultSource: PermitActionResultSource = 'applications'
       if (!canRemovePermitApplications || !resolvedPermitNumber || !applicationNumber) {
         throw new Error('This application cannot be removed from the current permit.')
       }
@@ -4596,7 +4958,6 @@ const ProvincialPermitDetailsPage = () => {
             : current,
         )
         setAvailablePermitApplicationItems(null)
-        setMinisterialPermitApplicationsToAdd([])
         setHasLoadedAvailablePermitApplications(false)
         setAvailablePermitApplicationsError('')
         try {
@@ -4639,7 +5000,6 @@ const ProvincialPermitDetailsPage = () => {
       canRemovePermitApplications,
       detail?.permitNumber,
       endPermitMutation,
-      ministerialPermit,
       permitNumber,
       reloadPermitScaleState,
       tryBeginPermitMutation,
@@ -5608,7 +5968,6 @@ const ProvincialPermitDetailsPage = () => {
   // loads. A permit that fails to load is still named by its number.
   const permitPageTitle =
     detailMatchesRoute || errorMessage ? `Permit ${permitDisplayNumber}`.trim() : ''
-  const isMinisterialPermitEdit = ministerialPermit && isEditingPermit && !!permitForm
   const isReviewedPermitEdit = usesReviewedPermitFlow && isEditingPermit && !!permitForm
 
   const renderPermitClientEditActions = () => (
@@ -5616,7 +5975,7 @@ const ProvincialPermitDetailsPage = () => {
       <Button
         kind="tertiary"
         size="md"
-        disabled={isSavingPermit}
+        disabled={isSavingPermitDetails}
         onClick={permitEditSections.cancelEditing}
       >
         Cancel
@@ -5624,11 +5983,15 @@ const ProvincialPermitDetailsPage = () => {
       <Button
         kind="primary"
         size="md"
-        disabled={isSavingPermit || isRefreshingPermitForEdit}
-        renderIcon={isSavingPermit ? PendingIcon : undefined}
+        disabled={isSavingPermitDetails || isRefreshingPermitForEdit}
+        renderIcon={isSavingPermitDetails ? PendingIcon : undefined}
         onClick={() => void onSavePermit()}
       >
-        {isSavingPermit ? 'Saving…' : usesReviewedPermitFlow ? 'Save changes' : 'Save permit'}
+        {isSavingPermitDetails
+          ? 'Saving…'
+          : usesReviewedPermitFlow
+            ? 'Save changes'
+            : 'Save permit'}
       </Button>
     </div>
   )
@@ -5639,7 +6002,7 @@ const ProvincialPermitDetailsPage = () => {
         <Button
           kind="tertiary"
           size="md"
-          disabled={isSavingPermit}
+          disabled={isSavingPermitDetails}
           onClick={permitEditSections.cancelEditing}
         >
           Cancel
@@ -5647,11 +6010,15 @@ const ProvincialPermitDetailsPage = () => {
         <Button
           kind="primary"
           size="md"
-          disabled={isSavingPermit || isRefreshingPermitForEdit}
-          renderIcon={isSavingPermit ? PendingIcon : undefined}
+          disabled={isSavingPermitDetails || isRefreshingPermitForEdit}
+          renderIcon={isSavingPermitDetails ? PendingIcon : undefined}
           onClick={() => void onSavePermit()}
         >
-          {isSavingPermit ? 'Saving…' : usesReviewedPermitFlow ? 'Save changes' : 'Save permit'}
+          {isSavingPermitDetails
+            ? 'Saving…'
+            : usesReviewedPermitFlow
+              ? 'Save changes'
+              : 'Save permit'}
         </Button>
       </div>
     ) : null
@@ -5680,21 +6047,47 @@ const ProvincialPermitDetailsPage = () => {
     </AppNotification>
   )
 
+  // The Application number(s) table: read-only in view mode, and with an Include in permit tick
+  // for each row while the permit's applications can change in edit mode.
   const renderMinisterialPermitApplications = () => {
-    const isUpdatingPermitApplications =
-      isSavingPermitApplication || isRemovingPermitApplication !== null
-    if (isPermitTablesLoading || isLoadingAvailableApplications) {
-      return <InlineLoading description="Loading permit applications…" />
-    }
-    if (availablePermitApplicationsError) {
-      return (
-        <EmptyState
-          title="Applications unavailable"
-          description={availablePermitApplicationsError}
-          headingLevel={3}
-          role="alert"
-          action={
-            canAddPermitApplications ? (
+    const selectable = isMinisterialPermitEdit && canRemovePermitApplications
+    const applicationLink = (applicationNumber: string) => (
+      <Link
+        to={`/provincial/application/${encodeURIComponent(applicationNumber)}`}
+        state={withDetailReturnTo(
+          location.state,
+          {
+            label: permitPageTitle,
+            to: locationPath(location),
+          },
+          detailReturnTo,
+        )}
+      >
+        {applicationNumber}
+      </Link>
+    )
+    const content = () => {
+      if (isPermitTablesLoading || (selectable && isLoadingAvailableApplications)) {
+        return <InlineLoading description="Loading permit applications…" />
+      }
+      if (permitTablesErrorMessage) {
+        return (
+          <EmptyState
+            title="Applications unavailable"
+            description={permitTablesErrorMessage}
+            headingLevel={3}
+            role="alert"
+          />
+        )
+      }
+      if (selectable && canAddPermitApplications && availablePermitApplicationsError) {
+        return (
+          <EmptyState
+            title="Applications unavailable"
+            description={availablePermitApplicationsError}
+            headingLevel={3}
+            role="alert"
+            action={
               <Button
                 kind="tertiary"
                 size="md"
@@ -5702,201 +6095,86 @@ const ProvincialPermitDetailsPage = () => {
               >
                 Retry
               </Button>
-            ) : undefined
-          }
-        />
-      )
-    }
-    if (permitTablesErrorMessage) {
-      return (
-        <EmptyState
-          title="Applications unavailable"
-          description={permitTablesErrorMessage}
-          headingLevel={3}
-          role="alert"
-        />
-      )
-    }
-
-    return (
-      <>
-        {canAddPermitApplications &&
-          ministerialAvailablePermitApplicationItems.some((item) => !item.disabled) && (
-            <p className="ministerial-permit-details__application-help">
-              Select applications, then choose Add application to include them in this permit. Save
-              does not add selected applications.
-            </p>
-          )}
-        {ministerialAvailablePermitApplicationItems.length > 0 ? (
-          <TableFrame ariaLabel="Applications available for this permit">
-            <Table size="md" useZebraStyles>
-              <TableHead>
-                <TableRow>
-                  <TableHeader>Include in permit</TableHeader>
-                  <TableHeader>Application number</TableHeader>
-                  <TableHeader>Pieces</TableHeader>
-                  <TableHeader>Volume (m³)</TableHeader>
-                </TableRow>
-              </TableHead>
-              <TableBody>
-                {ministerialAvailablePermitApplicationItems.map((item) => {
-                  const disabled =
-                    item.disabled || !canAddPermitApplications || isUpdatingPermitApplications
-                  const disabledDescription = item.disabled
-                    ? item.disabledReason
-                    : !canAddPermitApplications
-                      ? 'You do not have permission to add applications to this permit.'
-                      : isUpdatingPermitApplications
-                        ? 'Wait for the application update to finish.'
-                        : undefined
-                  return (
-                    <TableRow key={item.applicationNumber}>
-                      <TableCell>
-                        <DisabledButtonTooltip
-                          disabled={disabled}
-                          description={disabledDescription}
-                        >
-                          <Checkbox
-                            id={`permit-application-${item.applicationNumber}`}
-                            hideLabel
-                            labelText={`Include application ${item.applicationNumber} in permit`}
-                            checked={ministerialPermitApplicationsToAdd.includes(
-                              item.applicationNumber,
-                            )}
-                            disabled={disabled}
-                            onChange={(_, { checked }) =>
-                              setMinisterialPermitApplicationsToAdd((current) =>
-                                checked
-                                  ? Array.from(new Set([...current, item.applicationNumber]))
-                                  : current.filter(
-                                      (applicationNumber) =>
-                                        applicationNumber !== item.applicationNumber,
-                                    ),
-                              )
-                            }
-                          />
-                        </DisabledButtonTooltip>
-                      </TableCell>
-                      <TableCell>
-                        <Link
-                          to={`/provincial/application/${encodeURIComponent(item.applicationNumber)}`}
-                          state={withDetailReturnTo(
-                            location.state,
-                            {
-                              label: permitPageTitle,
-                              to: locationPath(location),
-                            },
-                            detailReturnTo,
-                          )}
-                        >
-                          {item.applicationNumber}
-                        </Link>
-                      </TableCell>
-                      <TableCell>{displayValue(item.unassignedPieces?.toLocaleString())}</TableCell>
-                      <TableCell>{displayVolume(item.unassignedVolume)}</TableCell>
-                    </TableRow>
-                  )
-                })}
-              </TableBody>
-            </Table>
-          </TableFrame>
-        ) : (
+            }
+          />
+        )
+      }
+      if (ministerialApplicationRows.length === 0) {
+        return selectable ? (
           <EmptyState
             title="No applications available"
             description="No applications are available to include in this permit."
             headingLevel={3}
           />
-        )}
-        {canAddPermitApplications && (
-          <div className="legacy-search-actions">
-            <DisabledButtonTooltip
-              disabled={
-                isUpdatingPermitApplications || ministerialPermitApplicationsToAdd.length === 0
-              }
-              description={
-                isUpdatingPermitApplications
-                  ? 'Wait for the application update to finish.'
-                  : 'Select at least one eligible application to include.'
-              }
-            >
-              <Button
-                kind="primary"
-                size="md"
-                disabled={
-                  isUpdatingPermitApplications || ministerialPermitApplicationsToAdd.length === 0
-                }
-                renderIcon={isUpdatingPermitApplications ? PendingIcon : undefined}
-                onClick={() => void onAddPermitApplication()}
-              >
-                {isSavingPermitApplication
-                  ? 'Adding…'
-                  : isRemovingPermitApplication
-                    ? 'Updating…'
-                    : 'Add application'}
-              </Button>
-            </DisabledButtonTooltip>
-          </div>
-        )}
-        {associatedPermitApplications.length > 0 && (
-          <>
-            <h3 className="detail-section-subtitle">Included applications</h3>
-            <TableFrame ariaLabel="Included permit applications">
-              <Table size="md" useZebraStyles>
-                <TableHead>
-                  <TableRow>
-                    <TableHeader>Application number</TableHeader>
-                    {canRemovePermitApplications && <TableHeader>Actions</TableHeader>}
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {associatedPermitApplications.map((applicationNumber) => (
-                    <TableRow key={applicationNumber}>
-                      <TableCell>
-                        <Link
-                          to={`/provincial/application/${encodeURIComponent(applicationNumber)}`}
-                          state={withDetailReturnTo(
-                            location.state,
-                            {
-                              label: permitPageTitle,
-                              to: locationPath(location),
-                            },
-                            detailReturnTo,
-                          )}
-                        >
-                          {applicationNumber}
-                        </Link>
-                      </TableCell>
-                      {canRemovePermitApplications && (
-                        <TableCell>
-                          <Button
-                            kind="ghost"
-                            size="md"
-                            disabled={isUpdatingPermitApplications}
-                            renderIcon={TrashCan}
-                            aria-label={`${
-                              isRemovingPermitApplication === applicationNumber
-                                ? 'Removing'
-                                : 'Remove'
-                            } application ${applicationNumber}`}
-                            onClick={() => {
-                              clearActionNotifications()
-                              setPermitApplicationPendingRemoval(applicationNumber)
-                            }}
-                          >
-                            {isRemovingPermitApplication === applicationNumber
-                              ? 'Removing…'
-                              : 'Remove'}
-                          </Button>
-                        </TableCell>
-                      )}
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </TableFrame>
-          </>
-        )}
-      </>
+        ) : (
+          <p className="detail-field-value">
+            <EmptyValue />
+          </p>
+        )
+      }
+      return (
+        <TableFrame
+          ariaLabel="Application number(s)"
+          className="ministerial-permit-details__application-table"
+        >
+          <Table size="md" useZebraStyles>
+            <TableHead>
+              <TableRow>
+                {selectable && <TableHeader>Include in permit</TableHeader>}
+                <TableHeader>Application number</TableHeader>
+                <TableHeader>Pieces</TableHeader>
+                <TableHeader>Volume (m³)</TableHeader>
+              </TableRow>
+            </TableHead>
+            <TableBody>
+              {ministerialApplicationRows.map((row) => (
+                <TableRow
+                  key={row.applicationNumber}
+                  className={
+                    selectable && row.disabled
+                      ? 'ministerial-permit-details__application-row--disabled'
+                      : undefined
+                  }
+                >
+                  {selectable && (
+                    <TableCell>
+                      <DisabledButtonTooltip
+                        disabled={row.disabled}
+                        description={row.disabledReason || undefined}
+                      >
+                        <Checkbox
+                          id={`permit-application-${row.applicationNumber}`}
+                          hideLabel
+                          labelText={`Include application ${row.applicationNumber} in permit`}
+                          checked={row.checked}
+                          disabled={row.disabled || isPermitBusy}
+                          onChange={(_, { checked }) =>
+                            setMinisterialApplicationDraft((current) => {
+                              const next = { ...current }
+                              if (checked === row.included) delete next[row.applicationNumber]
+                              else next[row.applicationNumber] = checked
+                              return next
+                            })
+                          }
+                        />
+                      </DisabledButtonTooltip>
+                    </TableCell>
+                  )}
+                  <TableCell>{applicationLink(row.applicationNumber)}</TableCell>
+                  <TableCell>{displayValue(row.pieces?.toLocaleString())}</TableCell>
+                  <TableCell>{displayVolume(row.volume)}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </TableFrame>
+      )
+    }
+    return (
+      <div className="ministerial-permit-details__applications">
+        <p className="detail-field-label">Application number(s)</p>
+        {content()}
+      </div>
     )
   }
 
@@ -6046,10 +6324,13 @@ const ProvincialPermitDetailsPage = () => {
               label="Total volume remaining (m³)"
               value={displayVolume(detail.exemptionVolumeRemaining)}
             />
-            <RecordField label="Current permit pieces" value={detail.numberOfPieces} />
+            <RecordField
+              label="Current permit pieces"
+              value={ministerialDraftPermitTotals?.pieces ?? detail.numberOfPieces}
+            />
             <RecordField
               label="Current permit volume (m³)"
-              value={displayVolume(detail.permitVolume)}
+              value={displayVolume(ministerialDraftPermitTotals?.volume ?? detail.permitVolume)}
             />
           </RecordFieldRow>
           <RecordFieldRow hidden={!detail.blanketOic}>
@@ -6081,12 +6362,7 @@ const ProvincialPermitDetailsPage = () => {
             />
           </RecordFieldRow>
         </RecordFieldGrid>
-        {ministerialPermit && (
-          <section className="ministerial-permit-details__applications">
-            <h3 className="detail-section-subtitle">Applications</h3>
-            {renderMinisterialPermitApplications()}
-          </section>
-        )}
+        {ministerialPermit && renderMinisterialPermitApplications()}
         <RecordFieldGrid editing={isReviewedPermitEdit}>
           <RecordFieldRow>
             <RecordField
@@ -7509,12 +7785,10 @@ const ProvincialPermitDetailsPage = () => {
                       <Column sm={4} md={8} lg={16}>
                         <Tile>
                           <DetailCardTitle icon={Certificate}>
-                            {ministerialPermit ? 'Applications' : 'Associated applications'}
+                            Associated applications
                           </DetailCardTitle>
                           {renderSectionSaveResult('applications')}
-                          {ministerialPermit ? (
-                            renderMinisterialPermitApplications()
-                          ) : isPermitTablesLoading ? (
+                          {isPermitTablesLoading ? (
                             <InlineLoading description="Loading associated permit applications…" />
                           ) : permitTablesErrorMessage ? (
                             <EmptyState
@@ -7589,7 +7863,7 @@ const ProvincialPermitDetailsPage = () => {
                               headingLevel={3}
                             />
                           )}
-                          {canAddPermitApplications && !ministerialPermit && (
+                          {canAddPermitApplications && (
                             <>
                               <RecordFieldGrid editing>
                                 <RecordFieldRow>
