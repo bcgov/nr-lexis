@@ -577,13 +577,13 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await expect(page.getByRole('button', { name: 'Close menu' })).toBeVisible()
 
     await provincial.click()
-    await page.getByRole('link', { name: 'Offers Report', exact: true }).click()
-    await expect(page.getByRole('heading', { name: 'Offers Report', exact: true })).toBeVisible()
+    await page.getByRole('link', { name: 'Offers report', exact: true }).click()
+    await expect(page.getByRole('heading', { name: 'Offers report', exact: true })).toBeVisible()
     await expect(provincial).toHaveAttribute('aria-expanded', 'true')
     await expect(reports).toHaveAttribute('aria-expanded', 'true')
     await expect(provincial).not.toHaveAttribute('aria-current')
     await expect(reports).not.toHaveAttribute('aria-current')
-    await expect(page.getByRole('link', { name: 'Offers Report', exact: true })).toHaveAttribute(
+    await expect(page.getByRole('link', { name: 'Offers report', exact: true })).toHaveAttribute(
       'aria-current',
       'page',
     )
@@ -888,7 +888,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
       if ((await groupToggle.getAttribute('aria-expanded')) === 'false') await groupToggle.click()
       await expect(groupToggle).toHaveAttribute('aria-expanded', 'true')
     }
-    for (const longLabel of ['Species and Grade Report', 'Non-appraised Sec.3 FIL%']) {
+    for (const longLabel of ['Species and grade report', 'Non-appraised Sec.3 FIL%']) {
       await expect(page.getByRole('link', { name: longLabel, exact: true })).toBeVisible()
     }
     const groupItemLabels = page.locator(
@@ -909,7 +909,7 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     ]) {
       await expect(page.getByRole('link', { name: retiredReport, exact: true })).toHaveCount(0)
     }
-    await expect(page.getByRole('link', { name: 'Advertising List', exact: true })).toBeVisible()
+    await expect(page.getByRole('link', { name: 'Advertising list', exact: true })).toBeVisible()
 
     const typographyFoundation = await page.evaluate(() => {
       const rootStyle = getComputedStyle(document.documentElement)
@@ -2876,11 +2876,11 @@ test.describe('FSPTS-aligned LEXIS shell', () => {
     await page.setViewportSize({ width: 1440, height: 900 })
     await gotoSyntheticRoute(page, '/reports/offerReport', {
       waitUntil: 'domcontentloaded',
-      ready: page.getByRole('heading', { level: 1, name: 'Offers Report', exact: true }),
+      ready: page.getByRole('heading', { level: 1, name: 'Offers report', exact: true }),
     })
 
-    await expect(page.getByRole('heading', { level: 1, name: 'Offers Report' })).toBeVisible()
-    const reportPanel = page.getByRole('region', { name: 'Offers Report' })
+    await expect(page.getByRole('heading', { level: 1, name: 'Offers report' })).toBeVisible()
+    const reportPanel = page.getByRole('region', { name: 'Offers report' })
     const reportFields = reportPanel.locator('.report-config-fields')
     const reportActions = page.getByRole('group', { name: 'Report actions' })
     await expect(reportPanel).toHaveCSS('border-top-width', '1px')

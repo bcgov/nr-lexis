@@ -190,10 +190,10 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Exemption Report' })
+    await screen.findByRole('heading', { name: 'Exemption report' })
 
-    expect(screen.getByRole('heading', { name: 'Exemption Report' })).toBeInTheDocument()
-    expect(screen.getByRole('region', { name: 'Exemption Report' })).toHaveClass(
+    expect(screen.getByRole('heading', { name: 'Exemption report' })).toBeInTheDocument()
+    expect(screen.getByRole('region', { name: 'Exemption report' })).toHaveClass(
       'report-config-panel',
     )
     const reportActions = screen.getByRole('group', { name: 'Report actions' })
@@ -211,8 +211,8 @@ describe('Reports Page Actions', () => {
       'cds--btn--md',
     )
     expect(screen.getByText('Exemption volumes, balances, and status.')).toBeVisible()
-    expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
-    expect(screen.queryByText('Offers Report')).not.toBeInTheDocument()
+    expect(screen.queryByText('Application report')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offers report')).not.toBeInTheDocument()
     expect(screen.queryByText(/Accessible reports:/)).not.toBeInTheDocument()
     expect(screen.queryByText('Not Granted')).not.toBeInTheDocument()
   })
@@ -234,7 +234,7 @@ describe('Reports Page Actions', () => {
     )
 
     expect(await screen.findByText('Forbidden report')).toBeInTheDocument()
-    expect(screen.queryByRole('heading', { name: 'Offers Report' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('heading', { name: 'Offers report' })).not.toBeInTheDocument()
   })
 
   it.each([
@@ -259,13 +259,13 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    expect(await screen.findByRole('heading', { name: 'Offers Report' })).toBeInTheDocument()
+    expect(await screen.findByRole('heading', { name: 'Offers report' })).toBeInTheDocument()
     expect(mockedRunReport).not.toHaveBeenCalled()
   })
 
   it.each([
-    ['/reports/offerReport', 'Offers Report'],
-    ['/reports/permitLedgerReport', 'Permits Report'],
+    ['/reports/offerReport', 'Offers report'],
+    ['/reports/permitLedgerReport', 'Permits report'],
   ])('uses the navigation wording for %s', async (path, title) => {
     mockReportPermissions()
 
@@ -310,7 +310,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('region', { name: 'Exemption Report' })
+    await screen.findByRole('region', { name: 'Exemption report' })
     expect(screen.getByLabelText('Client number')).toHaveValue('00012345')
     expect(screen.getByLabelText('Listing from date')).toHaveValue('2026-01-15')
     expect(screen.getByLabelText('Listing from date')).toHaveAttribute('placeholder', 'YYYY-MM-DD')
@@ -327,7 +327,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Offers Report' })
+    await screen.findByRole('heading', { name: 'Offers report' })
     await waitFor(() =>
       expect(screen.getByRole('button', { name: 'Generate report' })).toBeEnabled(),
     )
@@ -397,7 +397,7 @@ describe('Reports Page Actions', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('heading', { name: 'Exemption Report' })).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'Exemption report' })).toBeInTheDocument()
     })
     await waitFor(() => {
       expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
@@ -645,7 +645,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Application Report' })
+    await screen.findByRole('heading', { name: 'Application report' })
     const regionComboBox = getComboBox('Region')
     await userEvent.click(regionComboBox)
     fireEvent.change(regionComboBox, { target: { value: '' } })
@@ -661,7 +661,7 @@ describe('Reports Page Actions', () => {
     await waitFor(() => {
       expect(
         screen.getByText(
-          'Choose at least one Application Report filter before generating: region, jurisdiction, exemption reason, client number, growth type, or received date.',
+          'Choose at least one application report filter before generating: region, jurisdiction, exemption reason, client number, growth type, or received date.',
         ),
       ).toBeInTheDocument()
     })
@@ -687,7 +687,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Exemption Report' })
+    await screen.findByRole('heading', { name: 'Exemption report' })
     await waitFor(() => {
       expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
     })
@@ -731,7 +731,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Permits Report' })
+    await screen.findByRole('heading', { name: 'Permits report' })
     await waitFor(() => {
       expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
     })
@@ -769,7 +769,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Species and Grade Report' })
+    await screen.findByRole('heading', { name: 'Species and grade report' })
     await userEvent.click(await screen.findByRole('button', { name: 'Clear all selected items' }))
     expect(
       screen.queryByRole('button', { name: 'Clear all selected items' }),
@@ -807,7 +807,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Offers Report' })
+    await screen.findByRole('heading', { name: 'Offers report' })
 
     await chooseComboBoxOption('Region', 'Cariboo Natural Resource Region')
     await chooseComboBoxOption('Region', 'Kootenay-Boundary Natural Resource Region')
@@ -837,7 +837,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Species and Grade Report' })
+    await screen.findByRole('heading', { name: 'Species and grade report' })
     await waitFor(() => {
       expect(getComboBox('Permit status')).toHaveValue('Complete')
     })
@@ -873,7 +873,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Species and Grade Report' })
+    await screen.findByRole('heading', { name: 'Species and grade report' })
     await chooseComboBoxOption('Permit status', 'All')
     expect(getComboBox('Permit status')).toHaveValue('All')
     await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
@@ -909,7 +909,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Species and Grade Report' })
+    await screen.findByRole('heading', { name: 'Species and grade report' })
     await waitFor(() => {
       expect(getComboBox('Permit status')).toHaveValue('Complete')
     })
@@ -940,7 +940,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Species and Grade Report' })
+    await screen.findByRole('heading', { name: 'Species and grade report' })
     await userEvent.type(screen.getByLabelText('Timber mark'), 'tm123')
     expect(screen.getByLabelText('Forest file ID')).toBeDisabled()
 
@@ -997,7 +997,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Transport Report' })
+    await screen.findByRole('heading', { name: 'Transport report' })
     await userEvent.click(getComboBox('Final destination country'))
     expect(screen.queryByRole('option', { name: 'New Zealand' })).not.toBeInTheDocument()
     await userEvent.keyboard('{Escape}')
@@ -1048,7 +1048,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    await screen.findByRole('heading', { name: 'Tenure analysis report' })
     await waitFor(() => {
       expect(getComboBox('Exemption type')).toHaveValue('Ministerial')
     })
@@ -1089,7 +1089,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    await screen.findByRole('heading', { name: 'Tenure analysis report' })
     await userEvent.clear(screen.getByLabelText('Issued from date'))
     await userEvent.type(screen.getByLabelText('Issued from date'), '2026-02-15')
 
@@ -1127,7 +1127,7 @@ describe('Reports Page Actions', () => {
         </MemoryRouter>,
       )
 
-      await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+      await screen.findByRole('heading', { name: 'Tenure analysis report' })
       if (variantLabel !== 'Permit details report') {
         await chooseComboBoxOption('Report variant', variantLabel)
       }
@@ -1164,7 +1164,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    await screen.findByRole('heading', { name: 'Tenure analysis report' })
     expect(screen.getByLabelText('Issued from date')).toHaveValue('')
     expect(screen.getByLabelText('Issued to date')).toHaveValue('')
     await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
@@ -1188,7 +1188,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    await screen.findByRole('heading', { name: 'Tenure analysis report' })
     expect(screen.queryByLabelText('Tenure type 1')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Timber mark 1')).not.toBeInTheDocument()
     await chooseComboBoxOption('Report variant', 'Tenure types report')
@@ -1246,7 +1246,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    await screen.findByRole('heading', { name: 'Tenure analysis report' })
     await waitFor(() => {
       expect(mockedFetchReportOptions).toHaveBeenCalledTimes(1)
     })
@@ -1312,7 +1312,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    await screen.findByRole('heading', { name: 'Tenure analysis report' })
     await chooseComboBoxOption('Report variant', 'Tenure types report')
     expect(screen.queryByLabelText('Exemption number')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Client number')).not.toBeInTheDocument()
@@ -1374,7 +1374,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Tenure Analysis Report' })
+    await screen.findByRole('heading', { name: 'Tenure analysis report' })
     if (variantLabel !== 'Permit details report') {
       await chooseComboBoxOption('Report variant', variantLabel)
     }
@@ -1409,7 +1409,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Application Report' })
+    await screen.findByRole('heading', { name: 'Application report' })
     const jurisdictionComboBox = getComboBox('Jurisdiction')
     await userEvent.click(jurisdictionComboBox)
     fireEvent.change(jurisdictionComboBox, { target: { value: '' } })
@@ -1458,7 +1458,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Advertising List' })
+    await screen.findByRole('heading', { name: 'Advertising list' })
 
     expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
     await chooseComboBoxOption('Output format', 'CSV')
@@ -1503,7 +1503,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Advertising List' })
+    await screen.findByRole('heading', { name: 'Advertising list' })
     expect(screen.getByLabelText('Listing from date')).toHaveValue('')
     expect(screen.getByLabelText('Listing to date')).toHaveValue('')
 
@@ -1543,7 +1543,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Advertising List' })
+    await screen.findByRole('heading', { name: 'Advertising list' })
     const fromDate = screen.getByLabelText('Listing from date')
     const toDate = screen.getByLabelText('Listing to date')
     await userEvent.type(fromDate, '2026-07-02')
@@ -1588,9 +1588,9 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Advertising List' })
-    expect(screen.queryByText('Application Report')).not.toBeInTheDocument()
-    expect(screen.queryByText('Offers Report')).not.toBeInTheDocument()
+    await screen.findByRole('heading', { name: 'Advertising list' })
+    expect(screen.queryByText('Application report')).not.toBeInTheDocument()
+    expect(screen.queryByText('Offers report')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
     expect(screen.queryByText('Required action:')).not.toBeInTheDocument()
     expect(screen.queryByText('mofrListing')).not.toBeInTheDocument()
@@ -1640,7 +1640,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Advertising List' })
+    await screen.findByRole('heading', { name: 'Advertising list' })
 
     expect(screen.queryByLabelText('Report variant')).not.toBeInTheDocument()
     await chooseComboBoxOption('Jurisdiction', 'Federal')
@@ -1679,7 +1679,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Advertising List' })
+    await screen.findByRole('heading', { name: 'Advertising list' })
     await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
     await waitFor(() => {
@@ -1710,7 +1710,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    const reportPanel = await screen.findByRole('region', { name: 'Application Report' })
+    const reportPanel = await screen.findByRole('region', { name: 'Application report' })
     await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
     const generateButton = screen.getByRole('button', { name: 'Generate report' })
     await waitFor(() => expect(generateButton).toBeEnabled())
@@ -1749,7 +1749,7 @@ describe('Reports Page Actions', () => {
         </MemoryRouter>,
       )
 
-      await screen.findByRole('heading', { name: 'Advertising List' })
+      await screen.findByRole('heading', { name: 'Advertising list' })
       if (fromDate) {
         await userEvent.type(screen.getByLabelText('Listing from date'), fromDate)
       }
@@ -1779,7 +1779,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Exemption Report' })
+    await screen.findByRole('heading', { name: 'Exemption report' })
     expect(screen.queryByLabelText('Approval From Date')).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Approval To Date')).not.toBeInTheDocument()
     await userEvent.type(screen.getByLabelText('Listing from date'), '2026-01-01')
@@ -1808,7 +1808,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Application Report' })
+    await screen.findByRole('heading', { name: 'Application report' })
     await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
     await chooseComboBoxOption('Output format', 'CSV')
     await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
@@ -1838,19 +1838,19 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Application Report' })
+    await screen.findByRole('heading', { name: 'Application report' })
     await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
     const generate = screen.getByRole('button', { name: 'Generate report' })
     await userEvent.click(generate)
 
-    expect(await screen.findByText('Application Report downloaded.')).toBeVisible()
+    expect(await screen.findByText('Application report downloaded.')).toBeVisible()
     expect(generate).toHaveFocus()
 
     mockedRunReport.mockRejectedValueOnce(new ReportRequestError('No report data matched.'))
     await userEvent.click(generate)
 
     expect(await screen.findByText('No report data matched.')).toBeVisible()
-    expect(screen.queryByText('Application Report downloaded.')).not.toBeInTheDocument()
+    expect(screen.queryByText('Application report downloaded.')).not.toBeInTheDocument()
   })
 
   it('stays silent when the save picker is cancelled', async () => {
@@ -1870,7 +1870,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Application Report' })
+    await screen.findByRole('heading', { name: 'Application report' })
     await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
     await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 
@@ -1892,7 +1892,7 @@ describe('Reports Page Actions', () => {
       </MemoryRouter>,
     )
 
-    await screen.findByRole('heading', { name: 'Application Report' })
+    await screen.findByRole('heading', { name: 'Application report' })
     await userEvent.type(screen.getByLabelText('Received from date'), '2026-01-01')
     await userEvent.click(screen.getByRole('button', { name: 'Generate report' }))
 

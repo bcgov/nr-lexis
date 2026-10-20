@@ -812,12 +812,12 @@ const adminNavigationSections: Array<{
   {
     section: 'Reports',
     links: [
-      'Advertising List',
-      'Offers Report',
-      'Permits Report',
-      'Transport Report',
-      'Species and Grade Report',
-      'Tenure Analysis',
+      'Advertising list',
+      'Offers report',
+      'Permits report',
+      'Transport report',
+      'Species and grade report',
+      'Tenure analysis report',
     ],
   },
   {
@@ -2095,12 +2095,12 @@ test.describe('TEST IDIR admin regression', () => {
     await expandSideNavSection(page, 'Reports')
 
     for (const [linkName, path, heading] of [
-      ['Advertising List', '/reports/biweeklyListing', /advertising list/i],
-      ['Offers Report', '/reports/offerReport', /offers report/i],
-      ['Permits Report', '/reports/permitLedgerReport', /permits report/i],
-      ['Transport Report', '/reports/transportReport', /transport report/i],
-      ['Species and Grade Report', '/reports/speciesGradeReport', /species and grade report/i],
-      ['Tenure Analysis', '/reports/tenureReport', /tenure analysis report/i],
+      ['Advertising list', '/reports/biweeklyListing', /advertising list/i],
+      ['Offers report', '/reports/offerReport', /offers report/i],
+      ['Permits report', '/reports/permitLedgerReport', /permits report/i],
+      ['Transport report', '/reports/transportReport', /transport report/i],
+      ['Species and grade report', '/reports/speciesGradeReport', /species and grade report/i],
+      ['Tenure analysis report', '/reports/tenureReport', /tenure analysis report/i],
     ] as const) {
       await page.locator(sideNavSection('Reports')).getByRole('link', { name: linkName }).click()
       await expect(page.getByRole('heading', { name: heading }).first()).toBeVisible()
