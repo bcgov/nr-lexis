@@ -320,6 +320,12 @@ const ProvincialReviewPage = () => {
   const clearSelection = useCallback(() => {
     setSelectedRowsById({})
   }, [])
+  const selectAllRowsRef = useRef<HTMLInputElement>(null)
+  // Cancel closes the batch bar that holds focus, so focus goes to the header checkbox.
+  const cancelBatchSelection = useCallback(() => {
+    clearSelection()
+    requestAnimationFrame(() => selectAllRowsRef.current?.focus())
+  }, [clearSelection])
   const updateFilter = useCallback(
     <K extends keyof ApplicationReviewSearchFilters>(
       key: K,
@@ -991,7 +997,7 @@ const ProvincialReviewPage = () => {
                 <TableBatchActions
                   totalSelected={selectedRowsCount}
                   shouldShowBatchActions
-                  onCancel={clearSelection}
+                  onCancel={cancelBatchSelection}
                   translateWithId={APPLICATION_BATCH_SELECTION}
                 >
                   <TableBatchAction
@@ -1018,6 +1024,7 @@ const ProvincialReviewPage = () => {
                     {canApproveApplications && (
                       <TableHeader>
                         <Checkbox
+                          ref={selectAllRowsRef}
                           id="selectAllCurrentPageRows"
                           hideLabel
                           labelText="Select all rows on this page"

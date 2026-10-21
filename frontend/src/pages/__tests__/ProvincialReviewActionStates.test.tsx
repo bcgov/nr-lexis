@@ -817,6 +817,26 @@ describe('Application review', () => {
       expect(disapproveRow).toBeEnabled()
     })
 
+    it('returns batch Cancel focus to the select-all checkbox without searching again', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000123' }))
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
+      expect(screen.getAllByText('2 applications selected').length).toBeGreaterThan(0)
+      const searchCalls = mockedSearchApplicationReviews.mock.calls.length
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('checkbox', { name: 'Select all rows on this page' }),
+        ).toHaveFocus(),
+      )
+      expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+      expect(screen.getByRole('checkbox', { name: 'Select application 1000123' })).not.toBeChecked()
+      expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(searchCalls)
+    })
+
     it('names each row action and shows its icon after the label', async () => {
       renderPage()
       await screen.findByText('1000123')
