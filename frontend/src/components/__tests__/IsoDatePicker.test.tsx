@@ -62,6 +62,32 @@ describe('IsoDatePicker', () => {
     expect(screen.getByLabelText('Retrieval date')).toHaveValue('2026-06-26')
   })
 
+  it('keeps a read-only date focusable without a calendar, typing or format hint', async () => {
+    const onChange = vi.fn()
+    render(
+      <IsoDatePicker
+        id="readOnlyApplicationDate"
+        labelText="Application date"
+        value="2026-10-21"
+        readOnly
+        onChange={onChange}
+      />,
+    )
+    const input = screen.getByLabelText('Application date') as HTMLInputElement & {
+      _flatpickr: { isOpen: boolean }
+    }
+
+    await userEvent.click(input)
+    await userEvent.type(input, '2026-01-01')
+
+    expect(input).toHaveFocus()
+    expect(input).toHaveAttribute('readonly')
+    expect(input).toHaveValue('2026-10-21')
+    expect(input._flatpickr.isOpen).toBe(false)
+    expect(screen.queryByText('year-month-day')).not.toBeInTheDocument()
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('still supports typed ISO dates', async () => {
     const StatefulDatePicker = () => {
       const [value, setValue] = useState('')

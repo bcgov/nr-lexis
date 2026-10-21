@@ -42,6 +42,7 @@ type IsoDatePickerProps = {
   invalidText?: ReactNode
   required?: boolean
   disabled?: boolean
+  readOnly?: boolean
   onBlur?: () => void
   onChange: (value: string) => void
 }
@@ -54,6 +55,7 @@ export default function IsoDatePicker({
   invalidText,
   required = false,
   disabled = false,
+  readOnly = false,
   onBlur,
   onChange,
 }: IsoDatePickerProps) {
@@ -70,6 +72,7 @@ export default function IsoDatePicker({
       dateFormat="Y-m-d"
       allowInput
       parseDate={parseIsoDate}
+      readOnly={readOnly}
       value={flatpickrValue}
       onOpen={placeCalendarAfterMotion}
       onChange={(_selectedDates, dateString, calendar) => {
@@ -93,7 +96,7 @@ export default function IsoDatePicker({
         id={id}
         labelText={labelText}
         placeholder="YYYY-MM-DD"
-        helperText="year-month-day"
+        helperText={readOnly ? undefined : 'year-month-day'}
         pattern={ISO_DATE_INPUT_PATTERN}
         data-1p-ignore="true"
         data-lpignore="true"

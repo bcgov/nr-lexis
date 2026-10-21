@@ -392,9 +392,9 @@ describe('Create Page Core Flows', () => {
       'region',
       'productTypeCode',
       'exemptionType',
-      'applicationDate',
       'exportScheduleId-987',
       'exportScheduleId-no-list-date',
+      'applicationDate',
       'applicationTermDays',
     ])
 
@@ -427,7 +427,7 @@ describe('Create Page Core Flows', () => {
       ageClass: 'O',
       exemptionType: 'U',
       region: '11',
-      applicationDate: '2026-01-09',
+      applicationDate: formatBusinessIsoDate(),
       applicationTermDays: '30',
       exportScheduleId: '987',
       listingDate: '2026-01-11',
@@ -1037,7 +1037,7 @@ describe('Create Page Core Flows', () => {
       ageClass: 'O',
       exemptionType: 'U',
       region: '11',
-      applicationDate: '2026-01-09',
+      applicationDate: formatBusinessIsoDate(),
       applicationTermDays: '30',
       exportScheduleId: '987',
       listingDate: '2026-01-11',
@@ -1733,14 +1733,14 @@ describe('Create Page Core Flows', () => {
     nextSchedules: [],
   } satisfies Awaited<ReturnType<typeof fetchProvincialApplicationOptions>>
 
-  it('lets a provincial submitter save with a blank List date while no list date is open', async () => {
+  it('lets a provincial submitter save with a blank Advertising list date while no list date is open', async () => {
     mockedSubmitProvincialApplicationCreate.mockResolvedValue(successfulCreate('912'))
     mockedFetchProvincialApplicationOptions.mockResolvedValueOnce(NO_OPEN_SCHEDULES_OPTIONS)
     renderSubmitterApplicationCreate(READY_SUBMITTER_APPLICATION_QUERY)
 
     await waitForApplicationCreateLoads('Applicant client details')
     await selectApplicationCreateTab('Application')
-    expect(screen.getByText('List date').closest('.required-label')).toBeNull()
+    expect(screen.getByText('Advertising list date').closest('.required-label')).toBeNull()
     expect(screen.queryAllByRole('radio')).toHaveLength(0)
     await confirmSubmitterSave()
 
@@ -1752,7 +1752,7 @@ describe('Create Page Core Flows', () => {
     expect(screen.queryByText('Select a valid list date')).not.toBeInTheDocument()
   })
 
-  it('still asks a provincial submitter for a List date when a list date is open', async () => {
+  it('still asks a provincial submitter for an Advertising list date when a list date is open', async () => {
     renderSubmitterApplicationCreate(
       READY_SUBMITTER_APPLICATION_QUERY.replace('listingDate=2026-01-11', 'listingDate=2026-02-02'),
     )
@@ -2051,6 +2051,7 @@ describe('Create Page Core Flows', () => {
       expect(screen.getByRole('combobox', { name: 'Exemption reason' })).toHaveValue('Surplus')
       expect(screen.getByRole('combobox', { name: 'Region' })).toHaveValue('')
       expect(screen.getByRole('textbox', { name: 'Application date' })).toHaveValue(today)
+      expect(screen.getByRole('textbox', { name: 'Application date' })).toHaveAttribute('readonly')
       expect(screen.getByRole('spinbutton', { name: 'Exemption term (days)' })).toHaveValue(180)
       expect(screen.queryByRole('textbox', { name: /Date received/i })).not.toBeInTheDocument()
       expect(screen.getByRole('radio', { name: 'Aug 5, 2026' })).toBeChecked()
