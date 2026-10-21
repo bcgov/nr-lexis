@@ -309,7 +309,9 @@ const buildInitialFormFromQuery = (
     region: provincialSubmitterIdentityLocked
       ? ''
       : (query.get('region') ?? query.get('orgUnitNumber') ?? INITIAL_FORM.region),
-    applicationDate: query.get('applicationDate') ?? today,
+    // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_CREATE_DATES): A new application is dated the
+    // day it is created, and the field is read-only.
+    applicationDate: today,
     applicationTermDays:
       query.get('applicationTermDays') ??
       query.get('exemptionTerm') ??
@@ -2199,24 +2201,9 @@ const ProvincialApplicationCreatePage = () => {
                   </RecordFieldRow>
                   <RecordFieldRow>
                     <RecordFieldCell>
-                      <IsoDatePicker
-                        id="applicationDate"
-                        labelText={requiredLabel('Application date')}
-                        required
-                        value={form.applicationDate}
-                        invalid={!!fieldError('applicationDate')}
-                        invalidText={fieldError('applicationDate')}
-                        onBlur={() => markFieldTouched('applicationDate')}
-                        onChange={(value) => {
-                          markFormEdited()
-                          setForm((current) => ({ ...current, applicationDate: value }))
-                        }}
-                      />
-                    </RecordFieldCell>
-                    <RecordFieldCell>
                       <div className="application-list-date-field">
                         <RadioButtonGroup
-                          legendText={requiredLabel('List date', listDateRequired)}
+                          legendText={requiredLabel('Advertising list date', listDateRequired)}
                           name="exportScheduleId"
                           valueSelected={
                             form.exportScheduleId ||
@@ -2256,6 +2243,20 @@ const ProvincialApplicationCreatePage = () => {
                     </RecordFieldCell>
                   </RecordFieldRow>
                   <RecordFieldRow>
+                    <RecordFieldCell>
+                      <IsoDatePicker
+                        id="applicationDate"
+                        labelText={requiredLabel('Application date')}
+                        required
+                        readOnly
+                        value={form.applicationDate}
+                        invalid={!!fieldError('applicationDate')}
+                        invalidText={fieldError('applicationDate')}
+                        onChange={(value) => {
+                          setForm((current) => ({ ...current, applicationDate: value }))
+                        }}
+                      />
+                    </RecordFieldCell>
                     <RecordFieldCell>
                       <TextInput
                         id="applicationTermDays"

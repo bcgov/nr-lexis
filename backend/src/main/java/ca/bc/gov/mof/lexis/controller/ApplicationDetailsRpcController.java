@@ -30,6 +30,7 @@ import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.ApplicationItemMutation;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.OrgUnitSurface;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import ca.bc.gov.mof.lexis.util.TextUtils;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.core.type.TypeReference;
@@ -832,6 +833,9 @@ public class ApplicationDetailsRpcController {
           }
           if (changesApprovedListDate(service, request, authentication)) {
             return approvedListDateLocked(request.applicationNumber());
+          }
+          if (changesClientApplicationDate(service, request, authentication)) {
+            return clientApplicationDateLocked(request.applicationNumber());
           }
           if (changesAgentFromListDate(service, request, authentication)) {
             return agentListDateLocked(request.applicationNumber());
@@ -1700,6 +1704,35 @@ public class ApplicationDetailsRpcController {
             List.of()));
   }
 
+  // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_CREATE_DATES): Clients cannot change the
+  // application date of a saved application.
+  private boolean changesClientApplicationDate(
+      ApplicationDetailsRpcService service,
+      ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest request,
+      Authentication authentication) {
+    // Summary saves without an application date keep the stored one.
+    if (!request.saveSource().updatesSummaryFields()
+        || request.applicationDate() == null
+        || !applicationEditPolicyService.isIndustryUser(authentication)) {
+      return false;
+    }
+    return service
+        .getApplicationSummarySnapshot(request.applicationNumber())
+        .map(snapshot -> !request.applicationDate().equals(snapshot.applicationDate()))
+        .orElse(false);
+  }
+
+  private ResponseEntity<ApplicationPersistenceResponseDto> clientApplicationDateLocked(
+      Long applicationNumber) {
+    return ResponseEntity.ok(
+        new ApplicationPersistenceResponseDto(
+            false,
+            null,
+            applicationNumber,
+            List.of("Application date cannot be changed."),
+            List.of()));
+  }
+
   /**
    * Staff choose any applicant type. A Provincial Submitter can only act as, or stop using, an
    * agent; their forest client must still be the owner, or the agent when one is used.
@@ -2185,7 +2218,9 @@ public class ApplicationDetailsRpcController {
         APPLICATION_APPLICANT_TYPE_OWNER.equalsIgnoreCase(applicantTypeCode);
     return new ApplicationDetailsRpcService.CreateApplicationRequest(
         parsePositiveLong(first(parameters, "federalApplicationNumber", "fedApplicationNumber")),
-        parseDate(first(parameters, "applicationDate")),
+        // INTENTIONAL_LEGACY_DIVERGENCE(APPLICATION_CREATE_DATES): A new application is dated the
+        // business day it is created, whatever date the form sends.
+        LexisBusinessTime.today(),
         parsePositiveLong(first(parameters, "exemptionTerm", "termDays")),
         parseDate(first(parameters, "dateReceived", "receivedDate")),
         parseDouble(first(parameters, "applicationVolume")),

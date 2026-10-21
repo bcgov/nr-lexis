@@ -231,6 +231,12 @@ public class ApplicationEditPolicyService {
         "Remark editing is not allowed by the application edit policy.");
   }
 
+  /** True for a client: an industry user without the Administrator role. */
+  public boolean isIndustryUser(Authentication authentication) {
+    Set<String> roles = normalizeRoles(sessionService.parseRolesFromPrincipal(authentication));
+    return !roles.contains(ROLE_ADMIN) && isIndustryUser(roles);
+  }
+
   /** True once the application's list date has arrived in business time. */
   public boolean listDateReached(
       ApplicationDetailsRpcService applicationService, Long applicationNumber) {

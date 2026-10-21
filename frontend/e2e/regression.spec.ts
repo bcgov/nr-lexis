@@ -2843,9 +2843,11 @@ test.describe('TEST IDIR admin regression', () => {
     const region = page.getByRole('combobox', { name: 'Region' })
     await expect(region).toHaveValue('')
     await expect(region).toBeEnabled()
-    await expect(page.getByRole('textbox', { name: 'Application date' })).toHaveValue(today)
+    const applicationDate = page.getByRole('textbox', { name: 'Application date' })
+    await expect(applicationDate).toHaveValue(today)
+    await expect(applicationDate).toHaveAttribute('readonly', '')
     await expect(page.getByRole('textbox', { name: /Date received/i })).toHaveCount(0)
-    const listDate = page.getByRole('group', { name: 'List date' })
+    const listDate = page.getByRole('group', { name: 'Advertising list date' })
     await expect(
       listDate.getByRole('radio', { name: formatIsoDateLabel(nextListDate) }),
     ).toBeChecked()

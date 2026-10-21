@@ -35,6 +35,7 @@ import ca.bc.gov.mof.lexis.service.session.LexisAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService;
 import ca.bc.gov.mof.lexis.service.session.ProvincialAuthorizationService.ApplicationItemMutation;
 import ca.bc.gov.mof.lexis.service.session.LexisSessionService;
+import ca.bc.gov.mof.lexis.util.LexisBusinessTime;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpSession;
 import java.io.ByteArrayOutputStream;
@@ -55,6 +56,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
+import org.junit.jupiter.params.provider.NullSource;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
@@ -1096,7 +1098,7 @@ class ApplicationDetailsRpcControllerTest {
         ArgumentCaptor.forClass(ApplicationDetailsRpcService.CreateApplicationRequest.class);
     verify(service).addApplication(requestCaptor.capture(), org.mockito.ArgumentMatchers.eq("idir\\jsmith"));
     ApplicationDetailsRpcService.CreateApplicationRequest request = requestCaptor.getValue();
-    assertThat(request.applicationDate()).isEqualTo(LocalDate.of(2026, 3, 1));
+    assertThat(request.applicationDate()).isEqualTo(LexisBusinessTime.today());
     assertThat(request.receivedDate()).isEqualTo(LocalDate.of(2026, 3, 2));
     assertThat(request.agentClientNumber()).isEqualTo("00022222");
     assertThat(request.ownerClientNumber()).isEqualTo("00011111");
@@ -1601,6 +1603,79 @@ class ApplicationDetailsRpcControllerTest {
 
     assertThat(response.getBody().valid()).isTrue();
     verify(service).updateApplicationSummary(any(), any());
+  }
+
+  @ParameterizedTest
+  @NullSource
+  @ValueSource(strings = {"summary", "summary-items"})
+  void clientCannotChangeSavedApplicationDate(String saveSource) {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00011111"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(applicationEditPolicyService.isIndustryUser(authentication)).thenReturn(true);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshot()));
+    MultiValueMap<String, String> params = summaryListDateParams(saveSource, "1234");
+    params.add("applicationDate", "2026-02-15");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+    assertThat(response.getBody().valid()).isFalse();
+    assertThat(response.getBody().errors()).containsExactly("Application date cannot be changed.");
+    verify(service, never()).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void clientCanSaveTheStoredApplicationDate() {
+    TestingAuthenticationToken authentication =
+        authenticatedWithActions(
+            "bceid\\submitter",
+            List.of("LEXIS_PROVINCIAL_SUBMITTER_00011111"),
+            "createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(applicationEditPolicyService.isIndustryUser(authentication)).thenReturn(true);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshot()));
+    when(service.updateApplicationSummary(any(), any()))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = summaryListDateParams("summary", "1234");
+    params.add("applicationDate", "2026-03-01");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getBody().valid()).isTrue();
+    verify(service).updateApplicationSummary(any(), any());
+  }
+
+  @Test
+  void staffCanChangeSavedApplicationDate() {
+    TestingAuthenticationToken authentication = authorized("createApplication");
+    when(serviceProvider.getIfAvailable()).thenReturn(service);
+    when(service.getApplicationSummarySnapshot(1000456L))
+        .thenReturn(Optional.of(summarySnapshot()));
+    when(service.updateApplicationSummary(any(), eq("idir\\jsmith")))
+        .thenReturn(
+            new ApplicationDetailsRpcService.CreateApplicationResult(
+                true, "Saved", 1000456L, List.of(), List.of()));
+    MultiValueMap<String, String> params = summaryListDateParams("summary", "1234");
+    params.add("applicationDate", "2026-02-15");
+
+    ResponseEntity<ApplicationDetailsRpcController.ApplicationPersistenceResponseDto> response =
+        controller.updateApplicationSummary(params, authentication);
+
+    assertThat(response.getBody().valid()).isTrue();
+    ArgumentCaptor<ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest> requestCaptor =
+        ArgumentCaptor.forClass(ApplicationDetailsRpcService.ApplicationSummaryUpdateRequest.class);
+    verify(service).updateApplicationSummary(requestCaptor.capture(), eq("idir\\jsmith"));
+    assertThat(requestCaptor.getValue().applicationDate()).isEqualTo(LocalDate.of(2026, 2, 15));
   }
 
   @Test
