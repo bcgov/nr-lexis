@@ -426,7 +426,12 @@ const ProvincialPage = () => {
                             : workflowTotal.toLocaleString()}
                         </TableCell>
                         <TableCell>
-                          <Button kind="primary" size="md" onClick={() => navigate(workflow.path)}>
+                          <Button
+                            kind="primary"
+                            size="md"
+                            aria-label={`Open ${workflow.title}`}
+                            onClick={() => navigate(workflow.path)}
+                          >
                             Open
                           </Button>
                         </TableCell>

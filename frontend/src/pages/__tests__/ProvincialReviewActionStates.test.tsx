@@ -520,9 +520,25 @@ describe('Application review', () => {
 
       expect(screen.getByText('Searching')).toBeInTheDocument()
       const skeleton = screen.getByRole('table', { name: 'Searching' })
-      // Application, Status, volume, species, List date and Region; no selection or actions.
-      expect(within(skeleton).getAllByRole('columnheader')).toHaveLength(6)
+      // Application, Status, volume, species, List date, Region and Actions; no selection column.
+      expect(within(skeleton).getAllByRole('columnheader')).toHaveLength(7)
       expect(container.querySelectorAll('.legacy-search-table-toolbar')).toHaveLength(1)
+    })
+
+    it('leaves the Actions column out of the skeleton for a user who cannot approve', async () => {
+      mockedUseAuth.mockReturnValue(
+        createTestAuthContext({
+          canPerform: (action: string) =>
+            action === '/applicationSearch' || action === '/applicationDetails',
+        }),
+      )
+      mockedSearchApplicationReviews.mockReturnValueOnce(new Promise(() => {}))
+
+      renderPage()
+      await waitFor(() => expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(1))
+
+      const skeleton = screen.getByRole('table', { name: 'Searching' })
+      expect(within(skeleton).getAllByRole('columnheader')).toHaveLength(6)
     })
 
     it('shows the count in the toolbar and the pagination only', async () => {
@@ -799,6 +815,26 @@ describe('Application review', () => {
       expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
       expect(approveRow).toBeEnabled()
       expect(disapproveRow).toBeEnabled()
+    })
+
+    it('returns batch Cancel focus to the select-all checkbox without searching again', async () => {
+      renderPage()
+      await screen.findByText('1000123')
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000123' }))
+      await userEvent.click(screen.getByRole('checkbox', { name: 'Select application 1000456' }))
+      expect(screen.getAllByText('2 applications selected').length).toBeGreaterThan(0)
+      const searchCalls = mockedSearchApplicationReviews.mock.calls.length
+
+      await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+      await waitFor(() =>
+        expect(
+          screen.getByRole('checkbox', { name: 'Select all rows on this page' }),
+        ).toHaveFocus(),
+      )
+      expect(screen.queryByRole('button', { name: 'Approve' })).toBeNull()
+      expect(screen.getByRole('checkbox', { name: 'Select application 1000123' })).not.toBeChecked()
+      expect(mockedSearchApplicationReviews).toHaveBeenCalledTimes(searchCalls)
     })
 
     it('names each row action and shows its icon after the label', async () => {

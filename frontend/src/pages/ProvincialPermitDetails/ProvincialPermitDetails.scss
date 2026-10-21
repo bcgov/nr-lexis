@@ -63,6 +63,19 @@
   outline-offset: 2px;
 }
 
+// The page-level result sits 40px above the tabs, as on the create pages. The grid's row gap
+// supplies the space, so the notification adds no margin of its own; below the wide layout the
+// row gap is 32px and the wrapper adds the other 8px.
+.permit-page-result .app-inline-notification {
+  margin-block-end: 0;
+}
+
+@media (max-width: 1311px) {
+  .permit-page-result {
+    margin-block-end: 0.5rem;
+  }
+}
+
 // The package fee rows sit 24px from the package selector above and the fee table below.
 .permit-package-fee-fields.record-field-grid {
   margin-block: 1.5rem;
@@ -124,20 +137,33 @@
   margin-block-start: 1.5rem;
 }
 
+// The Application number(s) label sits above its table, as a field label sits above its value.
 .ministerial-permit-details__applications {
   display: grid;
   grid-template-columns: minmax(0, 1fr);
-  gap: 1rem;
+  gap: 0.5rem;
   min-inline-size: 0;
+
+  > .detail-field-label {
+    margin: 0;
+  }
 }
 
-.ministerial-permit-details__applications .detail-section-subtitle {
-  margin-block-end: 0;
+// The table is as wide as its columns, and takes the full width on small screens.
+.ministerial-permit-details__application-table {
+  inline-size: max-content;
+  min-inline-size: min(22rem, 100%);
 }
 
-.ministerial-permit-details__application-help {
-  margin: 0;
-  color: var(--cds-text-secondary);
+@media (max-width: 671px) {
+  .ministerial-permit-details__application-table {
+    inline-size: 100%;
+  }
+}
+
+// A row that can't be included shows its pieces and volume greyed; its link stays active.
+.ministerial-permit-details__application-row--disabled td:nth-last-child(-n + 2) {
+  color: var(--cds-text-disabled);
 }
 
 // Create package and Add scale panel forms.
@@ -232,6 +258,21 @@
 .permit-scale-summary__actions {
   justify-content: flex-end;
   margin-block-start: 1.5rem;
+}
+
+// The federal permit notice adds no margin of its own: the card or grid around it spaces it.
+.app-inline-notification.detail-federal-permit-notice {
+  margin-block: 0;
+}
+
+// Each sentence of these tab empty states starts its own line, and the wider description keeps
+// the first one on a single line.
+.lexis-empty-state.permit-empty-state--sentences .lexis-empty-state__description {
+  max-inline-size: 31rem;
+}
+
+.permit-empty-state__sentence {
+  display: block;
 }
 
 // An empty Scale tab has no padding, so its result keeps the tab's own inset.

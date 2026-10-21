@@ -1,5 +1,5 @@
 /** The longest application remark that can be stored, counted as stored. */
-const STORED_REMARK_MAX_LENGTH = 250
+export const STORED_REMARK_MAX_LENGTH = 250
 
 /** A remark's stored length: &, < and > are saved as &amp;, &lt; and &gt;. */
 export const storedRemarkLength = (remark: string): number =>

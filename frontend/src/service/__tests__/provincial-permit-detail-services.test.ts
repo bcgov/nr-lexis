@@ -13,6 +13,7 @@ import {
   fetchProvincialPermitFees,
   removeApplicationFromPermit,
   updateBlanketOicPackage,
+  updatePermitApplications,
   updatePermitScaleAttachment,
   updatePermitScaleSelection,
 } from '@/service/provincial-permit-detail-tabs-service'
@@ -232,6 +233,7 @@ describe('provincial permit detail services', () => {
     )
     expect(result).toEqual({
       applications: ['1000456'],
+      applicationTotals: [],
       packages: [
         {
           packageNumber: 'PKG-100',
@@ -894,6 +896,57 @@ describe('provincial permit detail services', () => {
     },
   )
 
+  it("reads each listed application's pieces and volume on the permit from the core tabs", async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({
+        applicationList: ['1000456', '1000457'],
+        applicationTotals: [
+          { applicationNumber: '1000456', pieces: 2515, volume: 847.7 },
+          { applicationNumber: 1000457, pieces: 58, volume: 70.7 },
+        ],
+        packageList: [],
+      }),
+    )
+
+    const core = await fetchProvincialPermitDetailCoreTabs('P-777')
+
+    expect(core.applicationTotals).toEqual([
+      { applicationNumber: '1000456', pieces: 2515, volume: 847.7 },
+      { applicationNumber: '1000457', pieces: 58, volume: 70.7 },
+    ])
+  })
+
+  it('reads core tabs without application totals as having none', async () => {
+    getCachedResponseMock.mockResolvedValue(
+      response({ applicationList: ['1000456'], packageList: [] }),
+    )
+
+    const core = await fetchProvincialPermitDetailCoreTabs('P-777')
+
+    expect(core.applicationTotals).toEqual([])
+  })
+
+  it.each([
+    { name: 'a list that is not an array', applicationTotals: { applicationNumber: '1000456' } },
+    { name: 'an entry without a number', applicationTotals: [{ pieces: 1, volume: 1 }] },
+    {
+      name: 'an entry with text pieces',
+      applicationTotals: [{ applicationNumber: '1000456', pieces: '1', volume: 1 }],
+    },
+    {
+      name: 'an entry with a non-finite volume',
+      applicationTotals: [{ applicationNumber: '1000456', pieces: 1, volume: Infinity }],
+    },
+  ])('rejects core tabs with $name in the application totals', async ({ applicationTotals }) => {
+    getCachedResponseMock.mockResolvedValue(
+      response({ applicationList: ['1000456'], applicationTotals, packageList: [] }),
+    )
+
+    await expect(fetchProvincialPermitDetailCoreTabs('P-777')).rejects.toThrow(
+      'Invalid core tab response',
+    )
+  })
+
   it('rejects malformed aggregate package data', async () => {
     getCachedResponseMock.mockImplementation((path: string) =>
       Promise.resolve(
@@ -1491,6 +1544,70 @@ describe('provincial permit detail services', () => {
       success: true,
       message: 'Application was removed from the permit.',
       errors: [],
+      warnings: [],
+    })
+  })
+
+  it('posts added and removed permit applications together as one form request', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: true,
+        message: 'Application changes were saved.',
+        warnings: [
+          'Application 1000458 has no unassigned scale rows, so it was not added to the permit.',
+        ],
+      }),
+    )
+
+    const result = await updatePermitApplications({
+      permitNumber: ' 777 ',
+      addedApplications: [' 1000457 ', '1000458'],
+      removedApplications: ['1000456'],
+    })
+
+    expect(postMock).toHaveBeenCalledTimes(1)
+    const [path, body, config] = postMock.mock.calls[0]
+    expect(path).toBe('/lexis/rpc/permit-details/update-permit-applications')
+    expect(body).toBeInstanceOf(URLSearchParams)
+    expect(body.get('permitNumber')).toBe('777')
+    expect(body.get('addedApplications')).toBe('1000457,1000458')
+    expect(body.get('removedApplications')).toBe('1000456')
+    expect(config).toEqual({
+      headers: {
+        'Content-Type': 'application/x-www-form-urlencoded',
+      },
+    })
+    expect(result).toEqual({
+      success: true,
+      message: 'Application changes were saved.',
+      errors: [],
+      warnings: [
+        'Application 1000458 has no unassigned scale rows, so it was not added to the permit.',
+      ],
+    })
+  })
+
+  it('returns refused permit application changes with their errors', async () => {
+    postMock.mockResolvedValue(
+      response({
+        success: false,
+        errors: ['The added scales total 34.5 m³, but the exemption has 30.0 m³ remaining.'],
+      }),
+    )
+
+    const result = await updatePermitApplications({
+      permitNumber: '777',
+      addedApplications: [],
+      removedApplications: ['1000456'],
+    })
+
+    // An empty side is left out of the form, as every blank legacy form value is.
+    expect(postMock.mock.calls[0][1].has('addedApplications')).toBe(false)
+    expect(postMock.mock.calls[0][1].get('removedApplications')).toBe('1000456')
+    expect(result).toEqual({
+      success: false,
+      message: 'Unable to save the application changes.',
+      errors: ['The added scales total 34.5 m³, but the exemption has 30.0 m³ remaining.'],
       warnings: [],
     })
   })

@@ -22,6 +22,7 @@ import {
   TextArea,
   TextInput,
 } from '@carbon/react'
+import axios from 'axios'
 import { Add, Box, Edit, TrashCan } from '@carbon/icons-react'
 import { Cardboard } from '@carbon/pictograms-react'
 import { ActionResultNotification } from '../../components/ActionResultNotification'
@@ -305,6 +306,11 @@ const PACKAGE_SAVED_TITLE = 'Package saved.'
 const PACKAGE_DELETED_TITLE = 'Package deleted.'
 const SCALE_SAVED_TITLE = 'Scale saved.'
 const SCALE_DELETED_TITLE = 'Scale deleted.'
+
+/** A delete answered 403 or 404 names a package or scale that is gone or no longer reachable. */
+const isRecordGoneResponse = (error: unknown): boolean =>
+  axios.isAxiosError(error) && (error.response?.status === 403 || error.response?.status === 404)
+
 const NO_SPECIES_CODES: string[] = []
 
 // Validation messages name each field by its label.
@@ -584,16 +590,25 @@ function ProvincialApplicationItemsPanel({
   const actionResultSection =
     actionResult?.kind !== 'success'
       ? 'items'
-      : actionResult.title === PACKAGE_SAVED_TITLE ||
-          (actionResult.title === PACKAGE_DELETED_TITLE && !packageFirstEmptyState)
+      : actionResult.title === PACKAGE_SAVED_TITLE
         ? 'package'
         : actionResult.title === SCALE_SAVED_TITLE || actionResult.title === SCALE_DELETED_TITLE
           ? 'scales'
           : 'items'
+  // A deleted package or scale takes its own button away, so the notice takes focus instead.
+  // With no package left, focus goes to Create package.
+  const focusActionResultOnReveal =
+    actionResult?.kind === 'success' &&
+    ((actionResult.title === PACKAGE_DELETED_TITLE && !packageFirstEmptyState) ||
+      actionResult.title === SCALE_DELETED_TITLE)
   const actionResultNotification = (section: typeof actionResultSection) =>
     !!actionResult &&
     actionResultSection === section && (
-      <ActionResultNotification result={actionResult} onClose={() => onActionResult(null)} />
+      <ActionResultNotification
+        result={actionResult}
+        onClose={() => onActionResult(null)}
+        focusOnReveal={focusActionResultOnReveal}
+      />
     )
   const [isSavingPackage, setIsSavingPackage] = useState(false)
   const [isSavingScale, setIsSavingScale] = useState(false)
@@ -1436,6 +1451,8 @@ function ProvincialApplicationItemsPanel({
         return
       }
 
+      setPackageBaselineForm(packageForm)
+      setPackageDraftTouched(false)
       const nextPackageNumber =
         result.packageNumber || packageForm.newPackageNumber || selectedPackageNumber
       dispatchPackageSelection({
@@ -1581,7 +1598,7 @@ function ProvincialApplicationItemsPanel({
       try {
         await onDetailChanged()
         onActionResult({ kind: 'success', title: PACKAGE_DELETED_TITLE, message: '' })
-        setPendingItemFocus('package')
+        if (packageNumbers.every((item) => item === packageNumber)) setPendingItemFocus('package')
       } catch (refreshError) {
         console.error(refreshError)
         showItemRefreshWarning(
@@ -1592,6 +1609,11 @@ function ProvincialApplicationItemsPanel({
       }
     } catch (error) {
       console.error(error)
+      if (isRecordGoneResponse(error)) {
+        throw new Error(
+          'Package not deleted. It may already have been deleted. Reload the application to check.',
+        )
+      }
       throw error instanceof Error ? error : new Error('Unable to delete package.')
     } finally {
       setIsSavingPackage(false)
@@ -1692,7 +1714,6 @@ function ProvincialApplicationItemsPanel({
         await onDetailChanged()
         await loadPackageItems(selectedPackageNumber)
         onActionResult({ kind: 'success', title: SCALE_DELETED_TITLE, message: '' })
-        setPendingItemFocus('scales')
       } catch (refreshError) {
         console.error(refreshError)
         showItemRefreshWarning(
@@ -1703,6 +1724,11 @@ function ProvincialApplicationItemsPanel({
       }
     } catch (error) {
       console.error(error)
+      if (isRecordGoneResponse(error)) {
+        throw new Error(
+          'Scale not deleted. It may already have been deleted. Reload the application to check.',
+        )
+      }
       throw error instanceof Error ? error : new Error('Unable to delete scale.')
     } finally {
       setDeletingScaleId('')
@@ -1726,7 +1752,11 @@ function ProvincialApplicationItemsPanel({
             </div>
             <EmptyState
               title="No packages for this application"
-              description="Create a package, then add Summary of scale."
+              description={
+                !hideMutationActions && canAddPackages
+                  ? 'Create a package, then add Summary of scale.'
+                  : 'No package has been created for this application.'
+              }
               icon={<Cardboard width={48} height={48} />}
               headingLevel={4}
               action={
@@ -1878,11 +1908,11 @@ function ProvincialApplicationItemsPanel({
           {actionResultNotification('package')}
           <RecordFieldGrid>
             <RecordFieldRow>
-              <RecordField label="Volume (m³)" value={formatVolume(packageForm.volume)} />
-              <RecordField label="Average length (m)" value={packageForm.averageLength} />
+              <RecordField label="Volume (m³)" value={formatVolume(packageBaselineForm.volume)} />
+              <RecordField label="Average length (m)" value={packageBaselineForm.averageLength} />
               <RecordField
                 label="Average top diameter (rads)"
-                value={packageForm.averageDiameter}
+                value={packageBaselineForm.averageDiameter}
               />
             </RecordFieldRow>
           </RecordFieldGrid>
@@ -1904,15 +1934,16 @@ function ProvincialApplicationItemsPanel({
                 onClick: requestDrawerClose,
               },
               {
-                label: isSavingPackage ? 'Saving…' : 'Save package',
+                label: isSavingPackage ? 'Saving package' : 'Save package',
                 kind: 'primary',
                 disabled: !canSubmitSelectedPackage,
+                renderIcon: isSavingPackage ? PendingIcon : undefined,
                 onClick: () => void onSaveSelectedPackage(),
               },
             ]}
           >
-            <RequiredFieldsLegend />
-            <div className="application-items-package-edit-panel" ref={drawerFormRef}>
+            <div className="application-items-panel-form" ref={drawerFormRef}>
+              <RequiredFieldsLegend />
               {!!itemsErrorMessage && (
                 <div tabIndex={-1} data-drawer-error>
                   <InlineNotification
@@ -1924,55 +1955,53 @@ function ProvincialApplicationItemsPanel({
                   />
                 </div>
               )}
-              <div className="application-items-form">
-                <TextInput
-                  id="applicationItemsPackageNumber"
-                  labelText={requiredLabel('Package number')}
-                  aria-required="true"
-                  value={packageForm.newPackageNumber}
-                  disabled={!canSaveSelectedPackage || !canUpdatePackageNumber}
-                  invalid={!!packageFieldError('packageNewPackageNumber')}
-                  invalidText={packageFieldError('packageNewPackageNumber')}
-                  onBlur={() => markItemFieldTouched('packageNewPackageNumber')}
-                  onChange={(event) => setPackageField('newPackageNumber', event.target.value)}
-                />
-                <TextInput
-                  id="applicationItemsPackageVolume"
-                  labelText={requiredLabel(VOLUME_LABEL)}
-                  aria-required="true"
-                  helperText="Must be less than or equal to application request volume"
-                  value={packageForm.volume}
-                  disabled={!canSaveSelectedPackage}
-                  invalid={!!packageFieldError('packageVolume')}
-                  invalidText={packageFieldError('packageVolume')}
-                  onBlur={() => markItemFieldTouched('packageVolume')}
-                  onChange={(event) => setPackageField('volume', event.target.value)}
-                />
-                <TextInput
-                  id="applicationItemsPackageLength"
-                  labelText={requiredLabel(AVERAGE_LENGTH_LABEL)}
-                  aria-required="true"
-                  helperText="Must be greater than 0"
-                  value={packageForm.averageLength}
-                  disabled={!canSaveSelectedPackage}
-                  invalid={!!packageFieldError('packageAverageLength')}
-                  invalidText={packageFieldError('packageAverageLength')}
-                  onBlur={() => markItemFieldTouched('packageAverageLength')}
-                  onChange={(event) => setPackageField('averageLength', event.target.value)}
-                />
-                <TextInput
-                  id="applicationItemsPackageDiameter"
-                  labelText={requiredLabel(AVERAGE_DIAMETER_LABEL)}
-                  aria-required="true"
-                  helperText="Must be greater than 0"
-                  value={packageForm.averageDiameter}
-                  disabled={!canSaveSelectedPackage}
-                  invalid={!!packageFieldError('packageAverageDiameter')}
-                  invalidText={packageFieldError('packageAverageDiameter')}
-                  onBlur={() => markItemFieldTouched('packageAverageDiameter')}
-                  onChange={(event) => setPackageField('averageDiameter', event.target.value)}
-                />
-              </div>
+              <TextInput
+                id="applicationItemsPackageNumber"
+                labelText={requiredLabel('Package number')}
+                aria-required="true"
+                value={packageForm.newPackageNumber}
+                disabled={!canSaveSelectedPackage || !canUpdatePackageNumber}
+                invalid={!!packageFieldError('packageNewPackageNumber')}
+                invalidText={packageFieldError('packageNewPackageNumber')}
+                onBlur={() => markItemFieldTouched('packageNewPackageNumber')}
+                onChange={(event) => setPackageField('newPackageNumber', event.target.value)}
+              />
+              <TextInput
+                id="applicationItemsPackageVolume"
+                labelText={requiredLabel(VOLUME_LABEL)}
+                aria-required="true"
+                helperText="Must be less than or equal to application request volume"
+                value={packageForm.volume}
+                disabled={!canSaveSelectedPackage}
+                invalid={!!packageFieldError('packageVolume')}
+                invalidText={packageFieldError('packageVolume')}
+                onBlur={() => markItemFieldTouched('packageVolume')}
+                onChange={(event) => setPackageField('volume', event.target.value)}
+              />
+              <TextInput
+                id="applicationItemsPackageLength"
+                labelText={requiredLabel(AVERAGE_LENGTH_LABEL)}
+                aria-required="true"
+                helperText="Must be greater than 0"
+                value={packageForm.averageLength}
+                disabled={!canSaveSelectedPackage}
+                invalid={!!packageFieldError('packageAverageLength')}
+                invalidText={packageFieldError('packageAverageLength')}
+                onBlur={() => markItemFieldTouched('packageAverageLength')}
+                onChange={(event) => setPackageField('averageLength', event.target.value)}
+              />
+              <TextInput
+                id="applicationItemsPackageDiameter"
+                labelText={requiredLabel(AVERAGE_DIAMETER_LABEL)}
+                aria-required="true"
+                helperText="Must be greater than 0"
+                value={packageForm.averageDiameter}
+                disabled={!canSaveSelectedPackage}
+                invalid={!!packageFieldError('packageAverageDiameter')}
+                invalidText={packageFieldError('packageAverageDiameter')}
+                onBlur={() => markItemFieldTouched('packageAverageDiameter')}
+                onChange={(event) => setPackageField('averageDiameter', event.target.value)}
+              />
               <TextArea
                 id="applicationItemsPackageComments"
                 labelText="Comments"
@@ -2205,6 +2234,7 @@ function ProvincialApplicationItemsPanel({
                                   deletingScaleId === row.id
                                 }
                                 renderIcon={deletingScaleId === row.id ? PendingIcon : TrashCan}
+                                aria-label={`${deletingScaleId === row.id ? 'Deleting' : 'Delete'} scale ${row.timberMark}, ${row.species}, grade ${row.grade.replace(/^Grade\s+/i, '')}`}
                                 onClick={() => {
                                   if (itemsBusy) return
                                   confirmItemDiscard(() => {

@@ -462,8 +462,8 @@ test('offers Delete only on scales not on a completed permit and explains a refu
   const lockedRow = page.getByRole('row').filter({ hasText: 'TMLOCK' })
   const openRow = page.getByRole('row').filter({ hasText: 'TMOPEN' })
   await expect(lockedRow).toBeVisible()
-  await expect(lockedRow.getByRole('button', { name: 'Delete', exact: true })).toHaveCount(0)
-  await expect(openRow.getByRole('button', { name: 'Delete', exact: true })).toHaveCount(1)
+  await expect(lockedRow.getByRole('button', { name: /^Delete scale / })).toHaveCount(0)
+  await expect(openRow.getByRole('button', { name: /^Delete scale / })).toHaveCount(1)
 
   // A package that has scales can't be deleted, and says so.
   await expect(
@@ -472,7 +472,7 @@ test('offers Delete only on scales not on a completed permit and explains a refu
   await expect(page.getByRole('button', { name: 'Delete package', exact: true })).toHaveCount(0)
 
   // The server can still refuse a delete when the scale has reached a completed permit meanwhile.
-  await openRow.getByRole('button', { name: 'Delete', exact: true }).click()
+  await openRow.getByRole('button', { name: /^Delete scale / }).click()
   const confirmation = page.getByRole('dialog', {
     name: 'Are you sure you want to delete this scale?',
     exact: true,

@@ -42,7 +42,15 @@ import {
   isSelectableClientLocation,
   resolveClientLocationCode,
 } from '@/pages/shared/application-form-utils'
-import { isoDateFieldError, isValidIsoDate } from '@/pages/shared/create-form-utils'
+import {
+  firstValidationError,
+  integerFieldError,
+  isoDateFieldError,
+  isValidIsoDate,
+  maxLengthFieldError,
+  maxNumericValueFieldError,
+  requiredFieldError,
+} from '@/pages/shared/create-form-utils'
 import { withShippingDefaults } from '@/pages/ProvincialPermitDetails/shipping-defaults'
 import { readDetailReturnTo } from '@/pages/shared/detail-navigation'
 import type { IdTextOption } from '@/pages/shared/search-query-utils'
@@ -126,6 +134,8 @@ const defaultLayout = ({ actions, content }: { actions: ReactNode; content: Reac
 
 const MAX_OIC_REQUEST_PIECES = 9_999_999_999
 const MAX_OIC_REQUEST_VOLUME_LENGTH = 9
+// A plain decimal, including one without a leading digit.
+const OIC_REQUEST_VOLUME_PATTERN = /^(?:\d+(?:\.\d+)?|\.\d+)$/
 
 // The fields on each tab. The error summary names the tabs with errors, and each tab counts its own.
 const FORM_TABS = [
@@ -284,24 +294,22 @@ const validateForm = (
         : undefined,
   }
 
-  const pieces = form.oicPermitTotalPieces.trim()
-  if (!pieces) {
-    errors.oicPermitTotalPieces = 'Permit request pieces is required.'
-  } else if (!/^\d+$/.test(pieces) || Number(pieces) > MAX_OIC_REQUEST_PIECES) {
-    errors.oicPermitTotalPieces =
-      'Permit request pieces must be a whole number no greater than 9999999999.'
-  }
+  const pieces = form.oicPermitTotalPieces
+  errors.oicPermitTotalPieces = firstValidationError(
+    () => requiredFieldError(pieces, 'Permit request pieces'),
+    () => integerFieldError(pieces, 'Permit request pieces'),
+    () => maxNumericValueFieldError(pieces, MAX_OIC_REQUEST_PIECES, 'Permit request pieces'),
+  )
 
-  const volume = form.oicPermitTotalVolume.trim()
-  if (!volume) {
-    errors.oicPermitTotalVolume = 'Permit request volume is required.'
-  } else if (
-    !/^(?:\d+(?:\.\d+)?|\.\d+)$/.test(volume) ||
-    volume.length > MAX_OIC_REQUEST_VOLUME_LENGTH
-  ) {
-    errors.oicPermitTotalVolume =
-      'Permit request volume must be a non-negative number of 9 characters or fewer.'
-  }
+  const volume = form.oicPermitTotalVolume
+  errors.oicPermitTotalVolume = firstValidationError(
+    () => requiredFieldError(volume, 'Permit request volume'),
+    () =>
+      OIC_REQUEST_VOLUME_PATTERN.test(volume.trim())
+        ? null
+        : 'Permit request volume must be numeric.',
+    () => maxLengthFieldError(volume, MAX_OIC_REQUEST_VOLUME_LENGTH, 'Permit request volume'),
+  )
 
   if (form.permitRemarks.length > 250) {
     errors.permitRemarks = 'Remarks must be 250 characters or fewer.'
@@ -1270,7 +1278,16 @@ const BlanketOicPermitCreateForm = ({
                               labelText={requiredLabel('Agent client')}
                               helperText="Enter name, acronym, or client number (min. 3 characters)"
                               value={form.agentClientNumber}
-                              selectedClientName={clientDisplayName(agentClientData, '')}
+                              selectedClientName={clientDisplayName(
+                                agentClientData ??
+                                  (clientLookupNumbersMatch(
+                                    form.agentClientNumber,
+                                    form.ownerClientNumber,
+                                  )
+                                    ? ownerClientData
+                                    : null),
+                                '',
+                              )}
                               resetKey={clientSearchResetKey}
                               counterpartyClientNumber={form.ownerClientNumber}
                               required

@@ -7,6 +7,7 @@ import {
   fetchExemptionEditContext,
   fetchExemptionRegionContext,
   fetchExemptionPermits,
+  formatFeeRate,
   removeApplicationFromExemption,
   sendExemptionApprovalEmails,
   sendExemptionApprovalNotifications,
@@ -99,6 +100,29 @@ describe('provincial exemption detail service', () => {
       '/lexis/rpc/exemption-details/edit-context',
       { params: { exemptionNumber: 'BOIC-205' } },
     )
+  })
+
+  it.each([
+    [1, '1.00'],
+    ['1', '1.00'],
+    [12.5, '12.50'],
+    ['999.99', '999.99'],
+    ['', ''],
+    [null, ''],
+  ])('reads a stored fee rate of %j as %j', async (stored, expected) => {
+    getMock.mockResolvedValue({
+      data: {
+        rateOverrideEnabled: true,
+        fixedFeeRate: stored,
+        regionNumbers: [1903],
+        locked: false,
+        lockMessage: '',
+      },
+    })
+
+    await expect(fetchExemptionEditContext('BOIC-205')).resolves.toMatchObject({
+      fixedFeeRate: expected,
+    })
   })
 
   it('keeps linked application access regions apart from the stored exemption regions', async () => {
@@ -525,5 +549,23 @@ describe('provincial exemption detail service', () => {
       contacts,
     )
     expect(getMock).not.toHaveBeenCalled()
+  })
+})
+
+describe('formatFeeRate', () => {
+  it.each([
+    ['1', '1.00'],
+    ['25', '25.00'],
+    ['12.5', '12.50'],
+    ['12.50', '12.50'],
+    [' 3 ', '3.00'],
+  ])('shows %j to two decimal places', (value, expected) => {
+    expect(formatFeeRate(value)).toBe(expected)
+  })
+
+  it('keeps a blank or non-numeric value as given', () => {
+    expect(formatFeeRate('')).toBe('')
+    expect(formatFeeRate('  ')).toBe('  ')
+    expect(formatFeeRate('abc')).toBe('abc')
   })
 })

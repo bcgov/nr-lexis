@@ -219,7 +219,7 @@ for (const mode of ['add', 'edit'] as const) {
           ? page.getByRole('button', { name: 'Add remark', exact: true })
           : page
               .getByRole('region', { name: 'Application remarks' })
-              .getByRole('button', { name: 'Edit', exact: true })
+              .getByRole('button', { name: /^Edit remark / })
       await launcher.focus()
       await page.keyboard.press('Enter')
       const panel = page.getByRole('complementary', {
@@ -313,7 +313,7 @@ test('conflict recovery also releases a pending document deletion without retryi
     ready: page.getByRole('heading', { level: 1, name: 'Application 321', exact: true }),
   })
   await page.getByRole('tab', { name: 'Documents', exact: true }).click()
-  await page.getByRole('button', { name: 'Delete', exact: true }).click()
+  await page.getByRole('button', { name: 'Delete synthetic-conflict.txt', exact: true }).click()
   const deletion = page.getByRole('dialog', {
     name: 'Are you sure you want to delete this document?',
     exact: true,
@@ -341,7 +341,9 @@ test('conflict recovery also releases a pending document deletion without retryi
   await expect(
     page.getByRole('cell', { name: 'synthetic-conflict.txt', exact: true }),
   ).toBeVisible()
-  await expect(page.getByRole('button', { name: 'Delete', exact: true })).toBeEnabled()
+  await expect(
+    page.getByRole('button', { name: 'Delete synthetic-conflict.txt', exact: true }),
+  ).toBeEnabled()
 })
 
 for (const { code, heading, recovery } of [

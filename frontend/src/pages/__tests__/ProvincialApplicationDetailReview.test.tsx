@@ -303,7 +303,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
         await userEvent.click(await screen.findByRole('button', { name: 'Add remark' }))
       } else {
         await screen.findByText('Older note')
-        await userEvent.click(screen.getAllByRole('button', { name: 'Edit' })[1])
+        await userEvent.click(screen.getAllByRole('button', { name: /^Edit remark / })[1])
       }
       fireEvent.change(await screen.findByLabelText('Remark'), { target: { value: savedText } })
       await userEvent.click(
@@ -366,7 +366,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
       await selectApplicationDetailTab('Remarks')
       const addButton = await screen.findByRole('button', { name: 'Add remark' })
-      const editButton = screen.getByRole('button', { name: 'Edit' })
+      const editButton = screen.getByRole('button', { name: /^Edit remark / })
       await userEvent.click(mode === 'add' ? addButton : editButton)
       const remarkInput = await screen.findByLabelText('Remark')
       expect(document.querySelector('.c4p--side-panel--slide-in')).toBeInTheDocument()
@@ -399,7 +399,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
       ).toBeVisible()
       expect(screen.queryByLabelText(/^Remark$/)).not.toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Add remark' })).toBeEnabled()
-      expect(screen.getByRole('button', { name: 'Edit' })).toBeEnabled()
+      expect(screen.getByRole('button', { name: /^Edit remark / })).toBeEnabled()
     },
   )
 
@@ -478,7 +478,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     await selectApplicationDetailTab('Remarks')
     const remarkRow = (await screen.findByText('ok')).closest('tr') as HTMLElement
     expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
-    await userEvent.click(within(remarkRow).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(within(remarkRow).getByRole('button', { name: /^Edit remark / }))
     fireEvent.change(await screen.findByLabelText('Remark'), {
       target: { value: 'Corrected application note' },
     })
@@ -518,7 +518,9 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     ).getByRole('table')
     expect(within(remarksTable).getByText('ok')).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add remark' })).not.toBeInTheDocument()
-    expect(within(remarksTable).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(
+      within(remarksTable).queryByRole('button', { name: /^Edit remark / }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows the lock notice instead of Update status while another user holds the lock', async () => {
@@ -622,7 +624,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
           : within(screen.getByRole('region', { name: 'Application remarks' })).getByRole(
               'button',
               {
-                name: 'Edit',
+                name: /^Edit remark /,
               },
             )
       await userEvent.click(launcher)
@@ -721,7 +723,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     await selectApplicationDetailTab('Remarks')
     const launcher = within(screen.getByRole('region', { name: 'Application remarks' })).getByRole(
       'button',
-      { name: 'Edit' },
+      { name: /^Edit remark / },
     )
     await userEvent.click(launcher)
     const remark = await screen.findByLabelText('Remark')
@@ -869,7 +871,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     await selectApplicationDetailTab('Remarks')
     const remarkRow = (await screen.findByText('ok')).closest('tr') as HTMLElement
-    await userEvent.click(within(remarkRow).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(within(remarkRow).getByRole('button', { name: /^Edit remark / }))
     fireEvent.change(await screen.findByLabelText('Remark'), {
       target: { value: 'Corrected application note' },
     })
@@ -934,8 +936,13 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     await selectApplicationRemarksForEditing()
     const remarkInput = await screen.findByLabelText('Remark')
+    const remarkCounter = remarkInput
+      .closest('.remark-text-area')
+      ?.querySelector('.cds--text-area__label-counter')
+    expect(remarkCounter).toHaveTextContent('0/250')
     const tooLongOnceStored = `${'R'.repeat(248)}&&`
     fireEvent.change(remarkInput, { target: { value: tooLongOnceStored } })
+    expect(remarkCounter).toHaveTextContent('258/250')
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
 
     expect(
@@ -948,6 +955,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
     const fitsOnceStored = `${'R'.repeat(241)}&<`
     fireEvent.change(remarkInput, { target: { value: fitsOnceStored } })
+    expect(remarkCounter).toHaveTextContent('250/250')
     await userEvent.click(screen.getByRole('button', { name: 'Save remark' }))
 
     await waitFor(() =>
@@ -1040,7 +1048,7 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(screen.queryByRole('tab', { name: 'Remarks' })).not.toBeInTheDocument()
     expect(screen.queryByLabelText('Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save remark' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Edit remark / })).not.toBeInTheDocument()
   })
 
   it('updates existing application remarks and refreshes detail', async () => {
@@ -1081,7 +1089,9 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
     expect(screen.queryByRole('textbox', { name: 'Filter remarks' })).not.toBeInTheDocument()
     expect(within(remarkRow as HTMLElement).getByText('Jan 4, 2026')).toBeInTheDocument()
     expect(within(remarkRow as HTMLElement).getByText('idir\\reviewer')).toBeInTheDocument()
-    await userEvent.click(within(remarkRow as HTMLElement).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(
+      within(remarkRow as HTMLElement).getByRole('button', { name: /^Edit remark / }),
+    )
     const remarkInput = await screen.findByLabelText('Remark')
     fireEvent.change(remarkInput, {
       target: { value: 'Updated application note' },
@@ -1274,7 +1284,9 @@ describe.sequential('Provincial Application Detail Actions - review', () => {
 
       await selectApplicationDetailTab('Remarks')
       await userEvent.click(
-        await screen.findByRole('button', { name: mode === 'add' ? 'Add remark' : 'Edit' }),
+        await screen.findByRole('button', {
+          name: mode === 'add' ? 'Add remark' : /^Edit remark /,
+        }),
       )
       const remarkLabel = 'Remark'
       fireEvent.change(await screen.findByLabelText(remarkLabel), {

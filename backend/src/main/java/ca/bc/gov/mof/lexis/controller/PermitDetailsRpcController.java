@@ -705,7 +705,7 @@ public class PermitDetailsRpcController {
                   service, permitNumber, applicationNumber, authentication));
       applicationLocksToRelease =
           acquireApplicationLocksForMutation(linkedApplicationNumbers, authentication);
-      return canChangePermitAgent(authentication)
+      return canChangePermitAgent(service, permitNumber, authentication)
           ? service.updatePermitWithAgentChange(mutationRequest, userId(authentication))
           : service.updatePermit(mutationRequest, userId(authentication));
     } finally {
@@ -1022,6 +1022,55 @@ public class PermitDetailsRpcController {
                 service.removeApplicationFromPermit(
                     permitNumber,
                     applicationNumber,
+                    userId(authentication)));
+          } finally {
+            releaseApplicationLocks(applicationLocksToRelease, authentication);
+          }
+        });
+  }
+
+  /** Adds and removes the permit's applications together, as one save. */
+  @PostMapping("/update-permit-applications")
+  public ResponseEntity<PermitPersistenceRpcResponseDto> updatePermitApplications(
+      @RequestParam(name = "permitNumber", required = false) Long permitNumber,
+      @RequestParam(name = "addedApplications", required = false) String addedApplications,
+      @RequestParam(name = "removedApplications", required = false) String removedApplications,
+      Authentication authentication) {
+    if (!canSavePermit(authentication)) {
+      return ResponseEntity.status(HttpStatus.FORBIDDEN).build();
+    }
+
+    PermitDetailsRpcService service = serviceProvider.getIfAvailable();
+    if (service == null) {
+      LOGGER.warn("Permit RPC service unavailable - returning no content for update permit applications");
+      return ResponseEntity.noContent().build();
+    }
+    requirePermitAccess(permitNumber, authentication);
+    List<Long> applicationNumbers =
+        java.util.stream.Stream.concat(
+                parseApplicationNumbers(addedApplications).stream(),
+                parseApplicationNumbers(removedApplications).stream())
+            .distinct()
+            .sorted()
+            .toList();
+    applicationNumbers.forEach(
+        applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+    return permitOperationMutex.executeAggregate(
+        applicationNumbers,
+        List.of(permitNumber),
+        () -> {
+          requirePermitAccess(permitNumber, authentication);
+          requirePermitEditable(permitNumber, authentication);
+          applicationNumbers.forEach(
+              applicationNumber -> requireApplicationAccess(applicationNumber, authentication));
+          List<Long> applicationLocksToRelease =
+              acquireApplicationLocksForMutation(applicationNumbers, authentication);
+          try {
+            return ResponseEntity.ok(
+                service.updatePermitApplications(
+                    permitNumber,
+                    addedApplications,
+                    removedApplications,
                     userId(authentication)));
           } finally {
             releaseApplicationLocks(applicationLocksToRelease, authentication);
@@ -1488,13 +1537,25 @@ public class PermitDetailsRpcController {
         sessionService.parseRolesFromPrincipal(authentication), LEGACY_ACTION_REVIEW_PERMITS);
   }
 
-  // Ministry users who can change an application's applicant type can also add or remove a
-  // Blanket OIC permit's agent.
-  private boolean canChangePermitAgent(Authentication authentication) {
-    return isMinistryUser(authentication)
-        && authorizationService.canPerformAction(
-            sessionService.parseRolesFromPrincipal(authentication),
-            LEGACY_ACTION_CHANGE_APPLICANT_TYPE);
+  // Ministry users who can change an application's applicant type, and Provincial Submitters whose
+  // forest client is the permit's saved owner or agent, can add or remove a Blanket OIC permit's
+  // agent. A submitter can reach a permit through an application linked to it without being its
+  // owner or agent, and that does not allow the change.
+  private boolean canChangePermitAgent(
+      PermitDetailsRpcService service, Long permitNumber, Authentication authentication) {
+    if (!isMinistryUser(authentication)) {
+      if (!authorization().hasClientScope(authentication)) {
+        return false;
+      }
+      PermitDetailsRpcService.PermitMutationClientScope clients =
+          service.getClientScopeForPermitMutation(permitNumber);
+      return authorization()
+          .canCreateForClient(
+              authentication, clients.ownerClientNumber(), clients.agentClientNumber());
+    }
+    return authorizationService.canPerformAction(
+        sessionService.parseRolesFromPrincipal(authentication),
+        LEGACY_ACTION_CHANGE_APPLICANT_TYPE);
   }
 
   private boolean requestsFeeOverrideMutation(PermitMutationRequestDto request) {

@@ -603,6 +603,7 @@ final class LexisApiAuthorizationRules {
               "/api/lexis/rpc/permit-details/update-scale-selection",
               "/api/lexis/rpc/permit-details/add-applications-to-permit",
               "/api/lexis/rpc/permit-details/remove-application-from-permit",
+              "/api/lexis/rpc/permit-details/update-permit-applications",
               "/api/lexis/rpc/permit-details/add-boic-scale",
               "/api/lexis/rpc/permit-details/delete-boic-scale",
               "/api/lexis/rpc/permit-details/boic-package",

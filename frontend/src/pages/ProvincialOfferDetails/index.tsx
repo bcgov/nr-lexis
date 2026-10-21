@@ -531,7 +531,7 @@ const ProvincialOfferDetailsPage = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={offerPageTitle}
-          subtitle="Check and manage this provincial offer"
+          focusTitle="whenFocusLost"
           actions={
             !loading && !isEditing && currentDetail && form && canEditAnyOfferField ? (
               <Button

@@ -57,6 +57,8 @@ export default function RegionMultiSelect({
           selectedItems.length === 0 ? placeholder : showSelectedNames ? selectedNames : undefined
         }
         selectedItems={selectedItems}
+        // Regions keep the order they are given, before and after being selected.
+        sortItems={(regions) => [...regions]}
         inputProps={{
           'aria-required': required || undefined,
           'aria-invalid': (invalid && !disabled) || undefined,

@@ -105,10 +105,12 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     renderApplicationDetail()
     await selectApplicationDetailTab('Remarks')
     const row = await screen.findByRole('row', { name: /ok/ })
-    await userEvent.click(within(row).getByRole('button', { name: 'Edit' }))
+    await userEvent.click(within(row).getByRole('button', { name: 'Edit remark 88' }))
     expect(await screen.findByLabelText('Remark')).toHaveValue('ok')
     await userEvent.click(screen.getByRole('button', { name: 'Update remark' }))
-    await waitFor(() => expect(within(row).getByRole('button', { name: 'Edit' })).toHaveFocus())
+    await waitFor(() =>
+      expect(within(row).getByRole('button', { name: 'Edit remark 88' })).toHaveFocus(),
+    )
     expect(mockedSaveApplicationRemark).not.toHaveBeenCalled()
     expect(screen.queryByRole('complementary', { name: 'Edit remark' })).not.toBeInTheDocument()
   })
@@ -461,6 +463,65 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     await waitFor(() => expect(screen.getByLabelText('Location of logs')).toHaveFocus())
   })
 
+  it('keeps the package card on the stored values while a package edit is open, refused or discarded', async () => {
+    mockedUpdateApplicationPackage.mockResolvedValueOnce({
+      valid: false,
+      packageNumber: '',
+      errors: ['Package PKG-1 cannot be saved.'],
+      warnings: [],
+    })
+    renderApplicationDetail('/provincial/application/321?tab=items')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
+    const drawer = within(packageDrawer())
+    const volume = drawer.getByLabelText('Volume (m³)')
+    await waitFor(() => expect(volume).toBeEnabled())
+    const storedVolume = () =>
+      within(document.getElementById('application-items-package') as HTMLElement)
+        .getByText('Volume (m³)', { selector: 'dt' })
+        .closest('.record-field')
+    expect(storedVolume()).toHaveTextContent('100.0')
+
+    await userEvent.clear(volume)
+    await userEvent.type(volume, '90.0')
+    expect(storedVolume()).toHaveTextContent('100.0')
+
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+    expect(await drawer.findByText('Package save failed')).toBeInTheDocument()
+    expect(mockedUpdateApplicationPackage).toHaveBeenCalledTimes(1)
+    expect(storedVolume()).toHaveTextContent('100.0')
+
+    await userEvent.clear(volume)
+    await userEvent.type(volume, '90.55')
+    await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
+    await waitFor(() => expect(volume).toHaveAttribute('aria-invalid', 'true'))
+    expect(mockedUpdateApplicationPackage).toHaveBeenCalledTimes(1)
+    expect(storedVolume()).toHaveTextContent('100.0')
+
+    await userEvent.click(drawer.getByRole('button', { name: 'Cancel' }))
+    await userEvent.click(await screen.findByRole('button', { name: 'Discard changes' }))
+    expect(packageDrawer()).toBeNull()
+    expect(storedVolume()).toHaveTextContent('100.0')
+  })
+
+  it('lays the Edit package fields out one per row under the required-fields legend', async () => {
+    renderApplicationDetail('/provincial/application/321?tab=items')
+    await userEvent.click(await screen.findByRole('button', { name: 'Edit package' }))
+    const drawer = packageDrawer()
+    const form = drawer.querySelector('.application-items-panel-form') as HTMLElement
+    expect(form).not.toBeNull()
+    expect(form.firstElementChild).toHaveClass('required-fields-legend')
+    expect(form.querySelector('.application-items-form')).toBeNull()
+    for (const id of [
+      'applicationItemsPackageNumber',
+      'applicationItemsPackageVolume',
+      'applicationItemsPackageLength',
+      'applicationItemsPackageDiameter',
+      'applicationItemsPackageComments',
+    ]) {
+      expect(form.querySelector(`#${id}`)).not.toBeNull()
+    }
+  })
+
   it('blocks replacement editing while a package save is pending', async () => {
     mockedUpdateApplicationPackage.mockReturnValueOnce(new Promise(() => undefined))
     renderApplicationDetail('/provincial/application/321?tab=items')
@@ -470,7 +531,7 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     await userEvent.type(drawer.getByLabelText('Comments'), ' Pending package')
     await userEvent.click(drawer.getByRole('button', { name: 'Save package' }))
 
-    expect(await drawer.findByRole('button', { name: 'Saving…' })).toBeDisabled()
+    expect(await drawer.findByRole('button', { name: 'Saving package' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Edit scale details' })).toBeDisabled()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationPackage).toHaveBeenCalledTimes(1)
@@ -573,11 +634,11 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     renderApplicationDetail()
     await selectApplicationDetailTab('Remarks')
     const firstEdit = within(screen.getByRole('row', { name: /ok/ })).getByRole('button', {
-      name: 'Edit',
+      name: /^Edit remark /,
     })
     const secondEdit = within(screen.getByRole('row', { name: /Second saved note/ })).getByRole(
       'button',
-      { name: 'Edit' },
+      { name: /^Edit remark / },
     )
     await userEvent.click(firstEdit)
     const remark = screen.getByLabelText('Remark')
@@ -616,7 +677,9 @@ describe.sequential('Provincial Application Detail - form behaviour', () => {
     expect(await screen.findByRole('button', { name: 'Saving remark' })).toBeDisabled()
     expect(screen.getByRole('button', { name: 'Add remark' })).toBeDisabled()
     expect(
-      within(screen.getByRole('row', { name: /ok/ })).getByRole('button', { name: 'Edit' }),
+      within(screen.getByRole('row', { name: /ok/ })).getByRole('button', {
+        name: /^Edit remark /,
+      }),
     ).toBeDisabled()
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
     expect(mockedSaveApplicationRemark).toHaveBeenCalledTimes(1)

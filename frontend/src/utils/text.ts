@@ -71,3 +71,11 @@ export const leadingDigits = (value: string): string => value.match(/^\d+/)?.[0]
 
 export const isValidEmail = (value: string): boolean =>
   /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value.trim())
+
+const TEN_DIGIT_PHONE_PATTERN = /^(\d{3})(\d{3})(\d{4})$/
+
+/** A ten-digit phone number as "(250) 555-1234"; any other value is returned as stored. */
+export const formatPhoneNumber = (value: string | null | undefined): string => {
+  const match = value?.trim().match(TEN_DIGIT_PHONE_PATTERN)
+  return match ? `(${match[1]}) ${match[2]}-${match[3]}` : (value ?? '')
+}

@@ -51,6 +51,20 @@ const PageHeader = ({
   const describedBy = [ariaDescribedBy, subtitle ? subtitleId : undefined].filter(Boolean).join(' ')
   const titleRef = useRef<HTMLHeadingElement>(null)
 
+  // The browser tab and history entry are named after the page's title, and the previous name
+  // returns when the header goes away.
+  useEffect(() => {
+    const previousTitle = document.title
+    return () => {
+      document.title = previousTitle
+    }
+  }, [])
+
+  useEffect(() => {
+    const titleText = titleRef.current?.textContent?.trim()
+    if (titleText) document.title = titleText
+  })
+
   useEffect(() => {
     if (!focusTitle) return
     const visit = historyEntryKey()

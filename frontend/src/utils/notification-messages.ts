@@ -3,7 +3,7 @@ const DEFAULT_TECHNICAL_ERROR_MESSAGE =
 
 const TECHNICAL_ERROR_PATTERNS = [
   /\bHTTP\s*\d{3}\b/i,
-  /\bstatus(?:Code)?["':\s]*\d{3}\b/i,
+  /\bstatus(?:\s*code)?["':\s]*\d{3}\b/i,
   /\bInternal Server Error\b/i,
   /\bBad Gateway\b/i,
   /\bGateway Timeout\b/i,

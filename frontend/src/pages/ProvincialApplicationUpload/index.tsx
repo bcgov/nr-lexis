@@ -306,6 +306,7 @@ function ProvincialApplicationUploadPage() {
         <PageHeader
           title={PAGE_TITLE}
           subtitle="Create one or more applications by uploading their LEXIS files."
+          focusTitle="whenFocusLost"
           style={{ marginBlockEnd: '1.5rem' }}
         />
         <UploadWorkflowProgress

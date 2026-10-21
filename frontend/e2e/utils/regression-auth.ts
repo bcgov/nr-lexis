@@ -785,7 +785,7 @@ export const expectAccessiblePage = async (
     timeout: 30_000,
   })
   await expect(page.getByRole('heading', { name: 'Unauthorized' })).toHaveCount(0)
-  await expect(page.getByRole('heading', { name: '404' })).toHaveCount(0)
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toHaveCount(0)
 }
 
 const requestWithConnectionRecovery = async (

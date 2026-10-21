@@ -21,6 +21,8 @@ type SearchableSelectProps = {
   required?: boolean
   disabled?: boolean
   readOnly?: boolean
+  /** Shows the clear button on a selected value (default). False hides it. */
+  clearable?: boolean
   invalid?: boolean
   invalidText?: ReactNode
   onBlur?: () => void
@@ -43,6 +45,7 @@ export default function SearchableSelect({
   required = false,
   disabled = false,
   readOnly = false,
+  clearable = true,
   invalid = false,
   invalidText,
   onBlur,
@@ -65,18 +68,29 @@ export default function SearchableSelect({
     items.find((option) => option.value === value) ??
     (value ? { value, label: value } : (allOption ?? null))
   const allSelected = !!allOption && (value === '' || value === allOption.value)
+  // Clearing a required value only leaves it empty, and a read-only value can't change.
+  const hideClear = !clearable || (required && value !== '') || readOnly
 
   return (
     <ComboBox
       id={id}
       // With All selected there's nothing to clear.
-      className={allSelected ? 'searchable-select--all' : undefined}
+      className={
+        [allSelected && 'searchable-select--all', hideClear && 'lexis-combobox--no-clear']
+          .filter(Boolean)
+          .join(' ') || undefined
+      }
       titleText={labelText}
       items={items}
       selectedItem={selectedItem}
       itemToString={itemToString}
       shouldFilterItem={({ item, inputValue }) =>
-        shouldFilterSearchableDropdownItem({ item, inputValue, optionCount: items.length })
+        shouldFilterSearchableDropdownItem({
+          item,
+          inputValue,
+          optionCount: items.length,
+          selectedLabel: itemToString(selectedItem),
+        })
       }
       placeholder={placeholder}
       helperText={helperText}

@@ -189,6 +189,102 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(focusedWhileInert).toEqual([false])
   })
 
+  it('focuses the title when a record opens with focus lost', async () => {
+    renderApplicationDetailPage()
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await waitFor(() => expect(heading).toHaveFocus())
+  })
+
+  it('keeps the title focused and the page usable while the first load waits for the summary', async () => {
+    let resolveSnapshot: (snapshot: typeof applicationSummarySnapshot) => void = () => undefined
+    mockedFetchApplicationSummarySnapshot.mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          resolveSnapshot = resolve
+        }),
+    )
+    const { container } = renderApplicationDetailPage()
+
+    const heading = await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await waitFor(() => expect(mockedFetchApplicationSummarySnapshot).toHaveBeenCalled())
+    await waitFor(() => expect(heading).toHaveFocus())
+    expect(mockedFetchProvincialApplicationDetail).toHaveBeenCalled()
+    expect(container.querySelector('.provincial-application-detail')).not.toHaveAttribute('inert')
+    expect(screen.getByText('Loading provincial application detail…')).toBeInTheDocument()
+
+    await act(async () => {
+      resolveSnapshot(applicationSummarySnapshot)
+    })
+
+    await screen.findByRole('tab', { name: 'Application' })
+    expect(container.querySelector('.provincial-application-detail')).not.toHaveAttribute('inert')
+    expect(screen.getByRole('heading', { level: 1, name: 'Application 321' })).toHaveFocus()
+  })
+
+  it('leaves focus where it already is when a record opens', async () => {
+    const elsewhere = document.createElement('button')
+    document.body.append(elsewhere)
+    elsewhere.focus()
+    onTestFinished(() => elsewhere.remove())
+
+    renderApplicationDetailPage()
+
+    await screen.findByRole('heading', { level: 1, name: 'Application 321' })
+    await act(async () => {
+      await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()))
+    })
+    expect(elsewhere).toHaveFocus()
+  })
+
+  it('removes the last save notice when a section edit opens', async () => {
+    renderApplicationDetailPage()
+
+    const summary = within(await selectApplicationSummaryTile())
+    fireEvent.change(summary.getByLabelText('Exemption term (days)'), { target: { value: '45' } })
+    const saveButton = summary.getByRole('button', { name: 'Save changes' })
+    await waitFor(() => expect(saveButton).toBeEnabled())
+    await userEvent.click(saveButton)
+    expect(await screen.findByText('The application was saved.')).toBeVisible()
+
+    await userEvent.click(
+      await within(getApplicationSummaryTile()).findByRole('button', {
+        name: 'Edit application details',
+      }),
+    )
+
+    expect(screen.queryByText('The application was saved.')).not.toBeInTheDocument()
+    expect(
+      within(getApplicationSummaryTile()).getByRole('button', { name: 'Save changes' }),
+    ).toBeVisible()
+  })
+
+  it('keeps the creation notice when a section edit opens', async () => {
+    render(
+      <MemoryRouter
+        initialEntries={[
+          {
+            pathname: '/provincial/application/321',
+            state: { applicationCreationNotice: { applicationNumber: '321' } },
+          },
+        ]}
+      >
+        <Routes>
+          <Route
+            path="/provincial/application/:applicationNumber"
+            element={<ProvincialApplicationDetailsPage />}
+          />
+        </Routes>
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('The application was saved.')).toBeVisible()
+    const summary = within(await selectApplicationSummaryTile())
+    expect(summary.getByRole('button', { name: 'Save changes' })).toBeVisible()
+
+    expect(screen.getByText('The application was saved.')).toBeVisible()
+  })
+
   it('shows each summary field once while editing and restores display values on cancel', async () => {
     render(
       <MemoryRouter initialEntries={['/provincial/application/321']}>
@@ -448,7 +544,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       province: '',
       postalCode: '',
       country: '',
-      phone: '',
+      phone: clientNumber === '00033344' ? '250-555-0200' : '2505550100',
       fax: '',
       email: '',
       notfound: '',
@@ -472,6 +568,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     const ownerContact = within(ownerSection).getByText('Contact name').nextElementSibling
     expect(ownerContact).toHaveTextContent('Not provided')
     expect(within(ownerSection).getByText('00 - Main office')).toBeInTheDocument()
+    expect(within(ownerSection).getByText('(250) 555-0100')).toBeInTheDocument()
 
     const agentSection = screen.getByRole('region', { name: 'Agent information' })
     expect(
@@ -479,6 +576,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     ).toBeInTheDocument()
     expect(agentSection.previousElementSibling).toHaveClass('application-applicant-divider')
     expect(within(agentSection).getByText('01 - Export office')).toBeInTheDocument()
+    expect(within(agentSection).getByText('250-555-0200')).toBeInTheDocument()
   })
 
   it('does not warn that client details are unavailable before their lookup settles', async () => {
@@ -1527,7 +1625,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       within(remarksTable).queryByRole('columnheader', { name: 'Actions' }),
     ).not.toBeInTheDocument()
-    expect(within(remarksTable).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(
+      within(remarksTable).queryByRole('button', { name: /^Edit remark / }),
+    ).not.toBeInTheDocument()
   })
 
   it('hides saved remark editing from users without the application create action', async () => {
@@ -1548,7 +1648,9 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       screen.getByRole('region', { name: 'Application remarks' }),
     ).getByRole('table')
     expect(within(remarksTable).getByText('ok')).toBeInTheDocument()
-    expect(within(remarksTable).queryByRole('button', { name: 'Edit' })).not.toBeInTheDocument()
+    expect(
+      within(remarksTable).queryByRole('button', { name: /^Edit remark / }),
+    ).not.toBeInTheDocument()
   })
 
   it('shows offer rows despite retired filter query parameters', async () => {
@@ -1587,7 +1689,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(
       screen.queryByRole('group', { name: 'Application offers toolbar' }),
     ).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Open' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Open / })).not.toBeInTheDocument()
   })
 
   it('shows the two signed-off offer columns and the stored B.C. receipt time', async () => {
@@ -1781,7 +1883,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     expect(screen.queryByLabelText('Document description')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Add document' })).not.toBeInTheDocument()
     expect(await screen.findByText('locked-doc.pdf')).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^Delete / })).not.toBeInTheDocument()
     await selectApplicationDetailTab('Remarks')
     expect(screen.queryByLabelText('Remark')).not.toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'Save remark' })).not.toBeInTheDocument()
@@ -2078,7 +2180,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     fireEvent.change(termDays, { target: { value: '100000' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findAllByText('Exemption term days must be 99999 or less')).toHaveLength(1)
+    expect(await screen.findAllByText('Exemption term must be 99999 or less')).toHaveLength(1)
     expect(termDays).toHaveAttribute('aria-invalid', 'true')
     await waitFor(() => expect(termDays).toHaveFocus())
     expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
@@ -2087,7 +2189,7 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
     fireEvent.change(termDays, { target: { value: '0' } })
     await userEvent.click(screen.getByRole('button', { name: 'Save changes' }))
 
-    expect(await screen.findAllByText('Exemption term days must be greater than 0')).toHaveLength(1)
+    expect(await screen.findAllByText('Exemption term must be greater than 0')).toHaveLength(1)
     expect(screen.queryByText('Review package volumes')).not.toBeInTheDocument()
     expect(mockedUpdateApplicationSummary).not.toHaveBeenCalled()
   })
@@ -4261,11 +4363,11 @@ describe.sequential('Provincial Application Detail Actions - application', () =>
       if (editable) {
         expect(screen.getByRole('button', { name: 'Edit package' })).toBeEnabled()
         expect(screen.getByRole('button', { name: 'Add scale' })).toBeEnabled()
-        expect(within(scaleRow).getByRole('button', { name: 'Delete' })).toBeEnabled()
+        expect(within(scaleRow).getByRole('button', { name: /^Delete / })).toBeEnabled()
       } else {
         expect(screen.queryByRole('button', { name: 'Edit package' })).not.toBeInTheDocument()
         expect(screen.queryByRole('button', { name: 'Add scale' })).not.toBeInTheDocument()
-        expect(within(scaleRow).queryByRole('button', { name: 'Delete' })).not.toBeInTheDocument()
+        expect(within(scaleRow).queryByRole('button', { name: /^Delete / })).not.toBeInTheDocument()
       }
     },
   )

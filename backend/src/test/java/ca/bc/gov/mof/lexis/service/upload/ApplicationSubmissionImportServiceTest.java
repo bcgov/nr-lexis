@@ -3239,9 +3239,9 @@ class ApplicationSubmissionImportServiceTest {
             "<lexis:applicantDetails>\n"
                 + "            <lexis:eicbNumber>123456</lexis:eicbNumber>")
         .replace(
-            "<lexis:name>Mosaic Forest Management Corporation</lexis:name>",
+            "<lexis:name>Sample Applicant Ltd.</lexis:name>",
             """
-            <lexis:name>Mosaic Forest Management Corporation</lexis:name>
+            <lexis:name>Sample Applicant Ltd.</lexis:name>
             <lexis:address>555 Government Street</lexis:address>
             <lexis:city>Vancouver</lexis:city>
             <lexis:provinceState>BC</lexis:provinceState>
@@ -3574,7 +3574,7 @@ class ApplicationSubmissionImportServiceTest {
               <lexis:applicantDetails>
                 <lexis:clientNumber>1074</lexis:clientNumber>
                 <lexis:clientLocnCode>03</lexis:clientLocnCode>
-                <lexis:name>Mosaic Forest Management Corporation</lexis:name>
+                <lexis:name>Sample Applicant Ltd.</lexis:name>
               </lexis:applicantDetails>
               <lexis:applicantContact>
                 <lexis:contactSurname>SERVICE</lexis:contactSurname>
@@ -3634,7 +3634,7 @@ class ApplicationSubmissionImportServiceTest {
             "applicantDetails": {
               "clientNumber": "1074",
               "clientLocnCode": "03",
-              "name": "Mosaic Forest Management Corporation"
+              "name": "Sample Applicant Ltd."
             },
             "applicantContact": {
               "contactSurname": "SERVICE",

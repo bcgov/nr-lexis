@@ -228,6 +228,7 @@ const ProvincialBlanketOicPermitCreatePage = () => {
       readDetailReturnTo(location.state) ?? {
         label: exemptionPageTitle,
         to: exemptionDetailPath,
+        state: { lexisDetailTab: 'permits' },
       },
     [exemptionDetailPath, exemptionPageTitle, location.state],
   )

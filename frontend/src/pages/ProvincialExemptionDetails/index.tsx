@@ -54,6 +54,7 @@ import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'reac
 import ContentLoadingOverlay from '@/components/ContentLoadingOverlay'
 import ConfirmationModal from '@/components/ConfirmationModal'
 import Modal from '@/components/Modal'
+import { useModalCloseDisabled } from '@/components/Modal/useModalCloseDisabled'
 import EmptyState from '@/components/EmptyState'
 import DetailBreadcrumb from '@/components/DetailBreadcrumb'
 import DetailCardTitle from '@/components/DetailCardTitle'
@@ -116,7 +117,7 @@ import { withoutActionError, type ActionResult } from '@/utils/action-result'
 import { getResponseStatus, isClientErrorResponse } from '@/utils/http-error'
 import { sanitizeNotificationText } from '@/utils/notification-messages'
 import { firstStringField, isRecord } from '@/utils/record'
-import { displayValueText } from '@/utils/text'
+import { displayValueText, formatPhoneNumber } from '@/utils/text'
 import { displayVolume, formatVolumeInput } from '@/utils/volume'
 import { triggerBrowserDownload } from '@/utils/download'
 import IsoDatePicker from '../../components/IsoDatePicker'
@@ -144,6 +145,7 @@ import {
   fetchExemptionApplications,
   fetchExemptionEditContext,
   fetchExemptionPermits,
+  formatFeeRate,
   removeApplicationFromExemption,
   updateExemption,
   type ExemptionApplicationRow,
@@ -292,6 +294,7 @@ const normalizeServerMessage = (message: string): string =>
     .trim()
 
 const APPROVAL_FAILED_MESSAGE = 'The exemption could not be approved.'
+const PERMITS_AFTER_APPROVAL_MESSAGE = 'Permits can be requested once the exemption is approved.'
 
 // The create page hands over the number it saved so this page confirms that save once.
 type ExemptionCreationNavigationState = Record<string, unknown> & {
@@ -478,8 +481,8 @@ const exemptionClientFields = ({
     { label: 'Province', value: loadingValue(clientData?.province) },
     { label: 'Country', value: loadingValue(clientData?.country) },
     { label: 'Postal code', value: loadingValue(clientData?.postalCode) },
-    { label: 'Phone number', value: loadingValue(clientData?.phone) },
-    { label: 'Fax number', value: loadingValue(clientData?.fax) },
+    { label: 'Phone number', value: loadingValue(formatPhoneNumber(clientData?.phone)) },
+    { label: 'Fax number', value: loadingValue(formatPhoneNumber(clientData?.fax)) },
     { label: 'Email address', value: loadingValue(clientData?.email) },
   ]
 }
@@ -1134,6 +1137,7 @@ const ProvincialExemptionDetailsPage = () => {
   const sections = useEditSections<ExemptionEditSection>({
     isDirty: isExemptionFormDirty,
     onDiscard: () => {
+      setActionResult(withoutActionError)
       if (currentDetail) setEditForm(toEditForm(currentDetail, editContext))
       resetFieldErrors()
     },
@@ -1207,7 +1211,6 @@ const ProvincialExemptionDetailsPage = () => {
     applicationMutationNumber !== null ||
     isRemovingDocumentId !== null ||
     documentUploadBusy
-  // Only users who can remove linked applications get the Actions column.
   const canManageApplicationLinks =
     isApplicationApprover &&
     withinApproverRegions &&
@@ -1221,6 +1224,9 @@ const ProvincialExemptionDetailsPage = () => {
     !editing &&
     !isExemptionFormDirty &&
     !documentUploadDirty
+  // The Actions column appears only while a row has an action to offer.
+  const showApplicationRowActions =
+    canLinkApplications && applications.some((application) => application.removable)
   // The server compares an added application's owner with the exemption's linked applications for
   // every type except Order in Council, so only those exemptions name the client.
   const addApplicationClientNumber = persistedTypeCode === 'O' ? '' : exemptionClientNumber
@@ -1582,6 +1588,8 @@ const ProvincialExemptionDetailsPage = () => {
     }
     if (!showFieldErrors(sectionFieldErrors, () => tabsColumnRef.current)) return false
     const resultSource = editingSection === 'fees' ? 'fees' : 'summary'
+    const saveErrorTitle =
+      resultSource === 'fees' ? 'Fees not saved.' : 'Exemption details not saved.'
     setSaving(true)
     setActionResult(null)
     // A Fees save changes only the fee fields; every other value is sent as loaded.
@@ -1616,7 +1624,9 @@ const ProvincialExemptionDetailsPage = () => {
         setActionResult({
           source: resultSource,
           kind: 'error',
+          title: saveErrorTitle,
           message: result.errors.join(' ') || result.message,
+          focusOnReveal: true,
         })
         return false
       }
@@ -1634,7 +1644,7 @@ const ProvincialExemptionDetailsPage = () => {
       const committedContext: ExemptionEditContext = {
         ...editContext,
         rateOverrideEnabled: submittedForm.enableRateOverride,
-        fixedFeeRate: submittedForm.enableRateOverride ? submittedForm.feeRate : '',
+        fixedFeeRate: submittedForm.enableRateOverride ? formatFeeRate(submittedForm.feeRate) : '',
         regionNumbers: submittedForm.regionNumbers,
       }
       setEditingSection(null)
@@ -1678,7 +1688,9 @@ const ProvincialExemptionDetailsPage = () => {
       setActionResult({
         source: resultSource,
         kind: 'error',
+        title: saveErrorTitle,
         message: 'Unable to save the exemption.',
+        focusOnReveal: true,
       })
       return false
     } finally {
@@ -1802,6 +1814,8 @@ const ProvincialExemptionDetailsPage = () => {
     setPermitCreationConfirmationOpen(false)
     window.setTimeout(() => applyForPermitButtonRef.current?.focus())
   }, [creatingPermit])
+  const permitCreationModalRef = useRef<HTMLDivElement>(null)
+  useModalCloseDisabled(permitCreationModalRef, creatingPermit)
 
   const continuePermitCreation = useCallback(
     (permitDetail: ProvincialExemptionDetail | null = currentDetail) => {
@@ -1915,6 +1929,13 @@ const ProvincialExemptionDetailsPage = () => {
       })
       if (result.blob) {
         triggerBrowserDownload(result.blob, result.filename)
+      }
+      if (!result.cancelled) {
+        setActionResult({
+          kind: 'success',
+          title: 'Approved exemption report downloaded.',
+          message: '',
+        })
       }
     } catch (error) {
       console.error(error)
@@ -2221,7 +2242,7 @@ const ProvincialExemptionDetailsPage = () => {
       <Column sm={4} md={8} lg={16} className="detail-page-header">
         <PageHeader
           title={exemptionPageTitle}
-          focusTitle={focusCreatedExemptionTitle && !!currentDetail}
+          focusTitle={focusCreatedExemptionTitle ? !!currentDetail : 'whenFocusLost'}
           subtitle={currentDetail ? `Author: ${displayValueText(currentDetail.author)}` : undefined}
           status={
             currentDetail ? (
@@ -2413,6 +2434,7 @@ const ProvincialExemptionDetailsPage = () => {
                                   <SearchableSelect
                                     id="exemptionDetailStatus"
                                     labelText="Status"
+                                    clearable={false}
                                     value={editForm.exemptionStatusCode}
                                     options={statusSelectOptions}
                                     disabled={
@@ -2529,8 +2551,11 @@ const ProvincialExemptionDetailsPage = () => {
                                 <RecordFieldCell>
                                   <IsoDatePicker
                                     id="exemptionDetailExpiryDate"
-                                    labelText={requiredLabel('Expiry date', expiryDateRequired)}
-                                    required={expiryDateRequired}
+                                    labelText={requiredLabel(
+                                      'Expiry date',
+                                      expiryDateRequired && canEditExpiryDate,
+                                    )}
+                                    required={expiryDateRequired && canEditExpiryDate}
                                     value={editForm.expiryDate}
                                     invalid={!!fieldErrors.expiryDate}
                                     invalidText={fieldErrorText(fieldErrors.expiryDate)}
@@ -2547,8 +2572,11 @@ const ProvincialExemptionDetailsPage = () => {
                                 <RecordFieldCell>
                                   <TextInput
                                     id="exemptionDetailApprovedVolume"
-                                    labelText={requiredLabel('Approval volume (m³)')}
-                                    aria-required="true"
+                                    labelText={requiredLabel(
+                                      'Approval volume (m³)',
+                                      canEditApprovedVolume,
+                                    )}
+                                    aria-required={canEditApprovedVolume ? 'true' : undefined}
                                     value={editForm.approvedVolume}
                                     disabled={!canEditApprovedVolume}
                                     invalid={!!fieldErrors.approvedVolume}
@@ -2839,7 +2867,7 @@ const ProvincialExemptionDetailsPage = () => {
                               ]}
                               onClose={() => confirmApplicationDraftDiscard(closeAddApplication)}
                             >
-                              <RequiredFieldsLegend />
+                              <RequiredFieldsLegend single />
                               <TextInput
                                 ref={addApplicationInputRef}
                                 id="exemptionApplicationNumberToAdd"
@@ -2885,7 +2913,7 @@ const ProvincialExemptionDetailsPage = () => {
                                   <TableRow>
                                     <TableHeader>Application</TableHeader>
                                     <TableHeader>Application volume (m³)</TableHeader>
-                                    {canManageApplicationLinks && (
+                                    {showApplicationRowActions && (
                                       <TableHeader>Actions</TableHeader>
                                     )}
                                   </TableRow>
@@ -2924,10 +2952,10 @@ const ProvincialExemptionDetailsPage = () => {
                                         <TableCell>
                                           {formatExemptionVolume(application.requestedVolume)}
                                         </TableCell>
-                                        {canManageApplicationLinks && (
+                                        {showApplicationRowActions && (
                                           <TableCell>
                                             <div className="legacy-search-actions">
-                                              {canLinkApplications && application.removable && (
+                                              {application.removable && (
                                                 <DisabledButtonTooltip
                                                   disabled={
                                                     application.locked ||
@@ -2942,6 +2970,14 @@ const ProvincialExemptionDetailsPage = () => {
                                                   <Button
                                                     kind="danger--ghost"
                                                     size="md"
+                                                    aria-label={`${
+                                                      applicationMutationNumber ===
+                                                      application.applicationNumber
+                                                        ? 'Removing'
+                                                        : application.locked
+                                                          ? 'Locked'
+                                                          : 'Remove'
+                                                    } application ${application.applicationNumber}`}
                                                     disabled={
                                                       application.locked ||
                                                       Boolean(applicationMutationNumber)
@@ -3004,6 +3040,13 @@ const ProvincialExemptionDetailsPage = () => {
                             edit exemption values.
                           </p>
                         )}
+                        {persistedStatusCode === 'NEW' &&
+                          visiblePermitRows.length > 0 &&
+                          !permitsErrorMessage && (
+                            <p className="detail-read-only-note">
+                              {PERMITS_AFTER_APPROVAL_MESSAGE}
+                            </p>
+                          )}
                         {!detail.blanketOic && (
                           <RecordFieldGrid
                             className="exemption-table-totals"
@@ -3109,7 +3152,7 @@ const ProvincialExemptionDetailsPage = () => {
                               permitRows.length > 0
                                 ? 'No associated permits are available to your account.'
                                 : persistedStatusCode === 'NEW'
-                                  ? 'Permits can be requested once the exemption is approved.'
+                                  ? PERMITS_AFTER_APPROVAL_MESSAGE
                                   : 'Permits requested against this exemption will appear here.'
                             }
                             icon={<DocumentSecurity_02 width={48} height={48} />}
@@ -3361,6 +3404,7 @@ const ProvincialExemptionDetailsPage = () => {
         )}
       {showPermitCreationConfirmation && currentDetail && (
         <Modal
+          ref={permitCreationModalRef}
           open
           passiveModal
           size="sm"

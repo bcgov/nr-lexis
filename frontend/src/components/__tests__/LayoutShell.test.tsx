@@ -600,6 +600,12 @@ describe('Layout shell', () => {
     expect(collapsedReportIssue).toHaveAttribute('aria-describedby', tooltip.id)
   })
 
+  it('names the application header landmark after the product', () => {
+    renderLayout('/admin/rtm/emslogamv')
+
+    expect(screen.getByRole('banner', { name: 'LEXIS' })).toBeVisible()
+  })
+
   it('navigates the app name to the resolved default route', async () => {
     renderLayout('/admin/rtm/emslogamv')
 
@@ -694,6 +700,47 @@ describe('Layout shell', () => {
       screen.queryByRole('link', { name: /^Non-appraised Sec\.3 FIL%$/i }),
     ).not.toBeInTheDocument()
     expect(screen.queryByRole('link', { name: /^Export Schedule$/i })).not.toBeInTheDocument()
+  })
+
+  it('names the report links in sentence case and keeps the Admin links in Title Case', async () => {
+    const grantedActions = [
+      'mofrListing',
+      '/offerReport',
+      '/permitLedgerReport',
+      '/transportReport',
+      '/speciesGradeReport',
+      '/tenureReport',
+      '/lexisPolicyAdmin',
+      '/lexisFILAdmin',
+    ]
+    mockedUseAuth.mockReturnValue(
+      createTestAuthContext({
+        capabilities: createTestCapabilities({
+          principal: 'idir\\reporter',
+          roles: ['ADMIN'],
+          welcomeTarget: '/reports',
+          grantedActions,
+        }),
+        defaultRoute: '/reports',
+        canPerform: (action: string) => grantedActions.includes(action),
+      }),
+    )
+
+    renderLayout('/reports/tenureReport')
+    await userEvent.click(screen.getByRole('button', { name: 'Admin' }))
+
+    for (const name of [
+      'Advertising list',
+      'Offers report',
+      'Permits report',
+      'Transport report',
+      'Species and grade report',
+      'Tenure analysis report',
+      'Multiplication Factor',
+    ]) {
+      expect(screen.getByRole('link', { name })).toBeVisible()
+    }
+    expect(screen.queryByRole('link', { name: 'Tenure Analysis' })).not.toBeInTheDocument()
   })
 
   it('renders available report navigation when an auth mock omits roles', () => {

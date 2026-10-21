@@ -264,7 +264,7 @@ class ApplicationApprovalEligibilityServiceTest {
         .contains(
             "Application date is required.",
             "Application received date is required.",
-            "Application term days must be between 1 and 99999.",
+            "Exemption term must be between 1 and 99999.",
             "Application product location is required.",
             "Application volume cannot be less than the total package volume.");
   }

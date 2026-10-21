@@ -441,6 +441,9 @@ describe('Admin upload workflow smoke', () => {
     expect(
       within(workflowProgress).getByText('2. Review').closest('[role="listitem"]'),
     ).toHaveAttribute('aria-current', 'step')
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2, name: 'Review' })).toHaveFocus(),
+    )
     await userEvent.type(screen.getByLabelText('Filter queued files'), 'scale')
 
     expect(screen.queryByText('permit.pdf')).not.toBeInTheDocument()
@@ -496,6 +499,33 @@ describe('Admin upload workflow smoke', () => {
         expect.objectContaining({ file, fileDescription: 'Corrected description' }),
       )
     })
+  })
+
+  it('focuses the page heading when the upload page opens with focus lost', async () => {
+    mockUploadAccess('/filePermitUpload')
+    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1, name: /upload/i })).toHaveFocus(),
+    )
+  })
+
+  it('focuses the step heading after Review and after Back', async () => {
+    mockUploadAccess('/filePermitUpload')
+    renderPage('/admin/uploads?type=permit&permitNumber=5001')
+    const file = new File(['first'], 'first.pdf', { type: 'application/pdf' })
+    await userEvent.upload(screen.getByLabelText('Document File'), file)
+    await userEvent.type(screen.getByLabelText(/Document description for first.pdf/), 'First')
+
+    await userEvent.click(screen.getByRole('button', { name: 'Review upload' }))
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2, name: 'Review' })).toHaveFocus(),
+    )
+
+    await userEvent.click(screen.getByRole('button', { name: 'Back' }))
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 2, name: 'Upload' })).toHaveFocus(),
+    )
   })
 
   it('locks completed file descriptions while allowing a failed file to be corrected and retried', async () => {

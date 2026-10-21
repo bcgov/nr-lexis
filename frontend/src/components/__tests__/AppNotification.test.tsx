@@ -26,6 +26,39 @@ describe('AppNotification', () => {
     expect(screen.queryByRole('button', { name: 'close notification' })).not.toBeInTheDocument()
   })
 
+  it('marks a rich notice without a close handler as having no close button', () => {
+    const { container } = render(
+      <AppNotification kind="info" lowContrast>
+        <span>
+          Apply through <a href="https://example.test/">a link</a>.
+        </span>
+      </AppNotification>,
+    )
+
+    const notice = container.querySelector('.app-inline-notification')
+    expect(notice).toHaveClass(
+      'cds--actionable-notification',
+      'cds--actionable-notification--hide-close-button',
+    )
+    expect(screen.queryByRole('button', { name: 'close notification' })).not.toBeInTheDocument()
+    expect(notice?.querySelector('.cds--actionable-notification__details')).toBeInTheDocument()
+  })
+
+  it('keeps the close button on a rich notice with a close handler', () => {
+    const { container } = render(
+      <AppNotification kind="info" lowContrast onCloseButtonClick={() => undefined}>
+        <span>
+          Apply through <a href="https://example.test/">a link</a>.
+        </span>
+      </AppNotification>,
+    )
+
+    expect(container.querySelector('.app-inline-notification')).not.toHaveClass(
+      'cds--actionable-notification--hide-close-button',
+    )
+    expect(screen.getByRole('button', { name: 'close notification' })).toBeInTheDocument()
+  })
+
   it('keeps success feedback until the caller dismisses or replaces it', () => {
     vi.useFakeTimers()
     const onClose = vi.fn()
