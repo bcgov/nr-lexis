@@ -33,17 +33,16 @@ export default function IsoDateRangePicker({
   const removeCalendarListenersRef = useRef<(() => void) | null>(null)
   const [pickerKey, setPickerKey] = useState(0)
   const [previousValues, setPreviousValues] = useState<[string, string]>([fromValue, toValue])
-  // Clearing both bounds from outside the range makes Carbon clear the calendar, and the range
-  // plugin then refocuses To if it was the last field used. A new calendar starts empty, so
-  // focus stays on the control that cleared the range.
+  // Bounds that differ from the ones this picker last sent were set from outside, such as a Clear
+  // all that restores defaults. Carbon then re-selects the old range as its calendar closes, and the
+  // range plugin refocuses To if it was the last field used. A new calendar starts from the new
+  // bounds, so focus stays on the control that changed them.
   if (previousValues[0] !== fromValue || previousValues[1] !== toValue) {
     setPreviousValues([fromValue, toValue])
-    const clearedFromOutside =
-      !fromValue &&
-      !toValue &&
-      Boolean(previousValues[0] || previousValues[1]) &&
+    const changedFromOutside =
+      (fromValue !== latestValuesRef.current[0] || toValue !== latestValuesRef.current[1]) &&
       !rangeRef.current?.contains(document.activeElement)
-    if (clearedFromOutside) setPickerKey((key) => key + 1)
+    if (changedFromOutside) setPickerKey((key) => key + 1)
   }
   const toError = isoDateRangeEndError(fromValue, toValue, fromLabel)
   const calendarValues = useMemo(

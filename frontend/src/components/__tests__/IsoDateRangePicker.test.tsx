@@ -19,6 +19,7 @@ function Range({ initial = ['', ''] as [string, string] }) {
       />
       <output aria-label="Search bounds">{JSON.stringify(values)}</output>
       <button onClick={() => setValues(['', ''])}>Clear range</button>
+      <button onClick={() => setValues(['', '2026-10-14'])}>Reset to default end</button>
       <button>Outside</button>
     </>
   )
@@ -97,6 +98,81 @@ describe('IsoDateRangePicker', () => {
     expect(to).toHaveValue('')
     expect(clear).toHaveFocus()
     expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+  })
+
+  it('keeps focus on the control that resets the bounds to an end-only default after To was last used', async () => {
+    render(<Range initial={['2026-01-10', '2026-01-20']} />)
+    const to = screen.getByLabelText('List date to')
+    await userEvent.click(to)
+    await userEvent.click(screen.getByRole('button', { name: 'Outside' }))
+    const reset = screen.getByRole('button', { name: 'Reset to default end' })
+
+    await userEvent.click(reset)
+    await new Promise((resolve) => setTimeout(resolve, 50))
+
+    expect(screen.getByLabelText('Search bounds')).toHaveTextContent('["","2026-10-14"]')
+    expect(screen.getByLabelText('List date from')).toHaveValue('')
+    expect(screen.getByLabelText('List date to')).toHaveValue('2026-10-14')
+    expect(reset).toHaveFocus()
+    expect(document.querySelector('.flatpickr-calendar.open')).toBeNull()
+  })
+
+  it('starts a new calendar when a control outside sets bounds that differ from the last ones sent', async () => {
+    render(<Range initial={['2026-01-10', '2026-01-20']} />)
+    const original = document.querySelector('.flatpickr-calendar')
+    expect(original).not.toBeNull()
+    await userEvent.click(screen.getByLabelText('List date to'))
+    await userEvent.click(screen.getByRole('button', { name: 'Outside' }))
+
+    await userEvent.click(screen.getByRole('button', { name: 'Reset to default end' }))
+
+    const replacement = document.querySelector('.flatpickr-calendar')
+    expect(replacement).not.toBeNull()
+    expect(replacement).not.toBe(original)
+    expect(document.querySelectorAll('.flatpickr-calendar')).toHaveLength(1)
+  })
+
+  it('keeps its calendar when the bounds are the ones it sent', async () => {
+    render(<Range initial={['2026-01-10', '2026-01-20']} />)
+    const original = document.querySelector('.flatpickr-calendar')
+
+    await userEvent.click(screen.getByLabelText('List date from'))
+    await userEvent.click(calendarDay(12))
+    await userEvent.click(screen.getByLabelText('List date to'))
+    await userEvent.click(calendarDay(16))
+    await waitFor(() =>
+      expect(screen.getByLabelText('Search bounds')).toHaveTextContent(
+        '["2026-01-12","2026-01-16"]',
+      ),
+    )
+    fireEvent.change(screen.getByLabelText('List date from'), { target: { value: '2026-01-13' } })
+    await waitFor(() =>
+      expect(screen.getByLabelText('Search bounds')).toHaveTextContent(
+        '["2026-01-13","2026-01-16"]',
+      ),
+    )
+
+    expect(document.querySelector('.flatpickr-calendar')).toBe(original)
+  })
+
+  it('keeps its calendar when the bounds change from outside while focus is inside the range', async () => {
+    const props = {
+      fromId: 'from',
+      toId: 'to',
+      fromLabel: 'List date from',
+      toLabel: 'List date to',
+      onChange: () => undefined,
+    }
+    const { rerender } = render(
+      <IsoDateRangePicker {...props} fromValue="2026-01-10" toValue="2026-01-20" />,
+    )
+    const original = document.querySelector('.flatpickr-calendar')
+    await userEvent.click(screen.getByLabelText('List date to'))
+
+    rerender(<IsoDateRangePicker {...props} fromValue="" toValue="2026-10-14" />)
+
+    expect(document.querySelector('.flatpickr-calendar')).toBe(original)
+    expect(screen.getByLabelText('List date to')).toHaveFocus()
   })
 
   it('starts the next calendar pick without the bounds that were cleared from outside', async () => {
